@@ -1,0 +1,77 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Inter:wght@300..900&family=Plus+Jakarta+Sans:wght@300..800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap");
+
+/* Import Tailwind v4 */
+@import "tailwindcss";
+
+/* Cấu hình Theme (thay thế cho tailwind.config.js) */
+@theme {
+  --color-primary: #725c00;
+  --color-primary-container: #ffd100;
+  --color-on-primary-fixed: #231b00;
+  --color-surface: #f9f9ff;
+  --color-on-surface: #111c2d;
+  --color-surface-variant: #d8e3fb;
+  --color-on-surface-variant: #4d4632;
+  --color-outline: #7f765f;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f0f3ff;
+  --color-surface-container-highest: #d8e3fb;
+  --color-background: #f9f9ff;
+
+  --font-headline: "Space Grotesk", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-label: "Plus Jakarta Sans", sans-serif;
+}
+
+/* Đặt font và màu nền mặc định cho toàn trang */
+@layer base {
+  body {
+    font-family: var(--font-body);
+    background-color: var(--color-background);
+    color: var(--color-on-surface);
+    overflow-x: hidden;
+  }
+}
+
+/* Định nghĩa các custom class bằng @utility của v4 */
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@utility hero-gradient {
+  background: linear-gradient(
+    180deg,
+    rgba(17, 28, 45, 0.4) 0%,
+    rgba(17, 28, 45, 0.2) 50%,
+    rgba(17, 28, 45, 0.6) 100%
+  );
+}
+
+@utility gsap-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@utility is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Thêm vào cuối file index.css */
+@utility animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  } /* Di chuyển chính xác 1 nửa độ dài */
+}
