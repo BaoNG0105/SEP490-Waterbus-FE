@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 
 export const Header = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  // Thêm state để theo dõi trạng thái cuộn trang
+  // State theo dõi trạng thái cuộn trang
   const [isScrolled, setIsScrolled] = useState(false);
 
   // Hook lắng nghe sự kiện scroll
@@ -46,7 +46,7 @@ export const Header = () => {
         <div className="hidden lg:flex items-center gap-6">
           <a
             className="text-xs font-bold text-white bg-primary px-4 py-2 rounded-full font-headline"
-            href="#"
+            href="/"
           >
             Trang chủ
           </a>
@@ -170,13 +170,13 @@ export const Header = () => {
                 />
               </button>
             ) : (
-              <button
-                onClick={() => setIsLoggedIn(true)}
+              <a
+                href="/login"
                 className="text-sm font-bold font-headline text-on-surface hover:text-primary transition-colors flex items-center gap-1"
               >
                 <span className="material-symbols-outlined text-lg">login</span>
                 Sign In
-              </button>
+              </a>
             )}
           </div>
         </div>

@@ -34,7 +34,7 @@ export const Footer = () => {
           </a>
         </div>
         <div className="text-center md:text-right text-[10px] font-body uppercase tracking-widest">
-          © 2024 Future-Classic River Transit. All rights reserved.
+          © 2026 Future-Classic River Transit. All rights reserved.
         </div>
       </div>
     </footer>

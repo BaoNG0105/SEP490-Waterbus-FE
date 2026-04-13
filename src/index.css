@@ -3,7 +3,7 @@
 /* Import Tailwind v4 */
 @import "tailwindcss";
 
-/* Cấu hình Theme (thay thế cho tailwind.config.js) */
+/* Cấu hình Theme */
 @theme {
   --color-primary: #725c00;
   --color-primary-container: #ffd100;
@@ -62,9 +62,16 @@
   transform: translateY(0);
 }
 
-/* Thêm vào cuối file index.css */
 @utility animate-marquee {
   animation: marquee 30s linear infinite;
+}
+
+@utility liquid-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--color-primary) 0%,
+    var(--color-primary-container) 100%
+  );
 }
 
 @keyframes marquee {
@@ -73,5 +80,5 @@
   }
   100% {
     transform: translateX(-50%);
-  } /* Di chuyển chính xác 1 nửa độ dài */
+  }
 }
