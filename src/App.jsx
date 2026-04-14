@@ -4,8 +4,9 @@ import { Footer } from "./components/layout/Footer";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { Station } from "./pages/Station";
 
-// Component layout chính (có Header, Footer)
+// Main Layout (Header, Footer)
 const MainLayout = ({ children }) => {
   return (
     <div className="min-h-screen flex flex-col">
@@ -20,7 +21,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Route cho trang chủ (Sử dụng Layout) */}
+        {/* Home Page */}
         <Route
           path="/"
           element={
@@ -30,7 +31,20 @@ function App() {
           }
         />
 
+        {/* Station Page */}
+        <Route
+          path="/stations/:id"
+          element={
+            <MainLayout>
+              <Station />
+            </MainLayout>
+          }
+        />
+
+        {/* Login Page */}
         <Route path="/login" element={<Login />} />
+
+        {/* Register Page */}
         <Route path="/register" element={<Register />} />
       </Routes>
     </Router>
