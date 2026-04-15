@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom"; // Thêm useLocation
+import { Link, useLocation } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 
 export const Header = () => {
@@ -16,6 +16,7 @@ export const Header = () => {
   // Xác định trạng thái active của các tab chính
   const isHomeActive = currentPath === "/";
   const isStationsActive = currentPath.startsWith("/stations");
+  const isContactActive = currentPath === "/contact";
 
   useEffect(() => {
     const handleScroll = () => {
@@ -157,8 +158,12 @@ export const Header = () => {
 
           {/* Contact */}
           <Link
-            className="text-xs font-medium text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400 transition-colors font-headline"
-            to="/"
+            className={`text-xs font-bold px-4 py-2 rounded-full font-headline transition-colors ${
+              isContactActive
+                ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
+                : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
+            }`}
+            to="/contact"
           >
             {lang === "VN" ? "Liên hệ" : "Contact"}
           </Link>
@@ -314,7 +319,7 @@ export const Header = () => {
             {lang === "VN" ? "Khuyến Mãi" : "Promotions"}
           </Link>
           <Link
-            to="/"
+            to="/contact"
             className="font-bold text-slate-900 dark:text-white text-base"
             onClick={() => setIsMobileMenuOpen(false)}
           >

@@ -22,13 +22,13 @@ export const Footer = () => {
           </a>
           <a
             className="text-white/70 hover:text-white transition-colors"
-            href="#"
+            href="https://www.instagram.com/saigonwaterbus/"
           >
             Instagram
           </a>
           <a
             className="text-white/70 hover:text-white transition-colors"
-            href="#"
+            href="/contact"
           >
             Contact Us
           </a>

@@ -5,6 +5,7 @@ import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { Station } from "./pages/Station";
+import { Contact } from "./pages/Contact";
 
 // Main Layout (Header, Footer)
 const MainLayout = ({ children }) => {
@@ -37,6 +38,16 @@ function App() {
           element={
             <MainLayout>
               <Station />
+            </MainLayout>
+          }
+        />
+
+        {/* Contact Page */}
+        <Route
+          path="/contact"
+          element={
+            <MainLayout>
+              <Contact />
             </MainLayout>
           }
         />
