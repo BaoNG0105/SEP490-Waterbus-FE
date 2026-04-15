@@ -2,11 +2,16 @@ import { useState } from "react";
 import { useParams, Navigate } from "react-router-dom";
 // Import dữ liệu từ file riêng
 import { stationsData } from "../../data/stations";
+// Import useApp để lấy ngôn ngữ hiện tại
+import { useApp } from "../../context/AppContext";
 
 export const Station = () => {
   // Lấy ID trạm từ URL (vd: 'bach-dang')
   const { id } = useParams();
   const station = stationsData[id];
+
+  // Gọi lang từ Context
+  const { lang } = useApp();
 
   // Quản lý trạng thái mở/đóng Modal cho các địa điểm lân cận
   const [selectedAttraction, setSelectedAttraction] = useState(null);
@@ -20,7 +25,7 @@ export const Station = () => {
     <main className="pt-24 pb-20 bg-background dark:bg-slate-900 transition-colors duration-300">
       {/* Hero Section */}
       <section className="relative w-full h-[716px] px-4 md:px-8 mb-20">
-        <div className="relative w-full h-full rounded-2rem overflow-hidden">
+        <div className="relative w-full h-full rounded-[2rem] overflow-hidden">
           <img
             className="w-full h-full object-cover"
             alt={station.name}
@@ -44,12 +49,12 @@ export const Station = () => {
             <span className="material-symbols-outlined text-primary dark:text-yellow-400">
               location_on
             </span>
-            <span className="text-primary dark:text-yellow-400 font-label font-bold text-sm">
-              TRẠM TRUNG TÂM
+            <span className="text-primary dark:text-yellow-400 font-label font-bold text-sm uppercase">
+              {lang === "VN" ? "TRẠM TRUNG TÂM" : "CENTRAL STATION"}
             </span>
           </div>
           <h2 className="font-headline text-4xl font-bold mb-6 text-on-surface dark:text-white">
-            Vị trí chiến lược
+            {lang === "VN" ? "Vị trí chiến lược" : "Strategic Location"}
           </h2>
           <div className="space-y-6 text-on-surface-variant dark:text-white/80 leading-relaxed">
             <div className="bg-surface-container-low dark:bg-slate-800 p-6 rounded-2xl transition-colors">
@@ -63,7 +68,6 @@ export const Station = () => {
         </div>
         {/* Phần Bản Đồ (Map) */}
         <div className="relative h-[450px] rounded-3xl overflow-hidden shadow-2xl dark:shadow-none group">
-          {/* Thay thẻ img bằng thẻ iframe */}
           <iframe
             src={station.mapEmbedUrl}
             width="100%"
@@ -72,18 +76,20 @@ export const Station = () => {
             allowFullScreen=""
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
-            // Hiệu ứng tự động chuyển Google Map sang Dark Mode khi giao diện đổi màu
-            className="w-full h-full transition-all duration-500 dark:invert dark:grayscale-80% dark:hue-rotate-180"
+            className="w-full h-full transition-all duration-500 dark:invert dark:grayscale-[80%] dark:hue-rotate-180"
           ></iframe>
 
-          {/* Lớp Overlay thông tin (Sẽ mờ đi khi người dùng trỏ chuột vào để tương tác với bản đồ) */}
           <div className="absolute bottom-4 left-4 right-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-4 rounded-xl flex justify-between items-center transition-all duration-300 group-hover:opacity-0 pointer-events-none">
             <div>
               <p className="font-bold text-on-surface dark:text-white">
-                Xem bản đồ tương tác
+                {lang === "VN"
+                  ? "Xem bản đồ tương tác"
+                  : "View interactive map"}
               </p>
               <p className="text-xs text-on-surface-variant dark:text-white/60">
-                Hướng dẫn đường đi đến bến
+                {lang === "VN"
+                  ? "Hướng dẫn đường đi đến bến"
+                  : "Get directions to the station"}
               </p>
             </div>
             <button className="bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 p-2 rounded-full transition-colors pointer-events-auto hover:scale-110">
@@ -100,11 +106,12 @@ export const Station = () => {
             <div className="flex justify-between items-end mb-12">
               <div>
                 <h2 className="font-headline text-4xl font-bold mb-4 dark:text-white">
-                  Điểm đến lân cận
+                  {lang === "VN" ? "Điểm đến lân cận" : "Nearby Attractions"}
                 </h2>
                 <p className="text-on-surface-variant dark:text-white/70">
-                  Khám phá các biểu tượng của Sài Gòn chỉ trong vài bước chân từ
-                  bến.
+                  {lang === "VN"
+                    ? "Khám phá các biểu tượng của Sài Gòn chỉ trong vài bước chân từ bến."
+                    : "Explore Saigon's iconic landmarks just steps away from the station."}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -121,13 +128,12 @@ export const Station = () => {
               </div>
             </div>
 
-            {/* Scrollable Cards */}
             <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8">
               {station.attractions.map((item) => (
                 <div
                   key={item.id}
                   className="min-w-[300px] md:min-w-[380px] group cursor-pointer"
-                  onClick={() => setSelectedAttraction(item)} // Mở modal khi click
+                  onClick={() => setSelectedAttraction(item)}
                 >
                   <div className="h-64 rounded-3xl overflow-hidden mb-4 relative">
                     <img
@@ -157,24 +163,26 @@ export const Station = () => {
       {station.gallery && station.gallery.length === 3 && (
         <section className="max-w-7xl mx-auto px-4 md:px-8 mb-32">
           <h2 className="font-headline text-4xl font-bold mb-12 text-center dark:text-white">
-            Góc nhìn {station.name}
+            {lang === "VN"
+              ? `Góc nhìn ${station.name}`
+              : `Views of ${station.name}`}
           </h2>
           <div className="grid grid-cols-12 grid-rows-2 gap-4 h-[600px]">
-            <div className="col-span-8 row-span-2 rounded-2rem overflow-hidden">
+            <div className="col-span-8 row-span-2 rounded-[2rem] overflow-hidden">
               <img
                 className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
                 alt="Gallery 1"
                 src={station.gallery[0]}
               />
             </div>
-            <div className="col-span-4 row-span-1 rounded-2rem overflow-hidden">
+            <div className="col-span-4 row-span-1 rounded-[2rem] overflow-hidden">
               <img
                 className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
                 alt="Gallery 2"
                 src={station.gallery[1]}
               />
             </div>
-            <div className="col-span-4 row-span-1 rounded-2rem overflow-hidden">
+            <div className="col-span-4 row-span-1 rounded-[2rem] overflow-hidden">
               <img
                 className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
                 alt="Gallery 3"
@@ -189,11 +197,12 @@ export const Station = () => {
       <section className="max-w-7xl mx-auto px-4 md:px-8 mb-12">
         <div className="bg-slate-900 rounded-[3rem] p-12 text-white flex flex-col items-center">
           <h2 className="font-headline text-4xl font-bold mb-4">
-            Mạng lưới kết nối
+            {lang === "VN" ? "Mạng lưới kết nối" : "Connection Network"}
           </h2>
           <p className="text-slate-400 mb-12 text-center max-w-2xl">
-            {station.name} là nút thắt trung tâm kết nối tất cả các tuyến chính
-            của RiverNav đến mọi khu vực trong thành phố.
+            {lang === "VN"
+              ? `${station.name} là nút thắt trung tâm kết nối tất cả các tuyến chính của WaterBus đến mọi khu vực trong thành phố.`
+              : `${station.name} is the central hub connecting all major WaterBus routes to every part of the city.`}
           </p>
           <div className="w-full max-w-4xl bg-white/5 rounded-3xl p-8 backdrop-blur-sm border border-white/10">
             <img
@@ -205,9 +214,9 @@ export const Station = () => {
         </div>
       </section>
 
-      {/* React Modal cho Địa điểm lân cận */}
+      {/* Modal Địa điểm lân cận */}
       {selectedAttraction && (
-        <div className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
           <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl relative animate-[fadeIn_0.3s_ease-out]">
             <button
               className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
@@ -246,7 +255,7 @@ export const Station = () => {
                     className="w-full bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 py-4 rounded-xl font-headline font-bold hover:brightness-110 transition-all flex items-center justify-center gap-2"
                   >
                     <span className="material-symbols-outlined">map</span>
-                    Xem trên bản đồ
+                    {lang === "VN" ? "Xem trên bản đồ" : "View on Map"}
                   </a>
                 </div>
               </div>

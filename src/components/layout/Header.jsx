@@ -1,14 +1,22 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom"; // Thêm useLocation
+import { useApp } from "../../context/AppContext";
 
 export const Header = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  // State theo dõi trạng thái cuộn trang
   const [isScrolled, setIsScrolled] = useState(false);
-  // State quản lý việc đóng/mở Mobile Menu
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Hook lắng nghe sự kiện scroll
+  const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
+
+  // Lấy thông tin URL hiện tại
+  const location = useLocation();
+  const currentPath = location.pathname;
+
+  // Xác định trạng thái active của các tab chính
+  const isHomeActive = currentPath === "/";
+  const isStationsActive = currentPath.startsWith("/stations");
+
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 20) {
@@ -22,7 +30,6 @@ export const Header = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Đóng mobile menu khi cuộn trang để tránh cản trở tầm nhìn
   useEffect(() => {
     const handleScrollClose = () => {
       if (isMobileMenuOpen) setIsMobileMenuOpen(false);
@@ -35,141 +42,160 @@ export const Header = () => {
     <nav
       className={`fixed top-6 left-1/2 -translate-x-1/2 w-[95%] max-w-[1200px] z-100 rounded-full transition-all duration-500 ${
         isScrolled
-          ? "bg-white shadow-2xl border border-surface-variant/50 py-1"
+          ? "bg-white dark:bg-slate-900 shadow-2xl border border-surface-variant/50 dark:border-slate-700 py-1"
           : "bg-transparent border border-transparent shadow-none py-2"
-      } ${isMobileMenuOpen ? "bg-white" : ""}`} // Ép nền trắng khi mở menu để không bị lỗi màu
+      } ${isMobileMenuOpen ? "bg-white dark:bg-slate-900" : ""}`}
     >
       <div className="px-6 md:px-8 py-2.5 flex justify-between items-center transition-all duration-300">
-        {/* Logo (Hiển thị mọi màn hình) */}
-        <div className="text-lg font-bold tracking-tighter text-slate-900 font-headline flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-primary text-xl">
+        {/* Logo */}
+        <Link
+          to="/"
+          className="text-lg font-bold tracking-tighter text-slate-900 dark:text-white font-headline flex items-center gap-1.5"
+        >
+          <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-xl">
             waves
           </span>
           WaterBus
-        </div>
+        </Link>
 
-        {/* Main Links (Chỉ hiện trên Desktop - màn hình lớn 'lg') */}
+        {/* Main Links (Desktop) */}
         <div className="hidden lg:flex items-center gap-6">
-          <a
-            className="text-xs font-bold text-white bg-primary px-4 py-2 rounded-full font-headline"
-            href="/"
+          {/* Home */}
+          <Link
+            className={`text-xs font-bold px-4 py-2 rounded-full font-headline transition-colors ${
+              isHomeActive
+                ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
+                : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
+            }`}
+            to="/"
           >
-            Trang chủ
-          </a>
+            {lang === "VN" ? "Trang chủ" : "Home"}
+          </Link>
 
+          {/* Station*/}
           <div className="relative group">
-            <button className="flex items-center gap-1 text-xs font-medium text-on-surface-variant group-hover:text-primary font-headline transition-colors">
-              Bến tàu
+            <button
+              className={`flex items-center gap-1 text-xs font-medium font-headline transition-colors ${
+                isStationsActive
+                  ? "text-primary dark:text-yellow-400 font-bold"
+                  : "text-on-surface-variant dark:text-white/80 group-hover:text-primary dark:group-hover:text-yellow-400"
+              }`}
+            >
+              {lang === "VN" ? "Bến tàu" : "Stations"}
               <span className="material-symbols-outlined text-xs">
                 expand_more
               </span>
             </button>
-            <div className="absolute top-full left-0 mt-3 w-48 bg-white shadow-xl rounded-xl py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 border border-surface-variant z-50">
-              <Link
-                to="/stations/bach-dang"
-                className="block px-4 py-2 text-xs hover:bg-surface-container-low transition-colors"
-              >
-                Bạch Đằng
-              </Link>
-              <Link
-                to="/stations/thu-thiem"
-                className="block px-4 py-2 text-xs hover:bg-surface-container-low transition-colors"
-              >
-                Thủ Thiêm
-              </Link>
-              <Link
-                to="/stations/binh-an"
-                className="block px-4 py-2 text-xs hover:bg-surface-container-low transition-colors"
-              >
-                Bình An
-              </Link>
-              <Link
-                to="/stations/thanh-da"
-                className="block px-4 py-2 text-xs hover:bg-surface-container-low transition-colors"
-              >
-                Thanh Đa
-              </Link>
-              <Link
-                to="/stations/linh-dong"
-                className="block px-4 py-2 text-xs hover:bg-surface-container-low transition-colors"
-              >
-                Linh Đông
-              </Link>
+            <div className="absolute top-full left-0 mt-3 w-48 bg-white dark:bg-slate-800 shadow-xl rounded-xl py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 border border-surface-variant dark:border-slate-700 z-50">
+              {[
+                { path: "/stations/bach-dang", label: "Bạch Đằng" },
+                { path: "/stations/thu-thiem", label: "Thủ Thiêm" },
+                { path: "/stations/binh-an", label: "Bình An" },
+                { path: "/stations/thanh-da", label: "Thanh Đa" },
+                { path: "/stations/linh-dong", label: "Linh Đông" },
+              ].map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`block px-4 py-2 text-xs transition-colors ${
+                    currentPath === item.path
+                      ? "text-primary dark:text-yellow-400 font-bold bg-surface-container-low dark:bg-slate-700"
+                      : "text-slate-900 dark:text-white hover:bg-surface-container-low dark:hover:bg-slate-700"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
             </div>
           </div>
 
-          <a
-            className="text-xs font-medium text-on-surface-variant hover:text-primary transition-colors font-headline"
-            href="#"
+          {/* Schedule */}
+          <Link
+            className={`text-xs font-medium font-headline transition-colors ${
+              currentPath === "/schedule"
+                ? "text-primary dark:text-yellow-400 font-bold"
+                : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
+            }`}
+            to="/"
           >
-            Lịch khởi hành
-          </a>
+            {lang === "VN" ? "Lịch khởi hành" : "Schedule"}
+          </Link>
 
+          {/* Services */}
           <div className="relative group">
-            <button className="flex items-center gap-1 text-xs font-medium text-on-surface-variant group-hover:text-primary font-headline">
-              Dịch vụ
+            <button className="flex items-center gap-1 text-xs font-medium text-on-surface-variant dark:text-white/80 group-hover:text-primary dark:group-hover:text-yellow-400 font-headline transition-colors">
+              {lang === "VN" ? "Dịch vụ" : "Services"}
               <span className="material-symbols-outlined text-xs">
                 expand_more
               </span>
             </button>
-            <div className="absolute top-full left-0 mt-3 w-48 bg-white shadow-xl rounded-xl py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 border border-surface-variant">
-              <a
-                className="block px-4 py-2 text-xs hover:bg-surface-container-low transition-colors"
-                href="#"
+            <div className="absolute top-full left-0 mt-3 w-48 bg-white dark:bg-slate-800 shadow-xl rounded-xl py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 border border-surface-variant dark:border-slate-700">
+              <Link
+                className="block px-4 py-2 text-xs text-slate-900 dark:text-white hover:bg-surface-container-low dark:hover:bg-slate-700 transition-colors"
+                to="/"
               >
-                Đặt vé online
-              </a>
-              <a
-                className="block px-4 py-2 text-xs hover:bg-surface-container-low transition-colors"
-                href="#"
+                {lang === "VN"
+                  ? "Đặt vé online & hướng dẫn"
+                  : "Book Online & Guide"}
+              </Link>
+              <Link
+                className="block px-4 py-2 text-xs text-slate-900 dark:text-white hover:bg-surface-container-low dark:hover:bg-slate-700 transition-colors"
+                to="/"
               >
-                Hướng dẫn đặt vé
-              </a>
+                {lang === "VN" ? "Kiểm tra vé" : "Check Ticket"}
+              </Link>
             </div>
           </div>
 
-          <a
-            className="text-xs font-medium text-on-surface-variant hover:text-primary transition-colors font-headline"
-            href="#"
+          {/* Promotions */}
+          <Link
+            className="text-xs font-medium text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400 transition-colors font-headline"
+            to="/"
           >
-            Khuyến Mãi
-          </a>
-          <a
-            className="text-xs font-medium text-on-surface-variant hover:text-primary transition-colors font-headline"
-            href="#"
+            {lang === "VN" ? "Khuyến Mãi" : "Promotions"}
+          </Link>
+
+          {/* Contact */}
+          <Link
+            className="text-xs font-medium text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400 transition-colors font-headline"
+            to="/"
           >
-            Liên hệ
-          </a>
+            {lang === "VN" ? "Liên hệ" : "Contact"}
+          </Link>
         </div>
 
-        {/* Cụm chức năng bên phải: Lang, Booking, Auth, Hamburger Menu */}
+        {/* Cụm chức năng bên phải */}
         <div className="flex items-center gap-3 lg:gap-4">
-          {/* Lang & Booking (Chỉ hiện trên Desktop, ẩn trên Mobile) */}
-          <div className="hidden lg:flex items-center gap-4">
-            <div className="flex items-center gap-4 bg-surface-container-low/50 px-5 py-2 rounded-full border border-surface-variant/30">
-              <button className="text-[11px] font-bold text-primary font-headline tracking-widest">
-                ENG
-              </button>
-              <span className="text-outline/30">|</span>
-              <button className="text-[11px] font-bold text-on-surface-variant/60 font-headline tracking-widest hover:text-primary transition-colors">
-                VN
-              </button>
-            </div>
-            <a
-              className="bg-primary-container text-on-primary-fixed px-8 py-2.5 rounded-full font-bold text-sm font-headline hover:brightness-105 transition-all shadow-md"
-              href="#booking-section"
+          <div className="hidden lg:flex items-center gap-3">
+            <button
+              onClick={toggleDarkMode}
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-surface-container-low/50 dark:bg-slate-800/50 border border-surface-variant/30 dark:border-slate-600 text-on-surface-variant dark:text-white hover:text-primary dark:hover:text-yellow-400 hover:bg-surface-container dark:hover:bg-slate-700 transition-colors"
             >
-              Booking
+              <span className="material-symbols-outlined text-[20px]">
+                {isDarkMode ? "light_mode" : "dark_mode"}
+              </span>
+            </button>
+
+            <button
+              onClick={toggleLang}
+              className="w-12 h-10 rounded-full flex items-center justify-center bg-surface-container-low/50 dark:bg-slate-800/50 border border-surface-variant/30 dark:border-slate-600 text-[11px] font-bold text-primary dark:text-yellow-400 font-headline tracking-widest hover:bg-surface-container dark:hover:bg-slate-700 transition-colors"
+            >
+              {lang}
+            </button>
+
+            <a
+              className="bg-primary-container dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 px-8 py-2.5 rounded-full font-bold text-sm font-headline hover:brightness-105 transition-all shadow-md ml-1"
+              href="/#booking-section"
+            >
+              {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
             </a>
           </div>
 
-          {/* User Auth (Hiện trên cả Mobile và Desktop) */}
-          <div className="flex items-center gap-2 lg:pl-4 lg:border-l border-surface-variant/30">
+          <div className="flex items-center gap-2 lg:pl-4 lg:border-l border-surface-variant/30 dark:border-slate-600">
             {isLoggedIn ? (
               <button
                 onClick={() => setIsLoggedIn(false)}
-                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-primary-container overflow-hidden border-2 border-transparent hover:border-primary transition-colors cursor-pointer shrink-0"
-                title="Đăng xuất"
+                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-primary-container overflow-hidden border-2 border-transparent hover:border-primary dark:hover:border-yellow-400 transition-colors cursor-pointer shrink-0"
               >
                 <img
                   alt="User Avatar"
@@ -178,21 +204,21 @@ export const Header = () => {
                 />
               </button>
             ) : (
-              <a
-                href="/login"
-                className="text-sm font-bold font-headline text-on-surface hover:text-primary transition-colors flex items-center gap-1"
+              <Link
+                to="/login"
+                className="text-sm font-bold font-headline text-on-surface dark:text-white hover:text-primary dark:hover:text-yellow-400 transition-colors flex items-center gap-1"
               >
                 <span className="material-symbols-outlined text-lg">login</span>
-                {/* Ẩn chữ Sign In trên màn hình quá nhỏ để tiết kiệm chỗ */}
-                <span className="hidden sm:inline">Sign In</span>
-              </a>
+                <span className="hidden sm:inline">
+                  {lang === "VN" ? "Đăng nhập" : "Sign In"}
+                </span>
+              </Link>
             )}
           </div>
 
-          {/* Nút Hamburger (Chỉ hiện trên Mobile) */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="lg:hidden flex items-center justify-center text-slate-900 hover:text-primary transition-colors p-1"
+            className="lg:hidden flex items-center justify-center text-slate-900 dark:text-white hover:text-primary dark:hover:text-yellow-400 transition-colors p-1"
           >
             <span className="material-symbols-outlined text-2xl">
               {isMobileMenuOpen ? "close" : "menu"}
@@ -201,117 +227,107 @@ export const Header = () => {
         </div>
       </div>
 
-      {/* ========================================= */}
       {/* MOBILE MENU DROPDOWN */}
-      {/* ========================================= */}
       <div
-        className={`absolute top-[105%] left-0 w-full bg-white shadow-2xl rounded-2xl border border-surface-variant/50 transition-all duration-300 origin-top flex flex-col overflow-hidden lg:hidden ${
+        className={`absolute top-[105%] left-0 w-full bg-white dark:bg-slate-900 shadow-2xl rounded-2xl border border-surface-variant/50 dark:border-slate-700 transition-all duration-300 origin-top flex flex-col overflow-hidden lg:hidden ${
           isMobileMenuOpen
             ? "scale-y-100 opacity-100 visible"
             : "scale-y-0 opacity-0 invisible"
         } max-h-[80vh] overflow-y-auto no-scrollbar`}
       >
         <div className="p-6 flex flex-col gap-5">
-          <a
-            href="/"
-            className="font-bold text-slate-900 text-base"
+          <Link
+            to="/"
+            className={`font-bold text-base ${isHomeActive ? "text-primary dark:text-yellow-400" : "text-slate-900 dark:text-white"}`}
             onClick={() => setIsMobileMenuOpen(false)}
           >
-            Trang chủ
-          </a>
+            {lang === "VN" ? "Trang chủ" : "Home"}
+          </Link>
 
           <div className="flex flex-col gap-2">
-            <span className="font-bold text-slate-900 text-base">Bến tàu</span>
-            <div className="flex flex-col gap-3 pl-4 border-l-2 border-surface-variant/50 ml-2 mt-1">
-              <a
-                href="#"
-                className="text-slate-600 text-sm font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Bạch Đằng
-              </a>
-              <a
-                href="#"
-                className="text-slate-600 text-sm font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Bình An
-              </a>
-              <a
-                href="#"
-                className="text-slate-600 text-sm font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Thanh Đa
-              </a>
-              <a
-                href="#"
-                className="text-slate-600 text-sm font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Hiệp Bình Chánh
-              </a>
-              <a
-                href="#"
-                className="text-slate-600 text-sm font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Linh Đông
-              </a>
+            <span
+              className={`font-bold text-base ${isStationsActive ? "text-primary dark:text-yellow-400" : "text-slate-900 dark:text-white"}`}
+            >
+              {lang === "VN" ? "Bến tàu" : "Stations"}
+            </span>
+            <div className="flex flex-col gap-3 pl-4 border-l-2 border-surface-variant/50 dark:border-slate-700 ml-2 mt-1">
+              {[
+                { path: "/stations/bach-dang", label: "Bạch Đằng" },
+                { path: "/stations/thu-thiem", label: "Thủ Thiêm" },
+                { path: "/stations/binh-an", label: "Bình An" },
+                { path: "/stations/thanh-da", label: "Thanh Đa" },
+                { path: "/stations/linh-dong", label: "Linh Đông" },
+              ].map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`text-sm font-medium ${
+                    currentPath === item.path
+                      ? "text-primary dark:text-yellow-400"
+                      : "text-slate-600 dark:text-slate-300"
+                  }`}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              ))}
             </div>
           </div>
 
-          <a
-            href="#"
-            className="font-bold text-slate-900 text-base"
+          <Link
+            to="/"
+            className="font-bold text-slate-900 dark:text-white text-base"
             onClick={() => setIsMobileMenuOpen(false)}
           >
-            Lịch khởi hành
-          </a>
+            {lang === "VN" ? "Lịch khởi hành" : "Schedule"}
+          </Link>
 
           <div className="flex flex-col gap-2">
-            <span className="font-bold text-slate-900 text-base">Dịch vụ</span>
-            <div className="flex flex-col gap-3 pl-4 border-l-2 border-surface-variant/50 ml-2 mt-1">
-              <a
-                href="#"
-                className="text-slate-600 text-sm font-medium"
+            <span className="font-bold text-slate-900 dark:text-white text-base">
+              {lang === "VN" ? "Dịch vụ" : "Services"}
+            </span>
+            <div className="flex flex-col gap-3 pl-4 border-l-2 border-surface-variant/50 dark:border-slate-700 ml-2 mt-1">
+              <Link
+                to="/"
+                className="text-slate-600 dark:text-slate-300 text-sm font-medium"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Đặt vé online
-              </a>
-              <a
-                href="#"
-                className="text-slate-600 text-sm font-medium"
+                {lang === "VN"
+                  ? "Đặt vé online & hướng dẫn"
+                  : "Book Online & Guide"}
+              </Link>
+              <Link
+                to="/"
+                className="text-slate-600 dark:text-slate-300 text-sm font-medium"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Hướng dẫn đặt vé
-              </a>
+                {lang === "VN" ? "Kiểm tra vé" : "Check Ticket"}
+              </Link>
             </div>
           </div>
 
-          <a
-            href="#"
-            className="font-bold text-slate-900 text-base"
+          <Link
+            to="/"
+            className="font-bold text-slate-900 dark:text-white text-base"
             onClick={() => setIsMobileMenuOpen(false)}
           >
-            Khuyến Mãi
-          </a>
-          <a
-            href="#"
-            className="font-bold text-slate-900 text-base"
+            {lang === "VN" ? "Khuyến Mãi" : "Promotions"}
+          </Link>
+          <Link
+            to="/"
+            className="font-bold text-slate-900 dark:text-white text-base"
             onClick={() => setIsMobileMenuOpen(false)}
           >
-            Liên hệ
-          </a>
+            {lang === "VN" ? "Liên hệ" : "Contact"}
+          </Link>
 
-          <hr className="border-surface-variant/50 my-2" />
+          <hr className="border-surface-variant/50 dark:border-slate-700 my-2" />
 
           {/* Button Booking Mobile */}
           <a
-            href="#booking-section"
+            href="/#booking-section"
             onClick={(e) => {
               setIsMobileMenuOpen(false);
-              // Hỗ trợ trượt xuống khi bấm Booking ở Mobile Menu
               if (window.location.pathname === "/") {
                 e.preventDefault();
                 document
@@ -319,19 +335,31 @@ export const Header = () => {
                   ?.scrollIntoView({ behavior: "smooth", block: "start" });
               }
             }}
-            className="bg-primary-container text-center text-on-primary-fixed px-8 py-3.5 rounded-xl font-bold text-sm font-headline hover:brightness-105 transition-all shadow-md"
+            className="bg-primary-container dark:bg-yellow-400 text-center text-on-primary-fixed dark:text-slate-900 px-8 py-3.5 rounded-xl font-bold text-sm font-headline hover:brightness-105 transition-all shadow-md"
           >
-            Booking Now
+            {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
           </a>
 
-          {/* Language Mobile */}
-          <div className="flex justify-center items-center gap-4 bg-surface-container-low/50 px-5 py-3 rounded-xl border border-surface-variant/30 mt-1">
-            <button className="text-xs font-bold text-primary font-headline tracking-widest">
-              ENG
+          {/* Theme & Language Mobile */}
+          <div className="grid grid-cols-2 gap-3 mt-1">
+            <button
+              onClick={toggleDarkMode}
+              className="flex justify-center items-center gap-2 bg-surface-container-low/50 dark:bg-slate-800 border border-surface-variant/30 dark:border-slate-600 px-5 py-3 rounded-xl text-on-surface-variant dark:text-white hover:text-primary dark:hover:text-yellow-400 transition-colors font-headline text-sm font-bold"
+            >
+              <span className="material-symbols-outlined text-[20px]">
+                {isDarkMode ? "light_mode" : "dark_mode"}
+              </span>
+              {isDarkMode ? "Sáng" : "Tối"}
             </button>
-            <span className="text-outline/30">|</span>
-            <button className="text-xs font-bold text-on-surface-variant/60 font-headline tracking-widest hover:text-primary transition-colors">
-              VN
+
+            <button
+              onClick={toggleLang}
+              className="flex justify-center items-center gap-2 bg-surface-container-low/50 dark:bg-slate-800 border border-surface-variant/30 dark:border-slate-600 px-5 py-3 rounded-xl text-primary dark:text-yellow-400 font-headline text-sm font-bold tracking-widest hover:brightness-110 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[20px]">
+                translate
+              </span>
+              {lang}
             </button>
           </div>
         </div>
