@@ -5,7 +5,9 @@ import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { Station } from "./pages/Station";
+import { Promotions } from "./pages/Promotions";
 import { Contact } from "./pages/Contact";
+import { Profile } from "./pages/Profile";
 
 // Main Layout (Header, Footer)
 const MainLayout = ({ children }) => {
@@ -42,12 +44,32 @@ function App() {
           }
         />
 
+        {/* Promotions Page */}
+        <Route
+          path="/promotions"
+          element={
+            <MainLayout>
+              <Promotions />
+            </MainLayout>
+          }
+        />
+
         {/* Contact Page */}
         <Route
           path="/contact"
           element={
             <MainLayout>
               <Contact />
+            </MainLayout>
+          }
+        />
+
+        {/* Profile Page */}
+        <Route
+          path="/profile"
+          element={
+            <MainLayout>
+              <Profile />
             </MainLayout>
           }
         />

@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 
 export const Header = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -16,6 +16,7 @@ export const Header = () => {
   // Xác định trạng thái active của các tab chính
   const isHomeActive = currentPath === "/";
   const isStationsActive = currentPath.startsWith("/stations");
+  const isPromotionsActive = currentPath.startsWith("/promotions");
   const isContactActive = currentPath === "/contact";
 
   useEffect(() => {
@@ -150,8 +151,12 @@ export const Header = () => {
 
           {/* Promotions */}
           <Link
-            className="text-xs font-medium text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400 transition-colors font-headline"
-            to="/"
+            className={`text-xs font-bold px-4 py-2 rounded-full font-headline transition-colors ${
+              isPromotionsActive
+                ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
+                : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
+            }`}
+            to="/promotions"
           >
             {lang === "VN" ? "Khuyến Mãi" : "Promotions"}
           </Link>
@@ -198,16 +203,17 @@ export const Header = () => {
 
           <div className="flex items-center gap-2 lg:pl-4 lg:border-l border-surface-variant/30 dark:border-slate-600">
             {isLoggedIn ? (
-              <button
-                onClick={() => setIsLoggedIn(false)}
-                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-primary-container overflow-hidden border-2 border-transparent hover:border-primary dark:hover:border-yellow-400 transition-colors cursor-pointer shrink-0"
+              <Link
+                to="/profile"
+                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-primary-container overflow-hidden border-2 border-transparent hover:border-primary dark:hover:border-yellow-400 transition-colors cursor-pointer shrink-0 block"
+                title={lang === "VN" ? "Hồ sơ của tôi" : "My Profile"}
               >
                 <img
                   alt="User Avatar"
                   className="w-full h-full object-cover"
                   src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJgEa1CJ6nEykaMCLialWDQWttf8sV3FmrwfpNsqm6OO9JzpZ8RcUQ1TWOwuutMrcEIMzEMozSlrOI28PIho2BdBNTFUC6OzHhjFH6UfeVhwuWTTTw3dFZtDn4rSlgsCXg6TGY88SStie6-CNRXxbboKK4EiEwhyYik6ZU2tM5ytXTRHz2M_OPltBXE3K4LGi2qWZoUw6EDd5-C-Uqc-tBO_-Tgj9zqYcTicR6MYKwEvvgdWXOqHahk_6FCxc0FkAqulS6IJiVBEJc"
                 />
-              </button>
+              </Link>
             ) : (
               <Link
                 to="/login"
@@ -312,7 +318,7 @@ export const Header = () => {
           </div>
 
           <Link
-            to="/"
+            to="/promotions"
             className="font-bold text-slate-900 dark:text-white text-base"
             onClick={() => setIsMobileMenuOpen(false)}
           >
