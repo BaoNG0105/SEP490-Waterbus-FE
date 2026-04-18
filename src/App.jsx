@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { Header } from "./components/layout/Header";
-import { Footer } from "./components/layout/Footer";
+import { AdminLayout } from "./components/layout/Admin/AdminLayout";
+import { MainLayout } from "./components/layout/MainLayout";
+//Client
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
@@ -8,22 +9,14 @@ import { Station } from "./pages/Station";
 import { Promotions } from "./pages/Promotions";
 import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
-
-// Main Layout (Header, Footer)
-const MainLayout = ({ children }) => {
-  return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      <div className="flex-grow">{children}</div>
-      <Footer />
-    </div>
-  );
-};
+//Admin
+import { AdminDashboard } from "./pages/AdminDashboard";
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* Client Page */}
         {/* Home Page */}
         <Route
           path="/"
@@ -79,6 +72,17 @@ function App() {
 
         {/* Register Page */}
         <Route path="/register" element={<Register />} />
+
+        {/* Admin Page */}
+        {/* Admin Dashboard Page */}
+        <Route
+          path="/admin"
+          element={
+            <AdminLayout title="Dashboard">
+              <AdminDashboard />
+            </AdminLayout>
+          }
+        />
       </Routes>
     </Router>
   );
