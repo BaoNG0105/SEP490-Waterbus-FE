@@ -1,9 +1,36 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 
 export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
   // Lấy các state và hàm từ AppContext
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
+  const location = useLocation();
+
+  // Danh sách thứ tự các trang quản lý để điều hướng Trái/Phải
+  const adminRoutes = [
+    "/admin",
+    "/admin/customers",
+    "/admin/staff",
+    "/admin/orders",
+    "/admin/boats",
+    "/admin/revenue",
+    "/admin/schedules",
+    "/admin/reports",
+    "/admin/settings",
+  ];
+
+  // Tìm vị trí (index) của trang hiện tại
+  const currentIndex = adminRoutes.indexOf(location.pathname);
+
+  // Tính toán trang Trước và Sau (Hỗ trợ vòng lặp)
+  const prevPath =
+    currentIndex > 0
+      ? adminRoutes[currentIndex - 1]
+      : adminRoutes[adminRoutes.length - 1];
+  const nextPath =
+    currentIndex !== -1 && currentIndex < adminRoutes.length - 1
+      ? adminRoutes[currentIndex + 1]
+      : adminRoutes[0];
 
   return (
     <header className="fixed top-0 w-full z-40 flex justify-between items-center px-6 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm border-b border-surface-variant/30 dark:border-slate-700 transition-colors duration-300">
@@ -27,10 +54,35 @@ export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
         </div>
       </div>
 
-      {/* Chính giữa: Title Trang */}
-      <h1 className="absolute left-1/2 -translate-x-1/2 font-headline font-bold tracking-tight text-xl text-slate-900 dark:text-white">
-        {title}
-      </h1>
+      {/* Chính giữa: Navigation Arrows & Title Trang */}
+      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4">
+        <Link
+          to={prevPath}
+          title={lang === "VN" ? "Trang trước" : "Previous Page"}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-primary dark:hover:text-yellow-400 transition-colors"
+        >
+          <span className="material-symbols-outlined text-[24px]">
+            chevron_left
+          </span>
+        </Link>
+
+        {/* Title bọc trong div fix cứng width để các mũi tên không bị giật/nhảy khi đổi trang có tên dài/ngắn khác nhau */}
+        <div className="min-w-[130px] md:min-w-[180px] text-center">
+          <h1 className="font-headline font-bold tracking-tight text-lg md:text-xl text-slate-900 dark:text-white whitespace-nowrap overflow-hidden text-ellipsis">
+            {title}
+          </h1>
+        </div>
+
+        <Link
+          to={nextPath}
+          title={lang === "VN" ? "Trang sau" : "Next Page"}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-primary dark:hover:text-yellow-400 transition-colors"
+        >
+          <span className="material-symbols-outlined text-[24px]">
+            chevron_right
+          </span>
+        </Link>
+      </div>
 
       {/* Góc phải: Toggles & Nút Power Off */}
       <div className="flex items-center gap-1 md:gap-2">

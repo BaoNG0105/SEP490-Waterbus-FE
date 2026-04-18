@@ -11,6 +11,7 @@ import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
 //Admin
 import { AdminDashboard } from "./pages/AdminDashboard";
+import { AdminCustomers } from "./pages/AdminCustomers";
 
 function App() {
   return (
@@ -80,6 +81,16 @@ function App() {
           element={
             <AdminLayout title="Dashboard">
               <AdminDashboard />
+            </AdminLayout>
+          }
+        />
+
+        {/* Admin Customers Page */}
+        <Route
+          path="/admin/customers"
+          element={
+            <AdminLayout title="Customers">
+              <AdminCustomers />
             </AdminLayout>
           }
         />

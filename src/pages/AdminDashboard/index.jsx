@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useApp } from "../../context/AppContext"; // Import Context
+import { useApp } from "../../context/AppContext";
 
 export const AdminDashboard = () => {
   const { lang } = useApp();
@@ -51,10 +51,13 @@ export const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Lưới các Lối tắt (Cards) */}
+        {/* Lưới các Lối tắt (Cards) - Thay đổi div thành thẻ Link */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           {/* Card Doanh thu (Highlighted) */}
-          <div className="bg-surface-container-highest dark:bg-slate-800 p-6 rounded-[2rem] border-b-4 border-primary-container dark:border-yellow-400 hover:-translate-y-1 transition-all cursor-pointer group shadow-sm hover:shadow-md">
+          <Link
+            to="/admin/revenue"
+            className="bg-surface-container-highest dark:bg-slate-800 p-6 rounded-[2rem] border-b-4 border-primary-container dark:border-yellow-400 hover:-translate-y-1 transition-all cursor-pointer group shadow-sm hover:shadow-md block"
+          >
             <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-700 flex items-center justify-center mb-4 shadow-sm group-hover:shadow-md transition-shadow">
               <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-3xl">
                 payments
@@ -66,56 +69,62 @@ export const AdminDashboard = () => {
             <span className="text-xs font-label text-slate-500 dark:text-slate-400 uppercase tracking-widest font-bold">
               Money
             </span>
-          </div>
-
-          {/* Các Card khác */}
+          </Link>
           {[
             {
               icon: "badge",
               titleVN: "Nhân viên",
               titleEN: "Staff",
               sub: "HR",
+              path: "/admin/staff",
             },
             {
               icon: "groups",
               titleVN: "Khách hàng",
               titleEN: "Customers",
               sub: "Users",
+              path: "/admin/customers",
             },
             {
               icon: "book_online",
               titleVN: "Đặt vé",
               titleEN: "Booking",
               sub: "Tickets",
+              path: "/admin/orders",
             },
             {
               icon: "directions_boat",
               titleVN: "Tàu cao tốc",
               titleEN: "Boats",
               sub: "Fleet",
+              path: "/admin/boats",
             },
             {
               icon: "event_repeat",
               titleVN: "Lịch trình",
               titleEN: "Schedule",
               sub: "Routes",
+              path: "/admin/schedules",
             },
             {
               icon: "analytics",
               titleVN: "Báo cáo",
               titleEN: "Reports",
               sub: "Data",
+              path: "/admin/reports",
             },
             {
               icon: "settings",
               titleVN: "Cài đặt",
               titleEN: "Settings",
               sub: "System",
+              path: "/admin/settings",
             },
           ].map((item, idx) => (
-            <div
+            <Link
               key={idx}
-              className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] hover:-translate-y-1 transition-all cursor-pointer group shadow-sm hover:shadow-md border border-slate-100 dark:border-slate-700"
+              to={item.path}
+              className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] hover:-translate-y-1 transition-all cursor-pointer group shadow-sm hover:shadow-md border border-slate-100 dark:border-slate-700 block"
             >
               <div className="w-12 h-12 rounded-2xl bg-surface-container-low dark:bg-slate-700 flex items-center justify-center mb-4">
                 <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-3xl">
@@ -128,7 +137,7 @@ export const AdminDashboard = () => {
               <span className="text-xs font-label text-slate-500 dark:text-slate-400 uppercase tracking-widest font-bold">
                 {item.sub}
               </span>
-            </div>
+            </Link>
           ))}
         </div>
       </section>
