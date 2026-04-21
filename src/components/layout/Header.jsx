@@ -50,7 +50,7 @@ export const Header = () => {
     >
       <div className="px-6 md:px-8 py-2.5 flex justify-between items-center transition-all duration-300">
         {/* Logo */}
-        <Link
+        {/* <Link
           to="/"
           className="text-lg font-bold tracking-tighter text-slate-900 dark:text-white font-headline flex items-center gap-1.5"
         >
@@ -58,7 +58,7 @@ export const Header = () => {
             waves
           </span>
           WaterBus
-        </Link>
+        </Link> */}
 
         {/* Main Links (Desktop) */}
         <div className="hidden lg:flex items-center gap-6">

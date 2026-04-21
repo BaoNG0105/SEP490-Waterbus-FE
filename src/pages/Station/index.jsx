@@ -193,27 +193,6 @@ export const Station = () => {
         </section>
       )}
 
-      {/* Section 4: Route Map */}
-      <section className="max-w-7xl mx-auto px-4 md:px-8 mb-12">
-        <div className="bg-slate-900 rounded-[3rem] p-12 text-white flex flex-col items-center">
-          <h2 className="font-headline text-4xl font-bold mb-4">
-            {lang === "VN" ? "Mạng lưới kết nối" : "Connection Network"}
-          </h2>
-          <p className="text-slate-400 mb-12 text-center max-w-2xl">
-            {lang === "VN"
-              ? `${station.name} là nút thắt trung tâm kết nối tất cả các tuyến chính của WaterBus đến mọi khu vực trong thành phố.`
-              : `${station.name} is the central hub connecting all major WaterBus routes to every part of the city.`}
-          </p>
-          <div className="w-full max-w-4xl bg-white/5 rounded-3xl p-8 backdrop-blur-sm border border-white/10">
-            <img
-              className="w-full h-auto rounded-xl opacity-80"
-              alt="Map"
-              src="https://res.cloudinary.com/dygipvoal/image/upload/v1776139243/uyviiv5fozuo569lvd4i.jpg"
-            />
-          </div>
-        </div>
-      </section>
-
       {/* Modal Địa điểm lân cận */}
       {selectedAttraction && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">

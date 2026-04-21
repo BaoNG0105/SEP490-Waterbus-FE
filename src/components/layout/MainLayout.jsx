@@ -1,5 +1,6 @@
 import { Header } from "./Header";
 import { Footer } from "./Footer";
+import { FloatingActions } from "./FloatingActions";
 
 export const MainLayout = ({ children }) => {
   return (
@@ -7,6 +8,7 @@ export const MainLayout = ({ children }) => {
       <Header />
       <div className="flex-grow">{children}</div>
       <Footer />
+      <FloatingActions />
     </div>
   );
 };
