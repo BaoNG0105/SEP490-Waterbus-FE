@@ -1,24 +1,83 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
+import { useSelector, useDispatch } from "react-redux";
+import { logout } from "../../features/auth/authSlice";
+import Swal from "sweetalert2";
 
 export const Header = () => {
-  const [isLoggedIn] = useState(false);
+  const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
-
-  // Lấy thông tin URL hiện tại
   const location = useLocation();
   const currentPath = location.pathname;
 
-  // Xác định trạng thái active của các tab chính
+  // Khởi tạo dispatch và navigate
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+
   const isHomeActive = currentPath === "/";
   const isStationsActive = currentPath.startsWith("/stations");
   const isPromotionsActive = currentPath.startsWith("/promotions");
   const isContactActive = currentPath === "/contact";
 
+  // LẤY DỮ LIỆU TỪ REDUX STORE (Thay cho localStorage)
+  const { isAuthenticated, user } = useSelector((state) => state.auth);
+
+  // logic hiển thị tên và ảnh
+  const defaultAvatar =
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuCJgEa1CJ6nEykaMCLialWDQWttf8sV3FmrwfpNsqm6OO9JzpZ8RcUQ1TWOwuutMrcEIMzEMozSlrOI28PIho2BdBNTFUC6OzHhjFH6UfeVhwuWTTTw3dFZtDn4rSlgsCXg6TGY88SStie6-CNRXxbboKK4EiEwhyYik6ZU2tM5ytXTRHz2M_OPltBXE3K4LGi2qWZoUw6EDd5-C-Uqc-tBO_-Tgj9zqYcTicR6MYKwEvvgdWXOqHahk_6FCxc0FkAqulS6IJiVBEJc";
+  const displayAvatar = user?.avatarUrl || defaultAvatar;
+  const displayUserName =
+    user?.fullName || (lang === "VN" ? "Thành viên" : "Member");
+
+  // Logic tự động đăng xuất sau 30p
+  useEffect(() => {
+    // Chỉ chạy nếu đã đăng nhập
+    if (!isAuthenticated) return;
+
+    const expirationTime = localStorage.getItem("expirationTime");
+    if (!expirationTime) return;
+
+    // Tính toán thời gian còn lại
+    const currentTime = new Date().getTime();
+    const timeLeft = parseInt(expirationTime) - currentTime;
+
+    const handleForceLogout = () => {
+      dispatch(logout()); // Xóa sạch dữ liệu Redux và LocalStorage
+
+      Swal.fire({
+        icon: 'info',
+        title: lang === "VN" ? 'Hết phiên đăng nhập' : 'Session Expired',
+        text: lang === "VN"
+          ? 'Tài khoản của bạn đã tự động đăng xuất sau 30 phút để bảo mật.'
+          : 'You have been automatically logged out after 30 minutes for security.',
+        confirmButtonColor: "#3085d6",
+        confirmButtonText: lang === "VN" ? 'Đăng nhập lại' : 'Sign in again',
+        background: isDarkMode ? '#1e293b' : '#ffffff',
+        color: isDarkMode ? '#ffffff' : '#0f172a',
+        allowOutsideClick: false // Bắt buộc người dùng phải bấm nút
+      }).then(() => {
+        navigate('/login');
+      });
+    };
+
+    // Nếu F5 mà thấy đã quá 30 phút -> Kích văng ra ngoài luôn
+    if (timeLeft <= 0) {
+      handleForceLogout();
+    } else {
+      // Đặt bộ đếm đếm ngược đúng số giây còn lại
+      const timer = setTimeout(() => {
+        handleForceLogout();
+      }, timeLeft);
+
+      // Dọn dẹp timer nếu component unmount (ví dụ user tự bấm logout trước)
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, dispatch, navigate, lang, isDarkMode]);
+
+  // logic scroll
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 20) {
@@ -27,7 +86,6 @@ export const Header = () => {
         setIsScrolled(false);
       }
     };
-
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -42,33 +100,19 @@ export const Header = () => {
 
   return (
     <nav
-      className={`fixed top-6 left-1/2 -translate-x-1/2 w-[95%] max-w-[1200px] z-100 rounded-full transition-all duration-500 ${
-        isScrolled
-          ? "bg-white dark:bg-slate-900 shadow-2xl border border-surface-variant/50 dark:border-slate-700 py-1"
-          : "bg-transparent border border-transparent shadow-none py-2"
-      } ${isMobileMenuOpen ? "bg-white dark:bg-slate-900" : ""}`}
+      className={`fixed top-6 left-1/2 -translate-x-1/2 w-[95%] max-w-1200px z-100 rounded-full transition-all duration-500 ${isScrolled
+        ? "bg-white dark:bg-slate-900 shadow-2xl border border-surface-variant/50 dark:border-slate-700 py-1"
+        : "bg-transparent border border-transparent shadow-none py-2"
+        } ${isMobileMenuOpen ? "bg-white dark:bg-slate-900" : ""}`}
     >
       <div className="px-6 md:px-8 py-2.5 flex justify-between items-center transition-all duration-300">
-        {/* Logo */}
-        {/* <Link
-          to="/"
-          className="text-lg font-bold tracking-tighter text-slate-900 dark:text-white font-headline flex items-center gap-1.5"
-        >
-          <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-xl">
-            waves
-          </span>
-          WaterBus
-        </Link> */}
-
-        {/* Main Links (Desktop) */}
+        {/* Home */}
         <div className="hidden lg:flex items-center gap-6">
-          {/* Home */}
           <Link
-            className={`text-xs font-bold px-4 py-2 rounded-full font-headline transition-colors ${
-              isHomeActive
-                ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
-                : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
-            }`}
+            className={`text-xs font-bold px-4 py-2 rounded-full font-headline transition-colors ${isHomeActive
+              ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
+              : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
+              }`}
             to="/"
           >
             {lang === "VN" ? "Trang chủ" : "Home"}
@@ -77,11 +121,10 @@ export const Header = () => {
           {/* Station*/}
           <div className="relative group">
             <button
-              className={`flex items-center gap-1 text-xs font-medium font-headline transition-colors ${
-                isStationsActive
-                  ? "text-primary dark:text-yellow-400 font-bold"
-                  : "text-on-surface-variant dark:text-white/80 group-hover:text-primary dark:group-hover:text-yellow-400"
-              }`}
+              className={`flex items-center gap-1 text-xs font-medium font-headline transition-colors ${isStationsActive
+                ? "text-primary dark:text-yellow-400 font-bold"
+                : "text-on-surface-variant dark:text-white/80 group-hover:text-primary dark:group-hover:text-yellow-400"
+                }`}
             >
               {lang === "VN" ? "Bến tàu" : "Stations"}
               <span className="material-symbols-outlined text-xs">
@@ -99,11 +142,10 @@ export const Header = () => {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`block px-4 py-2 text-xs transition-colors ${
-                    currentPath === item.path
-                      ? "text-primary dark:text-yellow-400 font-bold bg-surface-container-low dark:bg-slate-700"
-                      : "text-slate-900 dark:text-white hover:bg-surface-container-low dark:hover:bg-slate-700"
-                  }`}
+                  className={`block px-4 py-2 text-xs transition-colors ${currentPath === item.path
+                    ? "text-primary dark:text-yellow-400 font-bold bg-surface-container-low dark:bg-slate-700"
+                    : "text-slate-900 dark:text-white hover:bg-surface-container-low dark:hover:bg-slate-700"
+                    }`}
                 >
                   {item.label}
                 </Link>
@@ -113,17 +155,16 @@ export const Header = () => {
 
           {/* Schedule */}
           <Link
-            className={`text-xs font-medium font-headline transition-colors ${
-              currentPath === "/schedule"
-                ? "text-primary dark:text-yellow-400 font-bold"
-                : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
-            }`}
+            className={`text-xs font-medium font-headline transition-colors ${currentPath === "/schedule"
+              ? "text-primary dark:text-yellow-400 font-bold"
+              : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
+              }`}
             to="/"
           >
             {lang === "VN" ? "Lịch khởi hành" : "Schedule"}
           </Link>
 
-          {/* Services */}
+          {/* Booking */}
           <div className="relative group">
             <button className="flex items-center gap-1 text-xs font-medium text-on-surface-variant dark:text-white/80 group-hover:text-primary dark:group-hover:text-yellow-400 font-headline transition-colors">
               {lang === "VN" ? "Dịch vụ" : "Services"}
@@ -149,13 +190,12 @@ export const Header = () => {
             </div>
           </div>
 
-          {/* Promotions */}
+          {/* Promotion */}
           <Link
-            className={`text-xs font-bold px-4 py-2 rounded-full font-headline transition-colors ${
-              isPromotionsActive
-                ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
-                : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
-            }`}
+            className={`text-xs font-bold px-4 py-2 rounded-full font-headline transition-colors ${isPromotionsActive
+              ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
+              : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
+              }`}
             to="/promotions"
           >
             {lang === "VN" ? "Khuyến Mãi" : "Promotions"}
@@ -163,18 +203,17 @@ export const Header = () => {
 
           {/* Contact */}
           <Link
-            className={`text-xs font-bold px-4 py-2 rounded-full font-headline transition-colors ${
-              isContactActive
-                ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
-                : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
-            }`}
+            className={`text-xs font-bold px-4 py-2 rounded-full font-headline transition-colors ${isContactActive
+              ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
+              : "text-on-surface-variant dark:text-white/80 hover:text-primary dark:hover:text-yellow-400"
+              }`}
             to="/contact"
           >
             {lang === "VN" ? "Liên hệ" : "Contact"}
           </Link>
         </div>
 
-        {/* Cụm chức năng bên phải */}
+        {/* Darkmode & Booking */}
         <div className="flex items-center gap-3 lg:gap-4">
           <div className="hidden lg:flex items-center gap-3">
             <button
@@ -201,18 +240,24 @@ export const Header = () => {
             </a>
           </div>
 
+          {/* User */}
           <div className="flex items-center gap-2 lg:pl-4 lg:border-l border-surface-variant/30 dark:border-slate-600">
-            {isLoggedIn ? (
+            {isAuthenticated ? (
               <Link
                 to="/profile"
-                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-primary-container overflow-hidden border-2 border-transparent hover:border-primary dark:hover:border-yellow-400 transition-colors cursor-pointer shrink-0 block"
+                className="flex items-center gap-2 pl-1 pr-1 sm:pr-3 py-1 rounded-full bg-surface-container-low dark:bg-slate-800/80 border border-surface-variant/30 dark:border-slate-600 hover:border-primary dark:hover:border-yellow-400 transition-colors cursor-pointer"
                 title={lang === "VN" ? "Hồ sơ của tôi" : "My Profile"}
               >
-                <img
-                  alt="User Avatar"
-                  className="w-full h-full object-cover"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJgEa1CJ6nEykaMCLialWDQWttf8sV3FmrwfpNsqm6OO9JzpZ8RcUQ1TWOwuutMrcEIMzEMozSlrOI28PIho2BdBNTFUC6OzHhjFH6UfeVhwuWTTTw3dFZtDn4rSlgsCXg6TGY88SStie6-CNRXxbboKK4EiEwhyYik6ZU2tM5ytXTRHz2M_OPltBXE3K4LGi2qWZoUw6EDd5-C-Uqc-tBO_-Tgj9zqYcTicR6MYKwEvvgdWXOqHahk_6FCxc0FkAqulS6IJiVBEJc"
-                />
+                <div className="w-8 h-8 rounded-full bg-primary-container overflow-hidden shrink-0">
+                  <img
+                    alt="User Avatar"
+                    className="w-full h-full object-cover"
+                    src={displayAvatar}
+                  />
+                </div>
+                <span className="hidden sm:block text-xs font-bold font-headline text-slate-900 dark:text-white line-clamp-1 max-w-80px">
+                  {displayUserName}
+                </span>
               </Link>
             ) : (
               <Link
@@ -240,11 +285,10 @@ export const Header = () => {
 
       {/* MOBILE MENU DROPDOWN */}
       <div
-        className={`absolute top-[105%] left-0 w-full bg-white dark:bg-slate-900 shadow-2xl rounded-2xl border border-surface-variant/50 dark:border-slate-700 transition-all duration-300 origin-top flex flex-col overflow-hidden lg:hidden ${
-          isMobileMenuOpen
-            ? "scale-y-100 opacity-100 visible"
-            : "scale-y-0 opacity-0 invisible"
-        } max-h-[80vh] overflow-y-auto no-scrollbar`}
+        className={`absolute top-[105%] left-0 w-full bg-white dark:bg-slate-900 shadow-2xl rounded-2xl border border-surface-variant/50 dark:border-slate-700 transition-all duration-300 origin-top flex flex-col overflow-hidden lg:hidden ${isMobileMenuOpen
+          ? "scale-y-100 opacity-100 visible"
+          : "scale-y-0 opacity-0 invisible"
+          } max-h-[80vh] overflow-y-auto no-scrollbar`}
       >
         <div className="p-6 flex flex-col gap-5">
           <Link
@@ -272,11 +316,10 @@ export const Header = () => {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`text-sm font-medium ${
-                    currentPath === item.path
-                      ? "text-primary dark:text-yellow-400"
-                      : "text-slate-600 dark:text-slate-300"
-                  }`}
+                  className={`text-sm font-medium ${currentPath === item.path
+                    ? "text-primary dark:text-yellow-400"
+                    : "text-slate-600 dark:text-slate-300"
+                    }`}
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   {item.label}

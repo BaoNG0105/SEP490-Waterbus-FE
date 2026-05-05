@@ -1,3 +1,10 @@
+# Các file chứa Key, Token, Cấu hình môi trường
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
 # Logs
 logs
 *.log
