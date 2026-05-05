@@ -42,7 +42,7 @@ export const Profile = () => {
     });
   };
 
-  // Hàm xóa tài khoản
+  // Hàm xóa tài khoản (KHÔNG ĐƯỢC XÓA SAU NÀY CẬP NHẬT SAU)
   // const handleDeleteAccount = () => {
   //   Swal.fire({
   //     title: lang === "VN" ? "Bạn có chắc chắn muốn xóa?" : "Are you absolutely sure?",

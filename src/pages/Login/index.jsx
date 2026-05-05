@@ -1,30 +1,72 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
-import { loginWithGoogle, loginWithPhone } from "../../services/authService";
-
-// 1. IMPORT TỪ REDUX
-import { useDispatch } from "react-redux";
+import Swal from "sweetalert2";
+import {
+  loginWithGoogle,
+  loginWithPhone,
+  sendGooglePhoneOtp,
+  verifyGooglePhoneOtp
+} from "../../services/authService";
+import { useDispatch, useSelector } from "react-redux";
 import { loginSuccess } from "../../features/auth/authSlice";
 
+// DANH SÁCH MÃ VÙNG QUỐC GIA
+const COUNTRIES = [
+  { code: "+84", flag: "🇻🇳", name: "Vietnam" },
+  { code: "+1", flag: "🇺🇸", name: "USA / Canada" },
+  { code: "+44", flag: "🇬🇧", name: "United Kingdom" },
+  { code: "+61", flag: "🇦🇺", name: "Australia" },
+  { code: "+81", flag: "🇯🇵", name: "Japan" },
+  { code: "+82", flag: "🇰🇷", name: "South Korea" },
+  { code: "+86", flag: "🇨🇳", name: "China" },
+  { code: "+65", flag: "🇸🇬", name: "Singapore" },
+  { code: "+66", flag: "🇹🇭", name: "Thailand" },
+];
+
 export const Login = () => {
-  const [phone, setPhone] = useState("");
+  // QUẢN LÝ LUỒNG GIAO DIỆN
+  const [step, setStep] = useState(1); // 1: Login Form, 2: Nhập SĐT (Google), 3: Nhập OTP (Google)
+  const [tempToken, setTempToken] = useState("");
+  const [setChallengeId] = useState(0);
+  const [otpCode, setOtpCode] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // QUẢN LÝ BỘ ĐẾM THỜI GIAN OTP
+  const [timeLeft, setTimeLeft] = useState(300); // 300 giây = 5 phút
+  const [canResend, setCanResend] = useState(false);
+
+  // QUẢN LÝ DROPDOWN QUỐC GIA
+  const [phoneCode, setPhoneCode] = useState("+84");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [showPhoneDropdown, setShowPhoneDropdown] = useState(false);
+
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
   const navigate = useNavigate();
-  // 2. KHỞI TẠO HOOK DISPATCH
   const dispatch = useDispatch();
+  const { isAuthenticated } = useSelector((state) => state.auth);
 
+  // KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ ĐÁ VỀ TRANG CHỦ
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/", { replace: true }); 
+    }
+  }, [isAuthenticated, navigate]);
+
+  // XỬ LÝ ĐĂNG NHẬP THƯỜNG
   const handleLogin = async (e) => {
     e.preventDefault();
     setErrorMsg("");
+    setIsLoading(true);
     try {
-      const data = await loginWithPhone({ phone, password });
-      console.log("Đăng nhập thường thành công:", data);
+      const normalizedPhone = phoneNumber.replace(/^0+/, '');
+      const fullPhone = `${phoneCode}${normalizedPhone}`;
 
-      // 3. ĐƯA DỮ LIỆU VÀO REDUX STORE
+      const data = await loginWithPhone({ phone: fullPhone, password });
+
       if (data?.tokens?.accessToken) {
         dispatch(
           loginSuccess({
@@ -36,26 +78,120 @@ export const Login = () => {
             },
           }),
         );
-
         navigate("/");
       } else {
         setErrorMsg("Đăng nhập không thành công, vui lòng thử lại.");
       }
     } catch (error) {
+      console.log(error);
       setErrorMsg("Số điện thoại hoặc mật khẩu không chính xác.");
-      console.error("Lỗi đăng nhập:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // XỬ LÝ GOOGLE LOGIN TRẢ VỀ
   const handleGoogleSuccess = async (credentialResponse) => {
+    setErrorMsg("");
     try {
       const idToken = credentialResponse.credential;
-      // console.log("Lấy token Google thành công:", idToken);
+      console.log("🚨 TOKEN GOOGLE ĐỂ GỬI CHO BE TEST 🚨");
+      console.log(idToken);
 
       const data = await loginWithGoogle(idToken);
-      console.log("Backend phản hồi OK:", data);
 
-      // 4. ĐƯA DỮ LIỆU VÀO REDUX STORE
+      // TRƯỜNG HỢP 1: CẦN XÁC MINH SĐT
+      if (data?.status === "NEED_PHONE" && data?.tempToken) {
+        setTempToken(data.tempToken);
+        setStep(2); // Chuyển sang màn hình nhập SĐT
+      }
+      // TRƯỜNG HỢP 2: ĐĂNG NHẬP THÀNH CÔNG NGAY
+      else if (data?.tokens?.accessToken) {
+        dispatch(
+          loginSuccess({
+            accessToken: data.tokens.accessToken,
+            user: {
+              fullName: data.user?.fullName || "Thành viên",
+              avatarUrl: data.user?.avatarUrl || "",
+              roleName: data.user?.roles?.[0]?.displayName || "Customer",
+            },
+          }),
+        );
+        navigate("/");
+      }
+    } catch (error) {
+      console.log(error);
+      setErrorMsg("Đăng nhập Google thất bại. Vui lòng thử lại.");
+    }
+  };
+
+  const handleGoogleError = () => {
+    setErrorMsg("Đã hủy đăng nhập Google.");
+  };
+
+  // CHẠY ĐỒNG HỒ ĐẾM NGƯỢC Ở BƯỚC 3
+  useEffect(() => {
+    let interval;
+    if (step === 3 && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0) {
+      setCanResend(true); // Hết giờ thì cho phép gửi lại
+    }
+    return () => clearInterval(interval);
+  }, [step, timeLeft]);
+
+  // Hàm chuyển đổi giây thành định dạng MM:SS
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  // GỬI SĐT LẤY OTP CHO GOOGLE
+  const handleSendGooglePhoneOtp = async (e) => {
+    e.preventDefault();
+    setErrorMsg("");
+    setIsLoading(true);
+    try {
+      const normalizedPhone = phoneNumber.replace(/^0+/, '');
+      const fullPhone = `${phoneCode}${normalizedPhone}`;
+
+      const res = await sendGooglePhoneOtp({ tempToken, phone: fullPhone });
+
+      if (res?.challengeId) {
+        setChallengeId(res.challengeId);
+      }
+
+      // RESET ĐỒNG HỒ TRƯỚC KHI CHUYỂN BƯỚC
+      setTimeLeft(300);
+      setCanResend(false);
+      setStep(3);
+
+    } catch (error) {
+      setErrorMsg(error?.response?.data?.message || "Không thể gửi OTP. Số điện thoại có thể đã được sử dụng.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // XÁC THỰC OTP CHO GOOGLE
+  const handleVerifyGoogleOtp = async (e) => {
+    e.preventDefault();
+    if (otpCode.length < 4 || otpCode.length > 10) {
+      setErrorMsg("Mã OTP phải từ 4 đến 10 ký tự.");
+      return;
+    }
+
+    setErrorMsg("");
+    setIsLoading(true);
+    try {
+      const data = await verifyGooglePhoneOtp({
+        tempToken: tempToken,
+        otp: otpCode
+      });
+
       if (data?.tokens?.accessToken) {
         dispatch(
           loginSuccess({
@@ -67,203 +203,373 @@ export const Login = () => {
             },
           }),
         );
-
         navigate("/");
       }
     } catch (error) {
-      console.error("Backend từ chối token Google:", error);
+      setErrorMsg(error?.response?.data?.message || "Mã OTP không hợp lệ hoặc đã hết hạn.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleGoogleError = () => {
-    console.error("Đăng nhập Google thất bại!");
+  // GỬI LẠI OTP CHO GOOGLE LOGIN
+  const handleResendGoogleOtp = async () => {
+    setErrorMsg("");
+    setIsLoading(true);
+    try {
+      const normalizedPhone = phoneNumber.replace(/^0+/, '');
+      const fullPhone = `${phoneCode}${normalizedPhone}`;
+
+      const res = await sendGooglePhoneOtp({ tempToken, phone: fullPhone });
+      if (res?.challengeId) {
+        setChallengeId(res.challengeId);
+      }
+
+      // Khởi động lại đồng hồ
+      setTimeLeft(300);
+      setCanResend(false);
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Đã gửi lại OTP',
+        toast: true,
+        position: 'top-end',
+        timer: 3000,
+        showConfirmButton: false,
+      });
+
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Lỗi',
+        text: error?.response?.data?.message || 'Không thể gửi lại OTP lúc này.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  // Class chung cho input
+  const inputClasses = "w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl focus:ring-2 focus:ring-primary/40 dark:focus:ring-yellow-400/20 focus:border-primary dark:focus:border-transparent text-slate-900 dark:text-white outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-white/30";
+
   return (
-    <div className="bg-background font-body text-on-surface overflow-hidden min-h-screen relative">
-      <header className="fixed top-0 left-0 w-full p-8 lg:p-12 pointer-events-none flex justify-between items-center z-50">
-        <div className="bg-surface-container-lowest/10 backdrop-blur-md px-6 py-2 rounded-full lg:bg-transparent lg:backdrop-blur-none pointer-events-auto">
-          <span className="material-symbols-outlined text-primary text-xl">
-            waves
-          </span>
-          <span className="font-headline text-2xl font-black tracking-tighter text-on-surface lg:text-white">
-            WaterBus
-          </span>
-        </div>
-        <div className="pointer-events-auto">
-          {/* Nút quay lại trang chủ */}
-          <Link
-            to="/"
-            className="font-label text-xs uppercase tracking-widest text-on-surface/70 dark:text-white/70 hover:text-primary dark:hover:text-white flex items-center gap-2 group"
-          >
-            <span className="material-symbols-outlined text-lg group-hover:-translate-x-1 transition-transform">
-              arrow_back
-            </span>
+    <div className="bg-white dark:bg-slate-900 font-body text-slate-900 dark:text-white selection:bg-primary-container selection:text-on-primary-container overflow-hidden min-h-screen relative">
+
+      <header className="fixed top-0 left-0 w-full p-6 lg:p-12 pointer-events-none flex justify-between items-center z-50">
+        <div className="pointer-events-auto bg-white/80 dark:bg-slate-900/50 backdrop-blur-md px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm">
+          <Link to="/" className="font-label text-xs uppercase tracking-widest text-slate-600 dark:text-white/70 hover:text-primary dark:hover:text-white flex items-center gap-2 group">
+            <span className="material-symbols-outlined text-lg group-hover:-translate-x-1 transition-transform">arrow_back</span>
             Back to Site
           </Link>
         </div>
       </header>
 
-      <main className="flex min-h-screen">
-        <section className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-900 items-center justify-center">
-          <div className="absolute inset-0 opacity-40">
-            <img
-              alt="River at Sunrise"
-              className="w-full h-full object-cover mix-blend-overlay"
-              src="https://res.cloudinary.com/dygipvoal/image/upload/v1776092653/ywbwjyftzirzdqf2igte.jpg"
-            />
+      <main className="min-h-screen flex flex-col md:flex-row overflow-hidden">
+        {/* Left Side: Image */}
+        <section className="hidden md:flex md:w-1/2 lg:w-3/5 relative overflow-hidden bg-slate-900 items-center justify-center">
+          <div className="absolute inset-0 z-0 opacity-50 dark:opacity-40">
+            <img alt="River Transit" className="w-full h-full object-cover mix-blend-overlay" src="https://res.cloudinary.com/dygipvoal/image/upload/v1776092653/ywbwjyftzirzdqf2igte.jpg" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-black/60 via-transparent to-transparent"></div>
           </div>
-          {/* Branding Overlay */}
-          <div className="relative z-10 px-16 text-white max-w-2xl">
-            <h1 className="font-headline text-7xl font-bold tracking-tighter leading-none mb-6">
-              Navigate <br />
-              the flow.
-            </h1>
-            <p className="font-body text-xl text-surface-container-low font-light leading-relaxed max-w-md">
-              Seamless river transit across Saigon. Your journey through the
-              heart of the city begins with a single click.
-            </p>
+          <div className="relative z-10 p-12 flex flex-col justify-center h-full w-full gap-16">
+            <div className="max-w-lg">
+              <h1 className="font-headline text-5xl lg:text-7xl font-bold text-white leading-none tracking-tight mb-6">Navigate <br /> the flow.</h1>
+              <p className="text-white/90 text-lg lg:text-xl font-light leading-relaxed">Seamless river transit across Saigon. Your journey through the heart of the city begins with a single click.</p>
+            </div>
           </div>
-          {/* Floating 3D Accent */}
-          <div className="absolute -bottom-20 -right-20 w-96 h-96 rounded-full bg-primary/20 blur-3xl"></div>
         </section>
 
-        <section className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 sm:p-12 lg:p-24 bg-surface dark:bg-slate-900 transition-colors">
-          <div className="w-full max-w-md">
-            <div className="mb-10">
-              <h2 className="font-headline text-4xl font-bold text-on-surface dark:text-white mb-2 tracking-tight">
-                Welcome back
-              </h2>
-              <p className="text-on-surface-variant dark:text-white/70 font-label">
-                Enter your credentials to access your routes.
-              </p>
-            </div>
+        {/* Right Side: Form Area */}
+        <section className="w-full md:w-1/2 lg:w-2/5 bg-white dark:bg-slate-900 flex flex-col justify-start px-6 py-10 lg:px-20 relative transition-colors h-screen overflow-y-auto">
+          <div className="w-full max-w-md mx-auto pt-32 pb-12">
 
-            {/* Hiển thị thông báo lỗi nếu có */}
             {errorMsg && (
-              <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-xl">
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium">
+                <span className="material-symbols-outlined inline-block align-text-bottom mr-1 text-[18px]">error</span>
                 {errorMsg}
               </div>
             )}
 
-            <form className="space-y-6" onSubmit={handleLogin}>
-              <div className="space-y-2">
-                <label
-                  className="block font-label text-sm font-semibold text-on-surface-variant dark:text-white ml-1"
-                  htmlFor="phone"
-                >
-                  Số điện thoại
-                </label>
-                <input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Nhập số điện thoại"
-                  className="w-full px-6 py-4 rounded-xl bg-surface-container-high dark:bg-slate-800 border-none text-on-surface dark:text-white focus:ring-2 focus:ring-primary dark:focus:ring-yellow-400 focus:bg-surface-container-lowest dark:focus:bg-slate-700 transition-all duration-300 placeholder:text-outline/60"
-                  required
-                />
-              </div>
+            {/* ĐĂNG NHẬP MẶC ĐỊNH */}
+            {step === 1 && (
+              <div className="animate-fade-in-up">
+                <header className="mb-10">
+                  <h2 className="font-headline text-3xl font-bold text-slate-900 dark:text-white mb-2 tracking-tight">Welcome back</h2>
+                  <p className="text-slate-500 dark:text-white/70 font-body">Enter your credentials to access your routes.</p>
+                </header>
 
-              <div className="space-y-2">
-                <div className="flex justify-between items-center px-1">
-                  <label
-                    className="block font-label text-sm font-semibold text-on-surface-variant dark:text-white"
-                    htmlFor="password"
-                  >
-                    Password
-                  </label>
-                  <a
-                    className="text-xs font-label font-bold text-primary dark:text-yellow-400 hover:brightness-110 transition-colors"
-                    href="#"
-                  >
-                    Forgot password?
-                  </a>
-                </div>
-                <div className="relative">
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-6 py-4 rounded-xl bg-surface-container-high dark:bg-slate-800 border-none text-on-surface dark:text-white focus:ring-2 focus:ring-primary dark:focus:ring-yellow-400 focus:bg-surface-container-lowest dark:focus:bg-slate-700 transition-all duration-300 placeholder:text-outline/60"
-                    required
-                  />
+                <form className="space-y-6" onSubmit={handleLogin}>
+                  {/* TRƯỜNG PHONE KÈM DROPDOWN */}
+                  <div className="space-y-1.5">
+                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Phone Number</label>
+                    <div className="relative group flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl focus-within:ring-2 focus-within:ring-primary/40 dark:focus-within:ring-yellow-400/20 focus-within:border-primary dark:focus-within:border-transparent transition-all duration-300">
+                      <button
+                        type="button"
+                        onClick={() => setShowPhoneDropdown(!showPhoneDropdown)}
+                        className="flex items-center gap-2 pl-4 pr-3 py-3.5 text-slate-900 dark:text-white font-body outline-none border-r border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-xl transition-colors"
+                      >
+                        <span className="text-xl leading-none">{COUNTRIES.find(c => c.code === phoneCode)?.flag}</span>
+                        <span className="text-sm font-medium">{phoneCode}</span>
+                        <span className="material-symbols-outlined text-[16px] text-slate-400 dark:text-white/50">expand_more</span>
+                      </button>
+
+                      {showPhoneDropdown && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowPhoneDropdown(false)}></div>
+                          <div className="absolute z-50 top-[110%] left-0 w-64 max-h-60 overflow-y-auto bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 rounded-xl py-2 no-scrollbar animate-fade-in-up">
+                            {COUNTRIES.map((country) => (
+                              <button
+                                key={country.code}
+                                type="button"
+                                onClick={() => {
+                                  setPhoneCode(country.code);
+                                  setShowPhoneDropdown(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                              >
+                                <span className="text-xl leading-none">{country.flag}</span>
+                                <span className="text-sm font-bold text-slate-900 dark:text-white w-10">{country.code}</span>
+                                <span className="text-xs font-medium text-slate-500 dark:text-white/60 truncate">{country.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      <input
+                        name="phoneNumber"
+                        type="tel"
+                        required
+                        value={phoneNumber}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '');
+                          setPhoneNumber(val);
+                          setErrorMsg("");
+                        }}
+                        placeholder="90 123 4567"
+                        className="w-full px-4 py-3.5 bg-transparent border-none text-slate-900 dark:text-white font-body outline-none placeholder:text-slate-400 dark:placeholder:text-white/30"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password */}
+                  <div className="space-y-1.5 relative">
+                    <div className="flex justify-between items-center px-1 mb-1">
+                      <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90">Password</label>
+                      <a className="text-xs font-label font-bold text-primary dark:text-yellow-400 hover:underline transition-colors" href="#">Forgot password?</a>
+                    </div>
+                    <div className="relative">
+                      <input
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        autoComplete="current-password"
+                        className={inputClasses}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-primary dark:hover:text-yellow-400 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">
+                          {showPassword ? "visibility_off" : "visibility"}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
                   <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-primary dark:hover:text-white transition-colors"
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full liquid-gradient disabled:opacity-70 text-on-primary-fixed font-headline font-bold py-4 mt-2 rounded-full shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all duration-300 flex justify-center items-center gap-2"
                   >
-                    <span className="material-symbols-outlined text-xl">
-                      {showPassword ? "visibility_off" : "visibility"}
-                    </span>
+                    {isLoading ? "Signing in..." : "Sign In"}
                   </button>
+                </form>
+
+                <div className="relative my-10">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-white dark:bg-slate-900 px-4 text-slate-400 dark:text-white/60 font-label uppercase tracking-widest">
+                      Or continue with
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-center w-full overflow-hidden">
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={handleGoogleError}
+                    shape="rectangular"
+                    size="large"
+                    theme="outline"
+                    text="signin_with"
+                    width="100%"
+                  />
+                </div>
+
+                <div className="mt-12 text-center z-10 relative">
+                  <p className="text-sm text-slate-600 dark:text-white/70 font-body">
+                    Don't have an account?{" "}
+                    <Link to="/register" className="font-bold text-primary dark:text-yellow-400 hover:underline ml-1">
+                      Register for free
+                    </Link>
+                  </p>
                 </div>
               </div>
+            )}
 
-              <button
-                type="submit"
-                className="w-full liquid-gradient text-on-primary-fixed font-headline font-bold py-5 rounded-full shadow-lg hover:scale-[1.02] active:scale-95 transition-all duration-300 flex justify-center items-center gap-2"
-              >
-                Sign In
-              </button>
-            </form>
+            {/* NHẬP SĐT CHO GOOGLE ACCOUNT */}
+            {step === 2 && (
+              <div className="animate-fade-in-up">
+                <header className="mb-10">
+                  <h2 className="font-headline text-3xl font-bold text-slate-900 dark:text-white mb-2 tracking-tight">Verify Phone Number</h2>
+                  <p className="text-slate-500 dark:text-white/70 font-body">Your Google account needs a verified phone number to secure your bookings.</p>
+                </header>
 
-            <div className="relative my-12">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-outline-variant/30 dark:border-slate-700"></div>
+                <form className="space-y-6" onSubmit={handleSendGooglePhoneOtp}>
+                  <div className="space-y-1.5">
+                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Phone Number *</label>
+                    <div className="relative group flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl focus-within:ring-2 focus-within:ring-primary/40 dark:focus-within:ring-yellow-400/20 focus-within:border-primary dark:focus-within:border-transparent transition-all duration-300">
+                      <button
+                        type="button"
+                        onClick={() => setShowPhoneDropdown(!showPhoneDropdown)}
+                        className="flex items-center gap-2 pl-4 pr-3 py-3.5 text-slate-900 dark:text-white font-body outline-none border-r border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-xl transition-colors"
+                      >
+                        <span className="text-xl leading-none">{COUNTRIES.find(c => c.code === phoneCode)?.flag}</span>
+                        <span className="text-sm font-medium">{phoneCode}</span>
+                        <span className="material-symbols-outlined text-[16px] text-slate-400 dark:text-white/50">expand_more</span>
+                      </button>
+
+                      {showPhoneDropdown && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowPhoneDropdown(false)}></div>
+                          <div className="absolute z-50 top-[110%] left-0 w-64 max-h-60 overflow-y-auto bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 rounded-xl py-2 no-scrollbar animate-fade-in-up">
+                            {COUNTRIES.map((country) => (
+                              <button
+                                key={country.code}
+                                type="button"
+                                onClick={() => {
+                                  setPhoneCode(country.code);
+                                  setShowPhoneDropdown(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                              >
+                                <span className="text-xl leading-none">{country.flag}</span>
+                                <span className="text-sm font-bold text-slate-900 dark:text-white w-10">{country.code}</span>
+                                <span className="text-xs font-medium text-slate-500 dark:text-white/60 truncate">{country.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      <input
+                        name="phoneNumber"
+                        type="tel"
+                        required
+                        value={phoneNumber}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '');
+                          setPhoneNumber(val);
+                          setErrorMsg("");
+                        }}
+                        placeholder="90 123 4567"
+                        className="w-full px-4 py-3.5 bg-transparent border-none text-slate-900 dark:text-white font-body outline-none placeholder:text-slate-400 dark:placeholder:text-white/30"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isLoading || !phoneNumber}
+                      className="w-full liquid-gradient disabled:opacity-70 text-on-primary-fixed font-headline font-bold py-4 rounded-full shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all duration-300"
+                    >
+                      {isLoading ? "Sending..." : "Send OTP Code"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="w-full py-4 text-sm font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
               </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-surface dark:bg-slate-900 px-4 text-outline dark:text-white/60 font-label uppercase tracking-widest transition-colors">
-                  Or continue with
-                </span>
+            )}
+
+            {/* NHẬP XÁC THỰC OTP CHO GOOGLE */}
+            {step === 3 && (
+              <div className="animate-fade-in-up">
+                <header className="mb-8 text-center">
+                  <h2 className="font-headline text-3xl font-bold text-slate-900 dark:text-white mb-2">Verify Account</h2>
+                  <p className="text-slate-600 dark:text-white/70 font-body text-sm">
+                    We've sent an OTP code to your Phone
+                    <br />
+                    <span className="font-bold text-slate-900 dark:text-white mt-1 inline-block">
+                      {phoneCode}{phoneNumber.replace(/^0+/, '')}
+                    </span>
+                  </p>
+                </header>
+
+                <form className="space-y-6" onSubmit={handleVerifyGoogleOtp}>
+                  <div className="space-y-2 text-center">
+                    <input
+                      type="text"
+                      maxLength="10"
+                      required
+                      value={otpCode}
+                      onChange={(e) => { setOtpCode(e.target.value); setErrorMsg(""); }}
+                      placeholder="Enter OTP"
+                      className="w-full text-center tracking-[0.5em] font-headline font-bold text-2xl px-5 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl focus:ring-2 focus:ring-primary/40 dark:focus:ring-yellow-400/20 focus:border-primary dark:focus:border-transparent text-slate-900 dark:text-white outline-none transition-all uppercase"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full liquid-gradient disabled:opacity-70 text-on-primary-fixed font-headline font-bold py-4 rounded-full shadow-md hover:shadow-lg hover:scale-[1.02] transition-all"
+                    >
+                      {isLoading ? "Verifying..." : "Verify OTP"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStep(2)}
+                      className="w-full py-2 text-sm font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    >
+                      Back to Phone
+                    </button>
+                  </div>
+                </form>
+
+                <div className="text-center mt-8">
+                  {!canResend ? (
+                    <p className="text-sm text-slate-500 dark:text-white/60 font-medium">
+                      Resend OTP in <span className="font-bold text-primary dark:text-yellow-400">{formatTime(timeLeft)}</span>
+                    </p>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 animate-fade-in-up">
+                      <p className="text-sm text-slate-600 dark:text-white/70 font-body">Didn't receive the code?</p>
+                      <button
+                        onClick={handleResendGoogleOtp}
+                        disabled={isLoading}
+                        className="text-sm font-bold text-primary dark:text-yellow-400 hover:underline disabled:opacity-50 transition-all"
+                      >
+                        Resend OTP
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-
-            <div className="flex justify-center w-full">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={handleGoogleError}
-                shape="rectangular"
-                size="large"
-                theme="outline"
-                text="signin_with"
-                width="100%"
-              />
-            </div>
-
-            <div className="mt-12 text-center z-10 relative">
-              <p className="font-label text-sm text-on-surface-variant dark:text-white/70">
-                Don't have an account?{" "}
-                <Link
-                  to="/register"
-                  className="font-bold text-on-background dark:text-primary-container hover:text-primary dark:hover:text-yellow-400 transition-colors"
-                >
-                  Register for free
-                </Link>
-              </p>
-            </div>
-          </div>
-
-          <div className="absolute bottom-8 w-full max-w-md px-4 flex justify-between items-center">
-            <span className="font-label text-[10px] uppercase tracking-widest text-outline dark:text-white/50">
-              © 2026 WaterBus
-            </span>
-            <div className="flex gap-4">
-              <a
-                className="font-label text-[10px] uppercase tracking-widest text-outline dark:text-white/50 hover:text-on-surface dark:hover:text-white transition-colors"
-                href="#"
-              >
-                Privacy
-              </a>
-              <a
-                className="font-label text-[10px] uppercase tracking-widest text-outline dark:text-white/50 hover:text-on-surface dark:hover:text-white transition-colors"
-                href="#"
-              >
-                Terms
-              </a>
-            </div>
+            )}
           </div>
         </section>
       </main>
