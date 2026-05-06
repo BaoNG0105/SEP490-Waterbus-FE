@@ -24,28 +24,6 @@ export const loginWithGoogle = async (token) => {
     }
 };
 
-// Send phone OTP Google Login
-export const sendGooglePhoneOtp = async (data) => {
-    try {
-        const response = await api.post('/auth/google/send-phone-otp', data);
-        return response.data;
-    } catch (error) {
-        console.error('Error sending Google phone OTP:', error);
-        throw error;
-    }
-};
-
-// OTP Google Login
-export const verifyGooglePhoneOtp = async (data) => {
-    try {
-        const response = await api.post('/auth/google/verify-phone', data);
-        return response.data;
-    } catch (error) {
-        console.error('Error verifying Google phone OTP:', error);
-        throw error;
-    }
-};
-
 // Register
 export const registerCustomer = async (data) => {
     try {
