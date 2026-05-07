@@ -1,44 +1,29 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useSelector } from "react-redux";
 import Swal from "sweetalert2";
 import { useApp } from "../../context/AppContext";
 import { registerCustomer, verifyRegisterOtp, resendRegisterOtp } from "../../services/authService";
+import { useSelector } from "react-redux";
 
-// DANH SÁCH MÃ VÙNG QUỐC GIA
-const COUNTRIES = [
-  { code: "+84", flag: "🇻🇳", name: "Vietnam" },
-  { code: "+1", flag: "🇺🇸", name: "USA / Canada" },
-  { code: "+44", flag: "🇬🇧", name: "United Kingdom" },
-  { code: "+61", flag: "🇦🇺", name: "Australia" },
-  { code: "+81", flag: "🇯🇵", name: "Japan" },
-  { code: "+82", flag: "🇰🇷", name: "South Korea" },
-  { code: "+86", flag: "🇨🇳", name: "China" },
-  { code: "+65", flag: "🇸🇬", name: "Singapore" },
-  { code: "+66", flag: "🇹🇭", name: "Thailand" },
-];
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 
 export const Register = () => {
   const { lang, isDarkMode } = useApp();
   const navigate = useNavigate();
 
-  // QUẢN LÝ LUỒNG GIAO DIỆN
   const [step, setStep] = useState(1);
   const [challengeId, setChallengeId] = useState(0);
   const [otpCode, setOtpCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const [showPhoneDropdown, setShowPhoneDropdown] = useState(false);
-
-  // QUẢN LÝ BỘ ĐẾM THỜI GIAN OTP
-  const [timeLeft, setTimeLeft] = useState(300); // 300 giây = 5 phút
-  const [canResend, setCanResend] = useState(false);
+  const [expireTime, setExpireTime] = useState(300); 
+  const [resendCooldown, setResendCooldown] = useState(60); 
 
   const [formData, setFormData] = useState({
     fullName: "",
     dateOfBirth: "",
-    phoneCode: "+84",
-    phoneNumber: "",
+    phone: "", 
     email: "",
     password: "",
     confirmPassword: "",
@@ -47,85 +32,137 @@ export const Register = () => {
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false); 
   const [errorMsg, setErrorMsg] = useState("");
+  
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const { isAuthenticated } = useSelector((state) => state.auth);
 
-  // KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ ĐÁ VỀ TRANG CHỦ
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/", { replace: true }); 
+      navigate("/", { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
-  // CHẠY ĐỒNG HỒ ĐẾM NGƯỢC Ở BƯỚC 2 (Màn hình nhập OTP)
   useEffect(() => {
     let interval;
-    if (step === 2 && timeLeft > 0) {
+    if (step === 2) {
       interval = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
+        setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+        setExpireTime((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            Swal.fire({
+              icon: 'warning',
+              title: lang === "VN" ? 'Hết thời gian' : 'Session Expired',
+              text: lang === "VN" ? 'Phiên đăng ký đã hết hạn sau 5 phút. Vui lòng đăng ký lại.' : 'Registration session expired after 5 minutes. Please register again.',
+              background: isDarkMode ? '#1e293b' : '#ffffff',
+              color: isDarkMode ? '#ffffff' : '#0f172a',
+              confirmButtonColor: "#3085d6",
+              allowOutsideClick: false
+            }).then(() => {
+              setStep(1);
+            });
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
-    } else if (timeLeft === 0) {
-      setCanResend(true); // Hết giờ thì cho phép gửi lại
     }
     return () => clearInterval(interval);
-  }, [step, timeLeft]);
+  }, [step, lang, isDarkMode]);
 
-  // Hàm chuyển đổi giây thành định dạng MM:SS
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
   };
 
+  // HÀM KIỂM TRA LỖI TỪNG FIELD ĐỘC LẬP
+  const getFieldError = (name, value) => {
+    switch (name) {
+      case "fullName":
+        return (!value.trim() || value.length > 150) ? (lang === "VN" ? "Họ tên không được trống và tối đa 150 ký tự." : "Invalid Full Name.") : "";
+      case "dateOfBirth":
+        if (value) {
+          const dob = new Date(value);
+          if (dob > new Date()) return lang === "VN" ? "Ngày sinh không hợp lệ (ở tương lai)." : "Date of birth cannot be in the future.";
+        }
+        return "";
+      case "phone":
+        return (!value || !/^\+[1-9]\d{7,14}$/.test(value)) ? (lang === "VN" ? "Số điện thoại không hợp lệ." : "Invalid phone format.") : "";
+      case "password":
+        return (value.length < 6) ? (lang === "VN" ? "Mật khẩu phải có ít nhất 6 ký tự." : "Password must be at least 6 characters.") : "";
+      case "confirmPassword":
+        return (value !== formData.password) ? (lang === "VN" ? "Mật khẩu xác nhận không khớp." : "Passwords do not match.") : "";
+      case "termsAccepted":
+        return (!value) ? (lang === "VN" ? "Vui lòng đồng ý với điều khoản." : "You must accept the terms.") : "";
+      default:
+        return "";
+    }
+  };
+
+  // XỬ LÝ ON-BLUR (KHI NGƯỜI DÙNG RỜI KHỎI Ô NHẬP)
+  const handleBlur = (e) => {
+    const { name, value, type, checked } = e.target;
+    const val = type === "checkbox" ? checked : value;
+    const error = getFieldError(name, val);
+    setFieldErrors(prev => ({ ...prev, [name]: error }));
+  };
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
+    const val = type === "checkbox" ? checked : value;
+    
+    setFormData((prev) => ({ ...prev, [name]: val }));
     setErrorMsg("");
+
+    // Xóa lỗi tạm thời của field đang gõ để UI phản hồi nhanh
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => ({ ...prev, [name]: "" }));
+    }
+
+    // Đặc biệt: Nếu đổi pass thì phải check lại confirmPass
+    if (name === "password" && formData.confirmPassword) {
+      setFieldErrors(prev => ({ 
+        ...prev, 
+        confirmPassword: val !== formData.confirmPassword ? (lang === "VN" ? "Mật khẩu xác nhận không khớp." : "Passwords do not match.") : "" 
+      }));
+    }
   };
 
-  //XỬ LÍ VALIDATE FORM REGISTER
+  // HÀM ĐÁNH GIÁ ĐỘ MẠNH PASSWORD
+  const getPasswordStrength = (pass) => {
+    if (!pass) return null;
+    let score = 0;
+    if (pass.length >= 6) score += 1;
+    if (pass.length >= 8) score += 1;
+    if (/[A-Z]/.test(pass)) score += 1; // Có viết hoa
+    if (/[0-9]/.test(pass)) score += 1; // Có số
+    if (/[^A-Za-z0-9]/.test(pass)) score += 1; // Có ký tự đặc biệt
+
+    if (score <= 2) return { text: lang === "VN" ? "Yếu" : "Weak", color: "bg-red-500", textColor: "text-red-500", width: "w-1/3" };
+    if (score <= 4) return { text: lang === "VN" ? "Trung bình" : "Fair", color: "bg-yellow-500", textColor: "text-yellow-500", width: "w-2/3" };
+    return { text: lang === "VN" ? "Mạnh" : "Strong", color: "bg-green-500", textColor: "text-green-500", width: "w-full" };
+  };
+
+  // GỌI HÀM NÀY KHI BẤM NÚT REGISTER
   const validateForm = () => {
-    if (!formData.fullName.trim() || formData.fullName.length > 150) {
-      return lang === "VN" ? "Họ tên không được trống và tối đa 150 ký tự." : "Invalid Full Name.";
-    }
-    if (!formData.dateOfBirth) {
-      return lang === "VN" ? "Vui lòng chọn ngày sinh." : "Date of birth is required.";
-    }
-
-    const dob = new Date(formData.dateOfBirth);
-    const today = new Date();
-    if (dob > today) {
-      return lang === "VN" ? "Ngày sinh không được lớn hơn ngày hiện tại." : "Date of birth cannot be in the future.";
-    }
-
-    const normalizedPhone = formData.phoneNumber.replace(/^0+/, '');
-    const fullPhone = `${formData.phoneCode}${normalizedPhone}`;
-
-    const phoneRegex = /^\+[1-9]\d{7,14}$/;
-    if (!phoneRegex.test(fullPhone)) {
-      return lang === "VN"
-        ? "Số điện thoại không hợp lệ. Vui lòng kiểm tra lại."
-        : "Invalid phone format. Please check again.";
-    }
-
-    if (formData.password.length < 6) {
-      return lang === "VN" ? "Mật khẩu quá yếu (tối thiểu 6 ký tự)." : "Password is too weak.";
-    }
-    if (formData.password !== formData.confirmPassword) {
-      return lang === "VN" ? "Mật khẩu xác nhận không khớp." : "Passwords do not match.";
-    }
-    if (!formData.termsAccepted) {
-      return lang === "VN" ? "Vui lòng đồng ý với điều khoản." : "You must accept the terms.";
-    }
-
-    return null;
+    const newErrors = {
+      fullName: getFieldError("fullName", formData.fullName),
+      dateOfBirth: getFieldError("dateOfBirth", formData.dateOfBirth),
+      phone: getFieldError("phone", formData.phone),
+      password: getFieldError("password", formData.password),
+      confirmPassword: getFieldError("confirmPassword", formData.confirmPassword),
+      termsAccepted: getFieldError("termsAccepted", formData.termsAccepted),
+    };
+    setFieldErrors(newErrors);
+    
+    const hasError = Object.values(newErrors).some(err => err !== "");
+    return hasError ? (lang === "VN" ? "Vui lòng kiểm tra lại các trường thông tin bị đỏ." : "Please check the highlighted fields.") : null;
   };
 
-  // XỬ LÍ ĐĂNG KÍ & GỬI OTP
   const handleRegister = async (e) => {
     e.preventDefault();
     const error = validateForm();
@@ -136,13 +173,10 @@ export const Register = () => {
 
     setIsLoading(true);
     try {
-      const normalizedPhone = formData.phoneNumber.replace(/^0+/, '');
-      const fullPhone = `${formData.phoneCode}${normalizedPhone}`;
-
       const payload = {
         fullName: formData.fullName,
-        dateOfBirth: formData.dateOfBirth,
-        phone: fullPhone,
+        dateOfBirth: formData.dateOfBirth || null, 
+        phone: formData.phone,
         password: formData.password,
         email: formData.email.trim() !== "" ? formData.email : undefined,
         otpChannel: formData.email.trim() !== "" ? formData.otpChannel : "phone"
@@ -152,9 +186,8 @@ export const Register = () => {
 
       if (response && response.challengeId) {
         setChallengeId(response.challengeId);
-        // RESET ĐỒNG HỒ TRƯỚC KHI CHUYỂN BƯỚC
-        setTimeLeft(60);
-        setCanResend(false);
+        setExpireTime(300);
+        setResendCooldown(60);
         setStep(2);
 
         Swal.fire({
@@ -174,7 +207,7 @@ export const Register = () => {
     }
   };
 
-  // XỬ LÍ XÁC THỰC OTP
+  // ... (Giữ nguyên các hàm handleVerifyOtp, handleResendOtp như cũ) ...
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     if (otpCode.length < 4 || otpCode.length > 10) {
@@ -206,13 +239,13 @@ export const Register = () => {
     }
   };
 
-  //XỬ LÍ GỬI LẠI OTP
   const handleResendOtp = async () => {
+    setIsLoading(true);
     try {
       await resendRegisterOtp(challengeId);
-      // KHỞI ĐỘNG LẠI ĐỒNG HỒ
-      setTimeLeft(300);
-      setCanResend(false);
+      setExpireTime(300);
+      setResendCooldown(60);
+      
       Swal.fire({
         icon: 'success',
         title: lang === "VN" ? 'Đã gửi lại OTP' : 'OTP Resent',
@@ -225,18 +258,39 @@ export const Register = () => {
       });
       setErrorMsg("");
     } catch (err) {
+      const beErrorMsg = err?.response?.data?.message || "";
       Swal.fire({
         icon: 'error',
-        title: 'Lỗi',
-        text: err?.response?.data?.message || 'Không thể gửi lại OTP lúc này.',
+        title: lang === "VN" ? 'Lỗi' : 'Error',
+        text: beErrorMsg || (lang === "VN" ? 'Không thể gửi lại OTP lúc này.' : 'Cannot resend OTP at this time.'),
         background: isDarkMode ? '#1e293b' : '#ffffff',
         color: isDarkMode ? '#ffffff' : '#0f172a',
       });
+
+      if (beErrorMsg.toLowerCase().includes("hết hạn") || 
+          beErrorMsg.toLowerCase().includes("expired") || 
+          beErrorMsg.toLowerCase().includes("hủy")) {
+         setStep(1);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // Các class chung dùng cho input để dễ quản lý
-  const inputClasses = "w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl focus:ring-2 focus:ring-primary/40 dark:focus:ring-yellow-400/20 focus:border-primary dark:focus:border-transparent text-slate-900 dark:text-white outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-white/30";
+  // CLASSES CHUNG: CÓ HIỆU ỨNG ĐỎ KHI CÓ LỖI
+  const getInputClasses = (fieldName) => `w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-white/30 text-slate-900 dark:text-white ${
+    fieldErrors[fieldName] 
+    ? 'border-red-500 focus:ring-2 focus:ring-red-500/40' 
+    : 'border-slate-200 dark:border-transparent focus:ring-2 focus:ring-primary/40 dark:focus:ring-yellow-400/20 focus:border-primary dark:focus:border-transparent'
+  }`;
+
+  const phoneInputClasses = `w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border rounded-xl transition-all [&>input]:bg-transparent [&>input]:outline-none [&>input]:w-full text-slate-900 dark:text-white ${
+    fieldErrors.phone 
+    ? 'border-red-500 focus-within:ring-2 focus-within:ring-red-500/40' 
+    : 'border-slate-200 dark:border-transparent focus-within:ring-2 focus-within:ring-primary/40 dark:focus-within:ring-yellow-400/20 focus-within:border-primary dark:focus-within:border-transparent'
+  }`;
+
+  const pwdStrength = getPasswordStrength(formData.password);
 
   return (
     <div className="bg-white dark:bg-slate-900 font-body text-slate-900 dark:text-white selection:bg-primary-container selection:text-on-primary-container overflow-hidden min-h-screen relative">
@@ -250,7 +304,6 @@ export const Register = () => {
       </header>
 
       <main className="min-h-screen flex flex-col md:flex-row overflow-hidden">
-        {/* Left Side: Image */}
         <section className="hidden md:flex md:w-1/2 lg:w-3/5 relative overflow-hidden bg-slate-900 items-center justify-center">
           <div className="absolute inset-0 z-0 opacity-50 dark:opacity-40">
             <img alt="River Transit" className="w-full h-full object-cover mix-blend-overlay" src="https://res.cloudinary.com/dygipvoal/image/upload/v1776092653/ywbwjyftzirzdqf2igte.jpg" />
@@ -264,9 +317,9 @@ export const Register = () => {
           </div>
         </section>
 
-        {/* Right Side: Registration / OTP Form */}
-        <section className="w-full md:w-1/2 lg:w-2/5 bg-white dark:bg-slate-900 flex flex-col justify-start px-6 py-10 lg:px-20 relative transition-colors h-screen overflow-y-auto">
-          <div className="w-full max-w-md mx-auto pt-32 pb-12">
+        <section className="w-full md:w-1/2 lg:w-2/5 bg-white dark:bg-slate-900 flex flex-col justify-start px-6 lg:px-20 relative transition-colors h-screen overflow-y-auto">
+          {/* ĐÃ CHỈNH pt-32 THÀNH pt-20 ĐỂ FORM ĐƯỢC KÉO LÊN TRÊN */}
+          <div className="w-full max-w-md mx-auto pt-20 lg:pt-24 pb-12">
 
             {errorMsg && (
               <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium">
@@ -275,7 +328,6 @@ export const Register = () => {
               </div>
             )}
 
-            {/* BƯỚC 1: FORM ĐĂNG KÝ */}
             {step === 1 && (
               <>
                 <header className="mb-8">
@@ -283,83 +335,46 @@ export const Register = () => {
                   <p className="text-slate-500 dark:text-white/70 font-body">Join the elite network of river travelers today.</p>
                 </header>
 
-                <form className="space-y-5" onSubmit={handleRegister}>
+                <form className="space-y-4" onSubmit={handleRegister}>
                   {/* Full Name */}
                   <div className="space-y-1.5">
                     <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Full Name *</label>
-                    <input name="fullName" type="text" required value={formData.fullName} onChange={handleChange} placeholder="Nguyễn Văn A" className={inputClasses} />
+                    <input name="fullName" type="text" required value={formData.fullName} onChange={handleChange} onBlur={handleBlur} placeholder="Nguyễn Văn A" className={getInputClasses("fullName")} />
+                    {fieldErrors.fullName && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.fullName}</p>}
                   </div>
 
-                  {/* DOB Row */}
+                  {/* Date Of Birth */}
                   <div className="space-y-1.5">
-                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Date of Birth *</label>
-                    <input name="dateOfBirth" type="date" required value={formData.dateOfBirth} onChange={handleChange} className={`${inputClasses} [&::-webkit-calendar-picker-indicator]:dark:invert`} />
+                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Date of Birth (Optional)</label>
+                    <input name="dateOfBirth" type="date" value={formData.dateOfBirth} onChange={handleChange} onBlur={handleBlur} className={`${getInputClasses("dateOfBirth")} [&::-webkit-calendar-picker-indicator]:dark:invert`} />
+                    {fieldErrors.dateOfBirth && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.dateOfBirth}</p>}
                   </div>
 
-                  {/* THAY ĐỔI: TRƯỜNG PHONE CÓ DROPDOWN QUỐC GIA */}
+                  {/* Phone Input */}
                   <div className="space-y-1.5">
                     <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Phone Number *</label>
-                    <div className="relative group flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl focus-within:ring-2 focus-within:ring-primary/40 dark:focus-within:ring-yellow-400/20 focus-within:border-primary dark:focus-within:border-transparent transition-all duration-300">
-
-                      {/* Nút bật/tắt Dropdown */}
-                      <button
-                        type="button"
-                        onClick={() => setShowPhoneDropdown(!showPhoneDropdown)}
-                        className="flex items-center gap-2 pl-4 pr-3 py-3.5 text-slate-900 dark:text-white font-body outline-none border-r border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-xl transition-colors"
-                      >
-                        <span className="text-xl leading-none">{COUNTRIES.find(c => c.code === formData.phoneCode)?.flag}</span>
-                        <span className="text-sm font-medium">{formData.phoneCode}</span>
-                        <span className="material-symbols-outlined text-[16px] text-slate-400 dark:text-white/50">expand_more</span>
-                      </button>
-
-                      {/* Dropdown Menu */}
-                      {showPhoneDropdown && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setShowPhoneDropdown(false)}></div>
-                          <div className="absolute z-50 top-[110%] left-0 w-64 max-h-60 overflow-y-auto bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 rounded-xl py-2 no-scrollbar animate-fade-in-up">
-                            {COUNTRIES.map((country) => (
-                              <button
-                                key={country.code}
-                                type="button"
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, phoneCode: country.code }));
-                                  setShowPhoneDropdown(false);
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                              >
-                                <span className="text-xl leading-none">{country.flag}</span>
-                                <span className="text-sm font-bold text-slate-900 dark:text-white w-10">{country.code}</span>
-                                <span className="text-xs font-medium text-slate-500 dark:text-white/60 truncate">{country.name}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-
-                      {/* Ô nhập số điện thoại */}
-                      <input
-                        name="phoneNumber"
-                        type="tel"
-                        required
-                        value={formData.phoneNumber}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '');
-                          setFormData(prev => ({ ...prev, phoneNumber: val }));
-                          setErrorMsg("");
-                        }}
-                        placeholder="90 123 4567"
-                        className="w-full px-4 py-3.5 bg-transparent border-none text-slate-900 dark:text-white font-body outline-none placeholder:text-slate-400 dark:placeholder:text-white/30"
-                      />
-                    </div>
+                    <PhoneInput
+                      international
+                      defaultCountry="VN"
+                      value={formData.phone}
+                      onChange={(value) => {
+                        setFormData((prev) => ({ ...prev, phone: value }));
+                        setErrorMsg("");
+                        if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: "" }));
+                      }}
+                      onBlur={() => handleBlur({ target: { name: "phone", value: formData.phone } })}
+                      className={phoneInputClasses}
+                    />
+                    {fieldErrors.phone && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.phone}</p>}
                   </div>
 
                   {/* Email */}
                   <div className="space-y-1.5">
                     <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Email (Optional)</label>
-                    <input name="email" type="email" value={formData.email} onChange={handleChange} placeholder="name@domain.com" className={inputClasses} />
+                    <input name="email" type="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} placeholder="name@domain.com" className={getInputClasses("email")} />
                   </div>
 
-                  {/* OTP Channel (Chỉ hiện khi có nhập Email) */}
+                  {/* OTP Channel */}
                   {formData.email.trim() !== "" && (
                     <div className="space-y-1.5 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
                       <label className="block text-sm font-label font-bold text-slate-700 dark:text-white">Receive OTP via: *</label>
@@ -374,52 +389,77 @@ export const Register = () => {
                     </div>
                   )}
 
-                  {/* Password & Confirm */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5 relative">
-                      <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Password *</label>
-                      <input
-                        name="password"
-                        type={showPassword ? "text" : "password"}
-                        required
-                        value={formData.password}
-                        onChange={handleChange}
-                        placeholder="••••••••"
-                        autoComplete="new-password"
-                        className={inputClasses}
-                      />
-                    </div>
-                    <div className="space-y-1.5 relative">
-                      <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Confirm *</label>
-                      <input
-                        name="confirmPassword"
-                        type={showPassword ? "text" : "password"}
-                        required
-                        value={formData.confirmPassword}
-                        onChange={handleChange}
-                        placeholder="••••••••"
-                        autoComplete="new-password"
-                        className={inputClasses}
-                      />
-                      <span onClick={() => setShowPassword(!showPassword)} className="material-symbols-outlined absolute right-3 top-9 text-slate-400 dark:text-white/40 cursor-pointer text-[18px]">
-                        {showPassword ? "visibility_off" : "visibility"}
-                      </span>
-                    </div>
+                  {/* PASSWORD KÈM THANH ĐO ĐỘ MẠNH */}
+                  <div className="space-y-1.5 relative">
+                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Password *</label>
+                    <input
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={formData.password}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      className={getInputClasses("password")}
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-[38px] text-slate-400 dark:text-white/40 cursor-pointer text-[20px] transition-colors hover:text-primary dark:hover:text-yellow-400">
+                      <span className="material-symbols-outlined">{showPassword ? "visibility_off" : "visibility"}</span>
+                    </button>
+                    {fieldErrors.password && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.password}</p>}
+                    
+                    {/* UI Kiểm tra mật khẩu mạnh yếu Real-time */}
+                    {formData.password && pwdStrength && (
+                      <div className="mt-2 ml-1 pr-1">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs font-label text-slate-500 dark:text-white/60">
+                            {lang === "VN" ? "Độ bảo mật:" : "Strength:"}
+                          </span>
+                          <span className={`text-xs font-bold ${pwdStrength.textColor}`}>
+                            {pwdStrength.text}
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                          <div className={`h-full ${pwdStrength.color} ${pwdStrength.width} transition-all duration-300`}></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CONFIRM PASSWORD */}
+                  <div className="space-y-1.5 relative">
+                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Confirm Password *</label>
+                    <input
+                      name="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      required
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      className={getInputClasses("confirmPassword")}
+                    />
+                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-[38px] text-slate-400 dark:text-white/40 cursor-pointer text-[20px] transition-colors hover:text-primary dark:hover:text-yellow-400">
+                      <span className="material-symbols-outlined">{showConfirmPassword ? "visibility_off" : "visibility"}</span>
+                    </button>
+                    {fieldErrors.confirmPassword && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.confirmPassword}</p>}
                   </div>
 
                   {/* Terms Checkbox */}
                   <div className="flex items-start gap-3 pt-2">
-                    <input id="terms" name="termsAccepted" type="checkbox" required checked={formData.termsAccepted} onChange={handleChange} className="h-5 w-5 rounded border-slate-300 dark:border-slate-600 text-primary mt-0.5 cursor-pointer" />
+                    <input id="terms" name="termsAccepted" type="checkbox" required checked={formData.termsAccepted} onChange={handleChange} onBlur={handleBlur} className="h-5 w-5 rounded border-slate-300 dark:border-slate-600 text-primary mt-0.5 cursor-pointer" />
                     <label className="text-sm font-body text-slate-600 dark:text-white/70 leading-tight" htmlFor="terms">
                       I agree to the <a className="text-primary dark:text-yellow-400 font-bold hover:underline" href="#">Terms of Service</a> and <a className="text-primary dark:text-yellow-400 font-bold hover:underline" href="#">Privacy Policy</a>.
                     </label>
                   </div>
+                  {fieldErrors.termsAccepted && <p className="text-red-500 text-xs ml-8">{fieldErrors.termsAccepted}</p>}
 
-                  <button type="submit" disabled={isLoading} className="w-full liquid-gradient disabled:opacity-70 text-on-primary-fixed font-headline font-bold py-4 rounded-full shadow-md hover:shadow-lg hover:scale-[1.02] transition-all flex justify-center items-center gap-2">
+                  <button type="submit" disabled={isLoading} className="w-full liquid-gradient disabled:opacity-70 text-on-primary-fixed font-headline font-bold py-4 rounded-full shadow-md hover:shadow-lg hover:scale-[1.02] transition-all flex justify-center items-center gap-2 mt-4">
                     {isLoading ? "Processing..." : "Register Account"}
                   </button>
 
-                  <div className="text-center pt-4">
+                  <div className="text-center pt-2">
                     <p className="text-sm text-slate-600 dark:text-white/70 font-body">
                       Already have an account? <Link to="/login" className="font-bold text-primary dark:text-yellow-400 hover:underline ml-1">Sign In</Link>
                     </p>
@@ -432,12 +472,15 @@ export const Register = () => {
             {step === 2 && (
               <div className="animate-fade-in-up">
                 <header className="mb-8 text-center">
+                  <div className="w-16 h-16 bg-primary/10 dark:bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="material-symbols-outlined text-3xl text-primary dark:text-yellow-400">mark_email_read</span>
+                  </div>
                   <h2 className="font-headline text-3xl font-bold text-slate-900 dark:text-white mb-2">Verify Account</h2>
                   <p className="text-slate-600 dark:text-white/70 font-body text-sm">
                     We've sent an OTP code to your {formData.otpChannel === 'email' ? 'Email' : 'Phone'}
                     <br />
                     <span className="font-bold text-slate-900 dark:text-white mt-1 inline-block">
-                      {formData.otpChannel === 'email' ? formData.email : `${formData.phoneCode}${formData.phoneNumber.replace(/^0+/, '')}`}
+                      {formData.otpChannel === 'email' ? formData.email : formData.phone}
                     </span>
                   </p>
                 </header>
@@ -461,14 +504,15 @@ export const Register = () => {
                 </form>
 
                 <div className="text-center mt-8">
-                  {!canResend ? (
+                  {resendCooldown > 0 ? (
                     <p className="text-sm text-slate-500 dark:text-white/60 font-medium">
-                      Resend OTP in <span className="font-bold text-primary dark:text-yellow-400">{formatTime(timeLeft)}</span>
+                      Resend OTP in <span className="font-bold text-primary dark:text-yellow-400">{formatTime(resendCooldown)}</span>
                     </p>
                   ) : (
                     <div className="flex flex-col items-center gap-2 animate-fade-in-up">
                       <p className="text-sm text-slate-600 dark:text-white/70 font-body mb-1">Didn't receive the code?</p>
-                      <button
+                      <button 
+                        type="button"
                         onClick={handleResendOtp}
                         disabled={isLoading}
                         className="text-sm font-bold text-primary dark:text-yellow-400 hover:underline disabled:opacity-50 transition-all"
@@ -477,6 +521,10 @@ export const Register = () => {
                       </button>
                     </div>
                   )}
+                  
+                  <p className="text-[11px] text-slate-400 mt-6 uppercase tracking-wider font-label">
+                    Session expires in {formatTime(expireTime)}
+                  </p>
                 </div>
               </div>
             )}

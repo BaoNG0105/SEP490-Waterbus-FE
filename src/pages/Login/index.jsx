@@ -4,34 +4,20 @@ import { GoogleLogin } from "@react-oauth/google";
 import { loginWithGoogle, loginWithPhone } from "../../services/authService";
 import { useDispatch, useSelector } from "react-redux";
 import { loginSuccess } from "../../features/auth/authSlice";
-
-// DANH SÁCH MÃ VÙNG QUỐC GIA
-const COUNTRIES = [
-  { code: "+84", flag: "🇻🇳", name: "Vietnam" },
-  { code: "+1", flag: "🇺🇸", name: "USA / Canada" },
-  { code: "+44", flag: "🇬🇧", name: "United Kingdom" },
-  { code: "+61", flag: "🇦🇺", name: "Australia" },
-  { code: "+81", flag: "🇯🇵", name: "Japan" },
-  { code: "+82", flag: "🇰🇷", name: "South Korea" },
-  { code: "+86", flag: "🇨🇳", name: "China" },
-  { code: "+65", flag: "🇸🇬", name: "Singapore" },
-  { code: "+66", flag: "🇹🇭", name: "Thailand" },
-];
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 
 export const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
 
-  // QUẢN LÝ DROPDOWN QUỐC GIA
-  const [phoneCode, setPhoneCode] = useState("+84");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [showPhoneDropdown, setShowPhoneDropdown] = useState(false);
-
-  // QUẢN LÝ PASSWORD
+  // QUẢN LÝ FIELD ĐĂNG NHẬP
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  //QUẢN LÝ THÔNG BÁO LỖI
+  // QUẢN LÝ THÔNG BÁO LỖI CHUNG VÀ TỪNG FIELD
   const [errorMsg, setErrorMsg] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -44,16 +30,53 @@ export const Login = () => {
     }
   }, [isAuthenticated, navigate]);
 
+  // HÀM KIỂM TRA LỖI TỪNG FIELD ĐỘC LẬP
+  const getFieldError = (name, value) => {
+    switch (name) {
+      case "phone":
+        if (!value) return "Vui lòng nhập số điện thoại.";
+        if (!/^\+[1-9]\d{7,14}$/.test(value)) return "Số điện thoại không hợp lệ.";
+        return "";
+      case "password":
+        if (!value) return "Vui lòng nhập mật khẩu.";
+        return "";
+      default:
+        return "";
+    }
+  };
+
+  // XỬ LÝ ON-BLUR (KHI NGƯỜI DÙNG RỜI KHỎI Ô NHẬP)
+  const handleBlur = (e) => {
+    // Với PhoneInput, event có thể truyền thẳng object mô phỏng
+    const { name, value } = e.target;
+    const error = getFieldError(name, value);
+    setFieldErrors(prev => ({ ...prev, [name]: error }));
+  };
+
+  // XỬ LÝ KHI SUBMIT FORM
+  const validateForm = () => {
+    const newErrors = {
+      phone: getFieldError("phone", phone),
+      password: getFieldError("password", password),
+    };
+    setFieldErrors(newErrors);
+    
+    return Object.values(newErrors).some(err => err !== "");
+  };
+
   // XỬ LÝ ĐĂNG NHẬP THƯỜNG
   const handleLogin = async (e) => {
     e.preventDefault();
+    
+    // Validate trước khi gọi API
+    if (validateForm()) {
+      return; 
+    }
+
     setErrorMsg("");
     setIsLoading(true);
     try {
-      const normalizedPhone = phoneNumber.replace(/^0+/, '');
-      const fullPhone = `${phoneCode}${normalizedPhone}`;
-
-      const data = await loginWithPhone({ phone: fullPhone, password });
+      const data = await loginWithPhone({ phone, password });
 
       if (data?.tokens?.accessToken) {
         dispatch(
@@ -83,12 +106,10 @@ export const Login = () => {
     setErrorMsg("");
     try {
       const idToken = credentialResponse.credential;
-      //gửi token cho BE test (sẽ xóa sau)
       console.log(idToken);
 
       const data = await loginWithGoogle(idToken);
 
-      // NẾU BE TRẢ VỀ TOKEN THÌ LƯU VÀ ĐĂNG NHẬP LUÔN
       if (data?.tokens?.accessToken) {
         dispatch(
           loginSuccess({
@@ -110,13 +131,22 @@ export const Login = () => {
     }
   };
 
-  // XỬ LÝ LỖI LOGIN GG
   const handleGoogleError = () => {
     setErrorMsg("Đã hủy đăng nhập Google.");
   };
 
-  // Class chung cho input
-  const inputClasses = "w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl focus:ring-2 focus:ring-primary/40 dark:focus:ring-yellow-400/20 focus:border-primary dark:focus:border-transparent text-slate-900 dark:text-white outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-white/30";
+  // CLASSES CHUNG: CÓ HIỆU ỨNG ĐỎ KHI CÓ LỖI
+  const getInputClasses = (fieldName) => `w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-white/30 text-slate-900 dark:text-white ${
+    fieldErrors[fieldName] 
+    ? 'border-red-500 focus:ring-2 focus:ring-red-500/40' 
+    : 'border-slate-200 dark:border-transparent focus:ring-2 focus:ring-primary/40 dark:focus:ring-yellow-400/20 focus:border-primary dark:focus:border-transparent'
+  }`;
+
+  const phoneInputClasses = `w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border rounded-xl transition-all [&>input]:bg-transparent [&>input]:outline-none [&>input]:w-full text-slate-900 dark:text-white ${
+    fieldErrors.phone 
+    ? 'border-red-500 focus-within:ring-2 focus-within:ring-red-500/40' 
+    : 'border-slate-200 dark:border-transparent focus-within:ring-2 focus-within:ring-primary/40 dark:focus-within:ring-yellow-400/20 focus-within:border-primary dark:focus-within:border-transparent'
+  }`;
 
   return (
     <div className="bg-white dark:bg-slate-900 font-body text-slate-900 dark:text-white selection:bg-primary-container selection:text-on-primary-container overflow-hidden min-h-screen relative">
@@ -146,8 +176,9 @@ export const Login = () => {
         </section>
 
         {/* Right Side: Form Area */}
-        <section className="w-full md:w-1/2 lg:w-2/5 bg-white dark:bg-slate-900 flex flex-col justify-start px-6 py-10 lg:px-20 relative transition-colors h-screen overflow-y-auto">
-          <div className="w-full max-w-md mx-auto pt-32 pb-12">
+        <section className="w-full md:w-1/2 lg:w-2/5 bg-white dark:bg-slate-900 flex flex-col justify-start px-6 lg:px-20 relative transition-colors h-screen overflow-y-auto">
+          {/* Chỉnh lại pt-32 thành pt-20 để kéo form lên trên cân đối hơn */}
+          <div className="w-full max-w-md mx-auto pt-20 lg:pt-24 pb-12">
 
             {errorMsg && (
               <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium">
@@ -163,57 +194,22 @@ export const Login = () => {
               </header>
 
               <form className="space-y-6" onSubmit={handleLogin}>
-                {/* TRƯỜNG PHONE KÈM DROPDOWN */}
+                {/* THAY BẰNG THƯ VIỆN PhoneInput */}
                 <div className="space-y-1.5">
                   <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Phone Number</label>
-                  <div className="relative group flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl focus-within:ring-2 focus-within:ring-primary/40 dark:focus-within:ring-yellow-400/20 focus-within:border-primary dark:focus-within:border-transparent transition-all duration-300">
-                    <button
-                      type="button"
-                      onClick={() => setShowPhoneDropdown(!showPhoneDropdown)}
-                      className="flex items-center gap-2 pl-4 pr-3 py-3.5 text-slate-900 dark:text-white font-body outline-none border-r border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-xl transition-colors"
-                    >
-                      <span className="text-xl leading-none">{COUNTRIES.find(c => c.code === phoneCode)?.flag}</span>
-                      <span className="text-sm font-medium">{phoneCode}</span>
-                      <span className="material-symbols-outlined text-[16px] text-slate-400 dark:text-white/50">expand_more</span>
-                    </button>
-
-                    {showPhoneDropdown && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setShowPhoneDropdown(false)}></div>
-                        <div className="absolute z-50 top-[110%] left-0 w-64 max-h-60 overflow-y-auto bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 rounded-xl py-2 no-scrollbar animate-fade-in-up">
-                          {COUNTRIES.map((country) => (
-                            <button
-                              key={country.code}
-                              type="button"
-                              onClick={() => {
-                                setPhoneCode(country.code);
-                                setShowPhoneDropdown(false);
-                              }}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                            >
-                              <span className="text-xl leading-none">{country.flag}</span>
-                              <span className="text-sm font-bold text-slate-900 dark:text-white w-10">{country.code}</span>
-                              <span className="text-xs font-medium text-slate-500 dark:text-white/60 truncate">{country.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-
-                    <input
-                      name="phoneNumber"
-                      type="tel"
-                      required
-                      value={phoneNumber}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, '');
-                        setPhoneNumber(val);
-                        setErrorMsg("");
-                      }}
-                      placeholder="90 123 4567"
-                      className="w-full px-4 py-3.5 bg-transparent border-none text-slate-900 dark:text-white font-body outline-none placeholder:text-slate-400 dark:placeholder:text-white/30"
-                    />
-                  </div>
+                  <PhoneInput
+                    international
+                    defaultCountry="VN"
+                    value={phone}
+                    onChange={(value) => {
+                      setPhone(value);
+                      setErrorMsg("");
+                      if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: "" }));
+                    }}
+                    onBlur={() => handleBlur({ target: { name: "phone", value: phone } })}
+                    className={phoneInputClasses}
+                  />
+                  {fieldErrors.phone && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.phone}</p>}
                 </div>
 
                 {/* Password */}
@@ -226,12 +222,16 @@ export const Login = () => {
                     <input
                       name="password"
                       type={showPassword ? "text" : "password"}
-                      required
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setErrorMsg("");
+                        if (fieldErrors.password) setFieldErrors(prev => ({ ...prev, password: "" }));
+                      }}
+                      onBlur={handleBlur}
                       placeholder="••••••••"
                       autoComplete="current-password"
-                      className={inputClasses}
+                      className={getInputClasses("password")}
                     />
                     <button
                       type="button"
@@ -243,6 +243,7 @@ export const Login = () => {
                       </span>
                     </button>
                   </div>
+                  {fieldErrors.password && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.password}</p>}
                 </div>
 
                 <button
