@@ -589,53 +589,94 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* Schedules Section */}
-      <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300">
-        <div className="container mx-auto px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
-            <div className="gsap-reveal">
-              <h2 className="text-4xl font-headline font-bold mb-6 dark:text-white">
+      {/* Schedules Section - REDESIGNED */}
+      <section className="py-24 bg-surface-container-lowest dark:bg-slate-900 transition-colors duration-300 relative overflow-hidden">
+        {/* Background Decorative Elements */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 dark:bg-yellow-400/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
+
+        <div className="container mx-auto px-6 max-w-7xl">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 lg:gap-20 items-center">
+
+            {/* CỘT TRÁI: TIÊU ĐỀ & NÚT BẤM */}
+            <div className="lg:col-span-5 gsap-reveal">
+              <span className="text-primary dark:text-yellow-400 font-bold text-sm tracking-[0.2em] uppercase mb-4 block">
+                {lang === "VN" ? "Thời gian hoạt động" : "Operating Hours"}
+              </span>
+              <h2 className="text-4xl md:text-5xl font-headline font-bold mb-6 dark:text-white leading-tight">
                 {lang === "VN" ? "Lịch Trình Hàng Tuần" : "Weekly Schedules"}
               </h2>
-              <p className="text-on-surface-variant dark:text-white/80 mb-8 leading-relaxed">
+              <p className="text-on-surface-variant dark:text-white/80 mb-10 leading-relaxed text-lg font-body">
                 {lang === "VN"
-                  ? "Luôn đúng giờ với dịch vụ tần suất cao của chúng tôi. Các chuyến tàu khởi hành mỗi 15-30 phút trong giờ cao điểm."
-                  : "Stay on track with our high-frequency service. We run every 15-30 minutes during peak hours to ensure you're never late."}
+                  ? "Luôn đúng giờ với dịch vụ tần suất cao của chúng tôi. Các chuyến tàu khởi hành liên tục giúp bạn linh hoạt sắp xếp thời gian cho mọi kế hoạch."
+                  : "Stay on track with our high-frequency service. We run continuously to ensure you're never late and always have flexible travel options."}
               </p>
-              <div className="space-y-4 mb-10">
-                <div className="flex justify-between items-center py-4 border-b border-surface-variant dark:border-slate-700">
-                  <span className="font-bold dark:text-white">
-                    {lang === "VN" ? "Giờ cao điểm" : "Weekday Peak"}
-                  </span>
-                  <span className="text-primary dark:text-yellow-400 font-headline">
-                    {lang === "VN" ? "15 phút" : "Every 15 mins"}
-                  </span>
+
+              <button className="bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-900 px-8 py-4 rounded-full font-bold hover:bg-slate-800 dark:hover:bg-yellow-500 transition-all duration-300 flex items-center gap-2 shadow-xl hover:shadow-2xl hover:-translate-y-1">
+                {lang === "VN" ? "Xem chi tiết lịch trình" : "View Full Schedule"}
+              </button>
+            </div>
+
+            {/* CỘT PHẢI: CÁC KHỐI SỐ LIỆU KHỔNG LỒ */}
+            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6 gsap-reveal">
+
+              {/* Khối 1: Giờ Cao Điểm (Được làm to và nổi bật nhất) */}
+              <div className="sm:col-span-2 bg-gradient-to-br from-primary to-primary-container dark:from-yellow-400 dark:to-yellow-600 p-8 md:p-10 rounded-[2.5rem] shadow-xl text-white dark:text-slate-900 flex flex-col justify-between relative overflow-hidden group hover:scale-[1.02] transition-transform duration-500 cursor-default">
+                <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-20 transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-12">
+                  <span className="material-symbols-outlined text-[180px]">directions_boat</span>
                 </div>
-                <div className="flex justify-between items-center py-4 border-b border-surface-variant dark:border-slate-700">
-                  <span className="font-bold dark:text-white">
-                    {lang === "VN" ? "Giờ thấp điểm" : "Weekday Off-Peak"}
-                  </span>
-                  <span className="text-primary dark:text-yellow-400 font-headline">
-                    {lang === "VN" ? "30 phút" : "Every 30 mins"}
-                  </span>
+
+                <div className="relative z-10 flex flex-col h-full justify-between gap-6">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold uppercase tracking-widest opacity-90">
+                      {lang === "VN" ? "Giờ cao điểm (T2 - T6)" : "Weekday Peak Hours"}
+                    </p>
+                  </div>
+
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-8xl md:text-9xl font-black font-headline tracking-tighter leading-none drop-shadow-md">
+                      15
+                    </span>
+                    <span className="text-2xl md:text-3xl font-bold opacity-90">
+                      {lang === "VN" ? "phút/chuyến" : "mins/trip"}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center py-4 border-b border-surface-variant dark:border-slate-700">
-                  <span className="font-bold dark:text-white">
-                    {lang === "VN"
-                      ? "Cuối tuần / Ngày lễ"
-                      : "Weekend / Holiday"}
+              </div>
+
+              {/* Khối 2: Giờ Thấp Điểm */}
+              <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-lg border border-surface-variant/50 dark:border-slate-700 flex flex-col gap-6 group hover:border-primary/50 dark:hover:border-yellow-400/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-default">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                  <p className="text-xs font-bold uppercase tracking-widest">
+                    {lang === "VN" ? "Giờ thấp điểm" : "Off-Peak"}
+                  </p>
+                </div>
+                <div className="flex items-baseline gap-2 text-slate-900 dark:text-white group-hover:text-primary dark:group-hover:text-yellow-400 transition-colors duration-300">
+                  <span className="text-6xl md:text-7xl font-black font-headline tracking-tighter leading-none">
+                    30
                   </span>
-                  <span className="text-primary dark:text-yellow-400 font-headline">
-                    {lang === "VN" ? "20 phút" : "Every 20 mins"}
+                  <span className="text-lg font-bold text-slate-500 dark:text-slate-400">
+                    {lang === "VN" ? "phút" : "mins"}
                   </span>
                 </div>
               </div>
-              <button className="bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-900 px-8 py-4 rounded-full font-bold hover:bg-slate-800 transition-colors flex items-center gap-2">
-                {lang === "VN" ? "Xem chi tiết lịch" : "View Full Schedule"}
-                <span className="material-symbols-outlined text-sm">
-                  open_in_new
-                </span>
-              </button>
+
+              {/* Khối 3: Cuối Tuần & Lễ */}
+              <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-lg border border-surface-variant/50 dark:border-slate-700 flex flex-col gap-6 group hover:border-primary/50 dark:hover:border-yellow-400/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-default">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                  <p className="text-xs font-bold uppercase tracking-widest">
+                    {lang === "VN" ? "Cuối tuần & Lễ" : "Weekend/Holiday"}
+                  </p>
+                </div>
+                <div className="flex items-baseline gap-2 text-slate-900 dark:text-white group-hover:text-primary dark:group-hover:text-yellow-400 transition-colors duration-300">
+                  <span className="text-6xl md:text-7xl font-black font-headline tracking-tighter leading-none">
+                    20
+                  </span>
+                  <span className="text-lg font-bold text-slate-500 dark:text-slate-400">
+                    {lang === "VN" ? "phút" : "mins"}
+                  </span>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>

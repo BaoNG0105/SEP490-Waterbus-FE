@@ -18,7 +18,7 @@ export const Header = () => {
   const navigate = useNavigate();
 
   const isHomeActive = currentPath === "/";
-  const isStationsActive = currentPath.startsWith("/stations");
+  // Đã xóa biến isStationsActive
   const isPromotionsActive = currentPath.startsWith("/promotions");
   const isContactActive = currentPath === "/contact";
 
@@ -117,41 +117,6 @@ export const Header = () => {
           >
             {lang === "VN" ? "Trang chủ" : "Home"}
           </Link>
-
-          {/* Station*/}
-          <div className="relative group">
-            <button
-              className={`flex items-center gap-1 text-xs font-medium font-headline transition-colors ${isStationsActive
-                ? "text-primary dark:text-yellow-400 font-bold"
-                : "text-on-surface-variant dark:text-white/80 group-hover:text-primary dark:group-hover:text-yellow-400"
-                }`}
-            >
-              {lang === "VN" ? "Bến tàu" : "Stations"}
-              <span className="material-symbols-outlined text-xs">
-                expand_more
-              </span>
-            </button>
-            <div className="absolute top-full left-0 mt-3 w-48 bg-white dark:bg-slate-800 shadow-xl rounded-xl py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 border border-surface-variant dark:border-slate-700 z-50">
-              {[
-                { path: "/stations/bach-dang", label: "Bạch Đằng" },
-                { path: "/stations/thu-thiem", label: "Thủ Thiêm" },
-                { path: "/stations/binh-an", label: "Bình An" },
-                { path: "/stations/thanh-da", label: "Thanh Đa" },
-                { path: "/stations/linh-dong", label: "Linh Đông" },
-              ].map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`block px-4 py-2 text-xs transition-colors ${currentPath === item.path
-                    ? "text-primary dark:text-yellow-400 font-bold bg-surface-container-low dark:bg-slate-700"
-                    : "text-slate-900 dark:text-white hover:bg-surface-container-low dark:hover:bg-slate-700"
-                    }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          </div>
 
           {/* Schedule */}
           <Link
@@ -298,35 +263,6 @@ export const Header = () => {
           >
             {lang === "VN" ? "Trang chủ" : "Home"}
           </Link>
-
-          <div className="flex flex-col gap-2">
-            <span
-              className={`font-bold text-base ${isStationsActive ? "text-primary dark:text-yellow-400" : "text-slate-900 dark:text-white"}`}
-            >
-              {lang === "VN" ? "Bến tàu" : "Stations"}
-            </span>
-            <div className="flex flex-col gap-3 pl-4 border-l-2 border-surface-variant/50 dark:border-slate-700 ml-2 mt-1">
-              {[
-                { path: "/stations/bach-dang", label: "Bạch Đằng" },
-                { path: "/stations/thu-thiem", label: "Thủ Thiêm" },
-                { path: "/stations/binh-an", label: "Bình An" },
-                { path: "/stations/thanh-da", label: "Thanh Đa" },
-                { path: "/stations/linh-dong", label: "Linh Đông" },
-              ].map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`text-sm font-medium ${currentPath === item.path
-                    ? "text-primary dark:text-yellow-400"
-                    : "text-slate-600 dark:text-slate-300"
-                    }`}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          </div>
 
           <Link
             to="/"
