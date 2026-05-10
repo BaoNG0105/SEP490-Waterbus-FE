@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom"; // Import Link để điều hướng các marker trên bản đồ
+import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css'; // Bắt buộc phải có CSS để bản đồ không bị vỡ
 
 const heroSlides = [
   {
@@ -21,44 +24,58 @@ const heroSlides = [
   },
 ];
 
-// DỮ LIỆU TỌA ĐỘ CÁC TRẠM TRÊN BẢN ĐỒ
+// DỮ LIỆU TỌA ĐỘ CÁC TRẠM TRÊN BẢN ĐỒ (Kinh độ, Vĩ độ thực tế)
 const mapStations = [
   {
     id: "bach-dang",
     nameVN: "Bến Bạch Đằng",
     nameEN: "Bach Dang Station",
-    top: "88%",
-    left: "33%",
+    lat: 10.7728,
+    lng: 106.7064,
   },
   {
     id: "thu-thiem",
     nameVN: "Bến Thủ Thiêm",
     nameEN: "Thu Thiem Port",
-    top: "85%",
-    left: "42%",
+    lat: 10.7712,
+    lng: 106.7118,
   },
   {
     id: "binh-an",
     nameVN: "Bến Bình An",
     nameEN: "Binh An Port",
-    top: "57%",
-    left: "54.5%",
+    lat: 10.7931,
+    lng: 106.7230,
   },
   {
     id: "thanh-da",
     nameVN: "Bến Thanh Đa",
     nameEN: "Thanh Da Station",
-    top: "28%",
-    left: "43%",
+    lat: 10.8206,
+    lng: 106.7176,
   },
   {
     id: "linh-dong",
     nameVN: "Bến Linh Đông",
     nameEN: "Linh Dong Station",
-    top: "6%",
-    left: "71.5%",
+    lat: 10.8351,
+    lng: 106.7328,
   },
 ];
+
+// TẠO CUSTOM MARKER VỚI HIỆU ỨNG NHẤP NHÁY TAILWIND
+const pulsingIcon = new L.DivIcon({
+  className: 'custom-pulsing-marker',
+  html: `
+    <div class="relative flex items-center justify-center w-6 h-6">
+      <div class="absolute w-full h-full bg-red-500/50 dark:bg-yellow-400/50 rounded-full animate-ping"></div>
+      <div class="relative w-3.5 h-3.5 bg-red-500 dark:bg-yellow-400 border-2 border-white dark:border-slate-900 rounded-full shadow-lg"></div>
+    </div>
+  `,
+  iconSize: [24, 24], // Kích thước icon
+  iconAnchor: [12, 12], // Điểm tâm của icon đặt đúng vị trí tọa độ
+  popupAnchor: [0, -12] // Điểm xuất hiện của Popup (nổi lên trên chấm tròn)
+});
 
 // Thông báo (Hardcode)
 const announcements = [
@@ -87,7 +104,6 @@ const promoPosters = [
 const promoCards = [
   {
     id: 1,
-    tag: { vn: "Mới nhất", en: "Newest" },
     title: { vn: "Thứ 4 vui vẻ", en: "Happy Wednesday" },
     desc: {
       vn: "Giảm ngay 50% giá vé cho tất cả hành khách đặt vé vào khung giờ vàng từ 14:00 - 16:00 mỗi thứ 4 hàng tuần.",
@@ -97,7 +113,6 @@ const promoCards = [
   },
   {
     id: 2,
-    tag: { vn: "Member Only", en: "Member Only" },
     title: { vn: "Ưu đãi thẻ thành viên", en: "Member Privileges" },
     desc: {
       vn: "Tích lũy dặm bay sông nước để đổi lấy những chuyến đi miễn phí và dịch vụ phòng chờ hạng thương gia tại bến.",
@@ -107,7 +122,6 @@ const promoCards = [
   },
   {
     id: 3,
-    tag: { vn: "Doanh nghiệp", en: "Corporate" },
     title: { vn: "Gói di chuyển công sở", en: "Corporate Commute" },
     desc: {
       vn: "Giải pháp di chuyển đường thủy tối ưu cho doanh nghiệp. Tiết kiệm 30% chi phí đi lại hàng tháng cho nhân viên.",
@@ -117,7 +131,6 @@ const promoCards = [
   },
   {
     id: 4,
-    tag: { vn: "Cuối tuần", en: "Weekend" },
     title: { vn: "Combo Gia Đình", en: "Family Combo" },
     desc: {
       vn: "Miễn phí hoàn toàn vé cho trẻ em dưới 1m2 khi đi cùng 2 người lớn vào các ngày Thứ 7 và Chủ Nhật.",
@@ -328,9 +341,8 @@ export const Home = () => {
           {heroSlides.map((slide, index) => (
             <div
               key={index}
-              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
-              }`}
+              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
+                }`}
             >
               {slide.type === "youtube" ? (
                 <iframe
@@ -480,11 +492,10 @@ export const Home = () => {
             <button
               key={index}
               onClick={() => setCurrentSlide(index)}
-              className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
-                index === currentSlide
-                  ? "bg-primary-container w-8"
-                  : "bg-white/50 hover:bg-white"
-              }`}
+              className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${index === currentSlide
+                ? "bg-primary-container w-8"
+                : "bg-white/50 hover:bg-white"
+                }`}
             />
           ))}
         </div>
@@ -672,44 +683,44 @@ export const Home = () => {
             </div>
           </div>
 
-          {/* Bản đồ tương tác */}
-          <div className="relative w-full rounded-[3rem] overflow-hidden shadow-2xl border border-surface-variant dark:border-slate-700 gsap-reveal bg-slate-100 dark:bg-slate-800">
-            {/* Hình nền bản đồ (Dùng w-full h-auto để ảnh không bao giờ bị cắt xén) */}
-            <img
-              src="https://res.cloudinary.com/dygipvoal/image/upload/v1776757476/luzqh5q31dxxqvnpovir.png"
-              alt="Saigon River Route Map"
-              className="w-full h-auto block opacity-90 dark:opacity-60 dark:invert dark:hue-rotate-180 transition-all duration-500"
-            />
+          {/* BẢN ĐỒ OPENSTREETMAP INTERACTIVE */}
+          <div className="relative w-full h-[500px] lg:h-[600px] rounded-[3rem] overflow-hidden shadow-2xl border border-surface-variant dark:border-slate-700 gsap-reveal bg-slate-100 dark:bg-slate-800 z-10">
+            <MapContainer
+              center={[10.80, 106.72]} // Tọa độ trung tâm (Khoảng giữa Sông Sài Gòn)
+              zoom={13} // Mức zoom mặc định
+              scrollWheelZoom={false} // Tắt cuộn chuột để không bị kẹt khi user cuộn trang web
+              className="w-full h-full z-0"
+            >
+              {/* Load giao diện bản đồ từ OpenStreetMap */}
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                className="dark:hue-rotate-180 dark:invert transition-all duration-500" // CSS filter để có Dark mode cho map
+              />
 
-            {/* Các điểm đánh dấu trạm (Markers) */}
-            {mapStations.map((station) => (
-              <Link
-                key={station.id}
-                to={`/stations/${station.id}`}
-                className="absolute group flex flex-col items-center justify-center -translate-x-1/2 -translate-y-1/2 cursor-pointer z-10 hover:z-30"
-                style={{ top: station.top, left: station.left }}
-              >
-                {/* Khối Tooltip hiện khi trỏ chuột */}
-                <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-300 pointer-events-none">
-                  <div className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-3 rounded-2xl text-sm font-bold font-headline whitespace-nowrap shadow-xl flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[18px] text-primary dark:text-yellow-500">
-                      directions_boat
-                    </span>
-                    {lang === "VN" ? station.nameVN : station.nameEN}
-                  </div>
-                  {/* Tam giác nhỏ trỏ xuống */}
-                  <div className="w-3 h-3 bg-slate-900 dark:bg-white rotate-45 absolute -bottom-1.5 left-1/2 -translate-x-1/2"></div>
-                </div>
-
-                {/* Chấm tròn nhấp nháy trên bản đồ (Đã thu nhỏ lại một chút để vừa với map mới) */}
-                <div className="relative flex items-center justify-center w-6 h-6">
-                  {/* Vòng tròn lan tỏa (Radar ping) */}
-                  <div className="absolute w-full h-full bg-red-500/50 dark:bg-yellow-400/50 rounded-full animate-ping"></div>
-                  {/* Lõi chấm tròn cứng */}
-                  <div className="relative w-3.5 h-3.5 bg-red-500 dark:bg-yellow-400 border-2 border-white dark:border-slate-900 rounded-full shadow-lg group-hover:scale-150 transition-transform duration-300"></div>
-                </div>
-              </Link>
-            ))}
+              {/* Render các điểm trạm */}
+              {mapStations.map((station) => (
+                <Marker
+                  key={station.id}
+                  position={[station.lat, station.lng]}
+                  icon={pulsingIcon} // Gắn icon nhấp nháy ta đã tạo ở trên
+                >
+                  <Popup className="custom-popup">
+                    <div className="text-center">
+                      <h3 className="font-bold font-headline text-slate-900 mb-2">
+                        {lang === "VN" ? station.nameVN : station.nameEN}
+                      </h3>
+                      <Link
+                        to={`/stations/${station.id}`}
+                        className="inline-block bg-primary text-white text-xs px-3 py-1.5 rounded-full font-bold hover:bg-slate-800 transition-colors"
+                      >
+                        {lang === "VN" ? "Xem chi tiết" : "View Details"}
+                      </Link>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
           </div>
         </div>
       </section>
@@ -762,13 +773,6 @@ export const Home = () => {
                 </span>
               </button>
             </div>
-            <div className="gsap-reveal flex justify-center lg:justify-end">
-              <img
-                src="https://res.cloudinary.com/dygipvoal/image/upload/v1776076502/blwmejqkkpkfclbx0l96.jpg"
-                alt="Waterbus Schedule"
-                className="w-full max-w-xl rounded-[2rem] shadow-2xl object-contain border border-surface-variant dark:border-slate-700 transition-transform duration-500 hover:scale-105"
-              />
-            </div>
           </div>
         </div>
       </section>
@@ -811,10 +815,6 @@ export const Home = () => {
                     alt={promo.title[lang === "VN" ? "vn" : "en"]}
                     src={promo.img}
                   />
-                  {/* Nhãn tag nổi */}
-                  <div className="absolute top-4 left-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-1 rounded-full text-[10px] font-bold text-primary dark:text-yellow-400 uppercase shadow-sm">
-                    {promo.tag[lang === "VN" ? "vn" : "en"]}
-                  </div>
                 </div>
 
                 <div className="px-2 pb-1 shrink-0">
@@ -996,9 +996,8 @@ export const Home = () => {
                   key={index}
                   src={poster}
                   alt="Promotion"
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
-                    index === promoSlide ? "opacity-100 z-10" : "opacity-0 z-0"
-                  }`}
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${index === promoSlide ? "opacity-100 z-10" : "opacity-0 z-0"
+                    }`}
                 />
               ))}
               {/* Lớp gradient làm nền cho chữ dễ đọc hơn */}
@@ -1034,9 +1033,8 @@ export const Home = () => {
               {promoPosters.map((_, index) => (
                 <div
                   key={index}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    index === promoSlide ? "w-4 bg-white" : "w-1.5 bg-white/50"
-                  }`}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${index === promoSlide ? "w-4 bg-white" : "w-1.5 bg-white/50"
+                    }`}
                 ></div>
               ))}
             </div>
