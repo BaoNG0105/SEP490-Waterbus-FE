@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css'; // Bắt buộc phải có CSS để bản đồ không bị vỡ
+import 'leaflet/dist/leaflet.css';
 
 const heroSlides = [
   {
@@ -24,7 +24,7 @@ const heroSlides = [
   },
 ];
 
-// DỮ LIỆU TỌA ĐỘ CÁC TRẠM TRÊN BẢN ĐỒ (Kinh độ, Vĩ độ thực tế)
+// DỮ LIỆU TỌA ĐỘ VÀ THÔNG TIN CHI TIẾT CÁC TRẠM (Hardcode)
 const mapStations = [
   {
     id: "bach-dang",
@@ -32,6 +32,11 @@ const mapStations = [
     nameEN: "Bach Dang Station",
     lat: 10.7728,
     lng: 106.7064,
+    image: "https://res.cloudinary.com/dygipvoal/image/upload/v1776076390/x2bpvdexfabamjssoeno.webp",
+    addressVN: "10B Tôn Đức Thắng, P. Bến Nghé, Quận 1, TP.HCM",
+    addressEN: "10B Ton Duc Thang, Ben Nghe Ward, Dist. 1, HCMC",
+    timeVN: "07:00 - 22:30 hàng ngày",
+    timeEN: "07:00 AM - 10:30 PM daily",
   },
   {
     id: "thu-thiem",
@@ -39,6 +44,11 @@ const mapStations = [
     nameEN: "Thu Thiem Port",
     lat: 10.7712,
     lng: 106.7118,
+    image: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=800",
+    addressVN: "Đường hầm Sông Sài Gòn, TP. Thủ Đức, TP.HCM",
+    addressEN: "Saigon River Tunnel, Thu Duc City, HCMC",
+    timeVN: "07:00 - 22:30 hàng ngày",
+    timeEN: "07:00 AM - 10:30 PM daily",
   },
   {
     id: "binh-an",
@@ -46,6 +56,11 @@ const mapStations = [
     nameEN: "Binh An Port",
     lat: 10.7931,
     lng: 106.7230,
+    image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=800",
+    addressVN: "Khu đô thị Bình An, Phường Bình An, TP. Thủ Đức",
+    addressEN: "Binh An Urban Area, Binh An Ward, Thu Duc City",
+    timeVN: "07:30 - 21:00 hàng ngày",
+    timeEN: "07:30 AM - 09:00 PM daily",
   },
   {
     id: "thanh-da",
@@ -53,6 +68,11 @@ const mapStations = [
     nameEN: "Thanh Da Station",
     lat: 10.8206,
     lng: 106.7176,
+    image: "https://images.unsplash.com/photo-1528150395403-992a693e26c8?q=80&w=800",
+    addressVN: "Bán đảo Thanh Đa, Phường 27, Quận Bình Thạnh",
+    addressEN: "Thanh Da Peninsula, Ward 27, Binh Thanh Dist.",
+    timeVN: "08:00 - 20:30 hàng ngày",
+    timeEN: "08:00 AM - 08:30 PM daily",
   },
   {
     id: "linh-dong",
@@ -60,6 +80,11 @@ const mapStations = [
     nameEN: "Linh Dong Station",
     lat: 10.8351,
     lng: 106.7328,
+    image: "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?q=80&w=800",
+    addressVN: "Phường Linh Đông, TP. Thủ Đức, TP.HCM",
+    addressEN: "Linh Dong Ward, Thu Duc City, HCMC",
+    timeVN: "06:30 - 20:00 hàng ngày",
+    timeEN: "06:30 AM - 08:00 PM daily",
   },
 ];
 
@@ -72,9 +97,8 @@ const pulsingIcon = new L.DivIcon({
       <div class="relative w-3.5 h-3.5 bg-red-500 dark:bg-yellow-400 border-2 border-white dark:border-slate-900 rounded-full shadow-lg"></div>
     </div>
   `,
-  iconSize: [24, 24], // Kích thước icon
-  iconAnchor: [12, 12], // Điểm tâm của icon đặt đúng vị trí tọa độ
-  popupAnchor: [0, -12] // Điểm xuất hiện của Popup (nổi lên trên chấm tròn)
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
 });
 
 // Thông báo (Hardcode)
@@ -166,14 +190,19 @@ const testimonials = [
 ];
 
 export const Home = () => {
-  const [currentSlide, setCurrentSlide] = useState(0);
   const { lang } = useApp();
+
+  // Các state hiển thị
+  const [currentSlide, setCurrentSlide] = useState(0);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoSlide, setPromoSlide] = useState(0);
   const [showNoticeBar, setShowNoticeBar] = useState(true);
   const [noticeIndex, setNoticeIndex] = useState(0);
 
-  // Auto-cycle cho thanh thông báo (Chỉnh thành 12 giây để khớp với 1 vòng chạy chữ)
+  // STATE QUẢN LÝ MODAL TRẠM (STATION MODAL)
+  const [selectedStation, setSelectedStation] = useState(null);
+
+  // Auto-cycle cho thanh thông báo
   useEffect(() => {
     if (!showNoticeBar) return;
     const timer = setInterval(() => {
@@ -182,7 +211,6 @@ export const Home = () => {
     return () => clearInterval(timer);
   }, [showNoticeBar]);
 
-  // Hàm điều hướng thông báo Trái/Phải
   const nextNotice = () =>
     setNoticeIndex((prev) => (prev + 1) % announcements.length);
   const prevNotice = () =>
@@ -215,7 +243,7 @@ export const Home = () => {
     return () => elements.forEach((el) => observer.unobserve(el));
   }, []);
 
-  // Hiển thị Modal sau 3 giây (chỉ hiện 1 lần mỗi phiên truy cập để tránh làm phiền)
+  // Hiển thị Modal Quảng Cáo sau 3 giây
   useEffect(() => {
     const hasSeenPromo = sessionStorage.getItem("hasSeenPromo");
     if (!hasSeenPromo) {
@@ -227,7 +255,6 @@ export const Home = () => {
     }
   }, []);
 
-  // Tự động chuyển slide trong Modal quảng cáo mỗi 3s
   useEffect(() => {
     if (!showPromoModal) return;
     const slideTimer = setInterval(() => {
@@ -236,48 +263,18 @@ export const Home = () => {
     return () => clearInterval(slideTimer);
   }, [showPromoModal]);
 
-  useEffect(() => {
-    const slideTimer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 5000);
-    return () => clearInterval(slideTimer);
-  }, []);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible");
-          }
-        });
-      },
-      { threshold: 0.1 },
-    );
-
-    const elements = document.querySelectorAll(".gsap-reveal");
-    elements.forEach((el) => observer.observe(el));
-
-    return () => {
-      elements.forEach((el) => observer.unobserve(el));
-    };
-  }, []);
-
   return (
-    <main className="dark:bg-slate-900 transition-colors duration-300">
+    <main className="dark:bg-slate-900 transition-colors duration-300 relative">
       {/* THANH THÔNG BÁO */}
       {showNoticeBar && (
         <div className="fixed top-0 left-0 w-full h-10 bg-white dark:bg-slate-900 border-b border-surface-variant/50 dark:border-slate-700 z-[120] flex items-center justify-between px-4 md:px-8 shadow-sm transition-colors duration-300">
-          {/* Cụm Icon chuông */}
           <div className="flex items-center shrink-0 z-10 bg-white dark:bg-slate-900 py-2 pr-3">
             <span className="material-symbols-outlined text-red-600 dark:text-red-500 text-[18px] animate-pulse">
               notifications_active
             </span>
           </div>
 
-          {/* Cụm Nội dung chữ chạy băng chuyền */}
           <div className="flex-1 relative h-full flex items-center overflow-hidden group">
-            {/* CSS Keyframes inline cho hiệu ứng băng chuyền */}
             <style>{`
               @keyframes text-ticker {
                 0% { left: 100%; transform: translateX(0); }
@@ -290,7 +287,6 @@ export const Home = () => {
               }
             `}</style>
 
-            {/* Thẻ p sẽ bị reset lại animation mỗi khi noticeIndex thay đổi nhờ thuộc tính key */}
             <p
               key={noticeIndex}
               className="text-xs md:text-sm font-body font-medium text-slate-700 dark:text-slate-300 animate-ticker group-hover:[animation-play-state:paused] cursor-default"
@@ -301,7 +297,6 @@ export const Home = () => {
             </p>
           </div>
 
-          {/* Cụm Nút điều hướng & Đóng (Luôn nổi lên trên để không bị chữ đè) */}
           <div className="flex items-center gap-1 shrink-0 ml-4 z-10 bg-white dark:bg-slate-900 pl-2">
             <button
               onClick={prevNotice}
@@ -334,9 +329,8 @@ export const Home = () => {
         </div>
       )}
 
-      {/* Hero Section (Đã tích hợp Booking form) */}
+      {/* Hero Section */}
       <section className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-slate-900 pt-20">
-        {/* Background Slides */}
         <div className="absolute inset-0 z-0">
           {heroSlides.map((slide, index) => (
             <div
@@ -353,29 +347,16 @@ export const Home = () => {
                   allowFullScreen
                 />
               ) : slide.type === "video" ? (
-                <video
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                  src={slide.src}
-                />
+                <video autoPlay loop muted playsInline className="w-full h-full object-cover" src={slide.src} />
               ) : (
-                <img
-                  alt={`Saigon Waterbus Slide ${index + 1}`}
-                  className="w-full h-full object-cover"
-                  src={slide.src}
-                />
+                <img alt={`Slide ${index + 1}`} className="w-full h-full object-cover" src={slide.src} />
               )}
             </div>
           ))}
           <div className="absolute inset-0 hero-gradient z-20"></div>
         </div>
 
-        {/* Nội dung chính chia 2 cột */}
         <div className="container mx-auto px-6 md:px-12 relative z-30 flex flex-col lg:flex-row items-center justify-between gap-12 w-full">
-          {/* Cột Trái: Title */}
           <div className="flex-1 text-center lg:text-left flex flex-col items-center lg:items-start gsap-reveal">
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-headline font-bold text-white tracking-tighter leading-tight drop-shadow-lg">
               <span className="text-white italic block mb-2">
@@ -392,13 +373,8 @@ export const Home = () => {
             </p>
           </div>
 
-          {/* Cột Phải: Booking Block */}
-          <div
-            className="flex-1 w-full flex justify-center lg:justify-end gsap-reveal"
-            id="booking-section"
-          >
+          <div className="flex-1 w-full flex justify-center lg:justify-end gsap-reveal" id="booking-section">
             <div className="w-full max-w-md bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl p-8 border border-white/20 dark:border-slate-700/50 transition-colors duration-300">
-              {/* Tabs Khứ hồi / Một chiều */}
               <div className="flex gap-2 p-1.5 bg-surface-container-highest dark:bg-slate-700/50 rounded-2xl w-full mb-6">
                 <button className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-white dark:bg-slate-600 shadow-sm text-primary dark:text-yellow-400 transition-colors">
                   {lang === "VN" ? "Một chiều" : "One way"}
@@ -408,7 +384,6 @@ export const Home = () => {
                 </button>
               </div>
 
-              {/* Form Lưới vuông (2x2) */}
               <div className="grid grid-cols-2 gap-4 mb-8">
                 <div className="space-y-2 col-span-2 sm:col-span-1">
                   <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/60 ml-1">
@@ -438,24 +413,16 @@ export const Home = () => {
                   <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/60 ml-1">
                     {lang === "VN" ? "Ngày đi" : "Departure"}
                   </label>
-                  <input
-                    className="w-full bg-surface-container-low dark:bg-slate-700 dark:text-white border-none rounded-2xl font-headline font-bold focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3.5 cursor-pointer"
-                    type="date"
-                  />
+                  <input className="w-full bg-surface-container-low dark:bg-slate-700 dark:text-white border-none rounded-2xl font-headline font-bold focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3.5 cursor-pointer" type="date" />
                 </div>
                 <div className="space-y-2 col-span-2 sm:col-span-1">
                   <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/60 ml-1">
                     {lang === "VN" ? "Ngày về" : "Return"}
                   </label>
-                  <input
-                    className="w-full bg-surface-container-low dark:bg-slate-700 dark:text-white/50 border-none rounded-2xl font-headline font-bold focus:ring-2 ring-primary transition-colors outline-none px-4 py-3.5 cursor-not-allowed opacity-60"
-                    type="date"
-                    disabled
-                  />
+                  <input className="w-full bg-surface-container-low dark:bg-slate-700 dark:text-white/50 border-none rounded-2xl font-headline font-bold focus:ring-2 ring-primary transition-colors outline-none px-4 py-3.5 cursor-not-allowed opacity-60" type="date" disabled />
                 </div>
               </div>
 
-              {/* Nút Tìm kiếm */}
               <button className="w-full bg-primary-container dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 py-4 rounded-2xl font-bold font-label hover:brightness-105 transition-all flex items-center justify-center gap-2 shadow-lg">
                 <span className="material-symbols-outlined">search</span>
                 {lang === "VN" ? "Tìm chuyến" : "Search Trips"}
@@ -464,17 +431,11 @@ export const Home = () => {
           </div>
         </div>
 
-        {/* Nút Scroll Down (Đặt tuyệt đối ở giữa cạnh dưới màn hình) */}
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 hidden md:block">
-          <a
-            href="#mission-section"
-            onClick={(e) => {
-              e.preventDefault();
-              document.querySelector("#mission-section")?.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-              });
-            }}
+          <a href="#mission-section" onClick={(e) => {
+            e.preventDefault();
+            document.querySelector("#mission-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
             className="inline-flex flex-col items-center gap-3 gsap-reveal cursor-pointer opacity-70 hover:opacity-100 hover:-translate-y-1 transition-all duration-300"
           >
             <div className="w-8 h-[50px] border-2 border-white rounded-full flex justify-center items-start p-1.5">
@@ -486,26 +447,15 @@ export const Home = () => {
           </a>
         </div>
 
-        {/* Nút chấm chuyển Slide */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex gap-3">
           {heroSlides.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => setCurrentSlide(index)}
-              className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${index === currentSlide
-                ? "bg-primary-container w-8"
-                : "bg-white/50 hover:bg-white"
-                }`}
-            />
+            <button key={index} onClick={() => setCurrentSlide(index)} className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${index === currentSlide ? "bg-primary-container w-8" : "bg-white/50 hover:bg-white"}`} />
           ))}
         </div>
       </section>
 
       {/* Mission Section */}
-      <section
-        id="mission-section"
-        className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300"
-      >
+      <section id="mission-section" className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300">
         <div className="container mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
           <div className="gsap-reveal">
             <span className="text-primary dark:text-yellow-400 font-bold text-sm tracking-[0.2em] uppercase mb-4 block">
@@ -523,17 +473,13 @@ export const Home = () => {
             </p>
             <div className="grid grid-cols-2 gap-8 border-t border-surface-variant dark:border-slate-700 pt-10">
               <div>
-                <div className="text-4xl font-headline font-bold text-primary dark:text-yellow-400">
-                  15 min
-                </div>
+                <div className="text-4xl font-headline font-bold text-primary dark:text-yellow-400">15 min</div>
                 <p className="text-xs font-bold text-outline dark:text-white/60 uppercase mt-2">
                   {lang === "VN" ? "Tần suất cao điểm" : "Peak frequency"}
                 </p>
               </div>
               <div>
-                <div className="text-4xl font-headline font-bold text-primary dark:text-yellow-400">
-                  100%
-                </div>
+                <div className="text-4xl font-headline font-bold text-primary dark:text-yellow-400">100%</div>
                 <p className="text-xs font-bold text-outline dark:text-white/60 uppercase mt-2">
                   {lang === "VN" ? "Năng lượng sạch" : "Clean Energy Goal"}
                 </p>
@@ -543,11 +489,7 @@ export const Home = () => {
           <div className="relative gsap-reveal group cursor-pointer">
             <div className="absolute -inset-4 bg-primary/10 dark:bg-yellow-400/10 rounded-[3rem] -rotate-3 transition-all duration-700 group-hover:rotate-0 group-hover:scale-105 group-hover:bg-primary/20 dark:group-hover:bg-yellow-400/20"></div>
             <div className="relative overflow-hidden rounded-[2.5rem] shadow-2xl">
-              <img
-                alt="Fleet"
-                className="w-full transition-all duration-700 ease-out group-hover:scale-110 group-hover:brightness-110"
-                src="https://res.cloudinary.com/dygipvoal/image/upload/v1776076390/x2bpvdexfabamjssoeno.webp"
-              />
+              <img alt="Fleet" className="w-full transition-all duration-700 ease-out group-hover:scale-110 group-hover:brightness-110" src="https://res.cloudinary.com/dygipvoal/image/upload/v1776076390/x2bpvdexfabamjssoeno.webp" />
             </div>
           </div>
         </div>
@@ -568,108 +510,43 @@ export const Home = () => {
           </div>
           <div className="max-w-7xl mx-auto">
             <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
-              {/* Step 1 */}
-              <div className="flex-1 w-full relative group cursor-pointer">
-                <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-surface-variant dark:border-slate-700 text-center transition-all duration-500 group-hover:scale-105 group-hover:-translate-y-2 group-hover:shadow-2xl group-hover:bg-primary/5 dark:group-hover:bg-yellow-400/10 group-hover:border-primary/50 dark:group-hover:border-yellow-400/50 relative overflow-hidden">
-                  <div className="absolute top-2 right-6 text-7xl font-bold text-primary/5 dark:text-white/5 font-headline pointer-events-none transition-colors duration-500 group-hover:text-primary/20 dark:group-hover:text-yellow-400/20">
-                    01
+              {/* Steps (Giữ nguyên) */}
+              {[
+                { step: "01", icon: "route", titleVN: "Chọn Tuyến", titleEN: "Choose Route", descVN: "Chọn điểm khởi hành và điểm đến.", descEN: "Pick your departure and arrival stations." },
+                { step: "02", icon: "event_seat", titleVN: "Chọn Ghế", titleEN: "Select Seat", descVN: "Lựa chọn vị trí ngồi ưa thích của bạn.", descEN: "Browse available seats and select your preference." },
+                { step: "03", icon: "payments", titleVN: "Thanh Toán", titleEN: "Payment", descVN: "Thanh toán an toàn qua nhiều phương thức.", descEN: "Secure checkout with various payment methods." },
+                { step: "04", icon: "confirmation_number", titleVN: "Nhận Vé", titleEN: "Get Ticket", descVN: "Nhận vé điện tử ngay lập tức qua email.", descEN: "Receive your e-ticket instantly via app/email." },
+              ].map((item, index) => (
+                <div key={index} className="flex flex-1 w-full items-center">
+                  <div className="flex-1 w-full relative group cursor-pointer">
+                    <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-surface-variant dark:border-slate-700 text-center transition-all duration-500 group-hover:scale-105 group-hover:-translate-y-2 group-hover:shadow-2xl group-hover:bg-primary/5 dark:group-hover:bg-yellow-400/10 group-hover:border-primary/50 dark:group-hover:border-yellow-400/50 relative overflow-hidden">
+                      <div className="absolute top-2 right-6 text-7xl font-bold text-primary/5 dark:text-white/5 font-headline pointer-events-none transition-colors duration-500 group-hover:text-primary/20 dark:group-hover:text-yellow-400/20">
+                        {item.step}
+                      </div>
+                      <div className="w-16 h-16 bg-primary/10 dark:bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 group-hover:bg-primary dark:group-hover:bg-yellow-400 group-hover:scale-110 group-hover:rotate-12">
+                        <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-3xl transition-colors duration-500 group-hover:text-white dark:group-hover:text-slate-900">{item.icon}</span>
+                      </div>
+                      <h4 className="font-bold text-lg mb-2 font-headline text-slate-900 dark:text-white">
+                        {lang === "VN" ? item.titleVN : item.titleEN}
+                      </h4>
+                      <p className="text-sm text-on-surface-variant dark:text-white/70">
+                        {lang === "VN" ? item.descVN : item.descEN}
+                      </p>
+                    </div>
                   </div>
-                  <div className="w-16 h-16 bg-primary/10 dark:bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 group-hover:bg-primary dark:group-hover:bg-yellow-400 group-hover:scale-110 group-hover:rotate-12">
-                    <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-3xl transition-colors duration-500 group-hover:text-white dark:group-hover:text-slate-900">
-                      route
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-lg mb-2 font-headline text-slate-900 dark:text-white">
-                    {lang === "VN" ? "Chọn Tuyến" : "Choose Route"}
-                  </h4>
-                  <p className="text-sm text-on-surface-variant dark:text-white/70">
-                    {lang === "VN"
-                      ? "Chọn điểm khởi hành và điểm đến."
-                      : "Pick your departure and arrival stations."}
-                  </p>
+                  {index < 3 && (
+                    <div className="hidden lg:flex items-center text-primary/30 dark:text-white/20 px-2">
+                      <span className="material-symbols-outlined text-4xl">east</span>
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div className="hidden lg:flex items-center text-primary/30 dark:text-white/20">
-                <span className="material-symbols-outlined text-4xl">east</span>
-              </div>
-
-              {/* Step 2 */}
-              <div className="flex-1 w-full relative group cursor-pointer">
-                <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-surface-variant dark:border-slate-700 text-center transition-all duration-500 group-hover:scale-105 group-hover:-translate-y-2 group-hover:shadow-2xl group-hover:bg-primary/5 dark:group-hover:bg-yellow-400/10 group-hover:border-primary/50 dark:group-hover:border-yellow-400/50 relative overflow-hidden">
-                  <div className="absolute top-2 right-6 text-7xl font-bold text-primary/5 dark:text-white/5 font-headline pointer-events-none transition-colors duration-500 group-hover:text-primary/20 dark:group-hover:text-yellow-400/20">
-                    02
-                  </div>
-                  <div className="w-16 h-16 bg-primary/10 dark:bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 group-hover:bg-primary dark:group-hover:bg-yellow-400 group-hover:scale-110 group-hover:rotate-12">
-                    <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-3xl transition-colors duration-500 group-hover:text-white dark:group-hover:text-slate-900">
-                      event_seat
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-lg mb-2 font-headline text-slate-900 dark:text-white">
-                    {lang === "VN" ? "Chọn Ghế" : "Select Seat"}
-                  </h4>
-                  <p className="text-sm text-on-surface-variant dark:text-white/70">
-                    {lang === "VN"
-                      ? "Lựa chọn vị trí ngồi ưa thích của bạn."
-                      : "Browse available seats and select your preference."}
-                  </p>
-                </div>
-              </div>
-              <div className="hidden lg:flex items-center text-primary/30 dark:text-white/20">
-                <span className="material-symbols-outlined text-4xl">east</span>
-              </div>
-
-              {/* Step 3 */}
-              <div className="flex-1 w-full relative group cursor-pointer">
-                <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-surface-variant dark:border-slate-700 text-center transition-all duration-500 group-hover:scale-105 group-hover:-translate-y-2 group-hover:shadow-2xl group-hover:bg-primary/5 dark:group-hover:bg-yellow-400/10 group-hover:border-primary/50 dark:group-hover:border-yellow-400/50 relative overflow-hidden">
-                  <div className="absolute top-2 right-6 text-7xl font-bold text-primary/5 dark:text-white/5 font-headline pointer-events-none transition-colors duration-500 group-hover:text-primary/20 dark:group-hover:text-yellow-400/20">
-                    03
-                  </div>
-                  <div className="w-16 h-16 bg-primary/10 dark:bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 group-hover:bg-primary dark:group-hover:bg-yellow-400 group-hover:scale-110 group-hover:rotate-12">
-                    <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-3xl transition-colors duration-500 group-hover:text-white dark:group-hover:text-slate-900">
-                      payments
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-lg mb-2 font-headline text-slate-900 dark:text-white">
-                    {lang === "VN" ? "Thanh Toán" : "Payment"}
-                  </h4>
-                  <p className="text-sm text-on-surface-variant dark:text-white/70">
-                    {lang === "VN"
-                      ? "Thanh toán an toàn qua nhiều phương thức."
-                      : "Secure checkout with various payment methods."}
-                  </p>
-                </div>
-              </div>
-              <div className="hidden lg:flex items-center text-primary/30 dark:text-white/20">
-                <span className="material-symbols-outlined text-4xl">east</span>
-              </div>
-
-              {/* Step 4 */}
-              <div className="flex-1 w-full relative group cursor-pointer">
-                <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-surface-variant dark:border-slate-700 text-center transition-all duration-500 group-hover:scale-105 group-hover:-translate-y-2 group-hover:shadow-2xl group-hover:bg-primary/5 dark:group-hover:bg-yellow-400/10 group-hover:border-primary/50 dark:group-hover:border-yellow-400/50 relative overflow-hidden">
-                  <div className="absolute top-2 right-6 text-7xl font-bold text-primary/5 dark:text-white/5 font-headline pointer-events-none transition-colors duration-500 group-hover:text-primary/20 dark:group-hover:text-yellow-400/20">
-                    04
-                  </div>
-                  <div className="w-16 h-16 bg-primary/10 dark:bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 group-hover:bg-primary dark:group-hover:bg-yellow-400 group-hover:scale-110 group-hover:rotate-12">
-                    <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-3xl transition-colors duration-500 group-hover:text-white dark:group-hover:text-slate-900">
-                      confirmation_number
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-lg mb-2 font-headline text-slate-900 dark:text-white">
-                    {lang === "VN" ? "Nhận Vé" : "Get Ticket"}
-                  </h4>
-                  <p className="text-sm text-on-surface-variant dark:text-white/70">
-                    {lang === "VN"
-                      ? "Nhận vé điện tử ngay lập tức qua email."
-                      : "Receive your e-ticket instantly via app/email."}
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Stations Section */}
+      {/* Stations Section with Map */}
       <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300">
         <div className="container mx-auto px-6 max-w-7xl">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-4">
@@ -683,42 +560,29 @@ export const Home = () => {
             </div>
           </div>
 
-          {/* BẢN ĐỒ OPENSTREETMAP INTERACTIVE */}
           <div className="relative w-full h-[500px] lg:h-[600px] rounded-[3rem] overflow-hidden shadow-2xl border border-surface-variant dark:border-slate-700 gsap-reveal bg-slate-100 dark:bg-slate-800 z-10">
             <MapContainer
-              center={[10.80, 106.72]} // Tọa độ trung tâm (Khoảng giữa Sông Sài Gòn)
-              zoom={13} // Mức zoom mặc định
-              scrollWheelZoom={false} // Tắt cuộn chuột để không bị kẹt khi user cuộn trang web
+              center={[10.80, 106.72]}
+              zoom={13}
+              scrollWheelZoom={false}
               className="w-full h-full z-0"
             >
-              {/* Load giao diện bản đồ từ OpenStreetMap */}
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                className="dark:hue-rotate-180 dark:invert transition-all duration-500" // CSS filter để có Dark mode cho map
+                className="dark:hue-rotate-180 dark:invert transition-all duration-500"
               />
 
-              {/* Render các điểm trạm */}
               {mapStations.map((station) => (
                 <Marker
                   key={station.id}
                   position={[station.lat, station.lng]}
-                  icon={pulsingIcon} // Gắn icon nhấp nháy ta đã tạo ở trên
-                >
-                  <Popup className="custom-popup">
-                    <div className="text-center">
-                      <h3 className="font-bold font-headline text-slate-900 mb-2">
-                        {lang === "VN" ? station.nameVN : station.nameEN}
-                      </h3>
-                      <Link
-                        to={`/stations/${station.id}`}
-                        className="inline-block bg-primary text-white text-xs px-3 py-1.5 rounded-full font-bold hover:bg-slate-800 transition-colors"
-                      >
-                        {lang === "VN" ? "Xem chi tiết" : "View Details"}
-                      </Link>
-                    </div>
-                  </Popup>
-                </Marker>
+                  icon={pulsingIcon}
+                  // SỰ KIỆN CLICK ĐỂ MỞ MODAL THÔNG TIN TRẠM
+                  eventHandlers={{
+                    click: () => setSelectedStation(station)
+                  }}
+                />
               ))}
             </MapContainer>
           </div>
@@ -780,7 +644,6 @@ export const Home = () => {
       {/* PROMOTIONS SECTION */}
       <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300 overflow-hidden">
         <div className="container mx-auto px-6 max-w-7xl">
-          {/* Header & View All Link */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-4">
             <div>
               <h2 className="text-4xl font-headline font-bold dark:text-white">
@@ -801,7 +664,6 @@ export const Home = () => {
             </Link>
           </div>
 
-          {/* Slider Khuyến Mãi (Cuộn ngang - Dạng Card Hình Vuông) */}
           <div className="flex overflow-x-auto gap-6 pb-8 snap-x snap-mandatory no-scrollbar -mx-6 px-6 md:mx-0 md:px-0">
             {promoCards.map((promo) => (
               <Link
@@ -816,7 +678,6 @@ export const Home = () => {
                     src={promo.img}
                   />
                 </div>
-
                 <div className="px-2 pb-1 shrink-0">
                   <h3 className="text-lg font-bold font-headline mb-1.5 tracking-tight text-slate-900 dark:text-white group-hover:text-primary dark:group-hover:text-yellow-400 transition-colors line-clamp-1">
                     {promo.title[lang === "VN" ? "vn" : "en"]}
@@ -847,52 +708,26 @@ export const Home = () => {
           <div className="flex w-max animate-marquee group-hover:[animation-play-state:paused]">
             <div className="flex gap-8 px-4 shrink-0 py-4">
               {testimonials.map((item, index) => (
-                <div
-                  key={`set1-${index}`}
-                  className="w-[350px] whitespace-normal bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-surface-variant dark:border-slate-700 flex flex-col justify-between transition-all duration-500 cursor-pointer hover:scale-110 hover:shadow-2xl hover:z-10 hover:border-primary/50 dark:hover:border-yellow-400/50"
-                >
+                <div key={`set1-${index}`} className="w-[350px] whitespace-normal bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-surface-variant dark:border-slate-700 flex flex-col justify-between transition-all duration-500 cursor-pointer hover:scale-110 hover:shadow-2xl hover:z-10 hover:border-primary/50 dark:hover:border-yellow-400/50">
                   <div>
-                    <p className="italic text-on-surface-variant dark:text-white/80 leading-relaxed mb-8">
-                      "{item.quote}"
-                    </p>
+                    <p className="italic text-on-surface-variant dark:text-white/80 leading-relaxed mb-8">"{item.quote}"</p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <img
-                      alt={item.name}
-                      className="w-12 h-12 rounded-full bg-surface-container-high dark:bg-slate-700"
-                      src={item.avatar}
-                    />
-                    <div>
-                      <h5 className="font-bold text-sm dark:text-white">
-                        {item.name}
-                      </h5>
-                    </div>
+                    <img alt={item.name} className="w-12 h-12 rounded-full bg-surface-container-high dark:bg-slate-700" src={item.avatar} />
+                    <div><h5 className="font-bold text-sm dark:text-white">{item.name}</h5></div>
                   </div>
                 </div>
               ))}
             </div>
             <div className="flex gap-8 px-4 shrink-0 py-4">
               {testimonials.map((item, index) => (
-                <div
-                  key={`set2-${index}`}
-                  className="w-[350px] whitespace-normal bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-surface-variant dark:border-slate-700 flex flex-col justify-between transition-all duration-500 cursor-pointer hover:scale-110 hover:shadow-2xl hover:z-10 hover:border-primary/50 dark:hover:border-yellow-400/50"
-                >
+                <div key={`set2-${index}`} className="w-[350px] whitespace-normal bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-surface-variant dark:border-slate-700 flex flex-col justify-between transition-all duration-500 cursor-pointer hover:scale-110 hover:shadow-2xl hover:z-10 hover:border-primary/50 dark:hover:border-yellow-400/50">
                   <div>
-                    <p className="italic text-on-surface-variant dark:text-white/80 leading-relaxed mb-8">
-                      "{item.quote}"
-                    </p>
+                    <p className="italic text-on-surface-variant dark:text-white/80 leading-relaxed mb-8">"{item.quote}"</p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <img
-                      alt={item.name}
-                      className="w-12 h-12 rounded-full bg-surface-container-high dark:bg-slate-700"
-                      src={item.avatar}
-                    />
-                    <div>
-                      <h5 className="font-bold text-sm dark:text-white">
-                        {item.name}
-                      </h5>
-                    </div>
+                    <img alt={item.name} className="w-12 h-12 rounded-full bg-surface-container-high dark:bg-slate-700" src={item.avatar} />
+                    <div><h5 className="font-bold text-sm dark:text-white">{item.name}</h5></div>
                   </div>
                 </div>
               ))}
@@ -916,24 +751,16 @@ export const Home = () => {
               </p>
               <div className="space-y-6">
                 <div className="flex items-center gap-4 text-white">
-                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">
-                    phone_in_talk
-                  </span>
+                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">phone_in_talk</span>
                   <span className="font-medium">+84 (0) 28 3822 0000</span>
                 </div>
                 <div className="flex items-center gap-4 text-white">
-                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">
-                    mail
-                  </span>
+                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">mail</span>
                   <span className="font-medium">hello@rivernav.vn</span>
                 </div>
                 <div className="flex items-center gap-4 text-white">
-                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">
-                    location_on
-                  </span>
-                  <span className="font-medium">
-                    10B Ton Duc Thang, Dist. 1, HCMC
-                  </span>
+                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">location_on</span>
+                  <span className="font-medium">10B Ton Duc Thang, Dist. 1, HCMC</span>
                 </div>
               </div>
             </div>
@@ -941,32 +768,17 @@ export const Home = () => {
               <form className="space-y-6">
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/70">
-                      {lang === "VN" ? "Họ và Tên" : "Full Name"}
-                    </label>
-                    <input
-                      className="w-full bg-surface-container-low dark:bg-slate-600 dark:text-white border-none rounded-xl focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none"
-                      type="text"
-                    />
+                    <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/70">{lang === "VN" ? "Họ và Tên" : "Full Name"}</label>
+                    <input className="w-full bg-surface-container-low dark:bg-slate-600 dark:text-white border-none rounded-xl focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3" type="text" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/70">
-                      Email
-                    </label>
-                    <input
-                      className="w-full bg-surface-container-low dark:bg-slate-600 dark:text-white border-none rounded-xl focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none"
-                      type="email"
-                    />
+                    <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/70">Email</label>
+                    <input className="w-full bg-surface-container-low dark:bg-slate-600 dark:text-white border-none rounded-xl focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3" type="email" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/70">
-                    {lang === "VN" ? "Tin Nhắn" : "Message"}
-                  </label>
-                  <textarea
-                    className="w-full bg-surface-container-low dark:bg-slate-600 dark:text-white border-none rounded-xl focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none"
-                    rows="4"
-                  ></textarea>
+                  <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/70">{lang === "VN" ? "Tin Nhắn" : "Message"}</label>
+                  <textarea className="w-full bg-surface-container-low dark:bg-slate-600 dark:text-white border-none rounded-xl focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3" rows="4"></textarea>
                 </div>
                 <button className="w-full bg-primary dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 py-4 rounded-xl font-bold font-label hover:brightness-110 transition-all">
                   {lang === "VN" ? "Gửi Tin Nhắn" : "Send Message"}
@@ -977,19 +789,79 @@ export const Home = () => {
         </div>
       </section>
 
+      {/* MODAL CHI TIẾT TRẠM */}
+      {selectedStation && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-[2rem] overflow-hidden shadow-2xl animate-[fadeIn_0.3s_ease-out] flex flex-col">
+
+            {/* Nút đóng góc phải */}
+            <button
+              className="absolute top-4 right-4 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-md transition-colors"
+              onClick={() => setSelectedStation(null)}
+            >
+              <span className="material-symbols-outlined text-sm">close</span>
+            </button>
+
+            {/* Ảnh Station Cover */}
+            <div className="w-full h-48 sm:h-56 relative bg-slate-100 dark:bg-slate-800 shrink-0">
+              <img
+                src={selectedStation.image}
+                alt={selectedStation.nameEN}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent"></div>
+              <h3 className="absolute bottom-4 left-6 right-6 text-2xl font-headline font-bold text-white shadow-sm">
+                {lang === "VN" ? selectedStation.nameVN : selectedStation.nameEN}
+              </h3>
+            </div>
+
+            {/* Nội dung chi tiết */}
+            <div className="p-6 md:p-8 space-y-5">
+              {/* Box Địa chỉ */}
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-full bg-primary/10 dark:bg-yellow-400/20 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">location_on</span>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-white/50 mb-1">
+                    {lang === "VN" ? "Địa Chỉ" : "Address"}
+                  </p>
+                  <p className="text-sm text-slate-800 dark:text-white/90 font-medium">
+                    {lang === "VN" ? selectedStation.addressVN : selectedStation.addressEN}
+                  </p>
+                </div>
+              </div>
+
+              {/* Box Thời gian */}
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-full bg-primary/10 dark:bg-yellow-400/20 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">schedule</span>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-white/50 mb-1">
+                    {lang === "VN" ? "Thời Gian Hoạt Động" : "Operating Hours"}
+                  </p>
+                  <p className="text-sm text-slate-800 dark:text-white/90 font-medium">
+                    {lang === "VN" ? selectedStation.timeVN : selectedStation.timeEN}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* MODAL QUẢNG CÁO */}
       {showPromoModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
           <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-[2rem] overflow-hidden shadow-2xl animate-[fadeIn_0.4s_ease-out]">
-            {/* Nút đóng */}
             <button
               className="absolute top-4 right-4 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 text-white hover:bg-black/40 backdrop-blur-md transition-colors"
               onClick={() => setShowPromoModal(false)}
             >
               <span className="material-symbols-outlined text-sm">close</span>
             </button>
-
-            {/* Slider Hình ảnh (Tỷ lệ 4:5 dọc) */}
             <div className="relative w-full aspect-[4/5] bg-slate-100 dark:bg-slate-800">
               {promoPosters.map((poster, index) => (
                 <img
@@ -1000,11 +872,8 @@ export const Home = () => {
                     }`}
                 />
               ))}
-              {/* Lớp gradient làm nền cho chữ dễ đọc hơn */}
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent z-20"></div>
             </div>
-
-            {/* Nội dung & Nút bấm (Nằm đè lên phần dưới của ảnh) */}
             <div className="absolute bottom-0 left-0 right-0 p-8 flex flex-col items-center text-center z-30">
               <span className="inline-block px-3 py-1 bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 text-[10px] font-bold rounded-full mb-3 uppercase tracking-widest">
                 {lang === "VN" ? "Ưu đãi giới hạn" : "Limited Offer"}
@@ -1014,7 +883,6 @@ export const Home = () => {
                   ? "Nhận Deal hấp dẫn cùng WaterBus"
                   : "Get attractive deals with WaterBus"}
               </h3>
-
               <Link
                 to="/promotions"
                 className="w-full bg-primary-container dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 py-4 rounded-xl font-headline font-bold hover:scale-105 transition-transform flex items-center justify-center gap-2 shadow-lg"
@@ -1027,8 +895,6 @@ export const Home = () => {
                 </span>
               </Link>
             </div>
-
-            {/* Nút chuyển slide nhỏ (Dots) ở góc trên */}
             <div className="absolute top-5 left-1/2 -translate-x-1/2 flex gap-1.5 z-30 bg-black/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
               {promoPosters.map((_, index) => (
                 <div

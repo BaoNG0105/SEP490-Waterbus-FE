@@ -1,13 +1,10 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 
-// ==========================================
-// MOCK DATA: Dữ liệu mẫu chờ API thay thế
-// ==========================================
+// MOCK DATA: Dữ liệu mẫu
 const heroPromos = [
   {
     id: 1,
-    tag: { vn: "Ưu đãi giới hạn", en: "Limited Offer" },
     title: { vn: "Giảm 20% cho nhóm 5 người", en: "20% Off for Groups of 5" },
     desc: {
       vn: "Trải nghiệm hải trình thượng lưu cùng bạn bè với mức giá ưu đãi đặc biệt trong mùa hè này. Chỉ áp dụng cho các tuyến nội thành.",
@@ -17,7 +14,6 @@ const heroPromos = [
   },
   {
     id: 2,
-    tag: { vn: "Mùa hè sôi động", en: "Summer Vibes" },
     title: { vn: "Hoàng hôn lãng mạn", en: "Romantic Sunset Cruise" },
     desc: {
       vn: "Tặng ngay 1 đồ uống miễn phí khi đặt vé chuyến 17:00. Ngắm Sài Gòn chuyển mình trong ánh hoàng hôn tuyệt đẹp.",
@@ -30,7 +26,6 @@ const heroPromos = [
 const promoCards = [
   {
     id: 1,
-    tag: { vn: "Mới nhất", en: "Newest" },
     title: { vn: "Thứ 4 vui vẻ", en: "Happy Wednesday" },
     desc: {
       vn: "Giảm ngay 50% giá vé cho tất cả hành khách đặt vé vào khung giờ vàng từ 14:00 - 16:00 mỗi thứ 4 hàng tuần. Đây là cơ hội tuyệt vời để bạn tận hưởng không gian sông nước tĩnh lặng giữa tuần làm việc căng thẳng.",
@@ -41,7 +36,6 @@ const promoCards = [
   },
   {
     id: 2,
-    tag: { vn: "Member Only", en: "Member Only" },
     title: { vn: "Ưu đãi thẻ thành viên", en: "Member Privileges" },
     desc: {
       vn: "Tích lũy dặm bay sông nước để đổi lấy những chuyến đi miễn phí và dịch vụ phòng chờ hạng thương gia tại bến. Hạng thẻ Platinum còn được ưu tiên lên tàu và tặng thức uống chào mừng.",
@@ -52,7 +46,6 @@ const promoCards = [
   },
   {
     id: 3,
-    tag: { vn: "Doanh nghiệp", en: "Corporate" },
     title: { vn: "Gói di chuyển công sở", en: "Corporate Commute" },
     desc: {
       vn: "Giải pháp di chuyển đường thủy tối ưu cho doanh nghiệp. Tiết kiệm 30% chi phí đi lại hàng tháng cho nhân viên, đi kèm hóa đơn VAT và báo cáo chi phí minh bạch hàng tháng.",
@@ -63,7 +56,6 @@ const promoCards = [
   },
   {
     id: 4,
-    tag: { vn: "Cuối tuần", en: "Weekend" },
     title: { vn: "Combo Gia Đình", en: "Family Combo" },
     desc: {
       vn: "Miễn phí hoàn toàn vé cho trẻ em dưới 1m2 khi đi cùng 2 người lớn vào các ngày Thứ 7 và Chủ Nhật. Không gian khoang hành khách rộng rãi thích hợp cho xe nôi và đồ dùng trẻ em.",
@@ -99,9 +91,8 @@ export const Promotions = () => {
           {heroPromos.map((slide, index) => (
             <div
               key={slide.id}
-              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
-              }`}
+              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
+                }`}
             >
               {/* Ảnh nền */}
               <div className="absolute inset-0">
@@ -115,15 +106,6 @@ export const Promotions = () => {
 
               {/* Nội dung chữ */}
               <div className="relative h-full flex flex-col justify-center px-8 md:px-16 max-w-3xl">
-                <div className="inline-flex items-center gap-2 bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 px-4 py-1 rounded-full text-xs font-bold mb-6 w-fit uppercase tracking-tighter">
-                  <span
-                    className="material-symbols-outlined text-sm"
-                    data-icon="bolt"
-                  >
-                    bolt
-                  </span>
-                  {slide.tag[lang === "VN" ? "vn" : "en"]}
-                </div>
                 <h1 className="text-4xl md:text-6xl font-bold font-headline text-white leading-[1.1] mb-6 tracking-tighter">
                   {slide.title[lang === "VN" ? "vn" : "en"]}
                 </h1>
@@ -159,11 +141,10 @@ export const Promotions = () => {
               <div
                 key={idx}
                 onClick={() => setCurrentSlide(idx)}
-                className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                  currentSlide === idx
-                    ? "w-12 bg-primary-container dark:bg-yellow-400"
-                    : "w-6 bg-white/30 hover:bg-white/50"
-                }`}
+                className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${currentSlide === idx
+                  ? "w-12 bg-primary-container dark:bg-yellow-400"
+                  : "w-6 bg-white/30 hover:bg-white/50"
+                  }`}
               ></div>
             ))}
           </div>
@@ -202,9 +183,6 @@ export const Promotions = () => {
                   alt={promo.title[lang === "VN" ? "vn" : "en"]}
                   src={promo.img}
                 />
-                <div className="absolute top-4 left-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-1 rounded-full text-[10px] font-bold text-primary dark:text-yellow-400 uppercase shadow-sm">
-                  {promo.tag[lang === "VN" ? "vn" : "en"]}
-                </div>
               </div>
               <div className="px-4 pb-4 flex flex-col h-[calc(100%-18rem)] justify-between">
                 <div>
@@ -221,9 +199,6 @@ export const Promotions = () => {
                   className="w-full py-4 rounded-xl border-2 border-outline-variant dark:border-slate-600 font-bold text-sm text-slate-700 dark:text-white hover:bg-primary hover:border-primary hover:text-white dark:hover:bg-yellow-400 dark:hover:border-yellow-400 dark:hover:text-slate-900 transition-colors flex items-center justify-center gap-2 group-hover:bg-slate-900 group-hover:text-white group-hover:border-slate-900 dark:group-hover:bg-slate-700"
                 >
                   {lang === "VN" ? "Xem chi tiết" : "View Details"}
-                  <span className="material-symbols-outlined text-lg">
-                    {promo.icon}
-                  </span>
                 </button>
               </div>
             </div>
@@ -271,9 +246,7 @@ export const Promotions = () => {
         </div>
       </section>
 
-      {/* ========================================= */}
       {/* MODAL HIỂN THỊ CHI TIẾT KHUYẾN MÃI */}
-      {/* ========================================= */}
       {selectedPromo && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
           <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] overflow-hidden shadow-2xl relative animate-[fadeIn_0.3s_ease-out] flex flex-col md:flex-row max-h-[90vh]">
@@ -292,12 +265,6 @@ export const Promotions = () => {
                 className="w-full h-full object-cover"
                 src={selectedPromo.img}
               />
-              <div className="absolute top-4 left-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold text-primary dark:text-yellow-400 uppercase shadow-sm flex items-center gap-1">
-                <span className="material-symbols-outlined text-[14px]">
-                  {selectedPromo.icon}
-                </span>
-                {selectedPromo.tag[lang === "VN" ? "vn" : "en"]}
-              </div>
             </div>
 
             {/* Nội dung chi tiết (Cột phải trên Desktop) */}
@@ -344,9 +311,6 @@ export const Promotions = () => {
                 className="w-full bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 py-4 rounded-xl font-headline font-bold hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-md mt-auto"
               >
                 {lang === "VN" ? "Đặt vé nhận ưu đãi" : "Book with Offer"}
-                <span className="material-symbols-outlined text-lg">
-                  local_activity
-                </span>
               </a>
             </div>
           </div>
