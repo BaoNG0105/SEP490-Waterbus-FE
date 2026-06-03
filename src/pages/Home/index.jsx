@@ -1,191 +1,69 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
-import { MapContainer, TileLayer, Marker } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const heroSlides = [
-  {
-    type: "image",
-    src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png",
-  },
-  {
-    type: "image",
-    src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg",
-  },
-  {
-    type: "image",
-    src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075336/wkzbfwc5xyfby9ueute1.png",
-  },
-];
-
-// DỮ LIỆU TỌA ĐỘ VÀ THÔNG TIN CHI TIẾT CÁC TRẠM (Hardcode)
-const mapStations = [
-  {
-    id: "bach-dang",
-    nameVN: "Bến Bạch Đằng",
-    nameEN: "Bach Dang Station",
-    lat: 10.7728,
-    lng: 106.7064,
-    image: "https://res.cloudinary.com/dygipvoal/image/upload/v1776076390/x2bpvdexfabamjssoeno.webp",
-    addressVN: "10B Tôn Đức Thắng, P. Bến Nghé, Quận 1, TP.HCM",
-    addressEN: "10B Ton Duc Thang, Ben Nghe Ward, Dist. 1, HCMC",
-    timeVN: "07:00 - 22:30 hàng ngày",
-    timeEN: "07:00 AM - 10:30 PM daily",
-  },
-  {
-    id: "thu-thiem",
-    nameVN: "Bến Thủ Thiêm",
-    nameEN: "Thu Thiem Port",
-    lat: 10.7712,
-    lng: 106.7118,
-    image: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=800",
-    addressVN: "Đường hầm Sông Sài Gòn, TP. Thủ Đức, TP.HCM",
-    addressEN: "Saigon River Tunnel, Thu Duc City, HCMC",
-    timeVN: "07:00 - 22:30 hàng ngày",
-    timeEN: "07:00 AM - 10:30 PM daily",
-  },
-  {
-    id: "binh-an",
-    nameVN: "Bến Bình An",
-    nameEN: "Binh An Port",
-    lat: 10.7931,
-    lng: 106.7230,
-    image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=800",
-    addressVN: "Khu đô thị Bình An, Phường Bình An, TP. Thủ Đức",
-    addressEN: "Binh An Urban Area, Binh An Ward, Thu Duc City",
-    timeVN: "07:30 - 21:00 hàng ngày",
-    timeEN: "07:30 AM - 09:00 PM daily",
-  },
-  {
-    id: "thanh-da",
-    nameVN: "Bến Thanh Đa",
-    nameEN: "Thanh Da Station",
-    lat: 10.8206,
-    lng: 106.7176,
-    image: "https://images.unsplash.com/photo-1528150395403-992a693e26c8?q=80&w=800",
-    addressVN: "Bán đảo Thanh Đa, Phường 27, Quận Bình Thạnh",
-    addressEN: "Thanh Da Peninsula, Ward 27, Binh Thanh Dist.",
-    timeVN: "08:00 - 20:30 hàng ngày",
-    timeEN: "08:00 AM - 08:30 PM daily",
-  },
-  {
-    id: "linh-dong",
-    nameVN: "Bến Linh Đông",
-    nameEN: "Linh Dong Station",
-    lat: 10.8351,
-    lng: 106.7328,
-    image: "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?q=80&w=800",
-    addressVN: "Phường Linh Đông, TP. Thủ Đức, TP.HCM",
-    addressEN: "Linh Dong Ward, Thu Duc City, HCMC",
-    timeVN: "06:30 - 20:00 hàng ngày",
-    timeEN: "06:30 AM - 08:00 PM daily",
-  },
-];
-
-// TẠO CUSTOM MARKER VỚI HIỆU ỨNG NHẤP NHÁY TAILWIND
-const pulsingIcon = new L.DivIcon({
-  className: 'custom-pulsing-marker',
-  html: `
-    <div class="relative flex items-center justify-center w-6 h-6">
-      <div class="absolute w-full h-full bg-red-500/50 dark:bg-yellow-400/50 rounded-full animate-ping"></div>
-      <div class="relative w-3.5 h-3.5 bg-red-500 dark:bg-yellow-400 border-2 border-white dark:border-slate-900 rounded-full shadow-lg"></div>
-    </div>
-  `,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-});
-
-// Quảng cáo (Hardcode)
-const promoPosters = [
-  "https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=800",
-  "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=800",
-  "https://images.unsplash.com/photo-1528150395403-992a693e26c8?q=80&w=800",
-];
-
-// Ưu đãi (Hardcode)
-const promoCards = [
-  {
-    id: 1,
-    title: { vn: "Thứ 4 vui vẻ", en: "Happy Wednesday" },
-    desc: {
-      vn: "Giảm ngay 50% giá vé cho tất cả hành khách đặt vé vào khung giờ vàng từ 14:00 - 16:00 mỗi thứ 4 hàng tuần.",
-      en: "Get 50% off tickets for all passengers booking during the golden hours of 14:00 - 16:00 every Wednesday.",
-    },
-    img: "https://images.unsplash.com/photo-1528150395403-992a693e26c8?q=80&w=800",
-  },
-  {
-    id: 2,
-    title: { vn: "Ưu đãi thẻ thành viên", en: "Member Privileges" },
-    desc: {
-      vn: "Tích lũy dặm bay sông nước để đổi lấy những chuyến đi miễn phí và dịch vụ phòng chờ hạng thương gia tại bến.",
-      en: "Accumulate river miles to redeem free trips and business class lounge services at the station.",
-    },
-    img: "https://images.unsplash.com/photo-1569949381669-ecf31ae8e613?q=80&w=800",
-  },
-  {
-    id: 3,
-    title: { vn: "Gói di chuyển công sở", en: "Corporate Commute" },
-    desc: {
-      vn: "Giải pháp di chuyển đường thủy tối ưu cho doanh nghiệp. Tiết kiệm 30% chi phí đi lại hàng tháng cho nhân viên.",
-      en: "Optimal water transit solution for businesses. Save 30% on monthly commuting costs for employees.",
-    },
-    img: "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?q=80&w=800",
-  },
-  {
-    id: 4,
-    title: { vn: "Combo Gia Đình", en: "Family Combo" },
-    desc: {
-      vn: "Miễn phí hoàn toàn vé cho trẻ em dưới 1m2 khi đi cùng 2 người lớn vào các ngày Thứ 7 và Chủ Nhật.",
-      en: "Completely free tickets for children under 1.2m when accompanied by 2 adults on Saturdays and Sundays.",
-    },
-    img: "https://images.unsplash.com/photo-1511895426328-dc8714191300?q=80&w=800",
-  },
-];
-
-// Đánh giá (Hardcode)
-const testimonials = [
-  {
-    name: "Trần Thảo Vy",
-    avatar:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBrNSk9BqdRAed-iWcBtJs40kmiP7nRfT6hQtrE4L-7WCnjYWJPPYNMelRE67KMhTgTbvaYqMshhgvbEdy4X1QfpQ3HT1kPHgFDyEWb4VVNcDNCjYmuSEO7RSYOMbuRvKKz8QaYtiAiMi75qhY0J1hrnZBxVykWUKmzDZ9vbWmIcpkVlG_zp3cHbNY-dBHahHvbcDGIvjOHCtWh8jEP1kPj0J1DuIRFfnp2ictfnfF_4mOgIS8Ks49dCC2-llOZLSVg1-C2ERnJEWLQ",
-    quote:
-      "The best way to commute in Saigon. No traffic, clean air, and always on time. Highly recommended for daily travel.",
-  },
-  {
-    name: "Lê Anh Tú",
-    avatar:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuDnqcaVG7bAoxxZtz7En4UNSJfzRK_w0p3swT-DvFArsWG4EWHS83crseUb7CjVD5A62eE49XvX_inMlfqSjXRbZmsLTcPtnB5E3iOOjY8oelZ0kAT5-ASVxrqFRSEEy7bkuuvZIcc_lVMD7WMGmOqDiZmOkmNkt4DMRlwhAMVjTxVKv73Nrcb0MLb7ub0B5aC2tFYFmHm3HIx2u57qxP4xG7EKPe9hvMtBNkk9lEpQ_sKwkIyS-WLF59-jpNBE47F_WyIp-4z_AM1D",
-    quote:
-      "Luxurious experience at an affordable price. The Wi-Fi is fast and the cabin is super comfortable.",
-  },
-  {
-    name: "Phan Minh Hạnh",
-    avatar:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBwQAXy32-vnB6cACwmtGP72n_hgRe8XR3TyFchbCmT6qiHcSmIv0zG7EwJ01mcCWz_Jb6eHHyDu0dJOMAN7ZQUZMTJ-spql8n3Nqb5Kn3g3rQWh3grbHaA6vBOSZ6TStM_lc_43utIl7btl90-py07kTD7vMasPtct9u6dScFOxh0FCRV1p9FMEFyPVQi0HCDeIlRYokmF9J5slp8ZGBKJwCBPGIlghcg1WQChW1eCz4q9mDQEoOJ_-4xQbcrxkdqiKEWjKKX8HIXK",
-    quote:
-      "Efficient and futuristic. I love the simple booking process and the views are just incredible.",
-  },
-];
+import {
+  promoPosters,
+  heroSlides,
+  guidelines,
+  mapStations,
+  promoData,
+  newsData,
+  testimonialsData,
+  appImages
+} from "../../data/homeData";
 
 export const Home = () => {
   const { lang } = useApp();
 
+  // State quản lý Form Đặt vé Hero
+  const [isRoundTrip, setIsRoundTrip] = useState(false); // false: Một chiều, true: Khứ hồi
+  const [passengerCount, setPassengerCount] = useState(1);
+  const [departureDate, setDepartureDate] = useState("");
+  const [returnDate, setReturnDate] = useState("");
+  const [fromWharf, setFromWharf] = useState("");
+  const [toWharf, setToWharf] = useState("");
+
   // Các state hiển thị
-  const [currentSlide, setCurrentSlide] = useState(0);
+  const [heroSlide, setHeroSlide] = useState(0);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoSlide, setPromoSlide] = useState(0);
 
-  // STATE QUẢN LÝ MODAL TRẠM (STATION MODAL)
-  const [selectedStation, setSelectedStation] = useState(null);
+  // Quản lý Slide ảnh của App Download Section
+  const [appSlide, setAppSlide] = useState(0);
 
-  // Auto-cycle cho Hero Slides
+  // Quản lý Slide chạy tự động cho phần Testimonials
+  const [currentTestimonial, setCurrentTestimonial] = useState(0);
+
+  // Hàm chuyển testimonial tiếp theo và trước đó
+  const nextTestimonial = () => setCurrentTestimonial((prev) => (prev + 1) % testimonialsData.length);
+  const prevTestimonial = () => setCurrentTestimonial((prev) => (prev === 0 ? testimonialsData.length - 1 : prev - 1));
+
+  // Hero Slide tự động chạy sau mỗi 5 giây
   useEffect(() => {
-    const slideTimer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 5000);
-    return () => clearInterval(slideTimer);
+    const heroTimer = setInterval(() => {
+      setHeroSlide((prev) => (prev + 1) % heroSlides.length);
+    }, 5000); // Bạn có thể chỉnh 5000 (5 giây) thành thời gian bạn muốn
+    return () => clearInterval(heroTimer);
+  }, []);
+
+  // Testimonials tự động chạy sau mỗi 6 giây
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTestimonial((prev) => (prev + 1) % testimonialsData.length);
+    }, 6000); // Tự động trượt sau mỗi 6 giây
+    return () => clearInterval(timer);
+  }, []);
+
+  // Auto-cycle cho App Download Section
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAppSlide((prev) => (prev + 1) % appImages.length);
+    }, 4000);
+    return () => clearInterval(timer);
   }, []);
 
   // GSAP Reveal Observer
@@ -217,6 +95,7 @@ export const Home = () => {
     }
   }, []);
 
+  // Tự động chuyển slide trong Modal Quảng Cáo khi nó đang hiển thị
   useEffect(() => {
     if (!showPromoModal) return;
     const slideTimer = setInterval(() => {
@@ -227,569 +106,952 @@ export const Home = () => {
 
   return (
     <main className="dark:bg-slate-900 transition-colors duration-300 relative">
-      {/* Hero Section */}
-      <section className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-slate-900 pt-20">
+      {/* Hero Section & Booking Form */}
+      <section id="booking-section" className="relative min-h-[90vh] lg:min-h-screen flex flex-col justify-center items-center overflow-hidden select-none bg-slate-900">
+        {/* Bản Slider ảnh nền Hero chạy tự động */}
         <div className="absolute inset-0 z-0">
           {heroSlides.map((slide, index) => (
             <div
               key={index}
-              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
+              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === heroSlide ? "opacity-40 scale-100" : "opacity-0 scale-105"
                 }`}
             >
-              {slide.type === "youtube" ? (
-                <iframe
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full object-cover scale-[4] sm:scale-[2] md:scale-125 lg:scale-110 pointer-events-none"
-                  src={`https://www.youtube.com/embed/${slide.videoId}?autoplay=1&mute=1&loop=1&playlist=${slide.videoId}&controls=0&showinfo=0&rel=0&modestbranding=1&playsinline=1`}
-                  title="YouTube video player"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              ) : slide.type === "video" ? (
-                <video autoPlay loop muted playsInline className="w-full h-full object-cover" src={slide.src} />
-              ) : (
-                <img alt={`Slide ${index + 1}`} className="w-full h-full object-cover" src={slide.src} />
-              )}
+              <img src={slide.src} alt="Waterbus Background" className="w-full h-full object-cover transform transition-transform duration-[4000ms]" />
             </div>
           ))}
-          <div className="absolute inset-0 hero-gradient z-20"></div>
+          {/* Lớp phủ Gradient */}
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/50 via-slate-900/40 to-[#124757]/30"></div>
         </div>
-
-        <div className="container mx-auto px-6 md:px-12 relative z-30 flex flex-col lg:flex-row items-center justify-between gap-12 w-full">
-          <div className="flex-1 text-center lg:text-left flex flex-col items-center lg:items-start gsap-reveal">
-            <h1 className="text-5xl md:text-7xl lg:text-8xl font-headline font-bold text-white tracking-tighter leading-tight drop-shadow-lg">
-              <span className="text-white italic block mb-2">
-                {lang === "VN" ? "Chào mừng tới" : "Welcome to"}
+        {/* Khối Nội Dung Chính */}
+        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 md:px-12 pt-32 pb-20 flex flex-col items-center justify-center space-y-12">
+          {/* Tiêu Đề */}
+          <div className="text-center space-y-4 max-w-3xl gsap-reveal">
+            <h1 className="text-4xl md:text-6xl font-headline font-black text-white leading-tight drop-shadow-md">
+              {lang === "VN" ? "Welcome to" : "Chào mừng đến"}{" "}
+              <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-300">
+                {lang === "VN" ? "Waterbus" : "Waterbus"}
               </span>
-              <div className="text-white italic text-primary-container">
-                WaterBus
-              </div>
             </h1>
-            <p className="text-white/80 font-body text-lg mt-6 max-w-lg hidden md:block">
-              {lang === "VN"
-                ? "Trải nghiệm ngắm nhìn Sài Gòn tuyệt đẹp trên những chuyến tàu hiện đại, an toàn và đúng giờ."
-                : "Experience the beautiful views of Saigon on modern, safe, and punctual river buses."}
-            </p>
           </div>
-
-          <div className="flex-1 w-full flex justify-center lg:justify-end gsap-reveal" id="booking-section">
-            <div className="w-full max-w-md bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl p-8 border border-white/20 dark:border-slate-700/50 transition-colors duration-300">
-              <div className="flex gap-2 p-1.5 bg-surface-container-highest dark:bg-slate-700/50 rounded-2xl w-full mb-6">
-                <button className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-white dark:bg-slate-600 shadow-sm text-primary dark:text-yellow-400 transition-colors">
-                  {lang === "VN" ? "Một chiều" : "One way"}
-                </button>
-                <button className="flex-1 py-2.5 rounded-xl text-sm font-bold text-on-surface-variant dark:text-white/70 hover:text-primary dark:hover:text-yellow-400 transition-colors">
-                  {lang === "VN" ? "Khứ hồi" : "Round trip"}
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                <div className="space-y-2 col-span-2 sm:col-span-1">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/60 ml-1">
-                    {lang === "VN" ? "Nơi đi" : "Where to go"}
-                  </label>
-                  <select className="w-full bg-surface-container-low dark:bg-slate-700 dark:text-white border-none rounded-2xl font-headline font-bold focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3.5 cursor-pointer appearance-none">
-                    <option>Bạch Đằng</option>
-                    <option>Thủ thiêm</option>
-                    <option>Bình An</option>
-                    <option>Thanh Đa</option>
-                    <option>Linh Đông</option>
-                  </select>
-                </div>
-                <div className="space-y-2 col-span-2 sm:col-span-1">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/60 ml-1">
-                    {lang === "VN" ? "Nơi đến" : "Destination"}
-                  </label>
-                  <select className="w-full bg-surface-container-low dark:bg-slate-700 dark:text-white border-none rounded-2xl font-headline font-bold focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3.5 cursor-pointer appearance-none">
-                    <option>Thủ thiêm</option>
-                    <option>Bạch Đằng</option>
-                    <option>Bình An</option>
-                    <option>Thanh Đa</option>
-                    <option>Linh Đông</option>
-                  </select>
-                </div>
-                <div className="space-y-2 col-span-2 sm:col-span-1">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/60 ml-1">
-                    {lang === "VN" ? "Ngày đi" : "Departure"}
-                  </label>
-                  <input className="w-full bg-surface-container-low dark:bg-slate-700 dark:text-white border-none rounded-2xl font-headline font-bold focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3.5 cursor-pointer" type="date" />
-                </div>
-                <div className="space-y-2 col-span-2 sm:col-span-1">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/60 ml-1">
-                    {lang === "VN" ? "Ngày về" : "Return"}
-                  </label>
-                  <input className="w-full bg-surface-container-low dark:bg-slate-700 dark:text-white/50 border-none rounded-2xl font-headline font-bold focus:ring-2 ring-primary transition-colors outline-none px-4 py-3.5 cursor-not-allowed opacity-60" type="date" disabled />
-                </div>
-              </div>
-
-              <button className="w-full bg-primary-container dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 py-4 rounded-2xl font-bold font-label hover:brightness-105 transition-all flex items-center justify-center gap-2 shadow-lg">
-                <span className="material-symbols-outlined">search</span>
-                {lang === "VN" ? "Tìm chuyến" : "Search Trips"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 hidden md:block">
-          <a href="#mission-section" onClick={(e) => {
-            e.preventDefault();
-            document.querySelector("#mission-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-          }}
-            className="inline-flex flex-col items-center gap-3 gsap-reveal cursor-pointer opacity-70 hover:opacity-100 hover:-translate-y-1 transition-all duration-300"
-          >
-            <div className="w-8 h-[50px] border-2 border-white rounded-full flex justify-center items-start p-1.5">
-              <div className="w-1 h-3 bg-white rounded-full animate-bounce mt-1"></div>
-            </div>
-            <span className="text-white text-[10px] font-label uppercase tracking-widest font-bold">
-              {lang === "VN" ? "Khám phá thêm" : "Scroll Down"}
-            </span>
-          </a>
-        </div>
-
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex gap-3">
-          {heroSlides.map((_, index) => (
-            <button key={index} onClick={() => setCurrentSlide(index)} className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${index === currentSlide ? "bg-primary-container w-8" : "bg-white/50 hover:bg-white"}`} />
-          ))}
-        </div>
-      </section>
-
-      {/* Mission Section */}
-      <section id="mission-section" className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300">
-        <div className="container mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
-          <div className="gsap-reveal">
-            <span className="text-primary dark:text-yellow-400 font-bold text-sm tracking-[0.2em] uppercase mb-4 block">
-              {lang === "VN" ? "Sứ Mệnh Của Chúng Tôi" : "Our Mission"}
-            </span>
-            <h2 className="text-5xl font-headline font-bold mb-8 leading-tight dark:text-white">
-              {lang === "VN"
-                ? "Nâng tầm di chuyển đô thị bằng hệ thống giao thông thủy bền vững."
-                : "Elevating Urban Mobility Through Sustainable Water Transit."}
-            </h2>
-            <p className="text-on-surface-variant dark:text-white/80 text-lg leading-relaxed mb-10 font-body">
-              {lang === "VN"
-                ? "Waterbus đang định hình lại cách người dân TPHCM di chuyển. Kết hợp công nghệ hàng hải tiên tiến với thẩm mỹ cổ điển, chúng tôi mang đến một trải nghiệm di chuyển đáng tin cậy và ngoạn mục."
-                : "Waterbus is redefining how Ho Chi Minh City moves. By combining cutting-edge hydro-sonic engineering with a classic maritime aesthetic, we offer a transit experience that is as reliable as it is breathtaking."}
-            </p>
-            <div className="grid grid-cols-2 gap-8 border-t border-surface-variant dark:border-slate-700 pt-10">
-              <div>
-                <div className="text-4xl font-headline font-bold text-primary dark:text-yellow-400">15 min</div>
-                <p className="text-xs font-bold text-outline dark:text-white/60 uppercase mt-2">
-                  {lang === "VN" ? "Tần suất cao điểm" : "Peak frequency"}
-                </p>
-              </div>
-              <div>
-                <div className="text-4xl font-headline font-bold text-primary dark:text-yellow-400">100%</div>
-                <p className="text-xs font-bold text-outline dark:text-white/60 uppercase mt-2">
-                  {lang === "VN" ? "Năng lượng sạch" : "Clean Energy Goal"}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="relative gsap-reveal group cursor-pointer">
-            <div className="absolute -inset-4 bg-primary/10 dark:bg-yellow-400/10 rounded-[3rem] -rotate-3 transition-all duration-700 group-hover:rotate-0 group-hover:scale-105 group-hover:bg-primary/20 dark:group-hover:bg-yellow-400/20"></div>
-            <div className="relative overflow-hidden rounded-[2.5rem] shadow-2xl">
-              <img alt="Fleet" className="w-full transition-all duration-700 ease-out group-hover:scale-110 group-hover:brightness-110" src="https://res.cloudinary.com/dygipvoal/image/upload/v1776076390/x2bpvdexfabamjssoeno.webp" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Guidline Section */}
-      <section className="py-24 dark:bg-slate-900 transition-colors duration-300">
-        <div className="container mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-headline font-bold dark:text-white">
-              {lang === "VN" ? "Quy Trình Đặt Vé" : "Booking Process"}
-            </h2>
-            <p className="text-on-surface-variant dark:text-white/80 mt-2 font-label">
-              {lang === "VN"
-                ? "Đơn giản hóa hành trình của bạn với 4 bước"
-                : "Simplifying your commute in four easy steps"}
-            </p>
-          </div>
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
-              {/* Steps (Giữ nguyên) */}
-              {[
-                { step: "01", icon: "route", titleVN: "Chọn Tuyến", titleEN: "Choose Route", descVN: "Chọn điểm khởi hành và điểm đến.", descEN: "Pick your departure and arrival stations." },
-                { step: "02", icon: "event_seat", titleVN: "Chọn Ghế", titleEN: "Select Seat", descVN: "Lựa chọn vị trí ngồi ưa thích của bạn.", descEN: "Browse available seats and select your preference." },
-                { step: "03", icon: "payments", titleVN: "Thanh Toán", titleEN: "Payment", descVN: "Thanh toán an toàn qua nhiều phương thức.", descEN: "Secure checkout with various payment methods." },
-                { step: "04", icon: "confirmation_number", titleVN: "Nhận Vé", titleEN: "Get Ticket", descVN: "Nhận vé điện tử ngay lập tức qua email.", descEN: "Receive your e-ticket instantly via app/email." },
-              ].map((item, index) => (
-                <div key={index} className="flex flex-1 w-full items-center">
-                  <div className="flex-1 w-full relative group cursor-pointer">
-                    <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-surface-variant dark:border-slate-700 text-center transition-all duration-500 group-hover:scale-105 group-hover:-translate-y-2 group-hover:shadow-2xl group-hover:bg-primary/5 dark:group-hover:bg-yellow-400/10 group-hover:border-primary/50 dark:group-hover:border-yellow-400/50 relative overflow-hidden">
-                      <div className="absolute top-2 right-6 text-7xl font-bold text-primary/5 dark:text-white/5 font-headline pointer-events-none transition-colors duration-500 group-hover:text-primary/20 dark:group-hover:text-yellow-400/20">
-                        {item.step}
-                      </div>
-                      <div className="w-16 h-16 bg-primary/10 dark:bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 group-hover:bg-primary dark:group-hover:bg-yellow-400 group-hover:scale-110 group-hover:rotate-12">
-                        <span className="material-symbols-outlined text-primary dark:text-yellow-400 text-3xl transition-colors duration-500 group-hover:text-white dark:group-hover:text-slate-900">{item.icon}</span>
-                      </div>
-                      <h4 className="font-bold text-lg mb-2 font-headline text-slate-900 dark:text-white">
-                        {lang === "VN" ? item.titleVN : item.titleEN}
-                      </h4>
-                      <p className="text-sm text-on-surface-variant dark:text-white/70">
-                        {lang === "VN" ? item.descVN : item.descEN}
-                      </p>
-                    </div>
-                  </div>
-                  {index < 3 && (
-                    <div className="hidden lg:flex items-center text-primary/30 dark:text-white/20 px-2">
-                      <span className="material-symbols-outlined text-4xl">east</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stations Section with Map */}
-      <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300">
-        <div className="container mx-auto px-6 max-w-7xl">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-4">
-            <div>
-              <h2 className="text-4xl font-headline font-bold dark:text-white">
-                {lang === "VN" ? "Hệ Thống Bến Tàu" : "Station System"}
-              </h2>
-              <p className="text-on-surface-variant dark:text-white/70 mt-2 font-label uppercase tracking-widest text-xs font-bold">
-                {lang === "VN" ? "Bản đồ tuyến đường thủy" : "Water route map"}
-              </p>
-            </div>
-          </div>
-
-          <div className="relative w-full h-[500px] lg:h-[600px] rounded-[3rem] overflow-hidden shadow-2xl border border-surface-variant dark:border-slate-700 gsap-reveal bg-slate-100 dark:bg-slate-800 z-10">
-            <MapContainer
-              center={[10.80, 106.72]}
-              zoom={13}
-              scrollWheelZoom={false}
-              className="w-full h-full z-0"
-            >
-              <TileLayer
-                attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                className="dark:hue-rotate-180 dark:invert transition-all duration-500"
-              />
-
-              {mapStations.map((station) => (
-                <Marker
-                  key={station.id}
-                  position={[station.lat, station.lng]}
-                  icon={pulsingIcon}
-                  // SỰ KIỆN CLICK ĐỂ MỞ MODAL THÔNG TIN TRẠM
-                  eventHandlers={{
-                    click: () => setSelectedStation(station)
-                  }}
-                />
-              ))}
-            </MapContainer>
-          </div>
-        </div>
-      </section>
-
-      {/* Schedules Section - REDESIGNED */}
-      <section className="py-24 bg-surface-container-lowest dark:bg-slate-900 transition-colors duration-300 relative overflow-hidden">
-        {/* Background Decorative Elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 dark:bg-yellow-400/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
-
-        <div className="container mx-auto px-6 max-w-7xl">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 lg:gap-20 items-center">
-
-            {/* CỘT TRÁI: TIÊU ĐỀ & NÚT BẤM */}
-            <div className="lg:col-span-5 gsap-reveal">
-              <span className="text-primary dark:text-yellow-400 font-bold text-sm tracking-[0.2em] uppercase mb-4 block">
-                {lang === "VN" ? "Thời gian hoạt động" : "Operating Hours"}
-              </span>
-              <h2 className="text-4xl md:text-5xl font-headline font-bold mb-6 dark:text-white leading-tight">
-                {lang === "VN" ? "Lịch Trình Hàng Tuần" : "Weekly Schedules"}
-              </h2>
-              <p className="text-on-surface-variant dark:text-white/80 mb-10 leading-relaxed text-lg font-body">
-                {lang === "VN"
-                  ? "Luôn đúng giờ với dịch vụ tần suất cao của chúng tôi. Các chuyến tàu khởi hành liên tục giúp bạn linh hoạt sắp xếp thời gian cho mọi kế hoạch."
-                  : "Stay on track with our high-frequency service. We run continuously to ensure you're never late and always have flexible travel options."}
-              </p>
-
-              <button className="bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-900 px-8 py-4 rounded-full font-bold hover:bg-slate-800 dark:hover:bg-yellow-500 transition-all duration-300 flex items-center gap-2 shadow-xl hover:shadow-2xl hover:-translate-y-1">
-                {lang === "VN" ? "Xem chi tiết lịch trình" : "View Full Schedule"}
-              </button>
-            </div>
-
-            {/* CỘT PHẢI: CÁC KHỐI SỐ LIỆU KHỔNG LỒ */}
-            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6 gsap-reveal">
-
-              {/* Khối 1: Giờ Cao Điểm (Được làm to và nổi bật nhất) */}
-              <div className="sm:col-span-2 bg-gradient-to-br from-primary to-primary-container dark:from-yellow-400 dark:to-yellow-600 p-8 md:p-10 rounded-[2.5rem] shadow-xl text-white dark:text-slate-900 flex flex-col justify-between relative overflow-hidden group hover:scale-[1.02] transition-transform duration-500 cursor-default">
-                <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-20 transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-12">
-                  <span className="material-symbols-outlined text-[180px]">directions_boat</span>
-                </div>
-
-                <div className="relative z-10 flex flex-col h-full justify-between gap-6">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-bold uppercase tracking-widest opacity-90">
-                      {lang === "VN" ? "Giờ cao điểm (T2 - T6)" : "Weekday Peak Hours"}
-                    </p>
-                  </div>
-
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-8xl md:text-9xl font-black font-headline tracking-tighter leading-none drop-shadow-md">
-                      15
-                    </span>
-                    <span className="text-2xl md:text-3xl font-bold opacity-90">
-                      {lang === "VN" ? "phút/chuyến" : "mins/trip"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Khối 2: Giờ Thấp Điểm */}
-              <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-lg border border-surface-variant/50 dark:border-slate-700 flex flex-col gap-6 group hover:border-primary/50 dark:hover:border-yellow-400/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-default">
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                  <p className="text-xs font-bold uppercase tracking-widest">
-                    {lang === "VN" ? "Giờ thấp điểm" : "Off-Peak"}
-                  </p>
-                </div>
-                <div className="flex items-baseline gap-2 text-slate-900 dark:text-white group-hover:text-primary dark:group-hover:text-yellow-400 transition-colors duration-300">
-                  <span className="text-6xl md:text-7xl font-black font-headline tracking-tighter leading-none">
-                    30
-                  </span>
-                  <span className="text-lg font-bold text-slate-500 dark:text-slate-400">
-                    {lang === "VN" ? "phút" : "mins"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Khối 3: Cuối Tuần & Lễ */}
-              <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-lg border border-surface-variant/50 dark:border-slate-700 flex flex-col gap-6 group hover:border-primary/50 dark:hover:border-yellow-400/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-default">
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                  <p className="text-xs font-bold uppercase tracking-widest">
-                    {lang === "VN" ? "Cuối tuần & Lễ" : "Weekend/Holiday"}
-                  </p>
-                </div>
-                <div className="flex items-baseline gap-2 text-slate-900 dark:text-white group-hover:text-primary dark:group-hover:text-yellow-400 transition-colors duration-300">
-                  <span className="text-6xl md:text-7xl font-black font-headline tracking-tighter leading-none">
-                    20
-                  </span>
-                  <span className="text-lg font-bold text-slate-500 dark:text-slate-400">
-                    {lang === "VN" ? "phút" : "mins"}
-                  </span>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* PROMOTIONS SECTION */}
-      <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300 overflow-hidden">
-        <div className="container mx-auto px-6 max-w-7xl">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-4">
-            <div>
-              <h2 className="text-4xl font-headline font-bold dark:text-white">
-                {lang === "VN" ? "Ưu Đãi Nổi Bật" : "Featured Promotions"}
-              </h2>
-              <p className="text-on-surface-variant dark:text-white/70 mt-2 font-label uppercase tracking-widest text-xs font-bold">
-                {lang === "VN"
-                  ? "Khám phá các chương trình khuyến mãi"
-                  : "Discover our latest offers"}
-              </p>
-            </div>
-            <Link
-              to="/promotions"
-              className="text-primary dark:text-yellow-400 font-bold flex items-center gap-2 hover:gap-4 transition-all whitespace-nowrap"
-            >
-              {lang === "VN" ? "Xem tất cả" : "View All"}
-              <span className="material-symbols-outlined">east</span>
-            </Link>
-          </div>
-
-          <div className="flex overflow-x-auto gap-6 pb-8 snap-x snap-mandatory no-scrollbar -mx-6 px-6 md:mx-0 md:px-0">
-            {promoCards.map((promo) => (
-              <Link
-                key={promo.id}
-                to="/promotions"
-                className="w-[85vw] sm:w-[320px] aspect-square shrink-0 snap-center group bg-white dark:bg-slate-800 rounded-[2.5rem] p-4 transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 border border-surface-variant dark:border-slate-700 flex flex-col"
+          {/* KHỐI FORM ĐẶT VÉ CAO CẤP VỚI TÔNG MÀU #124757 */}
+          <div className="w-full max-w-5xl bg-white/95 dark:bg-slate-800/95 backdrop-blur-lg p-6 md:p-8 rounded-[2.5rem] shadow-2xl border border-white/20 dark:border-slate-700/50 space-y-6 transform hover:scale-[1.005] transition-all duration-300 gsap-reveal">
+            {/* Chọn loại chuyến đi: Một chiều / Khứ hồi */}
+            <div className="flex gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
+              <button
+                type="button"
+                onClick={() => setIsRoundTrip(false)}
+                className={`px-5 py-2 rounded-xl text-xs md:text-sm font-headline font-bold uppercase tracking-wide transition-all flex items-center gap-2 ${!isRoundTrip
+                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md"
+                  : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                  }`}
               >
-                <div className="relative flex-1 rounded-[2rem] overflow-hidden mb-4">
-                  <img
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                    alt={promo.title[lang === "VN" ? "vn" : "en"]}
-                    src={promo.img}
+                {lang === "VN" ? "Một chiều" : "One-Way"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRoundTrip(true)}
+                className={`px-5 py-2 rounded-xl text-xs md:text-sm font-headline font-bold uppercase tracking-wide transition-all flex items-center gap-2 ${isRoundTrip
+                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md"
+                  : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                  }`}
+              >
+                {lang === "VN" ? "Khứ hồi" : "Round-Trip"}
+              </button>
+            </div>
+            {/* Lưới ô điền thông tin đặt vé */}
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${isRoundTrip ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-5 items-end transition-all duration-300`}>
+              {/* Ô chọn Bến đi */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">location_on</span>
+                  {lang === "VN" ? "Bến xuất phát" : "Departure Wharf"}
+                </label>
+                <select
+                  value={fromWharf}
+                  onChange={(e) => setFromWharf(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 transition-all cursor-pointer shadow-inner"
+                >
+                  <option value="">-- {lang === "VN" ? "Chọn bến đi" : "Select Wharf"} --</option>
+                  <option value="bach-dang">Bến Bạch Đằng (Q.1)</option>
+                  <option value="thu-thiem">Bến Thủ Thiêm (TP.Thủ Đức)</option>
+                  <option value="binh-an">Bến Bình An (Q.2)</option>
+                  <option value="thanh-da">Bến Thanh Đa (Bình Thạnh)</option>
+                  <option value="linh-dong">Bến Linh Đông (Thủ Đức)</option>
+                </select>
+              </div>
+              {/* Ô chọn Bến đến */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">location_on</span>
+                  {lang === "VN" ? "Bến cập bến" : "Destination Wharf"}
+                </label>
+                <select
+                  value={toWharf}
+                  onChange={(e) => setToWharf(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 transition-all cursor-pointer shadow-inner"
+                >
+                  <option value="">-- {lang === "VN" ? "Chọn bến đến" : "Select Wharf"} --</option>
+                  <option value="bach-dang">Bến Bạch Đằng (Q.1)</option>
+                  <option value="thu-thiem">Bến Thủ Thiêm (TP.Thủ Đức)</option>
+                  <option value="binh-an">Bến Bình An (Q.2)</option>
+                  <option value="thanh-da">Bến Thanh Đa (Bình Thạnh)</option>
+                  <option value="linh-dong">Bến Linh Đông (Thủ Đức)</option>
+                </select>
+              </div>
+              {/* Ô chọn Ngày đi */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">calendar_today</span>
+                  {lang === "VN" ? "Ngày khởi hành" : "Departure Date"}
+                </label>
+                <input
+                  type="date"
+                  value={departureDate}
+                  onChange={(e) => setDepartureDate(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner uppercase cursor-pointer"
+                />
+              </div>
+              {/* Ô CHỌN NGÀY VỀ (Chỉ hiện ra khi nhấn lựa chọn Khứ hồi) */}
+              {isRoundTrip && (
+                <div className="space-y-2 transition-all duration-500 animate-fade-in">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">history</span>
+                    {lang === "VN" ? "Ngày về" : "Return Date"}
+                  </label>
+                  <input
+                    type="date"
+                    value={returnDate}
+                    min={departureDate}
+                    onChange={(e) => setReturnDate(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner uppercase cursor-pointer"
                   />
                 </div>
-                <div className="px-2 pb-1 shrink-0">
-                  <h3 className="text-lg font-bold font-headline mb-1.5 tracking-tight text-slate-900 dark:text-white group-hover:text-primary dark:group-hover:text-yellow-400 transition-colors line-clamp-1">
-                    {promo.title[lang === "VN" ? "vn" : "en"]}
-                  </h3>
-                  <p className="text-on-surface-variant dark:text-white/70 text-xs line-clamp-2 leading-relaxed">
-                    {promo.desc[lang === "VN" ? "vn" : "en"]}
-                  </p>
+              )}
+              {/* FIELD SỐ LƯỢNG HÀNH KHÁCH */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">group</span>
+                  {lang === "VN" ? "Số lượng hành khách" : "Passengers"}
+                </label>
+                <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 shadow-inner">
+                  <button
+                    type="button"
+                    disabled={passengerCount <= 1}
+                    onClick={() => setPassengerCount(prev => prev - 1)}
+                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-600 shadow-sm active:scale-95 disabled:opacity-40 transition-all outline-none"
+                  >
+                    -
+                  </button>
+                  <span className="text-base font-headline font-black text-[#124757] dark:text-white mx-2 w-6 text-center">
+                    {passengerCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPassengerCount(prev => prev + 1)}
+                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-600 shadow-sm active:scale-95 transition-all outline-none"
+                  >
+                    +
+                  </button>
                 </div>
-              </Link>
+              </div>
+
+            </div>
+            {/* Nút Tìm Chuyến Đặt Vé */}
+            <div className="pt-4 flex justify-end">
+              <button
+                type="button"
+                className="w-full md:w-auto bg-yellow-400 text-[#124757] dark:bg-yellow-400 dark:text-slate-900 px-12 py-4 rounded-2xl font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-[1.02] hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                {lang === "VN" ? "Tìm chuyến tàu ngay" : "Search Routes Now"}
+                <span className="material-symbols-outlined text-xl font-bold">search</span>
+              </button>
+            </div>
+          </div>
+          {/* Dấu chấm điều hướng Slide Hero */}
+          <div className="flex gap-2 bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm border border-white/5">
+            {heroSlides.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => setHeroSlide(index)}
+                className={`h-2 rounded-full transition-all duration-300 outline-none ${index === heroSlide ? "w-6 bg-yellow-400" : "w-2 bg-white/40 hover:bg-white/60"
+                  }`}
+              />
             ))}
           </div>
         </div>
       </section>
 
-      {/* User Testimonials Section */}
-      <section className="py-24 overflow-hidden bg-surface-container-low dark:bg-slate-900 transition-colors duration-300">
-        <div className="container text-center mx-auto px-6 mb-12">
-          <h2 className="text-4xl font-headline font-bold dark:text-white">
-            {lang === "VN" ? "Đánh Giá Của Khách Hàng" : "User Testimonials"}
-          </h2>
-          <p className="text-on-surface-variant dark:text-white/80 mt-2">
-            {lang === "VN"
-              ? "Những du khách thường xuyên nói gì về chúng tôi"
-              : "What our frequent travelers are saying"}
-          </p>
+      {/* Mission Section */}
+      <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          {/* Khối Nội Dung Bên Trái */}
+          <div className="space-y-6">
+            <span className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+              {lang === "VN" ? "Sứ mệnh của chúng tôi" : "Our Mission"}
+            </span>
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white leading-tight">
+              {lang === "VN"
+                ? "Nâng tầm di chuyển đô thị bằng giao thông đường thủy"
+                : "Elevating urban mobility through river transit"}
+            </h2>
+            <p className="text-slate-600 dark:text-slate-400 font-body text-base leading-relaxed">
+              {lang === "VN"
+                ? "Waterbus đang định hình lại tương lai của giao thông đô thị bằng cách khai phá tiềm năng to lớn của mạng lưới sông ngòi Sài Gòn. Chúng tôi không chỉ cung cấp một phương tiện đi lại thông thường, mà mang đến một giải pháp di chuyển xanh, bền vững, giúp giảm tải ùn tắc đường bộ nghiêm trọng, tiết kiệm thời gian quý báu của hành khách và kiến tạo những trải nghiệm hành trình thư thái, kết nối sâu sắc con người với cảnh quan thiên nhiên tráng lệ của thành phố."
+                : "Waterbus is reshaping the future of urban transportation by unlocking the immense potential of Saigon's river network. We don't just provide a standard transit method; we offer a green, sustainable mobility solution that alleviates severe road congestion, saves precious passenger time, and creates relaxed journey experiences that deeply connect people with the magnificent natural landscapes of the city."}
+            </p>
+            {/* Khối thông số kỹ thuật (Stats) */}
+            <div className="grid grid-cols-2 gap-8 pt-6">
+              {/* Tần suất cao điểm */}
+              <div className="space-y-2">
+                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400">
+                  15min
+                </div>
+                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  {lang === "VN" ? "Tần suất cao điểm" : "Peak frequency"}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {lang === "VN" ? "Các chuyến tàu chạy liên tục không lo chờ đợi" : "Continuous trips with zero waiting time"}
+                </p>
+              </div>
+              {/* Năng lượng sạch */}
+              <div className="space-y-2">
+                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400">
+                  100%
+                </div>
+                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  {lang === "VN" ? "Năng lượng sạch" : "Clean energy"}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {lang === "VN" ? "Hướng tới hệ sinh thái giao thông không phát thải" : "Towards a zero-emission transit ecosystem"}
+                </p>
+              </div>
+            </div>
+          </div>
+          {/* Khối Hình Ảnh Bên Phải */}
+          <div className="relative rounded-3xl overflow-hidden shadow-2xl aspect-video lg:aspect-square">
+            <img
+              src="https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg"
+              alt="Waterbus Mission Visual"
+              className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
+          </div>
         </div>
-        <div className="relative flex overflow-x-hidden group">
-          <div className="flex w-max animate-marquee group-hover:[animation-play-state:paused]">
-            <div className="flex gap-8 px-4 shrink-0 py-4">
-              {testimonials.map((item, index) => (
-                <div key={`set1-${index}`} className="w-[350px] whitespace-normal bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-surface-variant dark:border-slate-700 flex flex-col justify-between transition-all duration-500 cursor-pointer hover:scale-110 hover:shadow-2xl hover:z-10 hover:border-primary/50 dark:hover:border-yellow-400/50">
-                  <div>
-                    <p className="italic text-on-surface-variant dark:text-white/80 leading-relaxed mb-8">"{item.quote}"</p>
+      </section>
+
+      {/* Guideline Section */}
+      <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300 select-none">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          {/* Tiêu đề chính */}
+          <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white text-center mb-16">
+            {lang === "VN" ? "Hướng dẫn đặt vé" : "Ticketing Guide"}
+          </h2>
+          {/* Grid dàn ngang 4 cột trên Desktop, 2 cột trên Tablet, 1 cột trên Mobile */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10">
+            {guidelines.map((guide, index) => (
+              <div key={guide.id} className="flex flex-col group cursor-pointer">
+                {/* Số thứ tự */}
+                <div className="text-6xl font-headline font-black text-yellow-500 dark:text-yellow-400 mb-4 transition-transform duration-300 group-hover:-translate-y-2">
+                  0{index + 1}
+                </div>
+                {/* Hình ảnh minh họa */}
+                <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-md mb-6">
+                  <img
+                    src={guide.image}
+                    alt={`Guideline step ${index + 1}`}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                </div>
+                {/* Tiêu đề bước */}
+                <h3 className="text-xl font-headline font-bold text-[#124757] dark:text-white mb-3">
+                  {lang === "VN" ? guide.titleVn : guide.titleEn}
+                </h3>
+                {/* Mô tả chi tiết */}
+                <p className="text-slate-600 dark:text-slate-400 font-body text-sm leading-relaxed">
+                  {lang === "VN" ? guide.descVn : guide.descEn}
+                </p>
+
+              </div>
+            ))}
+          </div>
+          {/* Nút Đặt vé ngay */}
+          <div className="mt-16 flex justify-center">
+            <a
+              href="/#booking-section"
+              className="bg-yellow-400 text-[#124757] px-10 py-3.5 rounded-full font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-105 hover:shadow-xl transition-all duration-300"
+            >
+              {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Map / Stations Section */}
+      <section className="py-24 bg-white dark:bg-slate-800 transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          {/* Căn giữa tiêu đề và subtitle */}
+          <div className="flex flex-col items-center text-center mb-16">
+            {/* Subtitle màu vàng đồng bộ */}
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400 mb-4">
+              {lang === "VN" ? "Mạng lưới trạm dừng" : "Station Network"}
+            </p>
+            {/* Tiêu đề màu xanh #124757 (Light Mode) */}
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+              {lang === "VN" ? "Khám phá tuyến đường Waterbus" : "Explore the Waterbus Route"}
+            </h2>
+          </div>
+          {/* Bản đồ tương tác với các trạm dừng được đánh dấu bằng chấm đỏ/xanh và tooltip tên trạm luôn hiển thị bên cạnh */}
+          <div className="bg-slate-50 dark:bg-slate-900 rounded-3xl p-4 md:p-8 shadow-inner border border-slate-100 dark:border-slate-800">
+            <div className="h-[500px] md:h-[600px] w-full rounded-2xl overflow-hidden shadow-lg relative z-0">
+              <MapContainer
+                center={[10.7950, 106.7350]}
+                zoom={13}
+                scrollWheelZoom={false}
+                className="w-full h-full"
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+
+                {mapStations.map((station) => {
+                  // Icon mặc định của Leaflet
+                  const customIcon = L.icon({
+                    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                  });
+
+                  return (
+                    <Marker
+                      key={station.id}
+                      position={[station.lat, station.lng]}
+                      icon={customIcon}
+                    >
+                      {/* Tooltip luôn hiển thị tên trạm bên cạnh chấm đỏ/xanh */}
+                      <Tooltip
+                        permanent
+                        direction="right"
+                        offset={[15, -20]}
+                        className="font-body font-bold text-sm bg-white text-[#124757] border-0 shadow-md rounded-lg px-3 py-1"
+                      >
+                        {lang === "VN" ? station.nameVN : station.nameEN}
+                      </Tooltip>
+
+                      <Popup className="font-body">
+                        <div className="p-1">
+                          <h3 className="font-bold text-lg text-[#124757] mb-2 font-headline">
+                            {lang === "VN" ? station.nameVN : station.nameEN}
+                          </h3>
+                          <p className="text-sm text-slate-600 mb-3">{station.address}</p>
+                          <a href="/#booking-section" className="block text-center w-full bg-yellow-400 text-[#124757] font-bold py-2 rounded-lg hover:brightness-105 transition-all">
+                            {lang === "VN" ? "Đặt vé từ đây" : "Book from here"}
+                          </a>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+              </MapContainer>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Schedule Section */}
+      <section className="py-24 bg-surface-container-low dark:bg-slate-900 transition-colors duration-300 select-none">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+          {/* Khối Thông Tin Bên Trái */}
+          <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-32">
+            <span className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+              {lang === "VN" ? "Thời gian hoạt động" : "Operation Hours"}
+            </span>
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white leading-tight">
+              {lang === "VN"
+                ? "Lịch trình khởi hành linh hoạt mỗi ngày"
+                : "Flexible Departure Schedules Daily"}
+            </h2>
+            <p className="text-slate-600 dark:text-slate-400 font-body text-base leading-relaxed">
+              {lang === "VN"
+                ? "Hệ thống vận hành liên tục từ sáng sớm đến tối muộn với tần suất tối ưu, đảm bảo đáp ứng trọn vẹn mọi nhu cầu di chuyển đi làm hay tham quan ngắm cảnh của quý khách."
+                : "The system operates continuously from early morning until late at night with optimized frequency, fully meeting your daily commuting or sightseeing needs."}
+            </p>
+            <div className="pt-4">
+              <Link
+                to="/schedule"
+                className="inline-flex items-center gap-2 bg-white dark:bg-slate-800 text-[#124757] dark:text-yellow-400 border border-slate-200 dark:border-slate-700 px-8 py-3.5 rounded-full font-headline font-bold text-sm shadow-md hover:bg-yellow-400 hover:text-[#124757] dark:hover:bg-yellow-400 dark:hover:text-slate-900 hover:border-transparent transition-all duration-300 group"
+              >
+                {lang === "VN" ? "Xem chi tiết lịch trình" : "View Detailed Schedule"}
+                <span className="material-symbols-outlined text-lg transition-transform duration-300 group-hover:translate-x-1">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
+          </div>
+          {/* CỘT PHẢI: CÁC KHỐI SỐ LIỆU */}
+          <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6 gsap-reveal">
+            {/* Khối 1: Giờ Cao Điểm */}
+            <div className="sm:col-span-2 bg-gradient-to-br from-[#124757] to-[#1a657c] dark:from-yellow-400 dark:to-yellow-600 p-8 md:p-10 rounded-[2.5rem] shadow-xl text-white dark:text-slate-900 flex flex-col justify-between relative overflow-hidden group hover:scale-[1.02] transition-transform duration-500 cursor-default">
+              <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-20 transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-12">
+                <span className="material-symbols-outlined text-[180px]">directions_boat</span>
+              </div>
+              <div className="relative z-10 flex flex-col h-full justify-between gap-6">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold uppercase tracking-widest opacity-90">
+                    {lang === "VN" ? "Giờ cao điểm (T2 - T6)" : "Weekday Peak Hours"}
+                  </p>
+                </div>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-8xl md:text-9xl font-black font-headline tracking-tighter leading-none drop-shadow-md">
+                    15
+                  </span>
+                  <span className="text-2xl md:text-3xl font-bold opacity-90">
+                    {lang === "VN" ? "phút/chuyến" : "mins/trip"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {/* Khối 2: Giờ Thấp Điểm */}
+            <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-lg border border-slate-100 dark:border-slate-700 flex flex-col gap-6 group hover:border-[#124757]/50 dark:hover:border-yellow-400/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-default">
+              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                <p className="text-xs font-bold uppercase tracking-widest">
+                  {lang === "VN" ? "Giờ thấp điểm" : "Off-Peak"}
+                </p>
+              </div>
+              <div className="flex items-baseline gap-2 text-slate-900 dark:text-white group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors duration-300">
+                <span className="text-6xl md:text-7xl font-black font-headline tracking-tighter leading-none">
+                  30
+                </span>
+                <span className="text-lg font-bold text-slate-500 dark:text-slate-400">
+                  {lang === "VN" ? "phút" : "mins"}
+                </span>
+              </div>
+            </div>
+            {/* Khối 3: Cuối Tuần & Lễ */}
+            <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] shadow-lg border border-slate-100 dark:border-slate-700 flex flex-col gap-6 group hover:border-[#124757]/50 dark:hover:border-yellow-400/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-default">
+              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                <p className="text-xs font-bold uppercase tracking-widest">
+                  {lang === "VN" ? "Cuối tuần & Lễ" : "Weekend/Holiday"}
+                </p>
+              </div>
+              <div className="flex items-baseline gap-2 text-slate-900 dark:text-white group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors duration-300">
+                <span className="text-6xl md:text-7xl font-black font-headline tracking-tighter leading-none">
+                  20
+                </span>
+                <span className="text-lg font-bold text-slate-500 dark:text-slate-400">
+                  {lang === "VN" ? "phút" : "mins"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Promotions / Offers Section */}
+      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+
+          {/* Tiêu đề & Subtitle căn giữa trang, chuẩn hệ màu của bạn */}
+          <div className="flex flex-col items-center text-center mb-16 space-y-4">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+              {lang === "VN" ? "Chương trình ưu đãi" : "Exclusive Offers"}
+            </p>
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+              {lang === "VN" ? "Ưu đãi & Khuyến mãi độc quyền" : "Exclusive Deals & Promotions"}
+            </h2>
+          </div>
+
+          {/* Grid danh sách các thẻ Khuyến mại thiết kế lại theo ảnh mẫu */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {promoData.map((promo) => (  // <--- Sử dụng promoData ở đây
+              <div
+                key={promo.id}
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-[2rem] overflow-hidden flex flex-col group hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+              >
+                {/* Phần ảnh phía trên tích hợp Badge nổi */}
+                <div className="aspect-[16/10] relative overflow-hidden shrink-0">
+                  <img
+                    src={promo.image}
+                    alt={promo.titleVn}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
+                  {/* Badge tag góc trái ảnh */}
+                  <span className="absolute top-4 left-4 bg-[#124757] text-white font-headline text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm">
+                    {lang === "VN" ? promo.tagVn : promo.tagEn}
+                  </span>
+                </div>
+
+                {/* Nội dung chi tiết của Card khuyến mại */}
+                <div className="p-6 flex-1 flex flex-col justify-between space-y-5">
+                  <div className="space-y-2">
+                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      {lang === "VN" ? promo.expiryVn : promo.expiryEn}
+                    </div>
+                    <h3 className="text-xl font-headline font-bold text-slate-800 dark:text-white leading-snug line-clamp-2 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors">
+                      {lang === "VN" ? promo.titleVn : promo.titleEn}
+                    </h3>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <img alt={item.name} className="w-12 h-12 rounded-full bg-surface-container-high dark:bg-slate-700" src={item.avatar} />
-                    <div><h5 className="font-bold text-sm dark:text-white">{item.name}</h5></div>
+
+                  {/* Khu vực hiển thị mã Code và nút bấm đặt vé */}
+                  <div className="flex items-center justify-between gap-4 pt-2 border-t border-slate-200/60 dark:border-slate-700/50">
+                    <div className="bg-slate-200/70 dark:bg-slate-700 px-3.5 py-2 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 select-all cursor-pointer" title="Click to copy">
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mr-1.5">Code:</span>
+                      <span className="text-sm font-black font-headline text-[#124757] dark:text-yellow-400 tracking-wider">{promo.code}</span>
+                    </div>
+
+                    <a
+                      href="/#booking-section"
+                      className="bg-yellow-400 text-[#124757] w-10 h-10 rounded-full flex items-center justify-center shadow-sm hover:bg-yellow-300 hover:scale-110 transition-all shrink-0"
+                    >
+                      <span className="material-symbols-outlined text-lg font-bold">arrow_forward</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Nút "Xem tất cả" */}
+          <div className="mt-16 flex justify-center">
+            <Link
+              to="/promotions"
+              className="bg-yellow-400 text-[#124757] px-10 py-3.5 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-105 hover:shadow-xl transition-all duration-300 flex items-center gap-2"
+            >
+              {lang === "VN" ? "Xem tất cả ưu đãi" : "View All Offers"}
+              <span className="material-symbols-outlined text-lg">arrow_right_alt</span>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* News & Events Section */}
+      <section className="py-24 bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300 select-none">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          {/* Tiêu đề & Subtitle căn giữa */}
+          <div className="flex flex-col items-center text-center mb-16 space-y-4">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+              {lang === "VN" ? "Tin tức & Sự kiện" : "News & Events"}
+            </p>
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+              {lang === "VN" ? "Cập nhật thông tin mới nhất" : "Latest Updates & News"}
+            </h2>
+          </div>
+          {/* BỐ CỤC: 1 LỚN BÊN TRÁI - 3 NHỎ BÊN PHẢI */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+            {/* CỘT TRÁI: BÀI VIẾT NỔI BẬT LỚN NHẤT (Item đầu tiên) */}
+            {newsData.length > 0 && (
+              <div className="lg:col-span-7 flex flex-col group cursor-pointer h-full">
+                <div className="bg-white dark:bg-slate-800 rounded-[2rem] overflow-hidden shadow-sm hover:shadow-xl border border-slate-100 dark:border-slate-700/50 transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
+                  {/* Ảnh bài viết lớn */}
+                  <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:h-[400px] overflow-hidden shrink-0">
+                    <img
+                      src={newsData[0].image}
+                      alt={newsData[0].titleVn}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                    <div className="absolute top-5 left-5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md text-[#124757] dark:text-yellow-400 font-headline text-xs font-bold px-4 py-2 rounded-xl shadow-md">
+                      {lang === "VN" ? newsData[0].dateVn : newsData[0].dateEn}
+                    </div>
+                  </div>
+                  {/* Nội dung bài viết lớn */}
+                  <div className="p-8 md:p-10 flex flex-col flex-1 justify-between gap-6">
+                    <div className="space-y-4">
+                      <span className="text-sm font-bold text-yellow-500 uppercase tracking-widest bg-yellow-50 dark:bg-yellow-500/10 px-3 py-1.5 rounded-lg inline-block">
+                        {lang === "VN" ? newsData[0].categoryVn : newsData[0].categoryEn}
+                      </span>
+                      <h3 className="text-2xl md:text-3xl font-headline font-bold text-[#124757] dark:text-white leading-tight group-hover:text-yellow-500 dark:group-hover:text-yellow-400 transition-colors">
+                        <Link to="/news">{lang === "VN" ? newsData[0].titleVn : newsData[0].titleEn}</Link>
+                      </h3>
+                      <p className="text-base text-slate-600 dark:text-slate-400 font-body line-clamp-3 leading-relaxed">
+                        {lang === "VN" ? newsData[0].descVn : newsData[0].descEn}
+                      </p>
+                    </div>
+                    <Link
+                      to="/news"
+                      className="inline-flex items-center gap-2 text-sm font-headline font-bold text-[#124757] dark:text-yellow-400 group-hover:text-yellow-500 transition-colors w-max"
+                    >
+                      {lang === "VN" ? "Đọc chi tiết" : "Ready Details"}
+                      <span className="material-symbols-outlined text-base transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* CỘT PHẢI: DANH SÁCH 3 BÀI VIẾT NHỎ XẾP DỌC */}
+            <div className="lg:col-span-5 flex flex-col gap-6 h-full justify-between">
+              {newsData.slice(1).map((news) => (
+                <div
+                  key={news.id}
+                  className="bg-white dark:bg-slate-800 rounded-3xl p-5 flex items-center gap-5 border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-x-1 group cursor-pointer h-full"
+                >
+                  {/* Thumbnail nhỏ bên trái khối phụ */}
+                  <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden shrink-0 shadow-sm">
+                    <img
+                      src={news.image}
+                      alt={news.titleVn}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+                  </div>
+                  {/* Nội dung khối phụ bên phải bài viết */}
+                  <div className="flex-1 flex flex-col justify-between h-full py-0.5 space-y-2.5">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] sm:text-xs font-bold text-yellow-500 uppercase tracking-widest">
+                          {lang === "VN" ? news.categoryVn : news.categoryEn}
+                        </span>
+                        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-400 font-medium shrink-0">
+                          <span className="material-symbols-outlined text-[12px] sm:text-[14px]">calendar_today</span>
+                          {lang === "VN" ? news.dateVn : news.dateEn}
+                        </div>
+                      </div>
+                      <h4 className="text-sm sm:text-base font-headline font-bold text-[#124757] dark:text-white leading-snug line-clamp-2 group-hover:text-yellow-500 dark:group-hover:text-yellow-400 transition-colors">
+                        <Link to="/news">{lang === "VN" ? news.titleVn : news.titleEn}</Link>
+                      </h4>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-700/40 w-full">
+                      <Link
+                        to="/news"
+                        className="inline-flex items-center gap-1.5 text-xs font-headline font-bold text-[#124757] dark:text-yellow-400 group-hover:text-yellow-500 dark:group-hover:text-yellow-500 transition-colors"
+                      >
+                        {lang === "VN" ? "Đọc chi tiết" : "Read Details"}
+                        <span className="material-symbols-outlined text-[14px] transition-transform duration-300 group-hover:translate-x-1">
+                          arrow_forward
+                        </span>
+                      </Link>
+                    </div>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Nút Xem tất cả */}
+          <div className="mt-16 flex justify-center">
+            <Link
+              to="/news"
+              className="bg-yellow-400 text-[#124757] px-10 py-3.5 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-105 hover:shadow-xl transition-all duration-300 flex items-center gap-2"
+            >
+              {lang === "VN" ? "Xem tất cả tin tức" : "View All News"}
+              <span className="material-symbols-outlined text-lg">arrow_right_alt</span>
+            </Link>
+          </div>
+
+        </div>
+      </section>
+
+      {/* App Download Section */}
+      <section className="bg-[#124757] dark:bg-slate-900 py-16 md:py-0 overflow-hidden select-none border-t border-white/10 dark:border-slate-800/80">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 items-center gap-12 lg:gap-20 min-h-[500px]">
+          {/* CỘT TRÁI: Slide Hình Ảnh App (Thiết kế xếp chồng) */}
+          <div className="relative w-full h-[350px] md:h-[500px] flex items-center justify-center lg:justify-end">
+            {/* Lớp trang trí phát sáng phía sau */}
+            <div className="absolute w-[250px] md:w-[350px] h-[250px] md:h-[350px] bg-yellow-400/20 rounded-full blur-[80px]"></div>
+            {/* Khung chứa các Slide Ảnh */}
+            <div className="relative w-[220px] md:w-[280px] h-[450px] md:h-[580px] mt-10 md:mt-24 lg:mt-32">
+              {appImages.map((img, index) => (
+                <div
+                  key={index}
+                  className={`absolute inset-0 transition-all duration-1000 ease-in-out origin-bottom ${index === appSlide
+                    ? "opacity-100 scale-100 z-20 rotate-0"
+                    : "opacity-0 scale-95 z-0 translate-y-10 rotate-3"
+                    }`}
+                >
+                  <img
+                    src={img}
+                    alt={`WaterBus App Screen ${index + 1}`}
+                    className="w-full h-full object-cover rounded-[2rem] border-[6px] border-slate-900 shadow-2xl"
+                    style={{
+                      maskImage: "linear-gradient(to bottom, black 80%, transparent 100%)",
+                      WebkitMaskImage: "linear-gradient(to bottom, black 80%, transparent 100%)"
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CỘT PHẢI: Nội dung Text & Mã QR */}
+          <div className="flex flex-col items-center text-center lg:items-start lg:text-left space-y-8 lg:py-24">
+            {/* Tiêu đề & Subtitle */}
+            <div className="space-y-4">
+              <span className="text-sm font-bold uppercase tracking-widest text-yellow-400">
+                {lang === "VN" ? "Tải ứng dụng WaterBus" : "Download WaterBus App"}
+              </span>
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-headline font-bold text-white leading-tight">
+                {lang === "VN" ? "Mua vé nhanh chóng," : "Fast Ticketing,"}
+                <br />
+                <span className="text-yellow-400">
+                  {lang === "VN" ? "thanh toán dễ dàng!" : "Easy Payment!"}
+                </span>
+              </h2>
+              <p className="text-white/70 font-body text-base md:text-lg max-w-lg leading-relaxed pt-2">
+                {lang === "VN"
+                  ? "Trải nghiệm tiện ích đặt vé, chọn ghế và nhận vé điện tử (QR Code) ngay trên điện thoại của bạn. Không cần xếp hàng, không lo hết vé."
+                  : "Experience the convenience of booking, choosing seats, and receiving e-tickets (QR Code) right on your phone. No lines, no sold-out worries."}
+              </p>
+            </div>
+            {/* Khối quét mã QR & Download Badges */}
+            <div className="flex flex-col sm:flex-row items-center gap-6 pt-4">
+              {/* Hình ảnh QR Code */}
+              <div className="bg-white p-3 rounded-2xl shadow-lg shrink-0 hover:scale-105 transition-transform">
+                <img
+                  src="https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg"
+                  alt="QR Code"
+                  className="w-24 h-24 object-contain"
+                />
+              </div>
+
+              {/* Text hướng dẫn & Nút tải Store */}
+              <div className="space-y-4 text-center sm:text-left">
+                <p className="text-sm font-bold text-white/90 font-headline uppercase tracking-wide">
+                  {lang === "VN" ? "Quét để tải ngay!" : "Scan to download!"}
+                </p>
+                <div className="flex gap-3">
+                  <a href="#" className="hover:opacity-80 transition-opacity hover:-translate-y-1 transform duration-300">
+                    <img
+                      src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg"
+                      alt="Download on App Store"
+                      className="h-10 w-auto"
+                    />
+                  </a>
+                  <a href="#" className="hover:opacity-80 transition-opacity hover:-translate-y-1 transform duration-300">
+                    <img
+                      src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg"
+                      alt="Get it on Google Play"
+                      className="h-10 w-auto"
+                    />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials Section */}
+      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden">
+        <div className="max-w-5xl mx-auto px-6 md:px-12 flex flex-col items-center">
+          {/* Khối tiêu đề căn giữa đồng bộ */}
+          <div className="text-center mb-16 space-y-4">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+              {lang === "VN" ? "Đánh giá từ hành khách" : "Passenger Reviews"}
+            </p>
+            <h2 className="text-4xl md:text-5xl lg:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+              {lang === "VN" ? "Khách hàng nói gì về WaterBus?" : "What Our Passengers Say"}
+            </h2>
+          </div>
+          {/* Khung Slider chính */}
+          <div className="relative w-full bg-slate-50 dark:bg-slate-800 rounded-[2.5rem] p-8 md:p-14 shadow-xl border border-slate-100 dark:border-slate-700/50 flex flex-col items-center">
+            {/* Icon Dấu ngoặc kép trang trí lớn tinh tế */}
+            <span className="material-symbols-outlined text-6xl md:text-7xl text-[#124757]/10 dark:text-yellow-400/10 absolute top-8 left-8 md:top-10 md:left-12 pointer-events-none font-black">
+              format_quote
+            </span>
+            {/* Nội dung Review chuyển đổi slide mượt mà */}
+            <div className="w-full text-center space-y-6 relative min-h-[160px] flex flex-col justify-center items-center">
+              {testimonialsData.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`transition-all duration-700 ease-in-out flex flex-col items-center space-y-6 ${index === currentTestimonial
+                    ? "opacity-100 scale-100 relative z-10"
+                    : "opacity-0 scale-95 absolute z-0 pointer-events-none"
+                    }`}
+                >
+                  {/* Lời trích dẫn của khách hàng */}
+                  <p className="text-lg md:text-xl font-medium font-body text-slate-700 dark:text-slate-200 leading-relaxed max-w-3xl italic">
+                    "{lang === "VN" ? item.quoteVn : item.quoteEn}"
+                  </p>
+                  {/* Khối thông tin Người đánh giá */}
+                  <div className="flex items-center gap-3.5 pt-4">
+                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#124757] dark:border-yellow-400 shadow-md shrink-0">
+                      <img src={item.avatar} alt={item.name} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="text-left">
+                      <h4 className="font-headline font-bold text-base text-[#124757] dark:text-white leading-none">
+                        {item.name}
+                      </h4>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="flex gap-8 px-4 shrink-0 py-4">
-              {testimonials.map((item, index) => (
-                <div key={`set2-${index}`} className="w-[350px] whitespace-normal bg-white dark:bg-slate-800 p-8 rounded-[2rem] shadow-sm border border-surface-variant dark:border-slate-700 flex flex-col justify-between transition-all duration-500 cursor-pointer hover:scale-110 hover:shadow-2xl hover:z-10 hover:border-primary/50 dark:hover:border-yellow-400/50">
-                  <div>
-                    <p className="italic text-on-surface-variant dark:text-white/80 leading-relaxed mb-8">"{item.quote}"</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <img alt={item.name} className="w-12 h-12 rounded-full bg-surface-container-high dark:bg-slate-700" src={item.avatar} />
-                    <div><h5 className="font-bold text-sm dark:text-white">{item.name}</h5></div>
-                  </div>
-                </div>
-              ))}
+            {/* Nút mũi tên điều hướng Trái / Phải phẳng cao cấp */}
+            <div className="absolute top-1/2 -translate-y-1/2 left-3 md:-left-6 right-3 md:-right-6 flex justify-between pointer-events-none z-30">
+              <button
+                onClick={prevTestimonial}
+                className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white dark:bg-slate-700 text-[#124757] dark:text-white border border-slate-200/60 dark:border-slate-600 shadow-md flex items-center justify-center pointer-events-auto hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 hover:scale-105 transition-all outline-none"
+              >
+                <span className="material-symbols-outlined text-xl font-bold">chevron_left</span>
+              </button>
+              <button
+                onClick={nextTestimonial}
+                className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white dark:bg-slate-700 text-[#124757] dark:text-white border border-slate-200/60 dark:border-slate-600 shadow-md flex items-center justify-center pointer-events-auto hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 hover:scale-105 transition-all outline-none"
+              >
+                <span className="material-symbols-outlined text-xl font-bold">chevron_right</span>
+              </button>
             </div>
+          </div>
+          {/* Hệ thống các chấm nhỏ Pagination hiển thị trạng thái slide hiện tại */}
+          <div className="flex gap-2 mt-8 z-20">
+            {testimonialsData.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => setCurrentTestimonial(index)}
+                className={`h-2 rounded-full transition-all duration-300 outline-none ${index === currentTestimonial
+                  ? "w-6 bg-[#124757] dark:bg-yellow-400"
+                  : "w-2 bg-slate-300 dark:bg-slate-600 hover:bg-slate-400"
+                  }`}
+                title={`Go to slide ${index + 1}`}
+              />
+            ))}
           </div>
         </div>
       </section>
 
       {/* Contact Section */}
-      <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300">
-        <div className="container mx-auto px-6">
-          <div className="max-w-5xl mx-auto bg-slate-900 dark:bg-slate-800 rounded-[3rem] overflow-hidden flex flex-col md:flex-row shadow-2xl transition-colors">
-            <div className="md:w-1/2 p-12 lg:p-16">
-              <h2 className="text-4xl font-headline font-bold text-white mb-6">
-                {lang === "VN" ? "Kết Nối Với Chúng Tôi" : "Connect with Us"}
-              </h2>
-              <p className="text-white/60 mb-10">
-                {lang === "VN"
-                  ? "Bạn có câu hỏi về tuyến đường hoặc thuê tàu riêng? Hãy liên hệ và đội ngũ của chúng tôi sẽ hỗ trợ trong vòng 24 giờ."
-                  : "Have questions about our routes or private charters? Reach out and our team will assist you within 24 hours."}
-              </p>
+      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          {/* Khối tiêu đề chính & phụ căn giữa hệ thống */}
+          <div className="flex flex-col items-center text-center mb-16 space-y-4">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+              {lang === "VN" ? "Liên hệ với chúng tôi" : "Get In Touch"}
+            </p>
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+              {lang === "VN" ? "Chúng tôi luôn sẵn sàng hỗ trợ bạn" : "We Are Here To Help You"}
+            </h2>
+          </div>
+          {/* Chia layout 2 cột bất đối xứng */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+            {/* CỘT TRÁI (Tỷ lệ 5/12): THÔNG TIN LIÊN HỆ TRỰC TIẾP */}
+            <div className="lg:col-span-5 space-y-8">
+              <div className="space-y-4">
+                <h3 className="text-2xl font-headline font-bold text-slate-800 dark:text-white">
+                  {lang === "VN" ? "Thông tin liên hệ" : "Contact Information"}
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-body leading-relaxed max-w-sm">
+                  {lang === "VN"
+                    ? "Mọi thắc mắc, phản hồi hoặc yêu cầu hỗ trợ kỹ thuật đặt vé, xin vui lòng kết nối trực tiếp với tổng đài đắc lực của chúng tôi."
+                    : "For any inquiries, feedback, or technical assistance with booking, please feel free to reach out to our dedicated support center."}
+                </p>
+              </div>
+              {/* Danh sách các khối thẻ thông tin */}
               <div className="space-y-6">
-                <div className="flex items-center gap-4 text-white">
-                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">phone_in_talk</span>
-                  <span className="font-medium">+84 (0) 28 3822 0000</span>
+                {/* Hotline hỗ trợ */}
+                <div className="flex items-center gap-4 group">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400 shrink-0 shadow-sm transition-colors group-hover:bg-yellow-400 group-hover:text-[#124757]">
+                    <span className="material-symbols-outlined text-[22px]">call</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      {lang === "VN" ? "Hotline hỗ trợ 24/7" : "Support Hotline"}
+                    </p>
+                    <p className="text-lg font-headline font-black text-[#124757] dark:text-white">
+                      1900 636830
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 text-white">
-                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">mail</span>
-                  <span className="font-medium">hello@rivernav.vn</span>
+                {/* Hộp thư điện tử */}
+                <div className="flex items-center gap-4 group">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400 shrink-0 shadow-sm transition-colors group-hover:bg-yellow-400 group-hover:text-[#124757]">
+                    <span className="material-symbols-outlined text-[22px]">mail</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      {lang === "VN" ? "Email giao dịch" : "Email Address"}
+                    </p>
+                    <p className="text-base font-semibold text-slate-700 dark:text-slate-300">
+                      info@thuongnhat.com
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 text-white">
-                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">location_on</span>
-                  <span className="font-medium">10B Ton Duc Thang, Dist. 1, HCMC</span>
+                {/* Trụ sở chính */}
+                <div className="flex items-start gap-4 group">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400 shrink-0 shadow-sm transition-colors group-hover:bg-yellow-400 group-hover:text-[#124757] mt-0.5">
+                    <span className="material-symbols-outlined text-[22px]">location_on</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      {lang === "VN" ? "Trụ sở điều hành chính" : "Main Office"}
+                    </p>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed max-w-xs">
+                      10B Tôn Đức Thắng, Phường Bến Nghé, Quận 1, Thành phố Hồ Chí Minh, Việt Nam
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="md:w-1/2 bg-white dark:bg-slate-700 p-12 lg:p-16 transition-colors">
-              <form className="space-y-6">
-                <div className="grid grid-cols-2 gap-6">
+            {/* CỘT PHẢI (Tỷ lệ 7/12): FORM GỬI TIN NHẮN ĐÃ ĐỔI SANG NỀN XANH #124757 */}
+            <div className="lg:col-span-7 bg-[#124757] dark:bg-slate-800 border border-white/10 dark:border-slate-700/50 p-8 md:p-10 rounded-[2.5rem] shadow-xl">
+              <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+                {/* Grid Họ tên & Email */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {/* Họ và tên */}
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/70">{lang === "VN" ? "Họ và Tên" : "Full Name"}</label>
-                    <input className="w-full bg-surface-container-low dark:bg-slate-600 dark:text-white border-none rounded-xl focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3" type="text" />
+                    <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
+                      {lang === "VN" ? "Họ và tên *" : "Full Name *"}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={lang === "VN" ? "Nhập họ tên của bạn" : "Enter your full name"}
+                      className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner"
+                    />
                   </div>
+                  {/* Địa chỉ Email */}
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/70">Email</label>
-                    <input className="w-full bg-surface-container-low dark:bg-slate-600 dark:text-white border-none rounded-xl focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3" type="email" />
+                    <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
+                      {lang === "VN" ? "Địa chỉ Email *" : "Email Address *"}
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="example@domain.com"
+                      className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner"
+                    />
                   </div>
                 </div>
+                {/* Tiêu đề tin nhắn */}
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold tracking-widest text-outline dark:text-white/70">{lang === "VN" ? "Tin Nhắn" : "Message"}</label>
-                  <textarea className="w-full bg-surface-container-low dark:bg-slate-600 dark:text-white border-none rounded-xl focus:ring-2 ring-primary dark:ring-yellow-400 transition-colors outline-none px-4 py-3" rows="4"></textarea>
+                  <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
+                    {lang === "VN" ? "Tiêu đề liên hệ" : "Subject"}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={lang === "VN" ? "Nhập tiêu đề nội dung" : "What is this regarding?"}
+                    className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner"
+                  />
                 </div>
-                <button className="w-full bg-primary dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 py-4 rounded-xl font-bold font-label hover:brightness-110 transition-all">
-                  {lang === "VN" ? "Gửi Tin Nhắn" : "Send Message"}
-                </button>
+                {/* Khối nội dung nhập tin nhắn dài */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
+                    {lang === "VN" ? "Nội dung lời nhắn *" : "Message Contents *"}
+                  </label>
+                  <textarea
+                    rows={4}
+                    required
+                    placeholder={lang === "VN" ? "Viết nội dung tin nhắn của bạn tại đây..." : "Type your message details here..."}
+                    className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner resize-none"
+                  ></textarea>
+                </div>
+                {/* Nút hành động gửi thông tin màu trắng để tương phản cực tốt trên nền xanh */}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="w-full sm:w-auto bg-white text-[#124757] dark:bg-yellow-400 dark:text-slate-900 px-10 py-4 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-md hover:bg-slate-100 dark:hover:bg-yellow-300 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2"
+                  >
+                    {lang === "VN" ? "Gửi lời nhắn ngay" : "Send Message"}
+                    <span className="material-symbols-outlined text-lg">send</span>
+                  </button>
+                </div>
               </form>
             </div>
           </div>
         </div>
       </section>
-
-      {/* MODAL CHI TIẾT TRẠM */}
-      {selectedStation && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-[2rem] overflow-hidden shadow-2xl animate-[fadeIn_0.3s_ease-out] flex flex-col">
-
-            {/* Nút đóng góc phải */}
-            <button
-              className="absolute top-4 right-4 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-md transition-colors"
-              onClick={() => setSelectedStation(null)}
-            >
-              <span className="material-symbols-outlined text-sm">close</span>
-            </button>
-
-            {/* Ảnh Station Cover */}
-            <div className="w-full h-48 sm:h-56 relative bg-slate-100 dark:bg-slate-800 shrink-0">
-              <img
-                src={selectedStation.image}
-                alt={selectedStation.nameEN}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent"></div>
-              <h3 className="absolute bottom-4 left-6 right-6 text-2xl font-headline font-bold text-white shadow-sm">
-                {lang === "VN" ? selectedStation.nameVN : selectedStation.nameEN}
-              </h3>
-            </div>
-
-            {/* Nội dung chi tiết */}
-            <div className="p-6 md:p-8 space-y-5">
-              {/* Box Địa chỉ */}
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary/10 dark:bg-yellow-400/20 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">location_on</span>
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-white/50 mb-1">
-                    {lang === "VN" ? "Địa Chỉ" : "Address"}
-                  </p>
-                  <p className="text-sm text-slate-800 dark:text-white/90 font-medium">
-                    {lang === "VN" ? selectedStation.addressVN : selectedStation.addressEN}
-                  </p>
-                </div>
-              </div>
-
-              {/* Box Thời gian */}
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary/10 dark:bg-yellow-400/20 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-primary dark:text-yellow-400">schedule</span>
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-white/50 mb-1">
-                    {lang === "VN" ? "Thời Gian Hoạt Động" : "Operating Hours"}
-                  </p>
-                  <p className="text-sm text-slate-800 dark:text-white/90 font-medium">
-                    {lang === "VN" ? selectedStation.timeVN : selectedStation.timeEN}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
 
       {/* MODAL QUẢNG CÁO */}
       {showPromoModal && (

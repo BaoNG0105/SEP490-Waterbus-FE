@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useParams, Navigate } from "react-router-dom";
 // Import dữ liệu từ file riêng
 import { stationsData } from "../../data/stations";
@@ -12,9 +11,6 @@ export const Station = () => {
 
   // Gọi lang từ Context
   const { lang } = useApp();
-
-  // Quản lý trạng thái mở/đóng Modal cho các địa điểm lân cận
-  const [selectedAttraction, setSelectedAttraction] = useState(null);
 
   // Nếu người dùng nhập sai URL (trạm không tồn tại), chuyển hướng về trang chủ
   if (!station) {
@@ -45,14 +41,6 @@ export const Station = () => {
       {/* Section 1: Location Info */}
       <section className="max-w-7xl mx-auto px-4 md:px-8 mb-32 grid md:grid-cols-2 gap-12 items-center">
         <div>
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-container/20 rounded-full mb-6">
-            <span className="material-symbols-outlined text-primary dark:text-yellow-400">
-              location_on
-            </span>
-            <span className="text-primary dark:text-yellow-400 font-label font-bold text-sm uppercase">
-              {lang === "VN" ? "TRẠM TRUNG TÂM" : "CENTRAL STATION"}
-            </span>
-          </div>
           <h2 className="font-headline text-4xl font-bold mb-6 text-on-surface dark:text-white">
             {lang === "VN" ? "Vị trí chiến lược" : "Strategic Location"}
           </h2>
@@ -78,88 +66,10 @@ export const Station = () => {
             referrerPolicy="no-referrer-when-downgrade"
             className="w-full h-full transition-all duration-500 dark:invert dark:grayscale-[80%] dark:hue-rotate-180"
           ></iframe>
-
-          <div className="absolute bottom-4 left-4 right-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-4 rounded-xl flex justify-between items-center transition-all duration-300 group-hover:opacity-0 pointer-events-none">
-            <div>
-              <p className="font-bold text-on-surface dark:text-white">
-                {lang === "VN"
-                  ? "Xem bản đồ tương tác"
-                  : "View interactive map"}
-              </p>
-              <p className="text-xs text-on-surface-variant dark:text-white/60">
-                {lang === "VN"
-                  ? "Hướng dẫn đường đi đến bến"
-                  : "Get directions to the station"}
-              </p>
-            </div>
-            <button className="bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 p-2 rounded-full transition-colors pointer-events-auto hover:scale-110">
-              <span className="material-symbols-outlined">directions</span>
-            </button>
-          </div>
         </div>
       </section>
 
-      {/* Section 2: Nearby Attractions */}
-      {station.attractions && station.attractions.length > 0 && (
-        <section className="bg-surface-container-low dark:bg-slate-800 py-24 mb-32 transition-colors">
-          <div className="max-w-7xl mx-auto px-4 md:px-8">
-            <div className="flex justify-between items-end mb-12">
-              <div>
-                <h2 className="font-headline text-4xl font-bold mb-4 dark:text-white">
-                  {lang === "VN" ? "Điểm đến lân cận" : "Nearby Attractions"}
-                </h2>
-                <p className="text-on-surface-variant dark:text-white/70">
-                  {lang === "VN"
-                    ? "Khám phá các biểu tượng của Sài Gòn chỉ trong vài bước chân từ bến."
-                    : "Explore Saigon's iconic landmarks just steps away from the station."}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button className="p-3 rounded-full bg-white dark:bg-slate-700 border border-outline-variant/20 dark:border-slate-600 shadow-sm hover:bg-primary-container dark:hover:bg-slate-600 dark:text-white transition-colors">
-                  <span className="material-symbols-outlined">
-                    chevron_left
-                  </span>
-                </button>
-                <button className="p-3 rounded-full bg-white dark:bg-slate-700 border border-outline-variant/20 dark:border-slate-600 shadow-sm hover:bg-primary-container dark:hover:bg-slate-600 dark:text-white transition-colors">
-                  <span className="material-symbols-outlined">
-                    chevron_right
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-6 overflow-x-auto no-scrollbar pb-8">
-              {station.attractions.map((item) => (
-                <div
-                  key={item.id}
-                  className="min-w-[300px] md:min-w-[380px] group cursor-pointer"
-                  onClick={() => setSelectedAttraction(item)}
-                >
-                  <div className="h-64 rounded-3xl overflow-hidden mb-4 relative">
-                    <img
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      alt={item.title}
-                      src={item.img}
-                    />
-                    <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
-                  </div>
-                  <h3 className="font-headline text-xl font-bold dark:text-white group-hover:text-primary dark:group-hover:text-yellow-400 transition-colors">
-                    {item.title}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1 text-on-surface-variant dark:text-white/60 text-sm">
-                    <span className="material-symbols-outlined text-base">
-                      directions_walk
-                    </span>
-                    <span>{item.distance}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Section 3: Gallery */}
+      {/* Section 2: Gallery */}
       {station.gallery && station.gallery.length === 3 && (
         <section className="max-w-7xl mx-auto px-4 md:px-8 mb-32">
           <h2 className="font-headline text-4xl font-bold mb-12 text-center dark:text-white">
@@ -191,56 +101,6 @@ export const Station = () => {
             </div>
           </div>
         </section>
-      )}
-
-      {/* Modal Địa điểm lân cận */}
-      {selectedAttraction && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl relative animate-[fadeIn_0.3s_ease-out]">
-            <button
-              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 transition-colors"
-              onClick={() => setSelectedAttraction(null)}
-            >
-              <span className="material-symbols-outlined dark:text-white">
-                close
-              </span>
-            </button>
-            <div className="grid md:grid-cols-2">
-              <div className="h-64 md:h-full overflow-hidden">
-                <img
-                  alt={selectedAttraction.title}
-                  className="w-full h-full object-cover"
-                  src={selectedAttraction.img}
-                />
-              </div>
-              <div className="p-8 flex flex-col h-full">
-                <h3 className="font-headline text-3xl font-bold mb-4 text-on-surface dark:text-white">
-                  {selectedAttraction.title}
-                </h3>
-                <p className="font-body text-on-surface-variant dark:text-white/70 mb-6 flex-grow">
-                  {selectedAttraction.desc}
-                </p>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 text-sm font-label dark:text-white">
-                    <span className="material-symbols-outlined text-primary dark:text-yellow-400">
-                      schedule
-                    </span>
-                    <span>{selectedAttraction.hours}</span>
-                  </div>
-                  <a
-                    href={selectedAttraction.mapUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 py-4 rounded-xl font-headline font-bold hover:brightness-110 transition-all flex items-center justify-center gap-2"
-                  >
-                    <span className="material-symbols-outlined">map</span>
-                    {lang === "VN" ? "Xem trên bản đồ" : "View on Map"}
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </main>
   );

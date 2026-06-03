@@ -21,15 +21,22 @@
   --color-surface-container-highest: #d8e3fb;
   --color-background: #f9f9ff;
 
+  /* ĐỒNG BỘ TOÀN BỘ FONT SANG SPACE GROTESK */
+  --font-sans: "Space Grotesk", sans-serif;
+  /* Font mặc định của Tailwind */
   --font-headline: "Space Grotesk", sans-serif;
-  --font-body: "Inter", sans-serif;
-  --font-label: "Plus Jakarta Sans", sans-serif;
+  /* Các class font-headline */
+  --font-body: "Space Grotesk", sans-serif;
+  /* Các class font-body */
+  --font-label: "Space Grotesk", sans-serif;
+  /* Các class font-label */
 }
 
 /* Đặt font và màu nền mặc định cho toàn trang */
 @layer base {
   body {
-    font-family: var(--font-body);
+    font-family: var(--font-sans);
+    /* Dùng trực tiếp font-sans mặc định */
     background-color: var(--color-background);
     color: var(--color-on-surface);
     overflow-x: hidden;
@@ -41,17 +48,16 @@
   &::-webkit-scrollbar {
     display: none;
   }
+
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 
 @utility hero-gradient {
-  background: linear-gradient(
-    180deg,
-    rgba(17, 28, 45, 0.4) 0%,
-    rgba(17, 28, 45, 0.2) 50%,
-    rgba(17, 28, 45, 0.6) 100%
-  );
+  background: linear-gradient(180deg,
+      rgba(17, 28, 45, 0.4) 0%,
+      rgba(17, 28, 45, 0.2) 50%,
+      rgba(17, 28, 45, 0.6) 100%);
 }
 
 @utility gsap-reveal {
@@ -70,17 +76,16 @@
 }
 
 @utility liquid-gradient {
-  background: linear-gradient(
-    135deg,
-    var(--color-primary) 0%,
-    var(--color-primary-container) 100%
-  );
+  background: linear-gradient(135deg,
+      var(--color-primary) 0%,
+      var(--color-primary-container) 100%);
 }
 
 @keyframes marquee {
   0% {
     transform: translateX(0);
   }
+
   100% {
     transform: translateX(-50%);
   }
@@ -91,9 +96,11 @@
   border-radius: 1rem !important;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
 }
+
 .leaflet-popup-content {
   margin: 12px 16px !important;
 }
+
 .leaflet-container a.leaflet-popup-close-button {
   top: 8px !important;
   right: 8px !important;
