@@ -4,7 +4,7 @@ import "./index.css";
 import App from "./App.jsx";
 import { AppProvider } from "./context/AppContext";
 import { Provider } from "react-redux";
-import { store } from "./store/store.js";
+import { store } from "./redux/store.js";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;

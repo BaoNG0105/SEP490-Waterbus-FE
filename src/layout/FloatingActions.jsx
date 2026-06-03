@@ -1,4 +1,4 @@
-import { useApp } from "../../context/AppContext";
+import { useApp } from "../context/AppContext";
 
 export const FloatingActions = () => {
   // Nhúng Context để hỗ trợ đa ngôn ngữ cho các Tooltip (tiêu đề khi trỏ chuột vào)

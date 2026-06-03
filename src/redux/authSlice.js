@@ -16,7 +16,7 @@ const authSlice = createSlice({
   reducers: {
     loginSuccess: (state, action) => {
       const { accessToken, user } = action.payload;
-      
+
       state.accessToken = accessToken;
       state.user = user;
       state.isAuthenticated = true;
@@ -29,9 +29,9 @@ const authSlice = createSlice({
       localStorage.setItem('avatarUrl', user.avatarUrl);
       localStorage.setItem('roleName', user.roleName);
       // LƯU MỐC HẾT HẠN XUỐNG LOCALSTORAGE
-      localStorage.setItem('expirationTime', expirationTime.toString()); 
+      localStorage.setItem('expirationTime', expirationTime.toString());
     },
-    
+
     logout: (state) => {
       state.accessToken = null;
       state.user = { fullName: '', avatarUrl: '', roleName: '' };
@@ -42,7 +42,7 @@ const authSlice = createSlice({
       localStorage.removeItem('avatarUrl');
       localStorage.removeItem('roleName');
       // XÓA MỐC HẾT HẠN KHI ĐĂNG XUẤT
-      localStorage.removeItem('expirationTime'); 
+      localStorage.removeItem('expirationTime');
     },
   },
 });

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { useApp } from "../../../context/AppContext"; // Import Context
+import { useApp } from "../../context/AppContext";
 
 export const AdminSidebar = ({ isOpen, onClose }) => {
   const location = useLocation();

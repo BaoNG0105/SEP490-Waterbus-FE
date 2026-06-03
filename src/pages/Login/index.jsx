@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 import { loginWithGoogle, loginWithPhone } from "../../services/authService";
 import { useDispatch, useSelector } from "react-redux";
-import { loginSuccess } from "../../features/auth/authSlice";
+import { loginSuccess } from "../../redux/authSlice";
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 

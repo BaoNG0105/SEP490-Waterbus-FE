@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useApp } from "../../context/AppContext";
+import { useApp } from "../context/AppContext";
 import { useSelector, useDispatch } from "react-redux";
-import { logout } from "../../features/auth/authSlice";
+import { logout } from "../redux/authSlice";
 import Swal from "sweetalert2";
 
 export const Header = () => {

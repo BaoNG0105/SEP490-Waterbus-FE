@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useApp } from "../../../context/AppContext";
+import { useApp } from "../../context/AppContext";
 
 export const AdminFooter = () => {
   // Lấy trạng thái ngôn ngữ từ Context
