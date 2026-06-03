@@ -7,10 +7,6 @@ import 'leaflet/dist/leaflet.css';
 
 const heroSlides = [
   {
-    type: "youtube",
-    videoId: "AzBaYqeO8WE",
-  },
-  {
     type: "image",
     src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png",
   },
@@ -101,22 +97,6 @@ const pulsingIcon = new L.DivIcon({
   iconAnchor: [12, 12],
 });
 
-// Thông báo (Hardcode)
-const announcements = [
-  {
-    vn: "[THÔNG BÁO] Từ ngày 15/04/2026, hành khách tại Sân bay/Bến tàu cần thực hiện khai báo thông tin trước khi lên tàu.",
-    en: "[NOTICE] From April 15, 2026, passengers must declare information before boarding.",
-  },
-  {
-    vn: "[KHUYẾN MÃI] Nhập mã SUMMER26 giảm ngay 20% cho các chuyến đi trong tuần. Số lượng có hạn!",
-    en: "[PROMOTION] Enter code SUMMER26 for 20% off weekday trips. Limited quantity!",
-  },
-  {
-    vn: "[TIN TỨC] WaterBus chính thức mở thêm tuyến mới nối liền Quận 1 và Quận 7 vào tháng 6 này.",
-    en: "[NEWS] WaterBus officially opens a new route connecting District 1 and District 7 this June.",
-  },
-];
-
 // Quảng cáo (Hardcode)
 const promoPosters = [
   "https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=800",
@@ -196,27 +176,9 @@ export const Home = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoSlide, setPromoSlide] = useState(0);
-  const [showNoticeBar, setShowNoticeBar] = useState(true);
-  const [noticeIndex, setNoticeIndex] = useState(0);
 
   // STATE QUẢN LÝ MODAL TRẠM (STATION MODAL)
   const [selectedStation, setSelectedStation] = useState(null);
-
-  // Auto-cycle cho thanh thông báo
-  useEffect(() => {
-    if (!showNoticeBar) return;
-    const timer = setInterval(() => {
-      setNoticeIndex((prev) => (prev + 1) % announcements.length);
-    }, 12000);
-    return () => clearInterval(timer);
-  }, [showNoticeBar]);
-
-  const nextNotice = () =>
-    setNoticeIndex((prev) => (prev + 1) % announcements.length);
-  const prevNotice = () =>
-    setNoticeIndex((prev) =>
-      prev === 0 ? announcements.length - 1 : prev - 1,
-    );
 
   // Auto-cycle cho Hero Slides
   useEffect(() => {
@@ -265,70 +227,6 @@ export const Home = () => {
 
   return (
     <main className="dark:bg-slate-900 transition-colors duration-300 relative">
-      {/* THANH THÔNG BÁO */}
-      {showNoticeBar && (
-        <div className="fixed top-0 left-0 w-full h-10 bg-white dark:bg-slate-900 border-b border-surface-variant/50 dark:border-slate-700 z-[120] flex items-center justify-between px-4 md:px-8 shadow-sm transition-colors duration-300">
-          <div className="flex items-center shrink-0 z-10 bg-white dark:bg-slate-900 py-2 pr-3">
-            <span className="material-symbols-outlined text-red-600 dark:text-red-500 text-[18px] animate-pulse">
-              notifications_active
-            </span>
-          </div>
-
-          <div className="flex-1 relative h-full flex items-center overflow-hidden group">
-            <style>{`
-              @keyframes text-ticker {
-                0% { left: 100%; transform: translateX(0); }
-                100% { left: 0; transform: translateX(-100%); }
-              }
-              .animate-ticker {
-                position: absolute;
-                white-space: nowrap;
-                animation: text-ticker 12s linear infinite;
-              }
-            `}</style>
-
-            <p
-              key={noticeIndex}
-              className="text-xs md:text-sm font-body font-medium text-slate-700 dark:text-slate-300 animate-ticker group-hover:[animation-play-state:paused] cursor-default"
-            >
-              {lang === "VN"
-                ? announcements[noticeIndex].vn
-                : announcements[noticeIndex].en}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1 shrink-0 ml-4 z-10 bg-white dark:bg-slate-900 pl-2">
-            <button
-              onClick={prevNotice}
-              className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
-            >
-              <span className="material-symbols-outlined text-[16px]">
-                chevron_left
-              </span>
-            </button>
-            <button
-              onClick={nextNotice}
-              className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
-            >
-              <span className="material-symbols-outlined text-[16px]">
-                chevron_right
-              </span>
-            </button>
-
-            <div className="w-[1px] h-4 bg-slate-300 dark:bg-slate-600 mx-1 md:mx-2"></div>
-
-            <button
-              onClick={() => setShowNoticeBar(false)}
-              className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-500/20 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-            >
-              <span className="material-symbols-outlined text-[16px]">
-                close
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Hero Section */}
       <section className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-slate-900 pt-20">
         <div className="absolute inset-0 z-0">
