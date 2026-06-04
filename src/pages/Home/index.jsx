@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { MapContainer, TileLayer, Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
@@ -17,7 +17,8 @@ import {
 } from "../../data/homeData";
 
 export const Home = () => {
-  const { lang } = useApp();
+  const { lang } = useApp(); // Lấy ngôn ngữ hiện tại từ context để hiển thị nội dung phù hợp
+  const navigate = useNavigate(); // Khởi tạo navigate để chuyển hướng khi nhấn nút Đặt vé
 
   // State quản lý Form Đặt vé Hero
   const [isRoundTrip, setIsRoundTrip] = useState(false); // false: Một chiều, true: Khứ hồi
@@ -103,6 +104,34 @@ export const Home = () => {
     }, 3000);
     return () => clearInterval(slideTimer);
   }, [showPromoModal]);
+
+  // THÊM HÀM XỬ LÝ KHI BẤM NÚT TÌM KIẾM
+  const handleSearchToBooking = () => {
+    // Basic validation (Bắt buộc điền mới cho đi)
+    if (!fromWharf || !toWharf || !departureDate || (isRoundTrip && !returnDate)) {
+      alert(lang === "VN" ? "Vui lòng chọn đầy đủ bến và ngày đi!" : "Please fill in all required fields!");
+      return;
+    }
+
+    // Chuyển hướng sang trang /booking và mang theo toàn bộ data
+    navigate("/booking", {
+      state: {
+        step: 2, // Chỉ định nhảy thẳng tới Bước 2
+        bookingData: {
+          isRoundTrip,
+          fromWharf,
+          toWharf,
+          departureDate,
+          returnDate,
+          passengerCount,
+          selectedDepartureTrip: null,
+          selectedReturnTrip: null,
+          selectedSeatsDeparture: [],
+          selectedSeatsReturn: [],
+        }
+      }
+    });
+  };
 
   return (
     <main className="dark:bg-slate-900 transition-colors duration-300 relative">
@@ -257,10 +286,11 @@ export const Home = () => {
               </div>
 
             </div>
-            {/* Nút Tìm Chuyến Đặt Vé */}
+            {/* Nút Tìm Chuyến Đặt Vé Lớn Nổi Bật Dưới Cùng Form */}
             <div className="pt-4 flex justify-end">
               <button
                 type="button"
+                onClick={handleSearchToBooking} // Gắn hàm chuyển trang vào đây
                 className="w-full md:w-auto bg-yellow-400 text-[#124757] dark:bg-yellow-400 dark:text-slate-900 px-12 py-4 rounded-2xl font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-[1.02] hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
               >
                 {lang === "VN" ? "Tìm chuyến tàu ngay" : "Search Routes Now"}

@@ -9,6 +9,7 @@ import { Station } from "./pages/Station";
 import { Promotions } from "./pages/Promotions";
 import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
+import { Booking } from "./pages/Booking";
 //Admin
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { AdminCustomers } from "./pages/AdminCustomers";
@@ -68,11 +69,22 @@ function App() {
           }
         />
 
+        {/* Booking Page */}
+        <Route
+          path="/booking"
+          element={
+            <MainLayout>
+              <Booking />
+            </MainLayout>
+          }
+        />
+
         {/* Login Page */}
         <Route path="/login" element={<Login />} />
 
         {/* Register Page */}
         <Route path="/register" element={<Register />} />
+
 
         {/* Admin Page */}
         {/* Admin Dashboard Page */}
