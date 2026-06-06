@@ -20,7 +20,7 @@ export const CustomerManagement = () => {
     <div className="flex flex-col gap-8 relative min-h-[70vh]">
       {/* SECTION 1: Thanh Tìm kiếm & Lọc */}
       <section className="flex flex-col md:flex-row gap-4 items-center w-full">
-        <div className="relative w-full flex-grow">
+        <div className="relative w-full grow">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
             <span className="material-symbols-outlined text-on-surface-variant dark:text-slate-400">
               search
@@ -45,7 +45,7 @@ export const CustomerManagement = () => {
       {/* SECTION 2: Danh sách Khách hàng (Table) */}
       <section className="bg-surface-container-low dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-transparent dark:border-slate-700 transition-colors">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[600px]">
+          <table className="w-full text-left border-collapse min-w-150">
             <thead>
               <tr className="text-on-surface-variant dark:text-slate-400 font-label text-sm uppercase tracking-wider border-b border-outline-variant/15 dark:border-slate-700">
                 <th className="pb-4 px-4 font-bold">
@@ -150,7 +150,7 @@ export const CustomerManagement = () => {
 
       {/* MODAL: Form Thêm Khách hàng mới */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+        <div className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
           <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden animate-[fadeIn_0.3s_ease-out] border border-transparent dark:border-slate-700">
             {/* Header Modal */}
             <div className="p-6 border-b border-outline-variant/20 dark:border-slate-700 flex justify-between items-center bg-surface-container-lowest dark:bg-slate-800">

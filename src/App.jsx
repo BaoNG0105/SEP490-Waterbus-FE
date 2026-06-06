@@ -13,12 +13,13 @@ import { Booking } from "./pages/Booking";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
 import { CustomerManagement } from "./pages/Admin/CustomerManagement";
+import { BoatManagement, CreateBoat, EditBoat } from "./pages/Admin/BoatManagement";
 
 function App() {
   return (
     <Router>
       <Routes>
-        {/* Client Page */}
+        {/* ============= Client Page ============= */}
         {/* Home Page */}
         <Route
           path="/"
@@ -86,7 +87,7 @@ function App() {
         <Route path="/register" element={<Register />} />
 
 
-        {/* Admin Page */}
+        {/*============= Admin Page ============= */}
         {/* Admin Dashboard Page */}
         <Route
           path="/admin"
@@ -101,8 +102,37 @@ function App() {
         <Route
           path="/admin/customers-management"
           element={
-            <AdminLayout title="Customer Management">
+            <AdminLayout title="Customers Management">
               <CustomerManagement />
+            </AdminLayout>
+          }
+        />
+
+        {/* Admin Boats Page */}
+        <Route
+          path="/admin/boats-management"
+          element={
+            <AdminLayout title="Boats Management">
+              <BoatManagement />
+            </AdminLayout>
+          }
+        />
+
+        {/* Create Boats Page */}
+        <Route
+          path="/admin/boats-management/create"
+          element={
+            <AdminLayout title="Create Boat">
+              <CreateBoat />
+            </AdminLayout>
+          }
+        />
+
+        {/* Edit Boats Page */}
+        <Route path="/admin/boats/edit/:id"
+          element={
+            <AdminLayout title="Edit Vessel">
+              <EditBoat />
             </AdminLayout>
           }
         />
