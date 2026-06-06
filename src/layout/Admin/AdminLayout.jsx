@@ -3,27 +3,40 @@ import { AdminHeader } from "./AdminHeader";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminFooter } from "./AdminFooter";
 
-// Truyền prop 'title' để các trang có thể đổi tên Header
+// Truyền prop 'title' để các trang có thể tự động thay đổi tên trên thanh Header
 export const AdminLayout = ({ children, title }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   return (
-    // Bổ sung: dark:bg-slate-900 dark:text-white
-    <div className="bg-surface dark:bg-slate-900 font-body text-on-surface dark:text-white min-h-screen flex flex-col transition-colors duration-300">
-      {/* Header và Sidebar */}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-body text-slate-800 dark:text-white flex flex-col transition-colors duration-300">
+      
+      {/* 1. HEADER - Cố định ở phía trên cùng trang web (Cao h-16) */}
       <AdminHeader onMenuClick={() => setIsDrawerOpen(true)} title={title} />
-      <AdminSidebar
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-      />
 
-      {/* Main Content */}
-      <main className="flex-grow pt-24 px-6 max-w-7xl mx-auto pb-12 w-full">
-        {children}
-      </main>
+      {/* Khối wrapper bọc toàn bộ phần thân bên dưới thanh Header */}
+      <div className="flex flex-1 pt-16 relative">
+        
+        {/* 2. SIDEBAR - Nằm ở cạnh bên trái (Cố định rộng w-64 trên máy tính) */}
+        <AdminSidebar
+          isOpen={isDrawerOpen}
+          onClose={() => setIsDrawerOpen(false)}
+        />
 
-      {/* Footer */}
-      <AdminFooter />
+        {/* KHỐI CHỨA NỘI DUNG CHÍNH & FOOTER PHÍA BÊN PHẢI */}
+        {/* Lớp lg:pl-64 giúp đẩy toàn bộ khối này sang phải 256px để nhường chỗ cho Sidebar */}
+        <div className="flex-1 flex flex-col min-w-0 lg:pl-64 transition-all duration-300">
+          
+          {/* 3. MAIN BODY - Nằm ở khu vực chính giữa để hiển thị nội dung các trang quản trị */}
+          {/* Lớp flex-1 giúp main tự động giãn rộng để đẩy khít Footer xuống dưới cùng nếu ít nội dung */}
+          <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto pb-12">
+            {children}
+          </main>
+
+          {/* 4. FOOTER - Nằm ở dưới cùng của khu vực làm việc hệ thống */}
+          <AdminFooter />
+
+        </div>
+      </div>
     </div>
   );
 };

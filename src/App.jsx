@@ -11,8 +11,8 @@ import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
 import { Booking } from "./pages/Booking";
 //Admin
-import { AdminDashboard } from "./pages/AdminDashboard";
-import { AdminCustomers } from "./pages/AdminCustomers";
+import { Dashboard } from "./pages/Admin/Dashboard";
+import { CustomerManagement } from "./pages/Admin/CustomerManagement";
 
 function App() {
   return (
@@ -92,17 +92,17 @@ function App() {
           path="/admin"
           element={
             <AdminLayout title="Dashboard">
-              <AdminDashboard />
+              <Dashboard />
             </AdminLayout>
           }
         />
 
         {/* Admin Customers Page */}
         <Route
-          path="/admin/customers"
+          path="/admin/customers-management"
           element={
-            <AdminLayout title="Customers">
-              <AdminCustomers />
+            <AdminLayout title="Customer Management">
+              <CustomerManagement />
             </AdminLayout>
           }
         />

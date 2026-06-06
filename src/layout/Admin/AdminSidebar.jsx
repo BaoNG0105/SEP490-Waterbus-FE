@@ -4,127 +4,110 @@ import { useApp } from "../../context/AppContext";
 export const AdminSidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const currentPath = location.pathname;
-
-  // Lấy trạng thái ngôn ngữ từ Context
   const { lang } = useApp();
 
-  // Cấu hình danh sách menu có hỗ trợ đa ngôn ngữ
+  // MẢNG DỮ LIỆU ĐỊNH NGHĨA 16 DANH MỤC QUẢN TRỊ NGHIỆP VỤ
   const menuItems = [
-    {
-      path: "/admin",
-      icon: "dashboard",
-      label: lang === "VN" ? "Dashboard" : "Dashboard",
-    },
-    {
-      path: "/admin/staff",
-      icon: "badge",
-      label: lang === "VN" ? "Nhân viên" : "Staff",
-    },
-    {
-      path: "/admin/orders",
-      icon: "receipt_long",
-      label: lang === "VN" ? "Đơn hàng" : "Orders",
-    },
-    {
-      path: "/admin/boats",
-      icon: "directions_boat",
-      label: lang === "VN" ? "Tàu" : "Boats",
-    },
-    {
-      path: "/admin/customers",
-      icon: "groups",
-      label: lang === "VN" ? "Khách hàng" : "Customers",
-    },
-    {
-      path: "/admin/revenue",
-      icon: "payments",
-      label: lang === "VN" ? "Doanh thu" : "Revenue",
-    },
-    {
-      path: "/admin/schedules",
-      icon: "calendar_month",
-      label: lang === "VN" ? "Lịch trình" : "Schedules",
-    },
-    {
-      path: "/admin/reports",
-      icon: "analytics",
-      label: lang === "VN" ? "Báo cáo" : "Reports",
-    },
-    {
-      path: "/admin/settings",
-      icon: "settings",
-      label: lang === "VN" ? "Cài đặt" : "Settings",
-    },
+    { path: "/admin", icon: "dashboard", labelVn: "Dashboard", labelEn: "Dashboard" },
+    { path: "/admin/revenue", icon: "payments", labelVn: "Doanh thu", labelEn: "Revenue" },
+    { path: "/admin/staff-management", icon: "badge", labelVn: "Quản lý nhân viên", labelEn: "Staff Management" },
+    { path: "/admin/customers-management", icon: "groups", labelVn: "Quản lý KH", labelEn: "Customer Management" },
+    { path: "/admin/ticketing", icon: "local_activity", labelVn: "Bán vé", labelEn: "Ticket Sales" },
+    { path: "/admin/verification", icon: "qr_code_scanner", labelVn: "Soát vé", labelEn: "Ticket Scanning" },
+    { path: "/admin/tours", icon: "map", labelVn: "Quản lý tour booking", labelEn: "Tour Bookings" },
+    { path: "/admin/orders", icon: "receipt_long", labelVn: "Quản lý order", labelEn: "Order Management" },
+    { path: "/admin/stations", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station" },
+    { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Quản lý tàu", labelEn: "Vessel Fleet" },
+    { path: "/admin/schedules", icon: "calendar_month", labelVn: "Quản lý lịch trình", labelEn: "Trip Schedules" },
+    { path: "/admin/routes", icon: "alt_route", labelVn: "Quản lý tuyển", labelEn: "Route Networks" },
+    { path: "/admin/promotions", icon: "local_offer", labelVn: "Quản lý khuyến mãi", labelEn: "Promotions & Deals" },
+    { path: "/admin/news", icon: "feed", labelVn: "Quản lý Blog/News", labelEn: "Blog & Articles" },
+    { path: "/admin/cskh", icon: "support_agent", labelVn: "CSKH", labelEn: "Customer Support" },
+    { path: "/admin/ai-data", icon: "database_sync", labelVn: "Quản lý AI data", labelEn: "AI Data Context" },
   ];
 
   return (
     <>
-      {/* Overlay mờ */}
-      <div
-        className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 transition-opacity duration-300 ${isOpen ? "opacity-100 visible" : "opacity-0 invisible"}`}
-        onClick={onClose}
-      ></div>
+      {/* Lớp nền mờ khi mở sidebar trên thiết bị di động */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden transition-all"
+        ></div>
+      )}
 
-      {/* Drawer trượt */}
+      {/* KHỐI SIDEBAR CHÍNH - LIGHT MODE NỀN XANH #124757 */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-white dark:bg-slate-900 w-72 transform transition-transform duration-300 ease-in-out shadow-2xl overflow-y-auto ${isOpen ? "translate-x-0" : "-translate-x-full"} border-r border-transparent dark:border-slate-800`}
+        className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col w-64 bg-[#124757] dark:bg-slate-900 border-r border-white/10 dark:border-slate-800 pt-16 transform lg:transform-none lg:opacity-100 transition-all duration-300 ${
+          isOpen ? "translate-x-0 opacity-100" : "translate-x-0 max-lg:-translate-x-full max-lg:opacity-0"
+        }`}
       >
-        <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary-container dark:bg-yellow-400/20 flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-primary dark:text-yellow-400">
-                admin_panel_settings
+        
+        {/* --- KHỐI THÔNG TIN USER TÀI KHOẢN --- */}
+        <div className="p-5 border-b border-white/10 dark:border-slate-800 flex flex-col items-center text-center space-y-3 shrink-0 bg-white/5 select-none">
+          {/* Vòng tròn Avatar chứa Icon Người dùng */}
+          <div className="relative group">
+            <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-dashed border-[#FFD100] flex items-center justify-center text-white shadow-md transition-transform duration-500 group-hover:rotate-45">
+              <span className="material-symbols-outlined text-[32px] fill-1 text-white">account_circle</span>
+            </div>
+            {/* Chấm xanh lá nhấp nháy báo hiệu trạng thái Live */}
+            <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-[#124757] dark:border-slate-900"></span>
+            </span>
+          </div>
+
+          {/* Tên và role */}
+          <div className="space-y-0.5">
+            <h4 className="font-headline font-black text-sm uppercase tracking-wider text-white">
+              Ngô Gia Bảo
+            </h4>
+            <div className="bg-[#FFD100]/10 border border-[#FFD100]/20 rounded-full px-2.5 py-0.5 w-max mx-auto">
+              <span className="text-[10px] font-headline font-black text-[#FFD100] uppercase tracking-widest">
+                {lang === "VN" ? "Quản trị viên" : "Admin"}
               </span>
             </div>
-            <div>
-              <h2 className="text-base font-headline font-bold text-slate-900 dark:text-white leading-tight">
-                {lang === "VN" ? "Quản trị viên" : "Administrator"}
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-label">
-                Manager Role
-              </p>
-            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500 dark:text-slate-400"
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
         </div>
 
-        <nav className="flex-1 flex flex-col gap-1 p-4">
+        {/* Khối Danh mục menu */}
+        <nav className="flex-1 flex flex-col gap-1 p-4 overflow-y-auto no-scrollbar custom-scrollbar">
           {menuItems.map((item) => {
             const isActive = currentPath === item.path;
+            const label = lang === "VN" ? item.labelVn : item.labelEn;
+            
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                onClick={onClose} // Bấm xong tự đóng menu trên mobile
-                className={`flex items-center gap-3 p-3 rounded-xl transition-all font-headline font-bold ${
+                onClick={onClose}
+                className={`flex items-center gap-3.5 px-4 py-3 rounded-xl transition-all font-headline text-sm font-bold ${
                   isActive
-                    ? "bg-primary-container/20 dark:bg-yellow-400/10 text-primary dark:text-yellow-400"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-primary dark:hover:text-yellow-400"
+                    ? "bg-white/10 text-yellow-400 dark:bg-yellow-400/10 dark:text-yellow-400 shadow-sm"
+                    : "text-white/80 hover:bg-white/5 hover:text-white dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-yellow-400"
                 }`}
               >
                 <span
-                  className={`material-symbols-outlined ${isActive ? "" : "text-slate-400 dark:text-slate-500"}`}
+                  className={`material-symbols-outlined text-[20px] transition-colors ${
+                    isActive ? "text-yellow-400" : "text-white/40 dark:text-slate-500"
+                  }`}
                 >
                   {item.icon}
                 </span>
-                {item.label}
+                <span className="truncate">{label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 mt-auto border-t border-slate-100 dark:border-slate-800">
+        {/* Chân Sidebar: Nút Đăng xuất tài khoản */}
+        <div className="p-4 border-t border-white/10 dark:border-slate-800 shrink-0 bg-white/5 lg:bg-transparent">
           <Link
             to="/login"
-            className="flex items-center gap-3 p-3 w-full text-error dark:text-red-400 hover:bg-error-container/50 dark:hover:bg-red-500/20 rounded-xl transition-all font-headline font-bold"
+            className="flex items-center gap-3 px-4 py-3 w-full text-red-300 hover:text-red-400 hover:bg-white/5 rounded-xl transition-all font-headline text-sm font-bold"
           >
-            <span className="material-symbols-outlined">logout</span>
-            {lang === "VN" ? "Đăng xuất" : "Logout"}
+            <span className="material-symbols-outlined text-[20px]">logout</span>
+            {lang === "VN" ? "Đăng xuất" : "Sign Out"}
           </Link>
         </div>
       </aside>

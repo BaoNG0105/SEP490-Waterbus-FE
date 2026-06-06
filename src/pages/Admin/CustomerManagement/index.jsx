@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useApp } from "../../context/AppContext";
+import { useApp } from "../../../context/AppContext";
 
 // MOCK DATA: Dữ liệu khách hàng ảo chờ API
 const mockCustomers = [
@@ -10,7 +10,7 @@ const mockCustomers = [
   { id: "CU0005", name: "Hoang Van E", phone: "0845123987" },
 ];
 
-export const AdminCustomers = () => {
+export const CustomerManagement = () => {
   const { lang } = useApp();
 
   // State quản lý việc đóng/mở Modal Tạo mới User
