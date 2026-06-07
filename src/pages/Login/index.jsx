@@ -91,40 +91,38 @@ export const Login = () => {
   const handleGoogleSuccess = async (credentialResponse) => {
     setIsLoading(true);
     setErrorMsg("");
-
-    //idToken của gg để test  
-    console.log("=== ID TOKEN GOOGLE ===");
-    console.log(credentialResponse.credential);
-    console.log("=======================");
-
     try {
       // Gọi API gửi idToken của Google lên Backend
       const response = await loginWithGoogle(credentialResponse.credential);
-      const jwtToken = response.accessToken;
+
+      // Truy cập sâu vào object 'tokens' để lấy accessToken
+      const jwtToken = response?.tokens?.accessToken;
+
       if (jwtToken) {
         dispatch(loginSuccess({ token: jwtToken }));
         navigate("/", { replace: true });
       } else {
         setErrorMsg(
-          lang === "VN" 
-            ? "Hệ thống không trả về mã truy cập." 
+          lang === "VN"
+            ? "Hệ thống không trả về mã truy cập."
             : "Access token not received from server."
         );
       }
+
     } catch (error) {
       console.error("Google Login Error:", error);
       const errorData = error.response?.data;
       setErrorMsg(
-        errorData?.message || 
-        (lang === "VN" 
-          ? "Đăng nhập Google thất bại. Vui lòng thử lại sau." 
+        errorData?.message ||
+        (lang === "VN"
+          ? "Đăng nhập Google thất bại. Vui lòng thử lại sau."
           : "Google login failed. Please try again later.")
       );
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   // 6. HÀM XỬ LÝ LỖI KẾT NỐI GOOGLE
   const handleGoogleError = () => {
     setErrorMsg(lang === "VN" ? "Kết nối Google thất bại." : "Google connection failed.");
