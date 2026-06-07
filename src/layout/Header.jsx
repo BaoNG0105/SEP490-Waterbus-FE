@@ -6,7 +6,7 @@ import { logout } from "../redux/authSlice";
 import Swal from "sweetalert2";
 
 // Import file ảnh logo từ thư mục assets
-import logo from "../assets/logo.png";
+import logo from "../assets/logo-1.png";
 
 export const Header = ({ isNoticeVisible }) => {
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
@@ -116,7 +116,7 @@ export const Header = ({ isNoticeVisible }) => {
           </Link>
 
           {/* Lịch khởi hành */}
-          <Link className={linkBaseClasses} to="/">
+          <Link className={linkBaseClasses} to="/schedule">
             {lang === "VN" ? "Lịch khởi hành" : "Schedule"}
           </Link>
 
@@ -134,21 +134,27 @@ export const Header = ({ isNoticeVisible }) => {
             <div className="absolute top-full left-0 mt-3 w-56 bg-[#FFFFFF] dark:bg-slate-800 shadow-xl rounded-2xl py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 border border-slate-100 dark:border-slate-700 z-50">
               <Link
                 className="block px-5 py-2.5 text-xs font-medium text-[#111C2D] dark:text-white/80 hover:text-[#124757] dark:hover:text-yellow-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                to="/"
+                to="/waterbus-booking"
               >
-                {lang === "VN" ? "Đặt vé online & hướng dẫn" : "Book Online & Guide"}
+                {lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
               </Link>
               <Link
                 className="block px-5 py-2.5 text-xs font-medium text-[#111C2D] dark:text-white/80 hover:text-[#124757] dark:hover:text-yellow-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                to="/"
+                to="/watersightseeing-booking"
               >
-                {lang === "VN" ? "Kiểm tra vé" : "Check Ticket"}
+                {lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
               </Link>
               <Link
                 className="block px-5 py-2.5 text-xs font-medium text-[#111C2D] dark:text-white/80 hover:text-[#124757] dark:hover:text-yellow-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-t border-slate-50 dark:border-slate-700/50 mt-1"
-                to="/charter"
+                to="/watertaxi-booking"
               >
-                {lang === "VN" ? "Đặt vé theo yêu cầu" : "Custom Booking"}
+                {lang === "VN" ? "Đặt vé WaterTaxi" : "WaterTaxi Booking"}
+              </Link>
+              <Link
+                className="block px-5 py-2.5 text-xs font-medium text-[#111C2D] dark:text-white/80 hover:text-[#124757] dark:hover:text-yellow-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                to="/check-ticket"
+              >
+                {lang === "VN" ? "Kiểm tra vé" : "Check Ticket"}
               </Link>
             </div>
           </div>

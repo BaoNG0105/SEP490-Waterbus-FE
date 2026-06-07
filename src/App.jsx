@@ -2,7 +2,6 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AdminLayout } from "./layout/Admin/AdminLayout";
 import { MainLayout } from "./layout/MainLayout";
 //Client
-import { VerifyGooglePhone } from "./pages/VerifyGooglePhone";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
@@ -21,14 +20,6 @@ function App() {
     <Router>
       <Routes>
         {/* ============= Client Page ============= */}
-        {/* Verify Google Phone */}
-        <Route
-          path="/verify-google-phone"
-          element={
-            <VerifyGooglePhone />
-          }
-        />
-        
         {/* Home Page */}
         <Route
           path="/"
@@ -79,9 +70,9 @@ function App() {
           }
         />
 
-        {/* Booking Page */}
+        {/* Waterbus Booking Page */}
         <Route
-          path="/booking"
+          path="/waterbus-booking"
           element={
             <MainLayout>
               <Booking />

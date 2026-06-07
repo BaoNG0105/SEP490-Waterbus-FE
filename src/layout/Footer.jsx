@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 
 // Import file ảnh logo từ thư mục assets
-import logo from "../assets/logo.png";
+import logo from "../assets/logo-1.png";
 
 export const Footer = () => {
   const { lang } = useApp();

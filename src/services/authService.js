@@ -1,8 +1,6 @@
 import {
     loginWithPhoneEmail as apiLoginWithPhoneEmail,
     loginWithGoogle as apiLoginWithGoogle,
-    sendGooglePhoneOtp as apiSendGooglePhoneOtp,
-    verifyGooglePhoneOtp as apiVerifyGooglePhoneOtp,
     registerCustomer as apiRegisterCustomer,
     verifyRegisterOtp as apiVerifyRegisterOtp,
     resendRegisterOtp as apiResendRegisterOtp,
@@ -23,24 +21,6 @@ export const loginWithGoogle = async (token) => {
     } catch (error) {
         console.error('Error during Google login:', error);
         throw error;
-    }
-};
-
-export const sendGooglePhoneOtp = async (data) => {
-    try {
-        return await apiSendGooglePhoneOtp(data);
-    } catch (error) {
-        console.error('Error during send OTP:', error);
-        throw error;
-    }
-};
-
-export const verifyGooglePhoneOtp = async (data) => {
-    try { 
-        return await apiVerifyGooglePhoneOtp(data); 
-    }catch (error) { 
-        console.error('Error during send OTP:', error);
-        throw error; 
     }
 };
 
