@@ -91,21 +91,34 @@ export const Login = () => {
   const handleGoogleSuccess = async (credentialResponse) => {
     setIsLoading(true);
     setErrorMsg("");
+
+    console.log("=== ID TOKEN GOOGLE ===");
+    console.log(credentialResponse.credential);
+    console.log("=======================");
+
     try {
       // Gọi API gửi idToken của Google lên Backend
       const response = await loginWithGoogle(credentialResponse.credential);
-
-      // Truy cập sâu vào object 'tokens' để lấy accessToken
+      
+      // bóc tách dữ liệu theo đúng chuẩn object trả về từ Swagger của bạn
       const jwtToken = response?.tokens?.accessToken;
+      const userData = response?.user;
 
-      if (jwtToken) {
-        dispatch(loginSuccess({ token: jwtToken }));
-        navigate("/", { replace: true });
+      // Kiểm tra nghiêm ngặt xem Backend đã trả về đủ cả Token lẫn thông tin User chưa
+      if (jwtToken && userData) {
+        // ĐỒNG BỘ HÓA: Truyền chính xác cặp { token, user } giống y chang hàm 4
+        dispatch(loginSuccess({ 
+          token: jwtToken, 
+          user: userData 
+        }));
+        
+        // Đăng nhập thành công chuyển thẳng về trang chủ công cộng
+        navigate("/", { replace: true }); 
       } else {
         setErrorMsg(
-          lang === "VN"
-            ? "Hệ thống không trả về mã truy cập."
-            : "Access token not received from server."
+          lang === "VN" 
+            ? "Hệ thống không trả về đầy đủ mã truy cập hoặc thông tin người dùng." 
+            : "Incomplete token or user payload received from server."
         );
       }
 
@@ -113,9 +126,9 @@ export const Login = () => {
       console.error("Google Login Error:", error);
       const errorData = error.response?.data;
       setErrorMsg(
-        errorData?.message ||
-        (lang === "VN"
-          ? "Đăng nhập Google thất bại. Vui lòng thử lại sau."
+        errorData?.message || 
+        (lang === "VN" 
+          ? "Đăng nhập Google thất bại. Vui lòng thử lại sau." 
           : "Google login failed. Please try again later.")
       );
     } finally {
