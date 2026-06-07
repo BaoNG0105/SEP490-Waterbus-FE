@@ -1,6 +1,6 @@
 import api from './axios';
 
-export const loginWithPhone = (credentials) =>
+export const loginWithPhoneEmail = (credentials) =>
     api.post('/auth/login', credentials).then(r => r.data);
 
 export const loginWithGoogle = (token) =>

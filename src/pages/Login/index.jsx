@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react";
+import { useApp } from "../../context/AppContext";
 import { Link, useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
-import { loginWithGoogle, loginWithPhone } from "../../services/authService";
+import { loginWithGoogle, loginWithPhoneEmail } from "../../services/authService";
 import { useDispatch, useSelector } from "react-redux";
 import { loginSuccess } from "../../redux/authSlice";
-import PhoneInput from 'react-phone-number-input';
-import 'react-phone-number-input/style.css';
 
 export const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const { lang } = useApp();
 
-  // QUẢN LÝ FIELD ĐĂNG NHẬP
-  const [phone, setPhone] = useState("");
+  // 1. QUẢN LÝ FIELD ĐĂNG NHẬP
+  const [emailOrPhone, setEmailOrPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // QUẢN LÝ THÔNG BÁO LỖI CHUNG VÀ TỪNG FIELD
+  // 2. QUẢN LÝ THÔNG BÁO LỖI CHUNG VÀ TỪNG FIELD
   const [errorMsg, setErrorMsg] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
 
@@ -23,273 +23,263 @@ export const Login = () => {
   const dispatch = useDispatch();
   const { isAuthenticated } = useSelector((state) => state.auth);
 
-  // KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ ĐÁ VỀ TRANG CHỦ
+  // 3. KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ VỀ TRANG CHỦ
   useEffect(() => {
     if (isAuthenticated) {
       navigate("/", { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
-  // HÀM KIỂM TRA LỖI TỪNG FIELD ĐỘC LẬP
-  const getFieldError = (name, value) => {
-    switch (name) {
-      case "phone":
-        if (!value) return "Vui lòng nhập số điện thoại.";
-        if (!/^\+[1-9]\d{7,14}$/.test(value)) return "Số điện thoại không hợp lệ.";
-        return "";
-      case "password":
-        if (!value) return "Vui lòng nhập mật khẩu.";
-        return "";
-      default:
-        return "";
-    }
-  };
-
-  // XỬ LÝ ON-BLUR (KHI NGƯỜI DÙNG RỜI KHỎI Ô NHẬP)
-  const handleBlur = (e) => {
-    // Với PhoneInput, event có thể truyền thẳng object mô phỏng
-    const { name, value } = e.target;
-    const error = getFieldError(name, value);
-    setFieldErrors(prev => ({ ...prev, [name]: error }));
-  };
-
-  // XỬ LÝ KHI SUBMIT FORM
-  const validateForm = () => {
-    const newErrors = {
-      phone: getFieldError("phone", phone),
-      password: getFieldError("password", password),
-    };
-    setFieldErrors(newErrors);
-    
-    return Object.values(newErrors).some(err => err !== "");
-  };
-
-  // XỬ LÝ ĐĂNG NHẬP THƯỜNG
+  // 4. HÀM XỬ LÝ ĐĂNG NHẬP BẰNG TÀI KHOẢN/MẬT KHẨU
   const handleLogin = async (e) => {
     e.preventDefault();
-    
-    // Validate trước khi gọi API
-    if (validateForm()) {
-      return; 
+    setIsLoading(true);
+    setErrorMsg("");
+    setFieldErrors({});
+
+    const errors = {};
+    if (!emailOrPhone.trim()) {
+      errors.emailOrPhone = lang === "VN" ? "Vui lòng nhập Email hoặc Số điện thoại" : "Email or Phone is required";
+    }
+    if (!password) {
+      errors.password = lang === "VN" ? "Vui lòng nhập mật khẩu" : "Password is required";
     }
 
-    setErrorMsg("");
-    setIsLoading(true);
-    try {
-      const data = await loginWithPhone({ phone, password });
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setIsLoading(false);
+      return;
+    }
 
-      if (data?.tokens?.accessToken) {
-        dispatch(
-          loginSuccess({
-            accessToken: data.tokens.accessToken,
-            user: {
-              fullName: data.user?.fullName || "Thành viên",
-              avatarUrl: data.user?.avatarUrl || "",
-              roleName: data.user?.roles?.[0]?.displayName || "Customer",
-            },
-          })
-        );
-        navigate("/");
+    try {
+      const payload = {
+        emailOrPhone: emailOrPhone.trim(),
+        password: password,
+      };
+      const response = await loginWithPhoneEmail(payload);
+      if (response.tokens && response.tokens.accessToken) {
+        // 1. Lấy roleName từ mảng roles do API trả về (lấy phần tử đầu tiên)
+        const roleName = response.user?.roles?.[0]?.displayName || '';
+        // 2. Gom dữ liệu user lại cho khớp với cấu trúc authSlice đang chờ
+        const userInfo = {
+          fullName: response.user?.fullName || '',
+          avatarUrl: response.user?.avatarUrl || '',
+          roleName: roleName,
+        };
+        // 3. Dispatch với đúng key "accessToken" và "user"
+        dispatch(loginSuccess({
+          accessToken: response.tokens.accessToken,
+          user: userInfo
+        }));
+        navigate("/", { replace: true });
       } else {
-        setErrorMsg("Đăng nhập không thành công, vui lòng thử lại.");
+        setErrorMsg(lang === "VN" ? "Dữ liệu trả về không hợp lệ." : "Invalid response data.");
       }
     } catch (error) {
-      console.log(error);
-      setErrorMsg("Số điện thoại hoặc mật khẩu không chính xác.");
+      console.error("Login Error:", error);
+      const errorData = error.response?.data;
+      setErrorMsg(
+        errorData?.message ||
+        (lang === "VN" ? "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin." : "Login failed. Please check your credentials.")
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  // XỬ LÝ GOOGLE LOGIN
+  // 5. HÀM XỬ LÝ GOOGLE LOGIN
   const handleGoogleSuccess = async (credentialResponse) => {
+    setIsLoading(true);
     setErrorMsg("");
     try {
-      const idToken = credentialResponse.credential;
-      console.log(idToken);
-
-      const data = await loginWithGoogle(idToken);
-
-      if (data?.tokens?.accessToken) {
-        dispatch(
-          loginSuccess({
-            accessToken: data.tokens.accessToken,
-            user: {
-              fullName: data.user?.fullName || "Thành viên",
-              avatarUrl: data.user?.avatarUrl || "",
-              roleName: data.user?.roles?.[0]?.displayName || "Customer",
-            },
-          })
-        );
-        navigate("/");
-      } else {
-        setErrorMsg("Không thể xác thực tài khoản Google.");
+      const response = await loginWithGoogle(credentialResponse.credential);
+      if (response.token) {
+        dispatch(loginSuccess({ token: response.token }));
+        navigate("/", { replace: true });
       }
     } catch (error) {
-      console.log(error);
-      setErrorMsg("Đăng nhập Google thất bại. Vui lòng thử lại.");
+      console.error("Google Login Error:", error);
+      setErrorMsg(
+        lang === "VN"
+          ? "Đăng nhập Google thất bại. Vui lòng thử lại sau."
+          : "Google login failed. Please try again later."
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleGoogleError = () => {
-    setErrorMsg("Đã hủy đăng nhập Google.");
+    setErrorMsg(lang === "VN" ? "Kết nối Google thất bại." : "Google connection failed.");
   };
 
-  // CLASSES CHUNG: CÓ HIỆU ỨNG ĐỎ KHI CÓ LỖI
-  const getInputClasses = (fieldName) => `w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-white/30 text-slate-900 dark:text-white ${
-    fieldErrors[fieldName] 
-    ? 'border-red-500 focus:ring-2 focus:ring-red-500/40' 
-    : 'border-slate-200 dark:border-transparent focus:ring-2 focus:ring-primary/40 dark:focus:ring-yellow-400/20 focus:border-primary dark:focus:border-transparent'
-  }`;
-
-  const phoneInputClasses = `w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border rounded-xl transition-all [&>input]:bg-transparent [&>input]:outline-none [&>input]:w-full text-slate-900 dark:text-white ${
-    fieldErrors.phone 
-    ? 'border-red-500 focus-within:ring-2 focus-within:ring-red-500/40' 
-    : 'border-slate-200 dark:border-transparent focus-within:ring-2 focus-within:ring-primary/40 dark:focus-within:ring-yellow-400/20 focus-within:border-primary dark:focus-within:border-transparent'
-  }`;
-
   return (
-    <div className="bg-white dark:bg-slate-900 font-body text-slate-900 dark:text-white selection:bg-primary-container selection:text-on-primary-container overflow-hidden min-h-screen relative">
+    <div className="min-h-screen w-full flex font-body bg-white dark:bg-slate-900 transition-colors duration-300 overflow-x-hidden">
 
-      <header className="fixed top-0 left-0 w-full p-6 lg:p-12 pointer-events-none flex justify-between items-center z-50">
-        <div className="pointer-events-auto bg-white/80 dark:bg-slate-900/50 backdrop-blur-md px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm">
-          <Link to="/" className="font-label text-xs uppercase tracking-widest text-slate-600 dark:text-white/70 hover:text-primary dark:hover:text-white flex items-center gap-2 group">
-            <span className="material-symbols-outlined text-lg group-hover:-translate-x-1 transition-transform">arrow_back</span>
-            Back to Site
-          </Link>
+      {/* ========================================================================= */}
+      {/* CỘT TRÁI: BANNER HÌNH ẢNH CHIẾM TRỌN 50% MÀN HÌNH (STICKY FIXED THEO HEIGHT) */}
+      {/* ========================================================================= */}
+      <div className="w-1/2 h-screen top-0 hidden md:block relative overflow-hidden shrink-0 select-none">
+        <img
+          src="https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png"
+          alt="Waterbus Fullscreen Banner"
+          className="w-full h-full object-cover transform scale-100 hover:scale-[1.01] transition-transform duration-700 ease-out"
+        />
+        {/* Lớp phủ chuyển màu Gradient xanh đặc trưng giúp hiển thị chữ rõ nét */}
+        <div className="absolute inset-0 bg-linear-to-t from-[#124757] via-[#124757]/40 to-transparent opacity-90"></div>
+
+        {/* Khung nội dung text nổi dưới chân ảnh */}
+        <div className="absolute bottom-12 left-12 right-12 text-white space-y-2 z-10">
+          <h2 className="font-headline font-black text-4xl uppercase tracking-wider text-[#FFD100] drop-shadow-md">
+            WaterBus.
+          </h2>
+          <p className="text-base font-medium text-white/80 max-w-sm leading-relaxed">
+            {lang === "VN"
+              ? "Khám phá vẻ đẹp sông Sài Gòn theo cách của bạn."
+              : "Discover the beauty of Saigon River your way."}
+          </p>
         </div>
-      </header>
+      </div>
 
-      <main className="min-h-screen flex flex-col md:flex-row overflow-hidden">
-        {/* Left Side: Image */}
-        <section className="hidden md:flex md:w-1/2 lg:w-3/5 relative overflow-hidden bg-slate-900 items-center justify-center">
-          <div className="absolute inset-0 z-0 opacity-50 dark:opacity-40">
-            <img alt="River Transit" className="w-full h-full object-cover mix-blend-overlay" src="https://res.cloudinary.com/dygipvoal/image/upload/v1776092653/ywbwjyftzirzdqf2igte.jpg" />
-            <div className="absolute inset-0 bg-gradient-to-tr from-black/60 via-transparent to-transparent"></div>
+      {/* ========================================================================= */}
+      {/* CỘT PHẢI: KHÔNG GIAN FORM ĐĂNG NHẬP FULL CHIỀU CAO MÀN HÌNH */}
+      {/* ========================================================================= */}
+      <div className="flex-1 min-h-screen flex flex-col justify-center bg-white dark:bg-slate-800 px-6 py-12 sm:px-12 md:px-16 lg:px-24 relative">
+
+        {/* NÚT QUAY LẠI TRANG CHỦ GÓC TRÊN */}
+        <Link
+          to="/"
+          className="absolute top-8 right-8 text-slate-400 hover:text-[#124757] dark:hover:text-[#FFD100] transition-colors flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider z-20"
+        >
+          <span className="material-symbols-outlined text-[18px]">close</span>
+          {lang === "VN" ? "Đóng" : "Close"}
+        </Link>
+
+        {/* Khung Container Form khống chế kích thước tối đa để chống vỡ bố cục trên Desktop lớn */}
+        <div className="w-full max-w-md mx-auto space-y-8 animate-fade-in">
+
+          {/* Tiêu đề đầu Form */}
+          <div className="space-y-2 text-center md:text-left">
+            <h1 className="text-3xl md:text-4xl font-headline font-black text-[#124757] dark:text-white tracking-tight">
+              {lang === "VN" ? "Đăng Nhập" : "Welcome Back"}
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
+              {lang === "VN" ? "Vui lòng nhập thông tin để tiếp tục" : "Please enter your details to continue"}
+            </p>
           </div>
-          <div className="relative z-10 p-12 flex flex-col justify-center h-full w-full gap-16">
-            <div className="max-w-lg">
-              <h1 className="font-headline text-5xl lg:text-7xl font-bold text-white leading-none tracking-tight mb-6">Navigate <br /> the flow.</h1>
-              <p className="text-white/90 text-lg lg:text-xl font-light leading-relaxed">Seamless river transit across Saigon. Your journey through the heart of the city begins with a single click.</p>
+
+          {/* Hộp cảnh báo lỗi nếu gọi API fail */}
+          {errorMsg && (
+            <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-2xl text-sm font-bold flex items-center gap-2 border border-red-100 dark:border-red-500/20 shadow-inner">
+              <span className="material-symbols-outlined text-[20px]">error</span>
+              {errorMsg}
             </div>
-          </div>
-        </section>
+          )}
 
-        {/* Right Side: Form Area */}
-        <section className="w-full md:w-1/2 lg:w-2/5 bg-white dark:bg-slate-900 flex flex-col justify-start px-6 lg:px-20 relative transition-colors h-screen overflow-y-auto">
-          {/* Chỉnh lại pt-32 thành pt-20 để kéo form lên trên cân đối hơn */}
-          <div className="w-full max-w-md mx-auto pt-20 lg:pt-24 pb-12">
+          {/* Biểu mẫu Form submit nhập liệu */}
+          <form onSubmit={handleLogin} className="space-y-5">
 
-            {errorMsg && (
-              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium">
-                <span className="material-symbols-outlined inline-block align-text-bottom mr-1 text-[18px]">error</span>
-                {errorMsg}
-              </div>
-            )}
-
-            <div className="animate-fade-in-up">
-              <header className="mb-10">
-                <h2 className="font-headline text-3xl font-bold text-slate-900 dark:text-white mb-2 tracking-tight">Welcome back</h2>
-                <p className="text-slate-500 dark:text-white/70 font-body">Enter your credentials to access your routes.</p>
-              </header>
-
-              <form className="space-y-6" onSubmit={handleLogin}>
-                {/* THAY BẰNG THƯ VIỆN PhoneInput */}
-                <div className="space-y-1.5">
-                  <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Phone Number</label>
-                  <PhoneInput
-                    international
-                    defaultCountry="VN"
-                    value={phone}
-                    onChange={(value) => {
-                      setPhone(value);
-                      setErrorMsg("");
-                      if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: "" }));
-                    }}
-                    onBlur={() => handleBlur({ target: { name: "phone", value: phone } })}
-                    className={phoneInputClasses}
-                  />
-                  {fieldErrors.phone && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.phone}</p>}
-                </div>
-
-                {/* Password */}
-                <div className="space-y-1.5 relative">
-                  <div className="flex justify-between items-center px-1 mb-1">
-                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90">Password</label>
-                    <a className="text-xs font-label font-bold text-primary dark:text-yellow-400 hover:underline transition-colors" href="#">Forgot password?</a>
-                  </div>
-                  <div className="relative">
-                    <input
-                      name="password"
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        setErrorMsg("");
-                        if (fieldErrors.password) setFieldErrors(prev => ({ ...prev, password: "" }));
-                      }}
-                      onBlur={handleBlur}
-                      placeholder="••••••••"
-                      autoComplete="current-password"
-                      className={getInputClasses("password")}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-primary dark:hover:text-yellow-400 transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">
-                        {showPassword ? "visibility_off" : "visibility"}
-                      </span>
-                    </button>
-                  </div>
-                  {fieldErrors.password && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.password}</p>}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full liquid-gradient disabled:opacity-70 text-on-primary-fixed font-headline font-bold py-4 mt-2 rounded-full shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all duration-300 flex justify-center items-center gap-2"
-                >
-                  {isLoading ? "Signing in..." : "Sign In"}
-                </button>
-              </form>
-
-              <div className="relative my-10">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-white dark:bg-slate-900 px-4 text-slate-400 dark:text-white/60 font-label uppercase tracking-widest">
-                    Or continue with
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex justify-center w-full overflow-hidden">
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={handleGoogleError}
-                  shape="rectangular"
-                  size="large"
-                  theme="outline"
-                  text="signin_with"
-                  width="100%"
+            {/* Trường nhập Email / Số điện thoại */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                {lang === "VN" ? "Email / Số điện thoại" : "Email / Phone"}
+              </label>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  account_circle
+                </span>
+                <input
+                  type="text"
+                  value={emailOrPhone}
+                  onChange={(e) => setEmailOrPhone(e.target.value)}
+                  placeholder={lang === "VN" ? "Nhập email hoặc số điện thoại..." : "Enter your email or phone..."}
+                  className={`w-full bg-slate-50 dark:bg-slate-900 border ${fieldErrors.emailOrPhone ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'} rounded-xl pl-11 pr-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] focus:border-transparent transition-all`}
                 />
               </div>
-
-              <div className="mt-12 text-center z-10 relative">
-                <p className="text-sm text-slate-600 dark:text-white/70 font-body">
-                  Don't have an account?{" "}
-                  <Link to="/register" className="font-bold text-primary dark:text-yellow-400 hover:underline ml-1">
-                    Register for free
-                  </Link>
-                </p>
-              </div>
+              {fieldErrors.emailOrPhone && <p className="text-xs text-red-500 font-bold">{fieldErrors.emailOrPhone}</p>}
             </div>
+
+            {/* Trường nhập Mật khẩu */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  {lang === "VN" ? "Mật khẩu" : "Password"}
+                </label>
+                <Link to="/forgot-password" className="text-xs font-bold text-[#124757] dark:text-[#FFD100] hover:underline">
+                  {lang === "VN" ? "Quên mật khẩu?" : "Forgot password?"}
+                </Link>
+              </div>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  lock
+                </span>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className={`w-full bg-slate-50 dark:bg-slate-900 border ${fieldErrors.password ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'} rounded-xl pl-11 pr-12 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] focus:border-transparent transition-all`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    {showPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
+              </div>
+              {fieldErrors.password && <p className="text-xs text-red-500 font-bold">{fieldErrors.password}</p>}
+            </div>
+
+            {/* Phím bấm kích hoạt Submit */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-[#124757] dark:bg-[#FFD100] text-white dark:text-slate-900 font-headline font-black uppercase tracking-wider py-4 rounded-xl text-sm shadow-md hover:opacity-90 disabled:opacity-70 transition-all flex justify-center items-center gap-2 mt-2"
+            >
+              {isLoading ? (
+                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                lang === "VN" ? "Đăng Nhập" : "Sign In"
+              )}
+            </button>
+          </form>
+
+          {/* Vạch kẻ phân cách cổng bên thứ 3 */}
+          <div className="relative flex items-center py-2">
+            <div className="grow border-t border-slate-200 dark:border-slate-700"></div>
+            <span className="shrink-0 mx-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
+              {lang === "VN" ? "Hoặc" : "Or"}
+            </span>
+            <div className="grow border-t border-slate-200 dark:border-slate-700"></div>
           </div>
-        </section>
-      </main>
+
+          {/* Cổng đăng nhập mở rộng Google OAuth */}
+          <div className="flex justify-center w-full overflow-hidden">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={handleGoogleError}
+              shape="rectangular"
+              size="large"
+              theme="outline"
+              text="signin_with"
+              width="100%"
+            />
+          </div>
+
+          {/* Chuyển hướng sang trang đăng ký tài khoản tự do */}
+          <p className="text-center text-sm font-medium text-slate-500 dark:text-slate-400">
+            {lang === "VN" ? "Chưa có tài khoản?" : "Don't have an account?"}{" "}
+            <Link to="/register" className="font-bold text-[#124757] dark:text-[#FFD100] hover:underline">
+              {lang === "VN" ? "Đăng ký ngay" : "Sign up now"}
+            </Link>
+          </p>
+
+        </div>
+      </div>
+
     </div>
   );
 };

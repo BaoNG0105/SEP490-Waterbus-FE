@@ -1,14 +1,14 @@
 import {
-    loginWithPhone as apiLoginWithPhone,
+    loginWithPhoneEmail as apiLoginWithPhoneEmail,
     loginWithGoogle as apiLoginWithGoogle,
     registerCustomer as apiRegisterCustomer,
     verifyRegisterOtp as apiVerifyRegisterOtp,
     resendRegisterOtp as apiResendRegisterOtp,
 } from '../api/authApi';
 
-export const loginWithPhone = async (credentials) => {
+export const loginWithPhoneEmail = async (credentials) => {
     try {
-        return await apiLoginWithPhone(credentials);
+        return await apiLoginWithPhoneEmail(credentials);
     } catch (error) {
         console.error('Error during login:', error);
         throw error;

@@ -106,7 +106,7 @@ export const Dashboard = () => {
       color: "from-teal-500/10 to-emerald-500/10 text-teal-600 dark:text-teal-400"
     },
     {
-      path: "/admin/boats-management",
+      path: "/admin/vessels-management",
       icon: "directions_boat",
       titleVn: "Quản lý đội tàu",
       titleEn: "Vessel Fleet Matrix",

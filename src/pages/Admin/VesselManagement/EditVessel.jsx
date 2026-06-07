@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 
-export function EditBoat() {
+export function EditVessel() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { id } = useParams(); // Lấy ID tàu từ URL (Ví dụ: /admin/boats/edit/SWB-001)
@@ -74,7 +74,7 @@ export function EditBoat() {
     setTimeout(() => {
       setIsSubmitting(false);
       alert(lang === "VN" ? "✓ Cập nhật thông tin cấu hình tàu thành công!" : "✓ Vessel configurations successfully saved!");
-      navigate("/admin/boats"); // Đồng bộ điều hướng quay về trang danh sách
+      navigate("/admin/vessels-management"); // Đồng bộ điều hướng quay về trang danh sách
     }, 1200);
   };
 
@@ -94,11 +94,11 @@ export function EditBoat() {
     <div className="space-y-6 select-none font-body max-w-6xl mx-auto animate-fade-in">
       
       {/* THANH TIÊU ĐỀ & ĐIỀU HƯỚNG QUAY LẠI */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700/50 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => navigate("/admin/boats-management")}
+            onClick={() => navigate("/admin/vessels-management")}
             className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner"
             title={lang === "VN" ? "Quay lại danh sách" : "Back"}
           >
@@ -120,7 +120,7 @@ export function EditBoat() {
       <form onSubmit={handleSubmitForm} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* CỘT TRÁI (Tỷ lệ 7/12): ĐIỀN THÔNG TIN */}
-        <div className="lg:col-span-7 bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2rem] border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+        <div className="lg:col-span-7 bg-white dark:bg-slate-800 p-6 md:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
           <h3 className="text-base font-headline font-black text-[#124757] dark:text-white border-b pb-2.5 flex items-center gap-2">
             <span className="material-symbols-outlined text-[#FFD100]">edit_note</span>
             {lang === "VN" ? "Thông số kỹ thuật điều chỉnh" : "Vessel Specifications"}
@@ -171,7 +171,7 @@ export function EditBoat() {
           </div>
 
           {/* Cấu hình sức chứa ghế ngồi (Sửa lỗi dấu gạch chéo ngược) */}
-          <div className="space-y-1.5 max-w-[240px]">
+          <div className="space-y-1.5 max-w-60">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{lang === "VN" ? "Sức chứa tối đa (Số ghế) *" : "Max Seating Capacity *"}</label>
             <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2 shadow-inner">
               <button 
@@ -223,7 +223,7 @@ export function EditBoat() {
 
           {/* HÀNH ĐỘNG NÚT BẤM DƯỚI CÙNG FORM */}
           <div className="pt-4 border-t border-slate-50 dark:border-slate-700/60 flex justify-end gap-3">
-            <button type="button" onClick={() => navigate("/admin/boats")} className="border px-6 py-3 rounded-xl text-xs font-bold text-slate-500 bg-white dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 hover:bg-slate-50/50 transition-colors">{lang === "VN" ? "Hủy bỏ" : "Cancel"}</button>
+            <button type="button" onClick={() => navigate("/admin/vessels-management")} className="border px-6 py-3 rounded-xl text-xs font-bold text-slate-500 bg-white dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 hover:bg-slate-50/50 transition-colors">{lang === "VN" ? "Hủy bỏ" : "Cancel"}</button>
             <button type="submit" disabled={isSubmitting} className="bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider px-8 py-3.5 rounded-xl shadow-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-2">
               {isSubmitting ? <div className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"></div> : <span className="material-symbols-outlined text-base">save_as</span>}
               {lang === "VN" ? "Lưu lại thay đổi" : "Save Changes"}
@@ -232,7 +232,7 @@ export function EditBoat() {
         </div>
 
         {/* CỘT PHẢI (Tỷ lệ 5/12): REAL-TIME PREVIEW SƠ ĐỒ GHẾ CABIN TÀU THỦY */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-6">
+        <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-6">
           <div className="text-center border-b pb-4">
             <h4 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
               {lang === "VN" ? "Sơ đồ ma trận cabin xem trước" : "Live Cabin Layout Matrix"}
@@ -247,7 +247,7 @@ export function EditBoat() {
               {lang === "VN" ? "Hướng mũi tàu di chuyển" : "Forward Hull"}
             </div>
 
-            <div className="max-h-[380px] overflow-y-auto pr-1 no-scrollbar custom-scrollbar grid grid-cols-2 gap-8 sm:gap-10">
+            <div className="max-h-95 overflow-y-auto pr-1 no-scrollbar custom-scrollbar grid grid-cols-2 gap-8 sm:gap-10">
               {/* Dãy A trái */}
               <div className="grid grid-cols-3 gap-1.5">
                 {leftRow.map((seat) => (

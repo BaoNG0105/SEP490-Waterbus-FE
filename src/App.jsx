@@ -13,7 +13,7 @@ import { Booking } from "./pages/Booking";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
 import { CustomerManagement } from "./pages/Admin/CustomerManagement";
-import { BoatManagement, CreateBoat, EditBoat } from "./pages/Admin/BoatManagement";
+import { VesselManagement, CreateVessel, EditVessel } from "./pages/Admin/VesselManagement";
 
 function App() {
   return (
@@ -108,31 +108,31 @@ function App() {
           }
         />
 
-        {/* Admin Boats Page */}
+        {/* Admin Vessels Page */}
         <Route
-          path="/admin/boats-management"
+          path="/admin/vessels-management"
           element={
-            <AdminLayout title="Boats Management">
-              <BoatManagement />
+            <AdminLayout title="Vessels Management">
+              <VesselManagement />
             </AdminLayout>
           }
         />
 
-        {/* Create Boats Page */}
+        {/* Create Vessel Page */}
         <Route
-          path="/admin/boats-management/create"
+          path="/admin/vessels-management/create"
           element={
-            <AdminLayout title="Create Boat">
-              <CreateBoat />
+            <AdminLayout title="Create Vessel">
+              <CreateVessel />
             </AdminLayout>
           }
         />
 
-        {/* Edit Boats Page */}
-        <Route path="/admin/boats/edit/:id"
+        {/* Edit Vessel Page */}
+        <Route path="/admin/vessels-management/edit/:id"
           element={
             <AdminLayout title="Edit Vessel">
-              <EditBoat />
+              <EditVessel />
             </AdminLayout>
           }
         />
