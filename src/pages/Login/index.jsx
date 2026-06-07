@@ -91,6 +91,12 @@ export const Login = () => {
   const handleGoogleSuccess = async (credentialResponse) => {
     setIsLoading(true);
     setErrorMsg("");
+
+    //idToken của gg để test  
+    console.log("=== ID TOKEN GOOGLE ===");
+    console.log(credentialResponse.credential);
+    console.log("=======================");
+
     try {
       // Gọi API gửi idToken của Google lên Backend
       const response = await loginWithGoogle(credentialResponse.credential);
