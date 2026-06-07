@@ -19,16 +19,30 @@ export const Login = () => {
   const [errorMsg, setErrorMsg] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
 
+  //3. QUẢN LÝ AUTH VÀ ĐIỀU HƯỚNG: KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ VỀ TRANG CHỦ
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { isAuthenticated } = useSelector((state) => state.auth);
+  const { isAuthenticated, user } = useSelector((state) => state.auth);
 
-  // 3. KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ VỀ TRANG CHỦ
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/", { replace: true });
+  // HÀM HELPER ĐIỀU HƯỚNG THÔNG MINH DỰA TRÊN ROLE
+  const handleRoleRedirect = (userData) => {
+    const allowedRoles = ["ADMIN", "STAFF", "MANAGER"];
+    const isManagerOrAdmin = userData?.roles?.some(
+      (role) => allowedRoles.includes(role.code) || allowedRoles.includes(role.systemName)
+    );
+    if (isManagerOrAdmin) {
+      navigate("/admin", { replace: true }); // Quyền cao -> Vào thẳng Admin
+    } else {
+      navigate("/", { replace: true }); // Khách hàng -> Về trang chủ công cộng
     }
-  }, [isAuthenticated, navigate]);
+  };
+
+  // KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ TỰ ĐỘNG ĐIỀU HƯỚNG THEO ROLE
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      handleRoleRedirect(user);
+    }
+  }, [isAuthenticated, user, navigate]);
 
   // 4. HÀM XỬ LÝ ĐĂNG NHẬP BẰNG TÀI KHOẢN/MẬT KHẨU
   const handleLogin = async (e) => {
@@ -58,20 +72,18 @@ export const Login = () => {
       };
       const response = await loginWithPhoneEmail(payload);
       if (response.tokens && response.tokens.accessToken) {
-        // 1. Lấy roleName từ mảng roles do API trả về (lấy phần tử đầu tiên)
-        const roleName = response.user?.roles?.[0]?.displayName || '';
-        // 2. Gom dữ liệu user lại cho khớp với cấu trúc authSlice đang chờ
+        // Gom dữ liệu user lại cho khớp với cấu trúc authSlice đang chờ
         const userInfo = {
           fullName: response.user?.fullName || '',
           avatarUrl: response.user?.avatarUrl || '',
-          roleName: roleName,
+          roles: response.user?.roles || [],  // ← Lưu nguyên mảng roles từ API
         };
-        // 3. Dispatch với đúng key "accessToken" và "user"
+        // Dispatch với đúng key "accessToken" và "user"
         dispatch(loginSuccess({
           accessToken: response.tokens.accessToken,
           user: userInfo
         }));
-        navigate("/", { replace: true });
+        handleRoleRedirect(userInfo);
       } else {
         setErrorMsg(lang === "VN" ? "Dữ liệu trả về không hợp lệ." : "Invalid response data.");
       }
@@ -92,28 +104,21 @@ export const Login = () => {
     setIsLoading(true);
     setErrorMsg("");
 
-    console.log("=== ID TOKEN GOOGLE ===");
-    console.log(credentialResponse.credential);
-    console.log("=======================");
-
     try {
       // Gọi API gửi idToken của Google lên Backend
       const response = await loginWithGoogle(credentialResponse.credential);
-      
       // bóc tách dữ liệu theo đúng chuẩn object trả về từ Swagger của bạn
       const jwtToken = response?.tokens?.accessToken;
       const userData = response?.user;
-
-      // Kiểm tra nghiêm ngặt xem Backend đã trả về đủ cả Token lẫn thông tin User chưa
+      // Kiểm tra Backend đã trả về đủ cả Token lẫn thông tin User chưa
       if (jwtToken && userData) {
         // ĐỒNG BỘ HÓA: Truyền chính xác cặp { token, user } giống y chang hàm 4
         dispatch(loginSuccess({ 
           token: jwtToken, 
           user: userData 
         }));
-        
         // Đăng nhập thành công chuyển thẳng về trang chủ công cộng
-        navigate("/", { replace: true }); 
+        handleRoleRedirect(userData); 
       } else {
         setErrorMsg(
           lang === "VN" 
@@ -121,7 +126,6 @@ export const Login = () => {
             : "Incomplete token or user payload received from server."
         );
       }
-
     } catch (error) {
       console.error("Google Login Error:", error);
       const errorData = error.response?.data;

@@ -29,7 +29,7 @@ api.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        // THÊM ĐIỀU KIỆN: Chỉ xử lý văng logout nếu lỗi 401 VÀ KHÔNG PHẢI ĐANG GỌI API '/auth/'
+        // Chỉ xử lý văng logout nếu lỗi 401 VÀ KHÔNG PHẢI ĐANG GỌI API '/auth/'
         if (error.response && error.response.status === 401 && !originalRequest.url.toLowerCase().includes('/auth/')) {
 
             // Tránh vòng lặp vô hạn

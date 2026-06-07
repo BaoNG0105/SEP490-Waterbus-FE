@@ -1,12 +1,12 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+// Khởi tạo trạng thái ban đầu
 const initialState = {
   accessToken: localStorage.getItem('accessToken') || null,
-  user: {
-    fullName: localStorage.getItem('userName') || '',
-    avatarUrl: localStorage.getItem('avatarUrl') || '',
-    roleName: localStorage.getItem('roleName') || '',
-  },
+  // Giải nén nguyên cục user từ localStorage nếu có, nếu không thì để object mặc định có mảng roles rỗng
+  user: localStorage.getItem('user') 
+    ? JSON.parse(localStorage.getItem('user')) 
+    : { fullName: '', avatarUrl: '', roles: [] },
   isAuthenticated: !!localStorage.getItem('accessToken'),
 };
 
@@ -15,33 +15,31 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     loginSuccess: (state, action) => {
-      const { accessToken, user } = action.payload;
+      // Lấy linh hoạt cả 'accessToken' hoặc 'token' để khớp với mọi hàm đăng nhập ở trang Login
+      const { accessToken, token, user } = action.payload;
+      const finalToken = accessToken || token;
 
-      state.accessToken = accessToken;
+      state.accessToken = finalToken;
       state.user = user;
       state.isAuthenticated = true;
 
       // Tính toán mốc thời gian hết hạn (Hiện tại + 30 phút)
       const expirationTime = new Date().getTime() + 30 * 60 * 1000;
 
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('userName', user.fullName);
-      localStorage.setItem('avatarUrl', user.avatarUrl);
-      localStorage.setItem('roleName', user.roleName);
-      // LƯU MỐC HẾT HẠN XUỐNG LOCALSTORAGE
+      // Lưu trữ dữ liệu đồng bộ
+      localStorage.setItem('accessToken', finalToken);
+      localStorage.setItem('user', JSON.stringify(user)); // Ép thành chuỗi JSON để giữ lại mảng roles[...] của Backend
       localStorage.setItem('expirationTime', expirationTime.toString());
     },
 
     logout: (state) => {
       state.accessToken = null;
-      state.user = { fullName: '', avatarUrl: '', roleName: '' };
+      state.user = { fullName: '', avatarUrl: '', roles: [] };
       state.isAuthenticated = false;
 
+      // Dọn dẹp sạch sẽ các key tương ứng
       localStorage.removeItem('accessToken');
-      localStorage.removeItem('userName');
-      localStorage.removeItem('avatarUrl');
-      localStorage.removeItem('roleName');
-      // XÓA MỐC HẾT HẠN KHI ĐĂNG XUẤT
+      localStorage.removeItem('user');
       localStorage.removeItem('expirationTime');
     },
   },

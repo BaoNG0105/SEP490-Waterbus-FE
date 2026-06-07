@@ -1,6 +1,9 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AdminLayout } from "./layout/Admin/AdminLayout";
 import { MainLayout } from "./layout/MainLayout";
+
+import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
+
 //Client
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
@@ -88,54 +91,57 @@ function App() {
 
 
         {/*============= Admin Page ============= */}
-        {/* Admin Dashboard Page */}
-        <Route
-          path="/admin"
-          element={
-            <AdminLayout title="Dashboard">
-              <Dashboard />
-            </AdminLayout>
-          }
-        />
+        <Route element={<AdminProtectedRoute />}>
+          {/* Admin Dashboard Page */}
+          <Route
+            path="/admin"
+            element={
+              <AdminLayout title="Dashboard">
+                <Dashboard />
+              </AdminLayout>
+            }
+          />
 
-        {/* Admin Customers Page */}
-        <Route
-          path="/admin/customers-management"
-          element={
-            <AdminLayout title="Customers Management">
-              <CustomerManagement />
-            </AdminLayout>
-          }
-        />
+          {/* Admin Customers Page */}
+          <Route
+            path="/admin/customers-management"
+            element={
+              <AdminLayout title="Customers Management">
+                <CustomerManagement />
+              </AdminLayout>
+            }
+          />
 
-        {/* Admin Vessels Page */}
-        <Route
-          path="/admin/vessels-management"
-          element={
-            <AdminLayout title="Vessels Management">
-              <VesselManagement />
-            </AdminLayout>
-          }
-        />
+          {/* Admin Vessels Page */}
+          <Route
+            path="/admin/vessels-management"
+            element={
+              <AdminLayout title="Vessels Management">
+                <VesselManagement />
+              </AdminLayout>
+            }
+          />
 
-        {/* Create Vessel Page */}
-        <Route
-          path="/admin/vessels-management/create"
-          element={
-            <AdminLayout title="Create Vessel">
-              <CreateVessel />
-            </AdminLayout>
-          }
-        />
+          {/* Create Vessel Page */}
+          <Route
+            path="/admin/vessels-management/create"
+            element={
+              <AdminLayout title="Create Vessel">
+                <CreateVessel />
+              </AdminLayout>
+            }
+          />
 
-        {/* Edit Vessel Page */}
-        <Route path="/admin/vessels-management/edit/:id"
-          element={
-            <AdminLayout title="Edit Vessel">
-              <EditVessel />
-            </AdminLayout>
-          }
-        />
+          {/* Edit Vessel Page */}
+          <Route path="/admin/vessels-management/edit/:id"
+            element={
+              <AdminLayout title="Edit Vessel">
+                <EditVessel />
+              </AdminLayout>
+            }
+          />
+        </Route>
+
       </Routes>
     </Router>
   );
