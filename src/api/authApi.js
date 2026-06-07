@@ -6,6 +6,12 @@ export const loginWithPhoneEmail = (credentials) =>
 export const loginWithGoogle = (token) =>
     api.post('/auth/google-login', { idToken: token }).then(r => r.data);
 
+export const sendGooglePhoneOtp = (data) =>
+    api.post('/auth/google/send-phone-otp', data).then(r => r.data);
+
+export const verifyGooglePhoneOtp = (data) =>
+    api.post('/auth/google/verify-phone', data).then(r => r.data);
+
 export const registerCustomer = (data) =>
     api.post('/auth/register', data).then(r => r.data);
 

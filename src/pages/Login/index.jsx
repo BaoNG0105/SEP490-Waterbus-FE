@@ -91,24 +91,43 @@ export const Login = () => {
   const handleGoogleSuccess = async (credentialResponse) => {
     setIsLoading(true);
     setErrorMsg("");
+
+    // ====================================================
+    // ID-TOKEN
+    console.log("=== ID TOKEN GOOGLE ===");
+    console.log(credentialResponse.credential);
+    console.log("=======================");
+    // ====================================================
+
     try {
+      // Gọi API gửi idToken của Google lên Backend
       const response = await loginWithGoogle(credentialResponse.credential);
-      if (response.token) {
-        dispatch(loginSuccess({ token: response.token }));
+      
+      // TRƯỜNG HỢP 1: Tài khoản cũ đã có số điện thoại -> Đăng nhập thành công
+      if (response.status === "SUCCESS" && response.accessToken) {
+        dispatch(loginSuccess({ token: response.accessToken }));
         navigate("/", { replace: true });
+      } 
+      // TRƯỜNG HỢP 2: User mới hoặc User cũ chưa có số điện thoại -> Yêu cầu nhập SĐT
+      else if (response.status === "NEED_PHONE" && response.tempToken) {
+        // Chuyển hướng sang trang cập nhật số điện thoại và truyền theo tempToken
+        navigate("/verify-google-phone", { 
+          state: { tempToken: response.tempToken },
+          replace: true 
+        });
       }
     } catch (error) {
       console.error("Google Login Error:", error);
       setErrorMsg(
-        lang === "VN"
-          ? "Đăng nhập Google thất bại. Vui lòng thử lại sau."
+        lang === "VN" 
+          ? "Đăng nhập Google thất bại. Vui lòng thử lại sau." 
           : "Google login failed. Please try again later."
       );
     } finally {
       setIsLoading(false);
     }
   };
-
+  
   const handleGoogleError = () => {
     setErrorMsg(lang === "VN" ? "Kết nối Google thất bại." : "Google connection failed.");
   };

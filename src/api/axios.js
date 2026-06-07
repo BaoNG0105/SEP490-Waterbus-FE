@@ -29,31 +29,26 @@ api.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        // Nếu lỗi là 401 Unauthorized (Token hết hạn hoặc sai)
-        if (error.response && error.response.status === 401) {
+        // THÊM ĐIỀU KIỆN: Chỉ xử lý văng logout nếu lỗi 401 VÀ KHÔNG PHẢI ĐANG GỌI API '/auth/'
+        if (error.response && error.response.status === 401 && !originalRequest.url.toLowerCase().includes('/auth/')) {
 
             // Tránh vòng lặp vô hạn
             if (!originalRequest._retry) {
                 originalRequest._retry = true;
-
                 console.error("Token hết hạn hoặc không hợp lệ. Đang đăng xuất...");
-
-                // Xóa token cũ
                 localStorage.removeItem("accessToken");
 
-                // Hiển thị thông báo
+                // Hiển thị thông báo (Giữ nguyên code Swal của bạn)
                 Swal.fire({
                     title: 'Phiên đăng nhập hết hạn',
                     text: 'Vui lòng đăng nhập lại để tiếp tục.',
                     icon: 'warning',
                     confirmButtonText: 'Đồng ý'
                 }).then(() => {
-                    // Chuyển hướng về trang đăng nhập
                     window.location.href = '/login';
                 });
             }
         }
-
         return Promise.reject(error);
     }
 );
