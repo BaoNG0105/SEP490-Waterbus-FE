@@ -147,7 +147,7 @@ export const Register = () => {
     return { text: lang === "VN" ? "Mạnh" : "Strong", color: "bg-green-500", textColor: "text-green-500", width: "w-full" };
   };
 
-  // GỌI HÀM NÀY KHI BẤM NÚT REGISTER
+  // HÀM VALIDATE CÁC THÔNG TIN
   const validateForm = () => {
     const newErrors = {
       fullName: getFieldError("fullName", formData.fullName),
@@ -207,7 +207,6 @@ export const Register = () => {
     }
   };
 
-  // ... (Giữ nguyên các hàm handleVerifyOtp, handleResendOtp như cũ) ...
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     if (otpCode.length < 4 || otpCode.length > 10) {

@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AdminLayout } from "./layout/Admin/AdminLayout";
 import { MainLayout } from "./layout/MainLayout";
+import { NotFound } from "./pages/NotFound";
 
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 
@@ -141,6 +142,9 @@ function App() {
             }
           />
         </Route>
+
+        {/* THÊM ROUTE 404 Ở DƯỚI CÙNG */}
+        <Route path="*" element={<NotFound />} />
 
       </Routes>
     </Router>
