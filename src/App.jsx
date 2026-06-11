@@ -17,7 +17,7 @@ import { Booking } from "./pages/Booking";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
 import { CustomerManagement } from "./pages/Admin/CustomerManagement";
-import { VesselManagement, CreateVessel, EditVessel } from "./pages/Admin/VesselManagement";
+import { VesselManagement, CreateVessel, EditVessel, SeatLayoutEditor } from "./pages/Admin/VesselManagement";
 
 function App() {
   return (
@@ -129,6 +129,16 @@ function App() {
             element={
               <AdminLayout title="Create Vessel">
                 <CreateVessel />
+              </AdminLayout>
+            }
+          />
+
+          {/* Seat Layout Editor Page */}
+          <Route
+            path="/admin/vessels-management/seats/:vesselId"
+            element={
+              <AdminLayout title="Seat Layout Editor">
+                <SeatLayoutEditor />
               </AdminLayout>
             }
           />

@@ -7,9 +7,7 @@ export function EditVessel() {
   const navigate = useNavigate();
   const { id } = useParams(); // Lấy ID tàu từ URL (Ví dụ: /admin/boats/edit/SWB-001)
 
-  // ==========================================
   // STATE QUẢN LÝ DỮ LIỆU & UI
-  // ==========================================
   const [formData, setFormData] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [isLoading, setIsLoading] = useState(true);

@@ -24,3 +24,5 @@ export const addNewVessel = async (vesselPayload) => {
         throw error;
     }
 };
+
+// Hàm Service lấy chi tiết tàu theo ID
