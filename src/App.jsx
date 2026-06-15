@@ -153,7 +153,7 @@ function App() {
           />
         </Route>
 
-        {/* THÊM ROUTE 404 Ở DƯỚI CÙNG */}
+        {/* TRANG BÁO LỖI 404 */}
         <Route path="*" element={<NotFound />} />
 
       </Routes>

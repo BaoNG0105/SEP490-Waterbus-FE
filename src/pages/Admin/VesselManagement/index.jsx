@@ -109,7 +109,7 @@ export function VesselManagement() {
     // CÁC HÀM XỬ LÝ ĐIỀU HƯỚNG
     // ==========================================
     const handleAddVessel = () => navigate("/admin/vessels-management/create");
-    const handleEditVessel = (code) => navigate(`/admin/vessels-management/edit/${code}`);
+    const handleEditVessel = (id) => navigate(`/admin/vessels-management/edit/${id}`);
     const handleConfigureSeats = (id) => navigate(`/admin/vessels-management/seats/${id}`);
     const handleDeleteVessel = (code) => {
         if (window.confirm(lang === "VN" ? `Bạn chắc chắn muốn xóa mã số hiệu tàu ${code} khỏi hệ thống?` : `Are you sure you want to delete vessel code ${code}?`)) {
@@ -327,20 +327,20 @@ export function VesselManagement() {
                                             <td className="py-4 px-6">
                                                 <div className="flex items-center justify-center gap-2">
                                                     {/* NÚT CẤU HÌNH GHẾ */}
+                                                    {/* CHỈ HIỂN THỊ NÚT KHI tàu chưa cấu hình ghế (seatsConfigured === false) */}
+                                                    {!vessel.seatsConfigured && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleConfigureSeats(vessel.id)}
+                                                            className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-[#124757] hover:text-[#124757] dark:hover:border-yellow-400 dark:hover:text-yellow-400 flex items-center justify-center transition-colors shadow-sm"
+                                                            title={lang === "VN" ? "Cấu hình sơ đồ ghế" : "Configure Seats"}
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">chair</span>
+                                                        </button>
+                                                    )}
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleConfigureSeats(vessel.id)}
-                                                        className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shadow-inner ${!vessel.seatsConfigured
-                                                                ? "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-500 hover:text-white dark:bg-amber-500/10 dark:border-amber-500/30 dark:hover:bg-amber-500 dark:hover:text-white animate-pulse"
-                                                                : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900"
-                                                            }`}
-                                                        title={lang === "VN" ? "Cấu hình sơ đồ ghế" : "Configure Seats"}
-                                                    >
-                                                        <span className="material-symbols-outlined text-base">chair</span>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleEditVessel(vessel.code)}
+                                                        onClick={() => handleEditVessel(vessel.id)}
                                                         className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 flex items-center justify-center transition-all shadow-inner"
                                                         title={lang === "VN" ? "Sửa thông tin" : "Edit Details"}
                                                     >

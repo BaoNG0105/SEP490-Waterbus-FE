@@ -20,7 +20,6 @@ export const fetchSeatLayout = async (vesselId) => {
 
 // ==========================================
 // SINH MA TRẬN GHẾ THÔ (Dựa theo số hàng/cột)
-// Payload ví dụ: { decks: [{ deckNumber: 1, rowCount: 10, columnCount: 6 }] }
 // ==========================================
 export const generateMatrix = async (vesselId, matrixPayload) => {
     try {
@@ -33,7 +32,6 @@ export const generateMatrix = async (vesselId, matrixPayload) => {
 
 // ==========================================
 // SETUP/CHỐT SỔ SƠ ĐỒ GHẾ CHÍNH THỨC
-// Payload cực kỳ phức tạp gồm: decks, seatBlocks, facilities, cells...
 // ==========================================
 export const configureSeats = async (vesselId, layoutPayload) => {
     try {

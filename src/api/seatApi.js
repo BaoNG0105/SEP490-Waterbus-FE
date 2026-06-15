@@ -1,10 +1,10 @@
 import api from './axios';
 
-// 1. GET: Lấy sơ đồ ghế của tàu (đã setup hoặc đang có)
+// 1. GET: Lấy sơ đồ ghế của tàu
 export const getSeatLayout = (vesselId) => 
     api.get(`/vessels/${vesselId}/seats`).then(r => r.data);
 
-// 2. POST: Khởi tạo/Sinh ma trận ghế thô (Truyền lên số tầng, số cột, số hàng)
+// 2. POST: Khởi tạo/Sinh ma trận ghế thô
 export const generateSeatMatrix = (vesselId, matrixPayload) => 
     api.post(`/vessels/${vesselId}/seats/generate`, matrixPayload).then(r => r.data);
 
