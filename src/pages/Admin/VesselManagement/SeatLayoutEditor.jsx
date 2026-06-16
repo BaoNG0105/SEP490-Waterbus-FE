@@ -20,6 +20,8 @@ export function SeatLayoutEditor() {
   const [activeDeck, setActiveDeck] = useState(1);
   const [cellsLayout, setCellsLayout] = useState({});
 
+  const [history, setHistory] = useState([]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -139,10 +141,18 @@ export function SeatLayoutEditor() {
     if (activeTool === "NONE") return;
 
     const key = `${deckNum}_${row}_${col}`;
+
     setCellsLayout(prev => {
+      // 💡 THÊM MỚI: Chụp lại lưới hiện tại cất vào lịch sử TRƯỚC KHI bị sơn đè
+      setHistory(prevHistory => {
+        const newHistory = [...prevHistory, prev];
+        if (newHistory.length > 50) newHistory.shift(); // Tối ưu bộ nhớ: Chỉ nhớ tối đa 50 bước gần nhất
+        return newHistory;
+      });
+
       const updated = { ...prev };
 
-      // Enum String ("Empty", "Aisle", "Seat", "Toilet")
+      // Logic cập nhật chuẩn Enum String ("Empty", "Aisle", "Seat", "Toilet")
       if (activeTool === "SEAT_STANDARD") {
         updated[key] = { ...updated[key], type: "Seat", seatTypeCode: "STANDARD", rowSpan: 1, columnSpan: 1 };
       } else if (activeTool === "SEAT_VIP") {
@@ -163,6 +173,20 @@ export function SeatLayoutEditor() {
       }
 
       return updated;
+    });
+  };
+
+  // ==========================================
+  // HÀM HOÀN TÁC (UNDO)
+  // ==========================================
+  const handleUndo = () => {
+    if (history.length === 0) return;
+
+    setHistory(prevHistory => {
+      const newHistory = [...prevHistory];
+      const previousLayout = newHistory.pop(); // Lấy bản sao gần nhất ra khỏi lịch sử
+      setCellsLayout(previousLayout);          // Phục hồi lại lưới
+      return newHistory;
     });
   };
 
@@ -465,9 +489,22 @@ export function SeatLayoutEditor() {
 
             {/* BOX CHỌN LOẠI CỌ SƠN */}
             <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
-              <h4 className="font-headline font-black text-xs text-slate-400 uppercase tracking-widest border-b pb-2">
-                {lang === "VN" ? "Bảng màu cọ vẽ ô" : "Cell Node Brush Palette"}
-              </h4>
+              <div className="flex items-center justify-between border-b pb-2">
+                <h4 className="font-headline font-black text-xs text-slate-400 uppercase tracking-widest">
+                  {lang === "VN" ? "Bảng màu cọ vẽ ô" : "Cell Node Brush Palette"}
+                </h4>
+
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={history.length === 0}
+                  className="flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-[#124757] dark:hover:text-yellow-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border shadow-inner"
+                  title="Hoàn tác bước vừa rồi"
+                >
+                  <span className="material-symbols-outlined text-[14px]">undo</span>
+                  {lang === "VN" ? "Quay lại" : "Undo"}
+                </button>
+              </div>
 
               <div className="space-y-2">
                 <button
@@ -489,7 +526,7 @@ export function SeatLayoutEditor() {
                     }`}
                 >
                   <span className="material-symbols-outlined text-base text-slate-400">chair</span>
-                  <span className="text-left">{lang === "VN" ? "Cọ: Đặt lại Ghế Thường" : "Brush: Reset Standard"}</span>
+                  <span className="text-left">{lang === "VN" ? "Cọ: Ghế Thường" : "Brush: Reset Standard"}</span>
                 </button>
 
                 <button
@@ -551,14 +588,13 @@ export function SeatLayoutEditor() {
                 <span className="text-xs font-bold text-slate-500">
                   {lang === "VN" ? "Số ghế (Seat) trên lưới:" : "Seats on grid:"}
                 </span>
-                <span 
-                  className={`text-base font-black font-headline ${
-                    currentTotalSeats === matrixData?.totalSeats 
-                      ? "text-emerald-500 dark:text-emerald-400"
-                      : "text-rose-500 dark:text-rose-400"
-                  }`}
+                <span
+                  className={`text-base font-black font-headline ${currentTotalSeats === matrixData?.totalSeats
+                    ? "text-emerald-500 dark:text-emerald-400"
+                    : "text-rose-500 dark:text-rose-400"
+                    }`}
                 >
-                  {currentTotalSeats} 
+                  {currentTotalSeats}
                   <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 ml-1">
                     / {matrixData?.totalSeats || "?"}
                   </span>

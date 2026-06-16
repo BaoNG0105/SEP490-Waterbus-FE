@@ -156,7 +156,7 @@ export function CreateVessel() {
       {/* KHU VỰC FORM ĐIỀN THÔNG TIN */}
       <form onSubmit={handleSubmitForm} className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-6">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b pb-2 mb-2">
-          📋 {lang === "VN" ? "Thông số kỹ thuật & Hành chính" : "Technical & Administrative Specs"}
+          {lang === "VN" ? "Thông số kỹ thuật & Hành chính" : "Technical & Administrative Specs"}
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

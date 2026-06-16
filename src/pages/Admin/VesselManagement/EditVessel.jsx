@@ -410,7 +410,7 @@ export function EditVessel() {
         </div>
 
         {/* PANEL PHẢI: XEM LIVE SƠ ĐỒ GHẾ ĐÃ CONFIGURE (5/12) */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col justify-between overflow-hidden min-h-[500px]">
+        <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col justify-between overflow-hidden min-h-125">
           <div>
             <div className="flex items-center justify-between border-b pb-2 mb-4">
               <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">

@@ -10,9 +10,7 @@ export function VesselManagement() {
     // Link ảnh mặc định phòng trường hợp imageUrl từ API trả về null
     const DEFAULT_VESSEL_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png";
 
-    // ==========================================
     // STATE QUẢN LÝ DỮ LIỆU ĐỘI TÀU TỪ API
-    // ==========================================
     const [vessels, setVessels] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
@@ -22,9 +20,7 @@ export function VesselManagement() {
     const [statusFilter, setStatusFilter] = useState("All");
     const [deckFilter, setDeckFilter] = useState("All");
 
-    // ==========================================
     // EFFECT: GỌI API KHI TRANG VỪA LOAD
-    // ==========================================
     useEffect(() => {
         const getVesselsData = async () => {
             try {
@@ -47,9 +43,7 @@ export function VesselManagement() {
         getVesselsData();
     }, [lang]);
 
-    // ==========================================
     // THỐNG KÊ NHANH (So sánh theo Text)
-    // ==========================================
     const totalVessels = vessels.length;
     const activeVessels = vessels.filter(v => v.status?.toLowerCase() === "active").length;
     const inactiveVessels = vessels.filter(v => v.status?.toLowerCase() === "inactive").length;
@@ -105,9 +99,7 @@ export function VesselManagement() {
         }
     };
 
-    // ==========================================
     // CÁC HÀM XỬ LÝ ĐIỀU HƯỚNG
-    // ==========================================
     const handleAddVessel = () => navigate("/admin/vessels-management/create");
     const handleEditVessel = (id) => navigate(`/admin/vessels-management/edit/${id}`);
     const handleConfigureSeats = (id) => navigate(`/admin/vessels-management/seats/${id}`);
@@ -121,7 +113,7 @@ export function VesselManagement() {
         <div className="space-y-8 select-none font-body">
 
             {/* --- KHỐI TIÊU ĐỀ CHÍNH & PHỤ --- */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700/50 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
                 <div className="space-y-1">
                     <h2 className="text-2xl md:text-3xl font-headline font-black text-[#124757] dark:text-yellow-400">
                         {lang === "VN" ? "Quản Lý Đội Tàu Phương Tiện" : "Vessel Fleet Matrix"}
@@ -145,7 +137,7 @@ export function VesselManagement() {
 
             {/* --- SECTION 1: 5 KHỐI CARD VUÔNG THỐNG KÊ SỐ LIỆU --- */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
                     <div className="w-10 h-10 rounded-xl bg-slate-500/10 text-[#124757] dark:bg-slate-900 dark:text-yellow-400 flex items-center justify-center shrink-0">
                         <span className="material-symbols-outlined text-[20px]">directions_boat</span>
                     </div>
@@ -155,7 +147,7 @@ export function VesselManagement() {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
                     <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/5 dark:text-emerald-400 flex items-center justify-center shrink-0">
                         <span className="material-symbols-outlined text-[20px]">check_circle</span>
                     </div>
@@ -165,7 +157,7 @@ export function VesselManagement() {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
                     <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400 flex items-center justify-center shrink-0">
                         <span className="material-symbols-outlined text-[20px]">pause_circle</span>
                     </div>
@@ -175,7 +167,7 @@ export function VesselManagement() {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
                     <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 dark:bg-rose-500/5 dark:text-rose-400 flex items-center justify-center shrink-0">
                         <span className="material-symbols-outlined text-[20px]">history_toggle_off</span>
                     </div>
@@ -185,7 +177,7 @@ export function VesselManagement() {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5 group hover:shadow-md transition-shadow">
                     <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:bg-amber-500/5 dark:text-amber-400 flex items-center justify-center shrink-0">
                         <span className="material-symbols-outlined text-[20px]">build_circle</span>
                     </div>
@@ -241,7 +233,7 @@ export function VesselManagement() {
             </div>
 
             {/* --- DANH SÁCH BẢNG TRUY VẤN TÀU --- */}
-            <div className="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
