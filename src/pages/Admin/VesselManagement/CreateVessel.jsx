@@ -14,7 +14,6 @@ export function CreateVessel() {
     code: "",                        // Số hiệu tàu
     name: "",                        // Tên tàu
     seatCount: 1,                   // Sức chứa (Tổng số ghế)
-    passengerCapacity: 1,           // Sức chứa hành khách tối đa
     numberOfDecks: 1,                // Số tầng
     seatSetupType: "FullStandard",   // Kiểu thiết lập ghế: FullStandard | StandardAndVip
     registrationNumber: "",          // Số đăng ký/Đăng kiểm
@@ -79,7 +78,6 @@ export function CreateVessel() {
         payload.append("code", normalizedCode);
         payload.append("name", formData.name.trim());
         payload.append("seatCount", formData.seatCount);
-        payload.append("passengerCapacity", formData.passengerCapacity);
         payload.append("numberOfDecks", formData.numberOfDecks);
         payload.append("seatSetupType", formData.seatSetupType);
         payload.append("registrationNumber", formData.registrationNumber.trim());
@@ -93,7 +91,6 @@ export function CreateVessel() {
           code: normalizedCode,
           name: formData.name.trim(),
           seatCount: formData.seatCount,
-          passengerCapacity: formData.passengerCapacity,
           numberOfDecks: formData.numberOfDecks,
           seatSetupType: formData.seatSetupType,
           registrationNumber: formData.registrationNumber.trim(),
@@ -207,15 +204,6 @@ export function CreateVessel() {
             <input
               type="number" required min={1} max={500} value={formData.seatCount}
               onChange={(e) => handleInputChange("seatCount", Number(e.target.value))}
-              className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Tối đa hành khách (*)" : "Passenger Capacity"}</label>
-            <input
-              type="number" required min={1} max={500} value={formData.passengerCapacity}
-              onChange={(e) => handleInputChange("passengerCapacity", Number(e.target.value))}
               className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
             />
           </div>

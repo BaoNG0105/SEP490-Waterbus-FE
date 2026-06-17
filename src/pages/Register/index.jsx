@@ -1,12 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useApp } from "../../context/AppContext";
 import { registerCustomer, verifyRegisterOtp, resendRegisterOtp } from "../../services/authService";
-import { useSelector } from "react-redux";
+import "flag-icons/css/flag-icons.min.css";
 
-import PhoneInput from 'react-phone-number-input';
-import 'react-phone-number-input/style.css';
+// THƯ VIỆN QUỐC GIA
+import countries from "i18n-iso-countries";
+import viLocale from "i18n-iso-countries/langs/vi.json";
+import enLocale from "i18n-iso-countries/langs/en.json";
+
+// Đăng ký ngôn ngữ cho thư viện
+countries.registerLocale(viLocale);
+countries.registerLocale(enLocale);
 
 export const Register = () => {
   const { lang, isDarkMode } = useApp();
@@ -20,6 +26,20 @@ export const Register = () => {
   const [expireTime, setExpireTime] = useState(300); 
   const [resendCooldown, setResendCooldown] = useState(60); 
 
+  // Lưu thông tin đích đến đã được che (Masked) để hiện lên màn hình bảo mật OTP
+  const [maskedTarget, setMaskedDestination] = useState("");
+
+  // TẠO DANH SÁCH QUỐC GIA ĐỘNG TỪ THƯ VIỆN
+  const countryList = useMemo(() => {
+    const countryObj = countries.getNames(lang === "VN" ? "vi" : "en", { select: "official" });
+    return Object.entries(countryObj).map(([code, name]) => ({
+      code: code.toLowerCase(),
+      name: name,
+      isoCode: code
+    }));
+  }, [lang]);
+
+  // STATE LƯU TRỮ DỮ LIỆU ĐĂNG KÝ
   const [formData, setFormData] = useState({
     fullName: "",
     dateOfBirth: "",
@@ -27,507 +47,524 @@ export const Register = () => {
     email: "",
     password: "",
     confirmPassword: "",
-    otpChannel: "phone",
+    otpChannel: "SMS",
+    gender: "Male",
+    nationality: "Vietnam", 
     termsAccepted: false,
   });
 
+  const [selectedFlag, setSelectedFlag] = useState("vn");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false); 
   const [errorMsg, setErrorMsg] = useState("");
-  
-  const [fieldErrors, setFieldErrors] = useState({});
 
-  const { isAuthenticated } = useSelector((state) => state.auth);
+  const showOtpSelection = formData.phone.trim() !== "" && formData.email.trim() !== "";
 
+  // TỰ ĐỘNG GÁN KÊNH OTP KHI CHỈ NHẬP 1 TRONG 2
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/", { replace: true });
+    if (formData.phone.trim() !== "" && formData.email.trim() === "") {
+      setFormData((prev) => ({ ...prev, otpChannel: "SMS" }));
+    } else if (formData.email.trim() !== "" && formData.phone.trim() === "") {
+      setFormData((prev) => ({ ...prev, otpChannel: "EMAIL" }));
     }
-  }, [isAuthenticated, navigate]);
+  }, [formData.phone, formData.email]);
 
+  // Bộ đếm thời gian hiệu lực OTP
   useEffect(() => {
-    let interval;
-    if (step === 2) {
-      interval = setInterval(() => {
-        setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-        setExpireTime((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            Swal.fire({
-              icon: 'warning',
-              title: lang === "VN" ? 'Hết thời gian' : 'Session Expired',
-              text: lang === "VN" ? 'Phiên đăng ký đã hết hạn sau 5 phút. Vui lòng đăng ký lại.' : 'Registration session expired after 5 minutes. Please register again.',
-              background: isDarkMode ? '#1e293b' : '#ffffff',
-              color: isDarkMode ? '#ffffff' : '#0f172a',
-              confirmButtonColor: "#3085d6",
-              allowOutsideClick: false
-            }).then(() => {
-              setStep(1);
-            });
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    let timer;
+    if (step === 2 && expireTime > 0) {
+      timer = setInterval(() => setExpireTime(prev => prev - 1), 1000);
+    } else if (expireTime === 0 && step === 2) {
+      setStep(1);
+      setErrorMsg(lang === "VN" ? "Phiên xác thực đã hết hạn, vui lòng đăng ký lại." : "Verification session expired, please register again.");
     }
-    return () => clearInterval(interval);
-  }, [step, lang, isDarkMode]);
+    return () => clearInterval(timer);
+  }, [step, expireTime, lang]);
 
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  // HÀM KIỂM TRA LỖI TỪNG FIELD ĐỘC LẬP
-  const getFieldError = (name, value) => {
-    switch (name) {
-      case "fullName":
-        return (!value.trim() || value.length > 150) ? (lang === "VN" ? "Họ tên không được trống và tối đa 150 ký tự." : "Invalid Full Name.") : "";
-      case "dateOfBirth":
-        if (value) {
-          const dob = new Date(value);
-          if (dob > new Date()) return lang === "VN" ? "Ngày sinh không hợp lệ (ở tương lai)." : "Date of birth cannot be in the future.";
-        }
-        return "";
-      case "phone":
-        return (!value || !/^\+[1-9]\d{7,14}$/.test(value)) ? (lang === "VN" ? "Số điện thoại không hợp lệ." : "Invalid phone format.") : "";
-      case "password":
-        return (value.length < 6) ? (lang === "VN" ? "Mật khẩu phải có ít nhất 6 ký tự." : "Password must be at least 6 characters.") : "";
-      case "confirmPassword":
-        return (value !== formData.password) ? (lang === "VN" ? "Mật khẩu xác nhận không khớp." : "Passwords do not match.") : "";
-      case "termsAccepted":
-        return (!value) ? (lang === "VN" ? "Vui lòng đồng ý với điều khoản." : "You must accept the terms.") : "";
-      default:
-        return "";
+  // Bộ đếm thời gian chờ gửi lại OTP
+  useEffect(() => {
+    let timer;
+    if (step === 2 && resendCooldown > 0) {
+      timer = setInterval(() => setResendCooldown(prev => prev - 1), 1000);
     }
-  };
-
-  // XỬ LÝ ON-BLUR (KHI NGƯỜI DÙNG RỜI KHỎI Ô NHẬP)
-  const handleBlur = (e) => {
-    const { name, value, type, checked } = e.target;
-    const val = type === "checkbox" ? checked : value;
-    const error = getFieldError(name, val);
-    setFieldErrors(prev => ({ ...prev, [name]: error }));
-  };
+    return () => clearInterval(timer);
+  }, [step, resendCooldown]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    const val = type === "checkbox" ? checked : value;
-    
-    setFormData((prev) => ({ ...prev, [name]: val }));
-    setErrorMsg("");
+    setFormData({
+      ...formData,
+      [name]: type === "checkbox" ? checked : value,
+    });
+  };
 
-    // Xóa lỗi tạm thời của field đang gõ để UI phản hồi nhanh
-    if (fieldErrors[name]) {
-      setFieldErrors(prev => ({ ...prev, [name]: "" }));
-    }
-
-    // Đặc biệt: Nếu đổi pass thì phải check lại confirmPass
-    if (name === "password" && formData.confirmPassword) {
-      setFieldErrors(prev => ({ 
-        ...prev, 
-        confirmPassword: val !== formData.confirmPassword ? (lang === "VN" ? "Mật khẩu xác nhận không khớp." : "Passwords do not match.") : "" 
-      }));
+  const handleNationalityChange = (e) => {
+    const matched = countryList.find(item => item.code === e.target.value);
+    if (matched) {
+      setSelectedFlag(matched.code);
+      setFormData({
+        ...formData,
+        nationality: countries.getName(matched.isoCode, "en") // Luôn gửi chuỗi tiếng Anh cho BE chuẩn quốc tế
+      });
     }
   };
 
-  // HÀM ĐÁNH GIÁ ĐỘ MẠNH PASSWORD
-  const getPasswordStrength = (pass) => {
-    if (!pass) return null;
-    let score = 0;
-    if (pass.length >= 6) score += 1;
-    if (pass.length >= 8) score += 1;
-    if (/[A-Z]/.test(pass)) score += 1; // Có viết hoa
-    if (/[0-9]/.test(pass)) score += 1; // Có số
-    if (/[^A-Za-z0-9]/.test(pass)) score += 1; // Có ký tự đặc biệt
-
-    if (score <= 2) return { text: lang === "VN" ? "Yếu" : "Weak", color: "bg-red-500", textColor: "text-red-500", width: "w-1/3" };
-    if (score <= 4) return { text: lang === "VN" ? "Trung bình" : "Fair", color: "bg-yellow-500", textColor: "text-yellow-500", width: "w-2/3" };
-    return { text: lang === "VN" ? "Mạnh" : "Strong", color: "bg-green-500", textColor: "text-green-500", width: "w-full" };
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // HÀM VALIDATE CÁC THÔNG TIN
-  const validateForm = () => {
-    const newErrors = {
-      fullName: getFieldError("fullName", formData.fullName),
-      dateOfBirth: getFieldError("dateOfBirth", formData.dateOfBirth),
-      phone: getFieldError("phone", formData.phone),
-      password: getFieldError("password", formData.password),
-      confirmPassword: getFieldError("confirmPassword", formData.confirmPassword),
-      termsAccepted: getFieldError("termsAccepted", formData.termsAccepted),
-    };
-    setFieldErrors(newErrors);
-    
-    const hasError = Object.values(newErrors).some(err => err !== "");
-    return hasError ? (lang === "VN" ? "Vui lòng kiểm tra lại các trường thông tin bị đỏ." : "Please check the highlighted fields.") : null;
-  };
-
+  // BƯỚC 1: XỬ LÝ NGHIỆP VỤ SUBMIT FORM ĐĂNG KÝ
   const handleRegister = async (e) => {
     e.preventDefault();
-    const error = validateForm();
-    if (error) {
-      setErrorMsg(error);
+    setErrorMsg("");
+
+    // 💡 NGHIỆP VỤ: Kiểm tra Phone & Email bắt buộc ít nhất một kênh
+    if (!formData.phone.trim() && !formData.email.trim()) {
+      setErrorMsg(lang === "VN" ? "Vui lòng nhập Số điện thoại hoặc Email." : "Please provide either a Phone number or an Email.");
       return;
     }
 
-    setIsLoading(true);
+    if (formData.password !== formData.confirmPassword) {
+      setErrorMsg(lang === "VN" ? "Mật khẩu xác nhận không khớp!" : "Passwords do not match!");
+      return;
+    }
+
+    if (!formData.termsAccepted) {
+      setErrorMsg(lang === "VN" ? "Bạn cần đồng ý với Điều khoản sử dụng." : "You must accept the Terms of Use.");
+      return;
+    }
+
+    // 💡 NGHIỆP VỤ: Xử lý ngày sinh mặc định ngày hiện tại nếu bỏ trống
+    let formattedDate = "";
+    let dobToProcess = formData.dateOfBirth;
+    if (!dobToProcess) {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      dobToProcess = `${yyyy}-${mm}-${dd}`;
+    }
+    const [year, month, day] = dobToProcess.split("-");
+    formattedDate = `${day}/${month}/${year}`;
+
+    const payload = {
+      fullName: formData.fullName,
+      dateOfBirth: formattedDate,
+      password: formData.password,
+      phone: formData.phone,
+      email: formData.email,
+      otpChannel: formData.otpChannel,
+      gender: formData.gender,
+      nationality: formData.nationality
+    };
+
     try {
-      const payload = {
-        fullName: formData.fullName,
-        dateOfBirth: formData.dateOfBirth || null, 
-        phone: formData.phone,
-        password: formData.password,
-        email: formData.email.trim() !== "" ? formData.email : undefined,
-        otpChannel: formData.email.trim() !== "" ? formData.otpChannel : "phone"
-      };
-
+      setIsLoading(true);
       const response = await registerCustomer(payload);
+      
+      // Map "id" của response vào challengeId
+      setChallengeId(response.id);
+      setMaskedDestination(response.maskedDestination || response.maskedEmail);
 
-      if (response && response.challengeId) {
-        setChallengeId(response.challengeId);
-        setExpireTime(300);
-        setResendCooldown(60);
-        setStep(2);
+      // Tính số giây đếm ngược động từ mốc thời gian thực tế Server trả về
+      const now = new Date().getTime();
+      const expireDiff = Math.max(0, Math.floor((new Date(response.expiresAt).getTime() - now) / 1000));
+      const resendDiff = Math.max(0, Math.floor((new Date(response.resendAvailableAt).getTime() - now) / 1000));
 
-        Swal.fire({
-          icon: 'success',
-          title: lang === "VN" ? 'Đăng ký thành công!' : 'Registration successful!',
-          text: lang === "VN" ? 'Vui lòng kiểm tra mã OTP.' : 'Please check your OTP code.',
-          background: isDarkMode ? '#1e293b' : '#ffffff',
-          color: isDarkMode ? '#ffffff' : '#0f172a',
-          timer: 2000,
-          showConfirmButton: false
-        });
-      }
-    } catch (err) {
-      setErrorMsg(err?.response?.data?.message || (lang === "VN" ? "Đăng ký thất bại. Số điện thoại có thể đã tồn tại." : "Registration failed."));
+      setExpireTime(expireDiff > 0 ? expireDiff : 300);
+      setResendCooldown(resendDiff > 0 ? resendDiff : 60);
+      
+      setStep(2); // Tiến tới bước xác thực OTP
+
+    } catch (error) {
+      console.error("Lỗi đăng ký hành khách:", error);
+      setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Đăng ký thất bại. Vui lòng thử lại." : "Registration failed. Please try again."));
     } finally {
       setIsLoading(false);
     }
   };
 
+  // BƯỚC 2: XÁC THỰC MÃ OTP KHI ĐĂNG KÝ
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    if (otpCode.length < 4 || otpCode.length > 10) {
-      setErrorMsg(lang === "VN" ? "Mã OTP phải từ 4 đến 10 ký tự." : "OTP must be 4-10 characters.");
+    setErrorMsg("");
+
+    if (!otpCode || otpCode.length < 6) {
+      setErrorMsg(lang === "VN" ? "Vui lòng nhập đủ mã OTP." : "Please enter the complete OTP code.");
       return;
     }
 
-    setIsLoading(true);
     try {
-      await verifyRegisterOtp({
-        challengeId: challengeId,
-        code: otpCode
-      });
+      setIsLoading(true);
+      
+      // Đóng gói đúng mảng đối tượng { challengeId, code } theo quy định DTO Backend
+      const payload = {
+        challengeId: challengeId, 
+        code: otpCode,           
+      };
+
+      await verifyRegisterOtp(payload);
 
       Swal.fire({
-        icon: 'success',
-        title: lang === "VN" ? 'Xác thực thành công!' : 'Verification successful!',
-        text: lang === "VN" ? 'Tài khoản đã được kích hoạt. Hãy đăng nhập.' : 'Account activated. Please log in.',
-        background: isDarkMode ? '#1e293b' : '#ffffff',
-        color: isDarkMode ? '#ffffff' : '#0f172a',
-      }).then(() => {
-        navigate("/login");
-      });
+        icon: "success",
+        title: lang === "VN" ? "Thành công!" : "Success!",
+        text: lang === "VN" ? "Tài khoản của bạn đã được tạo thành công." : "Your account has been successfully created.",
+        confirmButtonColor: "#124757",
+        background: isDarkMode ? "#1e293b" : "#fff",
+        color: isDarkMode ? "#fff" : "#000",
+      }).then(() => navigate("/login"));
 
-    } catch (err) {
-      setErrorMsg(err?.response?.data?.message || "Mã OTP không hợp lệ hoặc đã hết hạn.");
+    } catch (error) {
+      console.error("Lỗi khi xác thực OTP:", error);
+      setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Mã OTP không hợp lệ hoặc đã hết hạn." : "Invalid or expired OTP."));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleResendOtp = async () => {
-    setIsLoading(true);
+    setErrorMsg("");
     try {
-      await resendRegisterOtp(challengeId);
-      setExpireTime(300);
-      setResendCooldown(60);
+      setIsLoading(true);
+      const response = await resendRegisterOtp(challengeId);
       
-      Swal.fire({
-        icon: 'success',
-        title: lang === "VN" ? 'Đã gửi lại OTP' : 'OTP Resent',
-        toast: true,
-        position: 'top-end',
-        timer: 3000,
-        showConfirmButton: false,
-        background: isDarkMode ? '#1e293b' : '#ffffff',
-        color: isDarkMode ? '#ffffff' : '#0f172a',
-      });
-      setErrorMsg("");
-    } catch (err) {
-      const beErrorMsg = err?.response?.data?.message || "";
-      Swal.fire({
-        icon: 'error',
-        title: lang === "VN" ? 'Lỗi' : 'Error',
-        text: beErrorMsg || (lang === "VN" ? 'Không thể gửi lại OTP lúc này.' : 'Cannot resend OTP at this time.'),
-        background: isDarkMode ? '#1e293b' : '#ffffff',
-        color: isDarkMode ? '#ffffff' : '#0f172a',
-      });
+      // Đồng bộ cập nhật lại thời gian đếm ngược dựa trên mốc mới Server trả về
+      const now = new Date().getTime();
+      const expireDiff = Math.max(0, Math.floor((new Date(response.expiresAt).getTime() - now) / 1000));
+      const resendDiff = Math.max(0, Math.floor((new Date(response.resendAvailableAt).getTime() - now) / 1000));
 
-      if (beErrorMsg.toLowerCase().includes("hết hạn") || 
-          beErrorMsg.toLowerCase().includes("expired") || 
-          beErrorMsg.toLowerCase().includes("hủy")) {
-         setStep(1);
-      }
+      setExpireTime(expireDiff > 0 ? expireDiff : 300);
+      setResendCooldown(resendDiff > 0 ? resendDiff : 60);
+
+      Swal.fire({
+        icon: "success",
+        title: lang === "VN" ? "Đã gửi lại OTP!" : "OTP Resent!",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: isDarkMode ? "#1e293b" : "#fff",
+        color: isDarkMode ? "#fff" : "#000",
+      });
+    } catch (error) {
+      console.error("Lỗi gửi lại OTP:", error);
+      setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Lỗi gửi lại OTP. Thử lại sau." : "Failed to resend OTP. Try again."));
     } finally {
       setIsLoading(false);
     }
   };
 
-  // CLASSES CHUNG: CÓ HIỆU ỨNG ĐỎ KHI CÓ LỖI
-  const getInputClasses = (fieldName) => `w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border rounded-xl outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-white/30 text-slate-900 dark:text-white ${
-    fieldErrors[fieldName] 
-    ? 'border-red-500 focus:ring-2 focus:ring-red-500/40' 
-    : 'border-slate-200 dark:border-transparent focus:ring-2 focus:ring-primary/40 dark:focus:ring-yellow-400/20 focus:border-primary dark:focus:border-transparent'
-  }`;
-
-  const phoneInputClasses = `w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-800 border rounded-xl transition-all [&>input]:bg-transparent [&>input]:outline-none [&>input]:w-full text-slate-900 dark:text-white ${
-    fieldErrors.phone 
-    ? 'border-red-500 focus-within:ring-2 focus-within:ring-red-500/40' 
-    : 'border-slate-200 dark:border-transparent focus-within:ring-2 focus-within:ring-primary/40 dark:focus-within:ring-yellow-400/20 focus-within:border-primary dark:focus-within:border-transparent'
-  }`;
-
-  const pwdStrength = getPasswordStrength(formData.password);
-
   return (
-    <div className="bg-white dark:bg-slate-900 font-body text-slate-900 dark:text-white selection:bg-primary-container selection:text-on-primary-container overflow-hidden min-h-screen relative">
-      <header className="fixed top-0 left-0 w-full p-6 lg:p-12 pointer-events-none flex justify-between items-center z-50">
-        <div className="pointer-events-auto bg-white/80 dark:bg-slate-900/50 backdrop-blur-md px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm">
-          <Link to="/" className="font-label text-xs uppercase tracking-widest text-slate-600 dark:text-white/70 hover:text-primary dark:hover:text-white flex items-center gap-2 group">
-            <span className="material-symbols-outlined text-lg group-hover:-translate-x-1 transition-transform">arrow_back</span>
-            Back to Site
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-white dark:bg-slate-900 transition-colors font-body">
+      
+      {/* CỘT TRÁI - ẢNH BANNER */}
+      <div className="hidden lg:block relative bg-slate-900 overflow-hidden">
+        <div className="absolute inset-0 bg-black/30 z-10"></div>
+        <img 
+          src="https://res.cloudinary.com/dygipvoal/image/upload/v1776092653/ywbwjyftzirzdqf2igte.jpg" 
+          alt="Waterbus" 
+          className="absolute inset-0 w-full h-full object-cover object-center"
+        />
+        <div className="absolute bottom-12 left-12 right-12 z-20 text-yellow-400 animate-fade-in-up">
+          <h2 className="text-4xl font-black font-headline mb-4 leading-tight">
+            {lang === "VN" ? "Hành Trình Chờ Đón Bạn" : "Your Journey Awaits"}
+          </h2>
+          <p className="text-white/80 text-sm max-w-md leading-relaxed">
+            {lang === "VN" 
+              ? "Tạo tài khoản ngay hôm nay để đặt vé nhanh chóng, quản lý chuyến đi dễ dàng và nhận các ưu đãi đặc quyền." 
+              : "Create an account today for quick booking, easy trip management, and exclusive offers."}
+          </p>
+        </div>
+      </div>
+
+      {/* CỘT PHẢI - BIỂU MẪU */}
+      <main className="flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-16 xl:px-24 relative overflow-y-auto custom-scrollbar h-screen">
+        
+        <div className="absolute top-6 left-6 sm:top-8 sm:left-12 z-20">
+          <Link to="/" className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
+            <span className="material-symbols-outlined text-lg">arrow_back</span>
+            <span>{lang === "VN" ? "Trang chủ" : "Back to Site"}</span>
           </Link>
         </div>
-      </header>
 
-      <main className="min-h-screen flex flex-col md:flex-row overflow-hidden">
-        <section className="hidden md:flex md:w-1/2 lg:w-3/5 relative overflow-hidden bg-slate-900 items-center justify-center">
-          <div className="absolute inset-0 z-0 opacity-50 dark:opacity-40">
-            <img alt="River Transit" className="w-full h-full object-cover mix-blend-overlay" src="https://res.cloudinary.com/dygipvoal/image/upload/v1776092653/ywbwjyftzirzdqf2igte.jpg" />
-            <div className="absolute inset-0 bg-gradient-to-tr from-black/60 via-transparent to-transparent"></div>
+        <div className="absolute top-6 right-6 sm:top-8 sm:right-12 z-20">
+          <Link to="/login" className="text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
+            {lang === "VN" ? "Đăng nhập" : "Login instead"}
+          </Link>
+        </div>
+
+        <section className="w-full max-w-md mx-auto mt-10 lg:mt-0">
+          
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-black text-[#124757] dark:text-yellow-400 font-headline uppercase tracking-widest mb-1">
+              WaterBus
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
+              {step === 1 
+                ? (lang === "VN" ? "Tạo tài khoản thành viên mới" : "Create a new passenger account")
+                : (lang === "VN" ? "Xác thực mã bảo mật gửi đến bạn" : "Security Verification Challenge")
+              }
+            </p>
           </div>
-          <div className="relative z-10 p-12 flex flex-col justify-center h-full w-full gap-16">
-            <div className="max-w-lg">
-              <h1 className="font-headline text-5xl lg:text-7xl font-bold text-white leading-none tracking-tight mb-6">Chart Your New Course.</h1>
-              <p className="text-white/90 text-lg lg:text-xl font-light leading-relaxed">Experience the Saigon River like never before. From daily commutes to weekend escapes, your premium nautical journey begins here.</p>
+
+          {/* HIỂN THỊ LỖI */}
+          {errorMsg && (
+            <div className="mb-6 p-4 rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400 text-xs font-bold flex items-start gap-2 border border-rose-100 dark:border-rose-500/20 animate-shake">
+              <span className="material-symbols-outlined text-base">error</span>
+              <span className="mt-0.5">{errorMsg}</span>
             </div>
-          </div>
-        </section>
+          )}
 
-        <section className="w-full md:w-1/2 lg:w-2/5 bg-white dark:bg-slate-900 flex flex-col justify-start px-6 lg:px-20 relative transition-colors h-screen overflow-y-auto">
-          {/* ĐÃ CHỈNH pt-32 THÀNH pt-20 ĐỂ FORM ĐƯỢC KÉO LÊN TRÊN */}
-          <div className="w-full max-w-md mx-auto pt-20 lg:pt-24 pb-12">
-
-            {errorMsg && (
-              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium">
-                <span className="material-symbols-outlined inline-block align-text-bottom mr-1 text-[18px]">error</span>
-                {errorMsg}
-              </div>
-            )}
-
-            {step === 1 && (
-              <>
-                <header className="mb-8">
-                  <h2 className="font-headline text-3xl font-bold text-slate-900 dark:text-white mb-2">Create an account</h2>
-                  <p className="text-slate-500 dark:text-white/70 font-body">Join the elite network of river travelers today.</p>
-                </header>
-
-                <form className="space-y-4" onSubmit={handleRegister}>
-                  {/* Full Name */}
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Full Name *</label>
-                    <input name="fullName" type="text" required value={formData.fullName} onChange={handleChange} onBlur={handleBlur} placeholder="Nguyễn Văn A" className={getInputClasses("fullName")} />
-                    {fieldErrors.fullName && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.fullName}</p>}
-                  </div>
-
-                  {/* Date Of Birth */}
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Date of Birth (Optional)</label>
-                    <input name="dateOfBirth" type="date" value={formData.dateOfBirth} onChange={handleChange} onBlur={handleBlur} className={`${getInputClasses("dateOfBirth")} [&::-webkit-calendar-picker-indicator]:dark:invert`} />
-                    {fieldErrors.dateOfBirth && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.dateOfBirth}</p>}
-                  </div>
-
-                  {/* Phone Input */}
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Phone Number *</label>
-                    <PhoneInput
-                      international
-                      defaultCountry="VN"
-                      value={formData.phone}
-                      onChange={(value) => {
-                        setFormData((prev) => ({ ...prev, phone: value }));
-                        setErrorMsg("");
-                        if (fieldErrors.phone) setFieldErrors(prev => ({ ...prev, phone: "" }));
-                      }}
-                      onBlur={() => handleBlur({ target: { name: "phone", value: formData.phone } })}
-                      className={phoneInputClasses}
-                    />
-                    {fieldErrors.phone && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.phone}</p>}
-                  </div>
-
-                  {/* Email */}
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Email (Optional)</label>
-                    <input name="email" type="email" value={formData.email} onChange={handleChange} onBlur={handleBlur} placeholder="name@domain.com" className={getInputClasses("email")} />
-                  </div>
-
-                  {/* OTP Channel */}
-                  {formData.email.trim() !== "" && (
-                    <div className="space-y-1.5 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                      <label className="block text-sm font-label font-bold text-slate-700 dark:text-white">Receive OTP via: *</label>
-                      <div className="flex gap-6 mt-2">
-                        <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-white">
-                          <input type="radio" name="otpChannel" value="email" checked={formData.otpChannel === "email"} onChange={handleChange} className="accent-primary" /> Email
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-white">
-                          <input type="radio" name="otpChannel" value="phone" checked={formData.otpChannel === "phone"} onChange={handleChange} className="accent-primary" /> SMS / Phone
-                        </label>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* PASSWORD KÈM THANH ĐO ĐỘ MẠNH */}
-                  <div className="space-y-1.5 relative">
-                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Password *</label>
-                    <input
-                      name="password"
-                      type={showPassword ? "text" : "password"}
-                      required
-                      value={formData.password}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                      placeholder="••••••••"
-                      autoComplete="new-password"
-                      className={getInputClasses("password")}
-                    />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-[38px] text-slate-400 dark:text-white/40 cursor-pointer text-[20px] transition-colors hover:text-primary dark:hover:text-yellow-400">
-                      <span className="material-symbols-outlined">{showPassword ? "visibility_off" : "visibility"}</span>
-                    </button>
-                    {fieldErrors.password && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.password}</p>}
-                    
-                    {/* UI Kiểm tra mật khẩu mạnh yếu Real-time */}
-                    {formData.password && pwdStrength && (
-                      <div className="mt-2 ml-1 pr-1">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-label text-slate-500 dark:text-white/60">
-                            {lang === "VN" ? "Độ bảo mật:" : "Strength:"}
-                          </span>
-                          <span className={`text-xs font-bold ${pwdStrength.textColor}`}>
-                            {pwdStrength.text}
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                          <div className={`h-full ${pwdStrength.color} ${pwdStrength.width} transition-all duration-300`}></div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* CONFIRM PASSWORD */}
-                  <div className="space-y-1.5 relative">
-                    <label className="block text-sm font-label font-bold text-slate-700 dark:text-white/90 ml-1">Confirm Password *</label>
-                    <input
-                      name="confirmPassword"
-                      type={showConfirmPassword ? "text" : "password"}
-                      required
-                      value={formData.confirmPassword}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                      placeholder="••••••••"
-                      autoComplete="new-password"
-                      className={getInputClasses("confirmPassword")}
-                    />
-                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-[38px] text-slate-400 dark:text-white/40 cursor-pointer text-[20px] transition-colors hover:text-primary dark:hover:text-yellow-400">
-                      <span className="material-symbols-outlined">{showConfirmPassword ? "visibility_off" : "visibility"}</span>
-                    </button>
-                    {fieldErrors.confirmPassword && <p className="text-red-500 text-xs ml-1 mt-1">{fieldErrors.confirmPassword}</p>}
-                  </div>
-
-                  {/* Terms Checkbox */}
-                  <div className="flex items-start gap-3 pt-2">
-                    <input id="terms" name="termsAccepted" type="checkbox" required checked={formData.termsAccepted} onChange={handleChange} onBlur={handleBlur} className="h-5 w-5 rounded border-slate-300 dark:border-slate-600 text-primary mt-0.5 cursor-pointer" />
-                    <label className="text-sm font-body text-slate-600 dark:text-white/70 leading-tight" htmlFor="terms">
-                      I agree to the <a className="text-primary dark:text-yellow-400 font-bold hover:underline" href="#">Terms of Service</a> and <a className="text-primary dark:text-yellow-400 font-bold hover:underline" href="#">Privacy Policy</a>.
-                    </label>
-                  </div>
-                  {fieldErrors.termsAccepted && <p className="text-red-500 text-xs ml-8">{fieldErrors.termsAccepted}</p>}
-
-                  <button type="submit" disabled={isLoading} className="w-full liquid-gradient disabled:opacity-70 text-on-primary-fixed font-headline font-bold py-4 rounded-full shadow-md hover:shadow-lg hover:scale-[1.02] transition-all flex justify-center items-center gap-2 mt-4">
-                    {isLoading ? "Processing..." : "Register Account"}
-                  </button>
-
-                  <div className="text-center pt-2">
-                    <p className="text-sm text-slate-600 dark:text-white/70 font-body">
-                      Already have an account? <Link to="/login" className="font-bold text-primary dark:text-yellow-400 hover:underline ml-1">Sign In</Link>
-                    </p>
-                  </div>
-                </form>
-              </>
-            )}
-
-            {/* BƯỚC 2: MÀN HÌNH XÁC THỰC OTP */}
-            {step === 2 && (
-              <div className="animate-fade-in-up">
-                <header className="mb-8 text-center">
-                  <div className="w-16 h-16 bg-primary/10 dark:bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="material-symbols-outlined text-3xl text-primary dark:text-yellow-400">mark_email_read</span>
-                  </div>
-                  <h2 className="font-headline text-3xl font-bold text-slate-900 dark:text-white mb-2">Verify Account</h2>
-                  <p className="text-slate-600 dark:text-white/70 font-body text-sm">
-                    We've sent an OTP code to your {formData.otpChannel === 'email' ? 'Email' : 'Phone'}
-                    <br />
-                    <span className="font-bold text-slate-900 dark:text-white mt-1 inline-block">
-                      {formData.otpChannel === 'email' ? formData.email : formData.phone}
-                    </span>
-                  </p>
-                </header>
-
-                <form className="space-y-6" onSubmit={handleVerifyOtp}>
-                  <div className="space-y-2 text-center">
-                    <input
-                      type="text"
-                      maxLength="10"
-                      required
-                      value={otpCode}
-                      onChange={(e) => { setOtpCode(e.target.value); setErrorMsg(""); }}
-                      placeholder="Enter OTP"
-                      className="w-full text-center tracking-[0.5em] font-headline font-bold text-2xl px-5 py-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-transparent rounded-xl focus:ring-2 focus:ring-primary/40 dark:focus:ring-yellow-400/20 focus:border-primary dark:focus:border-transparent text-slate-900 dark:text-white outline-none transition-all uppercase"
-                    />
-                  </div>
-
-                  <button type="submit" disabled={isLoading} className="w-full liquid-gradient disabled:opacity-70 text-on-primary-fixed font-headline font-bold py-4 rounded-full shadow-md hover:shadow-lg hover:scale-[1.02] transition-all">
-                    {isLoading ? "Verifying..." : "Verify OTP"}
-                  </button>
-                </form>
-
-                <div className="text-center mt-8">
-                  {resendCooldown > 0 ? (
-                    <p className="text-sm text-slate-500 dark:text-white/60 font-medium">
-                      Resend OTP in <span className="font-bold text-primary dark:text-yellow-400">{formatTime(resendCooldown)}</span>
-                    </p>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2 animate-fade-in-up">
-                      <p className="text-sm text-slate-600 dark:text-white/70 font-body mb-1">Didn't receive the code?</p>
-                      <button 
-                        type="button"
-                        onClick={handleResendOtp}
-                        disabled={isLoading}
-                        className="text-sm font-bold text-primary dark:text-yellow-400 hover:underline disabled:opacity-50 transition-all"
-                      >
-                        Resend OTP
-                      </button>
-                    </div>
-                  )}
-                  
-                  <p className="text-[11px] text-slate-400 mt-6 uppercase tracking-wider font-label">
-                    Session expires in {formatTime(expireTime)}
-                  </p>
+          {/* BƯỚC 1: ĐIỀN FORM ĐĂNG KÝ */}
+          {step === 1 && (
+            <form onSubmit={handleRegister} className="space-y-4 animate-fade-in">
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+               {/* HỌ VÀ TÊN */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                    {lang === "VN" ? "Họ và Tên (*)" : "Full Name (*)"}
+                  </label>
+                  <input
+                    type="text" name="fullName" required
+                    value={formData.fullName} onChange={handleChange}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                    placeholder="Nguyen Van A"
+                  />
+                </div>
+                {/* NGÀY SINH */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                    {lang === "VN" ? "Ngày sinh" : "Date of Birth"}
+                  </label>
+                  <input
+                    type="date" name="dateOfBirth"
+                    value={formData.dateOfBirth} onChange={handleChange}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                  />
                 </div>
               </div>
-            )}
-          </div>
+              {/* GIỚI TÍNH */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                    {lang === "VN" ? "Giới tính" : "Gender"}
+                  </label>
+                  <select
+                    name="gender" value={formData.gender} onChange={handleChange}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                  >
+                    <option value="Male">{lang === "VN" ? "Nam" : "Male"}</option>
+                    <option value="Female">{lang === "VN" ? "Nữ" : "Female"}</option>
+                    <option value="Other">{lang === "VN" ? "Khác" : "Other"}</option>
+                  </select>
+                </div>
+                {/* QUỐC TỊCH */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                    {lang === "VN" ? "Quốc tịch" : "Nationality"}
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className={`fi fi-${selectedFlag} absolute left-8 text-sm rounded-sm pointer-events-none shadow-sm`}></span>
+                    <select
+                      value={selectedFlag} onChange={handleNationalityChange}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-11 pr-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all appearance-none shadow-inner"
+                    >
+                      {countryList.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="material-symbols-outlined text-slate-400 absolute right-3 pointer-events-none text-base">arrow_drop_down</span>
+                  </div>
+                </div>
+              </div>
+              {/* EMAIL & PHONE */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                  {lang === "VN" ? "Thông tin liên hệ (Cần điền SĐT hoặc Email)" : "Contact (Fill Phone or Email)"}
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <input
+                    type="tel" name="phone" value={formData.phone} onChange={handleChange}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-md"
+                    placeholder={lang === "VN" ? "Số điện thoại..." : "Phone Number..."}
+                  />
+                  <input
+                    type="email" name="email" value={formData.email} onChange={handleChange}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-md"
+                    placeholder="Email..."
+                  />
+                </div>
+              </div>
+
+              {showOtpSelection && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 animate-fade-in">
+                  <label className="text-[10px] font-bold uppercase text-[#124757] dark:text-yellow-400 tracking-wider mb-1.5 sm:mb-0">
+                    {lang === "VN" ? "Nhận mã xác nhận qua:" : "Receive verification via:"}
+                  </label>
+                  <div className="flex gap-6">
+                    <label className="flex items-center gap-1.5 cursor-pointer group">
+                      <input
+                        type="radio" name="otpChannel" value="SMS"
+                        checked={formData.otpChannel === "SMS"} onChange={handleChange}
+                        className="text-[#124757] focus:ring-[#124757] dark:text-yellow-400 dark:focus:ring-yellow-400 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors">SMS</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer group">
+                      <input
+                        type="radio" name="otpChannel" value="EMAIL"
+                        checked={formData.otpChannel === "EMAIL"} onChange={handleChange}
+                        className="text-[#124757] focus:ring-[#124757] dark:text-yellow-400 dark:focus:ring-yellow-400 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors">Email</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+              {/* PASSWORD */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                    {lang === "VN" ? "Mật khẩu (*)" : "Password (*)"}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"} name="password" required
+                      value={formData.password} onChange={handleChange}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-4 pr-10 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button" onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {showPassword ? "visibility" : "visibility_off"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                    {lang === "VN" ? "Xác nhận mật khẩu (*)" : "Confirm (*)"}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"} name="confirmPassword" required
+                      value={formData.confirmPassword} onChange={handleChange}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-4 pr-10 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {showConfirmPassword ? "visibility" : "visibility_off"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 pb-2">
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox" name="termsAccepted"
+                    checked={formData.termsAccepted} onChange={handleChange}
+                    className="mt-1 rounded text-[#124757] focus:ring-[#124757] dark:text-yellow-400 dark:focus:ring-yellow-400 cursor-pointer w-4 h-4"
+                  />
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
+                    {lang === "VN" ? "Tôi đồng ý với " : "I agree to the "}
+                    <a href="#" className="font-bold text-[#124757] dark:text-yellow-400 hover:underline">
+                      {lang === "VN" ? "Điều khoản dịch vụ" : "Terms of Service"}
+                    </a>
+                    {lang === "VN" ? " và " : " and "}
+                    <a href="#" className="font-bold text-[#124757] dark:text-yellow-400 hover:underline">
+                      {lang === "VN" ? "Chính sách bảo mật" : "Privacy Policy"}
+                    </a>.
+                  </span>
+                </label>
+              </div>
+              {/* NÚT ĐĂNG KÝ */}
+              <button
+                type="submit" disabled={isLoading}
+                className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 py-4 mt-2 rounded-xl font-black font-headline uppercase text-sm tracking-widest hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+              >
+                {isLoading && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
+                {lang === "VN" ? "Đăng ký tài khoản" : "Sign Up"}
+              </button>
+            </form>
+          )}
+
+          {/* BƯỚC 2: XÁC THỰC MÃ OTP */}
+          {step === 2 && (
+            <div className="animate-fade-in">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-[#124757]/10 dark:bg-yellow-400/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#124757]/20 dark:border-yellow-400/20">
+                  <span className="material-symbols-outlined text-3xl text-[#124757] dark:text-yellow-400">lock_open</span>
+                </div>
+                <h3 className="text-xl font-black font-headline text-slate-800 dark:text-white mb-2">
+                  {lang === "VN" ? "Nhập mã OTP" : "Enter OTP Code"}
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed max-w-xs mx-auto">
+                  {lang === "VN" 
+                    ? `Hệ thống đã gửi mã xác minh gồm 6 chữ số đến ${maskedTarget}` 
+                    : `We sent a 6-digit verification code to your ${maskedTarget}`}
+                </p>
+              </div>
+
+              <form onSubmit={handleVerifyOtp} className="space-y-6">
+                <div>
+                  <input
+                    type="text" maxLength={6} value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-4 text-center text-2xl font-black tracking-[0.5em] text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                    placeholder="------"
+                  />
+                </div>
+
+                <button
+                  type="submit" disabled={isLoading || otpCode.length < 6}
+                  className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 py-4 rounded-xl font-black font-headline uppercase text-sm tracking-widest hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isLoading && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
+                  {isLoading ? (lang === "VN" ? "Đang xác thực..." : "Verifying...") : (lang === "VN" ? "Xác thực OTP" : "Verify OTP")}
+                </button>
+              </form>
+
+              <div className="text-center mt-8">
+                {resendCooldown > 0 ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                    {lang === "VN" ? "Gửi lại mã mới sau: " : "Resend OTP in "} <span className="font-bold text-[#124757] dark:text-yellow-400">{formatTime(resendCooldown)}</span>
+                  </p>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 animate-fade-in-up">
+                    <p className="text-sm text-slate-600 dark:text-slate-400 font-medium mb-1">
+                      {lang === "VN" ? "Bạn vẫn chưa nhận được mã?" : "Didn't receive the code?"}
+                    </p>
+                    <button 
+                      type="button" onClick={handleResendOtp} disabled={isLoading}
+                      className="text-sm font-bold text-[#124757] dark:text-yellow-400 hover:underline disabled:opacity-50 transition-all"
+                    >
+                      {lang === "VN" ? "Gửi lại mã OTP mới" : "Resend OTP"}
+                    </button>
+                  </div>
+                )}
+                
+                <p className="text-[11px] text-slate-400 mt-8 uppercase tracking-wider font-bold">
+                  {lang === "VN" ? "Mã hết hạn sau: " : "Session expires in "} {formatTime(expireTime)}
+                </p>
+              </div>
+            </div>
+          )}
+
         </section>
       </main>
     </div>

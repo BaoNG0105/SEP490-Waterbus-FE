@@ -148,9 +148,7 @@ export const Login = () => {
   return (
     <div className="min-h-screen w-full flex font-body bg-white dark:bg-slate-900 transition-colors duration-300 overflow-x-hidden">
 
-      {/* ========================================================================= */}
-      {/* CỘT TRÁI: BANNER HÌNH ẢNH CHIẾM TRỌN 50% MÀN HÌNH (STICKY FIXED THEO HEIGHT) */}
-      {/* ========================================================================= */}
+      {/* CỘT TRÁI: BANNER HÌNH ẢNH  */}
       <div className="w-1/2 h-screen top-0 hidden md:block relative overflow-hidden shrink-0 select-none">
         <img
           src="https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png"
@@ -163,7 +161,7 @@ export const Login = () => {
         {/* Khung nội dung text nổi dưới chân ảnh */}
         <div className="absolute bottom-12 left-12 right-12 text-white space-y-2 z-10">
           <h2 className="font-headline font-black text-4xl uppercase tracking-wider text-[#FFD100] drop-shadow-md">
-            WaterBus.
+            WaterBus
           </h2>
           <p className="text-base font-medium text-white/80 max-w-sm leading-relaxed">
             {lang === "VN"
@@ -173,10 +171,8 @@ export const Login = () => {
         </div>
       </div>
 
-      {/* ========================================================================= */}
       {/* CỘT PHẢI: KHÔNG GIAN FORM ĐĂNG NHẬP FULL CHIỀU CAO MÀN HÌNH */}
-      {/* ========================================================================= */}
-      <div className="flex-1 min-h-screen flex flex-col justify-center bg-white dark:bg-slate-800 px-6 py-12 sm:px-12 md:px-16 lg:px-24 relative">
+      <div className="flex-1 min-h-screen flex flex-col justify-center bg-white dark:bg-slate-900 px-6 py-12 sm:px-12 md:px-16 lg:px-24 relative">
 
         {/* NÚT QUAY LẠI TRANG CHỦ GÓC TRÊN */}
         <Link
@@ -192,7 +188,7 @@ export const Login = () => {
 
           {/* Tiêu đề đầu Form */}
           <div className="space-y-2 text-center md:text-left">
-            <h1 className="text-3xl md:text-4xl font-headline font-black text-[#124757] dark:text-white tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-headline font-black text-[#124757] dark:text-yellow-400 tracking-tight">
               {lang === "VN" ? "Đăng Nhập" : "Welcome Back"}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">

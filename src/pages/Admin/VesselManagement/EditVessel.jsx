@@ -129,7 +129,6 @@ export function EditVessel() {
         payload.append("code", normalizedCode);
         payload.append("name", formData.name.trim());
         payload.append("seatCount", formData.seatCount);
-        payload.append("passengerCapacity", formData.passengerCapacity);
         payload.append("numberOfDecks", formData.numberOfDecks);
         payload.append("seatSetupType", formData.seatSetupType);
         payload.append("registrationNumber", formData.registrationNumber.trim());
@@ -143,7 +142,6 @@ export function EditVessel() {
           code: normalizedCode,
           name: formData.name.trim(),
           seatCount: formData.seatCount,
-          passengerCapacity: formData.passengerCapacity,
           numberOfDecks: formData.numberOfDecks,
           seatSetupType: formData.seatSetupType,
           registrationNumber: formData.registrationNumber.trim(),
@@ -323,15 +321,6 @@ export function EditVessel() {
               <input
                 type="number" required min={1} max={500} value={formData?.seatCount || 0}
                 onChange={(e) => handleInputChange("seatCount", Number(e.target.value))}
-                className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Tối đa hành khách (*)" : "Passenger Capacity"}</label>
-              <input
-                type="number" required min={1} max={500} value={formData?.passengerCapacity || 0}
-                onChange={(e) => handleInputChange("passengerCapacity", Number(e.target.value))}
                 className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-3 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
               />
             </div>
