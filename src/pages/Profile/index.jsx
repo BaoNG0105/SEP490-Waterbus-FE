@@ -1,595 +1,460 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useApp } from "../../context/AppContext";
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../../redux/authSlice";
+import { fetchCurrentUserProfile, updateProfile } from "../../services/authService";
 import Swal from "sweetalert2";
+import "flag-icons/css/flag-icons.min.css";
 
-// DATA MẪU
-const mockUserStats = {
-  points: 12840,
-};
+import countries from "i18n-iso-countries";
+import viLocale from "i18n-iso-countries/langs/vi.json";
+import enLocale from "i18n-iso-countries/langs/en.json";
 
-const mockUpcomingTrips = [
-  {
-    id: "TICKET-12345",
-    boatNumber: "#420",
-    from: { vn: "Bến Bạch Đằng", en: "Bach Dang Wharf" },
-    to: { vn: "Đảo Thanh Đa", en: "Thanh Da Island" },
-    date: "Oct 24, 2026",
-    time: "08:45 AM",
-    iconColor: "text-primary dark:text-yellow-400",
-  },
-  {
-    id: "TICKET-67890",
-    boatNumber: "#246",
-    from: { vn: "Bến Thủ Thiêm", en: "Thu Thiem Terminal" },
-    to: { vn: "Bến Bạch Đằng", en: "Bach Dang Wharf" },
-    date: "Oct 28, 2026",
-    time: "05:30 PM",
-    iconColor: "text-primary dark:text-yellow-400",
+countries.registerLocale(viLocale);
+countries.registerLocale(enLocale);
+
+// DATA MẪU TẠM THỜI
+const mockUserStats = { points: 12840 };
+const mockUpcomingTrips = []; // Lược bớt hiển thị chuyến đi để tập trung code
+
+const convertDateForInput = (dateString) => {
+  if (!dateString) return "";
+  const parts = dateString.split("/");
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
   }
-];
-
-// Thêm dữ liệu để test phân trang
-const mockBookingHistory = [
-  { id: "BK01", date: "Oct 12, 2026", from: "Bạch Đằng", to: "Bình An", amount: "15,000đ", status: "COMPLETED" },
-  { id: "BK02", date: "Oct 05, 2026", from: "Thủ Thiêm", to: "Thanh Đa", amount: "30,000đ", status: "COMPLETED" },
-  { id: "BK04", date: "Sep 20, 2026", from: "Thanh Đa", to: "Bình An", amount: "15,000đ", status: "CANCELLED" },
-  { id: "BK05", date: "Sep 15, 2026", from: "Linh Đông", to: "Bạch Đằng", amount: "15,000đ", status: "COMPLETED" },
-  { id: "BK06", date: "Sep 10, 2026", from: "Bình An", to: "Thủ Thiêm", amount: "15,000đ", status: "COMPLETED" },
-  { id: "BK08", date: "Aug 25, 2026", from: "Thủ Thiêm", to: "Linh Đông", amount: "15,000đ", status: "COMPLETED" },
-];
-
-const STATUS_CONFIG = {
-  COMPLETED: { vn: "Thành công", en: "Completed", classes: "bg-green-500/10 text-green-600 dark:text-green-400" },
-  CANCELLED: { vn: "Đã hủy", en: "Cancelled", classes: "bg-red-500/10 text-red-600 dark:text-red-400" }
+  return dateString;
 };
 
 export const Profile = () => {
   const { lang, isDarkMode } = useApp();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-
   const { user } = useSelector((state) => state.auth);
 
-  const defaultAvatar = "https://lh3.googleusercontent.com/aida-public/AB6AXuCJgEa1CJ6nEykaMCLialWDQWttf8sV3FmrwfpNsqm6OO9JzpZ8RcUQ1TWOwuutMrcEIMzEMozSlrOI28PIho2BdBNTFUC6OzHhjFH6UfeVhwuWTTTw3dFZtDn4rSlgsCXg6TGY88SStie6-CNRXxbboKK4EiEwhyYik6ZU2tM5ytXTRHz2M_OPltBXE3K4LGi2qWZoUw6EDd5-C-Uqc-tBO_-Tgj9zqYcTicR6MYKwEvvgdWXOqHahk_6FCxc0FkAqulS6IJiVBEJc";
-  const displayAvatar = user?.avatarUrl || defaultAvatar;
-  const displayName = user?.fullName || (lang === "VN" ? "Người dùng" : "User");
-  const displayRole = user?.roleName || "Customer";
-
-  // STATE: MODAL CẬP NHẬT THÔNG TIN
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState(null);
+
+  // Lấy danh sách quốc gia
+  const countryList = useMemo(() => {
+    const countryObj = countries.getNames(lang === "VN" ? "vi" : "en", { select: "official" });
+    return Object.entries(countryObj).map(([code, name]) => ({
+      code: code.toLowerCase(),
+      name: name,
+      isoCode: code
+    }));
+  }, [lang]);
+
+  const [selectedFlag, setSelectedFlag] = useState("vn");
+
   const [profileData, setProfileData] = useState({
-    fullName: user?.fullName || "",
-    gender: "male",
-    dateOfBirth: "",
-    address: "",
-    phone: user?.phone || "",
-    email: user?.email || "",
+    fullName: "",
+    email: "",
+    phoneNumber: "",
+    dob: "",
+    gender: "Male",
+    nationality: "Vietnam",
+    avatarUrl: "",
+    roleName: "Khách hàng",
+    emailUnverified: false // Biến tạm lưu trạng thái chờ verify email
   });
 
-  const handleOpenEditProfile = () => {
-    setIsEditProfileOpen(true);
-  };
+  // HÀM TẢI DỮ LIỆU ĐƯỢC TÁCH RA ĐỂ GỌI LẠI SAU KHI CẬP NHẬT THÀNH CÔNG
+  const loadProfileData = useCallback(async () => {
+    try {
+      setIsLoadingProfile(true);
+      const data = await fetchCurrentUserProfile();
 
+      const userNationality = data.nationality || "Vietnam";
+      const matchedCountry = countryList.find(c => c.name === userNationality || c.isoCode.toUpperCase() === userNationality.toUpperCase());
+      if (matchedCountry) setSelectedFlag(matchedCountry.code);
+
+      setProfileData({
+        fullName: data.fullName || "",
+        email: data.email || "",
+        phoneNumber: data.phoneNumber || "",
+        dob: convertDateForInput(data.dateOfBirth),
+        gender: data.gender || "Male",
+        nationality: userNationality,
+        avatarUrl: data.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
+        roleName: data.roles?.[0]?.displayName || "Khách hàng"
+      });
+      setSelectedAvatarFile(null); // Reset lại file
+    } catch (error) {
+      console.error("Lỗi khi tải Profile:", error);
+      if (error.response && error.response.status === 401) {
+        Swal.fire({
+          icon: "warning",
+          title: lang === "VN" ? "Hết phiên đăng nhập!" : "Session Expired!",
+          text: lang === "VN" ? "Vui lòng đăng nhập lại để tiếp tục." : "Please log in again to continue.",
+          confirmButtonColor: "#124757",
+        }).then(() => {
+          dispatch(logout());
+          navigate("/login");
+        });
+      }
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  }, [countryList, dispatch, lang, navigate]);
+
+  useEffect(() => {
+    loadProfileData();
+  }, [loadProfileData]);
+
+  // ==========================================
+  // XỬ LÝ NHẬP LIỆU & ĐỔI ẢNH (BẮT LỖI TỪ CLIENT)
+  // ==========================================
   const handleProfileDataChange = (e) => {
     const { name, value } = e.target;
     setProfileData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSaveProfile = (e) => {
+  const handleNationalityChange = (e) => {
+    const matched = countryList.find(item => item.code === e.target.value);
+    if (matched) {
+      setSelectedFlag(matched.code);
+      setProfileData(prev => ({
+        ...prev,
+        nationality: countries.getName(matched.isoCode, "en") // Gửi tiếng Anh lên BE
+      }));
+    }
+  };
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        Swal.fire({ icon: 'error', title: 'Định dạng không hợp lệ', text: 'Chỉ hỗ trợ JPEG, PNG, WebP.' });
+        e.target.value = null;
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        Swal.fire({ icon: 'error', title: 'File quá lớn', text: 'Dung lượng ảnh tối đa 5MB.' });
+        e.target.value = null;
+        return;
+      }
+      setSelectedAvatarFile(file);
+      setProfileData(prev => ({ ...prev, avatarUrl: URL.createObjectURL(file) }));
+    }
+  };
+
+  // ==========================================
+  // SUBMIT CẬP NHẬT (TỰ ĐỘNG CHIA NHÁNH JSON / MULTIPART)
+  // ==========================================
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    Swal.fire({
-      icon: 'success',
-      title: lang === "VN" ? 'Cập nhật thành công!' : 'Profile Updated!',
-      background: isDarkMode ? '#1e293b' : '#ffffff',
-      color: isDarkMode ? '#ffffff' : '#0f172a',
-      timer: 2000,
-      showConfirmButton: false
-    });
-    setIsEditProfileOpen(false);
+    setIsUpdating(true);
+
+    let formattedDate = null;
+    if (profileData.dob) {
+      const [year, month, day] = profileData.dob.split("-");
+      formattedDate = `${day}/${month}/${year}`;
+    }
+
+    let payload;
+
+    // NẾU CÓ ẢNH THÌ GÓI THÀNH FORMDATA
+    if (selectedAvatarFile) {
+      payload = new FormData();
+      if (profileData.fullName) payload.append("fullName", profileData.fullName.trim());
+      if (formattedDate) payload.append("dateOfBirth", formattedDate);
+      if (profileData.gender) payload.append("gender", profileData.gender);
+      if (profileData.nationality) payload.append("nationality", profileData.nationality);
+      if (profileData.phoneNumber) payload.append("phoneNumber", profileData.phoneNumber.trim());
+      if (profileData.email) payload.append("email", profileData.email.trim());
+      payload.append("file", selectedAvatarFile);
+    }
+    // NẾU KHÔNG CÓ ẢNH THÌ GỬI JSON THƯỜNG
+    else {
+      payload = {
+        fullName: profileData.fullName.trim() || undefined,
+        dateOfBirth: formattedDate,
+        gender: profileData.gender,
+        nationality: profileData.nationality,
+        phoneNumber: profileData.phoneNumber.trim() || undefined,
+        email: profileData.email.trim() || undefined
+      };
+    }
+
+    try {
+      await updateProfile(payload);
+
+      Swal.fire({
+        icon: "success",
+        title: lang === "VN" ? "Cập nhật thành công!" : "Profile Updated!",
+        text: lang === "VN" ? "Hệ thống sẽ gửi OTP nếu bạn vừa thay đổi Email." : "OTP will be sent if email was changed.",
+        confirmButtonColor: "#124757",
+        background: isDarkMode ? "#1e293b" : "#fff",
+        color: isDarkMode ? "#fff" : "#000",
+      });
+
+      setIsEditProfileOpen(false);
+      loadProfileData(); // Render lại dữ liệu mới nhất
+
+    } catch (error) {
+      console.error("Lỗi cập nhật:", error);
+      Swal.fire({
+        icon: "error",
+        title: lang === "VN" ? "Cập nhật thất bại" : "Update Failed",
+        text: error.response?.data?.message || "Vui lòng thử lại sau.",
+        confirmButtonColor: "#124757"
+      });
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
-  // STATE: FORM CẬP NHẬT MẬT KHẨU
-  const [passwords, setPasswords] = useState({
-    oldPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-
-  const [showPasswords, setShowPasswords] = useState({
-    old: false,
-    new: false,
-    confirm: false,
-  });
-
-  const handlePasswordChange = (e) => {
-    const { name, value } = e.target;
-    setPasswords((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const togglePasswordVisibility = (field) => {
-    setShowPasswords((prev) => ({ ...prev, [field]: !prev[field] }));
-  };
-
-  // LOGOUT
   const handleLogout = () => {
     Swal.fire({
-      title: lang === "VN" ? "Xác nhận đăng xuất?" : "Confirm Logout?",
-      text: lang === "VN" ? "Bạn sẽ cần đăng nhập lại để xem vé." : "You will need to log in again to view tickets.",
+      title: lang === "VN" ? "Bạn có chắc chắn muốn đăng xuất?" : "Are you sure you want to log out?",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#3085d6",
+      confirmButtonColor: "#124757",
       cancelButtonColor: "#d33",
-      confirmButtonText: lang === "VN" ? "Vâng, Đăng xuất" : "Yes, Sign Out",
+      confirmButtonText: lang === "VN" ? "Đăng xuất" : "Log out",
       cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
-      background: isDarkMode ? "#1e293b" : "#ffffff",
-      color: isDarkMode ? "#ffffff" : "#0f172a",
+      background: isDarkMode ? "#1e293b" : "#fff",
+      color: isDarkMode ? "#fff" : "#000",
     }).then((result) => {
       if (result.isConfirmed) {
         dispatch(logout());
-        navigate("/login");
+        navigate("/");
       }
     });
   };
 
-  // LOGIC PHÂN TRANG & LỌC DỮ LIỆU
-  const [filterStatus, setFilterStatus] = useState("ALL");
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 4; // Số lượng hiển thị mỗi trang
-
-  // Lọc dữ liệu
-  const filteredHistory = mockBookingHistory.filter(
-    item => filterStatus === "ALL" || item.status === filterStatus
-  );
-
-  // Tính toán phân trang
-  const totalPages = Math.ceil(filteredHistory.length / ITEMS_PER_PAGE);
-  const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
-  const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
-  const currentItems = filteredHistory.slice(indexOfFirstItem, indexOfLastItem);
-
-  const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
-
-  const inputClasses = "w-full bg-surface-container-low dark:bg-slate-700 border-0 rounded-xl py-3.5 px-5 focus:ring-2 focus:ring-primary dark:focus:ring-yellow-400 text-slate-900 dark:text-white font-body outline-none transition-shadow";
-  const labelClasses = "block text-xs font-label font-bold text-on-surface-variant dark:text-white/60 uppercase tracking-widest mb-2.5";
+  const labelClasses = "text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1.5 block";
+  const inputClasses = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner";
 
   return (
-    <main className="pt-32 pb-24 px-6 md:px-12 max-w-screen-2xl mx-auto min-h-screen bg-surface dark:bg-slate-900 transition-colors duration-300 relative">
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-        {/* CỘT TRÁI: Tổng quan hồ sơ */}
-        <aside className="md:col-span-4 space-y-8">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-xl border border-surface-variant dark:border-slate-700 group hover:scale-[1.02] transition-transform duration-300">
-            <div className="flex flex-col items-center text-center">
-              <div className="relative mb-6">
-                <div className="w-32 h-32 rounded-full overflow-hidden shadow-xl ring-4 ring-primary-container/20 dark:ring-yellow-400/20 bg-slate-100">
-                  <img alt="User Avatar" className="w-full h-full object-cover" src={displayAvatar} />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 sm:px-6 lg:px-8 font-body transition-colors">
+
+      <div className="max-w-4xl mx-auto flex items-center justify-between mb-8">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
+          <span className="material-symbols-outlined text-xl">arrow_back</span>
+          {lang === "VN" ? "Quay lại" : "Back"}
+        </button>
+      </div>
+
+      {isLoadingProfile ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+        </div>
+      ) : (
+        <>
+          <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-[2rem] overflow-hidden shadow-xl border border-slate-100 dark:border-slate-700/50 mb-8 animate-fade-in-up">
+            <div className="h-40 sm:h-48 bg-[#124757] dark:bg-slate-900 relative overflow-hidden">
+              <div className="absolute inset-0 bg-black/20 z-10"></div>
+              <img src="https://res.cloudinary.com/dygipvoal/image/upload/v1781725530/c3i0whtz6gszslc5pa9f.jpg" alt="Cover" className="w-full h-full object-cover object-center opacity-80" />
+            </div>
+
+            <div className="px-6 sm:px-10 pb-8 relative">
+              <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 -mt-16 sm:-mt-20 relative z-20">
+                <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 text-center sm:text-left">
+                  <div className="w-32 h-32 rounded-[2rem] border-4 border-white dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-700 shadow-lg shrink-0">
+                    <img src={profileData.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="pb-2">
+                    <h1 className="text-2xl sm:text-3xl font-black font-headline text-yellow-400 dark:text-yellow-400 leading-tight">
+                      {profileData.fullName || "Member"}
+                    </h1>
+                    <p className="text-white dark:text-white font-medium text-sm mt-1">
+                      {profileData.phoneNumber} {profileData.email ? `• ${profileData.email}` : ""}
+                    </p>
+                    <div className="flex items-center gap-2 justify-center sm:justify-start mt-2">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-200 dark:border-emerald-500/20">
+                        <span className="material-symbols-outlined text-[14px]">verified</span>
+                        {lang === "VN" ? "Đã xác thực" : "Verified"}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-bold border border-indigo-200 dark:border-indigo-500/20">
+                        {profileData.roleName}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <button
-                  onClick={handleOpenEditProfile}
-                  className="absolute bottom-1 right-1 bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 p-2 rounded-full shadow-lg hover:scale-110 transition-transform"
-                >
-                  <span className="material-symbols-outlined text-sm">edit</span>
-                </button>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto pb-2">
+                  <button onClick={() => setIsEditProfileOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-yellow-400 text-slate-900 dark:bg-yellow-400 dark:text-slate-900 font-bold text-xs uppercase tracking-widest hover:brightness-110 hover:shadow-lg transition-all">
+                    <span className="material-symbols-outlined text-base">edit</span>
+                    {lang === "VN" ? "Chỉnh sửa" : "Edit Profile"}
+                  </button>
+                </div>
               </div>
-              <h1 className="text-3xl font-bold tracking-tight mb-1 font-headline text-slate-900 dark:text-white">{displayName}</h1>
-              <p className="text-on-surface-variant dark:text-white/60 font-label text-sm uppercase tracking-widest mb-6 font-bold">{displayRole}</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-10 pt-8 border-t border-slate-100 dark:border-slate-700">
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border border-slate-100 dark:border-slate-800 shadow-inner">
+                  <span className="material-symbols-outlined text-3xl text-amber-500 mb-2">stars</span>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1">
+                    {lang === "VN" ? "Điểm tích lũy" : "Reward Points"}
+                  </p>
+                  <h3 className="text-2xl font-black font-headline text-[#124757] dark:text-yellow-400">
+                    {mockUserStats.points.toLocaleString()}
+                  </h3>
+                </div>
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border border-slate-100 dark:border-slate-800 shadow-inner">
+                  <span className="material-symbols-outlined text-3xl text-[#124757] dark:text-yellow-400 mb-2">directions_boat</span>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1">
+                    {lang === "VN" ? "Chuyến đi" : "Total Trips"}
+                  </p>
+                  <h3 className="text-2xl font-black font-headline text-[#124757] dark:text-yellow-400">0</h3>
+                </div>
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border border-slate-100 dark:border-slate-800 shadow-inner">
+                  <span className="material-symbols-outlined text-3xl text-rose-500 mb-2">local_activity</span>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1">
+                    {lang === "VN" ? "Voucher hiện có" : "Available Vouchers"}
+                  </p>
+                  <h3 className="text-2xl font-black font-headline text-[#124757] dark:text-yellow-400">0</h3>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="bg-surface-container-highest/50 dark:bg-slate-800 backdrop-blur-md rounded-3xl p-8 border border-outline-variant/15 dark:border-slate-700 shadow-lg">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-xs font-label font-bold uppercase tracking-widest text-on-surface-variant dark:text-white/60 mb-2">
-                  {lang === "VN" ? "Điểm tích lũy" : "Available Points"}
-                </p>
-                <h3 className="text-5xl md:text-6xl font-black font-headline bg-gradient-to-br from-primary to-orange-400 dark:from-yellow-300 dark:to-yellow-500 bg-clip-text text-transparent drop-shadow-sm">
-                  {mockUserStats.points.toLocaleString()}
-                </h3>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* CỘT PHẢI: Nội dung chính */}
-        <div className="md:col-span-8 space-y-12">
-
-          {/* CHUYẾN ĐI SẮP TỚI */}
-          <section>
-            <div className="flex items-end justify-between mb-8 px-2">
-              <h2 className="text-3xl font-bold tracking-tight font-headline text-slate-900 dark:text-white">
-                {lang === "VN" ? "Chuyến đi sắp tới" : "Upcoming Trips"}
-              </h2>
-              <a className="text-sm font-bold text-primary dark:text-yellow-400 hover:underline cursor-pointer">
-                {lang === "VN" ? "Xem tất cả" : "View All"}
-              </a>
-            </div>
-
-            <div className="space-y-4">
-              {mockUpcomingTrips.map((trip) => (
-                <div key={trip.id} className="bg-white dark:bg-slate-800 rounded-3xl p-6 flex flex-col lg:flex-row gap-6 items-center shadow-md border border-surface-variant dark:border-slate-700 group hover:shadow-xl transition-all duration-300">
-                  <div className="w-32 h-32 bg-slate-100 dark:bg-white p-2 rounded-2xl shadow-inner flex shrink-0 items-center justify-center">
-                    <img
-                      alt="QR Code Ticket"
-                      className="w-full h-full opacity-80 mix-blend-multiply"
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${trip.id}`}
-                    />
-                  </div>
-                  <div className="flex-grow text-center lg:text-left">
-                    <div className={`flex items-center justify-center lg:justify-start gap-2 mb-2 ${trip.iconColor}`}>
-                      <span className="material-symbols-outlined text-sm">sailing</span>
-                      <span className="text-xs font-label font-bold uppercase tracking-widest">
-                        {lang === "VN" ? `Tàu ${trip.boatNumber}` : `Boat ${trip.boatNumber}`}
-                      </span>
-                    </div>
-                    <h3 className="text-xl font-bold mb-3 font-headline text-slate-900 dark:text-white">
-                      {lang === "VN" ? `${trip.from.vn} → ${trip.to.vn}` : `${trip.from.en} → ${trip.to.en}`}
-                    </h3>
-                    <div className="flex justify-center lg:justify-start gap-6 text-sm text-on-surface-variant dark:text-white/70 font-label font-medium">
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm">calendar_today</span> {trip.date}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm">schedule</span> {trip.time}
-                      </span>
-                    </div>
-                  </div>
+          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 pb-10">
+            <div className="md:col-span-2 space-y-6">
+              <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 sm:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest">
+                    {lang === "VN" ? "Chuyến đi sắp tới" : "Upcoming Trips"}
+                  </h2>
                 </div>
-              ))}
-            </div>
-          </section>
-
-          {/* LỊCH SỬ ĐẶT VÉ */}
-          <section>
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 px-2 gap-4">
-              <h2 className="text-3xl font-bold tracking-tight font-headline text-slate-900 dark:text-white">
-                {lang === "VN" ? "Lịch sử đặt vé" : "Booking History"}
-              </h2>
-
-              <div className="relative">
-                <select
-                  value={filterStatus}
-                  onChange={(e) => {
-                    setFilterStatus(e.target.value);
-                    setCurrentPage(1); // Reset page trực tiếp ngay khi chọn filter mới
-                  }} className="appearance-none w-full sm:w-auto bg-surface-container-low dark:bg-slate-700 text-sm font-label font-bold text-slate-700 dark:text-white border-0 rounded-xl px-5 py-3 pr-10 outline-none focus:ring-2 focus:ring-primary dark:focus:ring-yellow-400 cursor-pointer transition-shadow"
-                >
-                  <option value="ALL">{lang === "VN" ? "Tất cả trạng thái" : "All Status"}</option>
-                  <option value="COMPLETED">{lang === "VN" ? "Thành công" : "Completed"}</option>
-                  <option value="CANCELLED">{lang === "VN" ? "Đã hủy" : "Cancelled"}</option>
-                </select>
-                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 dark:text-white/50">
-                  expand_more
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-slate-800 rounded-3xl overflow-hidden border border-outline-variant/20 dark:border-slate-700 shadow-lg">
-              <div className="overflow-x-auto min-h-[300px]">
-                <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead className="bg-surface-container-low dark:bg-slate-900/50 border-b border-outline-variant/20 dark:border-slate-700">
-                    <tr>
-                      <th className="px-6 py-5 text-xs font-label font-bold uppercase tracking-widest text-on-surface-variant dark:text-white/50">
-                        {lang === "VN" ? "Ngày" : "Date"}
-                      </th>
-                      <th className="px-6 py-5 text-xs font-label font-bold uppercase tracking-widest text-on-surface-variant dark:text-white/50">
-                        {lang === "VN" ? "Tuyến đi" : "Route"}
-                      </th>
-                      <th className="px-6 py-5 text-xs font-label font-bold uppercase tracking-widest text-on-surface-variant dark:text-white/50">
-                        {lang === "VN" ? "Số tiền" : "Amount"}
-                      </th>
-                      <th className="px-6 py-5 text-xs font-label font-bold uppercase tracking-widest text-on-surface-variant dark:text-white/50 text-right">
-                        {lang === "VN" ? "Trạng thái" : "Status"}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-outline-variant/10 dark:divide-slate-700">
-                    {currentItems.length > 0 ? (
-                      currentItems.map((history) => (
-                        <tr key={history.id} className="hover:bg-surface-container-lowest dark:hover:bg-slate-700/50 transition-colors">
-                          <td className="px-6 py-4 font-label text-sm text-slate-600 dark:text-white/80 whitespace-nowrap">
-                            {history.date}
-                          </td>
-                          <td className="px-6 py-4 font-label text-sm font-bold text-slate-900 dark:text-white">
-                            <div className="flex items-center gap-2">
-                              {history.from}
-                              <span className="material-symbols-outlined text-[16px] text-slate-400">arrow_forward</span>
-                              {history.to}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 font-label text-sm font-medium text-slate-900 dark:text-white whitespace-nowrap">
-                            {history.amount}
-                          </td>
-                          <td className="px-6 py-4 text-right whitespace-nowrap">
-                            <span className={`text-[10px] font-bold px-3 py-1.5 rounded-lg uppercase tracking-wider ${STATUS_CONFIG[history.status].classes}`}>
-                              {lang === "VN" ? STATUS_CONFIG[history.status].vn : STATUS_CONFIG[history.status].en}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="4" className="px-6 py-12 text-center text-slate-500 dark:text-white/50 font-body">
-                          {lang === "VN" ? "Không có dữ liệu phù hợp." : "No records found."}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* PHÂN TRANG (PAGINATION) */}
-              {totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-outline-variant/20 dark:border-slate-700 bg-surface-container-lowest/50 dark:bg-slate-800 flex items-center justify-between">
-                  <span className="text-sm text-slate-500 dark:text-white/60 font-body">
-                    {lang === "VN" ? `Hiển thị ${indexOfFirstItem + 1} - ${Math.min(indexOfLastItem, filteredHistory.length)} trên tổng số ${filteredHistory.length}` : `Showing ${indexOfFirstItem + 1} to ${Math.min(indexOfLastItem, filteredHistory.length)} of ${filteredHistory.length}`}
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handlePrevPage}
-                      disabled={currentPage === 1}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-                    </button>
-
-                    {[...Array(totalPages)].map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setCurrentPage(index + 1)}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-bold transition-colors ${currentPage === index + 1
-                          ? "bg-primary dark:bg-yellow-400 text-white dark:text-slate-900"
-                          : "border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-slate-700"
-                          }`}
-                      >
-                        {index + 1}
-                      </button>
-                    ))}
-
-                    <button
-                      onClick={handleNextPage}
-                      disabled={currentPage === totalPages}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Cài đặt tài khoản */}
-          <section>
-            <h2 className="text-3xl font-bold tracking-tight mb-8 px-2 font-headline text-slate-900 dark:text-white">
-              {lang === "VN" ? "Cài đặt tài khoản" : "Account Settings"}
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-surface-variant dark:border-slate-700 shadow-md flex flex-col h-full">
-                <div className="space-y-5 flex-grow">
-                  <div className="relative">
-                    <label className={labelClasses}>
-                      {lang === "VN" ? "Mật khẩu cũ" : "Current Password"}
-                    </label>
-                    <div className="relative">
-                      <input
-                        name="oldPassword"
-                        type={showPasswords.old ? "text" : "password"}
-                        value={passwords.oldPassword}
-                        onChange={handlePasswordChange}
-                        className={inputClasses}
-                        placeholder="••••••••••••"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => togglePasswordVisibility("old")}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-primary dark:hover:text-yellow-400 transition-colors flex"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">
-                          {showPasswords.old ? "visibility_off" : "visibility"}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="relative">
-                    <label className={labelClasses}>
-                      {lang === "VN" ? "Mật khẩu mới" : "New Password"}
-                    </label>
-                    <div className="relative">
-                      <input
-                        name="newPassword"
-                        type={showPasswords.new ? "text" : "password"}
-                        value={passwords.newPassword}
-                        onChange={handlePasswordChange}
-                        className={inputClasses}
-                        placeholder="••••••••••••"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => togglePasswordVisibility("new")}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-primary dark:hover:text-yellow-400 transition-colors flex"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">
-                          {showPasswords.new ? "visibility_off" : "visibility"}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="relative pb-2">
-                    <label className={labelClasses}>
-                      {lang === "VN" ? "Xác nhận mật khẩu mới" : "Confirm New Password"}
-                    </label>
-                    <div className="relative">
-                      <input
-                        name="confirmPassword"
-                        type={showPasswords.confirm ? "text" : "password"}
-                        value={passwords.confirmPassword}
-                        onChange={handlePasswordChange}
-                        className={inputClasses}
-                        placeholder="••••••••••••"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => togglePasswordVisibility("confirm")}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40 hover:text-primary dark:hover:text-yellow-400 transition-colors flex"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">
-                          {showPasswords.confirm ? "visibility_off" : "visibility"}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <button className="w-full bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-900 px-6 py-4 rounded-xl font-label font-bold text-xs uppercase tracking-widest hover:brightness-110 transition-all shadow-md mt-6">
-                  {lang === "VN" ? "Lưu thay đổi" : "Save Profile Changes"}
-                </button>
-              </div>
-
-              {/* Đăng xuất */}
-              <div className="space-y-6 bg-white dark:bg-slate-800 p-8 rounded-[2.5rem] border border-surface-variant dark:border-slate-700 shadow-md flex flex-col justify-between">
-                <div>
-                  <h4 className="text-xl font-bold mb-3 font-headline text-slate-900 dark:text-white">
-                    {lang === "VN" ? "Quản lý truy cập" : "Access Management"}
-                  </h4>
-                  <p className="text-sm text-on-surface-variant dark:text-white/70 mb-6 font-body">
-                    {lang === "VN" ? "Bạn có thể đăng xuất khỏi thiết bị này hoặc yêu cầu xóa vĩnh viễn tài khoản." : "You can securely sign out or permanently delete your account."}
+                <div className="text-center py-10 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                  <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 mb-2">sailing</span>
+                  <p className="text-sm font-bold text-slate-400">
+                    {lang === "VN" ? "Chưa có chuyến đi nào được đặt." : "No upcoming trips found."}
                   </p>
                 </div>
-                <div className="space-y-4">
-                  <button onClick={handleLogout} className="w-full flex justify-center items-center gap-2 border-2 border-slate-900 dark:border-white text-slate-900 dark:text-white px-6 py-3.5 rounded-xl font-label font-bold text-xs uppercase tracking-widest hover:bg-slate-900 hover:text-white dark:hover:bg-white dark:hover:text-slate-900 transition-all">
-                    <span className="material-symbols-outlined text-[18px]">logout</span>
-                    {lang === "VN" ? "Đăng xuất" : "Sign Out"}
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 sm:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
+                <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">
+                  {lang === "VN" ? "Bảo mật" : "Security"}
+                </h2>
+                <div className="space-y-3">
+                  <button onClick={() => navigate("/profile/change-password")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all group">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-500 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors">
+                        <span className="material-symbols-outlined">lock</span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                        {lang === "VN" ? "Đổi mật khẩu" : "Change Password"}
+                      </span>
+                    </div>
+                  </button>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-700">
+                  <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-4 rounded-xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-sm hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 transition-all">
+                    <span className="material-symbols-outlined">logout</span>
+                    {lang === "VN" ? "Đăng xuất" : "Log out"}
                   </button>
                 </div>
               </div>
             </div>
-          </section>
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
-      {/* MODAL CẬP NHẬT THÔNG TIN */}
+      {/* MODAL CẬP NHẬT HỒ SƠ */}
       {isEditProfileOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-[2rem] overflow-hidden shadow-2xl animate-[fadeIn_0.3s_ease-out] flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-[2rem] shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden relative mt-auto mb-auto sm:my-8 animate-fade-in-up">
 
-            <div className="px-6 md:px-8 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center sticky top-0 bg-white dark:bg-slate-900 z-10">
-              <h3 className="text-xl font-bold font-headline text-slate-900 dark:text-white">
-                {lang === "VN" ? "Cập nhật thông tin" : "Update Profile"}
-              </h3>
-              <button
-                onClick={() => setIsEditProfileOpen(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              >
-                <span className="material-symbols-outlined text-sm">close</span>
+            <div className="px-6 md:px-8 py-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+              <div>
+                <h2 className="text-xl font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest">
+                  {lang === "VN" ? "Cập nhật hồ sơ" : "Edit Profile"}
+                </h2>
+                <p className="text-xs font-bold text-slate-400 mt-1">
+                  {lang === "VN" ? "Thay đổi thông tin cá nhân của bạn" : "Update your personal details"}
+                </p>
+              </div>
+              <button disabled={isUpdating} onClick={() => setIsEditProfileOpen(false)} className="w-10 h-10 rounded-full flex items-center justify-center bg-white dark:bg-slate-800 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-all border border-slate-200 dark:border-slate-700 shadow-sm disabled:opacity-50">
+                <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <div className="p-6 md:p-8 overflow-y-auto no-scrollbar">
-              <form id="profileForm" onSubmit={handleSaveProfile} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-6 md:p-8">
+              <form id="profileForm" onSubmit={handleSaveProfile} className="space-y-5">
 
-                  {/* Họ và tên */}
-                  <div className="space-y-2 md:col-span-2">
-                    <label className={labelClasses}>{lang === "VN" ? "Họ và tên" : "Full Name"}</label>
-                    <input
-                      name="fullName"
-                      value={profileData.fullName}
-                      onChange={handleProfileDataChange}
-                      className={inputClasses}
-                      required
-                    />
+                {/* ẢNH ĐẠI DIỆN VỚI INPUT FILE */}
+                <div className="flex flex-col items-center mb-6">
+                  <div className="w-24 h-24 rounded-2xl border-2 border-[#124757] dark:border-yellow-400 overflow-hidden bg-slate-100 dark:bg-slate-700 relative group cursor-pointer mb-3 shadow-lg">
+                    <img src={profileData.avatarUrl} alt="Avatar" className="w-full h-full object-cover group-hover:opacity-40 transition-opacity" />
+                    <label className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[#124757] dark:text-yellow-400 cursor-pointer bg-black/10">
+                      <span className="material-symbols-outlined drop-shadow-md">photo_camera</span>
+                      <input type="file" accept="image/jpeg, image/png, image/webp" onChange={handleAvatarChange} className="hidden" />
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium">JPEG, PNG, WebP (Max 5MB)</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className={labelClasses}>{lang === "VN" ? "Họ và Tên (*)" : "Full Name (*)"}</label>
+                    <input required name="fullName" type="text" value={profileData.fullName} onChange={handleProfileDataChange} className={inputClasses} />
                   </div>
 
-                  {/* Giới tính */}
-                  <div className="space-y-2">
+                  <div>
                     <label className={labelClasses}>{lang === "VN" ? "Giới tính" : "Gender"}</label>
-                    <select
-                      name="gender"
-                      value={profileData.gender}
-                      onChange={handleProfileDataChange}
-                      className={`${inputClasses} appearance-none cursor-pointer`}
-                    >
-                      <option value="male">{lang === "VN" ? "Nam" : "Male"}</option>
-                      <option value="female">{lang === "VN" ? "Nữ" : "Female"}</option>
-                      <option value="other">{lang === "VN" ? "Khác" : "Other"}</option>
+                    <select name="gender" value={profileData.gender} onChange={handleProfileDataChange} className={inputClasses}>
+                      <option value="Male">{lang === "VN" ? "Nam" : "Male"}</option>
+                      <option value="Female">{lang === "VN" ? "Nữ" : "Female"}</option>
+                      <option value="Other">{lang === "VN" ? "Khác" : "Other"}</option>
                     </select>
                   </div>
 
-                  {/* Ngày sinh */}
-                  <div className="space-y-2">
+                  <div>
+                    <label className={labelClasses}>{lang === "VN" ? "Email (*)" : "Email (*)"}</label>
+                    <input required name="email" type="email" value={profileData.email} onChange={handleProfileDataChange} className={inputClasses} />
+                    <p className="text-[10px] text-amber-500 mt-1.5 font-bold italic">
+                      * {lang === "VN" ? "Cần verify OTP nếu thay đổi" : "OTP required if changed"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className={labelClasses}>{lang === "VN" ? "Số điện thoại (*)" : "Phone Number (*)"}</label>
+                    <input required name="phoneNumber" type="tel" value={profileData.phoneNumber} onChange={handleProfileDataChange} className={inputClasses} />
+                    <p className="text-[10px] text-slate-400 mt-1.5">
+                      * {lang === "VN" ? "User Google chỉ thêm 1 lần" : "Google users can add once"}
+                    </p>
+                  </div>
+
+                  <div>
                     <label className={labelClasses}>{lang === "VN" ? "Ngày sinh" : "Date of Birth"}</label>
-                    <input
-                      name="dateOfBirth"
-                      type="date"
-                      value={profileData.dateOfBirth}
-                      onChange={handleProfileDataChange}
-                      className={`${inputClasses} [&::-webkit-calendar-picker-indicator]:dark:invert cursor-pointer`}
-                    />
+                    <input name="dob" type="date" value={profileData.dob} onChange={handleProfileDataChange} className={inputClasses} />
                   </div>
 
-                  {/* Số điện thoại */}
-                  <div className="space-y-2">
-                    <label className={labelClasses}>{lang === "VN" ? "Số điện thoại" : "Phone Number"}</label>
-                    <input
-                      name="phone"
-                      type="tel"
-                      value={profileData.phone}
-                      onChange={handleProfileDataChange}
-                      className={inputClasses}
-                      placeholder="+84..."
-                    />
+                  {/* CHỌN QUỐC GIA */}
+                  <div>
+                    <label className={labelClasses}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
+                    <div className="relative flex items-center">
+                      <span className={`fi fi-${selectedFlag} absolute left-4 text-sm rounded-sm pointer-events-none shadow-sm`}></span>
+                      <select value={selectedFlag} onChange={handleNationalityChange} className={`${inputClasses} pl-11 appearance-none`}>
+                        {countryList.map((country) => (
+                          <option key={country.code} value={country.code}>{country.name}</option>
+                        ))}
+                      </select>
+                      <span className="material-symbols-outlined text-slate-400 absolute right-3 pointer-events-none">arrow_drop_down</span>
+                    </div>
                   </div>
-
-                  {/* Email */}
-                  <div className="space-y-2">
-                    <label className={labelClasses}>Email</label>
-                    <input
-                      name="email"
-                      type="email"
-                      value={profileData.email}
-                      onChange={handleProfileDataChange}
-                      className={inputClasses}
-                    />
-                  </div>
-
-                  {/* Địa chỉ */}
-                  <div className="space-y-2 md:col-span-2">
-                    <label className={labelClasses}>{lang === "VN" ? "Địa chỉ" : "Address"}</label>
-                    <input
-                      name="address"
-                      type="text"
-                      value={profileData.address}
-                      onChange={handleProfileDataChange}
-                      className={inputClasses}
-                    />
-                  </div>
-
                 </div>
               </form>
             </div>
 
-            <div className="px-6 md:px-8 py-5 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-900 z-10">
-              <button
-                onClick={() => setIsEditProfileOpen(false)}
-                className="px-6 py-2.5 rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-label"
-              >
+            <div className="px-6 md:px-8 py-5 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-4 bg-slate-50 dark:bg-slate-900/50 rounded-b-[2rem]">
+              <button type="button" disabled={isUpdating} onClick={() => setIsEditProfileOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all text-xs uppercase tracking-widest shadow-sm disabled:opacity-50">
                 {lang === "VN" ? "Hủy" : "Cancel"}
               </button>
-              <button
-                form="profileForm"
-                type="submit"
-                className="px-8 py-2.5 rounded-xl font-bold bg-slate-900 dark:bg-yellow-400 text-white dark:text-slate-900 hover:brightness-110 transition-all shadow-md font-label uppercase tracking-widest text-xs"
-              >
+              <button form="profileForm" type="submit" disabled={isUpdating} className="px-8 py-3 rounded-xl font-black bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 hover:brightness-110 transition-all shadow-md font-headline uppercase tracking-widest text-xs disabled:opacity-50 flex items-center gap-2">
+                {isUpdating && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
                 {lang === "VN" ? "Lưu thay đổi" : "Save Changes"}
               </button>
             </div>
@@ -597,7 +462,6 @@ export const Profile = () => {
           </div>
         </div>
       )}
-
-    </main>
+    </div>
   );
 };

@@ -13,6 +13,7 @@ import { Station } from "./pages/Station";
 import { Promotions } from "./pages/Promotions";
 import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
+import { ChangePassword } from "./pages/Profile/ChangePassword";
 import { Booking } from "./pages/Booking";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
@@ -71,6 +72,14 @@ function App() {
             <MainLayout>
               <Profile />
             </MainLayout>
+          }
+        />
+
+        {/* Change Password Page */}
+        <Route
+          path="/profile/change-password"
+          element={
+            <ChangePassword />
           }
         />
 
