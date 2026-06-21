@@ -1,8 +1,9 @@
-import { 
+import {
     getVessels as apiGetVessels,
     createVessel as apiCreateVessel,
     getVesselById as apiGetVesselById,
-    updateVessel as apiUpdateVessel
+    updateVessel as apiUpdateVessel,
+    updateVesselStatus as apiUpdateVesselStatus
 } from '../api/vesselApi';
 
 // Hàm Service lấy danh sách tàu
@@ -43,6 +44,16 @@ export const modifyVessel = async (vesselId, vesselPayload) => {
         return await apiUpdateVessel(vesselId, vesselPayload);
     } catch (error) {
         console.error(`Lỗi trong service modifyVessel tại ID ${vesselId}:`, error);
+        throw error;
+    }
+};
+
+// Hàm Service cập nhật trạng thái tàu
+export const modifyVesselStatus = async (vesselId, statusPayload) => {
+    try {
+        return await apiUpdateVesselStatus(vesselId, statusPayload);
+    } catch (error) {
+        console.error(`Lỗi khi cập nhật trạng thái tàu ${vesselId}:`, error);
         throw error;
     }
 };

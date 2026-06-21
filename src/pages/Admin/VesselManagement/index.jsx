@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllVessels } from "../../../services/vesselService";
+import { fetchAllVessels, modifyVesselStatus } from "../../../services/vesselService";
+import Swal from "sweetalert2";
 
 export function VesselManagement() {
     const { lang } = useApp();
@@ -43,6 +44,71 @@ export function VesselManagement() {
         getVesselsData();
     }, [lang]);
 
+    // XỬ LÝ: CẬP NHẬT TRẠNG THÁI TÀU
+    const handleUpdateStatus = async (vessel) => {
+        // Định nghĩa danh sách tùy chọn trạng thái
+        const statusOptions = {
+            Active: lang === "VN" ? "Hoạt động (Active)" : "Active",
+            Maintenance: lang === "VN" ? "Bảo trì (Maintenance)" : "Maintenance",
+            Inactive: lang === "VN" ? "Chưa hoạt động (Inactive)" : "Inactive",
+            Retired: lang === "VN" ? "Dừng hoạt động (Retired)" : "Retired",
+        };
+
+        const { value: selectedStatus } = await Swal.fire({
+            title: lang === "VN" ? "Cập nhật trạng thái tàu" : "Update Vessel Status",
+            html: lang === "VN"
+                ? `Chọn trạng thái mới cho tàu <b>${vessel.name}</b> (${vessel.code})`
+                : `Select new status for <b>${vessel.name}</b> (${vessel.code})`,
+            input: 'select',
+            inputOptions: statusOptions,
+            inputValue: vessel.status, // Hiển thị sẵn trạng thái hiện tại
+            showCancelButton: true,
+            confirmButtonColor: '#124757',
+            cancelButtonColor: '#d33',
+            confirmButtonText: lang === "VN" ? "Xác nhận" : "Confirm",
+            cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
+            inputValidator: (value) => {
+                // Nếu chuyển sang Active mà chưa cấu hình ghế thì chặn luôn từ Frontend!
+                if (value === 'Active' && !vessel.seatsConfigured) {
+                    return lang === "VN"
+                        ? 'Tàu chưa được setup sơ đồ ghế! Không thể chuyển sang trạng thái Hoạt động (Active).'
+                        : 'Vessel seats are not configured! Cannot switch to Active status.';
+                }
+            }
+        });
+
+        // Nếu người dùng chọn một trạng thái hợp lệ và khác với trạng thái cũ
+        if (selectedStatus && selectedStatus !== vessel.status) {
+            try {
+                setIsLoading(true);
+                // Gọi API PATCH
+                await modifyVesselStatus(vessel.id, { status: selectedStatus });
+
+                Swal.fire({
+                    icon: 'success',
+                    title: lang === "VN" ? 'Thành công!' : 'Success!',
+                    text: lang === "VN" ? 'Cập nhật trạng thái tàu thành công.' : 'Vessel status updated successfully.',
+                    confirmButtonColor: '#124757'
+                });
+
+                // 💡 Load lại danh sách tàu sau khi cập nhật thành công
+                const data = await fetchAllVessels();
+                setVessels(data || []);
+
+            } catch (error) {
+                console.error("Lỗi đổi trạng thái:", error);
+                Swal.fire({
+                    icon: 'error',
+                    title: lang === "VN" ? 'Lỗi hệ thống' : 'Error',
+                    text: error.response?.data?.message || (lang === "VN" ? "Không thể cập nhật trạng thái lúc này." : "Failed to update status."),
+                    confirmButtonColor: '#124757'
+                });
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    };
+
     // THỐNG KÊ NHANH (So sánh theo Text)
     const totalVessels = vessels.length;
     const activeVessels = vessels.filter(v => v.status?.toLowerCase() === "active").length;
@@ -80,7 +146,7 @@ export function VesselManagement() {
                 };
             case "retired":
                 return {
-                    label: lang === "VN" ? "Hết hạn" : "Retired",
+                    label: lang === "VN" ? "Dừng hoạt động" : "Retired",
                     classes: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400",
                     dot: "bg-rose-500"
                 };
@@ -172,7 +238,7 @@ export function VesselManagement() {
                         <span className="material-symbols-outlined text-[20px]">history_toggle_off</span>
                     </div>
                     <div>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{lang === "VN" ? "Hết hạn" : "Retired"}</p>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{lang === "VN" ? "Dừng hoạt động" : "Retired"}</p>
                         <h3 className="text-xl font-headline font-black text-rose-600 dark:text-rose-400 mt-0.5">{isLoading ? "..." : retiredVessels}</h3>
                     </div>
                 </div>
@@ -225,7 +291,7 @@ export function VesselManagement() {
                             <option value="All">{lang === "VN" ? "Tất cả trạng thái" : "All Status"}</option>
                             <option value="Active">{lang === "VN" ? "Active (Hoạt động)" : "Active"}</option>
                             <option value="Inactive">{lang === "VN" ? "Inactive (Chưa hoạt động)" : "Inactive"}</option>
-                            <option value="Retired">{lang === "VN" ? "Retired (Hết hạn)" : "Retired"}</option>
+                            <option value="Retired">{lang === "VN" ? "Retired (Dừng hoạt động)" : "Retired"}</option>
                             <option value="Maintenance">{lang === "VN" ? "Maintenance (Bảo trì)" : "Maintenance"}</option>
                         </select>
                     </div>
@@ -330,6 +396,13 @@ export function VesselManagement() {
                                                             <span className="material-symbols-outlined text-base">chair</span>
                                                         </button>
                                                     )}
+                                                    <button
+                                                        onClick={() => handleUpdateStatus(vessel)}
+                                                        className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-all shadow-sm"
+                                                        title={lang === "VN" ? "Đổi trạng thái" : "Change Status"}
+                                                    >
+                                                        <span className="material-symbols-outlined text-[18px]">published_with_changes</span>
+                                                    </button>
                                                     <button
                                                         type="button"
                                                         onClick={() => handleEditVessel(vessel.id)}

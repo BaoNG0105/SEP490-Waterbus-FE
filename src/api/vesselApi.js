@@ -16,5 +16,9 @@ export const createVessel = (data) =>
 export const updateVessel = (id, data) => 
     api.put(`/vessels/${id}`, data).then(r => r.data);
 
+// API Cập nhật trạng thái tàu
+export const updateVesselStatus = (id, data) => 
+    api.patch(`/vessels/status/${id}`, data).then(r => r.data);
+
 
 // export const deleteVessel = (id) => api.delete(`/vessels/${vesselId}`).then(r => r.data);

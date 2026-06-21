@@ -23,7 +23,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
     { path: "/admin/promotions", icon: "local_offer", labelVn: "Quản lý khuyến mãi", labelEn: "Promotions & Deals" },
     { path: "/admin/news", icon: "feed", labelVn: "Quản lý Blog/News", labelEn: "Blog & Articles" },
     { path: "/admin/cskh", icon: "support_agent", labelVn: "CSKH", labelEn: "Customer Support" },
-    { path: "/admin/ai-data", icon: "database_sync", labelVn: "Quản lý AI data", labelEn: "AI Data Context" },
+    { path: "/admin/ai-data", icon: "database", labelVn: "Quản lý AI data", labelEn: "AI Data Context" },
   ];
 
   return (
