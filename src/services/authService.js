@@ -7,6 +7,8 @@ import {
     getCurrentUserProfile as apiGetCurrentUserProfile,
     updateCurrentUserProfile as apiUpdateCurrentUserProfile,
     changePasswordApi as apiChangePassword,
+    verifyEmailChangeOtp as apiVerifyEmailChangeOtp,
+    verifyPhoneChangeOtp as apiVerifyPhoneChangeOtp,
 } from '../api/authApi';
 
 // Service login thường
@@ -75,6 +77,26 @@ export const updateProfile = async (data) => {
         return await apiUpdateCurrentUserProfile(data);
     } catch (error) {
         console.error('Error updating profile:', error);
+        throw error;
+    }
+};
+
+// Service xác thực đổi email
+export const verifyEmailChangeOtp = async (data) => {
+    try {
+        return await apiVerifyEmailChangeOtp(data);
+    } catch (error) {
+        console.error('Error verifying email change OTP:', error);
+        throw error;
+    }
+};
+
+// Service xác thực đổi số điện thoại
+export const verifyPhoneChangeOtp = async (data) => {
+    try {
+        return await apiVerifyPhoneChangeOtp(data);
+    } catch (error) {
+        console.error('Error verifying phone change OTP:', error);
         throw error;
     }
 };

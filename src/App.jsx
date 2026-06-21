@@ -13,6 +13,7 @@ import { Station } from "./pages/Station";
 import { Promotions } from "./pages/Promotions";
 import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
+import { EditProfile } from "./pages/Profile/EditProfie";
 import { ChangePassword } from "./pages/Profile/ChangePassword";
 import { Booking } from "./pages/Booking";
 //Admin
@@ -71,6 +72,16 @@ function App() {
           element={
             <MainLayout>
               <Profile />
+            </MainLayout>
+          }
+        />
+
+        {/* Edit Profile Page */}
+        <Route
+          path="/profile/edit"
+          element={
+            <MainLayout>
+              <EditProfile />
             </MainLayout>
           }
         />

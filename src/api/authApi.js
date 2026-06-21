@@ -28,6 +28,14 @@ export const getCurrentUserProfile = () =>
 export const updateCurrentUserProfile = (data) =>
     api.put('/auth/me', data).then(r => r.data);
 
+// Api xác thực khi đổi email
+export const verifyEmailChangeOtp = (data) =>
+    api.post('/auth/verify-email-change-otp', data).then(r => r.data);
+
+// Api xác thực khi thêm/đổi số điện thoại (cho Google User)
+export const verifyPhoneChangeOtp = (data) =>
+    api.post('/auth/verify-phone-change-otp', data).then(r => r.data);
+
 // Api đổi mật khẩu
 export const changePasswordApi = (data) =>
     api.post('/auth/change-password', data).then(r => r.data);
