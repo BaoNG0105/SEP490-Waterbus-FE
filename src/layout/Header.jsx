@@ -49,8 +49,8 @@ export const Header = ({ isNoticeVisible }) => {
         icon: 'info',
         title: lang === "VN" ? 'Hết phiên đăng nhập' : 'Session Expired',
         text: lang === "VN"
-          ? 'Tài khoản của bạn đã tự động đăng xuất sau 30 phút để bảo mật.'
-          : 'You have been automatically logged out after 30 minutes for security.',
+          ? 'Tài khoản của bạn đã tự động đăng xuất để bảo mật.'
+          : 'You have been automatically logged out for security.',
         confirmButtonColor: "#3085d6",
         confirmButtonText: lang === "VN" ? 'Đăng nhập lại' : 'Sign in again',
         background: isDarkMode ? '#1e293b' : '#ffffff',

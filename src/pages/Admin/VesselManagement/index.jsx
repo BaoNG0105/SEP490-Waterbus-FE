@@ -74,7 +74,7 @@ export function VesselManagement() {
                 };
             case "inactive":
                 return {
-                    label: lang === "VN" ? "Tạm ngưng" : "Inactive",
+                    label: lang === "VN" ? "Chưa hoạt động" : "Inactive",
                     classes: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
                     dot: "bg-slate-400"
                 };
@@ -162,7 +162,7 @@ export function VesselManagement() {
                         <span className="material-symbols-outlined text-[20px]">pause_circle</span>
                     </div>
                     <div>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{lang === "VN" ? "Tạm ngưng" : "Inactive"}</p>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{lang === "VN" ? "Chưa hoạt động" : "Inactive"}</p>
                         <h3 className="text-xl font-headline font-black text-slate-600 dark:text-slate-300 mt-0.5">{isLoading ? "..." : inactiveVessels}</h3>
                     </div>
                 </div>
@@ -224,7 +224,7 @@ export function VesselManagement() {
                         >
                             <option value="All">{lang === "VN" ? "Tất cả trạng thái" : "All Status"}</option>
                             <option value="Active">{lang === "VN" ? "Active (Hoạt động)" : "Active"}</option>
-                            <option value="Inactive">{lang === "VN" ? "Inactive (Tạm ngưng)" : "Inactive"}</option>
+                            <option value="Inactive">{lang === "VN" ? "Inactive (Chưa hoạt động)" : "Inactive"}</option>
                             <option value="Retired">{lang === "VN" ? "Retired (Hết hạn)" : "Retired"}</option>
                             <option value="Maintenance">{lang === "VN" ? "Maintenance (Bảo trì)" : "Maintenance"}</option>
                         </select>

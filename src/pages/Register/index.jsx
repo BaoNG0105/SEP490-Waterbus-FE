@@ -299,7 +299,7 @@ export const Register = () => {
           
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-[#124757] dark:text-yellow-400 font-headline uppercase tracking-widest mb-1">
-              WaterBus
+            {lang === "VN" ? "Đăng ký tài khoản" : "Create Account"}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
               {step === 1 

@@ -140,7 +140,7 @@ export const ChangePassword = () => {
       <section className="w-full max-w-md mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-black text-[#124757] dark:text-yellow-400 font-headline uppercase tracking-widest mb-1">
-            WaterBus
+          {lang === "VN" ? "Đổi mật khẩu" : "Change Password"}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">
             {lang === "VN" ? "Thiết lập lại mật khẩu bảo mật" : "Reset your account security password"}

@@ -251,7 +251,7 @@ export const Profile = () => {
           <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-[2rem] overflow-hidden shadow-xl border border-slate-100 dark:border-slate-700/50 mb-8 animate-fade-in-up">
             <div className="h-40 sm:h-48 bg-[#124757] dark:bg-slate-900 relative overflow-hidden">
               <div className="absolute inset-0 bg-black/20 z-10"></div>
-              <img src="https://res.cloudinary.com/dygipvoal/image/upload/v1781725530/c3i0whtz6gszslc5pa9f.jpg" alt="Cover" className="w-full h-full object-cover object-center opacity-80" />
+              <img src="https://res.cloudinary.com/dygipvoal/image/upload/v1776188850/vpool5lgwmjfocldit1q.png" alt="Cover" className="w-full h-full object-cover object-center opacity-80" />
             </div>
 
             <div className="px-6 sm:px-10 pb-8 relative">
