@@ -23,8 +23,8 @@ const authSlice = createSlice({
       state.user = user;
       state.isAuthenticated = true;
 
-      // Tính toán mốc thời gian hết hạn (Hiện tại + 30 phút)
-      const expirationTime = new Date().getTime() + 30 * 60 * 1000;
+      // Tính toán mốc thời gian hết hạn (Hiện tại + 5 tiếng = 5 * 60 phút * 60 giây * 1000ms)
+      const expirationTime = new Date().getTime() + 5 * 60 * 60 * 1000;
 
       // Lưu trữ dữ liệu đồng bộ
       localStorage.setItem('accessToken', finalToken);
