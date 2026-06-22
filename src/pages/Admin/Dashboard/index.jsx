@@ -128,7 +128,7 @@ export const Dashboard = () => {
       color: "from-lime-500/10 to-emerald-500/10 text-lime-700 dark:text-lime-400"
     },
     {
-      path: "/admin/routes",
+      path: "/admin/routes-management",
       icon: "alt_route",
       titleVn: "Quản lý tuyến chạy",
       titleEn: "Route Canal Networks",

@@ -20,6 +20,7 @@ import { Booking } from "./pages/Booking";
 import { Dashboard } from "./pages/Admin/Dashboard";
 import { CustomerManagement } from "./pages/Admin/CustomerManagement";
 import { VesselManagement, CreateVessel, EditVessel, SeatLayoutEditor } from "./pages/Admin/VesselManagement";
+import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 
 function App() {
   return (
@@ -168,6 +169,16 @@ function App() {
             element={
               <AdminLayout title="Edit Vessel">
                 <EditVessel />
+              </AdminLayout>
+            }
+          />
+
+          {/* Waterways Page */}
+          <Route
+            path="/admin/waterways-management"
+            element={
+              <AdminLayout title="Waterways Management">
+                <Waterway />
               </AdminLayout>
             }
           />
