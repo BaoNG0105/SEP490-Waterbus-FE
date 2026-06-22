@@ -27,7 +27,7 @@ const convertDateForInput = (dateString) => {
 };
 
 export const EditProfile = () => {
-    const { lang, isDarkMode } = useApp();
+    const { lang } = useApp();
     const navigate = useNavigate();
 
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
@@ -35,8 +35,8 @@ export const EditProfile = () => {
     const [selectedAvatarFile, setSelectedAvatarFile] = useState(null);
     const [selectedFlag, setSelectedFlag] = useState("vn");
 
-    // State lưu dữ liệu gốc để so sánh xem user có đổi Email hay Phone không
-    const [originalData] = useState(null);
+    // Khai báo originalData để lưu bản gốc phục vụ cho việc so sánh OTP
+    const [originalData, setOriginalData] = useState(null);
 
     const [profileData, setProfileData] = useState({
         fullName: "",
@@ -64,24 +64,19 @@ export const EditProfile = () => {
                 const data = await fetchCurrentUserProfile();
 
                 const userNationality = data.nationality || "Vietnam";
-
-                // Tìm mã ISO code dựa trên tên tiếng Anh chuẩn lưu từ Backend 
-                // Thay vì tìm trên 'countryList' bị đổi ngôn ngữ động, ta tra thẳng bằng thư viện gốc với ngôn ngữ 'en'
                 const countryCodeIso = countries.getAlpha2Code(userNationality, "en");
 
-                let targetFlag = "vn"; // Mặc định phòng hờ
+                let targetFlag = "vn";
                 if (countryCodeIso) {
                     targetFlag = countryCodeIso.toLowerCase();
                 } else {
-                    // Nếu không tìm thấy bằng tên tiếng Anh, thử tìm bằng tên tiếng Việt (phòng dữ liệu cũ)
                     const backupCodeIso = countries.getAlpha2Code(userNationality, "vi");
                     if (backupCodeIso) targetFlag = backupCodeIso.toLowerCase();
                 }
 
-                // Cập nhật cờ quốc gia hiển thị chính xác
                 setSelectedFlag(targetFlag);
 
-                setProfileData({
+                const formattedData = {
                     fullName: data.fullName || "",
                     email: data.email || "",
                     phoneNumber: data.phoneNumber || "",
@@ -89,7 +84,11 @@ export const EditProfile = () => {
                     gender: data.gender || "Male",
                     nationality: userNationality,
                     avatarUrl: data.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
-                });
+                };
+
+                setProfileData(formattedData);
+                // Phải lưu lại bản gốc lúc tải xong để lúc Save có cái so sánh
+                setOriginalData(formattedData);
             } catch (error) {
                 console.error("Lỗi khi tải Profile:", error);
             } finally {
@@ -98,7 +97,7 @@ export const EditProfile = () => {
         };
 
         loadProfileData();
-    }, []); // 💡 ĐÃ SỬA: Bỏ 'countryList' khỏi mảng dependency để tránh hàm chạy lại làm reset lại cờ khi đổi ngôn ngữ ngẫu nhiên
+    }, []);
 
     const handleProfileDataChange = (e) => {
         const { name, value } = e.target;
@@ -138,6 +137,23 @@ export const EditProfile = () => {
     // ==========================================
     const handleSaveProfile = async (e) => {
         e.preventDefault();
+
+        const isEmailChanged = profileData.email.trim() !== (originalData?.email || "");
+        const isPhoneChanged = profileData.phoneNumber.trim() !== (originalData?.phoneNumber || "");
+
+        // 1. BẪY LỖI FRONTEND: Kiểm tra xem user có đổi cả 2 trường cùng lúc không
+        if (isEmailChanged && isPhoneChanged) {
+            Swal.fire({
+                icon: "warning",
+                title: lang === "VN" ? "Không hợp lệ" : "Invalid Request",
+                text: lang === "VN"
+                    ? "Bạn không thể đổi Email và Số điện thoại cùng lúc. Vui lòng xác thực đổi Email trước khi cập nhật Số điện thoại."
+                    : "Please verify email change before updating phone number. You cannot change both simultaneously.",
+                confirmButtonColor: "#124757"
+            });
+            return;
+        }
+
         setIsUpdating(true);
 
         let formattedDate = null;
@@ -170,38 +186,86 @@ export const EditProfile = () => {
         try {
             const response = await updateProfile(payload);
 
-            // Lấy ID từ emailVerification hoặc phoneVerification tùy theo trường hợp
             const challengeId =
                 response?.emailVerification?.id ||
                 response?.phoneVerification?.id ||
-                response?.challengeId; // Giữ lại fallback phòng hờ
+                response?.challengeId;
 
-            // NẾU BACKEND TRẢ VỀ CHALLENGE ID -> YÊU CẦU NHẬP OTP
+            // 💡 2. LUỒNG CÓ OTP: Giao diện nhập 6 ô vuông
             if (challengeId) {
-                const isEmailChanged = profileData.email.trim() !== originalData.email;
-                const isPhoneChanged = profileData.phoneNumber.trim() !== originalData.phoneNumber;
+                const maskedDest = response?.emailVerification?.maskedDestination || response?.phoneVerification?.maskedDestination;
+                const targetTypeLabel = isEmailChanged ? (lang === "VN" ? "Email" : "Email") : (lang === "VN" ? "Số điện thoại" : "Phone number");
 
                 const { value: otpCode } = await Swal.fire({
                     title: lang === "VN" ? "Xác thực thay đổi" : "Verify Changes",
-                    html: lang === "VN"
-                        ? `Hệ thống đã gửi mã OTP xác nhận đến <b>${isEmailChanged ? "Email" : "Số điện thoại"}</b> mới của bạn.<br/>Vui lòng nhập mã OTP để hoàn tất.`
-                        : `We have sent an OTP to your new <b>${isEmailChanged ? "Email" : "Phone number"}</b>.<br/>Please enter it to confirm.`,
-                    input: "text",
-                    inputPlaceholder: "Nhập mã OTP (Enter OTP)...",
+                    // Nhúng HTML 6 ô input
+                    html: `
+                <p class="text-sm text-slate-500 mb-5 font-medium leading-relaxed">
+                  ${lang === "VN"
+                            ? `Hệ thống đã gửi mã xác nhận đến <b>${targetTypeLabel}</b> mới của bạn ${maskedDest ? `(<b>${maskedDest}</b>)` : ""}. Vui lòng nhập mã OTP để hoàn tất.`
+                            : `We have sent a verification code to your new <b>${targetTypeLabel}</b> ${maskedDest ? `(<b>${maskedDest}</b>)` : ""}. Please enter it to confirm.`}
+                </p>
+                <div id="otp-container" class="flex justify-center gap-2 sm:gap-3" dir="ltr">
+                  ${Array(6).fill(0).map(() =>
+                                `<input type="text" class=" otp-input w-10 h-12 sm:w-12 sm:h-14 m-0 text-center text-xl font-black rounded-xl border-2 border-slate-200 focus:border-[#124757] focus:ring-0 shadow-inner" maxlength="1" pattern="[0-9]*" inputmode="numeric" />`
+                            ).join('')}
+                </div>
+              `,
                     showCancelButton: true,
                     confirmButtonColor: "#124757",
                     cancelButtonColor: "#d33",
                     confirmButtonText: lang === "VN" ? "Xác nhận" : "Verify",
                     cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
                     allowOutsideClick: false,
-                    inputValidator: (value) => {
-                        if (!value) return lang === "VN" ? "Mã OTP không được để trống!" : "OTP is required!";
+
+                    // Logic UX/UI cho 6 ô nhập
+                    didOpen: () => {
+                        const inputs = Swal.getHtmlContainer().querySelectorAll('.otp-input');
+                        if (inputs.length > 0) inputs[0].focus();
+
+                        inputs.forEach((input, index) => {
+                            // Tự động nhảy ô kế tiếp khi nhập
+                            input.addEventListener('input', (e) => {
+                                e.target.value = e.target.value.replace(/[^0-9]/g, ''); // Chỉ cho nhập số
+                                if (e.target.value !== '' && index < inputs.length - 1) {
+                                    inputs[index + 1].focus();
+                                }
+                            });
+                            // Nhấn Backspace tự động lùi về ô trước
+                            input.addEventListener('keydown', (e) => {
+                                if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
+                                    inputs[index - 1].focus();
+                                }
+                            });
+                            // Hỗ trợ Paste nguyên dãy 6 số vào
+                            input.addEventListener('paste', (e) => {
+                                e.preventDefault();
+                                const pastedData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+                                if (pastedData) {
+                                    for (let i = 0; i < pastedData.length; i++) {
+                                        if (inputs[index + i]) {
+                                            inputs[index + i].value = pastedData[i];
+                                            if (index + i < inputs.length - 1) inputs[index + i + 1].focus();
+                                        }
+                                    }
+                                }
+                            });
+                        });
+                    },
+                    // Gom 6 ô lại thành 1 chuỗi string để gửi lên BE
+                    preConfirm: () => {
+                        const inputs = Swal.getHtmlContainer().querySelectorAll('.otp-input');
+                        const code = Array.from(inputs).map(i => i.value).join('');
+                        if (code.length < 6) {
+                            Swal.showValidationMessage(lang === "VN" ? "Vui lòng nhập đầy đủ 6 số OTP!" : "Please enter the full 6-digit OTP!");
+                            return false;
+                        }
+                        return code;
                     }
                 });
 
                 if (otpCode) {
                     try {
-                        // Gọi đúng API xác thực tùy theo việc đổi Email hay Phone
                         if (isEmailChanged) {
                             await verifyEmailChangeOtp({ challengeId, code: otpCode });
                         } else if (isPhoneChanged) {
@@ -226,24 +290,26 @@ export const EditProfile = () => {
                     }
                 }
             }
-            // NẾU KHÔNG CẦN OTP -> CẬP NHẬT THÀNH CÔNG LUÔN
+            // 3. LUỒNG KHÔNG CÓ OTP: Chỉ đổi avatar, tên, ngày sinh...
             else {
                 Swal.fire({
                     icon: "success",
                     title: lang === "VN" ? "Cập nhật thành công!" : "Profile Updated!",
-                    confirmButtonColor: "#124757",
-                    background: isDarkMode ? "#1e293b" : "#fff",
-                    color: isDarkMode ? "#fff" : "#000",
-                }).then(() => {
-                    navigate(-1);
-                });
+                    confirmButtonColor: "#124757"
+                }).then(() => navigate(-1));
             }
         } catch (error) {
             console.error("Lỗi cập nhật:", error);
+
+            let validationMsg = "";
+            if (error.response?.data?.errors) {
+                validationMsg = Object.values(error.response.data.errors).flat().join(" | ");
+            }
+
             Swal.fire({
                 icon: "error",
                 title: lang === "VN" ? "Cập nhật thất bại" : "Update Failed",
-                text: error.response?.data?.message || (lang === "VN" ? "Vui lòng kiểm tra lại thông tin cung cấp." : "Please check your input details."),
+                text: validationMsg || error.response?.data?.message || (lang === "VN" ? "Vui lòng kiểm tra lại thông tin cung cấp." : "Please check your input details."),
                 confirmButtonColor: "#124757"
             });
         } finally {
@@ -287,7 +353,6 @@ export const EditProfile = () => {
 
                 <form onSubmit={handleSaveProfile} className="space-y-8">
 
-                    {/* AVATAR */}
                     <div className="flex flex-col sm:flex-row items-center gap-5 bg-slate-50/50 dark:bg-slate-800/30 p-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
                         <div className="w-20 h-24 rounded-2xl border-2 border-[#124757] dark:border-yellow-400 overflow-hidden bg-slate-100 dark:bg-slate-700 relative group cursor-pointer shadow-md shrink-0">
                             <img src={profileData.avatarUrl} alt="Avatar" className="w-full h-full object-cover group-hover:opacity-40 transition-opacity" />
@@ -349,15 +414,9 @@ export const EditProfile = () => {
                             <label className={labelClasses}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
                             <div className="relative flex items-center">
                                 <span className={`fi fi-${selectedFlag} absolute left-8 text-sm rounded-sm shadow-sm pointer-events-none`}></span>
-                                <select
-                                    value={selectedFlag}
-                                    onChange={handleNationalityChange}
-                                    className={`${inputClasses} pl-11 appearance-none font-semibold`}
-                                >
+                                <select value={selectedFlag} onChange={handleNationalityChange} className={`${inputClasses} pl-11 appearance-none font-semibold`}>
                                     {countryList.map((country) => (
-                                        <option key={country.code} value={country.code}>
-                                            {country.name}
-                                        </option>
+                                        <option key={country.code} value={country.code}>{country.name}</option>
                                     ))}
                                 </select>
                                 <span className="material-symbols-outlined text-slate-400 absolute right-3 pointer-events-none">arrow_drop_down</span>
