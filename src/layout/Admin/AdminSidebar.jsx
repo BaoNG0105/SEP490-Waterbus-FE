@@ -16,7 +16,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
     { path: "/admin/verification", icon: "qr_code_scanner", labelVn: "Soát vé", labelEn: "Ticket Scanning" },
     { path: "/admin/tours", icon: "map", labelVn: "Quản lý tour booking", labelEn: "Tour Bookings" },
     { path: "/admin/orders", icon: "receipt_long", labelVn: "Quản lý order", labelEn: "Order Management" },
-    { path: "/admin/stations", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station" },
+    { path: "/admin/stations-management", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station" },
     { path: "/admin/vessels-management", icon: "directions_boat", labelVn: "Quản lý tàu", labelEn: "Vessel Fleet" },
     { path: "/admin/schedules", icon: "calendar_month", labelVn: "Quản lý lịch trình", labelEn: "Trip Schedules" },
     { path: "/admin/routes", icon: "alt_route", labelVn: "Quản lý tuyển", labelEn: "Route Networks" },

@@ -6,7 +6,7 @@
 /* Import Tailwind v4 */
 @import "tailwindcss";
 
-/* BẬT CHẾ ĐỘ DARK MODE BẰNG CLASS CHO TAILWIND V4 */
+/* CHẾ ĐỘ DARK MODE BẰNG CLASS CHO TAILWIND V4 */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Cấu hình Theme */

@@ -20,6 +20,7 @@ import { Booking } from "./pages/Booking";
 import { Dashboard } from "./pages/Admin/Dashboard";
 import { CustomerManagement } from "./pages/Admin/CustomerManagement";
 import { VesselManagement, CreateVessel, EditVessel, SeatLayoutEditor } from "./pages/Admin/VesselManagement";
+import { StationManagement } from "./pages/Admin/StationManagement";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 
 function App() {
@@ -169,6 +170,15 @@ function App() {
             element={
               <AdminLayout title="Edit Vessel">
                 <EditVessel />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/stations-management"
+            element={
+              <AdminLayout title="Stations Management">
+                <StationManagement />
               </AdminLayout>
             }
           />
