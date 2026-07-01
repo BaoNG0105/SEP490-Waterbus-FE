@@ -21,6 +21,7 @@ import { Dashboard } from "./pages/Admin/Dashboard";
 import { CustomerManagement } from "./pages/Admin/CustomerManagement";
 import { VesselManagement, CreateVessel, EditVessel, SeatLayoutEditor } from "./pages/Admin/VesselManagement";
 import { StationManagement } from "./pages/Admin/StationManagement";
+import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 
 function App() {
@@ -174,11 +175,22 @@ function App() {
             }
           />
 
+          {/* Station Managment Page */}
           <Route
             path="/admin/stations-management"
             element={
               <AdminLayout title="Stations Management">
                 <StationManagement />
+              </AdminLayout>
+            }
+          />
+          
+          {/* Edit Station Page */}
+          <Route
+            path="/admin/stations-management/edit/:id"
+            element={
+              <AdminLayout title="Edit Station">
+                <EditStation />
               </AdminLayout>
             }
           />
