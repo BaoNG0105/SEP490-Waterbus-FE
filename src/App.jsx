@@ -12,6 +12,7 @@ import { Register } from "./pages/Register";
 import { BlogList } from "./pages/Blog";
 import { BlogDetail } from "./pages/Blog/BlogDetail";
 import { Station } from "./pages/Station";
+import { StationDetail } from "./pages/Station/StationDetail";
 import { Promotions } from "./pages/Promotions";
 import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
@@ -60,12 +61,12 @@ function App() {
           }
         />
 
-        {/* Station Page */}
+        {/* Station Detail Page */}
         <Route
-          path="/stations/:id"
+          path="/station/:id"
           element={
             <MainLayout>
-              <Station />
+              <StationDetail />
             </MainLayout>
           }
         />

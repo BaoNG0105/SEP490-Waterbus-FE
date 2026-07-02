@@ -1,18 +1,23 @@
 import { useEffect } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import { useNavigate } from "react-router-dom";
 import L from "leaflet";
 
 // Tự động căn chỉnh góc nhìn zoom mượt mà
-const MapController = ({ positions, centerPoint }) => {
+const MapController = ({ positions, centerPoint, multiMarkers }) => {
   const map = useMap();
   useEffect(() => {
     if (positions && positions.length > 0) {
       const bounds = L.latLngBounds(positions);
       map.fitBounds(bounds, { padding: [40, 40] });
+    } else if (multiMarkers && multiMarkers.length > 0) {
+      // Tự động fit khung hình bao trọn toàn bộ danh sách nhà ga hệ thống bến tàu
+      const bounds = L.latLngBounds(multiMarkers.map(m => [m.latitude, m.longitude]));
+      map.fitBounds(bounds, { padding: [50, 50] });
     } else if (centerPoint) {
       map.setView(centerPoint, 16, { animate: true });
     }
-  }, [positions, centerPoint, map]);
+  }, [positions, centerPoint, multiMarkers, map]);
   return null;
 };
 
@@ -28,7 +33,7 @@ const MapClickHandler = ({ onLocationSelect }) => {
   return null;
 };
 
-// Fix lỗi icon
+// Khắc phục lỗi icon Leaflet với Vite
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
@@ -36,16 +41,23 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
-export const WaterwayMap = ({ coordinates = [], waterwayName = "", stationPoint = null, onLocationSelect }) => {
+// Thêm prop stationsList phục vụ trang chủ khách hàng công cộng
+export const WaterwayMap = ({ 
+  coordinates = [], 
+  waterwayName = "", 
+  stationPoint = null, 
+  stationsList = [], 
+  onLocationSelect 
+}) => {
+  const navigate = useNavigate();
   const polylinePositions = coordinates.map((point) => [point.latitude, point.longitude]);
   const centerPoint = stationPoint ? [stationPoint.latitude, stationPoint.longitude] : [10.7719, 106.7067];
 
   return (
-    <div className="w-full h-100 rounded-4xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-md relative z-10 cursor-crosshair">
+    <div className="w-full h-full min-h-112.5 overflow-hidden border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative z-10">
       
-      {/* 💡 ĐÃ KHÔI PHỤC: Thẻ Label nổi hiển thị waterwayName để không bị dư biến */}
       {waterwayName && (
-        <div className="absolute top-4 left-4 z-1000 bg-white/90 dark:bg-slate-800/90 backdrop-blur px-4 py-2 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm pointer-events-none">
+        <div className="absolute top-4 left-4 z-1000 bg-white/90 dark:bg-slate-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm pointer-events-none">
           <span className="text-[10px] font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider block">
             Đang hiển thị tuyến
           </span>
@@ -55,7 +67,7 @@ export const WaterwayMap = ({ coordinates = [], waterwayName = "", stationPoint 
         </div>
       )}
 
-      <MapContainer center={centerPoint} zoom={15} className="w-full h-full">
+      <MapContainer center={centerPoint} zoom={13} className="w-full h-full">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -65,6 +77,7 @@ export const WaterwayMap = ({ coordinates = [], waterwayName = "", stationPoint 
           <Polyline positions={polylinePositions} pathOptions={{ color: "#124757", weight: 5, opacity: 0.85, lineJoin: "round" }} />
         )}
 
+        {/* TRƯỜNG HỢP 1: HIỂN THỊ 1 ĐIỂM MARKER ĐƠN LẺ (DÀNH CHO ADMIN CONFIG) */}
         {stationPoint && (
           <Marker position={centerPoint}>
             <Popup>
@@ -76,7 +89,37 @@ export const WaterwayMap = ({ coordinates = [], waterwayName = "", stationPoint 
           </Marker>
         )}
 
-        <MapController positions={polylinePositions} centerPoint={stationPoint ? centerPoint : null} />
+        {/* TRƯỜNG HỢP 2: HIỂN THỊ DANH SÁCH HÀNG LOẠT NHÀ GA (DÀNH CHO TRANG CHỦ HOME TƯƠNG TÁC) */}
+        {stationsList && stationsList.length > 0 && (
+          stationsList.filter(s => s.status === "Active").map((station) => (
+            <Marker 
+              key={station.stationId} 
+              position={[station.latitude, station.longitude]}
+            >
+              <Popup>
+                <div className="text-center font-body p-2 space-y-2 min-w-37.5">
+                  <p className="font-black text-[#124757] text-xs uppercase leading-tight m-0">{station.stationName}</p>
+                  <p className="text-[10px] text-slate-400 line-clamp-2 m-0">{station.address || "Bến tàu Saigon Waterbus"}</p>
+                  
+                  {/* Nút bấm điều hướng sang trang chi tiết nhà ga */}
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/station/${station.stationId}`)}
+                    className="w-full bg-[#124757] text-white text-[10px] font-bold uppercase py-1.5 px-3 rounded-lg shadow-sm hover:brightness-110 transition-all cursor-pointer block mt-1"
+                  >
+                    Xem chi tiết bến
+                  </button>
+                </div>
+              </Popup>
+            </Marker>
+          ))
+        )}
+
+        <MapController 
+          positions={polylinePositions} 
+          centerPoint={stationPoint ? centerPoint : null} 
+          multiMarkers={stationsList}
+        />
         <MapClickHandler onLocationSelect={onLocationSelect} />
       </MapContainer>
     </div>

@@ -4,13 +4,14 @@ import { useApp } from "../../context/AppContext";
 import { MapContainer, TileLayer, Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { fetchAllStations } from "../../services/stationService";
+import { WaterwayMap } from "../../components/WaterwayMap";
 import { fetchPublishedBlogPosts } from "../../services/blogService";
 
 import {
   promoPosters,
   heroSlides,
   guidelines,
-  mapStations,
   promoData,
   testimonialsData,
   appImages
@@ -19,6 +20,10 @@ import {
 export const Home = () => {
   const { lang } = useApp(); // Lấy ngôn ngữ hiện tại từ context để hiển thị nội dung phù hợp
   const navigate = useNavigate(); // Khởi tạo navigate để chuyển hướng khi nhấn nút Đặt vé
+
+  // Khai báo state quản lý danh sách nhà ga gọi từ API
+  const [stationPoints, setStationPoints] = useState([]);
+  const [isLoadingStations, setIsLoadingStations] = useState(true);
 
   // State quản lý danh sách Blog
   const [blogs, setBlogs] = useState([]);
@@ -54,6 +59,22 @@ export const Home = () => {
       setHeroSlide((prev) => (prev + 1) % heroSlides.length);
     }, 5000); // Bạn có thể chỉnh 5000 (5 giây) thành thời gian bạn muốn
     return () => clearInterval(heroTimer);
+  }, []);
+
+  // useEffect tải dữ liệu nhà ga
+  useEffect(() => {
+    const loadStationsData = async () => {
+      try {
+        setIsLoadingStations(true);
+        const data = await fetchAllStations();
+        setStationPoints(data || []);
+      } catch (error) {
+        console.error("Lỗi tải sơ đồ nhà ga trang chủ:", error);
+      } finally {
+        setIsLoadingStations(false);
+      }
+    };
+    loadStationsData();
   }, []);
 
   // useEffect tự động gọi API lấy Blog khi vào trang Home
@@ -439,74 +460,28 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* ===== STATION SECTION ===== */}
-      <section className="py-24 bg-white dark:bg-slate-800 transition-colors duration-300">
+      {/* STATION SECTION */}
+      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
-          {/* Tiêu đề và subtitle */}
-          <div className="flex flex-col items-center text-center mb-16">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400 mb-4">
-              {lang === "VN" ? "Mạng lưới trạm dừng" : "Station Network"}
+          {/* Tiêu đề & Subtitle */}
+          <div className="flex flex-col items-center text-center mb-16 space-y-4">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+              {lang === "VN" ? "Mạng lưới bến tàu" : "Operational Grid"}
             </p>
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-              {lang === "VN" ? "Khám phá tuyến đường Waterbus" : "Explore the Waterbus Route"}
+              {lang === "VN" ? "Sơ đồ hệ thống bến ga bến tàu" : "Saigon Waterbus Pier Network"}
             </h2>
           </div>
-          {/* Bản đồ tương tác với các trạm dừng được đánh dấu bằng chấm đỏ/xanh và tooltip tên trạm luôn hiển thị bên cạnh */}
-          <div className="h-125 md:h-150 w-full rounded-2xl overflow-hidden shadow-lg relative z-0">
-            <MapContainer
-              center={[10.7950, 106.7350]}
-              zoom={13}
-              scrollWheelZoom={false}
-              className="w-full h-full"
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-
-              {mapStations.map((station) => {
-                // Icon mặc định của Leaflet
-                const customIcon = L.icon({
-                  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-                  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-                  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-                  iconSize: [25, 41],
-                  iconAnchor: [12, 41],
-                  popupAnchor: [1, -34],
-                  shadowSize: [41, 41]
-                });
-
-                return (
-                  <Marker
-                    key={station.id}
-                    position={[station.lat, station.lng]}
-                    icon={customIcon}
-                  >
-                    {/* Tooltip luôn hiển thị tên trạm bên cạnh chấm đỏ/xanh */}
-                    <Tooltip
-                      permanent
-                      direction="right"
-                      offset={[15, -20]}
-                      className="font-body font-bold text-sm bg-white text-[#124757] border-0 shadow-md rounded-lg px-3 py-1"
-                    >
-                      {lang === "VN" ? station.nameVN : station.nameEN}
-                    </Tooltip>
-
-                    <Popup className="font-body">
-                      <div className="p-1">
-                        <h3 className="font-bold text-lg text-[#124757] mb-2 font-headline">
-                          {lang === "VN" ? station.nameVN : station.nameEN}
-                        </h3>
-                        <p className="text-sm text-slate-600 mb-3">{station.address}</p>
-                        <a href="/#booking-section" className="block text-center w-full bg-yellow-400 text-[#124757] font-bold py-2 rounded-lg hover:brightness-105 transition-all">
-                          {lang === "VN" ? "Đặt vé từ đây" : "Book from here"}
-                        </a>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
-            </MapContainer>
+          {/* Bản đồ */}
+          <div className="w-full h-125 md:h-145 relative">
+            {isLoadingStations ? (
+              <div className="w-full h-full bg-slate-50 dark:bg-slate-800 rounded-[2.5rem] flex items-center justify-center border border-dashed border-slate-200">
+                <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+              </div>
+            ) : (
+              // Gọi tấm bản đồ số truyền mảng dữ liệu động từ API trạm bến
+              <WaterwayMap stationsList={stationPoints} />
+            )}
           </div>
         </div>
       </section>
@@ -672,7 +647,7 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* BLOG SECTIONS*/}
+      {/* ===== BLOG SECTIONS ===== */}
       <section className="py-24 bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300 overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
@@ -884,7 +859,7 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* Testimonials Section */}
+      {/* ===== Testimonials Section ===== */}
       <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden">
         <div className="max-w-5xl mx-auto px-6 md:px-12 flex flex-col items-center">
           {/* Khối tiêu đề căn giữa đồng bộ */}
@@ -963,7 +938,7 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* Contact Section */}
+      {/* ===== CONTACT SECTION ===== */}
       <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
           {/* Khối tiêu đề chính & phụ căn giữa hệ thống */}
@@ -1035,7 +1010,7 @@ export const Home = () => {
                 </div>
               </div>
             </div>
-            {/* CỘT PHẢI (Tỷ lệ 7/12): FORM GỬI TIN NHẮN ĐÃ ĐỔI SANG NỀN XANH #124757 */}
+            {/* CỘT PHẢI (Tỷ lệ 7/12): FORM GỬI TIN NHẮN */}
             <div className="lg:col-span-7 bg-[#124757] dark:bg-slate-800 border border-white/10 dark:border-slate-700/50 p-8 md:p-10 rounded-[2.5rem] shadow-xl">
               <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
                 {/* Grid Họ tên & Email */}
@@ -1104,10 +1079,10 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* MODAL QUẢNG CÁO */}
+      {/* ===== MODAL QUẢNG CÁO ===== */}
       {
         showPromoModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+          <div className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
             <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-4xl overflow-hidden shadow-2xl animate-[fadeIn_0.4s_ease-out]">
               <button
                 className="absolute top-4 right-4 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 text-white hover:bg-black/40 backdrop-blur-md transition-colors"
