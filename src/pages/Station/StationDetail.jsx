@@ -47,40 +47,65 @@ export function StationDetail() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
                 {/* Khối Trái: Ảnh bìa nhà ga bến tàu */}
-                <div className="aspect-16/10 rounded-[2.5rem] overflow-hidden shadow-sm bg-slate-100">
+                <div className="aspect-16/10 rounded-[2.5rem] overflow-hidden shadow-sm bg-slate-100 relative group">
                     <img 
                         src={station?.imageUrl || "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg"} 
                         alt={station?.stationName} 
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
+                    {/* BADGE TRẠM CHÍNH THỨC HOẶC VỆ TINH */}
+                    {station?.isWaterbusStation ? (
+                        <div className="absolute top-5 left-5 bg-[#124757] text-yellow-400 text-[10px] font-black uppercase px-3 py-1.5 rounded-xl shadow-md border border-[#124757]/50 flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-sm">directions_boat</span>
+                            {lang === "VN" ? "Trạm Saigon Waterbus" : "Official Waterbus Pier"}
+                        </div>
+                    ) : (
+                        <div className="absolute top-5 left-5 bg-slate-800/90 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-xl shadow-md backdrop-blur border border-slate-700 flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-sm">hub</span>
+                            {lang === "VN" ? "Trạm liên kết vệ tinh" : "Partner Pier"}
+                        </div>
+                    )}
                 </div>
 
                 {/* Khối Phải: Chi tiết hồ sơ hạ tầng bến */}
                 <div className="space-y-6">
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                         <span className="bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-3 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-widest inline-block">
                             Mã trạm: {station?.stationCode}
                         </span>
                         <h1 className="text-2xl md:text-4xl font-headline font-black text-[#124757] dark:text-white leading-tight">
                             {station?.stationName}
                         </h1>
-                        <p className="text-sm text-slate-400 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-base">location_on</span>
-                            {station?.address || (lang === "VN" ? "Chưa cập nhật địa chỉ bến ga" : "Address unlisted")}
+                        <p className="text-sm text-slate-500 flex items-start gap-2">
+                            <span className="material-symbols-outlined text-base mt-0.5">location_on</span>
+                            <span className="flex-1 leading-relaxed">
+                                {station?.address || (lang === "VN" ? "Chưa cập nhật địa chỉ bến ga" : "Address unlisted")}
+                            </span>
                         </p>
+                        
+                        {/* GIỜ HOẠT ĐỘNG */}
+                        {(station?.openingTime || station?.closingTime) && (
+                            <div className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-700">
+                                <span className="material-symbols-outlined text-sm text-emerald-500">schedule</span>
+                                {lang === "VN" ? "Giờ mở cửa:" : "Operating Hours:"} 
+                                <span className="text-[#124757] dark:text-yellow-400">
+                                    {station?.openingTime ? station.openingTime.slice(0, 5) : "--:--"} - {station?.closingTime ? station.closingTime.slice(0, 5) : "--:--"}
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     <p className="text-slate-600 dark:text-slate-400 text-sm md:text-base leading-relaxed">
-                        {station?.description || (lang === "VN" ? "Bến ga trung tâm đón trả khách an toàn thuộc mạng lưới Saigon Waterbus." : "Operational pier point under the official Saigon Waterbus network direction.")}
+                        {station?.description || (lang === "VN" ? "Bến ga trung tâm đón trả khách an toàn thuộc mạng lưới giao thông đường thủy. Tại đây quý khách có thể trải nghiệm quang cảnh tuyệt đẹp của dòng sông Sài Gòn." : "Operational pier point under the network direction.")}
                     </p>
 
                     {/* Danh mục tiện ích bến bãi */}
                     <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-headline font-black uppercase text-slate-400 tracking-wider">Tiện ích tích hợp tại bến ga</h4>
                         <div className="flex flex-wrap gap-2">
-                            {station?.hasWaitingArea && <span className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold">🛋️ Phòng chờ điều hòa</span>}
-                            {station?.hasParking && <span className="px-3 py-1.5 bg-teal-50 text-teal-600 rounded-xl text-xs font-bold">🅿️ Bãi gửi xe gắn máy</span>}
-                            {station?.hasTicketCounter && <span className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold">🎫 Quầy bán vé trực tiếp</span>}
+                            {station?.hasWaitingArea && <span className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold shadow-sm">🛋️ Phòng chờ điều hòa</span>}
+                            {station?.hasParking && <span className="px-3 py-1.5 bg-teal-50 text-teal-600 rounded-xl text-xs font-bold shadow-sm">🅿️ Bãi gửi xe gắn máy</span>}
+                            {station?.hasTicketCounter && <span className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold shadow-sm">🎫 Quầy bán vé trực tiếp</span>}
                         </div>
                     </div>
                 </div>
