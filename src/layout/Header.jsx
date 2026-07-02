@@ -22,14 +22,14 @@ export const Header = ({ isNoticeVisible }) => {
   // Xác định trạng thái Active chuẩn tông màu theo đường dẫn URL
   const isHomeActive = currentPath === "/";
   const isPromotionsActive = currentPath.startsWith("/promotions");
-  const isNewsActive = currentPath.startsWith("/news");
+  const isBlogActive = currentPath.startsWith("/blog");
   const isContactActive = currentPath === "/contact";
 
   // LẤY DỮ LIỆU TỪ REDUX STORE (auth state)
   const { isAuthenticated, user } = useSelector((state) => state.auth);
 
   // logic hiển thị tên và ảnh đại diện
-  const defaultAvatar = "https://lh3.googleusercontent.com/aida-public/AB6AXuCJgEa1CJ6nEykaMCLialWDQWttf8sV3FmrwfpNsq";
+  const defaultAvatar = "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp";
   const displayAvatar = user?.avatarUrl || defaultAvatar;
   const displayUserName = user?.fullName || (lang === "VN" ? "Thành viên" : "Member");
 
@@ -160,8 +160,8 @@ export const Header = ({ isNoticeVisible }) => {
           </div>
 
           {/* Tin tức */}
-          <Link className={isNewsActive ? linkActiveClasses : linkBaseClasses} to="/news">
-            {lang === "VN" ? "Tin tức" : "News"}
+          <Link className={isBlogActive ? linkActiveClasses : linkBaseClasses} to="/blog">
+            {lang === "VN" ? "Tin tức" : "Blog"}
           </Link>
 
           {/* Liên hệ */}
@@ -306,11 +306,11 @@ export const Header = ({ isNoticeVisible }) => {
           </div>
 
           <Link
-            to="/news"
-            className={`font-bold text-base transition-colors ${isNewsActive ? "text-yellow-400" : "text-white"}`}
+            to="/blog"
+            className={`font-bold text-base transition-colors ${isBlogActive ? "text-yellow-400" : "text-white"}`}
             onClick={() => setIsMobileMenuOpen(false)}
           >
-            {lang === "VN" ? "Tin tức" : "News"}
+            {lang === "VN" ? "Tin tức" : "Blog"}
           </Link>
 
           <Link

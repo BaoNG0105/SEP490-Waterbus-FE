@@ -14,7 +14,7 @@ export function EditStation() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
 
-    // QUẢN LÝ ẢNH (GIỐNG VESSEL)
+    // QUẢN LÝ ẢNH
     const [selectedImages, setSelectedImages] = useState([]);
     const [imagePreviews, setImagePreviews] = useState([]);
 

@@ -9,6 +9,8 @@ import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { BlogList } from "./pages/Blog";
+import { BlogDetail } from "./pages/Blog/BlogDetail";
 import { Station } from "./pages/Station";
 import { Promotions } from "./pages/Promotions";
 import { Contact } from "./pages/Contact";
@@ -35,6 +37,25 @@ function App() {
           element={
             <MainLayout>
               <Home />
+            </MainLayout>
+          }
+        />
+
+        {/* Blogs Page */}
+        <Route
+          path="/blog"
+          element={
+            <MainLayout>
+              <BlogList />
+            </MainLayout>
+          }
+        />
+        {/* Blog Detail Page */}
+        <Route
+          path="/blog/:slug"
+          element={
+            <MainLayout>
+              <BlogDetail />
             </MainLayout>
           }
         />
@@ -184,7 +205,7 @@ function App() {
               </AdminLayout>
             }
           />
-          
+
           {/* Edit Station Page */}
           <Route
             path="/admin/stations-management/edit/:id"

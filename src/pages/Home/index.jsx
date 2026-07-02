@@ -4,6 +4,7 @@ import { useApp } from "../../context/AppContext";
 import { MapContainer, TileLayer, Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { fetchPublishedBlogPosts } from "../../services/blogService";
 
 import {
   promoPosters,
@@ -11,7 +12,6 @@ import {
   guidelines,
   mapStations,
   promoData,
-  newsData,
   testimonialsData,
   appImages
 } from "../../data/homeData";
@@ -19,6 +19,11 @@ import {
 export const Home = () => {
   const { lang } = useApp(); // Lấy ngôn ngữ hiện tại từ context để hiển thị nội dung phù hợp
   const navigate = useNavigate(); // Khởi tạo navigate để chuyển hướng khi nhấn nút Đặt vé
+
+  // State quản lý danh sách Blog
+  const [blogs, setBlogs] = useState([]);
+  const [isLoadingBlogs, setIsLoadingBlogs] = useState(true);
+
 
   // State quản lý Form Đặt vé Hero
   const [isRoundTrip, setIsRoundTrip] = useState(false); // false: Một chiều, true: Khứ hồi
@@ -49,6 +54,23 @@ export const Home = () => {
       setHeroSlide((prev) => (prev + 1) % heroSlides.length);
     }, 5000); // Bạn có thể chỉnh 5000 (5 giây) thành thời gian bạn muốn
     return () => clearInterval(heroTimer);
+  }, []);
+
+  // useEffect tự động gọi API lấy Blog khi vào trang Home
+  useEffect(() => {
+    const loadBlogs = async () => {
+      try {
+        setIsLoadingBlogs(true);
+        const data = await fetchPublishedBlogPosts();
+        // API đã trả về đúng các bài viết mới nhất (theo PublishedAt), nên ta chỉ việc set state
+        setBlogs(data || []);
+      } catch (error) {
+        console.error("Lỗi khi tải danh sách blog:", error);
+      } finally {
+        setIsLoadingBlogs(false);
+      }
+    };
+    loadBlogs();
   }, []);
 
   // Testimonials tự động chạy sau mỗi 6 giây
@@ -135,7 +157,7 @@ export const Home = () => {
 
   return (
     <main className="dark:bg-slate-900 transition-colors duration-300 relative">
-      {/* Hero Section & Booking Form */}
+      {/* ===== HERO SECTION & BOOKING FORM ===== */}
       <section id="booking-section" className="relative min-h-[90vh] lg:min-h-screen flex flex-col justify-center items-center overflow-hidden select-none bg-slate-900">
         {/* Bản Slider ảnh nền Hero chạy tự động */}
         <div className="absolute inset-0 z-0">
@@ -163,7 +185,7 @@ export const Home = () => {
               </span>
             </h1>
           </div>
-          {/* KHỐI FORM ĐẶT VÉ CAO CẤP VỚI TÔNG MÀU #124757 */}
+          {/* KHỐI FORM ĐẶT VÉ*/}
           <div className="w-full max-w-5xl bg-white/95 dark:bg-slate-800/95 backdrop-blur-lg p-6 md:p-8 rounded-[2.5rem] shadow-2xl border border-white/20 dark:border-slate-700/50 space-y-6 transform hover:scale-[1.005] transition-all duration-300 gsap-reveal">
             {/* Chọn loại chuyến đi: Một chiều / Khứ hồi */}
             <div className="flex gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
@@ -312,7 +334,7 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* Mission Section */}
+      {/* ===== MiSSON SECTION ===== */}
       <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Khối Nội Dung Bên Trái */}
@@ -365,12 +387,12 @@ export const Home = () => {
               alt="Waterbus Mission Visual"
               className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
+            <div className="absolute inset-0 bg-linear-to-t from-slate-900/40 to-transparent"></div>
           </div>
         </div>
       </section>
 
-      {/* Guideline Section */}
+      {/* ===== GUILINE SECTION ===== */}
       <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300 select-none">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề chính */}
@@ -386,7 +408,7 @@ export const Home = () => {
                   0{index + 1}
                 </div>
                 {/* Hình ảnh minh họa */}
-                <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-md mb-6">
+                <div className="aspect-4/3 rounded-2xl overflow-hidden shadow-md mb-6">
                   <img
                     src={guide.image}
                     alt={`Guideline step ${index + 1}`}
@@ -417,83 +439,79 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* Map / Stations Section */}
+      {/* ===== STATION SECTION ===== */}
       <section className="py-24 bg-white dark:bg-slate-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
-          {/* Căn giữa tiêu đề và subtitle */}
+          {/* Tiêu đề và subtitle */}
           <div className="flex flex-col items-center text-center mb-16">
-            {/* Subtitle màu vàng đồng bộ */}
             <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400 mb-4">
               {lang === "VN" ? "Mạng lưới trạm dừng" : "Station Network"}
             </p>
-            {/* Tiêu đề màu xanh #124757 (Light Mode) */}
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
               {lang === "VN" ? "Khám phá tuyến đường Waterbus" : "Explore the Waterbus Route"}
             </h2>
           </div>
           {/* Bản đồ tương tác với các trạm dừng được đánh dấu bằng chấm đỏ/xanh và tooltip tên trạm luôn hiển thị bên cạnh */}
-          <div className="bg-slate-50 dark:bg-slate-900 rounded-3xl p-4 md:p-8 shadow-inner border border-slate-100 dark:border-slate-800">
-            <div className="h-[500px] md:h-[600px] w-full rounded-2xl overflow-hidden shadow-lg relative z-0">
-              <MapContainer
-                center={[10.7950, 106.7350]}
-                zoom={13}
-                scrollWheelZoom={false}
-                className="w-full h-full"
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
+          <div className="h-125 md:h-150 w-full rounded-2xl overflow-hidden shadow-lg relative z-0">
+            <MapContainer
+              center={[10.7950, 106.7350]}
+              zoom={13}
+              scrollWheelZoom={false}
+              className="w-full h-full"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
 
-                {mapStations.map((station) => {
-                  // Icon mặc định của Leaflet
-                  const customIcon = L.icon({
-                    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-                    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-                    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41],
-                    popupAnchor: [1, -34],
-                    shadowSize: [41, 41]
-                  });
+              {mapStations.map((station) => {
+                // Icon mặc định của Leaflet
+                const customIcon = L.icon({
+                  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                  iconSize: [25, 41],
+                  iconAnchor: [12, 41],
+                  popupAnchor: [1, -34],
+                  shadowSize: [41, 41]
+                });
 
-                  return (
-                    <Marker
-                      key={station.id}
-                      position={[station.lat, station.lng]}
-                      icon={customIcon}
+                return (
+                  <Marker
+                    key={station.id}
+                    position={[station.lat, station.lng]}
+                    icon={customIcon}
+                  >
+                    {/* Tooltip luôn hiển thị tên trạm bên cạnh chấm đỏ/xanh */}
+                    <Tooltip
+                      permanent
+                      direction="right"
+                      offset={[15, -20]}
+                      className="font-body font-bold text-sm bg-white text-[#124757] border-0 shadow-md rounded-lg px-3 py-1"
                     >
-                      {/* Tooltip luôn hiển thị tên trạm bên cạnh chấm đỏ/xanh */}
-                      <Tooltip
-                        permanent
-                        direction="right"
-                        offset={[15, -20]}
-                        className="font-body font-bold text-sm bg-white text-[#124757] border-0 shadow-md rounded-lg px-3 py-1"
-                      >
-                        {lang === "VN" ? station.nameVN : station.nameEN}
-                      </Tooltip>
+                      {lang === "VN" ? station.nameVN : station.nameEN}
+                    </Tooltip>
 
-                      <Popup className="font-body">
-                        <div className="p-1">
-                          <h3 className="font-bold text-lg text-[#124757] mb-2 font-headline">
-                            {lang === "VN" ? station.nameVN : station.nameEN}
-                          </h3>
-                          <p className="text-sm text-slate-600 mb-3">{station.address}</p>
-                          <a href="/#booking-section" className="block text-center w-full bg-yellow-400 text-[#124757] font-bold py-2 rounded-lg hover:brightness-105 transition-all">
-                            {lang === "VN" ? "Đặt vé từ đây" : "Book from here"}
-                          </a>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  );
-                })}
-              </MapContainer>
-            </div>
+                    <Popup className="font-body">
+                      <div className="p-1">
+                        <h3 className="font-bold text-lg text-[#124757] mb-2 font-headline">
+                          {lang === "VN" ? station.nameVN : station.nameEN}
+                        </h3>
+                        <p className="text-sm text-slate-600 mb-3">{station.address}</p>
+                        <a href="/#booking-section" className="block text-center w-full bg-yellow-400 text-[#124757] font-bold py-2 rounded-lg hover:brightness-105 transition-all">
+                          {lang === "VN" ? "Đặt vé từ đây" : "Book from here"}
+                        </a>
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
+            </MapContainer>
           </div>
         </div>
       </section>
 
-      {/* Schedule Section */}
+      {/* ===== SCHEDULE SECTION ===== */}
       <section className="py-24 bg-surface-container-low dark:bg-slate-900 transition-colors duration-300 select-none">
         <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           {/* Khối Thông Tin Bên Trái */}
@@ -526,7 +544,7 @@ export const Home = () => {
           {/* CỘT PHẢI: CÁC KHỐI SỐ LIỆU */}
           <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6 gsap-reveal">
             {/* Khối 1: Giờ Cao Điểm */}
-            <div className="sm:col-span-2 bg-gradient-to-br from-[#124757] to-[#1a657c] dark:from-yellow-400 dark:to-yellow-600 p-8 md:p-10 rounded-[2.5rem] shadow-xl text-white dark:text-slate-900 flex flex-col justify-between relative overflow-hidden group hover:scale-[1.02] transition-transform duration-500 cursor-default">
+            <div className="sm:col-span-2 bg-linear-to-br from-[#124757] to-[#1a657c] dark:from-yellow-400 dark:to-yellow-600 p-8 md:p-10 rounded-[2.5rem] shadow-xl text-white dark:text-slate-900 flex flex-col justify-between relative overflow-hidden group hover:scale-[1.02] transition-transform duration-500 cursor-default">
               <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-20 transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-12">
                 <span className="material-symbols-outlined text-[180px]">directions_boat</span>
               </div>
@@ -582,11 +600,10 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* Promotions / Offers Section */}
+      {/* ===== PROMOTION SECTIONS ===== */}
       <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
-
-          {/* Tiêu đề & Subtitle căn giữa trang, chuẩn hệ màu của bạn */}
+          {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
             <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
               {lang === "VN" ? "Chương trình ưu đãi" : "Exclusive Offers"}
@@ -595,28 +612,26 @@ export const Home = () => {
               {lang === "VN" ? "Ưu đãi & Khuyến mãi độc quyền" : "Exclusive Deals & Promotions"}
             </h2>
           </div>
-
           {/* Grid danh sách các thẻ Khuyến mại thiết kế lại theo ảnh mẫu */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {promoData.map((promo) => (  // <--- Sử dụng promoData ở đây
               <div
                 key={promo.id}
-                className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-[2rem] overflow-hidden flex flex-col group hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-4xl overflow-hidden flex flex-col group hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
               >
                 {/* Phần ảnh phía trên tích hợp Badge nổi */}
-                <div className="aspect-[16/10] relative overflow-hidden shrink-0">
+                <div className="aspect-16/10 relative overflow-hidden shrink-0">
                   <img
                     src={promo.image}
                     alt={promo.titleVn}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
+                  <div className="absolute inset-0 bg-linear-to-t from-slate-900/40 to-transparent"></div>
                   {/* Badge tag góc trái ảnh */}
                   <span className="absolute top-4 left-4 bg-[#124757] text-white font-headline text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm">
                     {lang === "VN" ? promo.tagVn : promo.tagEn}
                   </span>
                 </div>
-
                 {/* Nội dung chi tiết của Card khuyến mại */}
                 <div className="p-6 flex-1 flex flex-col justify-between space-y-5">
                   <div className="space-y-2">
@@ -627,14 +642,12 @@ export const Home = () => {
                       {lang === "VN" ? promo.titleVn : promo.titleEn}
                     </h3>
                   </div>
-
                   {/* Khu vực hiển thị mã Code và nút bấm đặt vé */}
                   <div className="flex items-center justify-between gap-4 pt-2 border-t border-slate-200/60 dark:border-slate-700/50">
                     <div className="bg-slate-200/70 dark:bg-slate-700 px-3.5 py-2 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 select-all cursor-pointer" title="Click to copy">
                       <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mr-1.5">Code:</span>
                       <span className="text-sm font-black font-headline text-[#124757] dark:text-yellow-400 tracking-wider">{promo.code}</span>
                     </div>
-
                     <a
                       href="/#booking-section"
                       className="bg-yellow-400 text-[#124757] w-10 h-10 rounded-full flex items-center justify-center shadow-sm hover:bg-yellow-300 hover:scale-110 transition-all shrink-0"
@@ -659,10 +672,10 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* News & Events Section */}
-      <section className="py-24 bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300 select-none">
+      {/* BLOG SECTIONS*/}
+      <section className="py-24 bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300 overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
-          {/* Tiêu đề & Subtitle căn giữa */}
+          {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
             <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
               {lang === "VN" ? "Tin tức & Sự kiện" : "News & Events"}
@@ -671,106 +684,114 @@ export const Home = () => {
               {lang === "VN" ? "Cập nhật thông tin mới nhất" : "Latest Updates & News"}
             </h2>
           </div>
-          {/* BỐ CỤC: 1 LỚN BÊN TRÁI - 3 NHỎ BÊN PHẢI */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
-            {/* CỘT TRÁI: BÀI VIẾT NỔI BẬT LỚN NHẤT (Item đầu tiên) */}
-            {newsData.length > 0 && (
-              <div className="lg:col-span-7 flex flex-col group cursor-pointer h-full">
-                <div className="bg-white dark:bg-slate-800 rounded-[2rem] overflow-hidden shadow-sm hover:shadow-xl border border-slate-100 dark:border-slate-700/50 transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
-                  {/* Ảnh bài viết lớn */}
-                  <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:h-[400px] overflow-hidden shrink-0">
-                    <img
-                      src={newsData[0].image}
-                      alt={newsData[0].titleVn}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
-                    <div className="absolute top-5 left-5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md text-[#124757] dark:text-yellow-400 font-headline text-xs font-bold px-4 py-2 rounded-xl shadow-md">
-                      {lang === "VN" ? newsData[0].dateVn : newsData[0].dateEn}
-                    </div>
-                  </div>
-                  {/* Nội dung bài viết lớn */}
-                  <div className="p-8 md:p-10 flex flex-col flex-1 justify-between gap-6">
-                    <div className="space-y-4">
-                      <span className="text-sm font-bold text-yellow-500 uppercase tracking-widest bg-yellow-50 dark:bg-yellow-500/10 px-3 py-1.5 rounded-lg inline-block">
-                        {lang === "VN" ? newsData[0].categoryVn : newsData[0].categoryEn}
+
+          {isLoadingBlogs ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+            </div>
+          ) : blogs.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 font-medium">
+              {lang === "VN" ? "Hiện chưa có bài viết nào được xuất bản." : "No published articles available at the moment."}
+            </div>
+          ) : (
+            <div className="relative group">
+              {/* KHỐI SLIDER CHÍNH */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12 items-center min-h-100">
+                {/* KHỐI TRÁI (5/12): TIÊU ĐỀ, TÓM TẮT, ACTION BUTTON */}
+                <div className="order-2 lg:order-1 lg:col-span-5 flex flex-col justify-center space-y-6 animate-fade-in duration-500">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
+                      <span className="inline-flex items-center gap-1 bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2.5 py-1 rounded-md uppercase tracking-wider text-[10px]">
+                        {blogs[heroSlide].category}
                       </span>
-                      <h3 className="text-2xl md:text-3xl font-headline font-bold text-[#124757] dark:text-white leading-tight group-hover:text-yellow-500 dark:group-hover:text-yellow-400 transition-colors">
-                        <Link to="/news">{lang === "VN" ? newsData[0].titleVn : newsData[0].titleEn}</Link>
-                      </h3>
-                      <p className="text-base text-slate-600 dark:text-slate-400 font-body line-clamp-3 leading-relaxed">
-                        {lang === "VN" ? newsData[0].descVn : newsData[0].descEn}
-                      </p>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">calendar_today</span>
+                        {new Date(blogs[heroSlide].publishedAt).toLocaleDateString(lang === "VN" ? "vi-VN" : "en-US")}
+                      </span>
                     </div>
+                    {/* Tiêu đề */}
+                    <h3 className="text-2xl md:text-4xl font-headline font-black text-[#124757] dark:text-white leading-tight tracking-tight hover:text-yellow-500 transition-colors">
+                      <Link to={`/blog/${blogs[heroSlide].slug}`}>
+                        {blogs[heroSlide].title}
+                      </Link>
+                    </h3>
+                  </div>
+                  {/* Summary */}
+                  <p className="text-slate-600 dark:text-slate-400 font-body text-sm md:text-base leading-relaxed line-clamp-4">
+                    {blogs[heroSlide].summary}
+                  </p>
+                  {/* Nút xem chi tiết */}
+                  <div className="pt-2">
                     <Link
-                      to="/news"
-                      className="inline-flex items-center gap-2 text-sm font-headline font-bold text-[#124757] dark:text-yellow-400 group-hover:text-yellow-500 transition-colors w-max"
+                      to={`/blog/${blogs[heroSlide].slug}`}
+                      className="inline-flex items-center gap-2 text-sm font-headline font-black text-[#124757] dark:text-yellow-400 group/btn transition-colors w-max uppercase tracking-wider text-xs"
                     >
-                      {lang === "VN" ? "Đọc chi tiết" : "Ready Details"}
-                      <span className="material-symbols-outlined text-base transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
+                      <span>{lang === "VN" ? "Xem chi tiết" : "Read Full Story"}</span>
+                      <span className="material-symbols-outlined text-lg transition-transform duration-300 group-hover/btn:translate-x-1.5">
+                        arrow_right_alt
+                      </span>
                     </Link>
                   </div>
                 </div>
-              </div>
-            )}
-            {/* CỘT PHẢI: DANH SÁCH 3 BÀI VIẾT NHỎ XẾP DỌC */}
-            <div className="lg:col-span-5 flex flex-col gap-6 h-full justify-between">
-              {newsData.slice(1).map((news) => (
-                <div
-                  key={news.id}
-                  className="bg-white dark:bg-slate-800 rounded-3xl p-5 flex items-center gap-5 border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-x-1 group cursor-pointer h-full"
-                >
-                  {/* Thumbnail nhỏ bên trái khối phụ */}
-                  <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden shrink-0 shadow-sm">
-                    <img
-                      src={news.image}
-                      alt={news.titleVn}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                    />
-                  </div>
-                  {/* Nội dung khối phụ bên phải bài viết */}
-                  <div className="flex-1 flex flex-col justify-between h-full py-0.5 space-y-2.5">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] sm:text-xs font-bold text-yellow-500 uppercase tracking-widest">
-                          {lang === "VN" ? news.categoryVn : news.categoryEn}
-                        </span>
-                        <div className="flex items-center gap-1 text-[10px] sm:text-xs text-slate-400 font-medium shrink-0">
-                          <span className="material-symbols-outlined text-[12px] sm:text-[14px]">calendar_today</span>
-                          {lang === "VN" ? news.dateVn : news.dateEn}
-                        </div>
-                      </div>
-                      <h4 className="text-sm sm:text-base font-headline font-bold text-[#124757] dark:text-white leading-snug line-clamp-2 group-hover:text-yellow-500 dark:group-hover:text-yellow-400 transition-colors">
-                        <Link to="/news">{lang === "VN" ? news.titleVn : news.titleEn}</Link>
-                      </h4>
-                    </div>
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-700/40 w-full">
-                      <Link
-                        to="/news"
-                        className="inline-flex items-center gap-1.5 text-xs font-headline font-bold text-[#124757] dark:text-yellow-400 group-hover:text-yellow-500 dark:group-hover:text-yellow-500 transition-colors"
-                      >
-                        {lang === "VN" ? "Đọc chi tiết" : "Read Details"}
-                        <span className="material-symbols-outlined text-[14px] transition-transform duration-300 group-hover:translate-x-1">
-                          arrow_forward
-                        </span>
-                      </Link>
-                    </div>
-                  </div>
-
+                {/* KHỐI PHẢI (7/12): ẢNH */}
+                <div className="order-1 lg:order-2 lg:col-span-7 relative aspect-16/10 sm:aspect-video w-full overflow-hidden shadow-md group-hover:shadow-xl transition-all duration-500">
+                  <img
+                    src={blogs[heroSlide].imageUrl || "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png"}
+                    alt={blogs[heroSlide].title}
+                    className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+                  />
+                  <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent pointer-events-none" />
                 </div>
-              ))}
-            </div>
-          </div>
-          {/* Nút Xem tất cả */}
-          <div className="mt-16 flex justify-center">
-            <Link
-              to="/news"
-              className="bg-yellow-400 text-[#124757] px-10 py-3.5 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-105 hover:shadow-xl transition-all duration-300 flex items-center gap-2"
-            >
-              {lang === "VN" ? "Xem tất cả tin tức" : "View All News"}
-              <span className="material-symbols-outlined text-lg">arrow_right_alt</span>
-            </Link>
-          </div>
+              </div>
 
+              {/* THANH ĐIỀU HƯỚNG DƯỚI ĐÁY: PHÂN TRANG DOTS VÀ NÚT NEXT/PREV */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 pt-8 border-t border-slate-200/60 dark:border-slate-800">
+                {/* Các dấu chấm chỉ số slide (Dots indicator) */}
+                <div className="flex gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-full shadow-inner">
+                  {blogs.slice(0, 6).map((_, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setHeroSlide(index)}
+                      className={`h-2 rounded-full transition-all duration-300 ${index === heroSlide
+                        ? "w-6 bg-[#124757] dark:bg-yellow-400"
+                        : "w-2 bg-slate-300 dark:bg-slate-600 hover:bg-slate-400"
+                        }`}
+                      aria-label={`Go to slide ${index + 1}`}
+                    />
+                  ))}
+                </div>
+                {/* Bộ nút mũi tên click chuyển dịch slide tuần hoàn */}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setHeroSlide((prev) => (prev === 0 ? blogs.length - 1 : prev - 1))}
+                    className="w-11 h-11 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center transition-all shadow-sm active:scale-95"
+                  >
+                    <span className="material-symbols-outlined font-bold">chevron_left</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHeroSlide((prev) => (prev === blogs.length - 1 ? 0 : prev + 1))}
+                    className="w-11 h-11 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center transition-all shadow-sm active:scale-95"
+                  >
+                    <span className="material-symbols-outlined font-bold">chevron_right</span>
+                  </button>
+                </div>
+              </div>
+              {/* Nút "Xem tất cả" */}
+              <div className="mt-16 flex justify-center">
+                <Link
+                  to="/blog"
+                  className="bg-yellow-400 text-[#124757] px-10 py-3.5 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-105 hover:shadow-xl transition-all duration-300 flex items-center gap-2"
+                >
+                  {lang === "VN" ? "Xem tất cả bài viết" : "View All Blogs"}
+                  <span className="material-symbols-outlined text-lg">arrow_right_alt</span>
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1084,60 +1105,62 @@ export const Home = () => {
       </section>
 
       {/* MODAL QUẢNG CÁO */}
-      {showPromoModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-[2rem] overflow-hidden shadow-2xl animate-[fadeIn_0.4s_ease-out]">
-            <button
-              className="absolute top-4 right-4 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 text-white hover:bg-black/40 backdrop-blur-md transition-colors"
-              onClick={() => setShowPromoModal(false)}
-            >
-              <span className="material-symbols-outlined text-sm">close</span>
-            </button>
-            <div className="relative w-full aspect-[4/5] bg-slate-100 dark:bg-slate-800">
-              {promoPosters.map((poster, index) => (
-                <img
-                  key={index}
-                  src={poster}
-                  alt="Promotion"
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${index === promoSlide ? "opacity-100 z-10" : "opacity-0 z-0"
-                    }`}
-                />
-              ))}
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent z-20"></div>
-            </div>
-            <div className="absolute bottom-0 left-0 right-0 p-8 flex flex-col items-center text-center z-30">
-              <span className="inline-block px-3 py-1 bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 text-[10px] font-bold rounded-full mb-3 uppercase tracking-widest">
-                {lang === "VN" ? "Ưu đãi giới hạn" : "Limited Offer"}
-              </span>
-              <h3 className="text-2xl font-headline font-bold text-white mb-6 shadow-sm">
-                {lang === "VN"
-                  ? "Nhận Deal hấp dẫn cùng WaterBus"
-                  : "Get attractive deals with WaterBus"}
-              </h3>
-              <Link
-                to="/promotions"
-                className="w-full bg-primary-container dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 py-4 rounded-xl font-headline font-bold hover:scale-105 transition-transform flex items-center justify-center gap-2 shadow-lg"
+      {
+        showPromoModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+            <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-4xl overflow-hidden shadow-2xl animate-[fadeIn_0.4s_ease-out]">
+              <button
+                className="absolute top-4 right-4 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 text-white hover:bg-black/40 backdrop-blur-md transition-colors"
+                onClick={() => setShowPromoModal(false)}
               >
-                {lang === "VN"
-                  ? "Xem chi tiết ưu đãi"
-                  : "View Promotion Details"}
-                <span className="material-symbols-outlined text-lg">
-                  arrow_forward
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+              <div className="relative w-full aspect-4/5 bg-slate-100 dark:bg-slate-800">
+                {promoPosters.map((poster, index) => (
+                  <img
+                    key={index}
+                    src={poster}
+                    alt="Promotion"
+                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${index === promoSlide ? "opacity-100 z-10" : "opacity-0 z-0"
+                      }`}
+                  />
+                ))}
+                <div className="absolute inset-0 bg-linear-to-t from-slate-900/90 via-slate-900/20 to-transparent z-20"></div>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 p-8 flex flex-col items-center text-center z-30">
+                <span className="inline-block px-3 py-1 bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 text-[10px] font-bold rounded-full mb-3 uppercase tracking-widest">
+                  {lang === "VN" ? "Ưu đãi giới hạn" : "Limited Offer"}
                 </span>
-              </Link>
-            </div>
-            <div className="absolute top-5 left-1/2 -translate-x-1/2 flex gap-1.5 z-30 bg-black/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-              {promoPosters.map((_, index) => (
-                <div
-                  key={index}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${index === promoSlide ? "w-4 bg-white" : "w-1.5 bg-white/50"
-                    }`}
-                ></div>
-              ))}
+                <h3 className="text-2xl font-headline font-bold text-white mb-6 shadow-sm">
+                  {lang === "VN"
+                    ? "Nhận Deal hấp dẫn cùng WaterBus"
+                    : "Get attractive deals with WaterBus"}
+                </h3>
+                <Link
+                  to="/promotions"
+                  className="w-full bg-primary-container dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 py-4 rounded-xl font-headline font-bold hover:scale-105 transition-transform flex items-center justify-center gap-2 shadow-lg"
+                >
+                  {lang === "VN"
+                    ? "Xem chi tiết ưu đãi"
+                    : "View Promotion Details"}
+                  <span className="material-symbols-outlined text-lg">
+                    arrow_forward
+                  </span>
+                </Link>
+              </div>
+              <div className="absolute top-5 left-1/2 -translate-x-1/2 flex gap-1.5 z-30 bg-black/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
+                {promoPosters.map((_, index) => (
+                  <div
+                    key={index}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${index === promoSlide ? "w-4 bg-white" : "w-1.5 bg-white/50"
+                      }`}
+                  ></div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </main>
+        )
+      }
+    </main >
   );
 };
