@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
-import { MapContainer, TileLayer, Marker, Popup, Tooltip } from 'react-leaflet';
-import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { fetchAllStations } from "../../services/stationService";
 import { WaterwayMap } from "../../components/WaterwayMap";
@@ -25,10 +23,14 @@ export const Home = () => {
   const [stationPoints, setStationPoints] = useState([]);
   const [isLoadingStations, setIsLoadingStations] = useState(true);
 
+  // Khối xử lý lọc riêng các trạm Waterbus chính thức (isWaterbusStation: true)
+  const waterbusStations = useMemo(() => {
+    return stationPoints.filter(st => st.isWaterbusStation === true);
+  }, [stationPoints]);
+
   // State quản lý danh sách Blog
   const [blogs, setBlogs] = useState([]);
   const [isLoadingBlogs, setIsLoadingBlogs] = useState(true);
-
 
   // State quản lý Form Đặt vé Hero
   const [isRoundTrip, setIsRoundTrip] = useState(false); // false: Một chiều, true: Khứ hồi
@@ -469,7 +471,7 @@ export const Home = () => {
               {lang === "VN" ? "Mạng lưới bến tàu" : "Operational Grid"}
             </p>
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-              {lang === "VN" ? "Sơ đồ hệ thống bến ga bến tàu" : "Saigon Waterbus Pier Network"}
+              {lang === "VN" ? "Sơ đồ hệ thống bến tàu Waterbus" : "Saigon Waterbus Station Network"}
             </h2>
           </div>
           {/* Bản đồ */}
@@ -480,7 +482,7 @@ export const Home = () => {
               </div>
             ) : (
               // Gọi tấm bản đồ số truyền mảng dữ liệu động từ API trạm bến
-              <WaterwayMap stationsList={stationPoints} />
+              <WaterwayMap stationsList={waterbusStations} />
             )}
           </div>
         </div>

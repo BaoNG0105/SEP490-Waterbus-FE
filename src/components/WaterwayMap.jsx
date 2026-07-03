@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
@@ -6,18 +6,37 @@ import L from "leaflet";
 // Tự động căn chỉnh góc nhìn zoom mượt mà
 const MapController = ({ positions, centerPoint, multiMarkers }) => {
   const map = useMap();
+  const isInitialized = useRef(false);
+
+  // Tách mảng centerPoint [lat, lng] ra thành số thực tế để đưa vào dependency
+  const lat = centerPoint ? centerPoint[0] : undefined;
+  const lng = centerPoint ? centerPoint[1] : undefined;
+
   useEffect(() => {
+    // Chỉ auto-zoom bao quát vào lần đầu tiên load trang
+    if (isInitialized.current) return;
+
     if (positions && positions.length > 0) {
       const bounds = L.latLngBounds(positions);
       map.fitBounds(bounds, { padding: [40, 40] });
+      isInitialized.current = true;
     } else if (multiMarkers && multiMarkers.length > 0) {
-      // Tự động fit khung hình bao trọn toàn bộ danh sách nhà ga hệ thống bến tàu
       const bounds = L.latLngBounds(multiMarkers.map(m => [m.latitude, m.longitude]));
       map.fitBounds(bounds, { padding: [50, 50] });
-    } else if (centerPoint) {
-      map.setView(centerPoint, 16, { animate: true });
+      isInitialized.current = true;
+    } else if (lat !== undefined && lng !== undefined) {
+      map.setView([lat, lng], 16, { animate: true });
+      isInitialized.current = true;
     }
-  }, [positions, centerPoint, multiMarkers, map]);
+  }, [positions, multiMarkers, lat, lng, map]);
+
+  // Lắng nghe thao tác Click/Gõ tay tọa độ của Admin để lướt Map theo 
+  useEffect(() => {
+    if (lat !== undefined && lng !== undefined && isInitialized.current) {
+      map.setView([lat, lng], 16, { animate: true });
+    }
+  }, [lat, lng, map]);
+
   return null;
 };
 
@@ -42,12 +61,12 @@ L.Icon.Default.mergeOptions({
 });
 
 // Thêm prop stationsList phục vụ trang chủ khách hàng công cộng
-export const WaterwayMap = ({ 
-  coordinates = [], 
-  waterwayName = "", 
-  stationPoint = null, 
-  stationsList = [], 
-  onLocationSelect 
+export const WaterwayMap = ({
+  coordinates = [],
+  waterwayName = "",
+  stationPoint = null,
+  stationsList = [],
+  onLocationSelect
 }) => {
   const navigate = useNavigate();
   const polylinePositions = coordinates.map((point) => [point.latitude, point.longitude]);
@@ -55,7 +74,7 @@ export const WaterwayMap = ({
 
   return (
     <div className="w-full h-full min-h-112.5 overflow-hidden border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative z-10">
-      
+
       {waterwayName && (
         <div className="absolute top-4 left-4 z-1000 bg-white/90 dark:bg-slate-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm pointer-events-none">
           <span className="text-[10px] font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider block">
@@ -83,7 +102,7 @@ export const WaterwayMap = ({
             <Popup>
               <div className="text-center font-body p-1">
                 <p className="font-black text-[#124757] text-xs uppercase m-0 leading-tight">{stationPoint.name}</p>
-                <p className="text-[10px] text-slate-400 mt-1 m-0">Lat: {stationPoint.latitude?.toFixed(6)} <br/> Lng: {stationPoint.longitude?.toFixed(6)}</p>
+                <p className="text-[10px] text-slate-400 mt-1 m-0">Lat: {stationPoint.latitude?.toFixed(6)} <br /> Lng: {stationPoint.longitude?.toFixed(6)}</p>
               </div>
             </Popup>
           </Marker>
@@ -92,15 +111,15 @@ export const WaterwayMap = ({
         {/* TRƯỜNG HỢP 2: HIỂN THỊ DANH SÁCH HÀNG LOẠT NHÀ GA (DÀNH CHO TRANG CHỦ HOME TƯƠNG TÁC) */}
         {stationsList && stationsList.length > 0 && (
           stationsList.filter(s => s.status === "Active").map((station) => (
-            <Marker 
-              key={station.stationId} 
+            <Marker
+              key={station.stationId}
               position={[station.latitude, station.longitude]}
             >
               <Popup>
                 <div className="text-center font-body p-2 space-y-2 min-w-37.5">
                   <p className="font-black text-[#124757] text-xs uppercase leading-tight m-0">{station.stationName}</p>
                   <p className="text-[10px] text-slate-400 line-clamp-2 m-0">{station.address || "Bến tàu Saigon Waterbus"}</p>
-                  
+
                   {/* Nút bấm điều hướng sang trang chi tiết nhà ga */}
                   <button
                     type="button"
@@ -115,9 +134,9 @@ export const WaterwayMap = ({
           ))
         )}
 
-        <MapController 
-          positions={polylinePositions} 
-          centerPoint={stationPoint ? centerPoint : null} 
+        <MapController
+          positions={polylinePositions}
+          centerPoint={stationPoint ? centerPoint : null}
           multiMarkers={stationsList}
         />
         <MapClickHandler onLocationSelect={onLocationSelect} />
