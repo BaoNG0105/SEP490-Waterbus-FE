@@ -1,18 +1,16 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchVesselDetail, modifyVessel } from "../../../services/vesselService";
+import { fetchBoatDetail, modifyBoat } from "../../../services/boatService";
 import { fetchSeatLayout, deleteSeats } from "../../../services/seatService";
-import Swal from "sweetalert2"; // 💡 Đã import Swal để phục vụ thông báo lỗi
+import Swal from "sweetalert2";
 
-export function EditVessel() {
+export function EditBoat() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { id } = useParams();
 
-  // ==========================================
   // STATE CẤU HÌNH ĐỒNG BỘ 100% CÁC FIELD
-  // ==========================================
   const [formData, setFormData] = useState(null);
   const [seatMatrix, setSeatMatrix] = useState(null);
   const [activeDeck, setActiveDeck] = useState(1);
@@ -26,36 +24,34 @@ export function EditVessel() {
   const [isDeletingLayout, setIsDeletingLayout] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // ==========================================
   // EFFECT: GỌI ĐỒNG THỜI SONG SONG CÁC API THẬT
-  // ==========================================
-  const loadVesselAndSeatsData = async () => {
+  const loadBoatAndSeatsData = async () => {
     try {
       setIsLoading(true);
       setErrorMsg("");
 
       // 1. Gọi API chi tiết tàu trước để kiểm tra sự tồn tại của ID
-      const vesselData = await fetchVesselDetail(id);
+      const boatData = await fetchBoatDetail(id);
       
       // Khởi tạo form dữ liệu tương thích hoàn toàn cấu trúc mới
       setFormData({
-        code: vesselData.code || "",
-        name: vesselData.name || "",
-        seatCount: vesselData.seatCount || 0,
-        numberOfDecks: vesselData.numberOfDecks || 1,
-        seatSetupType: vesselData.seatSetupType || "FullStandard",
-        registrationNumber: vesselData.registrationNumber || "",
-        maxSpeedKmh: vesselData.maxSpeedKmh || 0,
-        yearBuilt: vesselData.yearBuilt || new Date().getFullYear(),
-        description: vesselData.description || "",
-        rentalPrices: vesselData.rentalPrices || []
+        code: boatData.code || "",
+        name: boatData.name || "",
+        seatCount: boatData.seatCount || 0,
+        numberOfDecks: boatData.numberOfDecks || 1,
+        seatSetupType: boatData.seatSetupType || "FullStandard",
+        registrationNumber: boatData.registrationNumber || "",
+        maxSpeedKmh: boatData.maxSpeedKmh || 0,
+        yearBuilt: boatData.yearBuilt || new Date().getFullYear(),
+        description: boatData.description || "",
+        rentalPrices: boatData.rentalPrices || []
       });
 
       // Load ảnh cũ từ server lên khu vực xem trước
-      if (vesselData.imageUrls && vesselData.imageUrls.length > 0) {
-        setImagePreviews(vesselData.imageUrls);
-      } else if (vesselData.imageUrl) {
-        setImagePreviews([vesselData.imageUrl]);
+      if (boatData.imageUrls && boatData.imageUrls.length > 0) {
+        setImagePreviews(boatData.imageUrls);
+      } else if (boatData.imageUrl) {
+        setImagePreviews([boatData.imageUrl]);
       }
 
       // 2. Tiếp tục lấy sơ đồ ma trận ghế
@@ -73,20 +69,20 @@ export function EditVessel() {
       if (error.response?.status === 404) {
         Swal.fire({
           icon: "error",
-          title: lang === "VN" ? "Không tìm thấy tàu!" : "Vessel Not Found!",
+          title: lang === "VN" ? "Không tìm thấy tàu!" : "Boat Not Found!",
           text: lang === "VN" 
             ? "Mã định danh phương tiện này không tồn tại trên hệ thống. Đang quay về danh sách." 
-            : "The requested vessel ID does not exist. Redirecting to management list...",
+            : "The requested boat ID does not exist. Redirecting to management list...",
           confirmButtonColor: "#124757",
           allowOutsideClick: false
         }).then(() => {
-          navigate("/admin/vessels-management");
+          navigate("/admin/boats-management");
         });
       } else {
         setErrorMsg(
           lang === "VN" 
             ? "Không thể tải dữ liệu phương tiện hoặc sơ đồ ghế. Vui lòng kiểm tra kết nối mạng." 
-            : "Failed to load vessel records or seating chart matrix."
+            : "Failed to load boat records or seating chart matrix."
         );
       }
     } finally {
@@ -95,16 +91,14 @@ export function EditVessel() {
   };
 
   useEffect(() => {
-    loadVesselAndSeatsData();
+    loadBoatAndSeatsData();
   }, [id]);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // ==========================================
   // LOGIC ĐỘNG: QUẢN LÝ BẢNG GIÁ THUÊ
-  // ==========================================
   const handleAddRentalPrice = () => {
     setFormData((prev) => ({
       ...prev,
@@ -130,14 +124,12 @@ export function EditVessel() {
     });
   };
 
-  // ==========================================
   // XỬ LÝ UPLOAD/PREVIEW THƯ VIỆN ẢNH
-  // ==========================================
   const handleImagesChange = (e) => {
     const files = Array.from(e.target.files);
     
     if (selectedImages.length + imagePreviews.length + files.length > 10) {
-      alert(lang === "VN" ? "Mỗi tàu chỉ được chứa tối đa 10 hình ảnh." : "Maximum 10 images allowed per vessel.");
+      alert(lang === "VN" ? "Mỗi tàu chỉ được chứa tối đa 10 hình ảnh." : "Maximum 10 images allowed per boat.");
       return;
     }
 
@@ -225,16 +217,16 @@ export function EditVessel() {
         };
       }
 
-      await modifyVessel(id, payload);
+      await modifyBoat(id, payload);
       
       Swal.fire({
         icon: "success",
         title: lang === "VN" ? "Thành công!" : "Success!",
-        text: lang === "VN" ? "Cập nhật thông tin phương tiện thành công!" : "Vessel details modified successfully!",
+        text: lang === "VN" ? "Cập nhật thông tin phương tiện thành công!" : "Boat details modified successfully!",
         confirmButtonColor: "#124757"
       });
 
-      loadVesselAndSeatsData();
+      loadBoatAndSeatsData();
     } catch (error) {
       console.error("Lỗi cập nhật tàu:", error);
       let validationMsg = "";
@@ -274,7 +266,7 @@ export function EditVessel() {
         confirmButtonColor: "#124757"
       });
 
-      loadVesselAndSeatsData();
+      loadBoatAndSeatsData();
     } catch (error) {
       console.error("Lỗi khi xóa ghế:", error);
       
@@ -289,9 +281,7 @@ export function EditVessel() {
     }
   };
 
-  // ==========================================
   // ĐỌC VÀ HIỂN THỊ MA TRẬN GHẾ
-  // ==========================================
   const renderDynamicSeatLayout = () => {
     const currentDeckData = seatMatrix?.decks?.find(d => d.deckNumber === activeDeck);
     
@@ -309,14 +299,14 @@ export function EditVessel() {
             <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1 leading-normal">
               {lang === "VN" 
                 ? "Phương tiện này hiện đang trống ma trận lưới vị trí ghế. Hãy di chuyển tới công cụ Editor để vẽ sơ đồ." 
-                : "This vessel doesn't have an active layout matrix blueprint configured yet."}
+                : "This boat doesn't have an active layout matrix blueprint configured yet."}
             </p>
           </div>
           
           {/* NÚT CHUYỂN ĐẾN TRANG SEAT LAYOUT EDITOR NHƯ YÊU CẦU */}
           <button
             type="button"
-            onClick={() => navigate(`/admin/vessels-management/seats/${id}`)}
+            onClick={() => navigate(`/admin/boats-management/seats/${id}`)}
             className="px-5 py-2.5 bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 text-xs font-black font-headline uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
           >
             {lang === "VN" ? "Thiết lập sơ đồ ngay" : "Go to Layout Editor"}
@@ -349,7 +339,7 @@ export function EditVessel() {
 
         {/* Mũi tàu hướng lái */}
         <div className="w-full bg-white dark:bg-slate-800 text-slate-400 border py-2 rounded-xl text-[9px] font-headline font-black text-center uppercase tracking-widest mb-4 shadow-sm">
-          {lang === "VN" ? "Buồng lái - Phía mũi tàu" : "Vessel Command Bridge - Bow Direction"}
+          {lang === "VN" ? "Buồng lái - Phía mũi tàu" : "Boat Command Bridge - Bow Direction"}
         </div>
 
         <div className="overflow-x-auto pb-2 custom-scrollbar flex justify-center bg-white dark:bg-slate-800/40 rounded-xl border border-dashed">
@@ -433,14 +423,14 @@ export function EditVessel() {
       <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between">
         <div className="flex items-center gap-4">
           <button
-            type="button" onClick={() => navigate("/admin/vessels-management")}
+            type="button" onClick={() => navigate("/admin/boats-management")}
             className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner"
           >
             <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
           </button>
           <div>
             <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-              {lang === "VN" ? `Chỉnh sửa tàu: ${formData.name}` : `Modify Vessel: ${formData.name}`}
+              {lang === "VN" ? `Chỉnh sửa tàu: ${formData.name}` : `Modify Boat: ${formData.name}`}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
               {lang === "VN" ? "Thay đổi hồ sơ kỹ thuật, bảng giá và quản lý cấu trúc ma trận ghế." : "Update parameters, price options and evaluate seating chart."}
@@ -454,7 +444,7 @@ export function EditVessel() {
         {/* PANEL TRÁI: FORM ĐIỀN THÔNG TIN TÀU CẬP NHẬT */}
         <div className="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-6">
           <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b pb-2">
-            {lang === "VN" ? "Thông tin kỹ thuật phương tiện" : "Vessel Specifications"}
+            {lang === "VN" ? "Thông tin kỹ thuật phương tiện" : "Boat Specifications"}
           </h3>
 
           {errorMsg && (
@@ -466,7 +456,7 @@ export function EditVessel() {
 
           <form onSubmit={handleSubmitForm} className="space-y-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Mã hiệu phương tiện (*)" : "Vessel Code"}</label>
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Mã hiệu phương tiện (*)" : "Boat Code"}</label>
               <input
                 type="text" required value={formData.code}
                 onChange={(e) => handleInputChange("code", e.target.value)}
@@ -475,7 +465,7 @@ export function EditVessel() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Tên phương tiện (*)" : "Vessel Name"}</label>
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Tên phương tiện (*)" : "Boat Name"}</label>
               <input
                 type="text" required value={formData.name}
                 onChange={(e) => handleInputChange("name", e.target.value)}

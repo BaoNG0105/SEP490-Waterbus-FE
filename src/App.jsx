@@ -11,7 +11,7 @@ import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { BlogList } from "./pages/Blog";
 import { BlogDetail } from "./pages/Blog/BlogDetail";
-import { Station } from "./pages/Station";
+// import { Station } from "./pages/Station";
 import { StationDetail } from "./pages/Station/StationDetail";
 import { Promotions } from "./pages/Promotions";
 import { Contact } from "./pages/Contact";
@@ -22,7 +22,7 @@ import { Booking } from "./pages/Booking";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
 import { CustomerManagement } from "./pages/Admin/CustomerManagement";
-import { VesselManagement, CreateVessel, EditVessel, SeatLayoutEditor } from "./pages/Admin/VesselManagement";
+import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor } from "./pages/Admin/BoatManagement";
 import { StationManagement } from "./pages/Admin/StationManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
@@ -158,29 +158,29 @@ function App() {
             }
           />
 
-          {/* Admin Vessels Page */}
+          {/* Admin Boats Page */}
           <Route
-            path="/admin/vessels-management"
+            path="/admin/boats-management"
             element={
-              <AdminLayout title="Vessels Management">
-                <VesselManagement />
+              <AdminLayout title="Boats Management">
+                <BoatManagement />
               </AdminLayout>
             }
           />
 
-          {/* Create Vessel Page */}
+          {/* Create Boat Page */}
           <Route
-            path="/admin/vessels-management/create"
+            path="/admin/boats-management/create"
             element={
-              <AdminLayout title="Create Vessel">
-                <CreateVessel />
+              <AdminLayout title="Create Boat">
+                <CreateBoat />
               </AdminLayout>
             }
           />
 
           {/* Seat Layout Editor Page */}
           <Route
-            path="/admin/vessels-management/seats/:vesselId"
+            path="/admin/boats-management/seats/:boatId"
             element={
               <AdminLayout title="Seat Layout Editor">
                 <SeatLayoutEditor />
@@ -188,11 +188,11 @@ function App() {
             }
           />
 
-          {/* Edit Vessel Page */}
-          <Route path="/admin/vessels-management/edit/:id"
+          {/* Edit Boat Page */}
+          <Route path="/admin/boats-management/edit/:id"
             element={
-              <AdminLayout title="Edit Vessel">
-                <EditVessel />
+              <AdminLayout title="Edit Boat">
+                <EditBoat />
               </AdminLayout>
             }
           />

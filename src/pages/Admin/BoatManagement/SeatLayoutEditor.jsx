@@ -8,7 +8,7 @@ import {
   configureSeats,
   deleteSeats
 } from "../../../services/seatService";
-import { fetchVesselDetail } from "../../../services/vesselService";
+import { fetchBoatDetail } from "../../../services/boatService";
 
 // CẤU HÌNH TOOL PALETTE (BỘ CÔNG CỤ VẼ)
 const TOOLS = [
@@ -25,10 +25,10 @@ const TOOLS = [
 
 export function SeatLayoutEditor() {
   const { lang } = useApp();
-  const { vesselId } = useParams();
+  const { boatId } = useParams();
   const navigate = useNavigate();
 
-  const [vesselData, setVesselData] = useState(null);
+  const [boatData, setBoatData] = useState(null);
   const [decksData, setDecksData] = useState(null);
   const [activeDeck, setActiveDeck] = useState(1);
   const [activeTool, setActiveTool] = useState("NONE");
@@ -57,17 +57,17 @@ export function SeatLayoutEditor() {
       setIsLoading(true);
       
       // 1. Gọi API lấy chi tiết tàu trước để kiểm tra sự tồn tại của ID
-      const vessel = await fetchVesselDetail(vesselId);
+      const boat = await fetchBoatDetail(boatId);
       
       // Nếu vì lý do nào đó API không văng lỗi nhưng object tàu trả về trống rỗng
-      if (!vessel || !vessel.id) {
+      if (!boat || !boat.id) {
         throw new Error("NOT_FOUND");
       }
       
-      setVesselData(vessel);
+      setBoatData(boat);
       
       // 2. Nếu tìm thấy tàu hợp lệ, tiếp tục gọi API lấy Layout ghế
-      const layout = await fetchSeatLayout(vesselId);
+      const layout = await fetchSeatLayout(boatId);
       
       // Nếu API trả về ma trận hợp lệ
       if (layout && layout.decks && layout.decks.length > 0) {
@@ -76,7 +76,7 @@ export function SeatLayoutEditor() {
         // Tàu chưa có ma trận -> Hiển thị form khởi tạo lưới ban đầu (Generate Form)
         setDecksData(null); 
         const initialDecks = [];
-        for (let i = 1; i <= vessel.numberOfDecks; i++) {
+        for (let i = 1; i <= boat.numberOfDecks; i++) {
           initialDecks.push({ deckNumber: i, rowCount: 14, columnCount: 8 });
         }
         setInputDecks(initialDecks);
@@ -88,22 +88,22 @@ export function SeatLayoutEditor() {
       if (e.message === "NOT_FOUND" || e.response?.status === 404) {
         Swal.fire({
           icon: "error",
-          title: lang === "VN" ? "Không tìm thấy phương tiện!" : "Vessel Not Found!",
+          title: lang === "VN" ? "Không tìm thấy phương tiện!" : "Boat Not Found!",
           text: lang === "VN" 
             ? "Mã định danh tàu không tồn tại trên hệ thống." 
-            : "The requested vessel ID does not exist.",
+            : "The requested boat ID does not exist.",
           confirmButtonColor: "#124757",
           allowOutsideClick: false // Chặn kích bên ngoài để ép người dùng bấm nút
         }).then(() => {
           // Đẩy người dùng văng ra lại trang danh sách quản lý tàu
-          navigate("/admin/vessels-management");
+          navigate("/admin/boats-management");
         });
       } else {
         // Dự phòng cho các lỗi kết nối server hoặc lỗi hệ thống khác
         Swal.fire({
           icon: "warning",
           title: lang === "VN" ? "Lỗi kết nối mạng" : "Connection Error",
-          text: lang === "VN" ? "Không thể tải cấu hình tàu vào lúc này." : "Failed to load vessel configuration matrix.",
+          text: lang === "VN" ? "Không thể tải cấu hình tàu vào lúc này." : "Failed to load boat configuration matrix.",
           confirmButtonColor: "#124757"
         });
       }
@@ -112,7 +112,7 @@ export function SeatLayoutEditor() {
     }
   };
 
-  useEffect(() => { loadData(); }, [vesselId]);
+  useEffect(() => { loadData(); }, [boatId]);
 
   // HÀM HELPER: MAP API RESPONSE VÀO STATE
   const parseAndSetDecksData = (decksArray) => {
@@ -168,8 +168,8 @@ export function SeatLayoutEditor() {
   const handleGenerate = async () => {
     try {
       setIsGenerating(true);
-      // Gọi API POST /vessels/{vesselId}/seats/generate
-      const res = await generateMatrix(vesselId, { decks: inputDecks });
+      // Gọi API POST /boats/{boatId}/seats/generate
+      const res = await generateMatrix(boatId, { decks: inputDecks });
       parseAndSetDecksData(res.decks);
     } catch (e) {
       console.error("Lỗi khi tạo ma trận:", e);
@@ -183,7 +183,7 @@ export function SeatLayoutEditor() {
   const handleDeleteLayout = async () => {
     if (!window.confirm(lang === "VN" ? "Cảnh báo: Toàn bộ cấu hình ghế sẽ bị xóa và tàu sẽ trở về Inactive. Trở lại Form tạo lưới ban đầu?" : "Warning: All seating layout will be deleted. Continue?")) return;
     try {
-      await deleteSeats(vesselId);
+      await deleteSeats(boatId);
       setDecksData(null);
     } catch (e) {
       console.error("Lỗi khi xóa sơ đồ:", e);
@@ -307,8 +307,8 @@ export function SeatLayoutEditor() {
 
   const handleConfigure = async () => {
     const totalDrawn = getTotalSeats();
-    if (vesselData && totalDrawn !== vesselData.seatCount) {
-      Swal.fire("Lỗi logic", `Tổng số ghế vẽ trên sơ đồ (${totalDrawn}) ĐANG KHÔNG KHỚP với thông số sức chứa của tàu (${vesselData.seatCount}). Cần vẽ thêm hoặc xóa bớt để khớp 100%!`, "error");
+    if (boatData && totalDrawn !== boatData.seatCount) {
+      Swal.fire("Lỗi logic", `Tổng số ghế vẽ trên sơ đồ (${totalDrawn}) ĐANG KHÔNG KHỚP với thông số sức chứa của tàu (${boatData.seatCount}). Cần vẽ thêm hoặc xóa bớt để khớp 100%!`, "error");
       return;
     }
 
@@ -339,14 +339,14 @@ export function SeatLayoutEditor() {
         };
       });
 
-      // Gọi API POST /vessels/{vesselId}/seats/configure
-      await configureSeats(vesselId, { decks: payloadDecks });
+      // Gọi API POST /boats/{boatId}/seats/configure
+      await configureSeats(boatId, { decks: payloadDecks });
 
       Swal.fire({
         icon: "success", title: "Cấu hình thành công",
         text: "Sơ đồ ma trận đã được thiết lập. Phương tiện hiện đã chuyển sang trạng thái Active và sẵn sàng mở bán vé!",
         confirmButtonColor: "#124757"
-      }).then(() => navigate("/admin/vessels-management"));
+      }).then(() => navigate("/admin/boats-management"));
 
     } catch (e) {
       // Bóc tách mảng lỗi từ Backend nếu có để hiển thị chi tiết (VD: lỗi validation)
@@ -361,7 +361,7 @@ export function SeatLayoutEditor() {
   };
 
   // HIỂN THỊ LOADING BAN ĐẦU
-  if (isLoading || !vesselData) {
+  if (isLoading || !boatData) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
@@ -376,22 +376,22 @@ export function SeatLayoutEditor() {
       <div className="flex flex-col lg:flex-row bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between gap-4">
         <div className="flex items-center gap-4 w-full">
           <button
-            type="button" onClick={() => navigate("/admin/vessels-management")}
+            type="button" onClick={() => navigate("/admin/boats-management")}
             className="w-10 h-10 shrink-0 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner"
           >
             <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
           </button>
           <div>
             <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-              {lang === "VN" ? `Cấu hình ghế: ${vesselData.name}` : `Seat Config: ${vesselData.name}`}
+              {lang === "VN" ? `Cấu hình ghế: ${boatData.name}` : `Seat Config: ${boatData.name}`}
             </h2>
             <p className="text-[10px] text-slate-500 mt-1 font-bold uppercase tracking-wider flex gap-3">
-              <span>Mã: {vesselData.code}</span>
+              <span>Mã: {boatData.code}</span>
               <span className="text-slate-300">|</span>
-              <span>Layout: {vesselData.seatSetupType}</span>
+              <span>Layout: {boatData.seatSetupType}</span>
               <span className="text-slate-300">|</span>
-              <span className={getTotalSeats() === vesselData.seatCount ? 'text-emerald-500' : 'text-rose-500'}>
-                TỔNG GHẾ: {vesselData.seatCount}
+              <span className={getTotalSeats() === boatData.seatCount ? 'text-emerald-500' : 'text-rose-500'}>
+                TỔNG GHẾ: {boatData.seatCount}
               </span>
             </p>
           </div>
@@ -401,8 +401,8 @@ export function SeatLayoutEditor() {
         {decksData && (
           <div className="shrink-0 text-right bg-slate-50 dark:bg-slate-900 px-6 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-inner w-full lg:w-auto">
             <div className="text-3xl font-black text-[#124757] dark:text-yellow-400 leading-none flex items-baseline justify-end gap-1">
-              <span className={getTotalSeats() !== vesselData.seatCount ? 'text-rose-500' : ''}>{getTotalSeats()}</span>
-              <span className="text-lg text-slate-400">/ {vesselData.seatCount}</span>
+              <span className={getTotalSeats() !== boatData.seatCount ? 'text-rose-500' : ''}>{getTotalSeats()}</span>
+              <span className="text-lg text-slate-400">/ {boatData.seatCount}</span>
             </div>
             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
               {lang === "VN" ? "Số ô Seat đã vẽ" : "Configured Seats"}

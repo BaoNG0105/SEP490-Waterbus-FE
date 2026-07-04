@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { addNewVessel } from "../../../services/vesselService";
+import { addNewBoat } from "../../../services/boatService";
 
-export function CreateVessel() {
+export function CreateBoat() {
   const { lang } = useApp();
   const navigate = useNavigate();
 
@@ -68,7 +68,7 @@ export function CreateVessel() {
 
     // Kiểm tra giới hạn số lượng ảnh (Tối đa 10)
     if (selectedImages.length + files.length > 10) {
-      alert(lang === "VN" ? "Mỗi tàu chỉ được tải lên tối đa 10 ảnh." : "Maximum 10 images allowed per vessel.");
+      alert(lang === "VN" ? "Mỗi tàu chỉ được tải lên tối đa 10 ảnh." : "Maximum 10 images allowed per boat.");
       return;
     }
 
@@ -163,10 +163,10 @@ export function CreateVessel() {
         };
       }
 
-      await addNewVessel(payload);
+      await addNewBoat(payload);
 
-      alert(lang === "VN" ? "✓ Đăng ký phương tiện mới thành công!" : "✓ New vessel registered successfully!");
-      navigate("/admin/vessels-management");
+      alert(lang === "VN" ? "✓ Đăng ký phương tiện mới thành công!" : "✓ New boat registered successfully!");
+      navigate("/admin/boats-management");
     } catch (error) {
       console.error("Lỗi khi tạo tàu:", error);
       const backendMsg = error.response?.data?.message;
@@ -189,14 +189,14 @@ export function CreateVessel() {
       {/* HEADER CONTROLS */}
       <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
         <button
-          type="button" onClick={() => navigate("/admin/vessels-management")}
+          type="button" onClick={() => navigate("/admin/boats-management")}
           className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner"
         >
           <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
         </button>
         <div>
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-            {lang === "VN" ? "Đăng ký phương tiện mới" : "Register New Vessel"}
+            {lang === "VN" ? "Đăng ký phương tiện mới" : "Register New Boat"}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN" ? "Nhập thông tin, upload ảnh và cài đặt giá thuê tàu." : "Input details, upload pictures, and setup rental prices."}
@@ -221,7 +221,7 @@ export function CreateVessel() {
           {/* code */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Mã hiệu (Code) (*)" : "Vessel Code"}</label>
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Mã hiệu (Code) (*)" : "Boat Code"}</label>
               <input
                 type="text" required value={formData.code}
                 onChange={(e) => handleInputChange("code", e.target.value)}
@@ -231,7 +231,7 @@ export function CreateVessel() {
             </div>
             {/* name */}
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Tên phương tiện (*)" : "Vessel Name"}</label>
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Tên phương tiện (*)" : "Boat Name"}</label>
               <input
                 type="text" required value={formData.name}
                 onChange={(e) => handleInputChange("name", e.target.value)}
@@ -300,12 +300,12 @@ export function CreateVessel() {
           </div>
           {/* description */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Mô tả phương tiện" : "Vessel Description"}</label>
+            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Mô tả phương tiện" : "Boat Description"}</label>
             <textarea
               rows={3} value={formData.description}
               onChange={(e) => handleInputChange("description", e.target.value)}
               className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-3 text-xs font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner resize-none"
-              placeholder={lang === "VN" ? "Nhập mô tả về tàu..." : "Enter vessel details..."}
+              placeholder={lang === "VN" ? "Nhập mô tả về tàu..." : "Enter boat details..."}
             />
           </div>
         </div>
@@ -314,7 +314,7 @@ export function CreateVessel() {
         <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-6">
           <div className="flex items-center justify-between border-b pb-2">
             <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-              {lang === "VN" ? "Thư viện ảnh phương tiện" : "Vessel Image Gallery"}
+              {lang === "VN" ? "Thư viện ảnh phương tiện" : "Boat Image Gallery"}
             </h3>
             <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg">
               {selectedImages.length} / 10

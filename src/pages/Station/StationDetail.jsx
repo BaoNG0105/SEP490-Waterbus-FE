@@ -96,7 +96,7 @@ export function StationDetail() {
                     </div>
 
                     <p className="text-slate-600 dark:text-slate-400 text-sm md:text-base leading-relaxed">
-                        {station?.description || (lang === "VN" ? "Bến ga trung tâm đón trả khách an toàn thuộc mạng lưới giao thông đường thủy. Tại đây quý khách có thể trải nghiệm quang cảnh tuyệt đẹp của dòng sông Sài Gòn." : "Operational pier point under the network direction.")}
+                        {station?.description || (lang === "VN" ? "Chưa có cập nhật mô tả chi tiết" : "No detailed description available")}
                     </p>
 
                     {/* Danh mục tiện ích bến bãi */}

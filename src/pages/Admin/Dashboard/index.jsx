@@ -88,10 +88,10 @@ export const Dashboard = () => {
       color: "from-teal-500/10 to-emerald-500/10 text-teal-600 dark:text-teal-400"
     },
     {
-      path: "/admin/vessels-management",
+      path: "/admin/boats-management",
       icon: "directions_boat",
       titleVn: "Quản lý đội tàu",
-      titleEn: "Vessel Fleet Matrix",
+      titleEn: "Boat Fleet Matrix",
       descVn: "Theo dõi trạng thái, bảo trì phương tiện.",
       descEn: "Track watercraft assets and maintenance.",
       color: "from-cyan-500/10 to-sky-500/10 text-cyan-600 dark:text-cyan-400"

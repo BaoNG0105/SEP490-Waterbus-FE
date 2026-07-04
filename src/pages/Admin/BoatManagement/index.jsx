@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllVessels, modifyVesselStatus } from "../../../services/vesselService";
+import { fetchAllBoats, modifyBoatStatus } from "../../../services/boatService";
 import Swal from "sweetalert2";
 
-export function VesselManagement() {
+export function BoatManagement() {
     const { lang } = useApp();
     const navigate = useNavigate();
 
     // Link ảnh mặc định phòng trường hợp imageUrl từ API trả về null
-    const DEFAULT_VESSEL_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png";
+    const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png";
 
     // STATE QUẢN LÝ DỮ LIỆU ĐỘI TÀU TỪ API
-    const [vessels, setVessels] = useState([]);
+    const [boats, setBoats] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
 
@@ -23,14 +23,14 @@ export function VesselManagement() {
 
     // EFFECT: GỌI API KHI TRANG VỪA LOAD
     useEffect(() => {
-        const getVesselsData = async () => {
+        const getBoatsData = async () => {
             try {
                 setIsLoading(true);
                 setErrorMsg("");
-                const data = await fetchAllVessels();
-                setVessels(data || []);
+                const data = await fetchAllBoats();
+                setBoats(data || []);
             } catch (error) {
-                console.error("Failed to load vessels:", error);
+                console.error("Failed to load boats:", error);
                 setErrorMsg(
                     lang === "VN"
                         ? "Không thể kết nối đến hệ thống máy chủ để lấy dữ liệu đội tàu."
@@ -41,11 +41,11 @@ export function VesselManagement() {
             }
         };
 
-        getVesselsData();
+        getBoatsData();
     }, [lang]);
 
     // XỬ LÝ: CẬP NHẬT TRẠNG THÁI TÀU
-    const handleUpdateStatus = async (vessel) => {
+    const handleUpdateStatus = async (boat) => {
         // Định nghĩa danh sách tùy chọn trạng thái
         const statusOptions = {
             Active: lang === "VN" ? "Hoạt động (Active)" : "Active",
@@ -55,13 +55,13 @@ export function VesselManagement() {
         };
 
         const { value: selectedStatus } = await Swal.fire({
-            title: lang === "VN" ? "Cập nhật trạng thái tàu" : "Update Vessel Status",
+            title: lang === "VN" ? "Cập nhật trạng thái tàu" : "Update Boat Status",
             html: lang === "VN"
-                ? `Chọn trạng thái mới cho tàu <b>${vessel.name}</b> (${vessel.code})`
-                : `Select new status for <b>${vessel.name}</b> (${vessel.code})`,
+                ? `Chọn trạng thái mới cho tàu <b>${boat.name}</b> (${boat.code})`
+                : `Select new status for <b>${boat.name}</b> (${boat.code})`,
             input: 'select',
             inputOptions: statusOptions,
-            inputValue: vessel.status, // Hiển thị sẵn trạng thái hiện tại
+            inputValue: boat.status, // Hiển thị sẵn trạng thái hiện tại
             showCancelButton: true,
             confirmButtonColor: '#124757',
             cancelButtonColor: '#d33',
@@ -69,31 +69,31 @@ export function VesselManagement() {
             cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
             inputValidator: (value) => {
                 // Nếu chuyển sang Active mà chưa cấu hình ghế thì chặn luôn từ Frontend!
-                if (value === 'Active' && !vessel.seatsConfigured) {
+                if (value === 'Active' && !boat.seatsConfigured) {
                     return lang === "VN"
                         ? 'Tàu chưa được setup sơ đồ ghế! Không thể chuyển sang trạng thái Hoạt động (Active).'
-                        : 'Vessel seats are not configured! Cannot switch to Active status.';
+                        : 'Boat seats are not configured! Cannot switch to Active status.';
                 }
             }
         });
 
         // Nếu người dùng chọn một trạng thái hợp lệ và khác với trạng thái cũ
-        if (selectedStatus && selectedStatus !== vessel.status) {
+        if (selectedStatus && selectedStatus !== boat.status) {
             try {
                 setIsLoading(true);
                 // Gọi API PATCH
-                await modifyVesselStatus(vessel.id, { status: selectedStatus });
+                await modifyBoatStatus(boat.id, { status: selectedStatus });
 
                 Swal.fire({
                     icon: 'success',
                     title: lang === "VN" ? 'Thành công!' : 'Success!',
-                    text: lang === "VN" ? 'Cập nhật trạng thái tàu thành công.' : 'Vessel status updated successfully.',
+                    text: lang === "VN" ? 'Cập nhật trạng thái tàu thành công.' : 'Boat status updated successfully.',
                     confirmButtonColor: '#124757'
                 });
 
-                // 💡 Load lại danh sách tàu sau khi cập nhật thành công
-                const data = await fetchAllVessels();
-                setVessels(data || []);
+                // Load lại danh sách tàu sau khi cập nhật thành công
+                const data = await fetchAllBoats();
+                setBoats(data || []);
 
             } catch (error) {
                 console.error("Lỗi đổi trạng thái:", error);
@@ -110,20 +110,20 @@ export function VesselManagement() {
     };
 
     // THỐNG KÊ NHANH (So sánh theo Text)
-    const totalVessels = vessels.length;
-    const activeVessels = vessels.filter(v => v.status?.toLowerCase() === "active").length;
-    const inactiveVessels = vessels.filter(v => v.status?.toLowerCase() === "inactive").length;
-    const retiredVessels = vessels.filter(v => v.status?.toLowerCase() === "retired").length;
-    const maintenanceVessels = vessels.filter(v => v.status?.toLowerCase() === "maintenance").length;
+    const totalBoats = boats.length;
+    const activeBoats = boats.filter(v => v.status?.toLowerCase() === "active").length;
+    const inactiveBoats = boats.filter(v => v.status?.toLowerCase() === "inactive").length;
+    const retiredBoats = boats.filter(v => v.status?.toLowerCase() === "retired").length;
+    const maintenanceBoats = boats.filter(v => v.status?.toLowerCase() === "maintenance").length;
 
     // Xử lý logic Tìm kiếm + Lọc trạng thái + Lọc số tầng
-    const filteredVessels = vessels.filter(vessel => {
-        const nameMatch = vessel.name?.toLowerCase().includes(searchTerm.toLowerCase());
-        const codeMatch = vessel.code?.toLowerCase().includes(searchTerm.toLowerCase());
+    const filteredBoats = boats.filter(boats => {
+        const nameMatch = boats.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        const codeMatch = boats.code?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesSearch = nameMatch || codeMatch;
 
-        const matchesStatus = statusFilter === "All" || vessel.status?.toLowerCase() === statusFilter.toLowerCase();
-        const matchesDeck = deckFilter === "All" || Number(vessel.numberOfDecks) === Number(deckFilter);
+        const matchesStatus = statusFilter === "All" || boats.status?.toLowerCase() === statusFilter.toLowerCase();
+        const matchesDeck = deckFilter === "All" || Number(boats.numberOfDecks) === Number(deckFilter);
 
         return matchesSearch && matchesStatus && matchesDeck;
     });
@@ -166,12 +166,12 @@ export function VesselManagement() {
     };
 
     // CÁC HÀM XỬ LÝ ĐIỀU HƯỚNG
-    const handleAddVessel = () => navigate("/admin/vessels-management/create");
-    const handleEditVessel = (id) => navigate(`/admin/vessels-management/edit/${id}`);
-    const handleConfigureSeats = (id) => navigate(`/admin/vessels-management/seats/${id}`);
-    const handleDeleteVessel = (code) => {
-        if (window.confirm(lang === "VN" ? `Bạn chắc chắn muốn xóa mã số hiệu tàu ${code} khỏi hệ thống?` : `Are you sure you want to delete vessel code ${code}?`)) {
-            setVessels(prev => prev.filter(v => v.code !== code));
+    const handleAddBoat = () => navigate("/admin/boats-management/create");
+    const handleEditBoat = (id) => navigate(`/admin/boats-management/edit/${id}`);
+    const handleConfigureSeats = (id) => navigate(`/admin/boats-management/seats/${id}`);
+    const handleDeleteBoat = (code) => {
+        if (window.confirm(lang === "VN" ? `Bạn chắc chắn muốn xóa mã số hiệu tàu ${code} khỏi hệ thống?` : `Are you sure you want to delete boat code ${code}?`)) {
+            setBoats(prev => prev.filter(v => v.code !== code));
         }
     };
 
@@ -182,7 +182,7 @@ export function VesselManagement() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
                 <div className="space-y-1">
                     <h2 className="text-2xl md:text-3xl font-headline font-black text-[#124757] dark:text-yellow-400">
-                        {lang === "VN" ? "Quản Lý Đội Tàu Phương Tiện" : "Vessel Fleet Matrix"}
+                        {lang === "VN" ? "Quản Lý Đội Tàu Phương Tiện" : "Boat Fleet Matrix"}
                     </h2>
                     <p className="text-sm font-medium text-slate-400">
                         {lang === "VN"
@@ -193,11 +193,11 @@ export function VesselManagement() {
 
                 <button
                     type="button"
-                    onClick={handleAddVessel}
+                    onClick={handleAddBoat}
                     className="bg-[#FFD100] text-[#124757] font-headline font-black uppercase text-xs tracking-wider px-6 py-3.5 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-95 transition-all flex items-center gap-2 w-max shrink-0"
                 >
                     <span className="material-symbols-outlined text-base font-black">add_circle</span>
-                    {lang === "VN" ? "Thêm tàu mới" : "Add New Vessel"}
+                    {lang === "VN" ? "Thêm tàu mới" : "Add New Boat"}
                 </button>
             </div>
 
@@ -209,7 +209,7 @@ export function VesselManagement() {
                     </div>
                     <div>
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{lang === "VN" ? "Tổng số tàu" : "Total Fleet"}</p>
-                        <h3 className="text-xl font-headline font-black text-[#124757] dark:text-white mt-0.5">{isLoading ? "..." : totalVessels}</h3>
+                        <h3 className="text-xl font-headline font-black text-[#124757] dark:text-white mt-0.5">{isLoading ? "..." : totalBoats}</h3>
                     </div>
                 </div>
 
@@ -219,7 +219,7 @@ export function VesselManagement() {
                     </div>
                     <div>
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{lang === "VN" ? "Hoạt động" : "Active"}</p>
-                        <h3 className="text-xl font-headline font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{isLoading ? "..." : activeVessels}</h3>
+                        <h3 className="text-xl font-headline font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{isLoading ? "..." : activeBoats}</h3>
                     </div>
                 </div>
 
@@ -229,7 +229,7 @@ export function VesselManagement() {
                     </div>
                     <div>
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{lang === "VN" ? "Chưa hoạt động" : "Inactive"}</p>
-                        <h3 className="text-xl font-headline font-black text-slate-600 dark:text-slate-300 mt-0.5">{isLoading ? "..." : inactiveVessels}</h3>
+                        <h3 className="text-xl font-headline font-black text-slate-600 dark:text-slate-300 mt-0.5">{isLoading ? "..." : inactiveBoats}</h3>
                     </div>
                 </div>
 
@@ -239,7 +239,7 @@ export function VesselManagement() {
                     </div>
                     <div>
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{lang === "VN" ? "Dừng hoạt động" : "Retired"}</p>
-                        <h3 className="text-xl font-headline font-black text-rose-600 dark:text-rose-400 mt-0.5">{isLoading ? "..." : retiredVessels}</h3>
+                        <h3 className="text-xl font-headline font-black text-rose-600 dark:text-rose-400 mt-0.5">{isLoading ? "..." : retiredBoats}</h3>
                     </div>
                 </div>
 
@@ -249,7 +249,7 @@ export function VesselManagement() {
                     </div>
                     <div>
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{lang === "VN" ? "Bảo trì" : "Maintenance"}</p>
-                        <h3 className="text-xl font-headline font-black text-amber-600 dark:text-amber-400 mt-0.5">{isLoading ? "..." : maintenanceVessels}</h3>
+                        <h3 className="text-xl font-headline font-black text-amber-600 dark:text-amber-400 mt-0.5">{isLoading ? "..." : maintenanceBoats}</h3>
                     </div>
                 </div>
             </div>
@@ -262,7 +262,7 @@ export function VesselManagement() {
                         type="text"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder={lang === "VN" ? "Tìm theo số hiệu, tên tàu..." : "Search by code, vessel name..."}
+                        placeholder={lang === "VN" ? "Tìm theo số hiệu, tên tàu..." : "Search by code, boat name..."}
                         className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-11 pr-4 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-[#FFD100] transition-all dark:text-white"
                     />
                 </div>
@@ -304,9 +304,9 @@ export function VesselManagement() {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-700 text-xs font-headline font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">
-                                <th className="py-4 px-6">{lang === "VN" ? "Số hiệu tàu" : "Vessel Code"}</th>
+                                <th className="py-4 px-6">{lang === "VN" ? "Số hiệu tàu" : "Boat Code"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Hình ảnh" : "Image"}</th>
-                                <th className="py-4 px-6">{lang === "VN" ? "Tên tàu" : "Vessel Name"}</th>
+                                <th className="py-4 px-6">{lang === "VN" ? "Tên tàu" : "Boat Name"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Sức chứa" : "Capacity"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Số tầng" : "Decks"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
@@ -318,7 +318,7 @@ export function VesselManagement() {
                                 <tr>
                                     <td colSpan="7" className="text-center py-16 text-slate-400 font-medium">
                                         <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] rounded-full animate-spin mx-auto mb-2"></div>
-                                        <p className="text-xs tracking-wider animate-pulse">{lang === "VN" ? "Đang đồng bộ dữ liệu đội tàu thủy..." : "Synchronizing vessels database..."}</p>
+                                        <p className="text-xs tracking-wider animate-pulse">{lang === "VN" ? "Đang đồng bộ dữ liệu đội tàu thủy..." : "Synchronizing boats database..."}</p>
                                     </td>
                                 </tr>
                             ) : errorMsg ? (
@@ -328,32 +328,32 @@ export function VesselManagement() {
                                         {errorMsg}
                                     </td>
                                 </tr>
-                            ) : filteredVessels.length > 0 ? (
-                                filteredVessels.map((vessel) => {
-                                    const statusConfig = getStatusInfo(vessel.status);
+                            ) : filteredBoats.length > 0 ? (
+                                filteredBoats.map((boat) => {
+                                    const statusConfig = getStatusInfo(boat.status);
                                     return (
-                                        <tr key={vessel.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors group">
+                                        <tr key={boat.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors group">
                                             {/* "code": Số hiệu tàu */}
                                             <td className="py-4 px-6 font-headline font-black text-[#124757] dark:text-yellow-400">
-                                                {vessel.code}
+                                                {boat.code}
                                             </td>
 
                                             {/* "imageUrl": Ảnh tàu */}
                                             <td className="py-4 px-4">
                                                 <div className="w-16 h-10 rounded-xl overflow-hidden shadow-sm border dark:border-slate-600 bg-slate-100 shrink-0">
                                                     <img
-                                                        src={vessel.imageUrl || DEFAULT_VESSEL_IMAGE}
-                                                        alt={vessel.name}
+                                                        src={boat.imageUrl || DEFAULT_BOAT_IMAGE}
+                                                        alt={boat.name}
                                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                                        onError={(e) => { e.target.src = DEFAULT_VESSEL_IMAGE; }}
+                                                        onError={(e) => { e.target.src = DEFAULT_BOAT_IMAGE; }}
                                                     />
                                                 </div>
                                             </td>
 
                                             {/* "name": Tên tàu + Cảnh báo chưa cấu hình ghế */}
                                             <td className="py-4 px-6">
-                                                <p className="font-bold text-slate-800 dark:text-white">{vessel.name}</p>
-                                                {!vessel.seatsConfigured && (
+                                                <p className="font-bold text-slate-800 dark:text-white">{boat.name}</p>
+                                                {!boat.seatsConfigured && (
                                                     <p className="text-[10px] font-bold text-amber-500 mt-1 flex items-center gap-1">
                                                         <span className="material-symbols-outlined text-[14px]">warning</span>
                                                         {lang === "VN" ? "Chưa cấu hình ghế" : "Pending Layout"}
@@ -363,13 +363,13 @@ export function VesselManagement() {
 
                                             {/* "seatCount": Sức chứa */}
                                             <td className="py-4 px-6 text-center font-headline font-black text-slate-700 dark:text-slate-200">
-                                                {vessel.seatCount || 0} <span className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "ghế" : "pax"}</span>
+                                                {boat.seatCount || 0} <span className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "ghế" : "pax"}</span>
                                             </td>
 
                                             {/* "numberOfDecks": Số tầng */}
                                             <td className="py-4 px-6 text-center">
                                                 <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border dark:border-slate-700 text-slate-600 dark:text-slate-300">
-                                                    {vessel.numberOfDecks} {lang === "VN" ? "Tầng" : "Deck(s)"}
+                                                    {boat.numberOfDecks} {lang === "VN" ? "Tầng" : "Deck(s)"}
                                                 </span>
                                             </td>
 
@@ -386,10 +386,10 @@ export function VesselManagement() {
                                                 <div className="flex items-center justify-center gap-2">
                                                     {/* NÚT CẤU HÌNH GHẾ */}
                                                     {/* CHỈ HIỂN THỊ NÚT KHI tàu chưa cấu hình ghế (seatsConfigured === false) */}
-                                                    {!vessel.seatsConfigured && (
+                                                    {!boat.seatsConfigured && (
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleConfigureSeats(vessel.id)}
+                                                            onClick={() => handleConfigureSeats(boat.id)}
                                                             className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-[#124757] hover:text-[#124757] dark:hover:border-yellow-400 dark:hover:text-yellow-400 flex items-center justify-center transition-colors shadow-sm"
                                                             title={lang === "VN" ? "Cấu hình sơ đồ ghế" : "Configure Seats"}
                                                         >
@@ -397,7 +397,7 @@ export function VesselManagement() {
                                                         </button>
                                                     )}
                                                     <button
-                                                        onClick={() => handleUpdateStatus(vessel)}
+                                                        onClick={() => handleUpdateStatus(boat)}
                                                         className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-all shadow-sm"
                                                         title={lang === "VN" ? "Đổi trạng thái" : "Change Status"}
                                                     >
@@ -405,7 +405,7 @@ export function VesselManagement() {
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleEditVessel(vessel.id)}
+                                                        onClick={() => handleEditBoat(boat.id)}
                                                         className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 flex items-center justify-center transition-all shadow-inner"
                                                         title={lang === "VN" ? "Sửa thông tin" : "Edit Details"}
                                                     >
@@ -413,9 +413,9 @@ export function VesselManagement() {
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleDeleteVessel(vessel.code)}
+                                                        onClick={() => handleDeleteBoat(boat.code)}
                                                         className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-inner"
-                                                        title={lang === "VN" ? "Xóa khỏi danh sách" : "Delete Vessel"}
+                                                        title={lang === "VN" ? "Xóa khỏi danh sách" : "Delete Boat"}
                                                     >
                                                         <span className="material-symbols-outlined text-base">delete</span>
                                                     </button>
@@ -428,7 +428,7 @@ export function VesselManagement() {
                                 <tr>
                                     <td colSpan="7" className="text-center py-12 text-slate-400 font-medium text-xs">
                                         <span className="material-symbols-outlined text-3xl mb-1 opacity-60 block">database_off</span>
-                                        {lang === "VN" ? "Không có dữ liệu tàu thủy nào khớp với từ khóa tìm kiếm." : "No vessels records found matching the specifications."}
+                                        {lang === "VN" ? "Không có dữ liệu tàu thủy nào khớp với từ khóa tìm kiếm." : "No boats records found matching the specifications."}
                                     </td>
                                 </tr>
                             )}
@@ -441,8 +441,8 @@ export function VesselManagement() {
             <div className="flex items-center justify-between px-2 text-xs font-bold text-slate-400">
                 <div>
                     {lang === "VN"
-                        ? `Hiển thị ${filteredVessels.length}/${totalVessels} phương tiện`
-                        : `Showing ${filteredVessels.length} of ${totalVessels} vessels`}
+                        ? `Hiển thị ${filteredBoats.length}/${totalBoats} phương tiện`
+                        : `Showing ${filteredBoats.length} of ${totalBoats} boats`}
                 </div>
 
                 <div className="flex items-center gap-1.5">
@@ -465,6 +465,6 @@ export function VesselManagement() {
     );
 }
 
-export { EditVessel } from "./EditVessel";
-export { CreateVessel } from "./CreateVessel";
+export { EditBoat } from "./EditBoat";
+export { CreateBoat } from "./CreateBoat";
 export { SeatLayoutEditor } from "./SeatLayoutEditor";
