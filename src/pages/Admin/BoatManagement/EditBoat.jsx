@@ -10,12 +10,10 @@ export function EditBoat() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  // STATE CẤU HÌNH ĐỒNG BỘ 100% CÁC FIELD
   const [formData, setFormData] = useState(null);
   const [seatMatrix, setSeatMatrix] = useState(null);
   const [activeDeck, setActiveDeck] = useState(1);
   
-  // Quản lý ảnh
   const [selectedImages, setSelectedImages] = useState([]); 
   const [imagePreviews, setImagePreviews] = useState([]);   
 
@@ -24,66 +22,56 @@ export function EditBoat() {
   const [isDeletingLayout, setIsDeletingLayout] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // EFFECT: GỌI ĐỒNG THỜI SONG SONG CÁC API THẬT
   const loadBoatAndSeatsData = async () => {
     try {
       setIsLoading(true);
       setErrorMsg("");
 
-      // 1. Gọi API chi tiết tàu trước để kiểm tra sự tồn tại của ID
-      const boatData = await fetchBoatDetail(id);
+      const boatDetail = await fetchBoatDetail(id);
       
-      // Khởi tạo form dữ liệu tương thích hoàn toàn cấu trúc mới
       setFormData({
-        code: boatData.code || "",
-        name: boatData.name || "",
-        seatCount: boatData.seatCount || 0,
-        numberOfDecks: boatData.numberOfDecks || 1,
-        seatSetupType: boatData.seatSetupType || "FullStandard",
-        registrationNumber: boatData.registrationNumber || "",
-        maxSpeedKmh: boatData.maxSpeedKmh || 0,
-        yearBuilt: boatData.yearBuilt || new Date().getFullYear(),
-        description: boatData.description || "",
-        rentalPrices: boatData.rentalPrices || []
+        code: boatDetail.code || boatDetail.boatCode || "",
+        name: boatDetail.name || boatDetail.boatName || "",
+        seatCount: Number(boatDetail.seatCount) || 0,
+        numberOfDecks: Number(boatDetail.numberOfDecks) || 1,
+        seatSetupType: boatDetail.seatSetupType || "FullStandard",
+        registrationNumber: boatDetail.registrationNumber || "",
+        maxSpeedKmh: Number(boatDetail.maxSpeedKmh) || 0,
+        yearBuilt: Number(boatDetail.yearBuilt) || new Date().getFullYear(),
+        description: boatDetail.description || "",
+        status: boatDetail.status || "Active",
+        rentalPrices: boatDetail.rentalPrices || []
       });
 
-      // Load ảnh cũ từ server lên khu vực xem trước
-      if (boatData.imageUrls && boatData.imageUrls.length > 0) {
-        setImagePreviews(boatData.imageUrls);
-      } else if (boatData.imageUrl) {
-        setImagePreviews([boatData.imageUrl]);
+      let legacyImages = [];
+      if (boatDetail.imageUrls && boatDetail.imageUrls.length > 0) {
+        legacyImages = boatDetail.imageUrls;
+      } else if (boatDetail.imageUrl) {
+        legacyImages = [boatDetail.imageUrl];
       }
+      setImagePreviews(legacyImages.slice(0, 6));
 
-      // 2. Tiếp tục lấy sơ đồ ma trận ghế
-      const seatsData = await fetchSeatLayout(id);
-      setSeatMatrix(seatsData);
-      
-      // Tự động focus tầng đầu tiên nếu có dữ liệu sơ đồ
-      if (seatsData?.decks?.length > 0) {
-        setActiveDeck(seatsData.decks[0].deckNumber);
+      if (boatDetail.seatsConfigured) {
+        const layoutData = await fetchSeatLayout(id);
+        setSeatMatrix(layoutData);
+        if (layoutData?.decks?.length > 0) {
+          setActiveDeck(layoutData.decks[0].deckNumber);
+        }
+      } else {
+        setSeatMatrix(null);
       }
 
     } catch (error) {
-      console.error("Lỗi khi tải thông tin chi tiết tàu:", error);
-      
+      console.error("Lỗi tải thông tin phương tiện tàu thủy:", error);
       if (error.response?.status === 404) {
         Swal.fire({
           icon: "error",
           title: lang === "VN" ? "Không tìm thấy tàu!" : "Boat Not Found!",
-          text: lang === "VN" 
-            ? "Mã định danh phương tiện này không tồn tại trên hệ thống. Đang quay về danh sách." 
-            : "The requested boat ID does not exist. Redirecting to management list...",
+          text: lang === "VN" ? "Mã định danh phương tiện không tồn tại." : "Requested boat records do not exist.",
           confirmButtonColor: "#124757",
-          allowOutsideClick: false
-        }).then(() => {
-          navigate("/admin/boats-management");
-        });
+        }).then(() => navigate("/admin/boats-management"));
       } else {
-        setErrorMsg(
-          lang === "VN" 
-            ? "Không thể tải dữ liệu phương tiện hoặc sơ đồ ghế. Vui lòng kiểm tra kết nối mạng." 
-            : "Failed to load boat records or seating chart matrix."
-        );
+        setErrorMsg(lang === "VN" ? "Lỗi đồng bộ hóa dữ liệu từ hệ thống máy chủ." : "Network handshake failure.");
       }
     } finally {
       setIsLoading(false);
@@ -92,62 +80,53 @@ export function EditBoat() {
 
   useEffect(() => {
     loadBoatAndSeatsData();
-  }, [id]);
+  }, [id, lang]);
 
-  const handleInputChange = (field, value) => {
+  const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // LOGIC ĐỘNG: QUẢN LÝ BẢNG GIÁ THUÊ
-  const handleAddRentalPrice = () => {
-    setFormData((prev) => ({
+  // LOGIC XỬ LÝ RENTAL PRICES
+  const handlePriceChange = (index, field, value) => {
+    const updatedPrices = [...formData.rentalPrices];
+    updatedPrices[index][field] = field === "unitPrice" ? Number(value) : value;
+    setFormData(prev => ({ ...prev, rentalPrices: updatedPrices }));
+  };
+
+  const handleAddPrice = () => {
+    setFormData(prev => ({
       ...prev,
-      rentalPrices: [
-        ...prev.rentalPrices,
-        { rentalUnit: "Day", unitPrice: 0, currency: "VND", note: "" }
-      ]
+      rentalPrices: [...prev.rentalPrices, { rentalUnit: "Day", unitPrice: 0, currency: "VND", note: "" }]
     }));
   };
 
-  const handleRemoveRentalPrice = (indexToRemove) => {
-    setFormData((prev) => ({
+  const handleRemovePrice = (index) => {
+    setFormData(prev => ({
       ...prev,
-      rentalPrices: prev.rentalPrices.filter((_, index) => index !== indexToRemove)
+      rentalPrices: prev.rentalPrices.filter((_, i) => i !== index)
     }));
   };
 
-  const handleRentalPriceChange = (index, field, value) => {
-    setFormData((prev) => {
-      const updatedPrices = [...prev.rentalPrices];
-      updatedPrices[index] = { ...updatedPrices[index], [field]: value };
-      return { ...prev, rentalPrices: updatedPrices };
-    });
-  };
-
-  // XỬ LÝ UPLOAD/PREVIEW THƯ VIỆN ẢNH
   const handleImagesChange = (e) => {
     const files = Array.from(e.target.files);
-    
-    if (selectedImages.length + imagePreviews.length + files.length > 10) {
-      alert(lang === "VN" ? "Mỗi tàu chỉ được chứa tối đa 10 hình ảnh." : "Maximum 10 images allowed per boat.");
+    if (selectedImages.length + imagePreviews.length + files.length > 6) {
+      Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "Quá số lượng" : "Limit Exceeded",
+        text: lang === "VN" ? "Hệ thống chỉ cho phép lưu trữ tối đa 6 hình ảnh." : "Maximum 6 images allowed per vessel.",
+        confirmButtonColor: "#124757",
+      });
       return;
     }
 
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
     const maxSize = 5 * 1024 * 1024;
     const newValidFiles = [];
     const newPreviews = [];
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!validTypes.includes(file.type)) {
-        alert(lang === "VN" ? `File ${file.name} sai định dạng JPEG/PNG/WebP.` : `File ${file.name} must be JPEG, PNG, or WebP.`);
-        continue;
-      }
-      if (file.size > maxSize) {
-        alert(lang === "VN" ? `File ${file.name} quá nặng (>5MB).` : `File ${file.name} exceeds 5MB.`);
-        continue;
-      }
+    for (let file of files) {
+      if (!validTypes.includes(file.type)) continue;
+      if (file.size > maxSize) continue;
       newValidFiles.push(file);
       newPreviews.push(URL.createObjectURL(file));
     }
@@ -162,98 +141,92 @@ export function EditBoat() {
     setImagePreviews((prev) => prev.filter((_, i) => i !== indexToRemove));
   };
 
-  // SUBMIT CẬP NHẬT 
-  const handleSubmitForm = async (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     try {
       setIsSubmitting(true);
       setErrorMsg("");
 
-      const normalizedCode = formData.code.trim().toUpperCase();
+      const legacyUrls = imagePreviews.filter((p) => p.startsWith("http"));
+
+      // Chỉ đóng gói các trường cho phép gửi/cập nhật
+      const commonFields = {
+        name: formData.name.trim(),
+        numberOfDecks: Number(formData.numberOfDecks),
+        seatCount: Number(formData.seatCount),
+        seatSetupType: formData.seatSetupType,
+        maxSpeedKmh: Number(formData.maxSpeedKmh),
+        description: formData.description?.trim() || null,
+        status: formData.status
+      };
+
       let payload;
 
-      if (selectedImages.length > 0) {
+      if (selectedImages.length > 0 || legacyUrls.length !== imagePreviews.length) {
         payload = new FormData();
-        payload.append("code", normalizedCode);
-        payload.append("name", formData.name.trim());
-        payload.append("seatCount", String(formData.seatCount));
-        payload.append("numberOfDecks", String(formData.numberOfDecks));
-        payload.append("seatSetupType", formData.seatSetupType);
-        payload.append("registrationNumber", formData.registrationNumber.trim() || "");
-        payload.append("maxSpeedKmh", String(formData.maxSpeedKmh));
-        payload.append("yearBuilt", String(formData.yearBuilt));
-        payload.append("description", formData.description.trim() || "");
-
-        formData.rentalPrices.forEach((price, index) => {
-          payload.append(`rentalPrices[${index}].rentalUnit`, price.rentalUnit);
-          payload.append(`rentalPrices[${index}].unitPrice`, String(price.unitPrice));
-          payload.append(`rentalPrices[${index}].currency`, price.currency || "VND");
-          payload.append(`rentalPrices[${index}].note`, price.note.trim() || "");
+        Object.entries(commonFields).forEach(([key, value]) => {
+          if (value !== null) payload.append(key, String(value));
         });
 
-        selectedImages.forEach((img) => payload.append("images", img));
+        selectedImages.forEach((file) => payload.append("images", file));
+        
+        if (legacyUrls.length > 0) {
+          legacyUrls.forEach((url) => payload.append("imageUrls", url));
+          payload.append("imageUrl", legacyUrls[0]); 
+        }
 
-        const legacyUrls = imagePreviews.filter(p => p.startsWith("http"));
-        legacyUrls.forEach((url) => payload.append("imageUrls", url));
+        // Định dạng rentalPrices array lồng vào FormData
+        if (formData.rentalPrices && formData.rentalPrices.length > 0) {
+          formData.rentalPrices.forEach((price, idx) => {
+            payload.append(`rentalPrices[${idx}].rentalUnit`, price.rentalUnit);
+            payload.append(`rentalPrices[${idx}].unitPrice`, String(price.unitPrice));
+            payload.append(`rentalPrices[${idx}].currency`, price.currency || "VND");
+            if (price.note) payload.append(`rentalPrices[${idx}].note`, price.note);
+          });
+        }
       } else {
-        const legacyUrls = imagePreviews.filter(p => p.startsWith("http"));
         payload = {
-          code: normalizedCode,
-          name: formData.name.trim(),
-          seatCount: Number(formData.seatCount),
-          numberOfDecks: Number(formData.numberOfDecks),
-          seatSetupType: formData.seatSetupType,
-          registrationNumber: formData.registrationNumber.trim() || "",
-          maxSpeedKmh: Number(formData.maxSpeedKmh),
-          yearBuilt: Number(formData.yearBuilt),
-          description: formData.description.trim() || "",
+          ...commonFields,
+          imageUrl: legacyUrls[0] || null,
           imageUrls: legacyUrls,
-          rentalPrices: formData.rentalPrices.map((p) => ({
-            rentalUnit: p.rentalUnit,
-            unitPrice: Number(p.unitPrice),
-            currency: p.currency || "VND",
-            note: p.note.trim() || ""
-          }))
+          rentalPrices: formData.rentalPrices
         };
       }
 
       await modifyBoat(id, payload);
-      
+
       Swal.fire({
         icon: "success",
-        title: lang === "VN" ? "Thành công!" : "Success!",
-        text: lang === "VN" ? "Cập nhật thông tin phương tiện thành công!" : "Boat details modified successfully!",
-        confirmButtonColor: "#124757"
-      });
+        title: lang === "VN" ? "Cập nhật thành công!" : "Successfully Saved!",
+        text: lang === "VN" ? "Thông số hồ sơ phương tiện đã được lưu trữ an toàn." : "Vessel blueprint updated successfully.",
+        confirmButtonColor: "#124757",
+      }).then(() => navigate("/admin/boats-management"));
 
-      loadBoatAndSeatsData();
     } catch (error) {
       console.error("Lỗi cập nhật tàu:", error);
-      let validationMsg = "";
+      let validationError = "";
       if (error.response?.data?.errors) {
-        validationMsg = Object.values(error.response.data.errors).flat().join(" | ");
+        validationError = Object.values(error.response.data.errors).flat().join(" | ");
       }
-      setErrorMsg(validationMsg || error.response?.data?.message || (lang === "VN" ? "Cập nhật thất bại. Vui lòng kiểm tra lại thông tin form." : "Update failed."));
+      setErrorMsg(validationError || error.response?.data?.message || (lang === "VN" ? "Cập nhật thông tin thất bại." : "Failed to apply updates."));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // XÓA SƠ ĐỒ GHẾ
   const handleDeleteLayout = async () => {
-    const result = await Swal.fire({
-      title: lang === "VN" ? "Xác nhận xóa?" : "Are you sure?",
-      text: lang === "VN" ? "Bạn có chắc chắn muốn xóa toàn bộ sơ đồ ghế này không?" : "Delete this seating chart matrix?",
+    const confirmResult = await Swal.fire({
+      title: lang === "VN" ? "Xóa cấu hình ghế?" : "Reset Layout Matrix?",
+      text: lang === "VN" ? "Hành động này sẽ xóa sạch toàn bộ sơ đồ ghế hiện tại, sau đó bạn có thể sửa Số ghế và Số tầng!" : "This will wipe all existing seat configurations.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
       cancelButtonColor: "#124757",
-      confirmButtonText: lang === "VN" ? "Xóa sơ đồ" : "Yes, delete it",
-      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel"
+      confirmButtonText: lang === "VN" ? "Xác nhận xóa" : "Wipe Matrix",
+      cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
     });
 
-    // Nếu người dùng chọn Hủy, thoát khỏi hàm
-    if (!result.isConfirmed) return;
+    if (!confirmResult.isConfirmed) return;
 
     try {
       setIsDeletingLayout(true);
@@ -261,413 +234,342 @@ export function EditBoat() {
       
       Swal.fire({
         icon: "success",
-        title: lang === "VN" ? "Đã xóa!" : "Cleared!",
-        text: lang === "VN" ? "Xóa sơ đồ ghế thành công!" : "Matrix layout cleared!",
-        confirmButtonColor: "#124757"
+        title: lang === "VN" ? "Đã gỡ bỏ!" : "Wiped out!",
+        text: lang === "VN" ? "Sơ đồ lưới ghế đã bị xóa sạch thành công. Bạn đã có thể chỉnh sửa lại Sức chứa tàu." : "Matrix database flushed.",
+        confirmButtonColor: "#124757",
       });
 
       loadBoatAndSeatsData();
     } catch (error) {
-      console.error("Lỗi khi xóa ghế:", error);
-      
-      Swal.fire({
-        icon: "error",
-        title: lang === "VN" ? "Lỗi!" : "Error!",
-        text: lang === "VN" ? "Thao tác xóa thất bại." : "Clear layout failed.",
-        confirmButtonColor: "#124757"
-      });
+      console.error(error);
+      Swal.fire("Thất bại", lang === "VN" ? "Không thể xóa sơ đồ lưới ghế." : "Failed to reset structure.", "error");
     } finally {
       setIsDeletingLayout(false);
     }
   };
 
-  // ĐỌC VÀ HIỂN THỊ MA TRẬN GHẾ
-  const renderDynamicSeatLayout = () => {
-    const currentDeckData = seatMatrix?.decks?.find(d => d.deckNumber === activeDeck);
-    
-    // Kiểm tra nếu tàu chưa có sơ đồ thì trả về giao diện vùng trống kèm nút chuyển trang Editor
-    if (!seatMatrix || !seatMatrix.seatsConfigured || !currentDeckData || !currentDeckData.cells || currentDeckData.cells.length === 0) {
-      return (
-        <div className="text-center py-14 bg-white dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-6 flex flex-col items-center justify-center space-y-4 w-full">
-          <div className="w-16 h-16 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center border border-slate-200 dark:border-slate-700 shadow-inner">
-            <span className="material-symbols-outlined text-3xl text-slate-400">grid_off</span>
-          </div>
-          <div>
-            <h4 className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide">
-              {lang === "VN" ? "Chưa có sơ đồ cấu hình ghế" : "No Seat Layout Blueprint"}
-            </h4>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1 leading-normal">
-              {lang === "VN" 
-                ? "Phương tiện này hiện đang trống ma trận lưới vị trí ghế. Hãy di chuyển tới công cụ Editor để vẽ sơ đồ." 
-                : "This boat doesn't have an active layout matrix blueprint configured yet."}
-            </p>
-          </div>
-          
-          {/* NÚT CHUYỂN ĐẾN TRANG SEAT LAYOUT EDITOR NHƯ YÊU CẦU */}
-          <button
-            type="button"
-            onClick={() => navigate(`/admin/boats-management/seats/${id}`)}
-            className="px-5 py-2.5 bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 text-xs font-black font-headline uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
-          >
-            {lang === "VN" ? "Thiết lập sơ đồ ngay" : "Go to Layout Editor"}
-          </button>
-        </div>
-      );
-    }
-
-    // NẾU ĐÃ CÓ DATA -> RENDER RA MA TRẬN CSS GRID
-    return (
-      <div className="bg-slate-100 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 overflow-hidden w-full">
-        {/* Bộ chuyển tầng */}
-        {seatMatrix?.decks?.length > 1 && (
-          <div className="flex gap-2 mb-4 bg-white dark:bg-slate-800 p-1.5 rounded-2xl border w-fit shadow-sm">
-            {seatMatrix.decks.map((deck) => (
-              <button
-                key={deck.deckNumber} type="button"
-                onClick={() => setActiveDeck(deck.deckNumber)}
-                className={`px-4 py-2 rounded-xl text-[10px] font-headline font-black uppercase transition-all tracking-wider ${
-                  activeDeck === deck.deckNumber
-                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md"
-                    : "bg-transparent text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                }`}
-              >
-                {lang === "VN" ? `Tầng ${deck.deckNumber}` : `Deck ${deck.deckNumber}`}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Mũi tàu hướng lái */}
-        <div className="w-full bg-white dark:bg-slate-800 text-slate-400 border py-2 rounded-xl text-[9px] font-headline font-black text-center uppercase tracking-widest mb-4 shadow-sm">
-          {lang === "VN" ? "Buồng lái - Phía mũi tàu" : "Boat Command Bridge - Bow Direction"}
-        </div>
-
-        <div className="overflow-x-auto pb-2 custom-scrollbar flex justify-center bg-white dark:bg-slate-800/40 rounded-xl border border-dashed">
-          <div
-            className="gap-1.5 inline-grid select-none p-4"
-            style={{
-              gridTemplateColumns: `repeat(${currentDeckData.columnCount}, 3rem)`,
-              gridTemplateRows: `repeat(${currentDeckData.rowCount}, 3rem)`
-            }}
-          >
-            {currentDeckData.cells.map(cell => {
-              if (cell.type === "Hidden") return null;
-
-              let bg = "bg-slate-100 text-slate-400 border-slate-300";
-              let lbl = "";
-              let icon = "";
-              let seatCode = "";
-
-              if (cell.type === "Seat") {
-                const typeCode = cell.seat?.seatType?.seatTypeCode || cell.seatType?.seatTypeCode || "STD";
-                seatCode = cell.seat?.seatCode || `${cell.row}-${cell.column}`;
-                
-                if (typeCode === "STANDARD") { bg = "bg-blue-100 text-blue-700 border-blue-300"; lbl = "STD"; icon = "chair"; }
-                else if (typeCode === "CABIN") { bg = "bg-purple-100 text-purple-700 border-purple-300"; lbl = "CAB"; icon = "chair_alt"; }
-                else if (typeCode === "RIVER") { bg = "bg-teal-100 text-teal-700 border-teal-300"; lbl = "RIV"; icon = "deck"; }
-                else if (typeCode === "SKY") { bg = "bg-sky-100 text-sky-700 border-sky-300"; lbl = "SKY"; icon = "airline_seat_recline_extra"; }
-                else { bg = "bg-slate-200 text-slate-700 border-slate-400"; lbl = typeCode; icon = "chair"; }
-                
-              } else if (cell.type === "Aisle") {
-                bg = "bg-slate-100 text-slate-400 border-slate-300 border-dashed opacity-50"; lbl = "Lối đi"; icon = "straight";
-              } else if (cell.type === "Empty") {
-                bg = "bg-white text-slate-300 border-slate-200 border-dashed opacity-40"; lbl = ""; icon = "";
-              } else if (cell.type === "Toilet") {
-                bg = "bg-amber-100 text-amber-700 border-amber-400 shadow-inner"; lbl = "WC"; icon = "wc";
-              }
-
-              return (
-                <div
-                  key={`${cell.row}-${cell.column}`}
-                  className={`border rounded-lg flex flex-col items-center justify-center text-[9px] font-black tracking-tighter overflow-hidden shadow-sm ${bg}`}
-                  style={{
-                    gridRow: `${cell.row} / span ${cell.rowSpan || 1}`,
-                    gridColumn: `${cell.column} / span ${cell.columnSpan || 1}`
-                  }}
-                >
-                  {icon && <span className="material-symbols-outlined text-[16px] leading-none mb-0.5 opacity-90">{icon}</span>}
-                  {cell.type === "Seat" ? (
-                    <>
-                      <span className="leading-none opacity-90">{seatCode}</span>
-                      <span className="text-[7px] font-medium opacity-60 mt-0.5 leading-none tracking-normal">{lbl}</span>
-                    </>
-                  ) : (
-                    cell.type !== "Empty" && <span className="leading-none opacity-90">{lbl}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Đuôi tàu */}
-        <div className="w-full bg-white dark:bg-slate-800 text-slate-400 border py-2 rounded-xl text-[9px] font-headline font-black text-center uppercase tracking-widest mt-4 shadow-sm">
-          {lang === "VN" ? "Phía đuôi tàu (Động cơ)" : "Stern Direction"}
-        </div>
-      </div>
-    );
-  };
+  const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
+  const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+  const disabledStyle = "opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-900/40"; // Class chung cho input bị khóa
 
   if (isLoading || !formData) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+      <div className="flex justify-center items-center h-64 w-full">
+        <div className="w-10 h-10 border-4 border-[#124757] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
+  // CỜ KIỂM TRA ĐIỀU KIỆN KHÓA: Nếu sơ đồ ghế đã setup -> Khóa Số ghế, Tầng, Loại ghế
+  const isSeatConfigured = seatMatrix?.seatsConfigured === true;
+
   return (
-    <div className="space-y-6 font-body max-w-7xl mx-auto pb-10 px-4">
+    <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
       
-      {/* HEADER BAR */}
-      <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button
-            type="button" onClick={() => navigate("/admin/boats-management")}
-            className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner"
-          >
-            <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
-          </button>
-          <div>
-            <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-              {lang === "VN" ? `Chỉnh sửa tàu: ${formData.name}` : `Modify Boat: ${formData.name}`}
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {lang === "VN" ? "Thay đổi hồ sơ kỹ thuật, bảng giá và quản lý cấu trúc ma trận ghế." : "Update parameters, price options and evaluate seating chart."}
-            </p>
-          </div>
+      <div className="flex bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
+        <button type="button" onClick={() => navigate("/admin/boats-management")} className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-[#124757] hover:text-white transition-all flex items-center justify-center shadow-inner shrink-0">
+          <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
+        </button>
+        <div>
+          <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
+            {lang === "VN" ? `Hồ sơ kỹ thuật: ${formData.code}` : `Vessel File: ${formData.code}`}
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {lang === "VN" ? "Thay đổi thông số cơ bản, cập nhật bộ sưu tập ảnh đại diện và theo dõi sơ đồ phân bổ ghế." : "Modify hardware blueprints, attach media collections and monitor seating grids."}
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      {errorMsg && (
+        <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20 shadow-sm">
+          {errorMsg}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         
-        {/* PANEL TRÁI: FORM ĐIỀN THÔNG TIN TÀU CẬP NHẬT */}
-        <div className="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-6">
-          <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b pb-2">
-            {lang === "VN" ? "Thông tin kỹ thuật phương tiện" : "Boat Specifications"}
+        {/* PANEL TRÁI: FORM ĐIỀN THÔNG TIN */}
+        <form onSubmit={handleFormSubmit} className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+          <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">
+            ⚙️ {lang === "VN" ? "Thông tin kỹ thuật phương tiện" : "Vessel Specifications"}
           </h3>
 
-          {errorMsg && (
-            <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-3 rounded-xl text-xs font-bold flex items-center gap-2 border border-red-100 dark:border-red-500/20">
-              <span className="material-symbols-outlined text-sm">error</span>
-              {errorMsg}
-            </div>
-          )}
+          <div>
+            <label className={labelStyle}>{lang === "VN" ? "Tên phương tiện tàu thủy (*)" : "Vessel Label Name (*)"}</label>
+            <input type="text" required value={formData.name} onChange={(e) => handleFieldChange("name", e.target.value)} className={inputStyle} />
+          </div>
 
-          <form onSubmit={handleSubmitForm} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Mã hiệu phương tiện (*)" : "Boat Code"}</label>
-              <input
-                type="text" required value={formData.code}
-                onChange={(e) => handleInputChange("code", e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner uppercase"
-              />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelStyle}>{lang === "VN" ? "Mã biển số đăng ký" : "Registration Number"}</label>
+              <input type="text" disabled value={formData.registrationNumber || ""} className={`${inputStyle} ${disabledStyle}`} title="Chỉ đọc" />
             </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Tên phương tiện (*)" : "Boat Name"}</label>
-              <input
-                type="text" required value={formData.name}
-                onChange={(e) => handleInputChange("name", e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
-              />
+            <div>
+              <label className={labelStyle}>{lang === "VN" ? "Năm đóng tàu" : "Year Built"}</label>
+              <input type="number" disabled value={formData.yearBuilt || ""} className={`${inputStyle} ${disabledStyle}`} title="Chỉ đọc" />
             </div>
+          </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Số Đăng kiểm (*)" : "Registration Number"}</label>
-              <input
-                type="text" required value={formData.registrationNumber}
-                onChange={(e) => handleInputChange("registrationNumber", e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Kiểu cấu hình ghế" : "Seat Setup Type"}</label>
-              <select
-                value={formData.seatSetupType}
-                onChange={(e) => handleInputChange("seatSetupType", e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
-              >
-                <option value="FullStandard">Full Standard</option>
-                <option value="StandardAndVip">Standard & VIP</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Tổng số ghế" : "Seat Count"}</label>
-                <input
-                  type="number" required min={1} value={formData.seatCount}
-                  onChange={(e) => handleInputChange("seatCount", Number(e.target.value))}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
-                />
+          {/* NHÓM CÁC TRƯỜNG BỊ KHÓA KHI ĐÃ CÓ SƠ ĐỒ GHẾ */}
+          <div className="p-4 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-700/30 rounded-2xl space-y-3 mt-2">
+            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm">info</span>
+              {isSeatConfigured 
+                  ? (lang === "VN" ? "Xóa sơ đồ ghế bên phải để thay đổi các thông số cấu trúc dưới đây." : "Delete active matrix to modify seating parameters.")
+                  : (lang === "VN" ? "Có thể tùy chỉnh thông số ghế trước khi sinh ma trận lưới." : "Seat grid parameters are editable.")
+              }
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Sức chứa" : "Capacity"}</label>
+                <input type="number" min={1} required disabled={isSeatConfigured} value={formData.seatCount} onChange={(e) => handleFieldChange("seatCount", e.target.value)} className={`${inputStyle} ${isSeatConfigured ? disabledStyle : ""}`} />
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Số tầng tàu" : "Decks Count"}</label>
-                <input
-                  type="number" required min={1} max={3} value={formData.numberOfDecks}
-                  onChange={(e) => handleInputChange("numberOfDecks", Number(e.target.value))}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
-                />
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Số tầng" : "Decks"}</label>
+                <input type="number" min={1} max={2} required disabled={isSeatConfigured} value={formData.numberOfDecks} onChange={(e) => handleFieldChange("numberOfDecks", e.target.value)} className={`${inputStyle} ${isSeatConfigured ? disabledStyle : ""}`} />
+              </div>
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Cấu hình ghế" : "Seat Setup"}</label>
+                <select disabled={isSeatConfigured} value={formData.seatSetupType} onChange={(e) => handleFieldChange("seatSetupType", e.target.value)} className={`${inputStyle} px-2 ${isSeatConfigured ? disabledStyle : "font-bold text-[#124757]"}`}>
+                  <option value="FullStandard">Full Standard</option>
+                  <option value="StandardAndVip">Standard & VIP</option>
+                </select>
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Vận tốc (km/h)" : "Max Speed"}</label>
-                <input
-                  type="number" value={formData.maxSpeedKmh}
-                  onChange={(e) => handleInputChange("maxSpeedKmh", Number(e.target.value))}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Năm sản xuất" : "Year Built"}</label>
-                <input
-                  type="number" value={formData.yearBuilt}
-                  onChange={(e) => handleInputChange("yearBuilt", Number(e.target.value))}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner"
-                />
-              </div>
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+            <div>
+              <label className={labelStyle}>{lang === "VN" ? "Vận tốc (Kmh)" : "Max Speed"}</label>
+              <input type="number" min={0} required value={formData.maxSpeedKmh} onChange={(e) => handleFieldChange("maxSpeedKmh", e.target.value)} className={inputStyle} />
             </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Ghi chú/Mô tả" : "Description"}</label>
-              <textarea
-                rows={2} value={formData.description}
-                onChange={(e) => handleInputChange("description", e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-2 text-xs font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner resize-none"
-              />
-            </div>
-
-            {/* THƯ VIỆN HÌNH ẢNH */}
-            <div className="space-y-2 pt-2">
-              <div className="flex justify-between items-center text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                <span>{lang === "VN" ? "Thư viện ảnh tàu" : "Image Gallery"}</span>
-                <span>{imagePreviews.length} / 10</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {imagePreviews.map((previewUrl, index) => (
-                  <div key={index} className="aspect-video relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group">
-                    <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                      <button type="button" onClick={() => handleRemoveImage(index)} className="bg-rose-500 text-white p-1 rounded-full hover:scale-105 transition-all">
-                        <span className="material-symbols-outlined text-xs">close</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {imagePreviews.length < 10 && (
-                  <label className="aspect-video rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center cursor-pointer transition-all">
-                    <span className="material-symbols-outlined text-lg text-slate-400">add_a_photo</span>
-                    <input type="file" multiple accept="image/jpeg, image/png, image/webp" onChange={handleImagesChange} className="hidden" />
-                  </label>
-                )}
-              </div>
-            </div>
-
-            {/* BẢNG GIÁ THUÊ TÀU */}
-            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
-              <div className="flex justify-between items-center">
-                <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Cài đặt giá thuê tàu" : "Rental Prices"}</label>
+            <div>
+              <label className={labelStyle}>{lang === "VN" ? "Trạng thái vận hành" : "Status"}</label>
+              <div className="flex items-center gap-3 pt-1">
                 <button
-                  type="button" onClick={handleAddRentalPrice}
-                  className="text-[9px] font-bold text-[#124757] dark:text-yellow-400 bg-[#124757]/10 dark:bg-yellow-400/10 px-2 py-1 rounded-md hover:bg-[#124757]/20 transition-all"
+                  type="button"
+                  onClick={() => handleFieldChange("status", formData.status === "Active" ? "Inactive" : "Active")}
+                  className={`relative inline-flex h-6 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-300 border-2 border-transparent focus:outline-none ${
+                    formData.status === "Active" ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
+                  }`}
                 >
-                  + {lang === "VN" ? "Thêm giá" : "Add Price"}
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-300 ${formData.status === "Active" ? "translate-x-6" : "translate-x-0"}`} />
+                </button>
+                <span className={`text-[11px] font-black uppercase ${formData.status === "Active" ? "text-emerald-600" : "text-slate-400"}`}>
+                  {formData.status}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className={labelStyle}>{lang === "VN" ? "Mô tả ghi chú kỹ thuật" : "Engineering Logs / Notes"}</label>
+            <textarea rows={2} value={formData.description} onChange={(e) => handleFieldChange("description", e.target.value)} className={`${inputStyle} resize-none font-medium`} />
+          </div>
+
+          {/* KHỐI BẢNG GIÁ THUÊ TÀU (RENTAL PRICES) */}
+          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+             <div className="flex justify-between items-center text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+              <span>{lang === "VN" ? "Bảng giá cho thuê Charter (VND)" : "Rental Tariffs"}</span>
+            </div>
+            {formData.rentalPrices.map((price, idx) => (
+              <div key={idx} className="flex flex-col sm:flex-row gap-2 bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-700">
+                <select value={price.rentalUnit} onChange={(e) => handlePriceChange(idx, "rentalUnit", e.target.value)} className="w-full sm:w-1/3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none">
+                  <option value="Day">Theo Ngày (Day)</option>
+                  <option value="Hour">Theo Giờ (Hour)</option>
+                  <option value="Trip">Theo Chuyến (Trip)</option>
+                </select>
+                <input type="number" min={0} value={price.unitPrice} onChange={(e) => handlePriceChange(idx, "unitPrice", e.target.value)} placeholder="Giá tiền" className="w-full sm:flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none" />
+                <button type="button" onClick={() => handleRemovePrice(idx)} className="w-full sm:w-auto px-3 py-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors">
+                  <span className="material-symbols-outlined text-[16px] block">delete</span>
                 </button>
               </div>
-
-              <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                {formData.rentalPrices.map((price, idx) => (
-                  <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 relative space-y-2 pt-6">
-                    <button
-                      type="button" onClick={() => handleRemoveRentalPrice(idx)}
-                      className="absolute top-1.5 right-1.5 w-5 h-5 bg-white dark:bg-slate-800 border rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500"
-                    >
-                      <span className="material-symbols-outlined text-xs">close</span>
-                    </button>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Loại hình</span>
-                        <select
-                          value={price.rentalUnit} onChange={(e) => handleRentalPriceChange(idx, "rentalUnit", e.target.value)}
-                          className="w-full bg-white dark:bg-slate-800 border rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-yellow-400"
-                        >
-                          <option value="Hour">Theo Giờ (Hour)</option>
-                          <option value="Day">Theo Ngày (Day)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Đơn giá</span>
-                        <input
-                          type="number" min={0} value={price.unitPrice} onChange={(e) => handleRentalPriceChange(idx, "unitPrice", Number(e.target.value))}
-                          className="w-full bg-white dark:bg-slate-800 border rounded-lg px-2 py-1 text-[11px] font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-yellow-400"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <input
-                        type="text" placeholder="Ghi chú dòng giá này..." value={price.note || ""} onChange={(e) => handleRentalPriceChange(idx, "note", e.target.value)}
-                        className="w-full bg-white dark:bg-slate-800 border rounded-lg px-2 py-1 text-[10px] font-medium text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-yellow-400"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="submit" disabled={isSubmitting}
-              className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-            >
-              {isSubmitting && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
-              {lang === "VN" ? "Lưu thông tin cập nhật" : "Save Specifications"}
+            ))}
+            <button type="button" onClick={handleAddPrice} className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-center items-center gap-1 border border-dashed border-slate-300 dark:border-slate-600">
+               <span className="material-symbols-outlined text-[14px]">add</span> {lang === "VN" ? "Thêm gói giá thuê" : "Add Tariff"}
             </button>
-          </form>
-        </div>
+          </div>
 
-        {/* PANEL PHẢI: HIỂN THỊ MA TRẬN SƠ ĐỒ GHẾ THẬT */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+          {/* KHỐI ALBUM THƯ VIỆN HÌNH ẢNH */}
+          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+            <div className="flex justify-between items-center text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+              <span>{lang === "VN" ? "Thư viện ảnh phương tiện" : "Vessel Image Hub"}</span>
+              <span className={imagePreviews.length === 6 ? "text-rose-500" : ""}>{imagePreviews.length} / 6</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {imagePreviews.map((previewUrl, index) => (
+                <div key={index} className="aspect-[4/3] relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group">
+                  <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <button type="button" onClick={() => handleRemoveImage(index)} className="bg-rose-500 text-white p-1.5 rounded-full hover:scale-105 transition-all">
+                      <span className="material-symbols-outlined text-xs">delete</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {imagePreviews.length < 6 && (
+                <label className="aspect-[4/3] rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center cursor-pointer transition-all">
+                  <span className="material-symbols-outlined text-lg text-slate-400">add_photo_alternate</span>
+                  <input type="file" multiple accept="image/jpeg, image/png, image/webp" onChange={handleImagesChange} className="hidden" />
+                </label>
+              )}
+            </div>
+          </div>
+
+          <button type="submit" disabled={isSubmitting} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 hover:brightness-110 disabled:opacity-50 py-3.5 rounded-xl text-xs font-headline font-black uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2 mt-4">
+            {isSubmitting && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
+            {lang === "VN" ? "Lưu thông số phương tiện" : "Save Specifications"}
+          </button>
+        </form>
+
+        {/* PANEL BÊN PHẢI (CHIẾM 3/5): SƠ ĐỒ LƯỚI GHẾ KHÔNG THAY ĐỔI */}
+        <div className="lg:col-span-3 bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 flex flex-col">
+          
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 gap-3">
             <div>
-              <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-                {lang === "VN" ? "Ma trận sơ đồ ghế hiện hành" : "Seating Configuration Matrix"}
+              <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                💺 {lang === "VN" ? "Bản xem trước ma trận sơ đồ ghế" : "Cabin Seating Grid Preview"}
               </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2">
-                {lang === "VN" ? "Xem phân bố kết cấu vị trí các hạng ghế trên phương tiện." : "Evaluate seat layout arrangement blueprint across current decks."}
-                {seatMatrix?.seatsConfigured && (
-                  <span className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-2 py-0.5 rounded-lg flex items-center gap-1">
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">
+                {isSeatConfigured ? (
+                  <span className="text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1 font-bold">
                     <span className="material-symbols-outlined text-[12px]">verified</span>
-                    Đã cấu hình ({seatMatrix.configuredSeats}/{seatMatrix.totalSeats})
+                    {lang === "VN" ? "Đã cấu hình sơ đồ lưới" : "Active Matrix Layout"}
+                  </span>
+                ) : (
+                  <span className="text-amber-500 inline-flex items-center gap-1 font-bold">
+                    <span className="material-symbols-outlined text-[12px]">error</span>
+                    {lang === "VN" ? "Chưa khởi tạo cấu hình ghế" : "Pending Setup"}
                   </span>
                 )}
               </p>
             </div>
 
-            {/* Chỉ hiện nút xóa sơ đồ ghế nếu tàu đã có ma trận hoàn chỉnh */}
-            {seatMatrix?.seatsConfigured && seatMatrix?.decks?.length > 0 && (
+            {isSeatConfigured && seatMatrix?.decks?.length > 0 && (
               <button
                 type="button" disabled={isDeletingLayout} onClick={handleDeleteLayout}
-                className="px-4 py-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl border border-red-100 dark:border-red-500/20 hover:bg-red-100 transition-colors flex items-center gap-1.5 disabled:opacity-50 shrink-0 self-start sm:self-center"
+                className="px-4 py-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl border border-red-100 dark:border-red-500/20 hover:bg-red-100 transition-colors flex items-center gap-1.5 disabled:opacity-50 shrink-0"
               >
                 {isDeletingLayout ? (
                   <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <span className="material-symbols-outlined text-base">delete</span>
                 )}
-                {lang === "VN" ? "Xóa sơ đồ ghế" : "Reset Matrix Layout"}
+                {lang === "VN" ? "Xóa sơ đồ ghế" : "Reset Grid Layout"}
               </button>
             )}
           </div>
 
-          {/* Vùng Render linh động: Nếu có rồi thì show Grid, chưa có show Nút đi vẽ */}
-          <div className="overflow-hidden flex justify-center w-full">
-            {renderDynamicSeatLayout()}
-          </div>
-        </div>
+          <div className="overflow-x-auto bg-slate-50 dark:bg-slate-900 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 p-6 flex flex-col items-center">
+            {isSeatConfigured && seatMatrix?.decks?.length > 0 ? (
+              <div className="w-full space-y-6">
+                
+                <div className="flex gap-2 justify-center mb-4">
+                  {seatMatrix.decks.map((d) => (
+                    <button
+                      key={d.deckNumber} type="button" onClick={() => setActiveDeck(d.deckNumber)}
+                      className={`px-5 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                        activeDeck === d.deckNumber 
+                          ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md" 
+                          : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400"
+                      }`}
+                    >
+                      {lang === "VN" ? `Tầng ${d.deckNumber}` : `Deck ${d.deckNumber}`}
+                    </button>
+                  ))}
+                </div>
 
+                {seatMatrix.decks.filter(d => d.deckNumber === activeDeck).map(deck => {
+                  const defaultSeatCode = formData?.seatSetupType === "StandardAndVip" ? "CABIN" : "STANDARD";
+                  
+                  // Tạo ma trận ảo
+                  const grid = Array.from({ length: deck.rowCount }, (_, r) => 
+                    Array.from({ length: deck.columnCount }, (_, c) => ({
+                      row: r,
+                      column: c,
+                      type: "Seat",
+                      seatTypeCode: defaultSeatCode
+                    }))
+                  );
+
+                  // Đắp đè cells override
+                  if (deck.cells && deck.cells.length > 0) {
+                    deck.cells.forEach(overrideCell => {
+                      if (
+                        overrideCell.row >= 0 && overrideCell.row < deck.rowCount &&
+                        overrideCell.column >= 0 && overrideCell.column < deck.columnCount
+                      ) {
+                        grid[overrideCell.row][overrideCell.column] = overrideCell;
+                      }
+                    });
+                  }
+
+                  return (
+                    <div key={deck.deckNumber} className="flex flex-col items-center min-w-max mx-auto">
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300 py-2.5 rounded-t-2xl text-[10px] font-headline font-black text-center uppercase tracking-[0.2em] mb-4 shadow-sm">
+                        {lang === "VN" ? "Hướng Mũi Tàu" : "Bow / Front"}
+                      </div>
+                      
+                      <div 
+                        className="grid gap-1.5 md:gap-2 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm"
+                        style={{
+                          gridTemplateColumns: `repeat(${deck.columnCount}, minmax(36px, 44px))`,
+                          gridTemplateRows: `repeat(${deck.rowCount}, minmax(36px, 44px))`
+                        }}
+                      >
+                        {grid.flat().map((cell, idx) => {
+                          let bgColor = "bg-white border-dashed border-slate-200 dark:border-slate-700";
+                          let icon = "";
+
+                          if (cell.type === "Aisle") {
+                            bgColor = "bg-slate-100 border-slate-200 dark:bg-slate-700/50 dark:border-slate-600";
+                          } else if (cell.type === "Seat") {
+                            if (cell.seatTypeCode === "STANDARD") { bgColor = "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10"; icon = "chair"; }
+                            else if (cell.seatTypeCode === "CABIN") { bgColor = "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10"; icon = "chair_alt"; }
+                            else if (cell.seatTypeCode === "RIVER") { bgColor = "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10"; icon = "deck"; }
+                            else if (cell.seatTypeCode === "SKY") { bgColor = "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10"; icon = "airline_seat_recline_extra"; }
+                          }
+
+                          return (
+                            <div key={idx} className={`flex flex-col items-center justify-center rounded-lg border text-[9px] font-bold select-none transition-all ${bgColor}`}>
+                              {icon && <span className="material-symbols-outlined text-[16px] leading-none mb-0.5">{icon}</span>}
+                              {cell.type === "Seat" && <span className="opacity-50 text-[7px] tracking-tighter">{cell.row}-{cell.column}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300 py-2.5 rounded-b-2xl text-[10px] font-headline font-black text-center uppercase tracking-[0.2em] mt-4 shadow-sm">
+                        {lang === "VN" ? "Hướng Đuôi Tàu" : "Stern / Aft"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-10 flex flex-col items-center">
+                <div className="w-16 h-16 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-4 border border-slate-200 dark:border-slate-700 shadow-sm">
+                  <span className="material-symbols-outlined text-3xl text-slate-400">grid_off</span>
+                </div>
+                <h4 className="text-sm font-headline font-black text-slate-600 dark:text-slate-300 uppercase mb-2">
+                  {lang === "VN" ? "Chưa cấu hình sơ đồ ghế" : "No Layout Active"}
+                </h4>
+                <p className="text-xs text-slate-400 max-w-sm mb-6">
+                  {lang === "VN" ? "Chiếc tàu này hiện chưa được khởi tạo sơ đồ lưới ghế. Hãy tiến hành thiết kế để đưa tàu vào vận hành." : "This vessel has no configured seating layout. A matrix must be generated."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/admin/boats-management/seats/${id}`)}
+                  className="bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black text-[11px] uppercase tracking-wider py-3 px-6 rounded-xl shadow-md hover:scale-105 transition-all flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-[18px]">design_services</span>
+                  {lang === "VN" ? "Mở công cụ thiết kế" : "Open Editor"}
+                </button>
+              </div>
+            )}
+          </div>
+
+        </div>
       </div>
     </div>
   );

@@ -180,7 +180,7 @@ function App() {
 
           {/* Seat Layout Editor Page */}
           <Route
-            path="/admin/boats-management/seats/:boatId"
+            path="/admin/boats-management/seats/:id"
             element={
               <AdminLayout title="Seat Layout Editor">
                 <SeatLayoutEditor />
