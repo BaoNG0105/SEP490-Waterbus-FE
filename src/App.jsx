@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AdminLayout } from "./layout/Admin/AdminLayout";
 import { MainLayout } from "./layout/MainLayout";
 import { NotFound } from "./pages/NotFound";
@@ -18,7 +18,11 @@ import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
 import { EditProfile } from "./pages/Profile/EditProfie";
 import { ChangePassword } from "./pages/Profile/ChangePassword";
+import { ProfileCharterBookingDetail } from "./pages/Profile/CharterBookings/Detail";
+import { ProfileCharterBookings } from "./pages/Profile/CharterBookings";
 import { Booking } from "./pages/Booking";
+import { CharterBookingPage } from "./pages/CharterBooking";
+import { PaymentResult } from "./pages/PaymentResult";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
 import { CustomerManagement } from "./pages/Admin/CustomerManagement";
@@ -26,6 +30,7 @@ import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor } from "./pages/
 import { StationManagement } from "./pages/Admin/StationManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
+import { CharterBooking } from "./pages/Admin/CharterBooking";
 
 function App() {
   return (
@@ -119,12 +124,52 @@ function App() {
           }
         />
 
+        {/* Profile Charter Booking Requests */}
+        <Route
+          path="/profile/charter-bookings"
+          element={
+            <MainLayout>
+              <ProfileCharterBookings />
+            </MainLayout>
+          }
+        />
+
+        {/* Profile Charter Booking Detail */}
+        <Route
+          path="/profile/charter-bookings/:id"
+          element={
+            <MainLayout>
+              <ProfileCharterBookingDetail />
+            </MainLayout>
+          }
+        />
+
         {/* Waterbus Booking Page */}
         <Route
           path="/waterbus-booking"
           element={
             <MainLayout>
               <Booking />
+            </MainLayout>
+          }
+        />
+
+        {/* Charter Booking Page */}
+        <Route
+          path="/charter-booking"
+          element={
+            <MainLayout>
+              <CharterBookingPage />
+            </MainLayout>
+          }
+        />
+
+        {/* PayOS Payment Result */}
+        <Route
+          path="/payment/success"
+          element={
+            <MainLayout>
+              <PaymentResult />
             </MainLayout>
           }
         />
@@ -226,6 +271,17 @@ function App() {
               </AdminLayout>
             }
           />
+
+          {/* Charter Booking Page */}
+          <Route
+            path="/admin/charter-bookings"
+            element={
+              <AdminLayout title="Charter Booking">
+                <CharterBooking />
+              </AdminLayout>
+            }
+          />
+          <Route path="/admin/tours" element={<Navigate to="/admin/charter-bookings" replace />} />
         </Route>
 
         {/* TRANG BÁO LỖI 404 */}

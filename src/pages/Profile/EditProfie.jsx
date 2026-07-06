@@ -138,7 +138,7 @@ export const EditProfile = () => {
     const handleSaveProfile = async (e) => {
         e.preventDefault();
 
-        const isEmailChanged = profileData.email.trim() !== (originalData?.email || "");
+        const isEmailChanged = profileData.email.trim() !== "" && profileData.email.trim() !== (originalData?.email || "");
         const isPhoneChanged = profileData.phoneNumber.trim() !== (originalData?.phoneNumber || "");
 
         // 1. BẪY LỖI FRONTEND: Kiểm tra xem user có đổi cả 2 trường cùng lúc không
@@ -387,8 +387,8 @@ export const EditProfile = () => {
                         </div>
 
                         <div className="space-y-1">
-                            <label className={labelClasses}>{lang === "VN" ? "Địa chỉ Email (*)" : "Email Address (*)"}</label>
-                            <input required name="email" type="email" value={profileData.email} onChange={handleProfileDataChange} className={inputClasses} />
+                            <label className={labelClasses}>{lang === "VN" ? "Địa chỉ Email" : "Email Address"}</label>
+                            <input name="email" type="email" value={profileData.email} onChange={handleProfileDataChange} className={inputClasses} />
                         </div>
 
                         <div className="space-y-1">

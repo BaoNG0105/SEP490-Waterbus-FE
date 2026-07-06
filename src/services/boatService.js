@@ -7,9 +7,9 @@ import {
 } from '../api/boatApi';
 
 // Hàm Service lấy danh sách tàu
-export const fetchAllBoats = async () => {
+export const fetchAllBoats = async (params) => {
     try {
-        const data = await apiGetBoats();
+        const data = await apiGetBoats(params);
         return data;
     } catch (error) {
         console.error('Error fetching boats list:', error);

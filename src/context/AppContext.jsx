@@ -41,4 +41,5 @@ export const AppProvider = ({ children }) => {
 };
 
 // Hook để các component con lấy dữ liệu dễ dàng
+// eslint-disable-next-line react-refresh/only-export-components
 export const useApp = () => useContext(AppContext);
