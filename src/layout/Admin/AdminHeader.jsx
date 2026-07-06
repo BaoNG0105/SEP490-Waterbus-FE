@@ -59,7 +59,7 @@ export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
 
         {/* Nút Đăng xuất tài khoản Admin */}
         <Link
-          to="/login"
+          to="/"
           className="p-2 text-white/80 hover:text-red-400 hover:bg-white/10 dark:hover:bg-red-500/20 dark:hover:text-red-400 rounded-full transition-all flex items-center justify-center"
           title={lang === "VN" ? "Đăng xuất" : "Logout"}
         >

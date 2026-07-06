@@ -9,7 +9,7 @@ export function BoatManagement() {
     const navigate = useNavigate();
 
     // Link ảnh mặc định phòng trường hợp imageUrl từ API trả về null
-    const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png";
+    const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
     // STATE QUẢN LÝ DỮ LIỆU ĐỘI TÀU TỪ API
     const [boats, setBoats] = useState([]);

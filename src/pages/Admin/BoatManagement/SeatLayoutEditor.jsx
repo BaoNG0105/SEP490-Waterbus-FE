@@ -3,27 +3,26 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import Swal from "sweetalert2";
 import {
-  fetchSeatLayout,
   generateMatrix,
-  configureSeats,
-  deleteSeats
+  configureSeats
 } from "../../../services/seatService";
 import { fetchBoatDetail } from "../../../services/boatService";
 
-// CẤU HÌNH TOOL PALETTE
-const TOOLS = [
-  { id: "NONE", label: "Chuột (Chỉ Xem)", icon: "pan_tool", color: "bg-slate-100 text-slate-600" },
-  { id: "SEAT_STANDARD", label: "Ghế Thường (STD)", icon: "chair", color: "bg-blue-100 text-blue-600" },
-  { id: "SEAT_CABIN", label: "Ghế Cabin (CAB)", icon: "chair_alt", color: "bg-purple-100 text-purple-600" },
-  { id: "SEAT_RIVER", label: "Ghế River (RIV)", icon: "deck", color: "bg-teal-100 text-teal-600" },
-  { id: "SEAT_SKY", label: "Ghế Sky (SKY)", icon: "airline_seat_recline_extra", color: "bg-sky-100 text-sky-600" },
-  { id: "Aisle", label: "Lối đi", icon: "view_stream", color: "bg-slate-300 text-slate-700" },
-  { id: "Empty", label: "Khoảng trống", icon: "check_box_outline_blank", color: "bg-white text-slate-400 border border-slate-300" },
+// BỘ CÔNG CỤ VẼ Ô
+const ALL_TOOLS = [
+  { id: "NONE", label: "Chuột (Chỉ Xem)", icon: "pan_tool", color: "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50" },
+  { id: "SEAT_STANDARD", label: "Ghế Thường (STD)", icon: "chair", color: "bg-gradient-to-b from-blue-100 to-blue-200 border-blue-400 text-blue-800 dark:from-blue-600 dark:to-blue-800 dark:border-blue-500 dark:text-blue-50 shadow-sm" },
+  { id: "SEAT_CABIN", label: "Ghế Cabin (CAB)", icon: "chair_alt", color: "bg-gradient-to-b from-purple-100 to-purple-200 border-purple-400 text-purple-800 dark:from-purple-600 dark:to-purple-800 dark:border-purple-500 dark:text-purple-50 shadow-sm" },
+  { id: "SEAT_RIVER", label: "Ghế River (RIV)", icon: "deck", color: "bg-gradient-to-b from-teal-100 to-teal-200 border-teal-400 text-teal-800 dark:from-teal-600 dark:to-teal-800 dark:border-teal-500 dark:text-teal-50 shadow-sm" },
+  { id: "SEAT_SKY", label: "Ghế Sky (SKY)", icon: "airline_seat_recline_extra", color: "bg-gradient-to-b from-sky-100 to-sky-200 border-sky-400 text-sky-800 dark:from-sky-600 dark:to-sky-800 dark:border-sky-500 dark:text-sky-50 shadow-sm" },
+  { id: "Aisle", label: "Lối đi", icon: "directions_walk", color: "bg-slate-200/60 dark:bg-slate-700/50 border-transparent text-slate-400 dark:text-slate-500 shadow-inner" },
+  { id: "Empty", label: "Khoảng trống", icon: "close", color: "bg-transparent border-dashed border-slate-300 dark:border-slate-600 text-slate-300 dark:text-slate-600" },
 ];
 
 export function SeatLayoutEditor() {
   const { lang } = useApp();
-  const { id } = useParams(); // boatId
+  const params = useParams(); 
+  const targetId = params.id || params.boatId; 
   const navigate = useNavigate();
 
   const [boatData, setBoatData] = useState(null);
@@ -35,41 +34,36 @@ export function SeatLayoutEditor() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // LOAD DỮ LIỆU TÀU VÀ SƠ ĐỒ GHẾ BAN ĐẦU
   useEffect(() => {
     const loadInitData = async () => {
       try {
         setIsLoading(true);
-        const detail = await fetchBoatDetail(id);
+        const detail = await fetchBoatDetail(targetId);
+
+        if (detail.seatsConfigured) {
+          await Swal.fire({
+            icon: 'warning',
+            title: lang === "VN" ? 'Sơ đồ ghế đã được cấu hình' : 'Seat Layout Already Configured',
+            text: lang === "VN"
+              ? 'Tàu này đã có sơ đồ ghế. Vui lòng vào trang chỉnh sửa tàu để quản lý trạng thái ghế hoặc xóa sơ đồ trước khi thiết kế lại.'
+              : 'This boat already has a configured seat layout. Manage seat status or delete the layout from the boat edit page first.',
+            confirmButtonColor: '#124757',
+          });
+          navigate(`/admin/boats-management/edit/${targetId}`);
+          return;
+        }
+
         setBoatData(detail);
 
-        // Load ma trận layout nếu tàu đã được cấu hình (seatsConfigured = true)
-        if (detail.seatsConfigured) {
-          const layoutData = await fetchSeatLayout(id);
-          if (layoutData && layoutData.decks) {
-            const mappedDecks = layoutData.decks.map(d => ({
-              id: d.deckNumber,
-              type: d.deckNumber === 1 ? 'MAIN' : 'UPPER',
-              rows: d.rowCount,
-              columns: d.columnCount,
-              // Map dữ liệu API về format UI
-              matrix: d.cells.map(c => ({
-                row: c.row,
-                column: c.column,
-                type: c.type === "Seat" ? `SEAT_${c.seatTypeCode}` : c.type
-              }))
-            }));
-            setDecks(mappedDecks);
-            setActiveDeck(mappedDecks[0]?.id);
-          }
-        } else {
-          // Khởi tạo deck ảo nếu chưa cấu hình
-          const initDecks = [
-            { id: 1, type: 'MAIN', rows: 10, columns: 6, matrix: [] }
-          ];
-          setDecks(initDecks);
-          setActiveDeck(1);
-        }
+        const initDecks = Array.from({ length: detail.numberOfDecks || 1 }, (_, i) => ({
+          id: i + 1,
+          type: i === 0 ? 'MAIN' : 'UPPER',
+          rows: 10,
+          columns: 7,
+          matrix: []
+        }));
+        setDecks(initDecks);
+        setActiveDeck(1);
       } catch (error) {
         console.error("Lỗi khởi tạo sơ đồ:", error);
         Swal.fire('Lỗi', 'Không tải được dữ liệu tàu', 'error').then(() => navigate('/admin/boats-management'));
@@ -78,9 +72,19 @@ export function SeatLayoutEditor() {
       }
     };
     loadInitData();
-  }, [id, navigate]);
+  }, [targetId, navigate, lang]);
 
-  // SINH MA TRẬN TỪ BE
+  const getAvailableTools = (setupType) => {
+    if (setupType === "FullStandard") {
+      return ALL_TOOLS.filter(t => ["NONE", "SEAT_STANDARD", "Aisle", "Empty"].includes(t.id));
+    } else {
+      return ALL_TOOLS.filter(t => ["NONE", "SEAT_CABIN", "SEAT_RIVER", "SEAT_SKY", "Aisle", "Empty"].includes(t.id));
+    }
+  };
+
+  const currentTools = getAvailableTools(boatData?.seatSetupType || "FullStandard");
+  const hasMatrix = decks.some(d => d.matrix && d.matrix.length > 0);
+
   const handleGenerateLayout = async () => {
     try {
       setIsLoading(true);
@@ -92,8 +96,9 @@ export function SeatLayoutEditor() {
         }))
       };
       
-      const res = await generateMatrix(id, payload);
+      const res = await generateMatrix(targetId, payload);
       if (res && res.decks) {
+        const defaultSeatCode = boatData.seatSetupType === "StandardAndVip" ? "CABIN" : "STANDARD";
         const mappedDecks = res.decks.map(d => ({
           id: d.deckNumber,
           type: d.deckNumber === 1 ? 'MAIN' : 'UPPER',
@@ -102,7 +107,7 @@ export function SeatLayoutEditor() {
           matrix: d.cells.map(c => ({
             row: c.row,
             column: c.column,
-            type: c.type === "Seat" ? `SEAT_${c.seatTypeCode}` : c.type
+            type: c.type === "Seat" ? `SEAT_${c.seatTypeCode || defaultSeatCode}` : c.type
           }))
         }));
         setDecks(mappedDecks);
@@ -116,14 +121,13 @@ export function SeatLayoutEditor() {
     }
   };
 
-  // LOGIC VẼ MAP BẰNG CHUỘT
   const applyToolToCell = (deckId, row, col) => {
     if (activeTool === "NONE") return;
     setDecks(prev => prev.map(deck => {
       if (deck.id !== deckId) return deck;
       const newMatrix = [...deck.matrix];
       const cellIndex = newMatrix.findIndex(c => c.row === row && c.column === col);
-      
+
       if (cellIndex >= 0) {
         newMatrix[cellIndex].type = activeTool;
       }
@@ -140,45 +144,16 @@ export function SeatLayoutEditor() {
     if (isDrawing) applyToolToCell(deckId, row, col);
   };
 
-  // LƯU CẤU HÌNH GỬI LÊN BACKEND (LOGIC OVERRIDE)
   const handleSaveConfiguration = async () => {
     if (!boatData) return;
-
-    // 1. VALIDATE TỔNG SỐ GHẾ (Chỉ đếm các ô là SEAT)
-    let totalMappedSeats = 0;
-    decks.forEach(deck => {
-      deck.matrix.forEach(cell => {
-        if (cell.type?.startsWith("SEAT_")) totalMappedSeats++;
-      });
-    });
-
-    if (totalMappedSeats !== boatData.seatCount) {
-      Swal.fire({
-        icon: 'error',
-        title: lang === 'VN' ? 'Sai số lượng ghế' : 'Capacity Mismatch',
-        text: lang === 'VN' 
-            ? `Tàu có sức chứa ${boatData.seatCount} ghế, nhưng bạn đang vẽ ${totalMappedSeats} ghế trên bản đồ!`
-            : `Expected ${boatData.seatCount} seats, but mapped ${totalMappedSeats} seats.`,
-        confirmButtonColor: '#124757'
-      });
-      return;
-    }
 
     try {
       setIsSubmitting(true);
 
-      // 2. NẾU TÀU ĐÃ ĐƯỢC CONFIG TRƯỚC ĐÓ -> GỌI API DELETE DỌN SẠCH DATA CŨ
-      if (boatData.seatsConfigured) {
-        await deleteSeats(id);
-      }
-
-      // 3. TẠO DTO THEO CƠ CHẾ GHI ĐÈ (OVERRIDE)
-      const defaultSeatCode = boatData.boatType === "StandardAndVip" ? "CABIN" : "STANDARD";
+      const defaultSeatCode = boatData.seatSetupType === "StandardAndVip" ? "CABIN" : "STANDARD";
 
       const payload = {
         decks: decks.map(deck => {
-          
-          // Map toàn bộ ma trận UI sang chuẩn DTO
           const formattedCells = deck.matrix.map(cell => {
             let beType = "Empty";
             let seatCode = null;
@@ -193,9 +168,7 @@ export function SeatLayoutEditor() {
             return { row: cell.row, column: cell.column, type: beType, seatTypeCode: seatCode };
           });
 
-          // Tiết kiệm băng thông: Chỉ gửi lên mảng Override (Bỏ đi những ô ghế đúng chuẩn Mặc định)
           const overrideCells = formattedCells.filter(c => {
-            // Loại bỏ ô mặc định
             if (c.type === "Seat" && c.seatTypeCode === defaultSeatCode) return false;
             return true;
           });
@@ -209,13 +182,12 @@ export function SeatLayoutEditor() {
         })
       };
 
-      // 4. GỌI API CONFIGURE
-      await configureSeats(id, payload);
-      
+      await configureSeats(targetId, payload);
+
       Swal.fire({
         icon: 'success',
         title: 'Cấu hình hoàn tất',
-        text: 'Sơ đồ ghế đã được kích hoạt thành công!',
+        text: 'Sơ đồ ghế đã được lưu và đã cập nhật tổng số lượng ghế cho tàu!',
         confirmButtonColor: '#124757'
       }).then(() => navigate('/admin/boats-management'));
 
@@ -228,7 +200,7 @@ export function SeatLayoutEditor() {
   };
 
   const getCellUI = (cellType) => {
-    const tool = TOOLS.find(t => t.id === cellType);
+    const tool = ALL_TOOLS.find(t => t.id === cellType);
     return tool ? { icon: tool.icon, label: tool.label.split(" ")[0], color: tool.color } : { icon: "", label: "", color: "bg-white" };
   };
 
@@ -251,28 +223,60 @@ export function SeatLayoutEditor() {
           <span className="material-symbols-outlined font-bold">arrow_back</span>
         </button>
         <div>
-          <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase">
-            {lang === "VN" ? `Thiết kế sơ đồ: Tàu ${boatData?.boatName}` : `Layout Editor: ${boatData?.boatName}`}
+          <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+            {lang === "VN" ? `Thiết kế sơ đồ: Tàu ${boatData?.name || boatData?.boatName}` : `Layout Editor: ${boatData?.name || boatData?.boatName}`}
           </h2>
-          <p className="text-xs text-slate-400 font-bold">
-            Kiểu tàu: <span className="text-yellow-500">{boatData?.boatType}</span> | Sức chứa: <span className="text-emerald-500">{boatData?.seatCount} ghế</span>
+          <p className="text-xs text-slate-400 font-bold mt-1">
+            Loại: <span className="text-blue-500">{boatData?.seatSetupType}</span> | Sức chứa hiện tại: <span className="text-emerald-500">{boatData?.seatCount} ghế</span>
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* THANH CÔNG CỤ TOOLS */}
+        {/* PANEL TRÁI: CẤU HÌNH VÀ CÔNG CỤ */}
         <div className="lg:col-span-3 space-y-4">
           <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700 shadow-sm sticky top-24">
+            
+            {!hasMatrix && (
+              <div className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                <h4 className="text-[10px] font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider mb-3">
+                  Tùy chỉnh số ô lưới
+                </h4>
+                <div className="space-y-3">
+                  {decks.map(d => (
+                    <div key={d.id} className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300 w-12">Tầng {d.id}</span>
+                      <div className="flex items-center gap-1.5 flex-1 justify-end">
+                        <input 
+                          type="number" min={1} value={d.rows} 
+                          onChange={(e) => setDecks(prev => prev.map(deck => deck.id === d.id ? { ...deck, rows: Number(e.target.value) } : deck))}
+                          className="w-12 sm:w-14 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757]" 
+                          title="Số hàng (Rows)"
+                        />
+                        <span className="text-[10px] text-slate-400 font-bold">X</span>
+                        <input 
+                          type="number" min={1} value={d.columns} 
+                          onChange={(e) => setDecks(prev => prev.map(deck => deck.id === d.id ? { ...deck, columns: Number(e.target.value) } : deck))}
+                          className="w-12 sm:w-14 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757]" 
+                          title="Số cột (Columns)"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <h3 className="text-xs font-black font-headline uppercase text-slate-500 mb-4 border-b border-slate-100 dark:border-slate-700 pb-2">Bảng công cụ vẽ</h3>
-            <div className="space-y-2">
-              {TOOLS.map((tool) => (
+            
+            <div className="space-y-3">
+              {currentTools.map((tool) => (
                 <button
                   key={tool.id}
                   onClick={() => setActiveTool(tool.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all border-2 ${
-                    activeTool === tool.id ? 'border-[#124757] dark:border-yellow-400 shadow-md scale-105' : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-700'
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[11px] font-bold transition-all border-2 ${
+                    activeTool === tool.id ? 'border-[#124757] dark:border-yellow-400 scale-105 shadow-lg' : ''
                   } ${tool.color}`}
                 >
                   <span className="material-symbols-outlined text-lg">{tool.icon}</span>
@@ -282,20 +286,20 @@ export function SeatLayoutEditor() {
             </div>
 
             <div className="mt-6 space-y-2 border-t border-slate-100 dark:border-slate-700 pt-4">
-              <button onClick={handleGenerateLayout} disabled={currentDeckData?.matrix?.length > 0} className="w-full bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-white px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50">
+              <button onClick={handleGenerateLayout} disabled={hasMatrix} className="w-full bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-white px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50">
                 1. Sinh ma trận lưới
               </button>
-              <button onClick={handleSaveConfiguration} disabled={isSubmitting || !currentDeckData?.matrix?.length} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 hover:brightness-110 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+              <button onClick={handleSaveConfiguration} disabled={isSubmitting || !hasMatrix} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 hover:brightness-110 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                 {isSubmitting && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
-                2. Áp dụng lưu cấu hình
+                2. Áp dụng cấu hình
               </button>
             </div>
           </div>
         </div>
 
-        {/* KHU VỰC BẢN VẼ LƯỚI */}
+        {/* PANEL PHẢI: KHU VỰC BẢN VẼ LƯỚI */}
         <div className="lg:col-span-9 space-y-4">
-          <div className="flex gap-2 p-2 bg-white dark:bg-slate-800 rounded-2xl w-max shadow-sm border border-slate-100 dark:border-slate-700">
+          <div className="flex gap-2 p-2 bg-white dark:bg-slate-800 rounded-2xl w-max shadow-sm border border-slate-100 dark:border-slate-700 mx-auto lg:mx-0">
             {decks.map((d) => (
               <button
                 key={d.id}
@@ -309,24 +313,27 @@ export function SeatLayoutEditor() {
             ))}
           </div>
 
-          {currentDeckData && currentDeckData.matrix.length === 0 ? (
-            <div className="h-100 bg-slate-50 dark:bg-slate-900/50 rounded-4xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400">
-              <span className="material-symbols-outlined text-5xl mb-2">grid_on</span>
-              <p className="font-bold">Nhấn "Sinh ma trận lưới" để bắt đầu thiết kế</p>
+          {!hasMatrix ? (
+            <div className="h-112.5 bg-slate-50 dark:bg-slate-900/50 rounded-4xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400 p-6 text-center">
+              <span className="material-symbols-outlined text-5xl mb-2 text-slate-300">grid_on</span>
+              <p className="font-bold text-slate-500 mb-1">Thiết lập số hàng và cột ở Panel bên trái.</p>
+              <p className="text-xs">Sau đó nhấn "Sinh ma trận lưới" để bắt đầu thiết kế chỗ ngồi.</p>
             </div>
           ) : currentDeckData && (
-            <div className="w-full overflow-x-auto bg-white dark:bg-slate-800 p-8 rounded-4xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center">
+            <div className="w-full bg-white dark:bg-slate-800 p-6 md:p-10 rounded-4xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center overflow-x-auto">
               
-              <div className="w-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300 py-3 rounded-t-2xl text-[10px] font-headline font-black text-center uppercase tracking-[0.2em] shadow-sm">
-                Hướng Mũi tàu (Cabin lái)
-              </div>
+              <div className="relative bg-slate-100 dark:bg-slate-900/80 border-8 border-slate-300 dark:border-slate-600 rounded-t-[12rem] rounded-b-[3rem] px-6 md:px-12 pt-20 pb-16 shadow-2xl min-w-max flex flex-col items-center">
+                
+                {/* Mũi Tàu */}
+                <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-60">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#124757] dark:text-yellow-400">Mũi Tàu</span>
+                </div>
 
-              <div className="p-8 bg-slate-50 dark:bg-slate-900 w-full flex justify-center border-x border-slate-200 dark:border-slate-700">
-                <div 
-                  className="grid gap-1 md:gap-2"
+                <div
+                  className="grid gap-2 relative z-10 mx-auto"
                   style={{
-                    gridTemplateColumns: `repeat(${currentDeckData.columns}, minmax(40px, 50px))`,
-                    gridTemplateRows: `repeat(${currentDeckData.rows}, minmax(40px, 50px))`
+                    gridTemplateColumns: `repeat(${currentDeckData.columns}, 46px)`,
+                    gridTemplateRows: `repeat(${currentDeckData.rows}, 46px)`
                   }}
                 >
                   {currentDeckData.matrix.map((cell) => {
@@ -336,19 +343,24 @@ export function SeatLayoutEditor() {
                         key={`${cell.row}-${cell.column}`}
                         onMouseDown={() => handleCellMouseDown(currentDeckData.id, cell.row, cell.column)}
                         onMouseEnter={() => handleCellMouseEnter(currentDeckData.id, cell.row, cell.column)}
-                        className={`flex flex-col items-center justify-center rounded-lg border text-[9px] font-bold cursor-crosshair select-none transition-colors ${ui.color} ${activeTool !== 'NONE' ? 'hover:scale-95 z-10' : ''}`}
+                        className={`relative flex flex-col items-center justify-center rounded-xl border-2 w-full h-full text-[9px] font-bold cursor-crosshair select-none transition-all duration-300 ${ui.color} ${activeTool !== 'NONE' ? 'hover:scale-90 hover:ring-4 ring-slate-400/20 z-20' : ''}`}
                         style={{ gridRow: cell.row, gridColumn: cell.column }}
                       >
-                        {ui.icon && <span className="material-symbols-outlined text-[16px] leading-none mb-0.5 opacity-90">{ui.icon}</span>}
-                        {cell.type?.startsWith("SEAT_") && <span className="text-[7px] font-medium opacity-60 mt-0.5 leading-none tracking-normal">{cell.row}-{cell.column}</span>}
+                        {ui.icon && <span className="material-symbols-outlined text-[20px] leading-none mb-0.5 opacity-90">{ui.icon}</span>}
+                        {cell.type?.startsWith("SEAT_") && (
+                          <span className="absolute bottom-1 right-1.5 text-[8px] font-black opacity-60 leading-none tracking-tighter">
+                            {cell.row}-{cell.column}
+                          </span>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-              </div>
 
-              <div className="w-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300 py-3 rounded-b-2xl text-[10px] font-headline font-black text-center uppercase tracking-[0.2em] shadow-sm mt-0">
-                Hướng Đuôi tàu (Động cơ)
+                {/* Đuôi Tàu */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center opacity-60">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Đuôi Tàu</span>
+                </div>
               </div>
             </div>
           )}
