@@ -17,8 +17,8 @@ export const updateBoat = (id, data) =>
     api.put(`/boats/${id}`, data).then(r => r.data);
 
 // API Cập nhật trạng thái tàu
-export const updateBoatStatus = (id, data) => 
-    api.patch(`/boats/${encodeURIComponent(id)}/status`, data).then(r => r.data);
+export const updateBoatStatus = (id, data) =>
+    api.patch(`/boats/${id}/status`, data).then(r => r.data);
 
 // API Xóa tàu
 export const deleteBoat = (id) => api.delete(`/boats/${id}`).then(r => r.data);

@@ -12,7 +12,7 @@ export const generateSeatMatrix = (boatId, matrixPayload) =>
 export const configureSeatLayout = (boatId, layoutPayload) => 
     api.post(`/boats/${boatId}/seats/configure`, layoutPayload).then(r => r.data);
 
-// 4. PATCH: Cập nhật trạng thái của một ghế lẻ (Ví dụ: báo hỏng/bảo trì - nếu bạn vẫn giữ API này)
+// 4. PATCH: Cập nhật trạng thái của một ghế lẻ
 export const updateSeatStatus = (boatId, seatId, statusPayload) => 
     api.patch(`/boats/${boatId}/seats/${seatId}/status`, statusPayload).then(r => r.data);
 

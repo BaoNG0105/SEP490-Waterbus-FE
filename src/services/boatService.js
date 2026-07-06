@@ -3,7 +3,8 @@ import {
     createBoat as apiCreateBoat,
     getBoatById as apiGetBoatById,
     updateBoat as apiUpdateBoat,
-    updateBoatStatus as apiUpdateBoatStatus
+    updateBoatStatus as apiUpdateBoatStatus,
+    deleteBoat as apiDeleteBoat
 } from '../api/boatApi';
 
 // Hàm Service lấy danh sách tàu
@@ -59,4 +60,11 @@ export const modifyBoatStatus = async (boatId, statusPayload) => {
 };
 
 // Hàm service xóa tàu
-// export const deleteBoat = 
+export const deleteBoat = async (boatId) => {
+    try {
+        return await apiDeleteBoat(boatId);
+    } catch (error) {
+        console.error(`Lỗi khi xóa tàu ${boatId}:`, error);
+        throw error;
+    }
+};

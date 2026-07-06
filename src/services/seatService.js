@@ -36,10 +36,10 @@ export const configureSeats = async (boatId, layoutPayload) => {
     }
 };
 
-// CẬP NHẬT TRẠNG THÁI GHẾ LẺ (BẢO TRÌ/HỎNG)
-export const changeSeatStatus = async (boatId, seatId, statusValue) => {
+// CẬP NHẬT TRẠNG THÁI GHẾ LẺ (BẬT/TẮT GHẾ)
+export const changeSeatStatus = async (boatId, seatId, isActive) => {
     try {
-        return await apiUpdateSeatStatus(boatId, seatId, { status: statusValue });
+        return await apiUpdateSeatStatus(boatId, seatId, { isActive });
     } catch (error) {
         console.error(`Lỗi khi cập nhật trạng thái ghế ID ${seatId}:`, error);
         throw error;
