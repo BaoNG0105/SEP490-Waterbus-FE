@@ -159,7 +159,7 @@ export const Profile = () => {
               <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100">
                 <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Bảo mật & Cài đặt" : "Security & Settings"}</h2>
                 <div className="space-y-3">
-                  <button onClick={() => navigate("/profile/charter-bookings")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
+                  <button onClick={() => navigate("/profile/my-charter-booking")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-500 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors">
                         <span className="material-symbols-outlined">directions_boat</span>

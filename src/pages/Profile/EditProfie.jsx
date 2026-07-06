@@ -413,7 +413,7 @@ export const EditProfile = () => {
                         <div className="space-y-1">
                             <label className={labelClasses}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
                             <div className="relative flex items-center">
-                                <span className={`fi fi-${selectedFlag} absolute left-8 text-sm rounded-sm shadow-sm pointer-events-none`}></span>
+                                <span className={`fi fi-${selectedFlag} absolute! left-4 top-1/2 -translate-y-1/2 text-sm rounded-sm shadow-sm pointer-events-none`}></span>
                                 <select value={selectedFlag} onChange={handleNationalityChange} className={`${inputClasses} pl-11 appearance-none font-semibold`}>
                                     {countryList.map((country) => (
                                         <option key={country.code} value={country.code}>{country.name}</option>

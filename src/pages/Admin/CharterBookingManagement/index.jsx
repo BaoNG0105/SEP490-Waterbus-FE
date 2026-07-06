@@ -9,8 +9,9 @@ import {
   modifyAdminCharterBookingStatus,
   previewAdminCharterBookingQuote,
   submitAdminCharterBookingQuote,
-  updateCharterAttendance,
+  // updateCharterAttendance,
 } from "../../../services/charterBookingService";
+import { getApiErrorMessage } from "../../../utils/apiError";
 
 const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Refunded"];
 const rentalUnits = ["Day", "Hour"];
@@ -46,18 +47,6 @@ const getBoatPrice = (boat, unit) => {
     ? boat.rentalPrices.find((price) => price.rentalUnit === unit)
     : null;
   return Number(rentalPrice?.unitPrice) || 0;
-};
-
-const getApiErrorMessage = (error, fallback) => {
-  const data = error.response?.data;
-  if (!data) return fallback;
-  if (typeof data === "string") return data;
-  if (typeof data.message === "string") return data.message;
-  if (data.errors && typeof data.errors === "object") {
-    return Object.values(data.errors).flat().filter(Boolean).join("\n") || fallback;
-  }
-  if (typeof data.title === "string") return data.title;
-  return fallback;
 };
 
 const formatRouteEstimate = (routeEstimate, lang) => {
@@ -155,7 +144,7 @@ const normalizeBooking = (item) => {
   };
 };
 
-export function CharterBooking() {
+export function CharterBookingManagement() {
   const { lang } = useApp();
   const [bookings, setBookings] = useState([]);
   const [boats, setBoats] = useState([]);
@@ -305,10 +294,10 @@ export function CharterBooking() {
     };
   };
 
-  const priorityBookings = bookings
-    .filter((booking) => ["PendingQuote", "Quoted", "PendingPayment", "Confirmed"].includes(booking.status))
-    .sort((a, b) => getAdminActionInfo(a).weight - getAdminActionInfo(b).weight)
-    .slice(0, 4);
+  // const priorityBookings = bookings
+  //   .filter((booking) => ["PendingQuote", "Quoted", "PendingPayment", "Confirmed"].includes(booking.status))
+  //   .sort((a, b) => getAdminActionInfo(a).weight - getAdminActionInfo(b).weight)
+  //   .slice(0, 4);
 
   const openDetail = async (booking) => {
     try {
@@ -484,45 +473,45 @@ export function CharterBooking() {
     }
   };
 
-  const handleAttendance = async (action) => {
-    if (!selectedBooking?.qrToken) {
-      Swal.fire({
-        icon: "info",
-        title: lang === "VN" ? "Booking chưa có QR tổng" : "Group QR is unavailable",
-        confirmButtonColor: "#124757",
-      });
-      return;
-    }
+  // const handleAttendance = async (action) => {
+  //   if (!selectedBooking?.qrToken) {
+  //     Swal.fire({
+  //       icon: "info",
+  //       title: lang === "VN" ? "Booking chưa có QR tổng" : "Group QR is unavailable",
+  //       confirmButtonColor: "#124757",
+  //     });
+  //     return;
+  //   }
 
-    const payload = selectedAttendanceTicketIds.length > 0
-      ? { action, mode: "Selected", ticketIds: selectedAttendanceTicketIds }
-      : { action, mode: "All", ticketIds: null };
+  //   const payload = selectedAttendanceTicketIds.length > 0
+  //     ? { action, mode: "Selected", ticketIds: selectedAttendanceTicketIds }
+  //     : { action, mode: "All", ticketIds: null };
 
-    try {
-      setIsSubmitting(true);
-      const manifest = await updateCharterAttendance(selectedBooking.qrToken, payload);
-      setSelectedBooking(normalizeBooking(manifest));
-      setSelectedAttendanceTicketIds([]);
-      await loadData();
-      Swal.fire({
-        icon: "success",
-        title: action === "CheckIn"
-          ? (lang === "VN" ? "Đã xử lý check-in" : "Check-in processed")
-          : (lang === "VN" ? "Đã xử lý check-out" : "Check-out processed"),
-        text: lang === "VN" ? "Các vé không hợp lệ sẽ được backend bỏ qua." : "Invalid ticket transitions are skipped by the server.",
-        confirmButtonColor: "#124757",
-      });
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: lang === "VN" ? "Không thể cập nhật lượt đi" : "Unable to update attendance",
-        text: error.response?.data?.message || (lang === "VN" ? "Vui lòng kiểm tra QR và trạng thái vé." : "Please check the QR token and ticket states."),
-        confirmButtonColor: "#124757",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  //   try {
+  //     setIsSubmitting(true);
+  //     const manifest = await updateCharterAttendance(selectedBooking.qrToken, payload);
+  //     setSelectedBooking(normalizeBooking(manifest));
+  //     setSelectedAttendanceTicketIds([]);
+  //     await loadData();
+  //     Swal.fire({
+  //       icon: "success",
+  //       title: action === "CheckIn"
+  //         ? (lang === "VN" ? "Đã xử lý check-in" : "Check-in processed")
+  //         : (lang === "VN" ? "Đã xử lý check-out" : "Check-out processed"),
+  //       text: lang === "VN" ? "Các vé không hợp lệ sẽ được backend bỏ qua." : "Invalid ticket transitions are skipped by the server.",
+  //       confirmButtonColor: "#124757",
+  //     });
+  //   } catch (error) {
+  //     Swal.fire({
+  //       icon: "error",
+  //       title: lang === "VN" ? "Không thể cập nhật lượt đi" : "Unable to update attendance",
+  //       text: error.response?.data?.message || (lang === "VN" ? "Vui lòng kiểm tra QR và trạng thái vé." : "Please check the QR token and ticket states."),
+  //       confirmButtonColor: "#124757",
+  //     });
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
 
   return (
     <div className="space-y-8 font-body pb-10">
@@ -573,7 +562,7 @@ export function CharterBooking() {
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+      {/* <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
         <section className="rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -640,35 +629,7 @@ export function CharterBooking() {
             )}
           </div>
         </section>
-
-        <section className="rounded-4xl border border-slate-100 bg-[#124757] p-5 text-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="font-headline text-lg font-black text-white dark:text-yellow-400">
-                {lang === "VN" ? "Luồng xử lý chuẩn" : "Standard Workflow"}
-              </h3>
-              <p className="mt-1 text-xs font-medium leading-5 text-white/65 dark:text-slate-400">
-                {lang === "VN" ? "Mỗi booking nên đi theo thứ tự để tránh sai trạng thái thanh toán." : "Keep each request moving in order to avoid payment-state conflicts."}
-              </p>
-            </div>
-            <span className="material-symbols-outlined rounded-2xl bg-white/10 p-3 text-2xl text-yellow-300">schema</span>
-          </div>
-          <div className="mt-5 space-y-3">
-            {[
-              [lang === "VN" ? "Nhập tàu" : "Assign", "directions_boat"],
-              [lang === "VN" ? "Preview giá" : "Preview", "calculate"],
-              [lang === "VN" ? "Chốt báo giá" : "Quote", "request_quote"],
-              [lang === "VN" ? "Theo dõi thanh toán" : "Payment", "payments"],
-            ].map(([label, icon], index) => (
-              <div key={label} className="flex items-center gap-3 rounded-2xl bg-white/10 px-3 py-3 dark:bg-slate-900">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-yellow-400 text-xs font-headline font-black text-[#124757]">{index + 1}</span>
-                <span className="material-symbols-outlined text-lg text-yellow-300">{icon}</span>
-                <span className="text-xs font-headline font-black uppercase tracking-wider">{label}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+      </div> */}
 
       <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col lg:flex-row items-center gap-4 justify-between">
         <div className="relative w-full lg:max-w-md">
@@ -881,7 +842,7 @@ export function CharterBooking() {
                 </div>
 
                 <div className="rounded-3xl bg-slate-50 dark:bg-slate-800 p-5 border border-slate-100 dark:border-slate-700 space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h4 className="font-headline font-black text-[#124757] dark:text-yellow-400 uppercase text-sm tracking-wider">
                         {lang === "VN" ? "Manifest & điểm danh" : "Manifest & Attendance"}
@@ -900,7 +861,7 @@ export function CharterBooking() {
                         Check-out
                       </button>
                     </div>
-                  </div>
+                  </div> */}
 
                   {Array.isArray(selectedBooking.tickets) && selectedBooking.tickets.length > 0 ? (
                     <div className="max-h-56 overflow-y-auto space-y-2 custom-scrollbar">

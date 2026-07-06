@@ -1,20 +1,43 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import Swal from "sweetalert2";
-import { useApp } from "../../context/AppContext";
-import { updateUserProfile } from "../../redux/authSlice";
-import { fetchAllStations } from "../../services/stationService";
-import { fetchCurrentUserProfile } from "../../services/authService";
-import { createMyCharterBooking } from "../../services/charterBookingService";
-import { getApiErrorMessage } from "../../utils/apiError";
+import { useApp } from "../../../context/AppContext";
+import { updateUserProfile } from "../../../redux/authSlice";
+import { fetchAllStations } from "../../../services/stationService";
+import { fetchCurrentUserProfile } from "../../../services/authService";
+import { fetchMyCharterBookingDetail, updateMyCharterBooking } from "../../../services/charterBookingService";
+import { getApiErrorMessage } from "../../../utils/apiError";
 
 const seatSetupOptions = ["FullStandard", "StandardAndVip"];
+const editableStatuses = ["PendingQuote"];
+
+const pick = (source, keys, fallback = "") => {
+  for (const key of keys) {
+    const value = key.split(".").reduce((obj, part) => obj?.[part], source);
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return fallback;
+};
 
 const getMinDepartureDate = () => {
   const date = new Date();
   date.setDate(date.getDate() + 7);
   return date.toISOString().slice(0, 10);
+};
+
+const toDateInputValue = (value) => {
+  if (!value) return "";
+  const text = String(value).trim();
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+
+  const viMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (viMatch) {
+    return `${viMatch[3]}-${viMatch[2].padStart(2, "0")}-${viMatch[1].padStart(2, "0")}`;
+  }
+
+  return "";
 };
 
 const createEmptyStop = () => ({
@@ -28,34 +51,49 @@ const createEmptyBoatRequest = () => ({
   seatSetupType: "FullStandard",
 });
 
-export function CharterBooking() {
+const buildFormDataFromDetail = (detail, user) => ({
+  customerName: pick(detail, ["contactName"], user?.fullName || ""),
+  contactPhone: pick(detail, ["contactPhone"], user?.phoneNumber || user?.phone || ""),
+  contactEmail: pick(detail, ["contactEmail"], user?.email || ""),
+  departureDate: toDateInputValue(pick(detail, ["departureDate"])) || getMinDepartureDate(),
+  rentalUnit: pick(detail, ["rentalUnit"], "Day"),
+  durationValue: Number(pick(detail, ["durationValue"], 1)),
+  adultCount: Number(pick(detail, ["adultCount"], 1)),
+  childCount: Number(pick(detail, ["childCount"], 0)),
+  startTime: pick(detail, ["startTime"], "08:00").slice(0, 5),
+  fromStationId: pick(detail, ["fromStationId"], ""),
+  toStationId: pick(detail, ["toStationId"], ""),
+  requestedBoats: Array.isArray(detail?.requestedBoats) && detail.requestedBoats.length > 0
+    ? detail.requestedBoats.map((boat) => ({ seatSetupType: pick(boat, ["seatSetupType"], "FullStandard") }))
+    : [createEmptyBoatRequest()],
+  itineraryStops: Array.isArray(detail?.itineraryStops)
+    ? detail.itineraryStops.map((stop, index) => ({
+      stationId: pick(stop, ["stationId"], ""),
+      stopOrder: Number(pick(stop, ["stopOrder"], index + 1)),
+      stayDurationMinutes: Number(pick(stop, ["stayDurationMinutes"], 0)),
+      note: pick(stop, ["note"], ""),
+    }))
+    : [],
+  boatRequirements: pick(detail, ["boatRequirements"], ""),
+  specialRequests: pick(detail, ["specialRequests"], ""),
+});
+
+export function EditCharter() {
   const { lang } = useApp();
+  const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { isAuthenticated, user } = useSelector((state) => state.auth);
 
   const [stations, setStations] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [bookingCode, setBookingCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [useAccountInfo, setUseAccountInfo] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState(() => ({
-    customerName: user?.fullName || "",
-    contactPhone: user?.phoneNumber || user?.phone || "",
-    contactEmail: user?.email || "",
-    departureDate: getMinDepartureDate(),
-    rentalUnit: "Day",
-    durationValue: 1,
-    adultCount: 1,
-    childCount: 0,
-    startTime: "08:00",
-    fromStationId: "",
-    toStationId: "",
-    requestedBoats: [{ seatSetupType: "FullStandard" }],
-    itineraryStops: [],
-    boatRequirements: "",
-    specialRequests: "",
-  }));
+  const [formData, setFormData] = useState(null);
 
   const loadStations = useCallback(async () => {
     try {
@@ -66,10 +104,41 @@ export function CharterBooking() {
     }
   }, []);
 
+  const loadBookingDetail = useCallback(async () => {
+    if (!isAuthenticated) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setLoadError("");
+      const detail = await fetchMyCharterBookingDetail(id);
+      const status = pick(detail, ["bookingStatus", "status"], "PendingQuote");
+
+      if (!editableStatuses.includes(status)) {
+        setLoadError(lang === "VN"
+          ? "Yêu cầu này đã được báo giá hoặc xử lý nên không thể chỉnh sửa."
+          : "This request has already been quoted or processed and can no longer be edited.");
+        return;
+      }
+
+      setBookingCode(pick(detail, ["bookingCode", "code"], "--"));
+      setFormData(buildFormDataFromDetail(detail, user));
+    } catch (error) {
+      setLoadError(getApiErrorMessage(error, lang === "VN"
+        ? "Không thể tải chi tiết yêu cầu để chỉnh sửa."
+        : "Unable to load the request details for editing."));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, isAuthenticated, lang, navigate, user]);
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     loadStations();
-  }, [loadStations]);
+    loadBookingDetail();
+  }, [loadStations, loadBookingDetail]);
 
   const contactInputClass = `w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] transition-all disabled:opacity-55 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-950 disabled:text-slate-500 dark:disabled:text-slate-400`;
 
@@ -281,21 +350,11 @@ export function CharterBooking() {
     }));
   };
 
-  const handleCreateBooking = async (event) => {
+  const handleUpdateBooking = async (event) => {
     event.preventDefault();
 
     if (!isLastStep) {
       handleNextStep();
-      return;
-    }
-
-    if (!isAuthenticated) {
-      Swal.fire({
-        icon: "info",
-        title: lang === "VN" ? "Bạn cần đăng nhập" : "Sign in required",
-        text: lang === "VN" ? "Vui lòng đăng nhập để gửi yêu cầu thuê tàu." : "Please sign in before creating a charter request.",
-        confirmButtonColor: "#124757",
-      }).then(() => navigate("/login"));
       return;
     }
 
@@ -328,17 +387,7 @@ export function CharterBooking() {
       return;
     }
 
-    if (!formData.departureDate) {
-      Swal.fire({
-        icon: "warning",
-        title: lang === "VN" ? "Ngày khởi hành chưa hợp lệ" : "Invalid departure date",
-        text: lang === "VN" ? "Vui lòng chọn ngày khởi hành." : "Please choose a departure date.",
-        confirmButtonColor: "#124757",
-      });
-      return;
-    }
-
-    if (formData.departureDate < minDepartureDate) {
+    if (!formData.departureDate || formData.departureDate < minDepartureDate) {
       Swal.fire({
         icon: "warning",
         title: lang === "VN" ? "Ngày khởi hành chưa hợp lệ" : "Invalid departure date",
@@ -372,7 +421,7 @@ export function CharterBooking() {
       Swal.fire({
         icon: "warning",
         title: lang === "VN" ? "Vui lòng chọn bến" : "Stations are required",
-        text: lang === "VN" ? "Bạn cần chọn cả bến đi và bến đến trước khi tạo yêu cầu." : "Select both origin and destination stations before submitting.",
+        text: lang === "VN" ? "Bạn cần chọn cả bến đi và bến đến trước khi lưu." : "Select both origin and destination stations before saving.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -451,42 +500,23 @@ export function CharterBooking() {
 
     try {
       setIsSubmitting(true);
-      const savedResponse = await createMyCharterBooking(payload);
-      const createdBooking = savedResponse || payload;
-      const bookingId = createdBooking?.id || createdBooking?.charterBookingId || createdBooking?.bookingId;
-      const bookingCode = createdBooking?.bookingCode || createdBooking?.code || "--";
-      const savedBooking = {
-        ...createdBooking,
-        id: bookingId,
-        bookingCode,
-        bookingStatus: createdBooking?.bookingStatus || createdBooking?.status || "PendingQuote",
-      };
-
-      localStorage.setItem("lastCharterBooking", JSON.stringify({
-        bookingId,
-        bookingCode,
-        bookingStatus: savedBooking.bookingStatus,
-      }));
+      await updateMyCharterBooking(id, payload);
 
       Swal.fire({
         icon: "success",
-        title: lang === "VN" ? "Đã gửi yêu cầu thuê tàu" : "Charter request submitted",
+        title: lang === "VN" ? "Đã cập nhật yêu cầu" : "Charter request updated",
         text: bookingCode !== "--"
           ? (lang === "VN" ? `Mã yêu cầu: ${bookingCode}` : `Request code: ${bookingCode}`)
-          : (lang === "VN" ? "Bạn có thể theo dõi yêu cầu trong Hồ sơ." : "You can track this request from your profile."),
+          : "",
         confirmButtonColor: "#124757",
       }).then(() => {
-        if (bookingId) {
-          navigate(`/profile/my-charter-booking/${bookingId}`, { state: { booking: savedBooking } });
-        } else {
-          navigate("/profile/my-charter-booking");
-        }
+        navigate(`/profile/my-charter-booking/${id}`);
       });
     } catch (error) {
-      console.error("Lỗi tạo charter booking:", error);
+      console.error("Lỗi cập nhật charter booking:", error);
       Swal.fire({
         icon: "error",
-        title: lang === "VN" ? "Không thể gửi yêu cầu" : "Unable to submit request",
+        title: lang === "VN" ? "Không thể cập nhật" : "Unable to update request",
         text: getApiErrorMessage(error, lang === "VN" ? "Vui lòng kiểm tra ngày đi, số khách và thông tin lộ trình." : "Please check departure date, passenger count, and route information."),
         confirmButtonColor: "#124757",
       });
@@ -495,111 +525,59 @@ export function CharterBooking() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center pt-32 pb-20">
+        <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (loadError || !formData) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pt-32 pb-20 px-4 sm:px-6 lg:px-8 font-body">
+        <main className="max-w-3xl mx-auto">
+          <section className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700/50 text-center shadow-sm">
+            <span className="material-symbols-outlined text-4xl text-rose-500">error</span>
+            <h1 className="mt-3 text-xl font-headline font-black text-[#124757] dark:text-white">
+              {lang === "VN" ? "Không thể chỉnh sửa yêu cầu" : "Unable to edit this request"}
+            </h1>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              {loadError || (lang === "VN" ? "Vui lòng thử lại sau." : "Please try again later.")}
+            </p>
+            <div className="mt-6 flex flex-col sm:flex-row justify-center gap-3">
+              <button onClick={() => navigate(`/profile/my-charter-booking/${id}`)} className="px-5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-200 font-bold text-sm">
+                {lang === "VN" ? "Quay lại chi tiết" : "Back to request"}
+              </button>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-body transition-colors duration-300">
-      {/* ===== SECTION 1: HERO ===== */}
-      <section
-        className="relative bg-[#124757] dark:bg-slate-950 overflow-hidden pt-32 pb-20 bg-cover bg-center"
-        style={{ backgroundImage: "url('https://res.cloudinary.com/dygipvoal/image/upload/v1776187354/mudyubyd1sqcihkzhkbo.jpg')" }}
-      >
-        <div className="absolute inset-0 bg-[#124757]/70 dark:bg-slate-950/70 pointer-events-none"></div>
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
-          <span className="material-symbols-outlined text-[420px] absolute -right-16 -top-16 text-white">directions_boat</span>
-        </div>
-        <div className="relative max-w-5xl mx-auto px-6 md:px-12 text-center space-y-6">
-          <h1 className="text-4xl md:text-6xl font-headline font-black text-white leading-tight">
-            {lang === "VN" ? "Dịch vụ thuê tàu WaterBus" : "WaterBus Charter Booking"}
-          </h1>
-          <p className="text-white/70 max-w-2xl mx-auto text-sm md:text-base leading-relaxed">
-            {lang === "VN"
-              ? "Gửi yêu cầu thuê tàu riêng cho gia đình, doanh nghiệp hay sự kiện đặc biệt. Đội ngũ vận hành sẽ kiểm tra tàu phù hợp và phản hồi báo giá ngay trong hồ sơ của bạn."
-              : "Submit a private charter request for your family, company, or special event. Our team will assign a suitable boat and send a quote directly to your profile."}
-          </p>
-        </div>
-      </section>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-body transition-colors duration-300 pt-32 pb-20 px-4 md:px-8">
+      <main className="relative max-w-5xl mx-auto">
+        <button onClick={() => navigate(`/profile/my-charter-booking/${id}`)} className="mb-6 flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
+          <span className="material-symbols-outlined text-xl">arrow_back</span>
+          {lang === "VN" ? "Quay lại chi tiết" : "Back to Request"}
+        </button>
 
-      {/* ===== SECTION 2: SERVICE INTRODUCTION ===== */}
-      <section className="py-20 bg-white dark:bg-slate-900 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-6 md:px-12">
-          <div className="flex flex-col items-center text-center mb-14 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-              {lang === "VN" ? "Vì sao chọn WaterBus Charter" : "Why Choose WaterBus Charter"}
-            </p>
-            <h2 className="text-3xl md:text-4xl font-headline font-bold text-[#124757] dark:text-white max-w-2xl">
-              {lang === "VN" ? "Trải nghiệm thuê tàu riêng trọn vẹn, minh bạch từ đầu đến cuối" : "A complete, transparent private charter experience"}
-            </h2>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { icon: "tune", titleVn: "Tùy chỉnh lộ trình", titleEn: "Custom Route", descVn: "Chọn bến đi, bến đến và các điểm dừng theo nhu cầu của bạn.", descEn: "Pick your origin, destination, and stops to match your plan." },
-              { icon: "directions_boat_filled", titleVn: "Đa dạng loại tàu", titleEn: "Flexible Boat Types", descVn: "Yêu cầu nhiều tàu với cấu hình ghế thường hoặc VIP.", descEn: "Request multiple boats with standard or VIP seating." },
-              { icon: "request_quote", titleVn: "Báo giá minh bạch", titleEn: "Transparent Quotes", descVn: "Nhận báo giá chi tiết ngay trong hồ sơ cá nhân.", descEn: "Receive a detailed quote right in your profile." },
-              { icon: "support_agent", titleVn: "Hỗ trợ tận tâm", titleEn: "Dedicated Support", descVn: "Đội ngũ vận hành đồng hành xuyên suốt quá trình thuê tàu.", descEn: "Our operations team supports you throughout the process." },
-            ].map((item) => (
-              <div key={item.icon} className="bg-slate-50 dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700/50 space-y-4 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
-                <div className="w-12 h-12 rounded-2xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-2xl">{item.icon}</span>
-                </div>
-                <h3 className="font-headline font-black text-slate-800 dark:text-white text-sm uppercase tracking-wide">
-                  {lang === "VN" ? item.titleVn : item.titleEn}
-                </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  {lang === "VN" ? item.descVn : item.descEn}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== SECTION 3: STEPS GUIDE ===== */}
-      <section className="py-20 bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-6 md:px-12">
-          <div className="flex flex-col items-center text-center mb-14 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-              {lang === "VN" ? "Quy trình đơn giản" : "Simple Process"}
-            </p>
-            <h2 className="text-3xl md:text-4xl font-headline font-bold text-[#124757] dark:text-white max-w-2xl">
-              {lang === "VN" ? "Hướng dẫn các bước thuê tàu" : "How to Book a Charter"}
-            </h2>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              { titleVn: "Điền thông tin & lịch trình", titleEn: "Fill in details & schedule", descVn: "Nhập thông tin liên hệ, ngày giờ khởi hành và thời lượng thuê tàu.", descEn: "Enter contact info, departure date/time, and rental duration." },
-              { titleVn: "Chọn lộ trình & loại tàu", titleEn: "Choose route & boat type", descVn: "Chọn bến đi, bến đến, điểm dừng và số lượng tàu mong muốn.", descEn: "Select origin, destination, stops, and the boats you need." },
-              { titleVn: "Gửi yêu cầu thuê tàu", titleEn: "Submit your request", descVn: "Xác nhận thông tin và gửi yêu cầu thuê tàu đến đội ngũ vận hành.", descEn: "Confirm details and send the request to our operations team." },
-              { titleVn: "Nhận báo giá & theo dõi", titleEn: "Get a quote & track it", descVn: "Theo dõi trạng thái và nhận báo giá ngay trong hồ sơ của bạn.", descEn: "Track the status and receive your quote in your profile." },
-            ].map((step, index) => (
-              <div key={step.icon} className="flex flex-col group">
-                <div className="text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400 mb-4 transition-transform duration-300 group-hover:-translate-y-2">
-                  0{index + 1}
-                </div>
-                <h3 className="text-lg font-headline font-bold text-[#124757] dark:text-white mb-2">
-                  {lang === "VN" ? step.titleVn : step.titleEn}
-                </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  {lang === "VN" ? step.descVn : step.descEn}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== SECTION 4: REQUEST FORM ===== */}
-      <main className="relative max-w-5xl mx-auto px-4 md:px-8 py-20">
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-72 h-72 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none"></div>
-        <form onSubmit={handleCreateBooking} className="relative bg-[#124757] dark:bg-slate-800 rounded-4xl shadow-[0_25px_70px_rgba(18,71,87,0.10)] border border-white/10 dark:border-slate-700/50 overflow-hidden">
-          <div className="p-8 md:p-10 border-b border-white/10 dark:border-slate-700 space-y-6 text-center bg-linear-to-b from-white/5 to-transparent dark:from-slate-900/40">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 w-72 h-72 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none"></div>
+        <form onSubmit={handleUpdateBooking} className="relative bg-white dark:bg-slate-800 rounded-4xl shadow-[0_25px_70px_rgba(18,71,87,0.10)] border border-slate-100 dark:border-slate-700/50 overflow-hidden">
+          <div className="p-8 md:p-10 border-b border-slate-100 dark:border-slate-700 space-y-6 text-center bg-linear-to-b from-slate-50/70 to-transparent dark:from-slate-900/40">
             <div className="space-y-2">
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-400/15 text-yellow-400 border border-yellow-400/20 text-[10px] font-headline font-black uppercase tracking-widest">
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-400/15 text-yellow-600 dark:text-yellow-400 border border-yellow-400/20 text-[10px] font-headline font-black uppercase tracking-widest">
                 {lang === "VN" ? `Bước ${currentStep + 1}/${steps.length}` : `Step ${currentStep + 1} of ${steps.length}`}
               </span>
-              <h2 className="text-2xl md:text-3xl font-headline font-black text-white dark:text-yellow-400">
-                {lang === "VN" ? "Tạo yêu cầu thuê tàu" : "Create Charter Request"}
+              <h2 className="text-2xl md:text-3xl font-headline font-black text-[#124757] dark:text-yellow-400">
+                {lang === "VN" ? "Chỉnh sửa yêu cầu thuê tàu" : "Edit Charter Request"}
               </h2>
-              <p className="text-xs text-white/70 dark:text-slate-400 max-w-md mx-auto">
-                {lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today."}
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                {bookingCode !== "--"
+                  ? (lang === "VN" ? `Mã yêu cầu ${bookingCode}` : `Request code ${bookingCode}`)
+                  : (lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today.")}
               </p>
             </div>
 
@@ -616,29 +594,29 @@ export function CharterBooking() {
                       className={`flex items-center gap-2 ${isDone ? "cursor-pointer" : "cursor-default"}`}
                     >
                       <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-headline font-black text-sm shrink-0 transition-colors ${isActive
-                        ? "bg-white dark:bg-yellow-400 text-[#124757] dark:text-slate-900"
+                        ? "bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900"
                         : isDone
                           ? "bg-emerald-500 text-white"
-                          : "bg-white/10 dark:bg-slate-900 text-white/50 dark:text-slate-400 border border-white/15 dark:border-slate-700"
+                          : "bg-slate-100 dark:bg-slate-900 text-slate-400 border border-slate-200 dark:border-slate-700"
                         }`}>
                         {isDone ? <span className="material-symbols-outlined text-base">check</span> : index + 1}
                       </span>
                       <span className={`hidden sm:inline text-[11px] font-headline font-black uppercase tracking-wider whitespace-nowrap ${isActive
-                        ? "text-white dark:text-yellow-400"
+                        ? "text-[#124757] dark:text-yellow-400"
                         : isDone
-                          ? "text-emerald-300 dark:text-emerald-400"
-                          : "text-white/40 dark:text-slate-400"
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-slate-400"
                         }`}>
                         {lang === "VN" ? step.titleVn : step.titleEn}
                       </span>
                     </button>
-                    {index < steps.length - 1 && <span className="w-4 sm:w-10 h-px bg-white/15 dark:bg-slate-700"></span>}
+                    {index < steps.length - 1 && <span className="w-4 sm:w-10 h-px bg-slate-200 dark:bg-slate-700"></span>}
                   </div>
                 );
               })}
             </div>
 
-            <div className="max-w-md mx-auto h-1.5 rounded-full bg-white/10 dark:bg-slate-900 overflow-hidden">
+            <div className="max-w-md mx-auto h-1.5 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden">
               <div
                 className="h-full rounded-full bg-[#FFD100] transition-all duration-500"
                 style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
@@ -647,32 +625,26 @@ export function CharterBooking() {
           </div>
 
           <div className="p-6 md:p-10 space-y-7">
-            {!isAuthenticated && (
-              <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-4 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-3">
-                <span className="material-symbols-outlined text-xl">lock</span>
-                {lang === "VN" ? "Bạn cần đăng nhập trước khi gửi yêu cầu thuê tàu." : "You need to sign in before submitting a charter request."}
-              </div>
-            )}
             {/* Thông tin khách hàng */}
             {currentStep === 0 && (
             <section className="space-y-6 max-w-3xl mx-auto">
               <div className="flex flex-col items-center text-center gap-3">
                 <div>
-                  <h3 className="font-headline font-black text-white text-lg">{lang === "VN" ? "Thông tin khách hàng" : "Customer Information"}</h3>
-                  <p className="text-xs text-white/70 dark:text-slate-400 mt-1 max-w-sm mx-auto">{lang === "VN" ? "Cho chúng tôi biết ai là người liên hệ chính của yêu cầu này." : "Tell us who the main contact for this request is."}</p>
+                  <h3 className="font-headline font-black text-slate-800 dark:text-white text-lg">{lang === "VN" ? "Thông tin khách hàng" : "Customer Information"}</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">{lang === "VN" ? "Cho chúng tôi biết ai là người liên hệ chính của yêu cầu này." : "Tell us who the main contact for this request is."}</p>
                 </div>
               </div>
               <div className="grid md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Họ tên người đặt" : "Contact Name"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Họ tên người đặt" : "Contact Name"}</label>
                   <input value={formData.customerName} onChange={(e) => handleFieldChange("customerName", e.target.value)} disabled={useAccountInfo} required maxLength={120} className={contactInputClass} placeholder={lang === "VN" ? "Nhập họ tên" : "Full name"} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Số điện thoại" : "Phone Number"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Số điện thoại" : "Phone Number"}</label>
                   <input value={formData.contactPhone} onChange={(e) => handleFieldChange("contactPhone", e.target.value)} disabled={useAccountInfo} required maxLength={30} className={contactInputClass} placeholder={lang === "VN" ? "Nhập số điện thoại" : "Phone number"} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">Email</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">Email</label>
                   <input type="email" value={formData.contactEmail} onChange={(e) => handleFieldChange("contactEmail", e.target.value)} disabled={useAccountInfo} required maxLength={160} className={contactInputClass} placeholder="email@example.com" />
                 </div>
               </div>
@@ -709,25 +681,25 @@ export function CharterBooking() {
             <section className="space-y-6 max-w-3xl mx-auto">
               <div className="flex flex-col items-center text-center gap-3">
                 <div>
-                  <h3 className="font-headline font-black text-white text-lg">{lang === "VN" ? "Lịch trình" : "Schedule"}</h3>
-                  <p className="text-xs text-white/70 dark:text-slate-400 mt-1 max-w-sm mx-auto">{lang === "VN" ? "Chọn thời gian bạn muốn khởi hành và thời lượng thuê tàu." : "Choose when you'd like to depart and how long you need the boat."}</p>
+                  <h3 className="font-headline font-black text-slate-800 dark:text-white text-lg">{lang === "VN" ? "Lịch trình" : "Schedule"}</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">{lang === "VN" ? "Chọn thời gian bạn muốn khởi hành và thời lượng thuê tàu." : "Choose when you'd like to depart and how long you need the boat."}</p>
                 </div>
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Ngày khởi hành" : "Departure Date"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ngày khởi hành" : "Departure Date"}</label>
                   <input type="date" min={getMinDepartureDate()} value={formData.departureDate} onChange={(e) => handleFieldChange("departureDate", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Giờ đi" : "Start Time"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Giờ đi" : "Start Time"}</label>
                   <input type="time" value={formData.startTime} onChange={(e) => handleFieldChange("startTime", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Thời lượng" : "Duration"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thời lượng" : "Duration"}</label>
                   <input type="number" min="1" max="60" value={formData.durationValue} onChange={(e) => handleFieldChange("durationValue", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Đơn vị thuê" : "Rental Unit"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Đơn vị thuê" : "Rental Unit"}</label>
                   <select value={formData.rentalUnit} onChange={(e) => handleFieldChange("rentalUnit", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
                     <option value="Day">{lang === "VN" ? "Theo ngày" : "Day"}</option>
                     <option value="Hour">{lang === "VN" ? "Theo giờ" : "Hour"}</option>
@@ -741,20 +713,20 @@ export function CharterBooking() {
             <section className="space-y-6">
               <div className="flex flex-col items-center text-center gap-3">
                 <div>
-                  <h3 className="font-headline font-black text-white text-lg">{lang === "VN" ? "Lộ trình & hành khách" : "Route & Guests"}</h3>
-                  <p className="text-xs text-white/70 dark:text-slate-400 mt-1 max-w-sm mx-auto">{lang === "VN" ? "Thiết lập lộ trình, điểm dừng và số lượng tàu bạn cần." : "Set up your route, stops, and the boats you need."}</p>
+                  <h3 className="font-headline font-black text-slate-800 dark:text-white text-lg">{lang === "VN" ? "Lộ trình & hành khách" : "Route & Guests"}</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">{lang === "VN" ? "Thiết lập lộ trình, điểm dừng và số lượng tàu bạn cần." : "Set up your route, stops, and the boats you need."}</p>
                 </div>
               </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Bến đi" : "From Station"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến đi" : "From Station"}</label>
                   <select value={formData.fromStationId} onChange={(e) => handleFieldChange("fromStationId", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
                     <option value="">{lang === "VN" ? "Chưa chọn" : "Not selected"}</option>
                     {stations.map((station) => <option key={station.stationId || station.id} value={station.stationId || station.id}>{station.stationName || station.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Bến đến" : "To Station"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến đến" : "To Station"}</label>
                   <select value={formData.toStationId} onChange={(e) => handleFieldChange("toStationId", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
                     <option value="">{lang === "VN" ? "Chưa chọn" : "Not selected"}</option>
                     {stations.map((station) => <option key={station.stationId || station.id} value={station.stationId || station.id}>{station.stationName || station.name}</option>)}
@@ -805,11 +777,11 @@ export function CharterBooking() {
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Người lớn" : "Adults"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Người lớn" : "Adults"}</label>
                   <input type="number" min="0" max="1000" value={formData.adultCount} onChange={(e) => handleFieldChange("adultCount", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Trẻ em" : "Children"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Trẻ em" : "Children"}</label>
                   <input type="number" min="0" max="1000" value={formData.childCount} onChange={(e) => handleFieldChange("childCount", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
                 </div>
               </div>
@@ -861,41 +833,41 @@ export function CharterBooking() {
             <section className="space-y-6 max-w-3xl mx-auto">
               <div className="flex flex-col items-center text-center gap-3">
                 <div>
-                  <h3 className="font-headline font-black text-white text-lg">{lang === "VN" ? "Ghi chú" : "Notes"}</h3>
-                  <p className="text-xs text-white/70 dark:text-slate-400 mt-1 max-w-sm mx-auto">{lang === "VN" ? "Thêm yêu cầu đặc biệt để chúng tôi phục vụ bạn tốt hơn (không bắt buộc)." : "Add any special requests to help us serve you better (optional)."}</p>
+                  <h3 className="font-headline font-black text-slate-800 dark:text-white text-lg">{lang === "VN" ? "Ghi chú" : "Notes"}</h3>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">{lang === "VN" ? "Thêm yêu cầu đặc biệt để chúng tôi phục vụ bạn tốt hơn (không bắt buộc)." : "Add any special requests to help us serve you better (optional)."}</p>
                 </div>
               </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Yêu cầu về tàu" : "Boat Requirements"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Yêu cầu về tàu" : "Boat Requirements"}</label>
                   <textarea value={formData.boatRequirements} onChange={(e) => handleFieldChange("boatRequirements", e.target.value)} maxLength={1000} rows={4} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" placeholder={lang === "VN" ? "Ví dụ: cần khu VIP, âm thanh, không gian tổ chức sinh nhật..." : "e.g. VIP area, sound setup, birthday decoration..."} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</label>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</label>
                   <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={4} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
                 </div>
               </div>
             </section>
             )}
 
-            <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/10 dark:border-slate-700">
+            <div className="flex items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-700">
               <button
                 type="button"
                 onClick={handleBackStep}
                 disabled={currentStep === 0}
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/20 dark:border-slate-700 bg-white/10 hover:bg-white/20 dark:bg-slate-900 text-white dark:text-slate-300 px-6 py-3.5 font-headline font-black uppercase tracking-widest text-xs disabled:opacity-40 mt-5"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-300 px-6 py-3.5 font-headline font-black uppercase tracking-widest text-xs disabled:opacity-40 mt-5"
               >
                 <span className="material-symbols-outlined text-base">arrow_back</span>
                 {lang === "VN" ? "Quay lại" : "Back"}
               </button>
               {isLastStep ? (
-                <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto min-w-56 bg-white dark:bg-yellow-400 text-[#124757] dark:text-slate-900 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 hover:bg-slate-100 dark:hover:bg-yellow-300 transition-all disabled:opacity-60 mt-5">
+                <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto min-w-56 bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 hover:brightness-110 transition-all disabled:opacity-60 mt-5">
                   {isSubmitting
-                    ? (lang === "VN" ? "Đang gửi..." : "Submitting...")
-                    : (lang === "VN" ? "Gửi yêu cầu" : "Submit")}
+                    ? (lang === "VN" ? "Đang lưu..." : "Saving...")
+                    : (lang === "VN" ? "Lưu thay đổi" : "Save Changes")}
                 </button>
               ) : (
-                <button type="submit" className="inline-flex items-center gap-2 w-full sm:w-auto min-w-56 justify-center bg-white dark:bg-yellow-400 text-[#124757] dark:text-slate-900 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 hover:bg-slate-100 dark:hover:bg-yellow-300 transition-all mt-5">
+                <button type="submit" className="inline-flex items-center gap-2 w-full sm:w-auto min-w-56 justify-center bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 hover:brightness-110 transition-all mt-5">
                   {lang === "VN" ? "Tiếp theo" : "Next"}
                   <span className="material-symbols-outlined text-base">arrow_forward</span>
                 </button>

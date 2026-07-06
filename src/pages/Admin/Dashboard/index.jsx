@@ -61,7 +61,7 @@ export const Dashboard = () => {
       color: "from-sky-500/10 to-blue-500/10 text-sky-600 dark:text-sky-400"
     },
     {
-      path: "/admin/charter-bookings",
+      path: "/admin/charter-bookings-management",
       icon: "directions_boat",
       titleVn: "Quản lý thuê tàu",
       titleEn: "Charter Booking Management",

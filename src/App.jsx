@@ -18,10 +18,11 @@ import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
 import { EditProfile } from "./pages/Profile/EditProfie";
 import { ChangePassword } from "./pages/Profile/ChangePassword";
-import { ProfileCharterBookingDetail } from "./pages/Profile/CharterBookings/Detail";
-import { ProfileCharterBookings } from "./pages/Profile/CharterBookings";
+import { CharterDetail } from "./pages/Profile/MyCharterBooking/CharterDetail";
+import { EditCharter } from "./pages/Profile/MyCharterBooking/EditCharter";
+import { CharterList } from "./pages/Profile/MyCharterBooking/CharterList";
 import { Booking } from "./pages/Booking";
-import { CharterBookingPage } from "./pages/CharterBooking";
+import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
@@ -30,7 +31,7 @@ import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor } from "./pages/
 import { StationManagement } from "./pages/Admin/StationManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
-import { CharterBooking } from "./pages/Admin/CharterBooking";
+import { CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
 
 function App() {
   return (
@@ -56,6 +57,7 @@ function App() {
             </MainLayout>
           }
         />
+
         {/* Blog Detail Page */}
         <Route
           path="/blog/:slug"
@@ -124,27 +126,37 @@ function App() {
           }
         />
 
-        {/* Profile Charter Booking Requests */}
+        {/* My Charter Booking List Page */}
         <Route
-          path="/profile/charter-bookings"
+          path="/profile/my-charter-booking"
           element={
             <MainLayout>
-              <ProfileCharterBookings />
+              <CharterList />
             </MainLayout>
           }
         />
 
-        {/* Profile Charter Booking Detail */}
+        {/* My Charter Booking Edit Page */}
         <Route
-          path="/profile/charter-bookings/:id"
+          path="/profile/my-charter-booking/edit/:id"
           element={
             <MainLayout>
-              <ProfileCharterBookingDetail />
+              <EditCharter />
             </MainLayout>
           }
         />
 
-        {/* Waterbus Booking Page */}
+        {/* My Charter Booking Detail Page */}
+        <Route
+          path="/profile/my-charter-booking/:id"
+          element={
+            <MainLayout>
+              <CharterDetail />
+            </MainLayout>
+          }
+        />
+
+        {/* Normal Booking Page */}
         <Route
           path="/waterbus-booking"
           element={
@@ -159,14 +171,14 @@ function App() {
           path="/charter-booking"
           element={
             <MainLayout>
-              <CharterBookingPage />
+              <CharterBooking />
             </MainLayout>
           }
         />
 
-        {/* PayOS Payment Result */}
+        {/* Charter Booking Payment Result Page */}
         <Route
-          path="/payment/success"
+          path="/payment/result"
           element={
             <MainLayout>
               <PaymentResult />
@@ -272,16 +284,15 @@ function App() {
             }
           />
 
-          {/* Charter Booking Page */}
+          {/* Charter Booking Management Page */}
           <Route
-            path="/admin/charter-bookings"
+            path="/admin/charter-bookings-management"
             element={
-              <AdminLayout title="Charter Booking">
-                <CharterBooking />
+              <AdminLayout title="Charter Booking Management">
+                <CharterBookingManagement />
               </AdminLayout>
             }
           />
-          <Route path="/admin/tours" element={<Navigate to="/admin/charter-bookings" replace />} />
         </Route>
 
         {/* TRANG BÁO LỖI 404 */}

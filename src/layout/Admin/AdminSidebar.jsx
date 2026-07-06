@@ -49,7 +49,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
     { path: "/admin/customers-management", icon: "groups", labelVn: "Quản lý KH", labelEn: "Customer Management" },
     { path: "/admin/ticketing", icon: "local_activity", labelVn: "Bán vé", labelEn: "Ticket Sales" },
     { path: "/admin/verification", icon: "qr_code_scanner", labelVn: "Soát vé", labelEn: "Ticket Scanning" },
-    { path: "/admin/charter-bookings", icon: "directions_boat", labelVn: "Quản lý thuê tàu", labelEn: "Charter Booking" },
+    { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Quản lý thuê tàu", labelEn: "Charter Booking Management" },
     { path: "/admin/orders", icon: "receipt_long", labelVn: "Quản lý order", labelEn: "Order Management" },
     { path: "/admin/stations-management", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station" },
     { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Quản lý tàu", labelEn: "Boat Fleet" },

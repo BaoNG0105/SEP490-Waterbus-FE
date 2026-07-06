@@ -1,24 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { syncBookingPaymentByOrderCode } from "../../services/paymentService";
+import { getApiErrorMessage } from "../../utils/apiError";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
     const value = key.split(".").reduce((obj, part) => obj?.[part], source);
     if (value !== undefined && value !== null && value !== "") return value;
-  }
-  return fallback;
-};
-
-const getApiErrorMessage = (error, fallback) => {
-  const data = error.response?.data;
-  if (!data) return fallback;
-  if (typeof data === "string") return data;
-  if (typeof data.message === "string") return data.message;
-  if (typeof data.title === "string") return data.title;
-  if (data.errors && typeof data.errors === "object") {
-    const firstError = Object.values(data.errors).flat().find(Boolean);
-    if (firstError) return String(firstError);
   }
   return fallback;
 };
@@ -151,7 +139,7 @@ export function PaymentResult() {
             {bookingId && (
               <button
                 type="button"
-                onClick={() => navigate(`/profile/charter-bookings/${bookingId}`)}
+                onClick={() => navigate(`/profile/my-charter-booking/${bookingId}`)}
                 className="rounded-xl bg-[#124757] px-6 py-3 text-xs font-headline font-black uppercase tracking-wider text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
               >
                 Xem chi tiet booking
@@ -159,7 +147,7 @@ export function PaymentResult() {
             )}
             <button
               type="button"
-              onClick={() => navigate("/profile/charter-bookings")}
+              onClick={() => navigate("/profile/my-charter-booking")}
               className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
             >
               Ve danh sach charter

@@ -46,7 +46,7 @@ const formatDate = (value) => {
   return date.toLocaleDateString("vi-VN");
 };
 
-export function ProfileCharterBookings() {
+export function CharterList() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { isAuthenticated } = useSelector((state) => state.auth);
@@ -111,7 +111,7 @@ export function ProfileCharterBookings() {
     if (booking.status === "PendingQuote") {
       return {
         icon: "hourglass_top",
-        label: lang === "VN" ? "Chờ admin báo giá" : "Waiting for quote",
+        label: lang === "VN" ? "Chờ báo giá" : "Waiting for quote",
         classes: "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
       };
     }
@@ -172,10 +172,7 @@ export function ProfileCharterBookings() {
     activeTrips: bookings.filter((booking) => ["PendingPayment", "Confirmed"].includes(booking.status)).length,
     paidTrips: bookings.filter((booking) => String(booking.paymentStatus).toLowerCase() === "paid").length,
   };
-  const statusCounts = statusOptions.reduce((counts, status) => ({
-    ...counts,
-    [status]: status === "All" ? bookings.length : bookings.filter((booking) => booking.status === status).length,
-  }), {});
+
   const workflowSteps = ["PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed"];
   const getProgressPercent = (status) => {
     if (["Cancelled", "Expired", "Refunded"].includes(status)) return 100;
@@ -184,13 +181,8 @@ export function ProfileCharterBookings() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 sm:px-6 lg:px-8 font-body transition-colors">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-30 px-4 sm:px-6 lg:px-8 font-body transition-colors">
       <main className="max-w-5xl mx-auto space-y-6">
-        <button onClick={() => navigate("/profile")} className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
-          <span className="material-symbols-outlined text-xl">arrow_back</span>
-          {lang === "VN" ? "Quay lại hồ sơ" : "Back to Profile"}
-        </button>
-
         <section className="bg-white dark:bg-slate-800 rounded-4xl p-6 md:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -229,8 +221,8 @@ export function ProfileCharterBookings() {
             { icon: "folder_open", label: lang === "VN" ? "Tổng yêu cầu" : "Total", value: stats.total, tone: "text-[#124757] dark:text-yellow-400", bg: "bg-slate-100 dark:bg-slate-900" },
             { icon: "request_quote", label: lang === "VN" ? "Chờ báo giá" : "Waiting", value: stats.waitingQuote, tone: "text-amber-600 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-500/10" },
             { icon: "payments", label: lang === "VN" ? "Cần thanh toán" : "To Pay", value: stats.readyToPay, tone: "text-indigo-600 dark:text-indigo-300", bg: "bg-indigo-50 dark:bg-indigo-500/10" },
-            { icon: "event_available", label: lang === "VN" ? "Đang hiệu lực" : "Active", value: stats.activeTrips, tone: "text-sky-600 dark:text-sky-300", bg: "bg-sky-50 dark:bg-sky-500/10" },
             { icon: "verified", label: lang === "VN" ? "Đã thanh toán" : "Paid", value: stats.paidTrips, tone: "text-emerald-600 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
+            { icon: "event_available", label: lang === "VN" ? "Đang hiệu lực" : "Active", value: stats.activeTrips, tone: "text-sky-600 dark:text-sky-300", bg: "bg-sky-50 dark:bg-sky-500/10" },
           ].map((item) => (
             <div key={item.label} className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
               <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${item.bg} ${item.tone}`}>
@@ -240,29 +232,6 @@ export function ProfileCharterBookings() {
               <p className={`mt-1 text-2xl font-headline font-black ${item.tone}`}>{item.value}</p>
             </div>
           ))}
-        </section>
-
-        <section className="flex gap-2 overflow-x-auto rounded-3xl border border-slate-100 bg-white p-3 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-          {statusOptions.map((status) => {
-            const active = statusFilter === status;
-            const info = status === "All" ? null : getStatusInfo(status);
-            return (
-              <button
-                key={status}
-                type="button"
-                onClick={() => setStatusFilter(status)}
-                className={`flex min-w-fit items-center gap-2 rounded-2xl border px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
-                  active
-                    ? "border-[#124757] bg-[#124757] text-white dark:border-yellow-400 dark:bg-yellow-400 dark:text-slate-900"
-                    : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                }`}
-              >
-                <span className={`h-2 w-2 rounded-full ${status === "All" ? "bg-slate-400" : info.dot}`}></span>
-                {status === "All" ? (lang === "VN" ? "Tất cả" : "All") : info.label}
-                <span className={`rounded-full px-2 py-0.5 ${active ? "bg-white/20" : "bg-white dark:bg-slate-800"}`}>{statusCounts[status]}</span>
-              </button>
-            );
-          })}
         </section>
 
         <section className="space-y-3">
@@ -294,6 +263,14 @@ export function ProfileCharterBookings() {
                       <p className="text-[11px] text-slate-400">
                         {formatDate(booking.departureDate)} {String(booking.startTime).slice(0, 5)} / {booking.passengerCount} {lang === "VN" ? "khách" : "guests"} / {booking.durationValue} {booking.rentalUnit}
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/profile/my-charter-booking/${booking.id}`, { state: { booking } })}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-colors shrink-0"
+                      >
+                        {lang === "VN" ? "Xem chi tiết" : "View details"}
+                        <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                      </button>
                       <div className="h-2 max-w-xl overflow-hidden rounded-full bg-slate-100 dark:bg-slate-900">
                         <div
                           className={`h-full rounded-full ${["Cancelled", "Expired", "Refunded"].includes(booking.status) ? "bg-slate-400" : "bg-[#FFD100]"}`}
@@ -312,12 +289,7 @@ export function ProfileCharterBookings() {
                         <p className="text-[10px] uppercase font-black text-slate-400">{lang === "VN" ? "Giá chốt" : "Quote"}</p>
                         <p className="font-headline font-black text-[#124757] dark:text-yellow-400">{booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--"}</p>
                       </div>
-                      <button
-                        onClick={() => navigate(`/profile/charter-bookings/${booking.id}`, { state: { booking } })}
-                        className="w-11 h-11 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-300 hover:text-[#124757] dark:hover:text-yellow-400"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-                      </button>
+
                     </div>
                   </div>
                 </article>
