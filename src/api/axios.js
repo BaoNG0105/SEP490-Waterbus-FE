@@ -3,7 +3,7 @@ import Swal from 'sweetalert2';
 
 // 1. Khởi tạo instance của Axios với baseURL
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL,
+    baseURL: import.meta.env.DEV ? "/api" : import.meta.env.VITE_API_BASE_URL,
 });
 
 // Danh sách các endpoint KHÔNG cần token (Public Routes)

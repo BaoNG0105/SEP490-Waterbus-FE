@@ -61,12 +61,12 @@ export const Dashboard = () => {
       color: "from-sky-500/10 to-blue-500/10 text-sky-600 dark:text-sky-400"
     },
     {
-      path: "/admin/tours",
-      icon: "map",
-      titleVn: "Quản lý tour booking",
-      titleEn: "Tour Cruise Packages",
-      descVn: "Điều phối tour tham quan, thuê tàu charter.",
-      descEn: "Handle private charters and river tours.",
+      path: "/admin/charter-bookings",
+      icon: "directions_boat",
+      titleVn: "Quản lý thuê tàu",
+      titleEn: "Charter Booking Management",
+      descVn: "Điều phối yêu cầu thuê tàu riêng, gán tàu và chốt giá.",
+      descEn: "Handle private charter requests, boat assignment, and quotes.",
       color: "from-violet-500/10 to-purple-500/10 text-violet-600 dark:text-violet-400"
     },
     {

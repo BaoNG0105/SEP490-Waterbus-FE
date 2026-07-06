@@ -42,8 +42,19 @@ const authSlice = createSlice({
       localStorage.removeItem('user');
       localStorage.removeItem('expirationTime');
     },
+
+    updateUserProfile: (state, action) => {
+      const nextUser = {
+        ...state.user,
+        ...action.payload,
+        roles: action.payload?.roles || state.user?.roles || [],
+      };
+
+      state.user = nextUser;
+      localStorage.setItem('user', JSON.stringify(nextUser));
+    },
   },
 });
 
-export const { loginSuccess, logout } = authSlice.actions;
+export const { loginSuccess, logout, updateUserProfile } = authSlice.actions;
 export default authSlice.reducer;

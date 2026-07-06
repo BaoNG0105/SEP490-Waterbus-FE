@@ -146,9 +146,9 @@ export const Header = ({ isNoticeVisible }) => {
               </Link>
               <Link
                 className="block px-5 py-2.5 text-xs font-medium text-[#111C2D] dark:text-white/80 hover:text-[#124757] dark:hover:text-yellow-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-t border-slate-50 dark:border-slate-700/50 mt-1"
-                to="/watertaxi-booking"
+                to="/charter-booking"
               >
-                {lang === "VN" ? "Đặt vé WaterTaxi" : "WaterTaxi Booking"}
+                {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
               </Link>
               <Link
                 className="block px-5 py-2.5 text-xs font-medium text-[#111C2D] dark:text-white/80 hover:text-[#124757] dark:hover:text-yellow-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
@@ -296,11 +296,11 @@ export const Header = ({ isNoticeVisible }) => {
                 {lang === "VN" ? "Kiểm tra vé" : "Check Ticket"}
               </Link>
               <Link
-                to="/charter"
+                to="/charter-booking"
                 className="text-white/70 dark:text-slate-300 text-sm font-medium hover:text-yellow-400"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                {lang === "VN" ? "Đặt vé theo yêu cầu" : "Custom Booking"}
+                {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
               </Link>
             </div>
           </div>

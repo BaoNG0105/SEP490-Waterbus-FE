@@ -1,11 +1,8 @@
 import { useState, useEffect } from "react";
-import { useApp } from "../../../context/AppContext";
 import { fetchWaterways, fetchWaterwayDetail } from "../../../services/waterwayService";
 import { WaterwayMap } from "../../../components/WaterwayMap"; // Import component vừa tạo
 
 export function Waterway() {
-  const { lang } = useApp();
-  
   const [waterwayList, setWaterwaysList] = useState([]);
   const [selectedWaterway, setSelectedWaterway] = useState(null);
   const [isLoading, setIsLoading] = useState(false);

@@ -1,8 +1,8 @@
 import api from './axios';
 
 // API Danh sách tàu
-export const getBoats = () =>
-    api.get('/boats').then(response => response.data);
+export const getBoats = (params) =>
+    api.get('/boats', { params }).then(response => response.data);
 
 // API Chi tiết tàu theo ID
 export const getBoatById = (id) => 

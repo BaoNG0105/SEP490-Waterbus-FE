@@ -1,10 +1,45 @@
+import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { useApp } from "../../context/AppContext";
+import { fetchCurrentUserProfile } from "../../services/authService";
+import { logout, updateUserProfile } from "../../redux/authSlice";
 
 export const AdminSidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const currentPath = location.pathname;
   const { lang } = useApp();
+  const dispatch = useDispatch();
+  const { isAuthenticated, user } = useSelector((state) => state.auth);
+
+  const defaultAvatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Admin";
+  const displayName = user?.fullName || (lang === "VN" ? "Quản trị viên" : "Admin");
+  const displayAvatar = user?.avatarUrl || "";
+  const primaryRole = user?.roles?.find((role) =>
+    ["ADMIN", "MANAGER", "STAFF"].includes(role?.systemName)
+  ) || user?.roles?.[0];
+  const displayRole = primaryRole?.displayName || primaryRole?.name || (
+    lang === "VN" ? "Quản trị viên" : "Admin"
+  );
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const loadCurrentUser = async () => {
+      try {
+        const data = await fetchCurrentUserProfile();
+        dispatch(updateUserProfile({
+          fullName: data.fullName || "",
+          avatarUrl: data.avatarUrl || "",
+          roles: data.roles || [],
+        }));
+      } catch (error) {
+        console.error("Lỗi tải thông tin admin sidebar:", error);
+      }
+    };
+
+    loadCurrentUser();
+  }, [dispatch, isAuthenticated]);
 
   // MẢNG DỮ LIỆU ĐỊNH NGHĨA 16 DANH MỤC QUẢN TRỊ NGHIỆP VỤ
   const menuItems = [
@@ -14,7 +49,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
     { path: "/admin/customers-management", icon: "groups", labelVn: "Quản lý KH", labelEn: "Customer Management" },
     { path: "/admin/ticketing", icon: "local_activity", labelVn: "Bán vé", labelEn: "Ticket Sales" },
     { path: "/admin/verification", icon: "qr_code_scanner", labelVn: "Soát vé", labelEn: "Ticket Scanning" },
-    { path: "/admin/tours", icon: "map", labelVn: "Quản lý tour booking", labelEn: "Tour Bookings" },
+    { path: "/admin/charter-bookings", icon: "directions_boat", labelVn: "Quản lý thuê tàu", labelEn: "Charter Booking" },
     { path: "/admin/orders", icon: "receipt_long", labelVn: "Quản lý order", labelEn: "Order Management" },
     { path: "/admin/stations-management", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station" },
     { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Quản lý tàu", labelEn: "Boat Fleet" },
@@ -47,8 +82,19 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
         <div className="p-5 border-b border-white/10 dark:border-slate-800 flex flex-col items-center text-center space-y-3 shrink-0 bg-white/5 select-none">
           {/* Vòng tròn Avatar chứa Icon Người dùng */}
           <div className="relative group">
-            <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-dashed border-[#FFD100] flex items-center justify-center text-white shadow-md transition-transform duration-500 group-hover:rotate-45">
-              <span className="material-symbols-outlined text-[32px] fill-1 text-white">account_circle</span>
+            <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-dashed border-[#FFD100] flex items-center justify-center text-white shadow-md overflow-hidden transition-transform duration-500 group-hover:rotate-45">
+              {displayAvatar ? (
+                <img
+                  src={displayAvatar}
+                  alt={displayName}
+                  className="w-full h-full object-cover"
+                  onError={(event) => {
+                    event.currentTarget.src = defaultAvatar;
+                  }}
+                />
+              ) : (
+                <span className="material-symbols-outlined text-[32px] fill-1 text-white">account_circle</span>
+              )}
             </div>
             {/* Chấm xanh lá nhấp nháy báo hiệu trạng thái Live */}
             <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
@@ -60,11 +106,11 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
           {/* Tên và role */}
           <div className="space-y-0.5">
             <h4 className="font-headline font-black text-sm uppercase tracking-wider text-white">
-              Ngô Gia Bảo
+              {displayName}
             </h4>
             <div className="bg-[#FFD100]/10 border border-[#FFD100]/20 rounded-full px-2.5 py-0.5 w-max mx-auto">
               <span className="text-[10px] font-headline font-black text-[#FFD100] uppercase tracking-widest">
-                {lang === "VN" ? "Quản trị viên" : "Admin"}
+                {displayRole}
               </span>
             </div>
           </div>
@@ -104,6 +150,10 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
         <div className="p-4 border-t border-white/10 dark:border-slate-800 shrink-0 bg-white/5 lg:bg-transparent">
           <Link
             to="/login"
+            onClick={() => {
+              dispatch(logout());
+              onClose?.();
+            }}
             className="flex items-center gap-3 px-4 py-3 w-full text-red-300 hover:text-red-400 hover:bg-white/5 rounded-xl transition-all font-headline text-sm font-bold"
           >
             <span className="material-symbols-outlined text-[20px]">logout</span>
