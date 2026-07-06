@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllBoats, modifyBoatStatus } from "../../../services/boatService";
+import { fetchAllBoats, modifyBoatStatus, deleteBoat } from "../../../services/boatService";
 import Swal from "sweetalert2";
 
 export function BoatManagement() {
@@ -46,10 +46,23 @@ export function BoatManagement() {
 
     // XỬ LÝ: CẬP NHẬT TRẠNG THÁI TÀU
     const handleUpdateStatus = async (boat) => {
+        // Tàu chưa cấu hình sơ đồ ghế thì BE đã tự set Inactive, không cho đổi sang trạng thái khác
+        if (!boat.seatsConfigured) {
+            Swal.fire({
+                icon: "warning",
+                title: lang === "VN" ? "Chưa thể đổi trạng thái" : "Cannot Change Status",
+                text: lang === "VN"
+                    ? "Tàu chưa được cấu hình sơ đồ ghế nên hệ thống tự đặt trạng thái Inactive. Vui lòng cấu hình sơ đồ ghế trước khi đổi trạng thái."
+                    : "This boat has no seat layout configured, so the system keeps it Inactive. Configure the seat layout before changing its status.",
+                confirmButtonColor: "#124757",
+            });
+            return;
+        }
+
         // Định nghĩa danh sách tùy chọn trạng thái
         const statusOptions = {
             Active: lang === "VN" ? "Hoạt động (Active)" : "Active",
-            Maintenance: lang === "VN" ? "Bảo trì (Maintenance)" : "Maintenance",
+            UnderMaintenance: lang === "VN" ? "Bảo trì (UnderMaintenance)" : "UnderMaintenance",
             Inactive: lang === "VN" ? "Chưa hoạt động (Inactive)" : "Inactive",
             Retired: lang === "VN" ? "Dừng hoạt động (Retired)" : "Retired",
         };
@@ -114,7 +127,7 @@ export function BoatManagement() {
     const activeBoats = boats.filter(v => v.status?.toLowerCase() === "active").length;
     const inactiveBoats = boats.filter(v => v.status?.toLowerCase() === "inactive").length;
     const retiredBoats = boats.filter(v => v.status?.toLowerCase() === "retired").length;
-    const maintenanceBoats = boats.filter(v => v.status?.toLowerCase() === "maintenance").length;
+    const maintenanceBoats = boats.filter(v => v.status?.toLowerCase() === "undermaintenance").length;
 
     // Xử lý logic Tìm kiếm + Lọc trạng thái + Lọc số tầng
     const filteredBoats = boats.filter(boats => {
@@ -150,9 +163,9 @@ export function BoatManagement() {
                     classes: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400",
                     dot: "bg-rose-500"
                 };
-            case "maintenance":
+            case "undermaintenance":
                 return {
-                    label: lang === "VN" ? "Bảo trì" : "Maintenance",
+                    label: lang === "VN" ? "Bảo trì" : "UnderMaintenance",
                     classes: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400",
                     dot: "bg-amber-500"
                 };
@@ -169,9 +182,45 @@ export function BoatManagement() {
     const handleAddBoat = () => navigate("/admin/boats-management/create");
     const handleEditBoat = (id) => navigate(`/admin/boats-management/edit/${id}`);
     const handleConfigureSeats = (id) => navigate(`/admin/boats-management/seats/${id}`);
-    const handleDeleteBoat = (code) => {
-        if (window.confirm(lang === "VN" ? `Bạn chắc chắn muốn xóa mã số hiệu tàu ${code} khỏi hệ thống?` : `Are you sure you want to delete boat code ${code}?`)) {
-            setBoats(prev => prev.filter(v => v.code !== code));
+    const handleDeleteBoat = async (boat) => {
+        const confirmResult = await Swal.fire({
+            title: lang === "VN" ? "Xóa tàu?" : "Delete Boat?",
+            html: lang === "VN"
+                ? `Bạn chắc chắn muốn xóa vĩnh viễn tàu <b>${boat.name}</b> (${boat.code}) khỏi hệ thống? Hành động này không thể hoàn tác.`
+                : `Are you sure you want to permanently delete boat <b>${boat.name}</b> (${boat.code})? This action cannot be undone.`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#d33",
+            cancelButtonColor: "#124757",
+            confirmButtonText: lang === "VN" ? "Xác nhận xóa" : "Confirm Delete",
+            cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
+        });
+
+        if (!confirmResult.isConfirmed) return;
+
+        try {
+            setIsLoading(true);
+            await deleteBoat(boat.id);
+
+            Swal.fire({
+                icon: "success",
+                title: lang === "VN" ? "Đã xóa!" : "Deleted!",
+                text: lang === "VN" ? `Tàu ${boat.code} đã được xóa khỏi hệ thống.` : `Boat ${boat.code} has been deleted.`,
+                confirmButtonColor: "#124757",
+            });
+
+            const data = await fetchAllBoats();
+            setBoats(data || []);
+        } catch (error) {
+            console.error("Lỗi xóa tàu:", error);
+            Swal.fire({
+                icon: "error",
+                title: lang === "VN" ? "Không thể xóa" : "Delete Failed",
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể xóa tàu này. Có thể tàu đã có lịch chạy được ghi nhận." : "Failed to delete this boat. It may already be referenced by a schedule."),
+                confirmButtonColor: "#124757",
+            });
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -292,7 +341,7 @@ export function BoatManagement() {
                             <option value="Active">{lang === "VN" ? "Active (Hoạt động)" : "Active"}</option>
                             <option value="Inactive">{lang === "VN" ? "Inactive (Chưa hoạt động)" : "Inactive"}</option>
                             <option value="Retired">{lang === "VN" ? "Retired (Dừng hoạt động)" : "Retired"}</option>
-                            <option value="Maintenance">{lang === "VN" ? "Maintenance (Bảo trì)" : "Maintenance"}</option>
+                            <option value="UnderMaintenance">{lang === "VN" ? "UnderMaintenance (Bảo trì)" : "UnderMaintenance"}</option>
                         </select>
                     </div>
                 </div>
@@ -398,8 +447,15 @@ export function BoatManagement() {
                                                     )}
                                                     <button
                                                         onClick={() => handleUpdateStatus(boat)}
-                                                        className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 hover:border-indigo-200 dark:hover:border-indigo-500/30 transition-all shadow-sm"
-                                                        title={lang === "VN" ? "Đổi trạng thái" : "Change Status"}
+                                                        disabled={!boat.seatsConfigured}
+                                                        className={`w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center transition-all shadow-sm ${
+                                                            boat.seatsConfigured
+                                                                ? "text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 hover:border-indigo-200 dark:hover:border-indigo-500/30"
+                                                                : "text-slate-300 dark:text-slate-600 opacity-50 cursor-not-allowed"
+                                                        }`}
+                                                        title={boat.seatsConfigured
+                                                            ? (lang === "VN" ? "Đổi trạng thái" : "Change Status")
+                                                            : (lang === "VN" ? "Cần cấu hình sơ đồ ghế trước khi đổi trạng thái" : "Configure the seat layout before changing status")}
                                                     >
                                                         <span className="material-symbols-outlined text-[18px]">published_with_changes</span>
                                                     </button>
@@ -413,9 +469,9 @@ export function BoatManagement() {
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleDeleteBoat(boat.code)}
+                                                        onClick={() => handleDeleteBoat(boat)}
                                                         className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-inner"
-                                                        title={lang === "VN" ? "Xóa khỏi danh sách" : "Delete Boat"}
+                                                        title={lang === "VN" ? "Xóa tàu" : "Delete Boat"}
                                                     >
                                                         <span className="material-symbols-outlined text-base">delete</span>
                                                     </button>
