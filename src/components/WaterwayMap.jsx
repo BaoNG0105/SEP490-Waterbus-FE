@@ -66,7 +66,8 @@ export const WaterwayMap = ({
   waterwayName = "",
   stationPoint = null,
   stationsList = [],
-  onLocationSelect
+  onLocationSelect,
+  hideStationLink = false
 }) => {
   const navigate = useNavigate();
   const polylinePositions = coordinates.map((point) => [point.latitude, point.longitude]);
@@ -121,13 +122,15 @@ export const WaterwayMap = ({
                   <p className="text-[10px] text-slate-400 line-clamp-2 m-0">{station.address || "Bến tàu Saigon Waterbus"}</p>
 
                   {/* Nút bấm điều hướng sang trang chi tiết nhà ga */}
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/station/${station.stationId}`)}
-                    className="w-full bg-[#124757] text-white text-[10px] font-bold uppercase py-1.5 px-3 rounded-lg shadow-sm hover:brightness-110 transition-all cursor-pointer block mt-1"
-                  >
-                    Xem chi tiết bến
-                  </button>
+                  {!hideStationLink && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/station/${station.stationId}`)}
+                      className="w-full bg-[#124757] text-white text-[10px] font-bold uppercase py-1.5 px-3 rounded-lg shadow-sm hover:brightness-110 transition-all cursor-pointer block mt-1"
+                    >
+                      Xem chi tiết bến
+                    </button>
+                  )}
                 </div>
               </Popup>
             </Marker>

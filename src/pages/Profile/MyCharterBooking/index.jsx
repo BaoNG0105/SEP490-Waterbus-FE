@@ -153,7 +153,7 @@ export function CharterList() {
     <div className="min-h-screen bg-slate-50 py-30 px-4 font-body transition-colors dark:bg-slate-900 sm:px-6 lg:px-8">
       <main className="mx-auto max-w-5xl space-y-6">
         <section className="overflow-hidden rounded-4xl border border-slate-100 bg-white shadow-xl dark:border-slate-700/50 dark:bg-slate-800">
-          <div className="bg-gradient-to-br from-[#124757] via-[#165a6d] to-[#0e3540] px-6 py-8 text-white md:px-8 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+          <div className="bg-linear-to-br from-[#124757] via-[#165a6d] to-[#0e3540] px-6 py-8 text-white md:px-8 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
               <div>
                 <p className="text-[10px] font-headline font-black uppercase tracking-[0.2em] text-white/60">
@@ -304,20 +304,9 @@ export function CharterList() {
 
                       <div className="grid gap-1 sm:grid-cols-2">
                         <p className="truncate text-sm font-bold text-slate-700 dark:text-slate-200">{booking.route}</p>
-                        {booking.boatName !== "--" && (
-                          <p className="truncate text-xs font-bold text-slate-400">
-                            <span className="material-symbols-outlined mr-1 align-middle text-sm">directions_boat</span>
-                            {booking.boatName}
-                          </p>
-                        )}
                         <p className="text-[11px] font-bold text-slate-400 sm:col-span-2">
                           {formatDate(booking.departureDate)} · {String(booking.startTime).slice(0, 5)} · {booking.passengerCount} {lang === "VN" ? "khách" : "guests"} · {booking.durationValue} {booking.rentalUnit}
                         </p>
-                      </div>
-
-                      <div className={`inline-flex max-w-full items-center gap-2 rounded-2xl border px-3 py-2 ${actionInfo.classes}`}>
-                        <span className="material-symbols-outlined text-lg">{actionInfo.icon}</span>
-                        <span className="text-[10px] font-headline font-black uppercase tracking-wider leading-4">{actionInfo.label}</span>
                       </div>
 
                       <CharterWorkflowStepper status={booking.status} lang={lang} compact />
@@ -340,15 +329,6 @@ export function CharterList() {
                       >
                         <span className="material-symbols-outlined text-base">{actionInfo.icon}</span>
                         {actionInfo.cta}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => openBooking(booking)}
-                        className="inline-flex items-center justify-center gap-1 text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 transition hover:text-[#124757] dark:hover:text-yellow-400"
-                      >
-                        {lang === "VN" ? "Xem chi tiết" : "View details"}
-                        <span className="material-symbols-outlined text-base">chevron_right</span>
                       </button>
                     </div>
                   </div>

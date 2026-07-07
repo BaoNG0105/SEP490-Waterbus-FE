@@ -341,7 +341,7 @@ export function CharterRefund() {
                   ].map((item) => (
                     <div key={item.label} className="flex items-start justify-between gap-3 border-b border-slate-200/70 pb-2 last:border-0 last:pb-0 dark:border-slate-700">
                       <span className="text-xs font-bold text-slate-400">{item.label}</span>
-                      <span className="max-w-56 break-words text-right text-xs font-black text-slate-700 dark:text-slate-100">{item.value || "--"}</span>
+                      <span className="max-w-56 wrap-break-word text-right text-xs font-black text-slate-700 dark:text-slate-100">{item.value || "--"}</span>
                     </div>
                   ))}
                 </div>

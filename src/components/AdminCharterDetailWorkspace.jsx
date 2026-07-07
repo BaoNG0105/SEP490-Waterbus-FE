@@ -133,7 +133,7 @@ function OverviewField({ icon, label, value, hint }) {
       </span>
       <div className="min-w-0">
         <p className="text-[11px] font-bold text-slate-400">{label}</p>
-        <p className="mt-0.5 break-words text-sm font-bold leading-snug text-slate-800 dark:text-white">{value || "--"}</p>
+        <p className="mt-0.5 wrap-break-word text-sm font-bold leading-snug text-slate-800 dark:text-white">{value || "--"}</p>
         {hint ? <p className="mt-1 text-xs font-medium text-slate-400">{hint}</p> : null}
       </div>
     </div>
@@ -173,7 +173,6 @@ export function AdminBookingOverviewTab({
   getRequestedDeckCount,
   getBoatDeckCount,
   getBoatSeatSetupType,
-  getBoatId,
   getBoatSeatCount,
   getPaymentStatusInfo,
   currencyFormatter,
@@ -198,7 +197,7 @@ export function AdminBookingOverviewTab({
 
   return (
     <div className="space-y-5">
-      <section className={`overflow-hidden rounded-[2rem] border shadow-[0_18px_50px_rgba(15,23,42,0.06)] ${adminActionInfo.urgent ? "border-amber-200/80 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10" : "border-slate-200/70 bg-white dark:border-slate-700/70 dark:bg-slate-800"}`}>
+      <section className={`overflow-hidden rounded-4xl border shadow-[0_18px_50px_rgba(15,23,42,0.06)] ${adminActionInfo.urgent ? "border-amber-200/80 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10" : "border-slate-200/70 bg-white dark:border-slate-700/70 dark:bg-slate-800"}`}>
         <div className="flex flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between md:px-8">
           <div className="flex items-start gap-4">
             <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-sm ${adminActionInfo.urgent ? "bg-amber-500 text-white" : "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"}`}>
@@ -236,7 +235,7 @@ export function AdminBookingOverviewTab({
         )}
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -328,7 +327,7 @@ export function AdminBookingOverviewTab({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
           <h2 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
             {lang === "VN" ? "Tàu yêu cầu & đã gán" : "Requested vs assigned boats"}
@@ -407,7 +406,6 @@ export function AdminBookingActionsTab({
   formatDuration,
   formatPassengerSummary,
   formatDeckCount,
-  getRequestedDeckCount,
   getBoatDeckCount,
   getBoatSeatSetupType,
   getBoatId,
@@ -772,7 +770,6 @@ export function AdminBookingTicketsTab({
   booking,
   tickets,
   formatDate,
-  formatDateTime,
   formatPassengerSummary,
   getPaymentStatusInfo,
 }) {
@@ -924,7 +921,7 @@ export function AdminBookingTicketsTab({
 
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-[#F8FBFC] shadow-sm dark:border-slate-700/70 dark:bg-slate-900">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-[#F8FBFC] shadow-sm dark:border-slate-700/70 dark:bg-slate-900">
         <div className="grid gap-3 px-6 py-5 md:grid-cols-2 xl:grid-cols-4 md:px-8">
           {[
             { icon: "person", label: lang === "VN" ? "Khách đặt" : "Booker", value: booking.customerName },
@@ -937,7 +934,7 @@ export function AdminBookingTicketsTab({
                 <span className="material-symbols-outlined text-base">{item.icon}</span>
                 <p className="text-[11px] font-bold">{item.label}</p>
               </div>
-              <p className="mt-2 break-words text-sm font-bold text-slate-800 dark:text-white">{item.value || "--"}</p>
+              <p className="mt-2 wrap-break-word text-sm font-bold text-slate-800 dark:text-white">{item.value || "--"}</p>
             </div>
           ))}
         </div>
@@ -950,7 +947,7 @@ export function AdminBookingTicketsTab({
         )}
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -1043,7 +1040,7 @@ export function AdminBookingTicketsTab({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
           <h3 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
             {lang === "VN" ? "Danh sách vé" : "Ticket list"}
