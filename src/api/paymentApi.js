@@ -18,6 +18,18 @@ export const refundPayment = (paymentId, refundPayload = {}) => {
     .then((response) => response.data);
 };
 
+export const manualRefundPayment = (paymentId, manualPayload = {}) => {
+  const value = String(paymentId || "").trim();
+
+  if (!value) {
+    return Promise.reject(new Error("paymentId is required to record a manual refund."));
+  }
+
+  return api
+    .post(`/payments/${encodeURIComponent(value)}/manual-refund`, manualPayload)
+    .then((response) => response.data);
+};
+
 export const syncPayment = (paymentId) => {
   const value = String(paymentId || "").trim();
 

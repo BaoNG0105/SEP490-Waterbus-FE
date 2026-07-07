@@ -90,7 +90,35 @@ const getPaymentPurpose = (payment) =>
   String(pick(payment, ["paymentPurpose", "purpose", "type"], "")).toLowerCase();
 
 const isPaidPayment = (payment) =>
-  ["paid", "success", "succeeded", "completed"].includes(String(payment?.paymentStatus).toLowerCase());
+  ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(payment?.paymentStatus).toLowerCase());
+
+const getPaymentId = (payment) => pick(payment, [
+  "paymentId",
+  "id",
+  "payment.id",
+  "payment.paymentId",
+  "paymentLinkId",
+  "paymentLink.id",
+  "linkPaymentId",
+], "");
+
+const getRefundablePayment = (booking) => {
+  const payments = Array.isArray(booking?.payments) ? booking.payments : [];
+  const paidPayment = payments.find((payment) => isPaidPayment(payment) && getPaymentId(payment));
+  if (paidPayment) return paidPayment;
+
+  const bookingPaymentId = pick(booking, ["paidPaymentId", "latestPaymentId", "paymentId", "payment.id"], "");
+  if (bookingPaymentId) {
+    return { paymentId: bookingPaymentId, paymentStatus: booking.paymentStatus, amount: booking.paidAmount };
+  }
+
+  const storedPaymentId = booking?.id ? sessionStorage.getItem(`charterPayment:${booking.id}`) : "";
+  if (storedPaymentId) {
+    return { paymentId: storedPaymentId, paymentStatus: booking.paymentStatus, amount: booking.paidAmount };
+  }
+
+  return null;
+};
 
 const getEstimatedPaymentDeadline = (payment) => {
   const createdAt = getPaymentCreatedAt(payment);
@@ -107,6 +135,7 @@ const normalizeBooking = (item) => {
   const payments = Array.isArray(item?.payments) ? item.payments : [];
   const pendingPayment = payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending");
   const paidPayments = payments.filter(isPaidPayment);
+  const paidPaymentWithId = paidPayments.find((payment) => getPaymentId(payment));
   const paymentStatus = pick(item, ["paymentStatus"], "--");
   const rawDepositAmount = Number(pick(item, ["depositAmount"], 0)) || 0;
   const paidAmountFromPayments = paidPayments.reduce((total, payment) => total + getPaymentAmount(payment), 0);
@@ -161,6 +190,7 @@ const normalizeBooking = (item) => {
     paidAmount,
     paidDepositAmount,
     hasDepositPaid,
+    paidPaymentId: getPaymentId(paidPaymentWithId || {}) || pick(item, ["paidPaymentId", "paymentId", "payment.id"], ""),
     latestPaymentId: pick(pendingPayment, ["paymentId", "id"], pick(item, ["paymentId", "latestPaymentId", "payment.id"], "")),
     latestPaymentOrderCode: pick(pendingPayment, ["orderCode", "paymentOrderCode", "payosOrderCode"], pick(item, ["orderCode", "paymentOrderCode", "latestPaymentOrderCode", "payment.orderCode"], "")),
     latestPaymentAmount: getPaymentAmount(pendingPayment) || Number(pick(item, ["paymentAmount", "latestPaymentAmount", "payment.amount"], 0)) || 0,
@@ -839,25 +869,56 @@ export function CharterDetail() {
     if (!booking) return;
     const hasPaidPayment = ["paid", "depositpaid"].includes(String(booking.paymentStatus).toLowerCase())
       || Number(booking.paidAmount || 0) > 0;
-    const result = await Swal.fire({
-      icon: "warning",
-      title: lang === "VN" ? "Hủy yêu cầu thuê tàu?" : "Cancel charter request?",
-      text: hasPaidPayment
-        ? (lang === "VN"
-          ? `Mã đặt chỗ ${booking.bookingCode} sẽ được hủy nếu còn hợp lệ. Khoản đã thanh toán sẽ được backend xử lý hoàn tiền.`
-          : `Booking ${booking.bookingCode} will be cancelled if eligible. Paid amounts will be refunded by the backend.`)
-        : (lang === "VN" ? `Mã đặt chỗ ${booking.bookingCode} sẽ được hủy nếu còn hợp lệ.` : `Booking ${booking.bookingCode} will be cancelled if it is still eligible.`),
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#124757",
-      confirmButtonText: lang === "VN" ? "Hủy yêu cầu" : "Cancel request",
-      cancelButtonText: lang === "VN" ? "Đóng" : "Close",
-    });
-    if (!result.isConfirmed) return;
+    const refundablePayment = hasPaidPayment ? getRefundablePayment(booking) : null;
+    const refundablePaymentId = getPaymentId(refundablePayment || {});
+
+    if (hasPaidPayment) {
+      if (!refundablePaymentId) {
+        Swal.fire({
+          icon: "error",
+          title: lang === "VN" ? "Không tìm thấy paymentId" : "Payment ID not found",
+          text: lang === "VN"
+            ? "Booking đã có thanh toán nhưng hệ thống chưa xác định được mã giao dịch cần hoàn tiền."
+            : "This booking has a paid amount, but the system cannot identify the transaction to refund.",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
+
+      console.log("Resolved refund payment:", {
+        paymentId: refundablePaymentId,
+        payment: refundablePayment,
+        bookingPaymentIds: {
+          paidPaymentId: booking.paidPaymentId,
+          latestPaymentId: booking.latestPaymentId,
+          storedPaymentId: sessionStorage.getItem(`charterPayment:${booking.id}`),
+        },
+      });
+      navigate(`/profile/my-charter-booking/${booking.id}/refund`, {
+        state: {
+          booking,
+          payment: refundablePayment,
+          paymentId: refundablePaymentId,
+        },
+      });
+      return;
+    } else {
+      const result = await Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "Hủy yêu cầu thuê tàu?" : "Cancel charter request?",
+        text: lang === "VN" ? `Mã đặt chỗ ${booking.bookingCode} sẽ được hủy nếu còn hợp lệ.` : `Booking ${booking.bookingCode} will be cancelled if it is still eligible.`,
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#124757",
+        confirmButtonText: lang === "VN" ? "Hủy yêu cầu" : "Cancel request",
+        cancelButtonText: lang === "VN" ? "Đóng" : "Close",
+      });
+      if (!result.isConfirmed) return;
+    }
 
     try {
       setIsSubmitting(true);
-      await cancelMyCharterBooking(booking.id);
+      await cancelMyCharterBooking(booking.id, {});
       await loadDetail();
       Swal.fire({
         icon: "success",
@@ -868,7 +929,10 @@ export function CharterDetail() {
       Swal.fire({
         icon: "error",
         title: lang === "VN" ? "Không thể hủy" : "Unable to cancel",
-        text: error.response?.data?.message || (lang === "VN" ? "Yêu cầu này có thể không còn được phép hủy." : "This request may no longer be cancellable."),
+        text: getApiErrorMessage(
+          error,
+          lang === "VN" ? "Yêu cầu này có thể không còn được phép hủy." : "This request may no longer be cancellable.",
+        ),
         confirmButtonColor: "#124757",
       });
     } finally {
@@ -1015,8 +1079,8 @@ export function CharterDetail() {
         text: getApiErrorMessage(
           error,
           lang === "VN"
-            ? "Backend chưa nhận lưu danh sách này. FE chỉ gửi số hành khách đang hiển thị, vui lòng kiểm tra passengerCount/adultCount/childCount của booking."
-            : "The backend did not accept this passenger list. The frontend only submitted the visible passengers; please check the booking passengerCount/adultCount/childCount.",
+            ? "Hệ thống chưa lưu được danh sách hành khách này. Vui lòng kiểm tra lại tổng số khách, số người lớn và số trẻ em của booking."
+            : "The system could not save this passenger list. Please verify the booking passenger totals, adult count, and child count.",
         ),
         confirmButtonColor: "#124757",
       });
@@ -1439,7 +1503,7 @@ export function CharterDetail() {
                 <span className="material-symbols-outlined text-3xl">hourglass_top</span>
                 <div>
                   <h3 className="font-headline text-lg font-black">{lang === "VN" ? "Chưa có báo giá" : "No quote yet"}</h3>
-                  <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Admin đang chọn tàu và chốt giá. Khi có báo giá, ảnh tàu và chi tiết giá sẽ hiển thị ở mục này." : "The administrator is assigning boats and pricing. Boat photos and quote details will appear here."}</p>
+                  <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Đội vận hành đang chọn tàu và chốt giá. Khi có báo giá, ảnh tàu và chi tiết giá sẽ hiển thị ở mục này." : "The operations team is assigning boats and pricing. Boat photos and quote details will appear here."}</p>
                 </div>
               </div>
             </div>
@@ -1567,7 +1631,7 @@ export function CharterDetail() {
                   ) : isQuoteHoldExpired ? (
                     <div className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
                       <p className="text-xs font-bold">
-                        {lang === "VN" ? "Báo giá đã quá hạn phản hồi. FE đã tải lại booking để nhận trạng thái mới nhất từ backend." : "The quote response deadline has passed. The booking has been refreshed for the latest backend state."}
+                        {lang === "VN" ? "Báo giá đã quá hạn phản hồi. Booking đã được tải lại để cập nhật trạng thái mới nhất." : "The quote response deadline has passed. The booking has been refreshed with the latest status."}
                       </p>
                       <button type="button" onClick={loadDetail} className="w-max rounded-lg border border-rose-300 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider">
                         {lang === "VN" ? "Tải lại booking" : "Refresh booking"}
@@ -1587,7 +1651,7 @@ export function CharterDetail() {
                       <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
                         <span className="material-symbols-outlined text-xl text-slate-400">timer_off</span>
                         <p className="text-xs font-bold">
-                          {lang === "VN" ? "Link/QR thanh toán cũ đã hết hạn. Tạo lại link thanh toán để backend cấp giao dịch mới." : "The previous payment link or QR has expired. Create a new payment link."}
+                          {lang === "VN" ? "Link/QR thanh toán cũ đã hết hạn. Vui lòng tạo giao dịch thanh toán mới." : "The previous payment link or QR has expired. Create a new payment transaction."}
                         </p>
                       </div>
                       <button type="button" onClick={handleCreatePayment} disabled={isSubmitting} className="w-max rounded-lg bg-[#124757] px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900">
@@ -1615,7 +1679,7 @@ export function CharterDetail() {
                         {effectivePaymentDeadline && (
                           <p className="text-[11px] opacity-80">
                             {isEstimatedPaymentDeadline
-                              ? (lang === "VN" ? "Thời gian tạm tính vì backend chưa trả hạn link PayOS." : "Estimated time because the backend has not returned the PayOS link deadline.")
+                              ? (lang === "VN" ? "Thời gian tạm tính trong lúc chờ hạn thanh toán PayOS chính thức." : "Estimated time while waiting for the confirmed PayOS payment deadline.")
                               : (lang === "VN" ? "Thời gian còn lại để hoàn tất thanh toán PayOS." : "Time left to complete the PayOS payment.")}
                           </p>
                         )}

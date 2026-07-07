@@ -47,9 +47,9 @@ export const fetchMyCharterBookingDetail = async (id) => {
     return apiGetCharterBookingById(id);
 };
 
-export const cancelMyCharterBooking = async (id) => {
+export const cancelMyCharterBooking = async (id, cancelPayload) => {
     try {
-        return await apiCancelCharterBooking(id);
+        return await apiCancelCharterBooking(id, cancelPayload);
     } catch (error) {
         console.error(`Lỗi khi hủy charter booking ${id}:`, error);
         throw error;

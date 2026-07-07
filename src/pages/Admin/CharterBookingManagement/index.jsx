@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
+import { BankBinSelect } from "../../../components/BankBinSelect";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats } from "../../../services/boatService";
 import {
@@ -11,7 +12,7 @@ import {
   submitAdminCharterBookingQuote,
   // updateCharterAttendance,
 } from "../../../services/charterBookingService";
-import { refundBookingPayment } from "../../../services/paymentService";
+import { manualRefundBookingPayment, refundBookingPayment, syncBookingPayment } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 
@@ -145,69 +146,85 @@ const getPaymentAmount = (payment) =>
   Number(pick(payment, ["amount", "paymentAmount", "paidAmount", "totalAmount"], 0)) || 0;
 const getRefundAmount = (payment) =>
   Number(pick(payment, ["refundAmount", "refundedAmount", "refund.amount", "refundAmountVnd"], 0)) || 0;
+const getRefundRequestedAmount = (payment) =>
+  Number(pick(payment, ["refundRequestedAmount", "refund.requestedAmount", "refund.refundRequestedAmount"], 0)) || 0;
 const getRefundStatus = (payment) =>
   pick(payment, ["refundStatus", "refund.status", "refundPaymentStatus", "refundState", "payoutStatus"], "");
+const getRefundMethod = (payment) =>
+  pick(payment, ["refundMethod", "refund.method"], "");
+const getRefundReferenceId = (payment) =>
+  pick(payment, ["refundReferenceId", "refund.referenceId", "refund.refundReferenceId", "payoutId"], "");
 const getRefundMessage = (payment) =>
   pick(payment, ["refundMessage", "refund.message", "refundError", "refund.error", "refundFailureReason", "refund.reason"], "");
-const escapeHtmlAttribute = (value) =>
-  String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 const getRefundBankValue = (payment, booking, keys) =>
   pick(payment, keys, pick(booking?.raw, keys, pick(booking, keys, "")));
-const buildRefundPromptHtml = (payment, booking, lang) => {
-  const reason = getRefundBankValue(payment, booking, ["refundReason", "reason"]) || "Customer refund";
-  const bankBin = getRefundBankValue(payment, booking, ["bankBin", "refundBankBin", "payoutBankBin", "customer.bankBin", "user.bankBin"]);
-  const accountNumber = getRefundBankValue(payment, booking, ["accountNumber", "refundAccountNumber", "payoutAccountNumber", "bankAccountNumber", "customer.accountNumber", "user.accountNumber"]);
-  const accountName = getRefundBankValue(payment, booking, ["accountName", "refundAccountName", "payoutAccountName", "bankAccountName", "customer.accountName", "user.accountName", "contactName", "customerName"]);
-  const inputClass = "swal2-input";
-  const labelStyle = "display:block;margin:10px 0 4px;text-align:left;font-size:12px;font-weight:700;color:#475569";
-
-  return `
-    <div style="text-align:left">
-      <label style="${labelStyle}" for="refund-reason">${lang === "VN" ? "Lý do" : "Reason"}</label>
-      <input id="refund-reason" class="${inputClass}" value="${escapeHtmlAttribute(reason)}" placeholder="Customer refund" style="margin:0;width:100%" />
-      <label style="${labelStyle}" for="refund-bank-bin">bankBin</label>
-      <input id="refund-bank-bin" class="${inputClass}" value="${escapeHtmlAttribute(bankBin)}" placeholder="970422" style="margin:0;width:100%" />
-      <label style="${labelStyle}" for="refund-account-number">${lang === "VN" ? "Số tài khoản" : "Account number"}</label>
-      <input id="refund-account-number" class="${inputClass}" value="${escapeHtmlAttribute(accountNumber)}" placeholder="123456789" style="margin:0;width:100%" />
-      <label style="${labelStyle}" for="refund-account-name">${lang === "VN" ? "Tên tài khoản" : "Account name"}</label>
-      <input id="refund-account-name" class="${inputClass}" value="${escapeHtmlAttribute(accountName)}" placeholder="NGUYEN VAN A" style="margin:0;width:100%" />
-      <p style="margin:12px 0 0;font-size:11px;font-weight:700;color:#64748b">
-        ${lang === "VN" ? "FE không gửi amount, backend tự tính số tiền hoàn theo chính sách." : "The frontend does not send amount. The backend calculates the refund amount by policy."}
-      </p>
-    </div>
-  `;
+const getRefundPaymentId = (payment) => pick(payment, [
+  "paymentId",
+  "id",
+  "payment.id",
+  "payment.paymentId",
+  "paymentLinkId",
+  "paymentLink.id",
+  "linkPaymentId",
+], "");
+const buildRefundFormDefaults = (payment, booking) => ({
+  reason: getRefundBankValue(payment, booking, ["refundReason", "reason"]) || "Customer refund",
+  bankBin: getRefundBankValue(payment, booking, ["bankBin", "refundBankBin", "payoutBankBin", "customer.bankBin", "user.bankBin"]),
+  accountNumber: getRefundBankValue(payment, booking, ["accountNumber", "refundAccountNumber", "payoutAccountNumber", "bankAccountNumber", "customer.accountNumber", "user.accountNumber"]),
+  accountName: getRefundBankValue(payment, booking, ["accountName", "refundAccountName", "payoutAccountName", "bankAccountName", "customer.accountName", "user.accountName", "contactName", "customerName"]),
+});
+const buildRefundRequestBody = (form) => ({
+  reason: form.reason?.trim() || "Customer refund",
+  bankBin: form.bankBin?.trim() || "",
+  accountNumber: form.accountNumber?.trim() || "",
+  accountName: form.accountName?.trim() || "",
+});
+const getRefundValidationMessage = (payload, lang) => {
+  if (!/^\d{6}$/.test(payload.bankBin)) {
+    return lang === "VN" ? "bankBin phải gồm đúng 6 chữ số." : "bankBin must contain exactly 6 digits.";
+  }
+  if (!/^\d{4,20}$/.test(payload.accountNumber)) {
+    return lang === "VN" ? "Số tài khoản chỉ gồm 4-20 chữ số." : "Account number must contain 4-20 digits.";
+  }
+  if (payload.accountName.trim().length < 3) {
+    return lang === "VN" ? "Tên tài khoản cần có ít nhất 3 ký tự." : "Account name must contain at least 3 characters.";
+  }
+  if (payload.reason.trim().length > 200) {
+    return lang === "VN" ? "Lý do hoàn tiền không được vượt quá 200 ký tự." : "Refund reason must not exceed 200 characters.";
+  }
+  return "";
 };
-const requestRefundPayload = async (payment, booking, lang) => {
-  const result = await Swal.fire({
-    icon: "warning",
-    title: lang === "VN" ? "Xử lý refund" : "Process refund",
-    html: buildRefundPromptHtml(payment, booking, lang),
-    showCancelButton: true,
-    confirmButtonColor: "#d33",
-    cancelButtonColor: "#124757",
-    confirmButtonText: lang === "VN" ? "Gửi refund" : "Submit refund",
-    cancelButtonText: lang === "VN" ? "Đóng" : "Close",
-    focusConfirm: false,
-    preConfirm: () => {
-      const reason = document.getElementById("refund-reason")?.value.trim() || "Customer refund";
-      const bankBin = document.getElementById("refund-bank-bin")?.value.trim() || "";
-      const accountNumber = document.getElementById("refund-account-number")?.value.trim() || "";
-      const accountName = document.getElementById("refund-account-name")?.value.trim() || "";
-
-      if (!bankBin || !accountNumber || !accountName) {
-        Swal.showValidationMessage(lang === "VN" ? "Vui lòng nhập đủ bankBin, số tài khoản và tên tài khoản." : "Please enter bankBin, account number, and account name.");
-        return false;
-      }
-
-      return { reason, bankBin, accountNumber, accountName };
-    },
-  });
-
-  return result.isConfirmed ? result.value : null;
+const buildManualRefundPayload = (form) => {
+  const refundedAt = form.refundedAt ? new Date(form.refundedAt).toISOString() : new Date().toISOString();
+  return {
+    reason: form.reason?.trim() || "Admin refunded by bank transfer after PayOS payout failed",
+    referenceId: form.referenceId?.trim() || "",
+    payoutId: form.payoutId?.trim() || null,
+    refundedAt,
+  };
+};
+const getCurrentDatetimeLocalValue = () => {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+};
+const getManualRefundValidationMessage = (form, lang) => {
+  if (form.reason.trim().length < 3) {
+    return lang === "VN" ? "Lý do ghi nhận hoàn thủ công cần có ít nhất 3 ký tự." : "Manual refund reason must contain at least 3 characters.";
+  }
+  if (form.reason.trim().length > 200) {
+    return lang === "VN" ? "Lý do ghi nhận hoàn thủ công không được vượt quá 200 ký tự." : "Manual refund reason must not exceed 200 characters.";
+  }
+  if (form.referenceId.trim().length < 3) {
+    return lang === "VN" ? "Mã giao dịch ngân hàng cần có ít nhất 3 ký tự." : "Bank transfer reference must contain at least 3 characters.";
+  }
+  if (form.referenceId.trim().length > 100) {
+    return lang === "VN" ? "Mã giao dịch ngân hàng không được vượt quá 100 ký tự." : "Bank transfer reference must not exceed 100 characters.";
+  }
+  if (form.refundedAt && Number.isNaN(new Date(form.refundedAt).getTime())) {
+    return lang === "VN" ? "Thời điểm hoàn thủ công không hợp lệ." : "Manual refund time is invalid.";
+  }
+  return "";
 };
 const getRefundStatusInfo = (payment, lang) => {
   const paymentStatus = String(pick(payment, ["paymentStatus"], "")).toLowerCase();
@@ -215,7 +232,7 @@ const getRefundStatusInfo = (payment, lang) => {
   if (paymentStatus === "refunded") {
     return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
   }
-  if (["success", "succeeded", "completed", "refunded", "paid"].includes(refundStatus)) {
+  if (["success", "succeeded", "completed", "refunded", "paid", "manualrefunded", "manual_refunded"].includes(refundStatus)) {
     return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
   }
   if (["pending", "processing", "requested", "created"].includes(refundStatus)) {
@@ -231,7 +248,7 @@ const isPaidPayment = (payment) =>
 const isRefundDone = (payment) => {
   const paymentStatus = String(pick(payment, ["paymentStatus"], "")).toLowerCase();
   const refundStatus = String(getRefundStatus(payment)).toLowerCase();
-  return paymentStatus === "refunded" || ["success", "succeeded", "completed", "refunded", "paid"].includes(refundStatus);
+  return paymentStatus === "refunded" || ["success", "succeeded", "completed", "refunded", "paid", "manualrefunded", "manual_refunded"].includes(refundStatus);
 };
 const isRefundProcessing = (payment) =>
   ["pending", "processing", "requested", "created"].includes(String(getRefundStatus(payment)).toLowerCase());
@@ -240,7 +257,17 @@ const isRefundFailed = (payment) => {
   const refundStatus = String(getRefundStatus(payment)).toLowerCase();
   return paymentStatus === "refundfailed" || paymentStatus === "refund_failed" || ["failed", "error", "cancelled", "rejected"].includes(refundStatus);
 };
-const hasRefundableAmount = (payment) => getPaymentAmount(payment) > getRefundAmount(payment);
+const getRemainingRefundAmount = (payment) => {
+  const heldAmount = isRefundProcessing(payment) ? Math.max(getRefundAmount(payment), getRefundRequestedAmount(payment)) : getRefundAmount(payment);
+  return Math.max(0, getPaymentAmount(payment) - heldAmount);
+};
+const canRecordManualRefund = (payment) =>
+  String(getRefundMethod(payment)).toLowerCase() === "payos"
+  && isRefundFailed(payment)
+  && getRefundRequestedAmount(payment) > 0
+  && Boolean(getRefundReferenceId(payment))
+  && Boolean(getRefundMessage(payment));
+const hasRefundableAmount = (payment) => getRemainingRefundAmount(payment) > 0 || canRecordManualRefund(payment);
 const canAdminHandleRefund = (payment, bookingStatus) =>
   (isPaidPayment(payment) || isRefundFailed(payment) || hasRefundableAmount(payment))
   && !isRefundDone(payment)
@@ -551,7 +578,7 @@ export function CharterBookingManagement() {
         title: lang === "VN" ? "Hủy booking này?" : "Cancel this booking?",
         text: hasPaid
           ? (lang === "VN"
-            ? "Booking đã có thanh toán. Sau khi hủy, admin vào tab Thanh toán để gửi refund với thông tin tài khoản nhận hoàn."
+            ? "Booking đã có thanh toán. Sau khi hủy, mở tab Thanh toán để gửi yêu cầu hoàn tiền với tài khoản nhận hoàn."
             : "This booking has paid payments. After cancellation, use the Payments tab to submit the refund with the recipient bank account.")
           : (lang === "VN" ? "Booking sẽ chuyển sang trạng thái Đã hủy." : "The booking will be marked as cancelled."),
         showCancelButton: true,
@@ -579,7 +606,7 @@ export function CharterBookingManagement() {
           ? (lang === "VN" ? "Đã hủy, đang theo dõi refund" : "Cancelled, refund is being tracked")
           : (lang === "VN" ? "Đã cập nhật trạng thái" : "Status updated"),
         text: nextStatus === "Cancelled" && hasRefundablePayment(targetBooking)
-          ? (lang === "VN" ? "Booking có payment đã thu. Vào tab Thanh toán, bấm Xử lý refund và nhập thông tin tài khoản nhận hoàn." : "This booking has collected payments. Open the Payments tab, click Process refund, and enter the recipient bank account.")
+          ? (lang === "VN" ? "Booking có giao dịch đã thu tiền. Vào tab Thanh toán để gửi yêu cầu hoàn tiền." : "This booking has collected payments. Open the Payments tab to submit the refund request.")
           : undefined,
         confirmButtonColor: "#124757",
         timer: nextStatus === "Cancelled" && hasRefundablePayment(targetBooking) ? undefined : 1400,
@@ -599,32 +626,9 @@ export function CharterBookingManagement() {
   };
 
   const handleRefundPayment = async (payment) => {
-    const paymentId = pick(payment, ["paymentId", "id"], "");
-    if (!paymentId) return;
-
-    const refundPayload = await requestRefundPayload(payment, selectedBooking, lang);
-    if (!refundPayload) return;
-
-    try {
-      setIsSubmitting(true);
-      await refundBookingPayment(paymentId, refundPayload);
-      await refreshAfterChange();
-      Swal.fire({
-        icon: "success",
-        title: lang === "VN" ? "Đã gửi yêu cầu refund" : "Refund requested",
-        text: lang === "VN" ? "Backend đang xử lý refund. Tải lại tab Thanh toán để theo dõi trạng thái." : "The backend is processing the refund. Refresh the Payments tab to track the status.",
-        confirmButtonColor: "#124757",
-      });
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: lang === "VN" ? "Refund thất bại" : "Refund failed",
-        text: getApiErrorMessage(error, lang === "VN" ? "Không thể gửi yêu cầu refund. Vui lòng kiểm tra backend hoặc thử lại." : "Unable to request refund. Please check the backend or try again."),
-        confirmButtonColor: "#124757",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
+    const paymentId = getRefundPaymentId(payment);
+    if (!paymentId || !selectedBooking?.id) return;
+    navigate(`/admin/charter-bookings-management/${selectedBooking.id}/payments/${encodeURIComponent(paymentId)}/refund`);
   };
 
   const handleSubmitQuote = async (event) => {
@@ -693,7 +697,7 @@ export function CharterBookingManagement() {
   //       title: action === "CheckIn"
   //         ? (lang === "VN" ? "Đã xử lý check-in" : "Check-in processed")
   //         : (lang === "VN" ? "Đã xử lý check-out" : "Check-out processed"),
-  //       text: lang === "VN" ? "Các vé không hợp lệ sẽ được backend bỏ qua." : "Invalid ticket transitions are skipped by the server.",
+  //       text: lang === "VN" ? "Các vé không hợp lệ sẽ được hệ thống bỏ qua." : "Invalid ticket transitions are skipped by the server.",
   //       confirmButtonColor: "#124757",
   //     });
   //   } catch (error) {
@@ -1099,7 +1103,7 @@ export function CharterBookingManagement() {
 	                                    disabled={isSubmitting}
 	                                    className="mt-2 rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
 	                                  >
-	                                    {lang === "VN" ? "Xử lý refund" : "Retry refund"}
+	                                    {lang === "VN" ? "Xử lý hoàn tiền" : "Process refund"}
 	                                  </button>
 	                                )}
 	                              </div>
@@ -1257,7 +1261,7 @@ export function CharterBookingManagement() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Tổng giá thủ công" : "Manual total override"}</label>
-                    <input type="number" min="0" value={quoteForm.subtotalAmount} onChange={(e) => setQuoteForm((prev) => ({ ...prev, subtotalAmount: e.target.value }))} placeholder={lang === "VN" ? "Để trống để backend tự tính" : "Leave empty for backend calculation"} className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold text-slate-700 dark:text-white outline-none" />
+                    <input type="number" min="0" value={quoteForm.subtotalAmount} onChange={(e) => setQuoteForm((prev) => ({ ...prev, subtotalAmount: e.target.value }))} placeholder={lang === "VN" ? "Để trống để hệ thống tự tính" : "Leave empty for automatic calculation"} className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-bold text-slate-700 dark:text-white outline-none" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Mã khuyến mãi" : "Promotion Code"}</label>
@@ -1297,7 +1301,7 @@ export function CharterBookingManagement() {
                     ) : (
                       <p className="text-xs font-bold text-slate-400">
                         {isQuoteBoatSelectionComplete
-                          ? (lang === "VN" ? "Preview sẽ hiển thị sau khi backend tính giá." : "Preview will appear after pricing is calculated.")
+                          ? (lang === "VN" ? "Preview sẽ hiển thị sau khi hệ thống tính giá." : "Preview will appear after pricing is calculated.")
                           : (lang === "VN" ? "Chọn đủ tàu để preview giá." : "Select all boats to preview pricing.")}
                       </p>
                     )}
@@ -1331,8 +1335,8 @@ export function CharterBookingManagement() {
                   </select>
                   <p className="text-[11px] leading-relaxed text-slate-400 font-medium">
                     {lang === "VN"
-                      ? "Hệ thống tự chuyển Chờ báo giá, Đã báo giá, Đã xác nhận và Đã hoàn tiền theo flow. Admin chỉ cập nhật thủ công: Đã hủy, Hết hạn, Hoàn tất."
-                      : "Pending Quote, Quoted, Confirmed, and Refunded are handled automatically by the flow. Admin can manually set only Cancelled, Expired, or Completed."}
+                      ? "Hệ thống tự chuyển Chờ báo giá, Đã báo giá, Đã xác nhận và Đã hoàn tiền theo quy trình. Quản trị chỉ cập nhật thủ công: Đã hủy, Hết hạn, Hoàn tất."
+                      : "Pending Quote, Quoted, Confirmed, and Refunded are handled automatically by the workflow. Admins can manually set only Cancelled, Expired, or Completed."}
                   </p>
                 </div>
               </div>
@@ -1517,7 +1521,7 @@ export function AdminCharterBookingDetail() {
         title: lang === "VN" ? "Hủy booking này?" : "Cancel this booking?",
         text: hasPaid
           ? (lang === "VN"
-            ? "Booking đã có thanh toán. Sau khi hủy, admin vào tab Thanh toán để gửi refund với thông tin tài khoản nhận hoàn."
+            ? "Booking đã có thanh toán. Sau khi hủy, mở tab Thanh toán để gửi yêu cầu hoàn tiền với tài khoản nhận hoàn."
             : "This booking has paid payments. After cancellation, use the Payments tab to submit the refund with the recipient bank account.")
           : (lang === "VN" ? "Booking sẽ chuyển sang trạng thái Đã hủy." : "The booking will be marked as cancelled."),
         showCancelButton: true,
@@ -1539,7 +1543,7 @@ export function AdminCharterBookingDetail() {
           ? (lang === "VN" ? "Đã hủy, đang theo dõi refund" : "Cancelled, refund is being tracked")
           : (lang === "VN" ? "Đã cập nhật trạng thái" : "Status updated"),
         text: nextStatus === "Cancelled" && hasRefundablePayment(booking)
-          ? (lang === "VN" ? "Booking có payment đã thu. Vào tab Thanh toán, bấm Xử lý refund và nhập thông tin tài khoản nhận hoàn." : "This booking has collected payments. Open the Payments tab, click Process refund, and enter the recipient bank account.")
+          ? (lang === "VN" ? "Booking có giao dịch đã thu tiền. Vào tab Thanh toán để gửi yêu cầu hoàn tiền." : "This booking has collected payments. Open the Payments tab to submit the refund request.")
           : undefined,
         confirmButtonColor: "#124757",
         timer: nextStatus === "Cancelled" && hasRefundablePayment(booking) ? undefined : 1400,
@@ -1558,32 +1562,9 @@ export function AdminCharterBookingDetail() {
   };
 
   const handleDetailRefundPayment = async (payment) => {
-    const paymentId = pick(payment, ["paymentId", "id"], "");
-    if (!paymentId) return;
-
-    const refundPayload = await requestRefundPayload(payment, booking, lang);
-    if (!refundPayload) return;
-
-    try {
-      setIsSubmitting(true);
-      await refundBookingPayment(paymentId, refundPayload);
-      await loadDetail();
-      Swal.fire({
-        icon: "success",
-        title: lang === "VN" ? "Đã gửi yêu cầu refund" : "Refund requested",
-        text: lang === "VN" ? "Backend đang xử lý refund. Theo dõi trạng thái trong tab Thanh toán." : "The backend is processing the refund. Track the status in the Payments tab.",
-        confirmButtonColor: "#124757",
-      });
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: lang === "VN" ? "Refund thất bại" : "Refund failed",
-        text: getApiErrorMessage(error, lang === "VN" ? "Không thể gửi yêu cầu refund. Vui lòng kiểm tra backend hoặc thử lại." : "Unable to request refund. Please check the backend or try again."),
-        confirmButtonColor: "#124757",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
+    const paymentId = getRefundPaymentId(payment);
+    if (!paymentId || !booking?.id) return;
+    navigate(`/admin/charter-bookings-management/${booking.id}/payments/${encodeURIComponent(paymentId)}/refund`);
   };
 
   if (isLoading) {
@@ -1805,7 +1786,7 @@ export function AdminCharterBookingDetail() {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Tổng giá thủ công" : "Manual total override"}</label>
-                  <input type="number" min="0" value={quoteForm.subtotalAmount} onChange={(event) => setQuoteForm((prev) => ({ ...prev, subtotalAmount: event.target.value }))} placeholder={lang === "VN" ? "Để trống để backend tự tính" : "Leave empty for backend calculation"} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                  <input type="number" min="0" value={quoteForm.subtotalAmount} onChange={(event) => setQuoteForm((prev) => ({ ...prev, subtotalAmount: event.target.value }))} placeholder={lang === "VN" ? "Để trống để hệ thống tự tính" : "Leave empty for automatic calculation"} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
                 </div>
                 <div className="space-y-2 md:col-span-4">
                   <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Mã khuyến mãi" : "Promotion Code"}</label>
@@ -1875,7 +1856,7 @@ export function AdminCharterBookingDetail() {
               ) : (
                 <p className="mt-4 rounded-2xl border border-dashed border-slate-200 p-4 text-xs font-bold text-slate-400 dark:border-slate-700">
                   {isQuoteBoatSelectionComplete
-                    ? (lang === "VN" ? "Preview sẽ hiển thị sau khi backend tính giá." : "Preview will appear after pricing is calculated.")
+                    ? (lang === "VN" ? "Preview sẽ hiển thị sau khi hệ thống tính giá." : "Preview will appear after pricing is calculated.")
                     : (lang === "VN" ? "Chọn đủ tàu để preview giá." : "Select all boats to preview pricing.")}
                 </p>
               )}
@@ -1892,7 +1873,7 @@ export function AdminCharterBookingDetail() {
                 ))}
               </select>
               <p className="mt-3 text-[11px] font-medium leading-relaxed text-slate-400">
-                {lang === "VN" ? "Admin chỉ cập nhật thủ công: Đã hủy, Hết hạn, Hoàn tất. Các trạng thái còn lại theo flow backend." : "Admin can manually set only Cancelled, Expired, or Completed. Other states follow the backend flow."}
+                {lang === "VN" ? "Quản trị chỉ cập nhật thủ công: Đã hủy, Hết hạn, Hoàn tất. Các trạng thái còn lại được xử lý theo quy trình hệ thống." : "Admins can manually set only Cancelled, Expired, or Completed. Other states follow the system workflow."}
               </p>
             </div>
           </div>
@@ -2007,8 +1988,8 @@ export function AdminCharterBookingDetail() {
             <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Theo dõi thanh toán" : "Payment Monitoring"}</h3>
             <p className="mt-1 text-xs font-bold text-slate-400">
               {lang === "VN"
-                ? "Chỉ hiển thị payment backend trả về: trạng thái, deadline link và checkoutUrl để admin kiểm tra. FE không lưu/reuse link ở đây."
-                : "Shows backend payments only: status, link deadline, and checkoutUrl for admin review. The frontend does not store or reuse links here."}
+                ? "Hiển thị các giao dịch thanh toán của booking: trạng thái, hạn thanh toán và đường dẫn PayOS để quản trị kiểm tra."
+                : "Shows booking payment transactions: status, payment deadline, and PayOS link for admin review."}
             </p>
           </div>
           <span className="w-max rounded-xl bg-slate-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
@@ -2068,7 +2049,7 @@ export function AdminCharterBookingDetail() {
 	                          disabled={isSubmitting}
 	                          className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
 	                        >
-	                          {lang === "VN" ? "Xử lý refund" : "Retry refund"}
+	                          {lang === "VN" ? "Xử lý hoàn tiền" : "Process refund"}
 	                        </button>
 	                      ) : (
 	                        <span className="text-[10px] font-bold text-slate-400">--</span>
@@ -2103,6 +2084,482 @@ export function AdminCharterBookingDetail() {
         </div>
       </section>
       )}
+    </div>
+  );
+}
+
+export function AdminCharterBookingRefund() {
+  const { lang } = useApp();
+  const { id, paymentId } = useParams();
+  const navigate = useNavigate();
+  const decodedPaymentId = paymentId ? decodeURIComponent(paymentId) : "";
+  const [booking, setBooking] = useState(null);
+  const [payment, setPayment] = useState(null);
+  const [form, setForm] = useState(() => buildRefundFormDefaults({}, {}));
+  const [manualForm, setManualForm] = useState(() => ({
+    reason: "Admin refunded by bank transfer after PayOS payout failed",
+    referenceId: "",
+    payoutId: "",
+    refundedAt: getCurrentDatetimeLocalValue(),
+  }));
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isManualSubmitting, setIsManualSubmitting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [submitResult, setSubmitResult] = useState(null);
+
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }),
+    []
+  );
+
+  const endpoint = `/api/payments/${encodeURIComponent(decodedPaymentId)}/refund`;
+
+  const loadRefundDetail = useCallback(async () => {
+    if (!id) return;
+    try {
+      setIsLoading(true);
+      setLoadError("");
+      const detail = await fetchAdminCharterBookingDetail(id);
+      const normalized = normalizeBooking(detail);
+      const targetPayment = normalized.payments.find((item) => getRefundPaymentId(item) === decodedPaymentId);
+
+      setBooking(normalized);
+      setPayment(targetPayment || null);
+      setForm(buildRefundFormDefaults(targetPayment || {}, normalized));
+
+      if (!targetPayment) {
+        setLoadError(lang === "VN"
+          ? "Không tìm thấy payment cần refund trong booking này."
+          : "Unable to find this payment in the selected booking.");
+      }
+    } catch (error) {
+      console.error("Lỗi tải trang refund:", error);
+      setLoadError(getApiErrorMessage(
+        error,
+        lang === "VN" ? "Không thể tải dữ liệu refund." : "Unable to load refund data.",
+      ));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [decodedPaymentId, id, lang]);
+
+  useEffect(() => {
+    loadRefundDetail();
+  }, [loadRefundDetail]);
+
+  const handleFieldChange = (field) => (event) => {
+    const value = field === "accountNumber"
+      ? event.target.value.replace(/\D/g, "").slice(0, 20)
+      : event.target.value;
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setSubmitError("");
+    setSubmitResult(null);
+  };
+
+  const handleBankBinChange = (bankBin) => {
+    setForm((prev) => ({ ...prev, bankBin }));
+    setSubmitError("");
+    setSubmitResult(null);
+  };
+
+  const handleManualFieldChange = (field) => (event) => {
+    setManualForm((prev) => ({ ...prev, [field]: event.target.value }));
+    setSubmitError("");
+    setSubmitResult(null);
+  };
+
+  const handleSyncPayment = async () => {
+    if (!decodedPaymentId) return;
+
+    try {
+      setIsSyncing(true);
+      setSubmitError("");
+      setSubmitResult(null);
+      const response = await syncBookingPayment(decodedPaymentId);
+      setSubmitResult(response || { ok: true });
+      await loadRefundDetail();
+    } catch (error) {
+      console.error("Sync payment failed:", error);
+      setSubmitError(getApiErrorMessage(
+        error,
+        lang === "VN" ? "Không thể đồng bộ trạng thái payment. Vui lòng tải lại booking hoặc thử lại." : "Unable to sync payment status. Please reload the booking or try again.",
+      ));
+      setSubmitResult(error.response?.data || null);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSubmitRefund = async (event) => {
+    event.preventDefault();
+    const payload = buildRefundRequestBody(form);
+    const validationMessage = getRefundValidationMessage(payload, lang);
+
+    if (validationMessage) {
+      setSubmitError(validationMessage);
+      return;
+    }
+
+    if (!payment || getRemainingRefundAmount(payment) <= 0 || isRefundDone(payment) || isRefundProcessing(payment)) {
+      setSubmitError(lang === "VN" ? "Payment này hiện không còn số tiền có thể gửi yêu cầu hoàn tự động." : "This payment has no amount available for a new automatic refund request.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError("");
+      setSubmitResult(null);
+      const response = await refundBookingPayment(decodedPaymentId, payload);
+      setSubmitResult(response || { ok: true });
+      await loadRefundDetail();
+    } catch (error) {
+      console.error("Refund failed:", error);
+      setSubmitError(getApiErrorMessage(
+        error,
+        lang === "VN" ? "Không thể gửi yêu cầu hoàn tiền. Vui lòng kiểm tra trạng thái giao dịch hoặc thử lại." : "Unable to request refund. Please check the transaction status or try again.",
+      ));
+      setSubmitResult(error.response?.data || null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmitManualRefund = async (event) => {
+    event.preventDefault();
+
+    if (!payment || !canRecordManualRefund(payment)) {
+      setSubmitError(lang === "VN" ? "Payment chưa đủ điều kiện ghi nhận hoàn thủ công." : "This payment is not eligible for manual refund recording.");
+      return;
+    }
+
+    const validationMessage = getManualRefundValidationMessage(manualForm, lang);
+    if (validationMessage) {
+      setSubmitError(validationMessage);
+      return;
+    }
+
+    const payload = buildManualRefundPayload(manualForm);
+
+    try {
+      setIsManualSubmitting(true);
+      setSubmitError("");
+      setSubmitResult(null);
+      const response = await manualRefundBookingPayment(decodedPaymentId, payload);
+      setSubmitResult(response || { ok: true });
+      await loadRefundDetail();
+    } catch (error) {
+      console.error("Manual refund failed:", error);
+      setSubmitError(getApiErrorMessage(
+        error,
+        lang === "VN" ? "Không thể ghi nhận hoàn thủ công. Vui lòng kiểm tra mã giao dịch hoặc thử lại." : "Unable to record manual refund. Please check the transfer reference or try again.",
+      ));
+      setSubmitResult(error.response?.data || null);
+    } finally {
+      setIsManualSubmitting(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-96 items-center justify-center rounded-4xl border border-slate-100 bg-white p-10 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <span className="material-symbols-outlined animate-spin text-4xl text-[#124757] dark:text-yellow-400">progress_activity</span>
+          <p className="text-sm font-bold text-slate-500 dark:text-slate-300">{lang === "VN" ? "Đang tải dữ liệu refund..." : "Loading refund data..."}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const refundInfo = payment ? getRefundStatusInfo(payment, lang) : getRefundStatusInfo({}, lang);
+  const bookingStatusInfo = booking ? getCharterBookingStatusInfo(booking.status, booking.paymentStatus, lang) : null;
+  const paidAmount = payment ? getPaymentAmount(payment) : 0;
+  const refundedAmount = payment ? getRefundAmount(payment) : 0;
+  const refundRequestedAmount = payment ? getRefundRequestedAmount(payment) : 0;
+  const remainingRefundAmount = payment ? getRemainingRefundAmount(payment) : 0;
+  const canSubmitPayOsRefund = Boolean(payment) && remainingRefundAmount > 0 && !isRefundDone(payment) && !isRefundProcessing(payment);
+  const canSubmitManualRefund = Boolean(payment) && canRecordManualRefund(payment);
+  const amountNeedAction = canSubmitManualRefund
+    ? refundRequestedAmount
+    : isRefundProcessing(payment || {})
+      ? refundRequestedAmount
+      : remainingRefundAmount;
+  const manualRefundEndpoint = `/api/payments/${encodeURIComponent(decodedPaymentId)}/manual-refund`;
+  const syncEndpoint = `/api/payments/${encodeURIComponent(decodedPaymentId)}/sync`;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <button
+            type="button"
+            onClick={() => navigate(id ? `/admin/charter-bookings-management/${id}` : "/admin/charter-bookings-management")}
+            className="mb-3 inline-flex items-center gap-2 text-xs font-headline font-black uppercase tracking-wider text-slate-500 transition-colors hover:text-[#124757] dark:text-slate-400 dark:hover:text-yellow-400"
+          >
+            <span className="material-symbols-outlined text-base">arrow_back</span>
+            {lang === "VN" ? "Quay lại booking" : "Back to booking"}
+          </button>
+          <h2 className="font-headline text-3xl font-black uppercase tracking-tight text-[#124757] dark:text-yellow-400">
+            {lang === "VN" ? "Xử lý hoàn tiền" : "Process Refund"}
+          </h2>
+          <p className="mt-1 text-sm font-bold text-slate-400">
+            {booking?.bookingCode || "--"} · {decodedPaymentId || "--"}
+          </p>
+        </div>
+        {payment && (
+          <span className={`w-max rounded-xl border px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider ${refundInfo.classes}`}>
+            Refund: {refundInfo.label}
+          </span>
+        )}
+      </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+          {loadError}
+        </div>
+      )}
+
+      <div className="grid gap-6 xl:grid-cols-5">
+        <div className="space-y-6 xl:col-span-2">
+          <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+            <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Thông tin booking" : "Booking Info"}</h3>
+            <div className="mt-4 space-y-3 text-sm">
+              {[
+                { label: "Booking", value: booking?.bookingCode },
+                { label: lang === "VN" ? "Khách hàng" : "Customer", value: booking?.customerName },
+                { label: lang === "VN" ? "Liên hệ" : "Contact", value: booking ? `${booking.phone} / ${booking.email}` : "" },
+                { label: lang === "VN" ? "Lộ trình" : "Route", value: booking?.route },
+                { label: lang === "VN" ? "Ngày đi" : "Departure", value: booking ? `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)}` : "" },
+                { label: lang === "VN" ? "Trạng thái" : "Status", value: bookingStatusInfo?.label },
+              ].map((item) => (
+                <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
+                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                  <p className="mt-1 break-words font-bold text-slate-800 dark:text-white">{item.value || "--"}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+            <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Thông tin payment" : "Payment Info"}</h3>
+            <div className="mt-4 space-y-3 text-sm">
+              {[
+                { label: "Payment ID", value: getRefundPaymentId(payment || {}) || decodedPaymentId },
+                { label: "Payment status", value: payment ? getPaymentStatusInfo(pick(payment, ["paymentStatus"], "--"), lang).label : "--" },
+                { label: lang === "VN" ? "Đã thu" : "Paid amount", value: paidAmount > 0 ? currencyFormatter.format(paidAmount) : "--" },
+                { label: lang === "VN" ? "Đã hoàn" : "Refunded amount", value: refundedAmount > 0 ? currencyFormatter.format(refundedAmount) : "--" },
+                { label: lang === "VN" ? "Đã yêu cầu hoàn" : "Requested refund", value: refundRequestedAmount > 0 ? currencyFormatter.format(refundRequestedAmount) : "--" },
+                { label: lang === "VN" ? "Còn cần xử lý" : "Amount to handle", value: amountNeedAction > 0 ? currencyFormatter.format(amountNeedAction) : "--" },
+                { label: "Refund method", value: getRefundMethod(payment || {}) || "--" },
+                { label: "Refund reference", value: getRefundReferenceId(payment || {}) || "--" },
+                { label: "Refund status", value: refundInfo.label },
+                { label: "expiresAt", value: payment && pick(payment, ["expiresAt"], "") ? formatDateTime(pick(payment, ["expiresAt"], "")) : "--" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
+                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                  <p className="mt-1 break-words font-bold text-slate-800 dark:text-white">{item.value || "--"}</p>
+                </div>
+              ))}
+              {payment && getRefundMessage(payment) && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+                  {getRefundMessage(payment)}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div className="space-y-6 xl:col-span-3">
+          <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Ngữ cảnh hoàn tiền" : "Refund Context"}</h3>
+                <p className="mt-1 text-xs font-bold text-slate-400">
+                  {lang === "VN" ? "FE không gửi amount. Backend tự tính số tiền hoàn theo payment và chính sách." : "The frontend does not send amount. Backend calculates the refund from payment data and policy."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSyncPayment}
+                disabled={!payment || isSyncing || isSubmitting || isManualSubmitting}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400 dark:hover:bg-slate-800"
+              >
+                <span className="material-symbols-outlined text-base">{isSyncing ? "progress_activity" : "sync"}</span>
+                {isSyncing ? (lang === "VN" ? "Đang đồng bộ" : "Syncing") : (lang === "VN" ? "Đồng bộ payment" : "Sync payment")}
+              </button>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: lang === "VN" ? "Đã thu" : "Paid", value: paidAmount > 0 ? currencyFormatter.format(paidAmount) : "--" },
+                { label: lang === "VN" ? "Đã hoàn" : "Refunded", value: refundedAmount > 0 ? currencyFormatter.format(refundedAmount) : "--" },
+                { label: lang === "VN" ? "Đã yêu cầu" : "Requested", value: refundRequestedAmount > 0 ? currencyFormatter.format(refundRequestedAmount) : "--" },
+                { label: lang === "VN" ? "Còn cần xử lý" : "To handle", value: amountNeedAction > 0 ? currencyFormatter.format(amountNeedAction) : "--", highlight: true },
+              ].map((item) => (
+                <div key={item.label} className={`rounded-2xl border p-4 ${item.highlight ? "border-rose-200 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10" : "border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-900"}`}>
+                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                  <p className={`mt-1 text-lg font-headline font-black ${item.highlight ? "text-rose-600 dark:text-rose-300" : "text-[#124757] dark:text-yellow-400"}`}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 grid gap-3 text-xs font-bold text-slate-500 dark:text-slate-300 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">PayOS refund</p>
+                <p className="mt-1 break-all font-mono text-[11px]">POST {endpoint}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">Sync</p>
+                <p className="mt-1 break-all font-mono text-[11px]">POST {syncEndpoint}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">Manual refund</p>
+                <p className="mt-1 break-all font-mono text-[11px]">POST {manualRefundEndpoint}</p>
+              </div>
+            </div>
+          </section>
+
+          <form onSubmit={handleSubmitRefund} className="space-y-6">
+            <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Hoàn tiền PayOS" : "PayOS Refund"}</h3>
+                  <p className="mt-1 text-xs font-bold text-slate-400">
+                    {canSubmitPayOsRefund
+                      ? (lang === "VN" ? "Nhập tài khoản nhận hoàn, hệ thống sẽ gọi refund PayOS trước." : "Enter the receiving account; the system will attempt PayOS refund first.")
+                      : (lang === "VN" ? "Payment này chưa đủ điều kiện tạo yêu cầu hoàn PayOS mới." : "This payment is not eligible for a new PayOS refund request.")}
+                  </p>
+                </div>
+                <button
+                  type="submit"
+                  disabled={!canSubmitPayOsRefund || isSubmitting || isSyncing || isManualSubmitting}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-white transition-all hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-base">{isSubmitting ? "progress_activity" : "payments"}</span>
+                  {isSubmitting ? (lang === "VN" ? "Đang gửi" : "Submitting") : (lang === "VN" ? "Gửi hoàn PayOS" : "Submit PayOS refund")}
+                </button>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <label className="sm:col-span-2">
+                  <span className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Lý do" : "Reason"}</span>
+                  <input
+                    value={form.reason}
+                    onChange={handleFieldChange("reason")}
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-yellow-400"
+                    placeholder={lang === "VN" ? "Khách hàng yêu cầu hoàn tiền" : "Customer refund"}
+                  />
+                </label>
+                <div className="sm:col-span-2">
+                  <BankBinSelect
+                    value={form.bankBin}
+                    onChange={handleBankBinChange}
+                    lang={lang}
+                    disabled={!canSubmitPayOsRefund || isSubmitting || isSyncing || isManualSubmitting}
+                    label={lang === "VN" ? "Ngân hàng nhận hoàn" : "Refund bank"}
+                    searchInputClassName="mt-1 w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm font-bold text-slate-800 outline-none transition focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-yellow-400"
+                    fallbackInputClassName="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-yellow-400"
+                  />
+                </div>
+                <label>
+                  <span className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Số tài khoản" : "Account number"}</span>
+                  <input
+                    value={form.accountNumber}
+                    onChange={handleFieldChange("accountNumber")}
+                    inputMode="numeric"
+                    maxLength={20}
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-yellow-400"
+                    placeholder="123456789"
+                  />
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Tên tài khoản" : "Account name"}</span>
+                  <input
+                    value={form.accountName}
+                    onChange={handleFieldChange("accountName")}
+                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-yellow-400"
+                    placeholder="NGUYEN VAN A"
+                  />
+                </label>
+              </div>
+            </section>
+          </form>
+
+          {canSubmitManualRefund && (
+            <form onSubmit={handleSubmitManualRefund} className="rounded-4xl border border-amber-200 bg-amber-50 p-6 shadow-sm dark:border-amber-500/20 dark:bg-amber-500/10">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-headline font-black uppercase tracking-wide text-amber-700 dark:text-amber-300">{lang === "VN" ? "Ghi nhận hoàn thủ công" : "Record Manual Refund"}</h3>
+                  <p className="mt-1 text-xs font-bold text-amber-700/80 dark:text-amber-200">
+                    {lang === "VN"
+                      ? `PayOS đã lỗi. Admin xác nhận đã chuyển khoản ngân hàng số tiền ${currencyFormatter.format(refundRequestedAmount)}.`
+                      : `PayOS failed. Admin confirms bank transfer of ${currencyFormatter.format(refundRequestedAmount)}.`}
+                  </p>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isManualSubmitting || isSubmitting || isSyncing}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-white transition-all hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-base">{isManualSubmitting ? "progress_activity" : "task_alt"}</span>
+                  {isManualSubmitting ? (lang === "VN" ? "Đang ghi nhận" : "Recording") : (lang === "VN" ? "Ghi nhận thủ công" : "Record manual")}
+                </button>
+              </div>
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <label className="sm:col-span-2">
+                  <span className="text-[10px] font-headline font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{lang === "VN" ? "Lý do" : "Reason"}</span>
+                  <input
+                    value={manualForm.reason}
+                    onChange={handleManualFieldChange("reason")}
+                    className="mt-1 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-amber-600 dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
+                  />
+                </label>
+                <label>
+                  <span className="text-[10px] font-headline font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{lang === "VN" ? "Mã giao dịch ngân hàng" : "Bank reference"}</span>
+                  <input
+                    value={manualForm.referenceId}
+                    onChange={handleManualFieldChange("referenceId")}
+                    className="mt-1 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-amber-600 dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
+                    placeholder="BANK-TX-123456"
+                  />
+                </label>
+                <label>
+                  <span className="text-[10px] font-headline font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">payoutId</span>
+                  <input
+                    value={manualForm.payoutId}
+                    onChange={handleManualFieldChange("payoutId")}
+                    className="mt-1 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-amber-600 dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
+                    placeholder={lang === "VN" ? "Có thể để trống" : "Optional"}
+                  />
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="text-[10px] font-headline font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">{lang === "VN" ? "Thời điểm đã hoàn" : "Refunded at"}</span>
+                  <input
+                    type="datetime-local"
+                    value={manualForm.refundedAt}
+                    onChange={handleManualFieldChange("refundedAt")}
+                    className="mt-1 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-amber-600 dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
+                  />
+                </label>
+              </div>
+            </form>
+          )}
+
+          {(submitError || submitResult) && (
+            <section className={`overflow-hidden rounded-4xl border shadow-sm ${submitError ? "border-rose-200 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10" : "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10"}`}>
+              <div className="border-b border-current/10 px-5 py-3">
+                <p className={`text-[10px] font-headline font-black uppercase tracking-widest ${submitError ? "text-rose-600 dark:text-rose-300" : "text-emerald-700 dark:text-emerald-300"}`}>
+                  {submitError ? (lang === "VN" ? "Hoàn tiền lỗi" : "Refund failed") : (lang === "VN" ? "Kết quả xử lý" : "Processing result")}
+                </p>
+                {submitError && <p className="mt-1 text-sm font-bold text-rose-600 dark:text-rose-300">{submitError}</p>}
+              </div>
+              {submitResult && (
+                <pre className="max-h-80 overflow-auto p-5 text-sm leading-6 text-slate-800 dark:text-slate-100">{JSON.stringify(submitResult, null, 2)}</pre>
+              )}
+            </section>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
