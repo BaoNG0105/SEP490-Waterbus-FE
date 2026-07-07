@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchMyCharterBookings } from "../../../services/charterBookingService";
+import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 
 const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Refunded"];
 
@@ -82,28 +83,7 @@ export function CharterList() {
     loadBookings();
   }, [loadBookings]);
 
-  const getStatusInfo = (status) => {
-    switch (status) {
-      case "PendingQuote":
-        return { label: lang === "VN" ? "Chờ báo giá" : "Pending Quote", classes: "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20", dot: "bg-amber-500" };
-      case "Quoted":
-        return { label: lang === "VN" ? "Đã báo giá" : "Quoted", classes: "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20", dot: "bg-indigo-500" };
-      case "PendingPayment":
-        return { label: lang === "VN" ? "Chờ thanh toán" : "Pending Payment", classes: "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20", dot: "bg-orange-500" };
-      case "Confirmed":
-        return { label: lang === "VN" ? "Đã xác nhận" : "Confirmed", classes: "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20", dot: "bg-sky-500" };
-      case "Completed":
-        return { label: lang === "VN" ? "Hoàn tất" : "Completed", classes: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20", dot: "bg-emerald-500" };
-      case "Cancelled":
-        return { label: lang === "VN" ? "Đã hủy" : "Cancelled", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20", dot: "bg-rose-500" };
-      case "Expired":
-        return { label: lang === "VN" ? "Hết hạn" : "Expired", classes: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700", dot: "bg-slate-400" };
-      case "Refunded":
-        return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20", dot: "bg-teal-500" };
-      default:
-        return { label: status || "--", classes: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700", dot: "bg-slate-400" };
-    }
-  };
+  const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
 
   const getActionInfo = (booking) => {
     const paymentStatus = String(booking.paymentStatus).toLowerCase();
@@ -124,10 +104,12 @@ export function CharterList() {
       };
     }
 
-    if (booking.status === "PendingPayment") {
+    if (booking.status === "PendingPayment" || (booking.status === "Confirmed" && paymentStatus === "depositpaid")) {
       return {
         icon: "sync",
-        label: lang === "VN" ? "Tiếp tục hoặc đồng bộ thanh toán" : "Continue or sync payment",
+        label: paymentStatus === "depositpaid"
+          ? (lang === "VN" ? "Thanh toán phần còn lại" : "Pay remaining balance")
+          : (lang === "VN" ? "Tiếp tục hoặc đồng bộ thanh toán" : "Continue or sync payment"),
         classes: "bg-orange-50 text-orange-700 border-orange-100 dark:bg-orange-500/10 dark:text-orange-300 dark:border-orange-500/20",
       };
     }
@@ -246,7 +228,7 @@ export function CharterList() {
             </div>
           ) : (
             filteredBookings.map((booking) => {
-              const statusInfo = getStatusInfo(booking.status);
+              const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
               const actionInfo = getActionInfo(booking);
               return (
                 <article key={booking.id || booking.bookingCode} className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-100 dark:border-slate-700/50 shadow-sm">
