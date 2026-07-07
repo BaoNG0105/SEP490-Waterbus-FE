@@ -295,6 +295,66 @@ export const getPaginationWindow = (currentPage, totalPages, windowSize = 5) => 
 
 const CLOSED_BOOKING_STATUSES = ["Cancelled", "Expired", "Completed", "Refunded"];
 
+export const CHARTER_QUOTE_HOLD_MS = 12 * 60 * 60 * 1000;
+export const CHARTER_DEFAULT_DEPOSIT_RATE = 0.5;
+
+export const getCharterDepositAmount = (quoteTotal, adminDepositAmount = 0) => {
+  const total = Number(quoteTotal) || 0;
+  const adminAmount = Number(adminDepositAmount) || 0;
+  if (total <= 0) return 0;
+  if (adminAmount > 0) return Math.min(adminAmount, total);
+  return Math.round(total * CHARTER_DEFAULT_DEPOSIT_RATE);
+};
+
+const pickDeadline = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== "");
+
+const getQuoteAnchorTime = (booking) => {
+  const anchor = pickDeadline(
+    booking?.quotedAt,
+    booking?.quoteSubmittedAt,
+    booking?.quoteAt,
+    booking?.quotedDate,
+  );
+  if (anchor) {
+    const time = new Date(anchor).getTime();
+    if (!Number.isNaN(time)) return time;
+  }
+  if (["Quoted", "PendingPayment", "Confirmed"].includes(String(booking?.status || ""))) {
+    const fallback = pickDeadline(booking?.updatedAt, booking?.modifiedAt, booking?.createdAt);
+    if (fallback) {
+      const time = new Date(fallback).getTime();
+      if (!Number.isNaN(time)) return time;
+    }
+  }
+  return 0;
+};
+
+export const getCharterQuotePaymentDeadline = (booking) => {
+  const anchorTime = getQuoteAnchorTime(booking);
+  const computedDeadline = anchorTime
+    ? new Date(anchorTime + CHARTER_QUOTE_HOLD_MS).toISOString()
+    : "";
+
+  const apiDeadline = pickDeadline(booking?.bookingHoldExpiresAt, booking?.holdExpiresAt);
+  if (computedDeadline && apiDeadline) {
+    const computedTime = new Date(computedDeadline).getTime();
+    const apiTime = new Date(apiDeadline).getTime();
+    if (!Number.isNaN(computedTime) && !Number.isNaN(apiTime)) {
+      return new Date(Math.max(computedTime, apiTime)).toISOString();
+    }
+  }
+  return computedDeadline || apiDeadline || "";
+};
+
+export const shouldShowCharterQuotePaymentCountdown = (booking) => {
+  if (!booking) return false;
+  if (isBookingClosed(booking)) return false;
+  if (isBookingFullyPaid(booking)) return false;
+  if (isBookingPaymentClosed(booking)) return false;
+  if (!["Quoted", "PendingPayment", "Confirmed"].includes(String(booking?.status || ""))) return false;
+  return Boolean(getCharterQuotePaymentDeadline(booking));
+};
+
 export const isBookingFullyPaid = (booking) =>
   String(booking?.paymentStatus || "").toLowerCase() === "paid";
 
@@ -308,13 +368,8 @@ export const isBookingClosed = (booking) =>
   || ["cancelled", "refunded", "expired", "completed"].includes(String(booking?.status || "").toLowerCase());
 
 /** Chỉ đếm ngược khi khách đã chấp nhận báo giá (PendingPayment) nhưng chưa thanh toán xong. */
-export const shouldShowBookingHoldCountdown = (booking) => {
-  if (!booking?.bookingHoldExpiresAt) return false;
-  if (isBookingClosed(booking)) return false;
-  if (isBookingFullyPaid(booking)) return false;
-  if (isBookingPaymentClosed(booking)) return false;
-  return String(booking?.status || "") === "PendingPayment";
-};
+export const shouldShowBookingHoldCountdown = (booking) =>
+  shouldShowCharterQuotePaymentCountdown(booking);
 
 export const shouldShowPaymentDeadlineCountdown = (payment, booking) => {
   if (!payment) return false;

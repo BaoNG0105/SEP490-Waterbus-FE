@@ -105,7 +105,6 @@ const buildFormDataFromDetail = (detail, user) => ({
       note: pick(stop, ["note"], ""),
     }))
     : [],
-  boatRequirements: pick(detail, ["boatRequirements"], ""),
   specialRequests: pick(detail, ["specialRequests"], ""),
 });
 
@@ -676,11 +675,11 @@ export function EditCharter() {
       return;
     }
 
-    if (formData.boatRequirements.length > 1000 || formData.specialRequests.length > 1000) {
+    if (formData.specialRequests.length > 1000) {
       Swal.fire({
         icon: "warning",
         title: lang === "VN" ? "Nội dung nhập quá dài" : "Input is too long",
-        text: lang === "VN" ? "Yêu cầu và ghi chú tối đa 1000 ký tự." : "Notes are limited to 1000 characters.",
+        text: lang === "VN" ? "Ghi chú tối đa 1000 ký tự." : "Notes are limited to 1000 characters.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -714,7 +713,6 @@ export function EditCharter() {
       }),
       preferredNumberOfDecks: normalizeDeckCount(formData.requestedBoats[0]?.numberOfDecks),
       preferredSeatSetupType: getDeckFallbackSeatSetupType(formData.requestedBoats[0]?.numberOfDecks),
-      boatRequirements: formData.boatRequirements || null,
       specialRequests: formData.specialRequests || null,
     };
 
@@ -1182,7 +1180,7 @@ export function EditCharter() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h4 className="font-headline font-black text-[#124757] dark:text-white text-sm uppercase tracking-wider">
-                        {lang === "VN" ? "Yêu cầu bổ sung" : "Additional notes"}
+                        {lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}
                       </h4>
                       <p className="mt-1 text-[11px] font-medium text-slate-400">
                         {lang === "VN" ? "Có thể bỏ trống nếu không có yêu cầu riêng." : "You can leave this empty if there are no extra requests."}
@@ -1194,17 +1192,10 @@ export function EditCharter() {
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
-                      <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Yêu cầu về tàu" : "Boat Requirements"}</label>
-                      <span className="text-[10px] font-bold text-slate-400">{String(formData.boatRequirements || "").length}/1000</span>
-                    </div>
-                    <textarea value={formData.boatRequirements} onChange={(e) => handleFieldChange("boatRequirements", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: cần khu VIP, âm thanh, bàn trang trí, không gian tổ chức sinh nhật..." : "e.g. VIP area, sound setup, decorated table, birthday space..."} />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</label>
+                      <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}</label>
                       <span className="text-[10px] font-bold text-slate-400">{String(formData.specialRequests || "").length}/1000</span>
                     </div>
-                    <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: đón khách lớn tuổi, chuẩn bị nước uống, cần hỗ trợ khi lên tàu..." : "e.g. elderly guests, drinks prepared, boarding support needed..."} />
+                    <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: cần trang trí sinh nhật, đón khách lớn tuổi, chuẩn bị nước uống..." : "e.g. birthday decoration, elderly guests, drinks prepared..."} />
                   </div>
                 </div>
               </div>
