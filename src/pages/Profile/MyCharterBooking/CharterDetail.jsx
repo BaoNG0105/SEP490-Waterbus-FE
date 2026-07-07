@@ -16,8 +16,9 @@ import {
   printSelectedCharterBookingTickets,
   updateMyCharterBookingPassengers,
 } from "../../../services/charterBookingService";
-import { createBookingPayment, syncBookingPayment } from "../../../services/paymentService";
+import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { PaymentLottieIcon } from "../../../components/PaymentLottieIcon";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -25,6 +26,75 @@ const pick = (source, keys, fallback = "") => {
     if (value !== undefined && value !== null && value !== "") return value;
   }
   return fallback;
+};
+
+const getDeadlineTime = (value) => {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
+const getRemainingMs = (deadline, now = Date.now()) => {
+  const time = getDeadlineTime(deadline);
+  return time ? Math.max(0, time - now) : 0;
+};
+
+const DEFAULT_PAYMENT_LINK_MS = 5 * 60 * 1000;
+
+const isDeadlineExpired = (deadline, now = Date.now()) => {
+  const time = getDeadlineTime(deadline);
+  return Boolean(time && now >= time);
+};
+
+const PayOSLogo = ({ inverted = false }) => (
+  <span className="inline-flex shrink-0 items-center gap-1.5" aria-label="PayOS">
+    <span
+      className={`flex h-6 w-6 items-center justify-center overflow-hidden rounded-md ${
+        inverted
+          ? "bg-white text-[#124757] dark:bg-slate-900 dark:text-yellow-400"
+          : "bg-white text-[#124757] ring-1 ring-[#D8E7EA] dark:bg-slate-900 dark:text-yellow-400 dark:ring-slate-700"
+      }`}
+    >
+      <PaymentLottieIcon className="h-7 w-7" />
+    </span>
+    <span
+      className={`font-headline text-sm font-black normal-case tracking-normal ${
+        inverted ? "text-white dark:text-slate-900" : "text-[#124757] dark:text-yellow-400"
+      }`}
+    >
+      pay<span className={inverted ? "text-[#FFD100] dark:text-[#124757]" : "text-cyan-500"}>OS</span>
+    </span>
+  </span>
+);
+
+const formatCountdown = (milliseconds) => {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value) => String(value).padStart(2, "0");
+
+  if (days > 0) return `${days}d ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+};
+
+const getPaymentAmount = (payment) =>
+  Number(pick(payment, ["amount", "paymentAmount", "paidAmount", "totalAmount"], 0)) || 0;
+
+const getPaymentCreatedAt = (payment) =>
+  pick(payment, ["createdAt", "paymentCreatedAt", "createdDate", "createdTime"], "");
+
+const getPaymentPurpose = (payment) =>
+  String(pick(payment, ["paymentPurpose", "purpose", "type"], "")).toLowerCase();
+
+const isPaidPayment = (payment) =>
+  ["paid", "success", "succeeded", "completed"].includes(String(payment?.paymentStatus).toLowerCase());
+
+const getEstimatedPaymentDeadline = (payment) => {
+  const createdAt = getPaymentCreatedAt(payment);
+  const createdTime = getDeadlineTime(createdAt);
+  return createdTime ? new Date(createdTime + DEFAULT_PAYMENT_LINK_MS).toISOString() : "";
 };
 
 const normalizeBooking = (item) => {
@@ -35,11 +105,16 @@ const normalizeBooking = (item) => {
   const toName = pick(item, ["toStationName", "toStation.stationName", "toStation.name"]);
   const payments = Array.isArray(item?.payments) ? item.payments : [];
   const pendingPayment = payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending");
-  const paidPayments = payments.filter((payment) => String(payment.paymentStatus).toLowerCase() === "paid");
-  const paidAmount = paidPayments.reduce((total, payment) => total + Number(payment.amount || 0), 0);
-  const paidDepositAmount = paidPayments
-    .filter((payment) => String(payment.paymentPurpose).toLowerCase() === "deposit")
-    .reduce((total, payment) => total + Number(payment.amount || 0), 0);
+  const paidPayments = payments.filter(isPaidPayment);
+  const paymentStatus = pick(item, ["paymentStatus"], "--");
+  const rawDepositAmount = Number(pick(item, ["depositAmount"], 0)) || 0;
+  const paidAmountFromPayments = paidPayments.reduce((total, payment) => total + getPaymentAmount(payment), 0);
+  const paidDepositAmountFromPayments = paidPayments
+    .filter((payment) => getPaymentPurpose(payment) === "deposit")
+    .reduce((total, payment) => total + getPaymentAmount(payment), 0);
+  const hasDepositPaid = paidDepositAmountFromPayments > 0 || String(paymentStatus).toLowerCase() === "depositpaid";
+  const paidDepositAmount = paidDepositAmountFromPayments || (hasDepositPaid ? rawDepositAmount : 0);
+  const paidAmount = paidAmountFromPayments || Number(pick(item, ["paidAmount", "paidPaymentAmount"], 0)) || paidDepositAmount;
 
   return {
     id: pick(item, ["id", "charterBookingId", "bookingId"]),
@@ -57,9 +132,11 @@ const normalizeBooking = (item) => {
     childCount,
     passengerCount,
     status: pick(item, ["bookingStatus", "status"], "PendingQuote"),
-    paymentStatus: pick(item, ["paymentStatus"], "--"),
+    paymentStatus,
+    holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
+    bookingHoldExpiresAt: pick(item, ["bookingHoldExpiresAt"], pick(pendingPayment, ["bookingHoldExpiresAt"], "")),
     estimatedPrice: Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0)),
-    depositAmount: Number(pick(item, ["depositAmount"], paidDepositAmount)),
+    depositAmount: rawDepositAmount || paidDepositAmount,
     promotionCode: pick(item, ["promotionCode"], ""),
     specialRequests: pick(item, ["specialRequests"], "--"),
     boatRequirements: pick(item, ["boatRequirements"], "--"),
@@ -81,9 +158,14 @@ const normalizeBooking = (item) => {
     tickets: pick(item, ["tickets"], []),
     payments,
     paidAmount,
-    hasDepositPaid: paidDepositAmount > 0,
+    paidDepositAmount,
+    hasDepositPaid,
     latestPaymentId: pick(pendingPayment, ["paymentId", "id"], pick(item, ["paymentId", "latestPaymentId", "payment.id"], "")),
+    latestPaymentOrderCode: pick(pendingPayment, ["orderCode", "paymentOrderCode", "payosOrderCode"], pick(item, ["orderCode", "paymentOrderCode", "latestPaymentOrderCode", "payment.orderCode"], "")),
+    latestPaymentAmount: getPaymentAmount(pendingPayment) || Number(pick(item, ["paymentAmount", "latestPaymentAmount", "payment.amount"], 0)) || 0,
     latestPaymentCheckoutUrl: pick(pendingPayment, ["checkoutUrl", "paymentUrl"], pick(item, ["checkoutUrl", "paymentUrl", "latestPaymentCheckoutUrl"], "")),
+    latestPaymentExpiresAt: pick(pendingPayment, ["expiresAt"], pick(item, ["expiresAt", "payment.expiresAt", "latestPaymentExpiresAt"], "")),
+    latestPaymentQrCode: pick(pendingPayment, ["qrCode"], pick(item, ["qrCode", "payment.qrCode", "latestPaymentQrCode"], "")),
     qrToken: pick(item, ["charterBookingQrToken", "qrToken"], ""),
   };
 };
@@ -94,6 +176,22 @@ const getBoatDisplayName = (boat, fallback = "--") => {
   if (code && name) return `${code} - ${name}`;
   return name || code || fallback;
 };
+
+const getRequestedDeckCount = (boat) => {
+  const directDeckCount = Number(pick(boat, ["requiredNumberOfDecks", "numberOfDecks", "preferredNumberOfDecks", "deckCount", "boat.numberOfDecks"], 0)) || 0;
+  if (directDeckCount > 0) return directDeckCount;
+
+  const legacySeatSetupType = pick(boat, ["requiredSeatSetupType", "seatSetupType", "preferredSeatSetupType", "boat.seatSetupType"], "");
+  if (legacySeatSetupType === "StandardAndVip") return 2;
+  if (legacySeatSetupType === "FullStandard") return 1;
+  return 0;
+};
+
+const formatDeckCount = (deckCount, lang) => (
+  Number(deckCount) > 0
+    ? `${deckCount} ${lang === "VN" ? "tầng" : Number(deckCount) === 1 ? "deck" : "decks"}`
+    : ""
+);
 
 const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png";
 
@@ -172,10 +270,25 @@ export function CharterDetail() {
   const [depositPercent, setDepositPercent] = useState(50);
   const [paymentPromotionCode, setPaymentPromotionCode] = useState("");
   const [paymentCheckoutUrl, setPaymentCheckoutUrl] = useState("");
+  const [paymentExpiresAt, setPaymentExpiresAt] = useState("");
+  const [paymentQrCode, setPaymentQrCode] = useState("");
+  const [paymentBookingHoldExpiresAt, setPaymentBookingHoldExpiresAt] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentWatcher, setPaymentWatcher] = useState({
+    isActive: false,
+    orderCode: "",
+    checkoutUrl: "",
+    amount: 0,
+    deadline: "",
+    statusText: "",
+  });
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const loadedIdRef = useRef("");
   const importInputRef = useRef(null);
   const syncedPaymentRef = useRef("");
   const autoSyncPaymentRef = useRef("");
+  const refreshedDeadlineRef = useRef("");
+  const paymentWindowRef = useRef(null);
 
   const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 
@@ -284,9 +397,47 @@ export function CharterDetail() {
     if (!booking) return;
     setPaymentOption(booking.hasDepositPaid && booking.paymentStatus !== "Paid" ? "Remaining" : "Full");
     setPaymentCheckoutUrl(booking.latestPaymentCheckoutUrl || "");
+    setPaymentExpiresAt(booking.latestPaymentExpiresAt || "");
+    setPaymentQrCode(booking.latestPaymentQrCode || "");
+    setPaymentBookingHoldExpiresAt(booking.bookingHoldExpiresAt || "");
+    setPaymentAmount(booking.latestPaymentAmount || 0);
     setPaymentPromotionCode((prev) => prev || booking.promotionCode || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-init only when these specific fields change, not on every booking refetch
-  }, [booking?.id, booking?.hasDepositPaid, booking?.paymentStatus, booking?.latestPaymentCheckoutUrl, booking?.promotionCode]);
+  }, [booking?.id, booking?.hasDepositPaid, booking?.paymentStatus, booking?.latestPaymentAmount, booking?.latestPaymentCheckoutUrl, booking?.latestPaymentExpiresAt, booking?.latestPaymentQrCode, booking?.bookingHoldExpiresAt, booking?.promotionCode]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const openPaymentTab = useCallback((checkoutUrl = "", { orderCode = "", amount = 0, expiresAt = "" } = {}) => {
+    const paymentTab = window.open(checkoutUrl || "about:blank", "_blank");
+
+    if (!paymentTab) {
+      Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "Trình duyệt đã chặn tab thanh toán" : "Payment tab was blocked",
+        text: lang === "VN"
+          ? "Vui lòng cho phép popup cho trang này rồi bấm thanh toán lại."
+          : "Please allow popups for this site and try again.",
+        confirmButtonColor: "#124757",
+      });
+      return null;
+    }
+
+    paymentWindowRef.current = paymentTab;
+    const deadline = expiresAt || new Date(Date.now() + DEFAULT_PAYMENT_LINK_MS).toISOString();
+    setPaymentWatcher({
+      isActive: true,
+      orderCode,
+      checkoutUrl,
+      amount: Number(amount || 0),
+      deadline,
+      statusText: lang === "VN" ? "Đang chờ thanh toán trên PayOS" : "Waiting for PayOS payment",
+    });
+    paymentTab.focus();
+    return paymentTab;
+  }, [lang]);
 
   const handleSyncPayment = useCallback(async (paymentId, { silent = false } = {}) => {
     if (!paymentId) return;
@@ -316,28 +467,100 @@ export function CharterDetail() {
     }
   }, [lang, loadDetail]);
 
-  useEffect(() => {
-    const storedPaymentId = sessionStorage.getItem(`charterPayment:${id}`);
-    const returnedFromPayOs = new URLSearchParams(location.search).has("status")
-      || new URLSearchParams(location.search).has("code")
-      || new URLSearchParams(location.search).has("orderCode");
+  const handleSyncPaymentByOrderCode = useCallback(async (orderCode, { silent = false } = {}) => {
+    if (!orderCode) return;
 
-    if (!storedPaymentId || !returnedFromPayOs || syncedPaymentRef.current === storedPaymentId) return;
-    syncedPaymentRef.current = storedPaymentId;
-    handleSyncPayment(storedPaymentId, { silent: true });
-  }, [handleSyncPayment, id, location.search]);
+    try {
+      setIsSubmitting(true);
+      await syncBookingPaymentByOrderCode(orderCode);
+      await loadDetail();
+      if (!silent) {
+        Swal.fire({
+          icon: "success",
+          title: lang === "VN" ? "Đã đồng bộ thanh toán" : "Payment synchronized",
+          confirmButtonColor: "#124757",
+        });
+      }
+    } catch (error) {
+      if (!silent) {
+        Swal.fire({
+          icon: "error",
+          title: lang === "VN" ? "Không thể đồng bộ" : "Unable to synchronize",
+          text: error.response?.data?.message || (lang === "VN" ? "Vui lòng thử lại sau." : "Please try again later."),
+          confirmButtonColor: "#124757",
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [lang, loadDetail]);
 
   useEffect(() => {
-    const paymentId = booking?.latestPaymentId || (booking?.id ? sessionStorage.getItem(`charterPayment:${booking.id}`) : "");
+    if (!paymentWatcher.isActive) return undefined;
+
     const isBookingPaid = String(booking?.paymentStatus).toLowerCase() === "paid";
+    if (isBookingPaid) {
+      setPaymentWatcher((current) => ({ ...current, isActive: false, statusText: "" }));
+      return undefined;
+    }
 
-    if (!paymentId || isBookingPaid) return undefined;
+    let active = true;
+    const checkPaymentState = async () => {
+      const paymentTabClosed = paymentWindowRef.current && paymentWindowRef.current.closed;
 
-    autoSyncPaymentRef.current = paymentId;
+      if (paymentWatcher.orderCode) {
+        try {
+          await syncBookingPaymentByOrderCode(paymentWatcher.orderCode);
+        } catch {
+          // Payment may still be pending while the PayOS tab is open.
+        }
+      }
+
+      if (!active) return;
+      await loadDetail();
+
+      if (!active) return;
+      if (paymentTabClosed && String(booking?.paymentStatus).toLowerCase() !== "paid") {
+        setPaymentWatcher((current) => ({
+          ...current,
+          isActive: false,
+          statusText: lang === "VN" ? "Tab PayOS đã đóng, thanh toán chưa hoàn tất" : "PayOS tab closed, payment is not completed",
+        }));
+      }
+    };
+
+    const interval = window.setInterval(checkPaymentState, 3000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [booking?.paymentStatus, lang, loadDetail, paymentWatcher.isActive, paymentWatcher.orderCode]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const orderCode = params.get("orderCode") || "";
+    const returnedFromPayOs = params.has("status") || params.has("code") || Boolean(orderCode);
+
+    if (!returnedFromPayOs || !orderCode || syncedPaymentRef.current === orderCode) return;
+
+    syncedPaymentRef.current = orderCode;
+    sessionStorage.setItem(`charterPaymentOrderCode:${id}`, orderCode);
+    sessionStorage.removeItem(`charterPayment:${id}`);
+    handleSyncPaymentByOrderCode(orderCode, { silent: true });
+  }, [handleSyncPaymentByOrderCode, id, location.search]);
+
+  useEffect(() => {
+    const orderCode = booking?.latestPaymentOrderCode || (booking?.id ? sessionStorage.getItem(`charterPaymentOrderCode:${booking.id}`) : "");
+    const isBookingPaid = String(booking?.paymentStatus).toLowerCase() === "paid";
+    const latestPaymentExpired = isDeadlineExpired(booking?.latestPaymentExpiresAt);
+
+    if (!orderCode || isBookingPaid || latestPaymentExpired) return undefined;
+
+    autoSyncPaymentRef.current = orderCode;
     const syncSilently = async () => {
       try {
-        await syncBookingPayment(paymentId);
-        if (autoSyncPaymentRef.current === paymentId) {
+        await syncBookingPaymentByOrderCode(orderCode);
+        if (autoSyncPaymentRef.current === orderCode) {
           await loadDetail();
         }
       } catch {
@@ -351,24 +574,54 @@ export function CharterDetail() {
       autoSyncPaymentRef.current = "";
       window.clearInterval(interval);
     };
-  }, [booking?.id, booking?.latestPaymentId, booking?.paymentStatus, loadDetail]);
+  }, [booking?.id, booking?.latestPaymentExpiresAt, booking?.latestPaymentOrderCode, booking?.paymentStatus, loadDetail]);
 
   const handleCreatePayment = async () => {
     if (!booking?.id) return;
     const activePendingPayment = Array.isArray(booking.payments)
-      ? booking.payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending")
+      ? booking.payments.find((payment) => {
+        const isPending = String(payment.paymentStatus).toLowerCase() === "pending";
+        const expiresAt = pick(payment, ["expiresAt"], "") || getEstimatedPaymentDeadline(payment);
+        return isPending && (!expiresAt || !isDeadlineExpired(expiresAt));
+      })
       : null;
-    const existingPaymentId = pick(activePendingPayment, ["paymentId", "id"], booking.latestPaymentId);
-    const existingCheckoutUrl = pick(activePendingPayment, ["checkoutUrl", "paymentUrl"], booking.latestPaymentCheckoutUrl || paymentCheckoutUrl);
+    const existingPaymentId = activePendingPayment ? pick(activePendingPayment, ["paymentId", "id"], booking.latestPaymentId) : "";
+    const existingOrderCode = activePendingPayment ? pick(activePendingPayment, ["orderCode", "paymentOrderCode", "payosOrderCode"], booking.latestPaymentOrderCode) : "";
+    const existingCheckoutUrl = activePendingPayment ? pick(activePendingPayment, ["checkoutUrl", "paymentUrl"], booking.latestPaymentCheckoutUrl || paymentCheckoutUrl) : "";
+    const existingExpiresAt = activePendingPayment ? pick(activePendingPayment, ["expiresAt"], booking.latestPaymentExpiresAt || paymentExpiresAt) : "";
+    const existingPaymentAmount = activePendingPayment ? getPaymentAmount(activePendingPayment) || booking.latestPaymentAmount || 0 : 0;
+    const quoteHoldExpired = booking.status === "Quoted" && isDeadlineExpired(booking.holdExpiresAt);
+
+    if (quoteHoldExpired) {
+      await loadDetail();
+      Swal.fire({
+        icon: "info",
+        title: lang === "VN" ? "Báo giá đã hết hạn" : "Quote expired",
+        text: lang === "VN" ? "Hệ thống đã tải lại booking để cập nhật trạng thái mới nhất." : "The booking has been refreshed for the latest status.",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
 
     if (existingPaymentId || existingCheckoutUrl) {
       if (existingCheckoutUrl) {
-        window.location.assign(existingCheckoutUrl);
+        openPaymentTab(existingCheckoutUrl, {
+          orderCode: existingOrderCode,
+          amount: existingPaymentAmount || selectedPaymentAmount,
+          expiresAt: existingExpiresAt,
+        });
+        return;
+      }
+      if (existingOrderCode) {
+        await handleSyncPaymentByOrderCode(existingOrderCode);
         return;
       }
       await handleSyncPayment(existingPaymentId);
       return;
     }
+
+    const paymentTab = openPaymentTab("", { amount: selectedPaymentAmount });
+    if (!paymentTab) return;
 
     try {
       setIsSubmitting(true);
@@ -382,6 +635,8 @@ export function CharterDetail() {
       }
       const payment = await createBookingPayment(paymentPayload);
       const paymentId = pick(payment, ["id", "paymentId", "data.id", "data.paymentId", "payment.id", "data.payment.id"]);
+      const orderCode = pick(payment, ["orderCode", "paymentOrderCode", "payosOrderCode", "data.orderCode", "data.paymentOrderCode", "data.payosOrderCode", "payment.orderCode", "data.payment.orderCode"]);
+      const createdPaymentAmount = Number(pick(payment, ["amount", "paymentAmount", "data.amount", "data.paymentAmount", "payment.amount", "data.payment.amount"], selectedPaymentAmount)) || selectedPaymentAmount;
       const checkoutUrl = pick(payment, [
         "checkoutUrl",
         "paymentUrl",
@@ -398,18 +653,47 @@ export function CharterDetail() {
         "data.payment.checkoutUrl",
         "data.payment.paymentUrl",
       ]);
+      const expiresAt = pick(payment, ["expiresAt", "data.expiresAt", "payment.expiresAt", "data.payment.expiresAt"]);
+      const qrCode = pick(payment, ["qrCode", "data.qrCode", "payment.qrCode", "data.payment.qrCode"]);
+      const bookingHoldExpiresAt = pick(payment, [
+        "bookingHoldExpiresAt",
+        "data.bookingHoldExpiresAt",
+        "payment.bookingHoldExpiresAt",
+        "data.payment.bookingHoldExpiresAt",
+      ]);
 
-      if (paymentId) {
+      if (orderCode) {
+        sessionStorage.setItem(`charterPaymentOrderCode:${booking.id}`, orderCode);
+        sessionStorage.removeItem(`charterPayment:${booking.id}`);
+      } else if (paymentId) {
         sessionStorage.setItem(`charterPayment:${booking.id}`, paymentId);
+      }
+      if (paymentId) {
         sessionStorage.setItem(`paymentBooking:${paymentId}`, booking.id);
         sessionStorage.setItem("latestCharterPaymentBooking", booking.id);
       }
       setPaymentCheckoutUrl(checkoutUrl || "");
+      setPaymentExpiresAt(expiresAt || "");
+      setPaymentQrCode(qrCode || "");
+      setPaymentBookingHoldExpiresAt(bookingHoldExpiresAt || "");
+      setPaymentAmount(createdPaymentAmount);
+      setPaymentWatcher((current) => ({
+        ...current,
+        isActive: Boolean(checkoutUrl),
+        orderCode,
+        checkoutUrl,
+        amount: createdPaymentAmount,
+        deadline: expiresAt || current.deadline || new Date(Date.now() + DEFAULT_PAYMENT_LINK_MS).toISOString(),
+        statusText: lang === "VN" ? "Đang chờ thanh toán trên PayOS" : "Waiting for PayOS payment",
+      }));
 
       if (checkoutUrl) {
-        window.location.assign(checkoutUrl);
+        paymentTab.location.href = checkoutUrl;
         return;
       }
+
+      paymentTab.close();
+      setPaymentWatcher((current) => ({ ...current, isActive: false }));
 
       Swal.fire({
         icon: "success",
@@ -418,6 +702,8 @@ export function CharterDetail() {
         confirmButtonColor: "#124757",
       });
     } catch (error) {
+      paymentTab.close();
+      setPaymentWatcher((current) => ({ ...current, isActive: false }));
       Swal.fire({
         icon: "error",
         title: lang === "VN" ? "Không thể tạo thanh toán" : "Unable to create payment",
@@ -431,6 +717,22 @@ export function CharterDetail() {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (!booking?.id) return;
+
+    const deadlines = [
+      booking.status === "Quoted" && booking.holdExpiresAt ? { key: `hold:${booking.id}:${booking.holdExpiresAt}`, value: booking.holdExpiresAt } : null,
+      paymentExpiresAt ? { key: `payment:${booking.id}:${paymentExpiresAt}`, value: paymentExpiresAt } : null,
+      paymentBookingHoldExpiresAt ? { key: `booking-hold:${booking.id}:${paymentBookingHoldExpiresAt}`, value: paymentBookingHoldExpiresAt } : null,
+    ].filter(Boolean);
+
+    const expiredDeadline = deadlines.find((deadline) => isDeadlineExpired(deadline.value, nowTick));
+    if (!expiredDeadline || refreshedDeadlineRef.current === expiredDeadline.key) return;
+
+    refreshedDeadlineRef.current = expiredDeadline.key;
+    loadDetail();
+  }, [booking?.holdExpiresAt, booking?.id, booking?.status, loadDetail, nowTick, paymentBookingHoldExpiresAt, paymentExpiresAt]);
 
   const handleCancelBooking = async () => {
     if (!booking) return;
@@ -634,6 +936,7 @@ export function CharterDetail() {
     return {
       boatOrder,
       name: getBoatDisplayName(boat, getBoatDisplayName(selectedBoat, `${lang === "VN" ? "Tàu" : "Boat"} ${boatOrder}`)),
+      numberOfDecks: getRequestedDeckCount(boat) || getRequestedDeckCount(selectedBoat),
       seatSetupType: pick(boat, ["seatSetupType", "requiredSeatSetupType", "boat.seatSetupType"], pick(selectedBoat, ["seatSetupType", "requiredSeatSetupType"], "--")),
       imageUrl: pick(
         boat,
@@ -650,16 +953,59 @@ export function CharterDetail() {
   const quoteSubtotal = booking.subtotalAmount || booking.estimatedPrice;
   const quoteTotal = booking.totalAmount || booking.estimatedPrice;
   const hasQuote = booking.status !== "PendingQuote" && (quoteBoatRows.length > 0 || booking.estimatedPrice > 0);
+  const storedPaymentOrderCode = sessionStorage.getItem(`charterPaymentOrderCode:${booking.id}`);
   const storedPaymentId = sessionStorage.getItem(`charterPayment:${booking.id}`);
   const activePendingPayment = Array.isArray(booking.payments)
-    ? booking.payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending")
+    ? booking.payments.find((payment) => {
+      const isPending = String(payment.paymentStatus).toLowerCase() === "pending";
+      const expiresAt = pick(payment, ["expiresAt"], "") || getEstimatedPaymentDeadline(payment);
+      return isPending && (!expiresAt || !isDeadlineExpired(expiresAt, nowTick));
+    })
     : null;
-  const pendingPaymentId = pick(activePendingPayment, ["paymentId", "id"], booking.latestPaymentId || storedPaymentId);
-  const effectiveCheckoutUrl = paymentCheckoutUrl || pick(activePendingPayment, ["checkoutUrl", "paymentUrl"], booking.latestPaymentCheckoutUrl);
+  const statePaymentIsActive = Boolean(paymentCheckoutUrl || booking.latestPaymentCheckoutUrl || paymentQrCode || booking.latestPaymentQrCode)
+    && (!paymentExpiresAt || !isDeadlineExpired(paymentExpiresAt, nowTick));
+  const pendingPaymentId = activePendingPayment
+    ? pick(activePendingPayment, ["paymentId", "id"], booking.latestPaymentId || storedPaymentId)
+    : (statePaymentIsActive ? (booking.latestPaymentId || storedPaymentId) : "");
+  const pendingPaymentOrderCode = activePendingPayment
+    ? pick(activePendingPayment, ["orderCode", "paymentOrderCode", "payosOrderCode"], booking.latestPaymentOrderCode || storedPaymentOrderCode)
+    : (statePaymentIsActive ? (booking.latestPaymentOrderCode || storedPaymentOrderCode) : "");
+  const effectiveCheckoutUrl = activePendingPayment
+    ? pick(activePendingPayment, ["checkoutUrl", "paymentUrl"], booking.latestPaymentCheckoutUrl)
+    : (statePaymentIsActive ? (paymentCheckoutUrl || booking.latestPaymentCheckoutUrl) : "");
+  const effectivePaymentExpiresAt = activePendingPayment
+    ? pick(activePendingPayment, ["expiresAt"], booking.latestPaymentExpiresAt)
+    : (statePaymentIsActive ? (paymentExpiresAt || booking.latestPaymentExpiresAt) : "");
+  const effectivePaymentQrCode = activePendingPayment
+    ? pick(activePendingPayment, ["qrCode"], booking.latestPaymentQrCode)
+    : (statePaymentIsActive ? (paymentQrCode || booking.latestPaymentQrCode) : "");
+  const expiredPendingPayment = Array.isArray(booking.payments)
+    ? booking.payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending" && isDeadlineExpired(pick(payment, ["expiresAt"], "") || getEstimatedPaymentDeadline(payment), nowTick))
+    : null;
+  const expiredPaymentCheckoutUrl = pick(expiredPendingPayment, ["checkoutUrl", "paymentUrl"], "");
+  const holdRemainingMs = getRemainingMs(booking.holdExpiresAt, nowTick);
+  const hasHoldDeadline = Boolean(getDeadlineTime(booking.holdExpiresAt));
+  const isQuoteHoldExpired = booking.status === "Quoted" && hasHoldDeadline && holdRemainingMs <= 0;
+  const paymentRemainingMs = getRemainingMs(effectivePaymentExpiresAt, nowTick);
+  const hasPaymentDeadline = Boolean(getDeadlineTime(effectivePaymentExpiresAt));
+  const isPaymentLinkExpired = hasPaymentDeadline && paymentRemainingMs <= 0;
+  const bookingHoldDeadline = paymentBookingHoldExpiresAt || booking.bookingHoldExpiresAt;
+  const bookingHoldRemainingMs = getRemainingMs(bookingHoldDeadline, nowTick);
+  const hasBookingHoldDeadline = Boolean(getDeadlineTime(bookingHoldDeadline));
+  const isBookingHoldExpired = hasBookingHoldDeadline && bookingHoldRemainingMs <= 0;
   const hasPendingPayOs = Boolean(pendingPaymentId || effectiveCheckoutUrl);
-  const canCreatePayment = ["Quoted", "PendingPayment", "Confirmed"].includes(booking.status) && !isPaid && !hasPendingPayOs;
-  const remainingAmount = Math.max(quoteTotal - paidAmount, 0);
-  const depositPaymentAmount = Math.round((quoteTotal * Number(depositPercent || 0)) / 100);
+  const canCreatePayment = ["Quoted", "PendingPayment", "Confirmed"].includes(booking.status)
+    && !isPaid
+    && !hasPendingPayOs
+    && !isQuoteHoldExpired
+    && !isBookingHoldExpired
+    && !["Expired", "Cancelled", "Completed", "Refunded"].includes(booking.status);
+  const paidDepositAmount = Number(booking.paidDepositAmount || 0);
+  const depositPaymentAmount = booking.depositAmount > 0
+    ? Math.min(Number(booking.depositAmount), quoteTotal)
+    : Math.round((quoteTotal * Number(depositPercent || 0)) / 100);
+  const effectivePaidAmount = Math.max(paidAmount, booking.hasDepositPaid ? paidDepositAmount || depositPaymentAmount : 0);
+  const remainingAmount = Math.max(quoteTotal - effectivePaidAmount, 0);
   const selectedPaymentAmount = paymentOption === "Deposit"
     ? depositPaymentAmount
     : paymentOption === "Remaining"
@@ -667,6 +1013,14 @@ export function CharterDetail() {
       : booking.hasDepositPaid
         ? remainingAmount
         : quoteTotal;
+  const estimatedPendingPaymentDeadline = activePendingPayment ? getEstimatedPaymentDeadline(activePendingPayment) : "";
+  const effectivePendingPaymentAmount = activePendingPayment
+    ? getPaymentAmount(activePendingPayment) || selectedPaymentAmount
+    : Number(paymentAmount || booking.latestPaymentAmount || selectedPaymentAmount) || selectedPaymentAmount;
+  const effectivePaymentDeadline = effectivePaymentExpiresAt || paymentWatcher.deadline || estimatedPendingPaymentDeadline;
+  const isEstimatedPaymentDeadline = Boolean(!effectivePaymentExpiresAt && effectivePaymentDeadline);
+  const paymentWatcherRemainingMs = getRemainingMs(effectivePaymentDeadline, nowTick);
+  const paymentWatcherAmount = paymentWatcher.amount || effectivePendingPaymentAmount;
   const paymentChoices = [
     { id: "Deposit", label: lang === "VN" ? "Đặt cọc" : "Deposit", disabled: booking.hasDepositPaid, amount: depositPaymentAmount },
     { id: "Full", label: lang === "VN" ? "Thanh toán đủ" : "Full", disabled: false, amount: booking.hasDepositPaid ? remainingAmount : quoteTotal },
@@ -678,7 +1032,14 @@ export function CharterDetail() {
   const scheduleItems = [
     { icon: "event", label: lang === "VN" ? "Ngày giờ đi" : "Schedule", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)}` },
     { icon: "timer", label: lang === "VN" ? "Thời lượng thuê" : "Duration", value: `${booking.durationValue} ${booking.rentalUnit}` },
-    { icon: "groups", label: lang === "VN" ? "Hành khách" : "Passengers", value: `${booking.passengerCount} (${booking.adultCount} adult / ${booking.childCount} child)` },
+    {
+      icon: "groups",
+      label: lang === "VN" ? "Hành khách" : "Passengers",
+      value: lang === "VN" ? `${booking.passengerCount} khách` : `${booking.passengerCount} guests`,
+      description: lang === "VN"
+        ? `${booking.adultCount} người lớn / ${booking.childCount} trẻ em`
+        : `${booking.adultCount} adults / ${booking.childCount} children`,
+    },
     { icon: "route", label: lang === "VN" ? "Ước tính lộ trình" : "Route Estimate", value: formatRouteEstimate(booking.routeEstimate) },
   ];
   const contactItems = [
@@ -686,8 +1047,26 @@ export function CharterDetail() {
     { icon: "call", label: lang === "VN" ? "Số điện thoại" : "Phone", value: booking.contactPhone },
     { icon: "mail", label: lang === "VN" ? "Email" : "Email", value: booking.contactEmail },
   ];
+  const itineraryTimelineItems = [
+    { type: "start", label: lang === "VN" ? "Bến đi" : "From", name: routeFrom },
+    ...(Array.isArray(booking.itineraryStops) ? booking.itineraryStops.map((stop, index) => ({
+      type: "stop",
+      label: lang === "VN" ? `Điểm dừng ${index + 1}` : `Stop ${index + 1}`,
+      name: stop.stationName || "--",
+      meta: Number(stop.stayDurationMinutes) > 0 ? `${stop.stayDurationMinutes} ${lang === "VN" ? "phút dừng" : "min stay"}` : "",
+    })) : []),
+    { type: "end", label: lang === "VN" ? "Bến đến" : "To", name: routeTo },
+  ];
+  const requestedDeckItems = Array.isArray(booking.requestedBoats)
+    ? booking.requestedBoats.map((boat, index) => ({
+      order: pick(boat, ["boatOrder", "order"], index + 1),
+      deckText: formatDeckCount(getRequestedDeckCount(boat), lang),
+      seatSetupType: pick(boat, ["requiredSeatSetupType", "seatSetupType", "preferredSeatSetupType"], "--"),
+    }))
+    : [];
 
   return (
+    <>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 sm:px-6 lg:px-8 font-body transition-colors">
       <main className="max-w-6xl mx-auto space-y-6">
         <button onClick={() => navigate("/profile/my-charter-booking")} className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
@@ -758,85 +1137,143 @@ export function CharterDetail() {
         </section>
 
         {/* ===== SECTION 1: REQUEST OVERVIEW ===== */}
-        <section className="bg-white dark:bg-slate-800 rounded-[2rem] shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70 px-6 py-6 md:px-8">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
-              {lang === "VN" ? "Tổng quan yêu cầu" : "Request Overview"}
-            </h2>
-            <p className="text-[11px] font-bold text-slate-400">
-              {lang === "VN" ? "Gửi lúc" : "Submitted"} {formatDateTime(booking.createdAt)}
-            </p>
+        <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-[2rem] shadow-[0_18px_50px_rgba(15,23,42,0.07)] border border-slate-200/70 dark:border-slate-700/70">
+          <div className="border-b border-slate-100 dark:border-slate-700/70 px-6 py-5 md:px-8">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
+                  {lang === "VN" ? "Tổng quan yêu cầu" : "Request Overview"}
+                </h2>
+                <p className="mt-1 text-xs font-medium text-slate-400">
+                  {lang === "VN" ? "Thông tin lộ trình, hành khách và liên hệ" : "Route, passenger, and contact details"}
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
+                <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400">schedule</span>
+                {lang === "VN" ? "Gửi lúc" : "Submitted"} {formatDateTime(booking.createdAt)}
+              </span>
+            </div>
           </div>
 
-          <div className="mt-4 grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            {scheduleItems.map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
-                <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined rounded-xl bg-[#EAF3F5] dark:bg-slate-800 p-2 text-xl text-[#124757] dark:text-yellow-400">{item.icon}</span>
+          <div className="px-6 py-6 md:px-8">
+            <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="rounded-3xl border border-[#D8E7EA] bg-[#F7FAFB] p-5 dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900">
+                    <span className="material-symbols-outlined text-2xl">route</span>
+                  </span>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-                    <p className="mt-1 font-headline font-black text-slate-800 dark:text-white break-words">{item.value}</p>
+                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                      {lang === "VN" ? "Lộ trình dự kiến" : "Planned Route"}
+                    </p>
+                    <p className="mt-1 truncate text-xl font-headline font-black text-[#0E4050] dark:text-white">
+                      {routeFrom} <span className="text-slate-300">/</span> {routeTo}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {itineraryTimelineItems.map((item, index) => {
+                    const isLast = index === itineraryTimelineItems.length - 1;
+                    const isEndpoint = item.type !== "stop";
+                    return (
+                      <div key={`${item.type}-${item.name}-${index}`} className="grid grid-cols-[32px_1fr] gap-3">
+                        <div className="flex flex-col items-center">
+                          <span className={`flex h-8 w-8 items-center justify-center rounded-full border text-[10px] font-headline font-black ${isEndpoint
+                            ? "border-[#124757] bg-white text-[#124757] dark:border-yellow-400 dark:bg-slate-800 dark:text-yellow-400"
+                            : "border-slate-200 bg-white text-slate-400 dark:border-slate-700 dark:bg-slate-800"
+                            }`}
+                          >
+                            {item.type === "start" ? "A" : item.type === "end" ? "B" : index}
+                          </span>
+                          {!isLast && <span className="mt-2 h-8 w-px bg-[#C9DADF] dark:bg-slate-700"></span>}
+                        </div>
+                        <div className="rounded-2xl border border-white bg-white px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-800">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                              <p className="mt-0.5 truncate text-sm font-headline font-black text-[#0E4050] dark:text-slate-100">{item.name}</p>
+                            </div>
+                            {item.meta && <span className="w-max rounded-full bg-yellow-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:bg-yellow-400/10 dark:text-yellow-300">{item.meta}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {scheduleItems.map((item) => (
+                  <div key={item.label} className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
+                    <span className="material-symbols-outlined rounded-2xl bg-[#EAF3F5] p-2.5 text-2xl text-[#124757] dark:bg-slate-800 dark:text-yellow-400">{item.icon}</span>
+                    <p className="mt-4 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                    <p className="mt-1 text-lg font-headline font-black leading-snug text-slate-800 dark:text-white break-words">{item.value}</p>
+                    {item.description && (
+                      <p className="mt-1 text-xs font-bold leading-snug text-slate-400 dark:text-slate-500">{item.description}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {requestedDeckItems.length > 0 && (
+              <div className="mt-4 rounded-2xl bg-[#FBFDFD] px-4 py-3 ring-1 ring-[#D8E7EA] dark:bg-slate-900 dark:ring-slate-700">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EAF3F5] text-[#124757] dark:bg-slate-800 dark:text-yellow-400">
+                      <span className="material-symbols-outlined text-lg">directions_boat</span>
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Tàu yêu cầu" : "Requested Boats"}</p>
+                      <p className="truncate text-sm font-bold text-slate-600 dark:text-slate-300">
+                        {lang === "VN" ? `${requestedDeckItems.length} tàu` : `${requestedDeckItems.length} boat${requestedDeckItems.length > 1 ? "s" : ""}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 sm:justify-end">
+                    {requestedDeckItems.map((boat) => (
+                      <span key={`${boat.order}-${boat.deckText || boat.seatSetupType}`} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-headline font-black text-[#124757] shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#124757] text-[9px] text-white dark:bg-yellow-400 dark:text-slate-900">{boat.order}</span>
+                        {boat.deckText || boat.seatSetupType}
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            )}
 
-          {Array.isArray(booking.itineraryStops) && booking.itineraryStops.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-[#F8FBFC] dark:bg-slate-900 px-4 py-4">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Điểm dừng lộ trình" : "Itinerary Stops"}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">{routeFrom}</span>
-                {booking.itineraryStops.map((stop, index) => (
-                  <span key={`${stop.stationId || stop.stationName}-${index}`} className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-base text-slate-300">arrow_forward</span>
-                    <span className="px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">
-                      {stop.stationName || "--"}
-                      {Number(stop.stayDurationMinutes) > 0 ? ` · ${stop.stayDurationMinutes} ${lang === "VN" ? "phút" : "min"}` : ""}
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {contactItems.map((item) => (
+                <div key={item.label} className="rounded-3xl border border-slate-200 bg-[#F8FBFC] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#124757] ring-1 ring-slate-200 dark:bg-slate-800 dark:text-yellow-400 dark:ring-slate-700">
+                      <span className="material-symbols-outlined text-xl">{item.icon}</span>
                     </span>
-                  </span>
-                ))}
-                <span className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-base text-slate-300">arrow_forward</span>
-                  <span className="px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">{routeTo}</span>
-                </span>
-              </div>
-            </div>
-          )}
-
-          {Array.isArray(booking.requestedBoats) && booking.requestedBoats.length > 0 && (
-            <div className="mt-4 flex flex-col md:flex-row md:items-center gap-3 rounded-2xl border border-dashed border-[#BFD4D9] dark:border-slate-700 bg-[#FBFDFD] dark:bg-slate-900 px-4 py-4">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Loại tàu đã yêu cầu" : "Requested Boats"}</p>
-              <div className="flex flex-wrap gap-2">
-                {booking.requestedBoats.map((boat, index) => (
-                  <span key={`${pick(boat, ["seatSetupType"], "boat")}-${index}`} className="px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
-                    {pick(boat, ["seatSetupType"], "--")}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-4 grid md:grid-cols-3 gap-3">
-            {contactItems.map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-[#F8FBFC] dark:bg-slate-900 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-lg text-[#124757] dark:text-yellow-400">{item.icon}</span>
-                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                      <p className="mt-1 break-words text-sm font-bold text-slate-700 dark:text-slate-200">{item.value}</p>
+                    </div>
+                  </div>
                 </div>
-                <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200 break-words">{item.value}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 grid md:grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-4">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Yêu cầu về tàu" : "Boat Requirements"}</p>
-              <p className="mt-2 font-medium text-slate-700 dark:text-slate-200 break-words">{booking.boatRequirements}</p>
+              ))}
             </div>
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-4">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</p>
-              <p className="mt-2 font-medium text-slate-700 dark:text-slate-200 break-words">{booking.specialRequests}</p>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex items-center gap-2 text-slate-400">
+                  <span className="material-symbols-outlined text-lg">tune</span>
+                  <p className="text-[10px] font-headline font-black uppercase tracking-widest">{lang === "VN" ? "Yêu cầu về tàu" : "Boat Requirements"}</p>
+                </div>
+                <p className="mt-3 min-h-10 font-medium text-slate-700 dark:text-slate-200 break-words">{booking.boatRequirements}</p>
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex items-center gap-2 text-slate-400">
+                  <span className="material-symbols-outlined text-lg">sticky_note_2</span>
+                  <p className="text-[10px] font-headline font-black uppercase tracking-widest">{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</p>
+                </div>
+                <p className="mt-3 min-h-10 font-medium text-slate-700 dark:text-slate-200 break-words">{booking.specialRequests}</p>
+              </div>
             </div>
           </div>
         </section>
@@ -882,7 +1319,7 @@ export function CharterDetail() {
                             <p className="font-headline font-black text-slate-900 dark:text-white truncate">{boat.name}</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <span className="rounded-full border border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-headline font-black text-[#124757] dark:text-yellow-400">
-                                {boat.seatSetupType}
+                                {formatDeckCount(boat.numberOfDecks, lang) || boat.seatSetupType}
                               </span>
                               {boat.seatCount !== "" && (
                                 <span className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300">
@@ -943,6 +1380,30 @@ export function CharterDetail() {
                   </div>
                 </div>
 
+                {hasHoldDeadline && booking.status === "Quoted" && (
+                  <div className={`mt-5 rounded-2xl border px-4 py-3 ${
+                    isQuoteHoldExpired
+                      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+                      : "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300"
+                  }`}
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-xl">{isQuoteHoldExpired ? "timer_off" : "hourglass_top"}</span>
+                        <div>
+                          <p className="text-[10px] font-headline font-black uppercase tracking-widest">
+                            {lang === "VN" ? "Thời hạn phản hồi báo giá" : "Quote response deadline"}
+                          </p>
+                          <p className="text-xs font-bold opacity-80">{formatDateTime(booking.holdExpiresAt)}</p>
+                        </div>
+                      </div>
+                      <p className="font-headline text-2xl font-black tabular-nums">
+                        {isQuoteHoldExpired ? (lang === "VN" ? "Hết hạn" : "Expired") : formatCountdown(holdRemainingMs)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-5 border-t border-dashed border-slate-200 dark:border-slate-700 pt-4">
                   {isPaid ? (
                     <div className="flex items-center gap-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
@@ -954,18 +1415,88 @@ export function CharterDetail() {
                       <span className="material-symbols-outlined text-xl">cancel</span>
                       {lang === "VN" ? "Yêu cầu đã hủy, không thể thanh toán" : "Request cancelled, payment unavailable"}
                     </div>
+                  ) : isQuoteHoldExpired ? (
+                    <div className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+                      <p className="text-xs font-bold">
+                        {lang === "VN" ? "Báo giá đã quá hạn phản hồi. FE đã tải lại booking để nhận trạng thái mới nhất từ backend." : "The quote response deadline has passed. The booking has been refreshed for the latest backend state."}
+                      </p>
+                      <button type="button" onClick={loadDetail} className="w-max rounded-lg border border-rose-300 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider">
+                        {lang === "VN" ? "Tải lại booking" : "Refresh booking"}
+                      </button>
+                    </div>
+                  ) : isBookingHoldExpired ? (
+                    <div className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+                      <p className="text-xs font-bold">
+                        {lang === "VN" ? "Thời hạn giữ tàu đã hết. Vui lòng tải lại booking để cập nhật trạng thái." : "The booking hold deadline has passed. Refresh the booking for the latest status."}
+                      </p>
+                      <button type="button" onClick={loadDetail} className="w-max rounded-lg border border-rose-300 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider">
+                        {lang === "VN" ? "Tải lại booking" : "Refresh booking"}
+                      </button>
+                    </div>
+                  ) : (expiredPendingPayment || (Boolean(expiredPaymentCheckoutUrl || paymentCheckoutUrl) && isPaymentLinkExpired)) ? (
+                    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+                      <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
+                        <span className="material-symbols-outlined text-xl text-slate-400">timer_off</span>
+                        <p className="text-xs font-bold">
+                          {lang === "VN" ? "Link/QR thanh toán cũ đã hết hạn. Tạo lại link thanh toán để backend cấp giao dịch mới." : "The previous payment link or QR has expired. Create a new payment link."}
+                        </p>
+                      </div>
+                      <button type="button" onClick={handleCreatePayment} disabled={isSubmitting} className="w-max rounded-lg bg-[#124757] px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900">
+                        {isSubmitting ? (lang === "VN" ? "Đang tạo..." : "Creating...") : (lang === "VN" ? "Tạo lại link thanh toán" : "Create new payment link")}
+                      </button>
+                    </div>
                   ) : hasPendingPayOs ? (
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 px-4 py-3">
-                      <p className="flex-1 text-xs font-bold text-amber-800 dark:text-amber-200">
-                        {lang === "VN" ? "Đang có giao dịch PayOS chờ xử lý." : "A PayOS payment is pending."}
-                      </p>
-                      <div className="flex shrink-0 gap-2">
+                      <div className="flex-1 space-y-2 text-xs font-bold text-amber-800 dark:text-amber-200">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <PayOSLogo />
+                          <p>{lang === "VN" ? "Đang có giao dịch PayOS chờ xử lý." : "A PayOS payment is pending."}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="rounded-lg bg-white px-3 py-1.5 font-headline text-sm font-black text-[#0E4050] ring-1 ring-amber-200 dark:bg-slate-900 dark:text-yellow-400 dark:ring-amber-500/20">
+                            {effectivePendingPaymentAmount > 0 ? currencyFormatter.format(effectivePendingPaymentAmount) : "--"}
+                          </span>
+                          {effectivePaymentDeadline && (
+                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 font-headline text-sm font-black tabular-nums text-amber-700 ring-1 ring-amber-200 dark:bg-slate-900 dark:text-amber-300 dark:ring-amber-500/20">
+                              <span className="material-symbols-outlined text-base">timer</span>
+                              {formatCountdown(paymentWatcherRemainingMs)}
+                            </span>
+                          )}
+                        </div>
+                        {effectivePaymentDeadline && (
+                          <p className="text-[11px] opacity-80">
+                            {isEstimatedPaymentDeadline
+                              ? (lang === "VN" ? "Thời gian tạm tính vì backend chưa trả hạn link PayOS." : "Estimated time because the backend has not returned the PayOS link deadline.")
+                              : (lang === "VN" ? "Thời gian còn lại để hoàn tất thanh toán PayOS." : "Time left to complete the PayOS payment.")}
+                          </p>
+                        )}
+                        {hasBookingHoldDeadline && (
+                          <p className="text-[11px] opacity-80">
+                            {lang === "VN" ? "Giữ booking/tàu đến " : "Booking hold until "}{formatDateTime(bookingHoldDeadline)}
+                            {bookingHoldRemainingMs > 0 ? ` (${formatCountdown(bookingHoldRemainingMs)})` : ""}
+                          </p>
+                        )}
+                        {!effectiveCheckoutUrl && effectivePaymentQrCode && (
+                          <img src={effectivePaymentQrCode} alt="PayOS QR" className="mt-2 h-36 w-36 rounded-xl bg-white object-contain p-2 ring-1 ring-amber-200" />
+                        )}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
                         {effectiveCheckoutUrl && (
-                          <button type="button" onClick={() => window.location.assign(effectiveCheckoutUrl)} className="rounded-lg bg-[#124757] dark:bg-yellow-400 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:text-slate-900">
-                            {lang === "VN" ? "Mở PayOS" : "Open PayOS"}
+                          <button
+                            type="button"
+                            onClick={() => openPaymentTab(effectiveCheckoutUrl, { orderCode: pendingPaymentOrderCode, amount: effectivePendingPaymentAmount, expiresAt: effectivePaymentDeadline })}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#124757] dark:bg-yellow-400 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:text-slate-900"
+                          >
+                            <PayOSLogo inverted />
+                            {lang === "VN" ? "Mở PayOS" : "Open PayOS"}{effectivePendingPaymentAmount > 0 ? ` · ${currencyFormatter.format(effectivePendingPaymentAmount)}` : ""}
                           </button>
                         )}
-                        <button type="button" onClick={() => handleSyncPayment(pendingPaymentId)} disabled={isSubmitting || !pendingPaymentId} className="rounded-lg border border-amber-300 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 disabled:opacity-50">
+                        <button
+                          type="button"
+                          onClick={() => pendingPaymentOrderCode ? handleSyncPaymentByOrderCode(pendingPaymentOrderCode) : handleSyncPayment(pendingPaymentId)}
+                          disabled={isSubmitting || (!pendingPaymentOrderCode && !pendingPaymentId)}
+                          className="rounded-lg border border-amber-300 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 disabled:opacity-50"
+                        >
                           {lang === "VN" ? "Đồng bộ" : "Sync"}
                         </button>
                       </div>
@@ -1019,8 +1550,9 @@ export function CharterDetail() {
                           type="button"
                           onClick={handleCreatePayment}
                           disabled={isSubmitting || !canCreatePayment}
-                          className="shrink-0 rounded-xl bg-[#124757] dark:bg-yellow-400 px-6 py-2.5 text-xs font-headline font-black uppercase tracking-wider text-white dark:text-slate-900 disabled:opacity-50"
+                          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#124757] dark:bg-yellow-400 px-6 py-2.5 text-xs font-headline font-black uppercase tracking-wider text-white dark:text-slate-900 disabled:opacity-50"
                         >
+                          {!isSubmitting && <PayOSLogo inverted />}
                           {isSubmitting
                             ? (lang === "VN" ? "Đang xử lý..." : "Processing...")
                             : `${lang === "VN" ? "Thanh toán qua PayOS" : "Pay via PayOS"}${selectedPaymentAmount > 0 ? ` · ${currencyFormatter.format(selectedPaymentAmount)}` : ""}`}
@@ -1117,5 +1649,65 @@ export function CharterDetail() {
         )}
       </main>
     </div>
+    {paymentWatcher.isActive && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-md">
+        <div className="w-full max-w-lg overflow-hidden rounded-[2rem] border border-white/20 bg-white shadow-[0_30px_90px_rgba(2,6,23,0.35)] dark:border-slate-700 dark:bg-slate-900">
+          <div className="bg-[#124757] px-6 py-6 text-center text-white dark:bg-slate-950">
+            <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-3xl bg-white/10 ring-1 ring-white/20">
+              <PaymentLottieIcon className="h-20 w-20" />
+            </div>
+            <h2 className="mt-4 font-headline text-2xl font-black">
+              {lang === "VN" ? "Đang chờ thanh toán PayOS" : "Waiting for PayOS payment"}
+            </h2>
+            <p className="mx-auto mt-2 max-w-sm text-sm font-bold text-white/70">
+              {lang === "VN" ? "Tab thanh toán đã được mở. Trang này sẽ tự cập nhật khi giao dịch hoàn tất." : "The payment tab is open. This page will update automatically when payment is completed."}
+            </p>
+          </div>
+          <div className="space-y-4 px-6 py-6">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Số tiền" : "Amount"}</p>
+                <p className="mt-1 font-headline text-lg font-black text-[#0E4050] dark:text-yellow-400">
+                  {paymentWatcherAmount > 0 ? currencyFormatter.format(paymentWatcherAmount) : "--"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                  {isEstimatedPaymentDeadline
+                    ? (lang === "VN" ? "Thời gian ước tính" : "Estimated time")
+                    : (lang === "VN" ? "Thời gian còn" : "Time left")}
+                </p>
+                <p className="mt-1 font-headline text-lg font-black tabular-nums text-[#0E4050] dark:text-yellow-400">
+                  {effectivePaymentDeadline ? formatCountdown(paymentWatcherRemainingMs) : "--:--"}
+                </p>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+              {lang === "VN" ? "Không đóng trang này trong lúc thanh toán. Nếu bạn đóng tab PayOS trước khi thanh toán, booking vẫn ở trạng thái chưa thanh toán." : "Keep this page open during payment. If the PayOS tab closes before payment, the booking remains unpaid."}
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              {paymentWatcher.checkoutUrl && (
+                <button
+                  type="button"
+                  onClick={() => openPaymentTab(paymentWatcher.checkoutUrl, { orderCode: paymentWatcher.orderCode, amount: paymentWatcherAmount, expiresAt: effectivePaymentDeadline })}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#124757] px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
+                >
+                  <PayOSLogo inverted />
+                  {lang === "VN" ? "Mở lại PayOS" : "Reopen PayOS"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => paymentWatcher.orderCode ? handleSyncPaymentByOrderCode(paymentWatcher.orderCode) : loadDetail()}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400"
+              >
+                {lang === "VN" ? "Kiểm tra trạng thái" : "Check status"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

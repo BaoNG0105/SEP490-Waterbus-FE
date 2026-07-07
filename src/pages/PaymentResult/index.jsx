@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { syncBookingPaymentByOrderCode } from "../../services/paymentService";
 import { getApiErrorMessage } from "../../utils/apiError";
+import { PaymentLottieIcon } from "../../components/PaymentLottieIcon";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -17,18 +18,21 @@ export function PaymentResult() {
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const payosId = params.get("id") || params.get("paymentId") || "";
   const orderCode = params.get("orderCode") || "";
+  const resultCode = params.get("code") || "";
   const storedBookingId = sessionStorage.getItem("latestCharterPaymentBooking") || "";
-  const paymentId = payosId || orderCode;
   const status = params.get("status") || "";
   const isCancelled = params.get("cancel") === "true";
-  const isPaid = status.toLowerCase() === "paid" && !isCancelled;
-  const [isSyncing, setIsSyncing] = useState(Boolean(orderCode));
+  const isPaid = resultCode === "00" && status.toLowerCase() === "paid" && !isCancelled;
+  const shouldSyncPayment = Boolean(orderCode && isPaid);
+  const [isSyncing, setIsSyncing] = useState(shouldSyncPayment);
   const [syncError, setSyncError] = useState("");
-  const [syncedOrderCode, setSyncedOrderCode] = useState("");
   const [bookingId, setBookingId] = useState(storedBookingId);
 
   useEffect(() => {
-    if (!orderCode) return;
+    if (!shouldSyncPayment) {
+      setIsSyncing(false);
+      return;
+    }
 
     let active = true;
     Promise.resolve()
@@ -50,13 +54,13 @@ export function PaymentResult() {
           "data.booking.id",
         ]);
         const resolvedBookingId = responseBookingId || sessionStorage.getItem("latestCharterPaymentBooking") || "";
-        setSyncedOrderCode(orderCode);
         if (resolvedBookingId) {
           setBookingId(resolvedBookingId);
           sessionStorage.setItem("latestCharterPaymentBooking", resolvedBookingId);
+          sessionStorage.setItem(`charterPaymentOrderCode:${resolvedBookingId}`, orderCode);
+          sessionStorage.removeItem(`charterPayment:${resolvedBookingId}`);
           if (payosId) {
             sessionStorage.setItem(`paymentBooking:${payosId}`, resolvedBookingId);
-            sessionStorage.setItem(`charterPayment:${resolvedBookingId}`, payosId);
           }
         }
         setSyncError("");
@@ -72,94 +76,101 @@ export function PaymentResult() {
     return () => {
       active = false;
     };
-  }, [orderCode, payosId]);
+  }, [orderCode, payosId, shouldSyncPayment]);
 
-  const effectiveIsSyncing = orderCode ? isSyncing : false;
-  const effectiveSyncError = orderCode ? syncError : "Khong tim thay orderCode trong URL PayOS.";
+  const effectiveIsSyncing = shouldSyncPayment ? isSyncing : false;
+  const effectiveSyncError = !orderCode && isPaid
+    ? "Khong tim thay orderCode trong URL PayOS."
+    : shouldSyncPayment
+      ? syncError
+      : "";
   const title = isCancelled
-    ? "Thanh toan da huy"
+    ? "Thanh toán đã hủy"
     : isPaid
-      ? "Thanh toan thanh cong"
-      : "Dang kiem tra thanh toan";
+      ? "Thanh toán thành công"
+      : "Đang kiểm tra thanh toán";
+  const description = isPaid
+    ? "Cảm ơn bạn. Hệ thống đang cập nhật booking và mở khóa thông tin vé."
+    : isCancelled
+      ? "Giao dịch PayOS đã được hủy. Booking của bạn vẫn đang chờ thanh toán."
+      : "Hệ thống đang đọc kết quả thanh toán từ PayOS.";
   const icon = isCancelled ? "close" : isPaid ? "check" : "sync";
   const accentClasses = isCancelled
-      ? "bg-rose-50 text-rose-600 border-rose-100"
+      ? "bg-rose-50 text-rose-600 ring-rose-100"
     : isPaid
-      ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-      : "bg-amber-50 text-amber-600 border-amber-100";
+      ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
+      : "bg-amber-50 text-amber-600 ring-amber-100";
+  const syncLabel = effectiveIsSyncing
+    ? "Đang đồng bộ booking..."
+    : effectiveSyncError
+      ? "Chưa đồng bộ xong"
+      : shouldSyncPayment
+        ? "Đã đồng bộ"
+        : "Không cần đồng bộ";
 
   return (
-    <div className="min-h-[70vh] bg-slate-50 px-4 py-16 font-body dark:bg-slate-900">
-      <main className="mx-auto max-w-3xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.10)] dark:border-slate-700 dark:bg-slate-800">
-        <div className="border-b border-slate-200 px-6 py-7 text-center dark:border-slate-700 md:px-10">
-          <div className={`mx-auto flex h-20 w-20 items-center justify-center rounded-3xl border ${accentClasses}`}>
-            <span className={`material-symbols-outlined text-4xl ${effectiveIsSyncing ? "animate-spin" : ""}`}>{icon}</span>
+    <div className="min-h-[72vh] bg-[#F5F8FA] px-4 py-12 font-body dark:bg-slate-950">
+      <main className="mx-auto max-w-2xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_28px_80px_rgba(15,23,42,0.12)] dark:border-slate-800 dark:bg-slate-900">
+        <div className="px-6 py-10 text-center md:px-10">
+          <div className={`mx-auto flex h-24 w-24 items-center justify-center rounded-[1.75rem] ring-1 ${accentClasses}`}>
+            {effectiveIsSyncing ? (
+              <PaymentLottieIcon className="h-20 w-20" />
+            ) : (
+              <span className="material-symbols-outlined text-5xl">{icon}</span>
+            )}
           </div>
-          <h1 className="mt-5 text-3xl font-headline font-black text-[#0E4050] dark:text-yellow-400">{title}</h1>
-          <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-6 text-slate-500 dark:text-slate-300">
-            {isPaid
-              ? "PayOS da ghi nhan giao dich. He thong se dong bo booking va mo khoa thong tin ve khi backend xac nhan thanh cong."
-              : isCancelled
-                ? "Ban da huy qua trinh thanh toan PayOS. Booking van duoc giu o trang thai hien tai."
-                : "He thong dang doc ket qua tu PayOS va dong bo trang thai thanh toan."}
-          </p>
-        </div>
+          <h1 className="mt-6 text-3xl font-headline font-black text-[#0E4050] dark:text-yellow-400">{title}</h1>
+          <p className="mx-auto mt-3 max-w-md text-sm font-bold leading-6 text-slate-500 dark:text-slate-300">{description}</p>
 
-        <div className="space-y-4 px-6 py-6 md:px-10">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-[#F8FBFC] p-4 dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">Payment ID</p>
-              <p className="mt-1 break-all text-sm font-bold text-slate-800 dark:text-white">{payosId || paymentId || "--"}</p>
+          <div className="mx-auto mt-6 max-w-md rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-headline font-black uppercase tracking-widest text-slate-400">OrderCode</span>
+              <span className="break-all text-right text-sm font-bold text-slate-700 dark:text-slate-200">{orderCode || "--"}</span>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-[#F8FBFC] p-4 dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">PayOS Status</p>
-              <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{status || "--"}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-[#F8FBFC] p-4 dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">Dong bo</p>
-              <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{effectiveIsSyncing ? "Dang xu ly" : effectiveSyncError ? (isPaid ? "Cho backend xac nhan" : "Can thu lai") : "Da dong bo"}</p>
+            <div className="mt-3 flex items-center justify-between gap-4 border-t border-slate-200 pt-3 dark:border-slate-800">
+              <span className="text-xs font-headline font-black uppercase tracking-widest text-slate-400">Trạng thái</span>
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-headline font-black ${
+                effectiveSyncError
+                  ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                  : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+              }`}>
+                <span className="material-symbols-outlined text-sm">{effectiveSyncError ? "hourglass_top" : "verified"}</span>
+                {syncLabel}
+              </span>
             </div>
           </div>
 
           {effectiveSyncError && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-              {isPaid
-                ? "PayOS da tra ve PAID, nhung backend chua dong bo kip. Ban co the bam Dong bo lai hoac quay ve chi tiet booking de he thong tiep tuc cap nhat."
-                : effectiveSyncError}
-            </div>
+            <p className="mx-auto mt-4 max-w-md rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+              {isPaid ? "PayOS đã ghi nhận thanh toán. Nếu booking chưa cập nhật, bạn có thể đồng bộ lại." : effectiveSyncError}
+            </p>
           )}
 
-          {(orderCode || syncedOrderCode) && (
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-              {orderCode ? `OrderCode: ${orderCode}` : ""}{orderCode && syncedOrderCode ? " · " : ""}{syncedOrderCode ? `Synced by orderCode` : ""}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-center">
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
             {bookingId && (
               <button
                 type="button"
                 onClick={() => navigate(`/profile/my-charter-booking/${bookingId}`)}
                 className="rounded-xl bg-[#124757] px-6 py-3 text-xs font-headline font-black uppercase tracking-wider text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
               >
-                Xem chi tiet booking
+                Xem booking
               </button>
             )}
             <button
               type="button"
               onClick={() => navigate("/profile/my-charter-booking")}
-              className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+              className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:bg-slate-950 dark:text-yellow-400"
             >
-              Ve danh sach charter
+              Danh sách charter
             </button>
-            {paymentId && (
+            {orderCode && isPaid && effectiveSyncError && (
               <button
                 type="button"
                 onClick={() => window.location.reload()}
                 disabled={effectiveIsSyncing}
-                className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-xs font-headline font-black uppercase tracking-wider text-slate-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-xs font-headline font-black uppercase tracking-wider text-slate-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
               >
-                Dong bo lai
+                Đồng bộ lại
               </button>
             )}
           </div>

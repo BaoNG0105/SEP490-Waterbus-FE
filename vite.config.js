@@ -7,19 +7,23 @@ import process from 'node:process'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
   const apiTarget = env.VITE_API_BASE_URL?.replace(/\/api\/?$/, "")
+  const devPort = Number(env.VITE_DEV_PORT || 5174)
 
   return {
     plugins: [react(), tailwindcss()],
-    server: apiTarget
-      ? {
-          proxy: {
-            "/api": {
-              target: apiTarget,
-              changeOrigin: true,
-              secure: true,
+    server: {
+      port: devPort,
+      ...(apiTarget
+        ? {
+            proxy: {
+              "/api": {
+                target: apiTarget,
+                changeOrigin: true,
+                secure: true,
+              },
             },
-          },
-        }
-      : undefined,
+          }
+        : {}),
+    },
   }
 })

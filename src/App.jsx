@@ -31,7 +31,7 @@ import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor } from "./pages/
 import { StationManagement } from "./pages/Admin/StationManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
-import { CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
+import { AdminCharterBookingDetail, CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
 
 function App() {
   return (
@@ -185,6 +185,22 @@ function App() {
             </MainLayout>
           }
         />
+        <Route
+          path="/payment/success"
+          element={
+            <MainLayout>
+              <PaymentResult />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/payment/cancel"
+          element={
+            <MainLayout>
+              <PaymentResult />
+            </MainLayout>
+          }
+        />
 
         {/* Login Page */}
         <Route path="/login" element={<Login />} />
@@ -290,6 +306,14 @@ function App() {
             element={
               <AdminLayout title="Charter Booking Management">
                 <CharterBookingManagement />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/admin/charter-bookings-management/:id"
+            element={
+              <AdminLayout title="Charter Booking Detail">
+                <AdminCharterBookingDetail />
               </AdminLayout>
             }
           />

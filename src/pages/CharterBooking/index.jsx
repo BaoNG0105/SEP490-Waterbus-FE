@@ -9,12 +9,28 @@ import { fetchCurrentUserProfile } from "../../services/authService";
 import { createMyCharterBooking } from "../../services/charterBookingService";
 import { getApiErrorMessage } from "../../utils/apiError";
 
-const seatSetupOptions = ["FullStandard", "StandardAndVip"];
+const deckOptions = [1, 2];
+const deckOptionImages = {
+  1: "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/15/5b/30/ea/saigon-waterbus-lu-t.jpg?w=1200&h=-1&s=1",
+  2: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQNjBezqsnPRbARMzFhnjKsf9iQcLUnZLV9CEBL1zV7w6uOrEm6V33a2Oo&s=10",
+};
+
+const getDeckFallbackSeatSetupType = (numberOfDecks) => (
+  Number(numberOfDecks) === 2 ? "StandardAndVip" : "FullStandard"
+);
+
+const normalizeDeckCount = (value, fallback = 1) => {
+  const numberOfDecks = Number(value);
+  return deckOptions.includes(numberOfDecks) ? numberOfDecks : fallback;
+};
 
 const getMinDepartureDate = () => {
   const date = new Date();
   date.setDate(date.getDate() + 7);
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 const createEmptyStop = () => ({
@@ -25,6 +41,7 @@ const createEmptyStop = () => ({
 });
 
 const createEmptyBoatRequest = () => ({
+  numberOfDecks: 1,
   seatSetupType: "FullStandard",
 });
 
@@ -38,7 +55,10 @@ export function CharterBooking() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [useAccountInfo, setUseAccountInfo] = useState(false);
+  const [accountInfoApplied, setAccountInfoApplied] = useState(false);
+  const [isRentalUnitOpen, setIsRentalUnitOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState(() => ({
     customerName: user?.fullName || "",
     contactPhone: user?.phoneNumber || user?.phone || "",
@@ -51,7 +71,7 @@ export function CharterBooking() {
     startTime: "08:00",
     fromStationId: "",
     toStationId: "",
-    requestedBoats: [{ seatSetupType: "FullStandard" }],
+    requestedBoats: [createEmptyBoatRequest()],
     itineraryStops: [],
     boatRequirements: "",
     specialRequests: "",
@@ -72,6 +92,54 @@ export function CharterBooking() {
   }, [loadStations]);
 
   const contactInputClass = `w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] transition-all disabled:opacity-55 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-950 disabled:text-slate-500 dark:disabled:text-slate-400`;
+  const contactLabelClass = "flex min-h-4 items-center text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400";
+  const contactErrorTextClass = "text-[11px] font-bold text-rose-200 dark:text-rose-300";
+  const requiredMark = <span className="ml-1 text-[#FFD100]" aria-hidden="true">*</span>;
+  const contactFieldLabels = {
+    customerName: lang === "VN" ? "họ tên người đặt" : "contact name",
+    contactPhone: lang === "VN" ? "số điện thoại" : "phone number",
+    contactEmail: lang === "VN" ? "email liên hệ" : "contact email",
+  };
+  const contactRequiredMessages = {
+    customerName: lang === "VN" ? "Vui lòng nhập họ tên người đặt." : "Please enter contact name.",
+    contactPhone: lang === "VN" ? "Vui lòng nhập số điện thoại." : "Please enter phone number.",
+    contactEmail: lang === "VN" ? "Vui lòng nhập email liên hệ." : "Please enter contact email.",
+  };
+  const getContactInputClass = (field) => `${contactInputClass} ${fieldErrors[field] ? "border-rose-400 dark:border-rose-400 focus:ring-rose-400 bg-rose-50 dark:bg-rose-950/30" : ""}`;
+  const getContactFieldErrors = (data = formData) => {
+    const errors = {};
+    const customerName = String(data.customerName || "").trim();
+    const contactPhone = String(data.contactPhone || "").trim();
+    const contactEmail = String(data.contactEmail || "").trim();
+
+    if (!customerName) errors.customerName = contactRequiredMessages.customerName;
+    if (!contactPhone) errors.contactPhone = contactRequiredMessages.contactPhone;
+    if (!contactEmail) {
+      errors.contactEmail = contactRequiredMessages.contactEmail;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+      errors.contactEmail = lang === "VN" ? "Email liên hệ chưa đúng định dạng." : "Contact email is not valid.";
+    }
+
+    return errors;
+  };
+  const getContactValidationText = (errors) => {
+    const fields = Object.keys(errors);
+    if (fields.length <= 1) return errors[fields[0]] || "";
+
+    const requiredFields = fields.filter((field) => errors[field] === contactRequiredMessages[field]);
+    if (requiredFields.length === fields.length) {
+      const labels = requiredFields.map((field) => contactFieldLabels[field]).join(", ");
+      return lang === "VN" ? `Vui lòng bổ sung: ${labels}.` : `Please fill in: ${labels}.`;
+    }
+
+    return fields.map((field) => errors[field]).join(" ");
+  };
+  const focusContactField = (field) => {
+    if (!field) return;
+    window.setTimeout(() => {
+      document.getElementById(`charter-${field}`)?.focus();
+    }, 0);
+  };
 
   const steps = [
     { titleVn: "Thông tin khách hàng", titleEn: "Customer Information", icon: "person" },
@@ -80,18 +148,82 @@ export function CharterBooking() {
     { titleVn: "Ghi chú", titleEn: "Notes", icon: "notes" },
   ];
   const isLastStep = currentStep === steps.length - 1;
+  const durationUnitLabel = formData.rentalUnit === "Hour"
+    ? (lang === "VN" ? "giờ" : "hour")
+    : (lang === "VN" ? "ngày" : "day");
+  const rentalUnitOptions = [
+    { value: "Day", label: lang === "VN" ? "Theo ngày" : "Day", icon: "calendar_today" },
+    { value: "Hour", label: lang === "VN" ? "Theo giờ" : "Hour", icon: "schedule" },
+  ];
+  const selectedRentalUnitOption = rentalUnitOptions.find((option) => option.value === formData.rentalUnit) || rentalUnitOptions[0];
+  const getStationNameById = (stationId) => {
+    const station = stations.find((item) => String(item.stationId || item.id) === String(stationId));
+    return station?.stationName || station?.name || (lang === "VN" ? "Chưa chọn" : "Not selected");
+  };
+  const formatDepartureDate = (value) => {
+    if (!value) return lang === "VN" ? "Chưa chọn" : "Not selected";
+    const [year, month, day] = String(value).split("-").map(Number);
+    if (!year || !month || !day) return value;
+
+    return new Intl.DateTimeFormat(lang === "VN" ? "vi-VN" : "en-US", {
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(new Date(year, month - 1, day));
+  };
+  const totalPassengers = Number(formData.adultCount || 0) + Number(formData.childCount || 0);
+  const routeSummary = formData.fromStationId && formData.toStationId
+    ? `${getStationNameById(formData.fromStationId)} - ${getStationNameById(formData.toStationId)}`
+    : (lang === "VN" ? "Chưa chọn đủ bến đi và bến đến" : "Origin and destination not completed");
+  const requestedBoatSummary = (() => {
+    const deckCounts = formData.requestedBoats.reduce((counts, boat) => {
+      const deckCount = normalizeDeckCount(boat.numberOfDecks);
+      return { ...counts, [deckCount]: (counts[deckCount] || 0) + 1 };
+    }, {});
+    const deckText = deckOptions
+      .filter((deckCount) => deckCounts[deckCount])
+      .map((deckCount) => (
+        lang === "VN"
+          ? `${deckCounts[deckCount]} tàu ${deckCount} tầng`
+          : `${deckCounts[deckCount]} ${deckCount === 1 ? "single-deck" : "double-deck"} boat${deckCounts[deckCount] > 1 ? "s" : ""}`
+      ))
+      .join(", ");
+
+    return deckText || (lang === "VN" ? "Chưa chọn tàu" : "No boats selected");
+  })();
+  const finalStepSummaryItems = [
+    {
+      icon: "event",
+      label: lang === "VN" ? "Khởi hành" : "Departure",
+      value: `${formatDepartureDate(formData.departureDate)} - ${formData.startTime || "--:--"}`,
+    },
+    {
+      icon: "route",
+      label: lang === "VN" ? "Lộ trình" : "Route",
+      value: routeSummary,
+    },
+    {
+      icon: "groups",
+      label: lang === "VN" ? "Hành khách" : "Guests",
+      value: lang === "VN"
+        ? `${totalPassengers} khách (${formData.adultCount || 0} người lớn, ${formData.childCount || 0} trẻ em)`
+        : `${totalPassengers} guests (${formData.adultCount || 0} adults, ${formData.childCount || 0} children)`,
+    },
+    {
+      icon: "directions_boat",
+      label: lang === "VN" ? "Tàu mong muốn" : "Requested boats",
+      value: requestedBoatSummary,
+    },
+  ];
 
   const validateCustomerStep = () => {
-    const customerName = formData.customerName.trim();
-    const contactPhone = formData.contactPhone.trim();
-    const contactEmail = formData.contactEmail.trim();
+    const errors = getContactFieldErrors();
+    const firstErrorField = Object.keys(errors)[0];
 
-    if (!customerName || !contactPhone || !contactEmail) {
-      return lang === "VN" ? "Vui lòng nhập họ tên, số điện thoại và email liên hệ." : "Please enter contact name, phone number, and email.";
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
-      return lang === "VN" ? "Vui lòng nhập đúng định dạng email liên hệ." : "Please enter a valid contact email.";
-    }
+    setFieldErrors(errors);
+    if (firstErrorField) return { text: getContactValidationText(errors), field: firstErrorField };
+
     return null;
   };
 
@@ -101,6 +233,9 @@ export function CharterBooking() {
 
     if (!formData.departureDate || formData.departureDate < minDepartureDate) {
       return lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today.";
+    }
+    if (!formData.startTime) {
+      return lang === "VN" ? "Vui lòng chọn giờ đi." : "Please choose a start time.";
     }
     if (!Number.isInteger(durationValue) || durationValue < 1 || durationValue > 60) {
       return lang === "VN" ? "Thời lượng thuê phải là số nguyên từ 1 đến 60." : "Duration must be an integer from 1 to 60.";
@@ -134,17 +269,32 @@ export function CharterBooking() {
     if (formData.itineraryStops.length > 50 || invalidStop) {
       return lang === "VN" ? "Tối đa 50 điểm dừng; mỗi điểm cần có bến dừng, thứ tự và thời gian dừng không âm." : "Maximum 50 stops; each stop needs a station, non-negative order, and non-negative stay minutes.";
     }
-    if (formData.requestedBoats.length < 1 || formData.requestedBoats.length > 20 || formData.requestedBoats.some((boat) => !seatSetupOptions.includes(boat.seatSetupType))) {
-      return lang === "VN" ? "Cần ít nhất 1 tàu, tối đa 20 tàu, mỗi tàu chọn FullStandard hoặc StandardAndVip." : "Please request 1-20 boats, each with FullStandard or StandardAndVip.";
+    if (formData.requestedBoats.length < 1 || formData.requestedBoats.length > 20 || formData.requestedBoats.some((boat) => !deckOptions.includes(Number(boat.numberOfDecks)))) {
+      return lang === "VN" ? "Cần ít nhất 1 tàu, tối đa 20 tàu, mỗi tàu chọn 1 tầng hoặc 2 tầng." : "Please request 1-20 boats, each with 1 or 2 decks.";
     }
     return null;
   };
 
   const stepValidators = [validateCustomerStep, validateScheduleStep, validateRouteStep, () => null];
+  const hasRequiredCustomerInfo = Boolean(
+    formData.customerName.trim()
+    && formData.contactPhone.trim()
+    && formData.contactEmail.trim()
+  );
+  const canContinueToNext = currentStep === 0
+    ? hasRequiredCustomerInfo
+    : currentStep === 1
+      ? !validateScheduleStep()
+      : currentStep === 2
+        ? !validateRouteStep()
+        : true;
 
   const handleNextStep = () => {
-    const errorText = stepValidators[currentStep]();
+    const validationResult = stepValidators[currentStep]();
+    const errorText = typeof validationResult === "string" ? validationResult : validationResult?.text;
     if (errorText) {
+      if (validationResult?.field) focusContactField(validationResult.field);
+      if (currentStep === 0) return;
       Swal.fire({
         icon: "warning",
         title: lang === "VN" ? "Vui lòng kiểm tra lại thông tin" : "Please check your information",
@@ -162,11 +312,27 @@ export function CharterBooking() {
 
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const handleRentalUnitChange = (rentalUnit) => {
+    setFormData((prev) => ({
+      ...prev,
+      rentalUnit,
+      durationValue: 1,
+    }));
+    setIsRentalUnitOpen(false);
   };
 
   const handleAccountInfoToggle = async () => {
-    if (useAccountInfo) {
+    if (useAccountInfo || accountInfoApplied) {
       setUseAccountInfo(false);
+      setAccountInfoApplied(false);
       return;
     }
 
@@ -180,6 +346,18 @@ export function CharterBooking() {
       const contact = getProfileContact(profile);
       return Boolean(contact.customerName && contact.contactPhone && contact.contactEmail);
     };
+    const hasAnyContact = (profile) => {
+      const contact = getProfileContact(profile);
+      return Boolean(contact.customerName || contact.contactPhone || contact.contactEmail);
+    };
+    const getMissingProfileFields = (profile) => {
+      const contact = getProfileContact(profile);
+      return [
+        !contact.customerName ? "customerName" : "",
+        !contact.contactPhone ? "contactPhone" : "",
+        !contact.contactEmail ? "contactEmail" : "",
+      ].filter(Boolean);
+    };
 
     const applyProfile = (profile) => {
       const contact = getProfileContact(profile);
@@ -189,10 +367,19 @@ export function CharterBooking() {
         contactPhone: contact.contactPhone || prev.contactPhone,
         contactEmail: contact.contactEmail || prev.contactEmail,
       }));
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        if (contact.customerName) delete next.customerName;
+        if (contact.contactPhone) delete next.contactPhone;
+        if (contact.contactEmail) delete next.contactEmail;
+        return next;
+      });
+      return Boolean(contact.customerName || contact.contactPhone || contact.contactEmail);
     };
 
     if (hasFullContact(user)) {
-      applyProfile(user);
+      const hasAppliedInfo = applyProfile(user);
+      setAccountInfoApplied(hasAppliedInfo);
       setUseAccountInfo(true);
       return;
     }
@@ -201,20 +388,25 @@ export function CharterBooking() {
       setIsLoadingProfile(true);
       const profile = await fetchCurrentUserProfile();
       dispatch(updateUserProfile(profile));
-      applyProfile(profile);
+      const hasAppliedInfo = applyProfile(profile);
       const canUseAccountInfo = hasFullContact(profile);
       setUseAccountInfo(canUseAccountInfo);
+      setAccountInfoApplied(hasAppliedInfo || hasAnyContact(profile));
       if (!canUseAccountInfo) {
-        Swal.fire({
-          icon: "warning",
-          title: lang === "VN" ? "Hồ sơ chưa đủ thông tin" : "Profile is incomplete",
-          text: lang === "VN" ? "Tài khoản chưa có đủ họ tên, số điện thoại và email. Vui lòng bổ sung phần còn thiếu." : "Your account is missing name, phone, or email. Please fill the missing fields manually.",
-          confirmButtonColor: "#124757",
+        const missingProfileFields = getMissingProfileFields(profile);
+        setFieldErrors((prev) => {
+          const next = { ...prev };
+          missingProfileFields.forEach((field) => {
+            if (!String(formData[field] || "").trim()) next[field] = contactRequiredMessages[field];
+          });
+          return next;
         });
+        focusContactField(missingProfileFields[0]);
       }
     } catch (error) {
       console.error("Lỗi lấy thông tin tài khoản:", error);
       setUseAccountInfo(false);
+      setAccountInfoApplied(false);
       Swal.fire({
         icon: "error",
         title: lang === "VN" ? "Không lấy được thông tin" : "Unable to load account info",
@@ -226,11 +418,14 @@ export function CharterBooking() {
     }
   };
 
-  const handleBoatRequestChange = (index, seatSetupType) => {
+  const handleBoatRequestChange = (index, numberOfDecks) => {
+    const deckCount = normalizeDeckCount(numberOfDecks);
     setFormData((prev) => ({
       ...prev,
       requestedBoats: prev.requestedBoats.map((boat, boatIndex) => (
-        boatIndex === index ? { ...boat, seatSetupType } : boat
+        boatIndex === index
+          ? { ...boat, numberOfDecks: deckCount, seatSetupType: getDeckFallbackSeatSetupType(deckCount) }
+          : boat
       )),
     }));
   };
@@ -307,24 +502,13 @@ export function CharterBooking() {
     const customerName = formData.customerName.trim();
     const contactPhone = formData.contactPhone.trim();
     const contactEmail = formData.contactEmail.trim();
+    const contactErrors = getContactFieldErrors();
+    const firstContactErrorField = Object.keys(contactErrors)[0];
 
-    if (!customerName || !contactPhone || !contactEmail) {
-      Swal.fire({
-        icon: "warning",
-        title: lang === "VN" ? "Thiếu thông tin khách hàng" : "Missing customer information",
-        text: lang === "VN" ? "Vui lòng nhập họ tên, số điện thoại và email liên hệ." : "Please enter contact name, phone number, and email.",
-        confirmButtonColor: "#124757",
-      });
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
-      Swal.fire({
-        icon: "warning",
-        title: lang === "VN" ? "Email chưa hợp lệ" : "Invalid email",
-        text: lang === "VN" ? "Vui lòng nhập đúng định dạng email liên hệ." : "Please enter a valid contact email.",
-        confirmButtonColor: "#124757",
-      });
+    if (firstContactErrorField) {
+      setFieldErrors(contactErrors);
+      setCurrentStep(0);
+      focusContactField(firstContactErrorField);
       return;
     }
 
@@ -343,6 +527,16 @@ export function CharterBooking() {
         icon: "warning",
         title: lang === "VN" ? "Ngày khởi hành chưa hợp lệ" : "Invalid departure date",
         text: lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today.",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+
+    if (!formData.startTime) {
+      Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "Giờ đi chưa hợp lệ" : "Invalid start time",
+        text: lang === "VN" ? "Vui lòng chọn giờ đi." : "Please choose a start time.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -407,11 +601,11 @@ export function CharterBooking() {
       return;
     }
 
-    if (formData.requestedBoats.length < 1 || formData.requestedBoats.length > 20 || formData.requestedBoats.some((boat) => !seatSetupOptions.includes(boat.seatSetupType))) {
+    if (formData.requestedBoats.length < 1 || formData.requestedBoats.length > 20 || formData.requestedBoats.some((boat) => !deckOptions.includes(Number(boat.numberOfDecks)))) {
       Swal.fire({
         icon: "warning",
         title: lang === "VN" ? "Danh sách tàu chưa hợp lệ" : "Invalid requested boats",
-        text: lang === "VN" ? "Cần ít nhất 1 tàu, tối đa 20 tàu, mỗi tàu chọn FullStandard hoặc StandardAndVip." : "Please request 1-20 boats, each with FullStandard or StandardAndVip.",
+        text: lang === "VN" ? "Cần ít nhất 1 tàu, tối đa 20 tàu, mỗi tàu chọn 1 tầng hoặc 2 tầng." : "Please request 1-20 boats, each with 1 or 2 decks.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -428,6 +622,8 @@ export function CharterBooking() {
     }
 
     const payload = {
+      contactName: customerName,
+      contactPhone,
       contactEmail,
       departureDate: formData.departureDate,
       rentalUnit: formData.rentalUnit,
@@ -443,8 +639,16 @@ export function CharterBooking() {
         stayDurationMinutes: Number(stop.stayDurationMinutes || 0),
         note: stop.note || null,
       })),
-      requestedBoats: formData.requestedBoats.map((boat) => ({ seatSetupType: boat.seatSetupType })),
-      preferredSeatSetupType: formData.requestedBoats[0]?.seatSetupType || "FullStandard",
+      requestedBoats: formData.requestedBoats.map((boat) => {
+        const numberOfDecks = normalizeDeckCount(boat.numberOfDecks);
+        return {
+          numberOfDecks,
+          requiredNumberOfDecks: numberOfDecks,
+          seatSetupType: getDeckFallbackSeatSetupType(numberOfDecks),
+        };
+      }),
+      preferredNumberOfDecks: normalizeDeckCount(formData.requestedBoats[0]?.numberOfDecks),
+      preferredSeatSetupType: getDeckFallbackSeatSetupType(formData.requestedBoats[0]?.numberOfDecks),
       boatRequirements: formData.boatRequirements || null,
       specialRequests: formData.specialRequests || null,
     };
@@ -570,7 +774,7 @@ export function CharterBooking() {
               { titleVn: "Gửi yêu cầu thuê tàu", titleEn: "Submit your request", descVn: "Xác nhận thông tin và gửi yêu cầu thuê tàu đến đội ngũ vận hành.", descEn: "Confirm details and send the request to our operations team." },
               { titleVn: "Nhận báo giá & theo dõi", titleEn: "Get a quote & track it", descVn: "Theo dõi trạng thái và nhận báo giá ngay trong hồ sơ của bạn.", descEn: "Track the status and receive your quote in your profile." },
             ].map((step, index) => (
-              <div key={step.icon} className="flex flex-col group">
+              <div key={`${step.titleEn}-${index}`} className="flex flex-col group">
                 <div className="text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400 mb-4 transition-transform duration-300 group-hover:-translate-y-2">
                   0{index + 1}
                 </div>
@@ -589,7 +793,7 @@ export function CharterBooking() {
       {/* ===== SECTION 4: REQUEST FORM ===== */}
       <main className="relative max-w-5xl mx-auto px-4 md:px-8 py-20">
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-72 h-72 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none"></div>
-        <form onSubmit={handleCreateBooking} className="relative bg-[#124757] dark:bg-slate-800 rounded-4xl shadow-[0_25px_70px_rgba(18,71,87,0.10)] border border-white/10 dark:border-slate-700/50 overflow-hidden">
+        <form noValidate onSubmit={handleCreateBooking} className="relative bg-[#124757] dark:bg-slate-800 rounded-4xl shadow-[0_25px_70px_rgba(18,71,87,0.10)] border border-white/10 dark:border-slate-700/50 overflow-hidden">
           <div className="p-8 md:p-10 border-b border-white/10 dark:border-slate-700 space-y-6 text-center bg-linear-to-b from-white/5 to-transparent dark:from-slate-900/40">
             <div className="space-y-2">
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-400/15 text-yellow-400 border border-yellow-400/20 text-[10px] font-headline font-black uppercase tracking-widest">
@@ -663,43 +867,37 @@ export function CharterBooking() {
                 </div>
               </div>
               <div className="grid md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Họ tên người đặt" : "Contact Name"}</label>
-                  <input value={formData.customerName} onChange={(e) => handleFieldChange("customerName", e.target.value)} disabled={useAccountInfo} required maxLength={120} className={contactInputClass} placeholder={lang === "VN" ? "Nhập họ tên" : "Full name"} />
+                <div className="flex flex-col gap-2.5">
+                  <label className={contactLabelClass}>{lang === "VN" ? "Họ tên người đặt" : "Contact Name"}{requiredMark}</label>
+                  <input id="charter-customerName" value={formData.customerName} onChange={(e) => handleFieldChange("customerName", e.target.value)} disabled={useAccountInfo} required maxLength={120} className={getContactInputClass("customerName")} placeholder={lang === "VN" ? "Nhập họ tên" : "Full name"} aria-invalid={Boolean(fieldErrors.customerName)} aria-describedby={fieldErrors.customerName ? "charter-customerName-error" : undefined} />
+                  {fieldErrors.customerName && <p id="charter-customerName-error" className={contactErrorTextClass}>{fieldErrors.customerName}</p>}
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Số điện thoại" : "Phone Number"}</label>
-                  <input value={formData.contactPhone} onChange={(e) => handleFieldChange("contactPhone", e.target.value)} disabled={useAccountInfo} required maxLength={30} className={contactInputClass} placeholder={lang === "VN" ? "Nhập số điện thoại" : "Phone number"} />
+                <div className="flex flex-col gap-2.5">
+                  <label className={contactLabelClass}>{lang === "VN" ? "Số điện thoại" : "Phone Number"}{requiredMark}</label>
+                  <input id="charter-contactPhone" value={formData.contactPhone} onChange={(e) => handleFieldChange("contactPhone", e.target.value)} disabled={useAccountInfo} required maxLength={30} className={getContactInputClass("contactPhone")} placeholder={lang === "VN" ? "Nhập số điện thoại" : "Phone number"} aria-invalid={Boolean(fieldErrors.contactPhone)} aria-describedby={fieldErrors.contactPhone ? "charter-contactPhone-error" : undefined} />
+                  {fieldErrors.contactPhone && <p id="charter-contactPhone-error" className={contactErrorTextClass}>{fieldErrors.contactPhone}</p>}
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">Email</label>
-                  <input type="email" value={formData.contactEmail} onChange={(e) => handleFieldChange("contactEmail", e.target.value)} disabled={useAccountInfo} required maxLength={160} className={contactInputClass} placeholder="email@example.com" />
+                <div className="flex flex-col gap-2.5">
+                  <label className={contactLabelClass}>Email{requiredMark}</label>
+                  <input id="charter-contactEmail" type="email" value={formData.contactEmail} onChange={(e) => handleFieldChange("contactEmail", e.target.value)} disabled={useAccountInfo} required maxLength={160} className={getContactInputClass("contactEmail")} placeholder="email@example.com" aria-invalid={Boolean(fieldErrors.contactEmail)} aria-describedby={fieldErrors.contactEmail ? "charter-contactEmail-error" : undefined} />
+                  {fieldErrors.contactEmail && <p id="charter-contactEmail-error" className={contactErrorTextClass}>{fieldErrors.contactEmail}</p>}
                 </div>
               </div>
-              <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className={`material-symbols-outlined text-xl ${useAccountInfo ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"}`}>
-                    {useAccountInfo ? "lock" : "edit"}
-                  </span>
-                  <p className="text-[11px] text-slate-400 font-bold">
-                    {useAccountInfo
-                      ? (lang === "VN" ? "Đang dùng thông tin trong tài khoản. Bỏ tích nếu muốn nhập thông tin khác." : "Using your account information. Uncheck to enter different contact details.")
-                      : (lang === "VN" ? "Bạn có thể nhập thủ công hoặc tích dùng thông tin tài khoản." : "You can enter manually or use your account information.")}
-                  </p>
-                </div>
+              <div className="flex justify-end pt-1">
                 <button
                   type="button"
                   onClick={handleAccountInfoToggle}
                   disabled={isLoadingProfile}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider transition-all disabled:opacity-50 ${useAccountInfo
-                    ? "bg-[#124757] text-white border-[#124757] dark:bg-yellow-400 dark:text-slate-900 dark:border-yellow-400"
-                    : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-[#124757] dark:text-yellow-400"
+                  className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider transition-all disabled:opacity-50 ${accountInfoApplied
+                    ? "bg-yellow-400 text-[#124757] border-yellow-400"
+                    : "bg-white/5 dark:bg-slate-900 border-white/20 dark:border-slate-700 text-white/80 dark:text-yellow-400 hover:bg-white/10"
                     }`}
                 >
-                  <span className={`material-symbols-outlined text-base ${isLoadingProfile ? "animate-spin" : ""}`}>
-                    {isLoadingProfile ? "progress_activity" : useAccountInfo ? "check_box" : "check_box_outline_blank"}
+                  <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 border-current ${isLoadingProfile ? "animate-spin" : ""}`}>
+                    {accountInfoApplied && !isLoadingProfile && <span className="h-2 w-2 rounded-full bg-current"></span>}
                   </span>
-                  {lang === "VN" ? "Dùng thông tin tài khoản" : "Use Account Info"}
+                  <span className="hidden sm:inline">{lang === "VN" ? "Dùng thông tin tài khoản" : "Use Account Info"}</span>
+                  <span className="sm:hidden">{lang === "VN" ? "Dùng tài khoản" : "Account Info"}</span>
                 </button>
               </div>
             </section>
@@ -714,24 +912,79 @@ export function CharterBooking() {
                 </div>
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Ngày khởi hành" : "Departure Date"}</label>
+                <div className="flex flex-col gap-2.5">
+                  <label className={contactLabelClass}>{lang === "VN" ? "Ngày khởi hành" : "Departure Date"}{requiredMark}</label>
                   <input type="date" min={getMinDepartureDate()} value={formData.departureDate} onChange={(e) => handleFieldChange("departureDate", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Giờ đi" : "Start Time"}</label>
-                  <input type="time" value={formData.startTime} onChange={(e) => handleFieldChange("startTime", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                <div className="flex flex-col gap-2.5">
+                  <label className={contactLabelClass}>{lang === "VN" ? "Giờ đi" : "Start Time"}{requiredMark}</label>
+                  <input type="time" value={formData.startTime} onChange={(e) => handleFieldChange("startTime", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Thời lượng" : "Duration"}</label>
-                  <input type="number" min="1" max="60" value={formData.durationValue} onChange={(e) => handleFieldChange("durationValue", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                <div className="flex flex-col gap-2.5">
+                  <label className={contactLabelClass}>
+                    {lang === "VN" ? `Thời lượng (${durationUnitLabel})` : `Duration (${durationUnitLabel})`}{requiredMark}
+                  </label>
+                  <div className="flex overflow-hidden rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-[#FFD100]">
+                    <input type="number" min="1" max="60" value={formData.durationValue} onChange={(e) => handleFieldChange("durationValue", e.target.value)} required className="min-w-0 flex-1 px-4 py-3 bg-transparent text-sm font-bold text-slate-800 dark:text-white outline-none" />
+                    <span className="flex min-w-16 items-center justify-center border-l border-yellow-300/70 bg-yellow-100 px-3 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757]">
+                      {durationUnitLabel}
+                    </span>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Đơn vị thuê" : "Rental Unit"}</label>
-                  <select value={formData.rentalUnit} onChange={(e) => handleFieldChange("rentalUnit", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
-                    <option value="Day">{lang === "VN" ? "Theo ngày" : "Day"}</option>
-                    <option value="Hour">{lang === "VN" ? "Theo giờ" : "Hour"}</option>
-                  </select>
+                <div className="flex flex-col gap-2.5">
+                  <label className={contactLabelClass}>{lang === "VN" ? "Đơn vị thuê" : "Rental Unit"}{requiredMark}</label>
+                  <div
+                    className="relative"
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget)) setIsRentalUnitOpen(false);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") setIsRentalUnitOpen(false);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIsRentalUnitOpen((prev) => !prev)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm font-bold text-slate-800 outline-none transition-all dark:bg-slate-900 dark:text-white ${isRentalUnitOpen
+                        ? "border-[#FFD100] ring-2 ring-[#FFD100]"
+                        : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
+                        }`}
+                      aria-haspopup="listbox"
+                      aria-expanded={isRentalUnitOpen}
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="material-symbols-outlined text-lg text-[#124757] dark:text-yellow-400">{selectedRentalUnitOption.icon}</span>
+                        <span className="truncate">{selectedRentalUnitOption.label}</span>
+                      </span>
+                      <span className={`material-symbols-outlined text-xl text-slate-500 transition-transform ${isRentalUnitOpen ? "rotate-180" : ""}`}>expand_more</span>
+                    </button>
+                    {isRentalUnitOpen && (
+                      <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-900/15 dark:border-slate-700 dark:bg-slate-900" role="listbox">
+                        {rentalUnitOptions.map((option) => {
+                          const isSelected = formData.rentalUnit === option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => handleRentalUnitChange(option.value)}
+                              className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm font-bold transition-colors ${isSelected
+                                ? "bg-yellow-50 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
+                                : "text-slate-600 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                                }`}
+                              role="option"
+                              aria-selected={isSelected}
+                            >
+                              <span className="flex min-w-0 items-center gap-2.5">
+                                <span className="material-symbols-outlined text-lg">{option.icon}</span>
+                                <span className="truncate">{option.label}</span>
+                              </span>
+                              {isSelected && <span className="material-symbols-outlined text-lg">check</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>
@@ -747,14 +1000,14 @@ export function CharterBooking() {
               </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Bến đi" : "From Station"}</label>
+                  <label className={contactLabelClass}>{lang === "VN" ? "Bến đi" : "From Station"}{requiredMark}</label>
                   <select value={formData.fromStationId} onChange={(e) => handleFieldChange("fromStationId", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
                     <option value="">{lang === "VN" ? "Chưa chọn" : "Not selected"}</option>
                     {stations.map((station) => <option key={station.stationId || station.id} value={station.stationId || station.id}>{station.stationName || station.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Bến đến" : "To Station"}</label>
+                  <label className={contactLabelClass}>{lang === "VN" ? "Bến đến" : "To Station"}{requiredMark}</label>
                   <select value={formData.toStationId} onChange={(e) => handleFieldChange("toStationId", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
                     <option value="">{lang === "VN" ? "Chưa chọn" : "Not selected"}</option>
                     {stations.map((station) => <option key={station.stationId || station.id} value={station.stationId || station.id}>{station.stationName || station.name}</option>)}
@@ -817,33 +1070,64 @@ export function CharterBooking() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Danh sách tàu mong muốn" : "Requested Boats"}</label>
-                    <p className="text-[11px] text-slate-400 mt-1">{lang === "VN" ? "Tối đa 20 tàu." : "Request maximum 20 boats."}</p>
                   </div>
                   <button type="button" onClick={handleAddBoatRequest} disabled={formData.requestedBoats.length >= 20} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 disabled:opacity-50">
                     <span className="material-symbols-outlined text-base">add</span>
                     {lang === "VN" ? "Thêm tàu" : "Add Boat"}
                   </button>
                 </div>
-                <div className="space-y-3">
-                  {formData.requestedBoats.map((boat, index) => (
-                    <div key={`boat-${index}`} className="grid sm:grid-cols-[auto_1fr_auto] gap-3 items-center rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
-                      <div className="h-11 w-11 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 flex items-center justify-center font-headline font-black text-sm">
-                        {index + 1}
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {deckOptions.map((deckCount) => {
+                    const deckLabel = lang === "VN" ? `${deckCount} tầng` : `${deckCount} ${deckCount === 1 ? "deck" : "decks"}`;
+                    return (
+                      <div key={`deck-preview-${deckCount}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+                        <div className="relative h-28 overflow-hidden bg-slate-100 dark:bg-slate-800">
+                          <img src={deckOptionImages[deckCount]} alt={deckLabel} loading="lazy" className="h-full w-full object-cover" />
+                          <span className="absolute inset-0 bg-linear-to-t from-slate-950/50 via-transparent to-transparent"></span>
+                        </div>
+                        <div className="flex items-center gap-2.5 p-3">
+                          <span className="material-symbols-outlined text-xl text-[#124757] dark:text-yellow-400">directions_boat</span>
+                          <div>
+                            <p className="text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">{deckLabel}</p>
+                            <p className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "Ảnh mẫu để nhận diện loại tàu." : "Reference image for this boat type."}</p>
+                          </div>
+                        </div>
                       </div>
-                      <div className="grid sm:grid-cols-2 gap-3">
-                        {seatSetupOptions.map((type) => {
-                          const isSelected = boat.seatSetupType === type;
+                    );
+                  })}
+                </div>
+                <div className="space-y-2">
+                  {formData.requestedBoats.map((boat, index) => (
+                    <div key={`boat-${index}`} className="grid gap-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 md:grid-cols-[minmax(140px,1fr)_minmax(260px,360px)_44px] md:items-center">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
+                          <span className="material-symbols-outlined text-lg">directions_boat</span>
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">
+                            {lang === "VN" ? `Tàu ${index + 1}` : `Boat ${index + 1}`}
+                          </p>
+                          <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                            {lang === "VN" ? "Chọn số tầng" : "Choose decks"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                        {deckOptions.map((deckCount) => {
+                          const isSelected = Number(boat.numberOfDecks) === deckCount;
                           return (
-                            <label key={`${index}-${type}`} className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all ${isSelected ? "bg-yellow-400/15 border-yellow-400 text-[#124757] dark:text-yellow-300" : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300"}`}>
-                              <input type="radio" name={`boat-${index}`} checked={isSelected} onChange={() => handleBoatRequestChange(index, type)} className="w-4 h-4 accent-[#124757]" />
-                              <span className="material-symbols-outlined text-xl">{type === "StandardAndVip" ? "workspace_premium" : "event_seat"}</span>
-                              <span className="min-w-0">
-                                <span className="block text-xs font-headline font-black uppercase tracking-wider">
-                                  {type === "StandardAndVip" ? (lang === "VN" ? "Thường + VIP" : "Standard + VIP") : (lang === "VN" ? "Toàn ghế thường" : "Full Standard")}
-                                </span>
-                                <span className="block text-[11px] font-medium opacity-70 mt-0.5">{type}</span>
-                              </span>
-                            </label>
+                            <button
+                              key={`${index}-deck-${deckCount}`}
+                              type="button"
+                              onClick={() => handleBoatRequestChange(index, deckCount)}
+                              className={`flex h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${isSelected
+                                ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
+                                : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
+                                }`}
+                            >
+                              <span className="material-symbols-outlined text-base">{isSelected ? "check_circle" : "radio_button_unchecked"}</span>
+                              {lang === "VN" ? `${deckCount} tầng` : `${deckCount} ${deckCount === 1 ? "deck" : "decks"}`}
+                            </button>
                           );
                         })}
                       </div>
@@ -858,21 +1142,68 @@ export function CharterBooking() {
             )}
             {/* Ghi chú */}
             {currentStep === 3 && (
-            <section className="space-y-6 max-w-3xl mx-auto">
+            <section className="space-y-6 max-w-4xl mx-auto">
               <div className="flex flex-col items-center text-center gap-3">
                 <div>
-                  <h3 className="font-headline font-black text-white text-lg">{lang === "VN" ? "Ghi chú" : "Notes"}</h3>
-                  <p className="text-xs text-white/70 dark:text-slate-400 mt-1 max-w-sm mx-auto">{lang === "VN" ? "Thêm yêu cầu đặc biệt để chúng tôi phục vụ bạn tốt hơn (không bắt buộc)." : "Add any special requests to help us serve you better (optional)."}</p>
+                  <h3 className="font-headline font-black text-white text-xl">{lang === "VN" ? "Xác nhận & ghi chú" : "Review & Notes"}</h3>
+                  <p className="text-xs text-white/70 dark:text-slate-400 mt-1 max-w-md mx-auto">{lang === "VN" ? "Kiểm tra nhanh thông tin đã chọn, sau đó thêm yêu cầu riêng nếu cần." : "Review your selected details, then add any request notes if needed."}</p>
                 </div>
               </div>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Yêu cầu về tàu" : "Boat Requirements"}</label>
-                  <textarea value={formData.boatRequirements} onChange={(e) => handleFieldChange("boatRequirements", e.target.value)} maxLength={1000} rows={4} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" placeholder={lang === "VN" ? "Ví dụ: cần khu VIP, âm thanh, không gian tổ chức sinh nhật..." : "e.g. VIP area, sound setup, birthday decoration..."} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-white/70 dark:text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</label>
-                  <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={4} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+              <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-4">
+                <aside className="rounded-2xl bg-white/95 dark:bg-slate-900 border border-white/20 dark:border-slate-700 p-5 shadow-sm">
+                  <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
+                      <span className="material-symbols-outlined text-xl">fact_check</span>
+                    </span>
+                    <div>
+                      <h4 className="font-headline font-black text-[#124757] dark:text-white text-sm uppercase tracking-wider">
+                        {lang === "VN" ? "Tóm tắt yêu cầu" : "Request summary"}
+                      </h4>
+                      <p className="text-[11px] font-medium text-slate-400">
+                        {lang === "VN" ? "Thông tin chính trước khi gửi" : "Key details before submitting"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {finalStepSummaryItems.map((item) => (
+                      <div key={item.icon} className="flex gap-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-3">
+                        <span className="material-symbols-outlined mt-0.5 text-lg text-[#124757] dark:text-yellow-400">{item.icon}</span>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{item.label}</p>
+                          <p className="mt-1 text-sm font-bold leading-snug text-slate-700 dark:text-slate-100">{item.value}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </aside>
+                <div className="space-y-4 rounded-2xl bg-white/95 dark:bg-slate-900 border border-white/20 dark:border-slate-700 p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="font-headline font-black text-[#124757] dark:text-white text-sm uppercase tracking-wider">
+                        {lang === "VN" ? "Yêu cầu bổ sung" : "Additional notes"}
+                      </h4>
+                      <p className="mt-1 text-[11px] font-medium text-slate-400">
+                        {lang === "VN" ? "Có thể bỏ trống nếu không có yêu cầu riêng." : "You can leave this empty if there are no extra requests."}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-yellow-100 px-3 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300">
+                      {lang === "VN" ? "Không bắt buộc" : "Optional"}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Yêu cầu về tàu" : "Boat Requirements"}</label>
+                      <span className="text-[10px] font-bold text-slate-400">{String(formData.boatRequirements || "").length}/1000</span>
+                    </div>
+                    <textarea value={formData.boatRequirements} onChange={(e) => handleFieldChange("boatRequirements", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: cần khu VIP, âm thanh, bàn trang trí, không gian tổ chức sinh nhật..." : "e.g. VIP area, sound setup, decorated table, birthday space..."} />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</label>
+                      <span className="text-[10px] font-bold text-slate-400">{String(formData.specialRequests || "").length}/1000</span>
+                    </div>
+                    <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: đón khách lớn tuổi, chuẩn bị nước uống, cần hỗ trợ khi lên tàu..." : "e.g. elderly guests, drinks prepared, boarding support needed..."} />
+                  </div>
                 </div>
               </div>
             </section>
@@ -895,7 +1226,7 @@ export function CharterBooking() {
                     : (lang === "VN" ? "Gửi yêu cầu" : "Submit")}
                 </button>
               ) : (
-                <button type="submit" className="inline-flex items-center gap-2 w-full sm:w-auto min-w-56 justify-center bg-white dark:bg-yellow-400 text-[#124757] dark:text-slate-900 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 hover:bg-slate-100 dark:hover:bg-yellow-300 transition-all mt-5">
+                <button type="submit" disabled={!canContinueToNext} className="inline-flex items-center gap-2 w-full sm:w-auto min-w-56 justify-center bg-white dark:bg-yellow-400 text-[#124757] dark:text-slate-900 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 hover:bg-slate-100 dark:hover:bg-yellow-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white dark:disabled:hover:bg-yellow-400 mt-5">
                   {lang === "VN" ? "Tiếp theo" : "Next"}
                   <span className="material-symbols-outlined text-base">arrow_forward</span>
                 </button>
