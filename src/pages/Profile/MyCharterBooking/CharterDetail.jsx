@@ -18,7 +18,9 @@ import {
 } from "../../../services/charterBookingService";
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { CharterPaymentLedger } from "../../../components/CharterPaymentLedger";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
+import { shouldShowBookingHoldCountdown, shouldShowPaymentDeadlineCountdown } from "../../../utils/charterBookingActions";
 import { PaymentLottieIcon } from "../../../components/PaymentLottieIcon";
 
 const pick = (source, keys, fallback = "") => {
@@ -476,6 +478,7 @@ export function CharterDetail() {
   const [nowTick, setNowTick] = useState(() => Date.now());
   const loadedIdRef = useRef("");
   const importInputRef = useRef(null);
+  const paymentSectionRef = useRef(null);
   const syncedPaymentRef = useRef("");
   const autoSyncPaymentRef = useRef("");
   const refreshedDeadlineRef = useRef("");
@@ -537,6 +540,14 @@ export function CharterDetail() {
     loadedIdRef.current = id;
     loadDetail();
   }, [id, loadDetail]);
+
+  useEffect(() => {
+    if (!location.state?.focusPayment || isLoading || !booking) return;
+    const timer = window.setTimeout(() => {
+      paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [booking, isLoading, location.state?.focusPayment]);
 
   useEffect(() => {
     if (!booking?.qrToken) {
@@ -1193,8 +1204,9 @@ export function CharterDetail() {
   const hasPaymentDeadline = Boolean(getDeadlineTime(effectivePaymentExpiresAt));
   const isPaymentLinkExpired = hasPaymentDeadline && paymentRemainingMs <= 0;
   const bookingHoldDeadline = paymentBookingHoldExpiresAt || booking.bookingHoldExpiresAt;
-  const bookingHoldRemainingMs = getRemainingMs(bookingHoldDeadline, nowTick);
-  const hasBookingHoldDeadline = Boolean(getDeadlineTime(bookingHoldDeadline));
+  const showBookingHoldCountdown = shouldShowBookingHoldCountdown(booking);
+  const bookingHoldRemainingMs = showBookingHoldCountdown ? getRemainingMs(bookingHoldDeadline, nowTick) : 0;
+  const hasBookingHoldDeadline = showBookingHoldCountdown && Boolean(getDeadlineTime(bookingHoldDeadline));
   const isBookingHoldExpired = hasBookingHoldDeadline && bookingHoldRemainingMs <= 0;
   const hasPendingPayOs = Boolean(pendingPaymentId || effectiveCheckoutUrl);
   const canCreatePayment = ["Quoted", "PendingPayment", "Confirmed"].includes(booking.status)
@@ -1593,31 +1605,37 @@ export function CharterDetail() {
                   </div>
                 </div>
 
-                {hasHoldDeadline && booking.status === "Quoted" && (
+                {showBookingHoldCountdown && (
                   <div className={`mt-5 rounded-2xl border px-4 py-3 ${
-                    isQuoteHoldExpired
+                    isBookingHoldExpired
                       ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
-                      : "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300"
+                      : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300"
                   }`}
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-xl">{isQuoteHoldExpired ? "timer_off" : "hourglass_top"}</span>
+                        <span className="material-symbols-outlined text-xl">{isBookingHoldExpired ? "timer_off" : "hourglass_top"}</span>
                         <div>
                           <p className="text-[10px] font-headline font-black uppercase tracking-widest">
-                            {lang === "VN" ? "Thời hạn phản hồi báo giá" : "Quote response deadline"}
+                            {lang === "VN" ? "Hạn thanh toán sau chấp nhận" : "Payment deadline after acceptance"}
                           </p>
-                          <p className="text-xs font-bold opacity-80">{formatDateTime(booking.holdExpiresAt)}</p>
+                          <p className="text-xs font-bold opacity-80">{formatDateTime(bookingHoldDeadline)}</p>
                         </div>
                       </div>
                       <p className="font-headline text-2xl font-black tabular-nums">
-                        {isQuoteHoldExpired ? (lang === "VN" ? "Hết hạn" : "Expired") : formatCountdown(holdRemainingMs)}
+                        {isBookingHoldExpired ? (lang === "VN" ? "Hết hạn" : "Expired") : formatCountdown(bookingHoldRemainingMs)}
                       </p>
                     </div>
                   </div>
                 )}
 
-                <div className="mt-5 border-t border-dashed border-slate-200 dark:border-slate-700 pt-4">
+                <CharterPaymentLedger
+                  payments={booking.payments}
+                  lang={lang}
+                  currencyFormatter={currencyFormatter}
+                />
+
+                <div ref={paymentSectionRef} className="mt-5 border-t border-dashed border-slate-200 dark:border-slate-700 pt-4 scroll-mt-28">
                   {isPaid ? (
                     <div className="flex items-center gap-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
                       <span className="material-symbols-outlined text-xl">verified</span>
@@ -1669,24 +1687,18 @@ export function CharterDetail() {
                           <span className="rounded-lg bg-white px-3 py-1.5 font-headline text-sm font-black text-[#0E4050] ring-1 ring-amber-200 dark:bg-slate-900 dark:text-yellow-400 dark:ring-amber-500/20">
                             {effectivePendingPaymentAmount > 0 ? currencyFormatter.format(effectivePendingPaymentAmount) : "--"}
                           </span>
-                          {effectivePaymentDeadline && (
+                          {effectivePaymentDeadline && shouldShowPaymentDeadlineCountdown({ paymentStatus: "pending" }, booking) && (
                             <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 font-headline text-sm font-black tabular-nums text-amber-700 ring-1 ring-amber-200 dark:bg-slate-900 dark:text-amber-300 dark:ring-amber-500/20">
                               <span className="material-symbols-outlined text-base">timer</span>
                               {formatCountdown(paymentWatcherRemainingMs)}
                             </span>
                           )}
                         </div>
-                        {effectivePaymentDeadline && (
+                        {effectivePaymentDeadline && shouldShowPaymentDeadlineCountdown({ paymentStatus: "pending" }, booking) && (
                           <p className="text-[11px] opacity-80">
                             {isEstimatedPaymentDeadline
                               ? (lang === "VN" ? "Thời gian tạm tính trong lúc chờ hạn thanh toán PayOS chính thức." : "Estimated time while waiting for the confirmed PayOS payment deadline.")
                               : (lang === "VN" ? "Thời gian còn lại để hoàn tất thanh toán PayOS." : "Time left to complete the PayOS payment.")}
-                          </p>
-                        )}
-                        {hasBookingHoldDeadline && (
-                          <p className="text-[11px] opacity-80">
-                            {lang === "VN" ? "Giữ booking/tàu đến " : "Booking hold until "}{formatDateTime(bookingHoldDeadline)}
-                            {bookingHoldRemainingMs > 0 ? ` (${formatCountdown(bookingHoldRemainingMs)})` : ""}
                           </p>
                         )}
                         {!effectiveCheckoutUrl && effectivePaymentQrCode && (
@@ -1909,6 +1921,43 @@ export function CharterDetail() {
         )}
       </main>
     </div>
+
+    {(canCreatePayment || hasPendingPayOs) && !isPaid && (
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 backdrop-blur-lg shadow-[0_-8px_30px_rgba(15,23,42,0.08)] dark:border-slate-700 dark:bg-slate-900/95 md:hidden">
+        <div className="mx-auto flex max-w-6xl items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+              {hasPendingPayOs
+                ? (lang === "VN" ? "Đang chờ thanh toán PayOS" : "PayOS payment pending")
+                : (lang === "VN" ? "Cần thanh toán" : "Payment due")}
+            </p>
+            <p className="font-headline text-sm font-black text-[#124757] dark:text-yellow-400">
+              {selectedPaymentAmount > 0 ? currencyFormatter.format(hasPendingPayOs ? effectivePendingPaymentAmount : selectedPaymentAmount) : "--"}
+            </p>
+          </div>
+          {hasPendingPayOs && effectiveCheckoutUrl ? (
+            <a
+              href={effectiveCheckoutUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#124757] px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
+            >
+              PayOS
+              <span className="material-symbols-outlined text-base">open_in_new</span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCreatePayment}
+              disabled={isSubmitting || !canCreatePayment}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#124757] px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
+            >
+              {lang === "VN" ? "Thanh toán" : "Pay"}
+            </button>
+          )}
+        </div>
+      </div>
+    )}
     </>
   );
 }

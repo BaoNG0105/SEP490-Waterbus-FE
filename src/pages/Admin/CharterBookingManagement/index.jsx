@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import Swal from "sweetalert2";
+import {
+  AdminBookingActionsTab,
+  AdminBookingOverviewTab,
+  AdminBookingTicketsTab,
+} from "../../../components/AdminCharterDetailWorkspace";
 import { BankBinSelect } from "../../../components/BankBinSelect";
+import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats } from "../../../services/boatService";
 import {
@@ -14,6 +20,17 @@ import {
 } from "../../../services/charterBookingService";
 import { manualRefundBookingPayment, refundBookingPayment, syncBookingPayment } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { canShowCharterTickets, normalizeCharterTicketRows } from "../../../utils/charterBookingTickets";
+import {
+  bookingNeedsRefundAttention,
+  getAdminActionInfo,
+  getDefaultAdminTab,
+  getPaginationWindow,
+  getPriorityBookings,
+  isBookingPaymentClosed,
+  matchesSmartFilter,
+  shouldShowBookingHoldCountdown,
+} from "../../../utils/charterBookingActions";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 
 const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Refunded"];
@@ -389,7 +406,12 @@ const normalizeBooking = (item) => {
     promotionCode: pick(item, ["promotionCode"], ""),
     note: pick(item, ["specialRequests", "boatRequirements", "note"], "--"),
     qrToken: pick(item, ["charterBookingQrToken", "qrToken"], ""),
-    tickets: pick(item, ["tickets", "passengers"], []),
+    passengers: Array.isArray(item?.passengers) ? item.passengers : [],
+    tickets: normalizeCharterTicketRows(item, {
+      adultCount,
+      passengerCount,
+      contactName: pick(item, ["contactName", "customerName", "fullName"], ""),
+    }),
     payments: pick(item, ["payments"], []),
     createdAt: pick(item, ["createdAt", "createdDate"]),
   };
@@ -473,6 +495,7 @@ export function CharterBookingManagement() {
 
   const stats = {
     total: bookings.length,
+    needsAction: bookings.filter((item) => matchesSmartFilter(item, "needsAction")).length,
     pendingQuote: bookings.filter((item) => item.status === "PendingQuote").length,
     quoted: bookings.filter((item) => item.status === "Quoted").length,
     confirmed: bookings.filter((item) => item.status === "Confirmed").length,
@@ -481,11 +504,13 @@ export function CharterBookingManagement() {
       .reduce((sum, item) => sum + item.estimatedPrice, 0),
   };
 
-  const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
+  const priorityBookings = getPriorityBookings(bookings, 4);
 
-  // const priorityBookings = bookings
-  //   .filter((booking) => ["PendingQuote", "Quoted", "PendingPayment", "Confirmed"].includes(booking.status))
-  //   .slice(0, 4);
+  const openAdminBooking = (booking, tab) => {
+    navigate(`/admin/charter-bookings-management/${booking.id}`, { state: tab ? { tab } : undefined });
+  };
+
+  const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
 
   const refreshAfterChange = async () => {
     await loadData();
@@ -743,92 +768,73 @@ export function CharterBookingManagement() {
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { icon: "map", labelVn: "Tổng yêu cầu", labelEn: "Total Requests", value: isLoading ? "..." : stats.total, color: "text-[#124757] dark:text-yellow-400", bg: "bg-slate-500/10 dark:bg-slate-900" },
-          { icon: "pending_actions", labelVn: "Chờ báo giá", labelEn: "Pending Quote", value: isLoading ? "..." : stats.pendingQuote, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
-          { icon: "request_quote", labelVn: "Đã báo giá", labelEn: "Quoted", value: isLoading ? "..." : stats.quoted, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
-          { icon: "event_available", labelVn: "Đã xác nhận", labelEn: "Confirmed", value: isLoading ? "..." : stats.confirmed, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-500/10" },
-          { icon: "payments", labelVn: "Giá trị báo giá", labelEn: "Quoted Value", value: isLoading ? "..." : currencyFormatter.format(stats.revenue), color: "text-[#124757] dark:text-white", bg: "bg-yellow-400/20" },
+          { key: "all", icon: "map", labelVn: "Tổng yêu cầu", labelEn: "Total Requests", value: isLoading ? "..." : stats.total, color: "text-[#124757] dark:text-yellow-400", bg: "bg-slate-500/10 dark:bg-slate-900" },
+          { key: "needsAction", icon: "priority_high", labelVn: "Cần xử lý", labelEn: "Needs Action", value: isLoading ? "..." : stats.needsAction, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
+          { key: "waitingQuote", icon: "pending_actions", labelVn: "Chờ báo giá", labelEn: "Pending Quote", value: isLoading ? "..." : stats.pendingQuote, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
+          { key: "toPay", icon: "request_quote", labelVn: "Đã báo giá", labelEn: "Quoted", value: isLoading ? "..." : stats.quoted, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
+          { key: "active", icon: "event_available", labelVn: "Đã xác nhận", labelEn: "Confirmed", value: isLoading ? "..." : stats.confirmed, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-500/10" },
         ].map((item) => (
-          <div key={item.icon} className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/60 shadow-sm flex items-center gap-3.5">
-            <div className={`w-10 h-10 rounded-xl ${item.bg} ${item.color} flex items-center justify-center shrink-0`}>
-              <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">{lang === "VN" ? item.labelVn : item.labelEn}</p>
-              <h3 className={`text-lg font-headline font-black mt-0.5 truncate ${item.color}`}>{item.value}</h3>
+          <div
+            key={item.key}
+            className="rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-slate-800"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.bg} ${item.color}`}>
+                <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? item.labelVn : item.labelEn}</p>
+                <h3 className={`mt-0.5 truncate font-headline text-lg font-black ${item.color}`}>{item.value}</h3>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
-        <section className="rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+      {priorityBookings.length > 0 && (
+        <section className="rounded-4xl border border-amber-100 bg-gradient-to-br from-amber-50/80 to-white p-5 shadow-sm dark:border-amber-500/20 dark:from-amber-500/5 dark:to-slate-800">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                {lang === "VN" ? "Hàng đợi xử lý" : "Operations Queue"}
+                {lang === "VN" ? "Hàng đợi ưu tiên" : "Priority queue"}
               </h3>
-              <p className="mt-1 text-xs font-medium text-slate-400">
-                {lang === "VN" ? "Ưu tiên booking cần báo giá, thanh toán hoặc chuẩn bị vận hành." : "Prioritizes requests that need quoting, payment follow-up, or operation prep."}
+              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {lang === "VN" ? "Booking cần báo giá, thanh toán hoặc hoàn tiền ngay." : "Bookings needing quote, payment, or refund attention."}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setStatusFilter("PendingQuote");
-                setCurrentPage(1);
-              }}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
-            >
-              <span className="material-symbols-outlined text-base">assignment_add</span>
-              {lang === "VN" ? "Lọc chờ báo giá" : "Pending quotes"}
-            </button>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {priorityBookings.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-center text-xs font-bold text-slate-400 dark:border-slate-700 lg:col-span-2">
-                <span className="material-symbols-outlined mb-2 block text-3xl">task_alt</span>
-                {lang === "VN" ? "Không có booking cần xử lý ngay." : "No urgent charter requests right now."}
-              </div>
-            ) : (
-              priorityBookings.map((booking) => {
-                const actionInfo = getAdminActionInfo(booking);
-                return (
-                  <button
-                    key={`queue-${booking.id || booking.bookingCode}`}
-                    type="button"
-                    onClick={() => openDetail(booking)}
-                    className="rounded-3xl border border-slate-100 bg-slate-50 p-4 text-left transition-all hover:border-[#124757]/30 hover:bg-white hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-yellow-400/40 dark:hover:bg-slate-800"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-headline font-black text-[#124757] dark:text-white">{booking.bookingCode}</p>
-                        <p className="mt-1 truncate text-xs font-bold text-slate-500 dark:text-slate-300">{booking.customerName}</p>
-                      </div>
-                      <span className={`inline-flex shrink-0 items-center gap-1 rounded-xl border px-2.5 py-1 text-[9px] font-headline font-black uppercase tracking-wider ${getStatusInfo(booking.status).classes}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${getStatusInfo(booking.status).dot}`}></span>
-                        {getStatusInfo(booking.status).label}
-                      </span>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+            {priorityBookings.map((booking) => {
+              const actionInfo = getAdminActionInfo(booking, lang);
+              return (
+                <button
+                  key={`queue-${booking.id || booking.bookingCode}`}
+                  type="button"
+                  onClick={() => openAdminBooking(booking, actionInfo.tab)}
+                  className="rounded-3xl border border-white bg-white/90 p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-headline font-black text-[#124757] dark:text-white">{booking.bookingCode}</p>
+                      <p className="mt-1 truncate text-xs font-bold text-slate-500 dark:text-slate-300">{booking.customerName}</p>
                     </div>
-                    <div className={`mt-3 rounded-2xl border px-3 py-2 ${actionInfo.classes}`}>
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-lg">{actionInfo.icon}</span>
-                        <span className="text-[10px] font-headline font-black uppercase tracking-wider">{actionInfo.label}</span>
-                      </div>
+                    {actionInfo.urgent && (
+                      <span className="inline-flex h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#FFD100]" />
+                    )}
+                  </div>
+                  <div className={`mt-3 rounded-2xl border px-3 py-2 ${actionInfo.classes}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-lg">{actionInfo.icon}</span>
+                      <span className="text-[10px] font-headline font-black uppercase tracking-wider">{actionInfo.label}</span>
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-bold text-slate-400">
-                      <span>{formatDate(booking.departureDate)}</span>
-                      <span className="text-center">{booking.passengerCount} {lang === "VN" ? "khách" : "guests"}</span>
-                      <span className="text-right">{booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--"}</span>
-                    </div>
-                  </button>
-                );
-              })
-            )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </section>
-      </div> */}
+      )}
 
       <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col lg:flex-row items-center gap-4 justify-between">
         <div className="relative w-full lg:max-w-md">
@@ -905,6 +911,7 @@ export function CharterBookingManagement() {
                 <th className="py-4 px-4">{lang === "VN" ? "Tàu & lộ trình" : "Boat & Route"}</th>
                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Lịch thuê" : "Schedule"}</th>
                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                <th className="py-4 px-4">{lang === "VN" ? "Việc cần làm" : "Next step"}</th>
                 <th className="py-4 px-6 text-right">{lang === "VN" ? "Giá chốt" : "Quote"}</th>
                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
               </tr>
@@ -912,13 +919,13 @@ export function CharterBookingManagement() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-14">
+                  <td colSpan={8} className="text-center py-14">
                     <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin mx-auto"></div>
                   </td>
                 </tr>
               ) : currentBookings.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                  <td colSpan={8} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                     <span className="material-symbols-outlined text-4xl block mb-2">event_busy</span>
                     {lang === "VN" ? "Không có yêu cầu thuê tàu phù hợp." : "No charter requests match your filters."}
                   </td>
@@ -926,8 +933,13 @@ export function CharterBookingManagement() {
               ) : (
                 currentBookings.map((booking) => {
                   const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
+                  const actionInfo = getAdminActionInfo(booking, lang);
                   return (
-                    <tr key={booking.id || booking.bookingCode} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
+                    <tr
+                      key={booking.id || booking.bookingCode}
+                      onClick={() => openAdminBooking(booking, actionInfo.tab)}
+                      className="cursor-pointer transition-colors hover:bg-[#124757]/5 dark:hover:bg-yellow-400/5 group"
+                    >
                       <td className="py-4 px-6">
                         <p className="font-headline font-black text-[#124757] dark:text-white">{booking.bookingCode}</p>
                         <p className="text-[10px] text-slate-400 mt-1">{booking.passengerCount} {lang === "VN" ? "khách" : "guests"} / {formatDuration(booking.durationValue, booking.rentalUnit, lang)}</p>
@@ -951,17 +963,24 @@ export function CharterBookingManagement() {
                         </span>
                         <p className="text-[9px] text-slate-400 mt-1">{getPaymentStatusInfo(booking.paymentStatus, lang).label}</p>
                       </td>
+                      <td className="py-4 px-4">
+                        <div className={`inline-flex max-w-44 items-center gap-2 rounded-xl border px-2.5 py-1.5 ${actionInfo.classes}`}>
+                          <span className="material-symbols-outlined text-base">{actionInfo.icon}</span>
+                          <span className="text-[9px] font-headline font-black uppercase tracking-wider leading-4">{actionInfo.label}</span>
+                        </div>
+                      </td>
                       <td className="py-4 px-6 text-right font-headline font-black text-[#124757] dark:text-yellow-400">
                         {booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--"}
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      <td className="py-4 px-6 text-center" onClick={(event) => event.stopPropagation()}>
                         <button
                           type="button"
-                          onClick={() => navigate(`/admin/charter-bookings-management/${booking.id}`)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-[#124757] text-white shadow-sm transition-all hover:scale-105 dark:bg-yellow-400 dark:text-slate-900"
-                          title={lang === "VN" ? "Mở trang chi tiết" : "Open detail page"}
+                          onClick={() => openAdminBooking(booking, actionInfo.tab)}
+                          className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider shadow-sm transition hover:scale-105 ${actionInfo.buttonClasses}`}
+                          title={actionInfo.cta}
                         >
-                          <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+                          <span className="material-symbols-outlined text-base">{actionInfo.icon}</span>
+                          {actionInfo.cta}
                         </button>
                       </td>
                     </tr>
@@ -982,8 +1001,8 @@ export function CharterBookingManagement() {
             <button type="button" onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 flex items-center justify-center text-slate-500 dark:text-slate-300">
               <span className="material-symbols-outlined text-base">chevron_left</span>
             </button>
-            {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-              <button key={page} type="button" onClick={() => setCurrentPage(page)} className={`w-8 h-8 rounded-xl font-headline font-black text-xs ${currentPage === page ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900" : "border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300"}`}>
+            {getPaginationWindow(currentPage, totalPages).map((page) => (
+              <button key={page} type="button" onClick={() => setCurrentPage(page)} className={`min-w-8 h-8 px-2 rounded-xl font-headline font-black text-xs ${currentPage === page ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900" : "border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300"}`}>
                 {page}
               </button>
             ))}
@@ -1352,9 +1371,10 @@ export function AdminCharterBookingDetail() {
   const { lang } = useApp();
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [booking, setBooking] = useState(null);
   const [boats, setBoats] = useState([]);
-  const [activeTab, setActiveTab] = useState("actions");
+  const [activeTab, setActiveTab] = useState(() => location.state?.tab || "overview");
   const [quoteForm, setQuoteForm] = useState({
     boats: [],
     subtotalAmount: "",
@@ -1392,6 +1412,9 @@ export function AdminCharterBookingDetail() {
       setQuoteForm(buildQuoteFormFromBooking(normalized));
       setQuotePreview(null);
       setQuotePreviewError("");
+      if (!location.state?.tab) {
+        setActiveTab(getDefaultAdminTab(normalized));
+      }
     } catch (error) {
       console.error("Lỗi tải chi tiết charter booking:", error);
       setLoadError(getApiErrorMessage(
@@ -1401,7 +1424,13 @@ export function AdminCharterBookingDetail() {
     } finally {
       setIsLoading(false);
     }
-  }, [id, lang]);
+  }, [id, lang, location.state?.tab]);
+
+  useEffect(() => {
+    if (location.state?.tab) {
+      setActiveTab(location.state.tab);
+    }
+  }, [location.state?.tab]);
 
   useEffect(() => {
     loadDetail();
@@ -1411,12 +1440,6 @@ export function AdminCharterBookingDetail() {
     const interval = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (activeTab === "payments" && booking && (!Array.isArray(booking.payments) || booking.payments.length === 0)) {
-      setActiveTab("overview");
-    }
-  }, [activeTab, booking]);
 
   const buildDetailQuotePayload = useCallback(() => ({
     boats: quoteForm.boats.map((boat) => ({
@@ -1438,6 +1461,24 @@ export function AdminCharterBookingDetail() {
   const canManageQuote = Boolean(booking)
     && ["PendingQuote", "Quoted"].includes(booking.status)
     && !hasBlockingPayment;
+
+  const bookingPaidAmount = useMemo(() => {
+    if (!Array.isArray(booking?.payments)) return 0;
+    return booking.payments
+      .filter((payment) => isPaidPayment(payment))
+      .reduce((sum, payment) => sum + getPaymentAmount(payment), 0);
+  }, [booking?.payments]);
+
+  const adminActionsPhase = useMemo(() => {
+    if (!booking) return "closed";
+    const status = booking.status;
+    if (["Cancelled", "Expired", "Refunded", "Completed"].includes(status)) return "closed";
+    if (isBookingPaymentClosed(booking) && status !== "PendingQuote") return "closed";
+    if (status === "PendingQuote" || (status === "Quoted" && canManageQuote)) return "quote";
+    if (["Quoted", "PendingPayment"].includes(status)) return "payment";
+    if (status === "Confirmed") return "operate";
+    return "closed";
+  }, [booking, canManageQuote]);
 
   useEffect(() => {
     if (!booking?.id || !isQuoteBoatSelectionComplete || !canManageQuote) {
@@ -1590,67 +1631,25 @@ export function AdminCharterBookingDetail() {
   }
 
   const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
-  const holdRemainingMs = getRemainingMs(booking.holdExpiresAt, nowTick);
-  const bookingHoldRemainingMs = getRemainingMs(booking.bookingHoldExpiresAt, nowTick);
+  const adminActionInfo = getAdminActionInfo(booking, lang);
+  const showBookingHoldCountdown = shouldShowBookingHoldCountdown(booking);
+  const bookingHoldRemainingMs = showBookingHoldCountdown
+    ? getRemainingMs(booking.bookingHoldExpiresAt, nowTick)
+    : 0;
+  const quoteTotal = Number(booking?.estimatedPrice || 0);
+  const remainingAmount = Math.max(quoteTotal - bookingPaidAmount, 0);
   const selectedBoats = Array.isArray(booking.selectedBoats) ? booking.selectedBoats : [];
   const requestedBoats = Array.isArray(booking.requestedBoats) ? booking.requestedBoats : [];
   const payments = Array.isArray(booking.payments) ? booking.payments : [];
-  const tickets = Array.isArray(booking.tickets) ? booking.tickets : [];
-  const rawJson = JSON.stringify(booking.raw || {}, null, 2);
-  const nextActionText = (() => {
-    switch (booking.status) {
-      case "PendingQuote":
-        return lang === "VN" ? "Gán tàu và chốt giá" : "Assign boats and submit quote";
-      case "Quoted":
-        return lang === "VN" ? "Theo dõi khách thanh toán trước deadline" : "Monitor customer payment before the deadline";
-      case "Confirmed":
-        return lang === "VN" ? "Theo dõi vận hành và danh sách khách" : "Monitor operation and passenger list";
-      case "Expired":
-        return lang === "VN" ? "Booking đã hết hạn, không thao tác thanh toán" : "Booking expired, payment is unavailable";
-      case "Cancelled":
-        return lang === "VN" ? "Booking đã hủy" : "Booking cancelled";
-      case "Completed":
-        return lang === "VN" ? "Booking đã hoàn tất" : "Booking completed";
-      default:
-        return lang === "VN" ? "Kiểm tra trạng thái booking" : "Review booking status";
-    }
-  })();
-  const infoItems = [
-    { label: lang === "VN" ? "Khách hàng" : "Customer", value: booking.customerName },
-    { label: lang === "VN" ? "Điện thoại" : "Phone", value: booking.phone },
-    { label: "Email", value: booking.email },
-    { label: lang === "VN" ? "Lộ trình" : "Route", value: booking.route },
-    { label: lang === "VN" ? "Ngày đi" : "Departure", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)}` },
-    { label: lang === "VN" ? "Thời lượng" : "Duration", value: formatDuration(booking.durationValue, booking.rentalUnit, lang) },
-    { label: lang === "VN" ? "Hành khách" : "Passengers", value: formatPassengerSummary(booking, lang) },
-    { label: lang === "VN" ? "Thanh toán" : "Payment", value: getPaymentStatusInfo(booking.paymentStatus, lang).label },
-    { label: lang === "VN" ? "Giá chốt" : "Quote", value: booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--" },
-    { label: lang === "VN" ? "Đặt cọc" : "Deposit", value: booking.depositAmount > 0 ? currencyFormatter.format(booking.depositAmount) : "--" },
-  ];
+  const tickets = canShowCharterTickets(booking)
+    ? (Array.isArray(booking.tickets) ? booking.tickets : [])
+    : [];
   const workspaceTabs = [
     { id: "actions", icon: "edit_square", label: lang === "VN" ? "Thao tác" : "Actions" },
     { id: "overview", icon: "dashboard", label: lang === "VN" ? "Tổng quan" : "Overview" },
-    ...(payments.length > 0 ? [{ id: "payments", icon: "payments", label: lang === "VN" ? "Thanh toán" : "Payments" }] : []),
-    { id: "tickets", icon: "confirmation_number", label: lang === "VN" ? "Vé/khách" : "Tickets" },
+    { id: "payments", icon: "payments", label: lang === "VN" ? "Thanh toán" : "Payments", badge: payments.length || (bookingNeedsRefundAttention(booking) ? "!" : "") },
+    { id: "tickets", icon: "confirmation_number", label: lang === "VN" ? "Vé/khách" : "Tickets", badge: tickets.length || "" },
   ];
-  const copyDebugJson = async () => {
-    try {
-      await navigator.clipboard.writeText(rawJson);
-      Swal.fire({
-        icon: "success",
-        title: lang === "VN" ? "Đã copy debug JSON" : "Debug JSON copied",
-        timer: 1200,
-        showConfirmButton: false,
-      });
-    } catch {
-      Swal.fire({
-        icon: "error",
-        title: lang === "VN" ? "Không thể copy" : "Unable to copy",
-        text: lang === "VN" ? "Trình duyệt không cho phép copy clipboard." : "The browser blocked clipboard access.",
-        confirmButtonColor: "#124757",
-      });
-    }
-  };
 
   return (
     <div className="space-y-6 pb-10 font-body">
@@ -1670,10 +1669,6 @@ export function AdminCharterBookingDetail() {
           <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">{booking.customerName} · {booking.route}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={copyDebugJson} className="inline-flex w-max items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-slate-500 shadow-sm hover:text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-yellow-400">
-            <span className="material-symbols-outlined text-base">content_copy</span>
-            Debug JSON
-          </button>
           <button type="button" onClick={loadDetail} className="inline-flex w-max items-center gap-2 rounded-2xl bg-[#FFD100] px-5 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] shadow-sm">
             <span className="material-symbols-outlined text-base">refresh</span>
             {lang === "VN" ? "Tải lại" : "Refresh"}
@@ -1690,7 +1685,7 @@ export function AdminCharterBookingDetail() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
+                className={`relative flex h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
                   active
                     ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
                     : "text-slate-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"
@@ -1698,288 +1693,123 @@ export function AdminCharterBookingDetail() {
               >
                 <span className="material-symbols-outlined text-base">{tab.icon}</span>
                 <span className="truncate">{tab.label}</span>
+                {tab.badge ? (
+                  <span className={`absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-black ${
+                    tab.badge === "!" ? "bg-rose-500 text-white" : "bg-[#FFD100] text-slate-900"
+                  }`}
+                  >
+                    {tab.badge}
+                  </span>
+                ) : null}
               </button>
             );
           })}
         </div>
       </div>
 
-      {activeTab === "actions" && (
-        <section className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-          <form onSubmit={handleDetailSubmitQuote} className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+        <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+          {lang === "VN" ? "Tiến trình booking" : "Booking progress"}
+        </p>
+        <CharterWorkflowStepper status={booking.status} lang={lang} />
+      </div>
+
+      {bookingNeedsRefundAttention(booking) && (
+        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/20 dark:bg-rose-500/10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-2xl text-rose-600 dark:text-rose-300">currency_exchange</span>
               <div>
-                <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
-                  {lang === "VN" ? "Gán tàu & chốt giá" : "Assign Boats & Quote"}
-                </h3>
-                <p className="mt-1 text-xs font-bold text-slate-400">
-                  {lang === "VN" ? "Thao tác thủ công trực tiếp trên trang chi tiết." : "Manual operation directly on this detail page."}
+                <p className="font-headline text-sm font-black uppercase tracking-wide text-rose-700 dark:text-rose-300">
+                  {lang === "VN" ? "Cần xử lý hoàn tiền" : "Refund attention required"}
+                </p>
+                <p className="mt-1 text-xs font-bold text-rose-600/80 dark:text-rose-200">
+                  {lang === "VN" ? "Booking đã hủy hoặc hoàn lỗi — mở tab Thanh toán để xử lý." : "Booking cancelled or refund failed — open the Payments tab to process."}
                 </p>
               </div>
-              <span className={`w-max rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider ${statusInfo.classes}`}>
-                {statusInfo.label}
-              </span>
             </div>
-
-            {!canManageQuote && (
-              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-                {hasBlockingPayment
-                  ? (lang === "VN" ? "Booking đã có giao dịch đang chờ hoặc đã thanh toán. Không thể đổi tàu hay báo giá." : "This booking has a pending or paid transaction. Boats and pricing can no longer be changed.")
-                  : (lang === "VN" ? "Trạng thái hiện tại không cho phép cập nhật báo giá." : "The current status does not allow quote changes.")}
-              </div>
-            )}
-
-            <fieldset disabled={!canManageQuote || isSubmitting} className="mt-5 space-y-5 disabled:opacity-60">
-              <div className="grid gap-4 xl:grid-cols-2">
-                {quoteForm.boats.map((quoteBoat) => {
-                  const selectedBoatIds = quoteForm.boats
-                    .filter((boat) => boat.boatOrder !== quoteBoat.boatOrder && boat.boatId)
-                    .map((boat) => boat.boatId);
-                  const availableBoats = boats.filter((boat) => {
-                    const boatId = getBoatId(boat);
-                    const requiredDecks = Number(quoteBoat.requiredNumberOfDecks) || 0;
-                    const matchesDeck = !requiredDecks || getBoatDeckCount(boat) === requiredDecks;
-                    const matchesSeatSetup = requiredDecks
-                      ? true
-                      : (!quoteBoat.requiredSeatSetupType || getBoatSeatSetupType(boat) === quoteBoat.requiredSeatSetupType);
-                    return isActiveBoat(boat) && matchesDeck && matchesSeatSetup && (!selectedBoatIds.includes(boatId) || boatId === quoteBoat.boatId);
-                  });
-
-                  return (
-                    <div key={quoteBoat.boatOrder} className="rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-                      <div className="mb-3 flex items-center justify-between gap-2">
-                        <p className="text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                          {lang === "VN" ? `Tàu ${quoteBoat.boatOrder}` : `Boat ${quoteBoat.boatOrder}`}
-                        </p>
-                        <span className="rounded-lg bg-white px-2 py-1 text-[9px] font-black uppercase text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-                          {formatDeckCount(quoteBoat.requiredNumberOfDecks, lang) || quoteBoat.requiredSeatSetupType || "--"}
-                        </span>
-                      </div>
-                      <select value={quoteBoat.boatId} onChange={(event) => handleDetailQuoteBoatChange(quoteBoat.boatOrder, event.target.value)} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-                        <option value="">{lang === "VN" ? "Chọn tàu" : "Select boat"}</option>
-                        {availableBoats.map((boat) => {
-                          const boatId = getBoatId(boat);
-                          const deckText = formatDeckCount(getBoatDeckCount(boat), lang);
-                          return (
-                            <option key={boatId} value={boatId}>
-                              {boat.code ? `${boat.code} - ` : ""}{boat.name} ({getBoatSeatCount(boat)} {lang === "VN" ? "ghế" : "seats"}{deckText ? `, ${deckText}` : ""}) - {currencyFormatter.format(getBoatPrice(boat, quoteForm.rentalUnit || booking.rentalUnit || "Day"))}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Đơn vị" : "Unit"}</label>
-                  <select value={quoteForm.rentalUnit} onChange={(event) => setQuoteForm((prev) => ({ ...prev, rentalUnit: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white">
-                    <option value="">{lang === "VN" ? "Giữ nguyên" : "Keep current"}</option>
-                    {rentalUnits.map((unit) => <option key={unit} value={unit}>{formatRentalUnit(unit, lang)}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thời lượng" : "Duration"}</label>
-                  <input type="number" min="1" max="60" value={quoteForm.durationValue} onChange={(event) => setQuoteForm((prev) => ({ ...prev, durationValue: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Tổng giá thủ công" : "Manual total override"}</label>
-                  <input type="number" min="0" value={quoteForm.subtotalAmount} onChange={(event) => setQuoteForm((prev) => ({ ...prev, subtotalAmount: event.target.value }))} placeholder={lang === "VN" ? "Để trống để hệ thống tự tính" : "Leave empty for automatic calculation"} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-                </div>
-                <div className="space-y-2 md:col-span-4">
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Mã khuyến mãi" : "Promotion Code"}</label>
-                  <input value={quoteForm.promotionCode} onChange={(event) => setQuoteForm((prev) => ({ ...prev, promotionCode: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-                </div>
-              </div>
-
-              <button type="submit" disabled={isSubmitting || !isQuoteBoatSelectionComplete || !canManageQuote} className="w-full rounded-xl bg-[#124757] px-6 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900">
-                {isSubmitting ? (lang === "VN" ? "Đang xử lý..." : "Submitting...") : (lang === "VN" ? "Chốt giá" : "Submit Quote")}
-              </button>
-            </fieldset>
-          </form>
-
-          <div className="space-y-6">
-            <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-              <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
-                {lang === "VN" ? "Tóm tắt xử lý" : "Operation Summary"}
-              </h3>
-              <div className="mt-4 space-y-3 text-xs">
-                {[
-                  { label: lang === "VN" ? "Lộ trình" : "Route", value: booking.route },
-                  { label: lang === "VN" ? "Lịch thuê" : "Schedule", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)} · ${formatDuration(booking.durationValue, booking.rentalUnit, lang)}` },
-                  { label: lang === "VN" ? "Hành khách" : "Passengers", value: formatPassengerSummary(booking, lang) },
-                  {
-                    label: lang === "VN" ? "Tàu yêu cầu" : "Requested boats",
-                    value: requestedBoats.length > 0
-                      ? requestedBoats.map((boat, index) => formatDeckCount(getRequestedDeckCount(boat), lang) || pick(boat, ["requiredSeatSetupType", "seatSetupType", "preferredSeatSetupType"], `${lang === "VN" ? "Tàu" : "Boat"} ${index + 1}`)).join(", ")
-                      : "--",
-                  },
-                  { label: lang === "VN" ? "Liên hệ" : "Contact", value: `${booking.customerName} · ${booking.phone}` },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-900">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-                    <p className="mt-1 font-bold text-slate-700 dark:text-slate-200">{item.value}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-              <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
-                {lang === "VN" ? "Preview giá" : "Quote Preview"}
-              </h3>
-              {isPreviewLoading ? (
-                <p className="mt-4 text-xs font-bold text-slate-400">{lang === "VN" ? "Đang tính..." : "Calculating..."}</p>
-              ) : quotePreviewError ? (
-                <p className="mt-4 text-xs font-bold text-red-500">{quotePreviewError}</p>
-              ) : quotePreview ? (
-                <div className="mt-4 space-y-3">
-                  {Array.isArray(quotePreview.boats) && quotePreview.boats.map((boat, index) => (
-                    <div key={`${pick(boat, ["boatOrder"], index + 1)}-${index}`} className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-900">
-                      <div className="flex items-center justify-between gap-2 text-xs">
-                        <span className="font-black text-slate-500 dark:text-slate-300">{lang === "VN" ? `Tàu ${pick(boat, ["boatOrder"], index + 1)}` : `Boat ${pick(boat, ["boatOrder"], index + 1)}`}</span>
-                        <span className="font-headline font-black text-[#124757] dark:text-yellow-400">{currencyFormatter.format(Number(pick(boat, ["subtotalAmount"], 0)) || 0)}</span>
-                      </div>
-                      <p className="mt-1 text-[10px] text-slate-400">
-                        {lang === "VN" ? "Đơn giá" : "Unit price"}: {currencyFormatter.format(Number(pick(boat, ["unitPrice"], 0)) || 0)}
-                      </p>
-                    </div>
-                  ))}
-                  <div className="space-y-2 border-t border-slate-100 pt-3 text-xs font-bold text-slate-500 dark:border-slate-700 dark:text-slate-300">
-                    <div className="flex justify-between"><span>{lang === "VN" ? "Tổng trước giảm" : "Subtotal"}</span><span>{currencyFormatter.format(Number(pick(quotePreview, ["subtotalAmount"], 0)) || 0)}</span></div>
-                    <div className="flex justify-between"><span>{lang === "VN" ? "Giảm giá" : "Discount"}</span><span>{currencyFormatter.format(Number(pick(quotePreview, ["discountAmount"], 0)) || 0)}</span></div>
-                    <div className="flex justify-between font-headline font-black text-[#124757] dark:text-yellow-400"><span>{lang === "VN" ? "Tổng cuối" : "Total"}</span><span>{currencyFormatter.format(Number(pick(quotePreview, ["totalAmount"], 0)) || 0)}</span></div>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-4 rounded-2xl border border-dashed border-slate-200 p-4 text-xs font-bold text-slate-400 dark:border-slate-700">
-                  {isQuoteBoatSelectionComplete
-                    ? (lang === "VN" ? "Preview sẽ hiển thị sau khi hệ thống tính giá." : "Preview will appear after pricing is calculated.")
-                    : (lang === "VN" ? "Chọn đủ tàu để preview giá." : "Select all boats to preview pricing.")}
-                </p>
-              )}
-            </div>
-
-            <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-              <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
-                {lang === "VN" ? "Cập nhật trạng thái thủ công" : "Manual Status Update"}
-              </h3>
-              <select defaultValue="" onChange={(event) => handleDetailStatusChange(event.target.value)} disabled={isSubmitting} className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
-                <option value="" disabled>{lang === "VN" ? "Chọn trạng thái" : "Select status"}</option>
-                {manualStatusOptions.map((status) => (
-                  <option key={status} value={status}>{getStatusInfo(status).label}</option>
-                ))}
-              </select>
-              <p className="mt-3 text-[11px] font-medium leading-relaxed text-slate-400">
-                {lang === "VN" ? "Quản trị chỉ cập nhật thủ công: Đã hủy, Hết hạn, Hoàn tất. Các trạng thái còn lại được xử lý theo quy trình hệ thống." : "Admins can manually set only Cancelled, Expired, or Completed. Other states follow the system workflow."}
-              </p>
-            </div>
+            <button type="button" onClick={() => setActiveTab("payments")} className="rounded-xl bg-rose-600 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white">
+              {lang === "VN" ? "Đến thanh toán" : "Go to payments"}
+            </button>
           </div>
-        </section>
+        </div>
+      )}
+
+      {activeTab === "actions" && (
+        <AdminBookingActionsTab
+          lang={lang}
+          phase={adminActionsPhase}
+          booking={booking}
+          statusInfo={statusInfo}
+          boats={boats}
+          quoteForm={quoteForm}
+          setQuoteForm={setQuoteForm}
+          rentalUnits={rentalUnits}
+          canManageQuote={canManageQuote}
+          hasBlockingPayment={hasBlockingPayment}
+          isSubmitting={isSubmitting}
+          isQuoteBoatSelectionComplete={isQuoteBoatSelectionComplete}
+          isPreviewLoading={isPreviewLoading}
+          quotePreviewError={quotePreviewError}
+          quotePreview={quotePreview}
+          currencyFormatter={currencyFormatter}
+          formatDate={formatDate}
+          formatDuration={formatDuration}
+          formatPassengerSummary={formatPassengerSummary}
+          formatDeckCount={formatDeckCount}
+          getRequestedDeckCount={getRequestedDeckCount}
+          getBoatDeckCount={getBoatDeckCount}
+          getBoatSeatSetupType={getBoatSeatSetupType}
+          getBoatId={getBoatId}
+          getBoatSeatCount={getBoatSeatCount}
+          getBoatPrice={getBoatPrice}
+          isActiveBoat={isActiveBoat}
+          showBookingHoldCountdown={showBookingHoldCountdown}
+          bookingHoldRemainingMs={bookingHoldRemainingMs}
+          formatDateTime={formatDateTime}
+          formatCountdown={formatCountdown}
+          quoteTotal={quoteTotal}
+          bookingPaidAmount={bookingPaidAmount}
+          selectedBoats={selectedBoats}
+          payments={payments}
+          manualStatusOptions={manualStatusOptions}
+          getStatusInfo={getStatusInfo}
+          onSubmitQuote={handleDetailSubmitQuote}
+          onQuoteBoatChange={handleDetailQuoteBoatChange}
+          onStatusChange={handleDetailStatusChange}
+          onNavigateTab={setActiveTab}
+        />
       )}
 
       {activeTab === "overview" && (
-        <>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-          <p className="text-[10px] font-headline font-black uppercase tracking-widest">{lang === "VN" ? "Việc cần làm" : "Next Action"}</p>
-          <p className="mt-2 text-lg font-headline font-black leading-snug">{nextActionText}</p>
-          <button type="button" onClick={() => setActiveTab("actions")} className="mt-4 rounded-xl bg-white px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-amber-700 ring-1 ring-amber-200 dark:bg-slate-900 dark:text-amber-300 dark:ring-amber-500/20">
-            {lang === "VN" ? "Đi tới thao tác" : "Go to actions"}
-          </button>
-        </div>
-        <div className="rounded-3xl border border-slate-100 bg-white p-5 dark:border-slate-700 dark:bg-slate-800">
-          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Lịch thuê" : "Schedule"}</p>
-          <p className="mt-2 text-lg font-headline font-black text-[#124757] dark:text-yellow-400">{formatDate(booking.departureDate)} {String(booking.startTime).slice(0, 5)}</p>
-          <p className="mt-1 text-xs font-bold text-slate-400">{formatDuration(booking.durationValue, booking.rentalUnit, lang)}</p>
-        </div>
-        <div className="rounded-3xl border border-slate-100 bg-white p-5 dark:border-slate-700 dark:bg-slate-800">
-          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Khách" : "Passengers"}</p>
-          <p className="mt-2 text-lg font-headline font-black text-[#124757] dark:text-yellow-400">{booking.passengerCount} {lang === "VN" ? "khách" : "guests"}</p>
-          <p className="mt-1 text-xs font-bold text-slate-400">{booking.adultCount} adult / {booking.childCount} child</p>
-        </div>
-        <div className="rounded-3xl border border-slate-100 bg-white p-5 dark:border-slate-700 dark:bg-slate-800">
-          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Giá & thanh toán" : "Quote & Payment"}</p>
-          <p className="mt-2 text-lg font-headline font-black text-[#124757] dark:text-yellow-400">{booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : (lang === "VN" ? "Chưa chốt giá" : "Not quoted")}</p>
-          <p className="mt-1 text-xs font-bold text-slate-400">{getPaymentStatusInfo(booking.paymentStatus, lang).label}</p>
-        </div>
-      </div>
-
-      {(booking.holdExpiresAt || booking.bookingHoldExpiresAt) && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {booking.holdExpiresAt && (
-            <div className="rounded-3xl border border-indigo-100 bg-indigo-50 p-5 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest">holdExpiresAt</p>
-              <p className="mt-2 text-sm font-bold">{formatDateTime(booking.holdExpiresAt)}</p>
-              <p className="mt-2 text-2xl font-headline font-black tabular-nums">{holdRemainingMs > 0 ? formatCountdown(holdRemainingMs) : (lang === "VN" ? "Hết hạn" : "Expired")}</p>
-            </div>
-          )}
-          {booking.bookingHoldExpiresAt && (
-            <div className="rounded-3xl border border-sky-100 bg-sky-50 p-5 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest">bookingHoldExpiresAt</p>
-              <p className="mt-2 text-sm font-bold">{formatDateTime(booking.bookingHoldExpiresAt)}</p>
-              <p className="mt-2 text-2xl font-headline font-black tabular-nums">{bookingHoldRemainingMs > 0 ? formatCountdown(bookingHoldRemainingMs) : (lang === "VN" ? "Hết hạn" : "Expired")}</p>
-            </div>
-          )}
-        </div>
+        <AdminBookingOverviewTab
+          lang={lang}
+          booking={booking}
+          adminActionInfo={adminActionInfo}
+          showBookingHoldCountdown={showBookingHoldCountdown}
+          bookingHoldRemainingMs={bookingHoldRemainingMs}
+          formatDate={formatDate}
+          formatDateTime={formatDateTime}
+          formatCountdown={formatCountdown}
+          formatDuration={formatDuration}
+          formatPassengerSummary={formatPassengerSummary}
+          formatDeckCount={formatDeckCount}
+          getRequestedDeckCount={getRequestedDeckCount}
+          getBoatDeckCount={getBoatDeckCount}
+          getBoatSeatSetupType={getBoatSeatSetupType}
+          getBoatId={getBoatId}
+          getBoatSeatCount={getBoatSeatCount}
+          getPaymentStatusInfo={getPaymentStatusInfo}
+          currencyFormatter={currencyFormatter}
+          quoteTotal={quoteTotal}
+          bookingPaidAmount={bookingPaidAmount}
+          remainingAmount={remainingAmount}
+          requestedBoats={requestedBoats}
+          selectedBoats={selectedBoats}
+          onNavigateTab={setActiveTab}
+        />
       )}
 
-      <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-        <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Thông tin đầy đủ" : "Full Information"}</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {infoItems.map((item) => (
-            <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-              <p className="mt-1 break-words text-sm font-bold text-slate-800 dark:text-white">{item.value || "--"}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Yêu cầu/Ghi chú" : "Requests / Notes"}</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-700 dark:text-slate-200">{booking.note}</p>
-        </div>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-          <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Tàu yêu cầu" : "Requested Boats"}</h3>
-          <div className="mt-4 space-y-3">
-            {requestedBoats.length > 0 ? requestedBoats.map((boat, index) => (
-              <div key={`${pick(boat, ["boatOrder", "order"], index + 1)}-${index}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-                <p className="font-headline font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Tàu" : "Boat"} {pick(boat, ["boatOrder", "order"], index + 1)}</p>
-                <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">
-                  {formatDeckCount(getRequestedDeckCount(boat), lang) || pick(boat, ["requiredSeatSetupType", "seatSetupType", "preferredSeatSetupType"], "--")}
-                </p>
-              </div>
-            )) : (
-              <p className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-xs font-bold text-slate-400 dark:border-slate-700">{lang === "VN" ? "Không có dữ liệu tàu yêu cầu." : "No requested boat data."}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-          <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Tàu đã gán" : "Assigned Boats"}</h3>
-          <div className="mt-4 space-y-3">
-            {selectedBoats.length > 0 ? selectedBoats.map((boat, index) => (
-              <div key={`${getBoatId(boat) || index}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-headline font-black text-[#124757] dark:text-yellow-400">{boat.code ? `${boat.code} - ` : ""}{boat.name || pick(boat, ["boatName", "boat.name"], "--")}</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">{formatDeckCount(getBoatDeckCount(boat), lang) || getBoatSeatSetupType(boat) || "--"}</p>
-                  </div>
-                  <span className="rounded-xl bg-white px-2.5 py-1 text-[10px] font-headline font-black text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">{getBoatSeatCount(boat)} {lang === "VN" ? "ghế" : "seats"}</span>
-                </div>
-              </div>
-            )) : (
-              <p className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-xs font-bold text-slate-400 dark:border-slate-700">{lang === "VN" ? "Chưa gán tàu." : "No assigned boats."}</p>
-            )}
-          </div>
-        </div>
-      </section>
-        </>
-      )}
 
       {activeTab === "payments" && (
       <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
@@ -2069,20 +1899,15 @@ export function AdminCharterBookingDetail() {
       )}
 
       {activeTab === "tickets" && (
-      <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-        <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Vé/Hành khách" : "Tickets / Passengers"}</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {tickets.length > 0 ? tickets.map((ticket, index) => (
-            <div key={`${pick(ticket, ["id", "ticketId", "ticketCode"], index)}-${index}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-              <p className="font-headline font-black text-[#124757] dark:text-yellow-400">{pick(ticket, ["ticketCode", "code"], `#${index + 1}`)}</p>
-              <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{pick(ticket, ["fullName", "passengerName", "name"], "--")}</p>
-              <p className="mt-1 text-[10px] font-bold uppercase text-slate-400">{pick(ticket, ["attendanceStatus", "ticketStatus", "status"], "--")}</p>
-            </div>
-          )) : (
-            <p className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-xs font-bold text-slate-400 dark:border-slate-700 md:col-span-2 xl:col-span-3">{lang === "VN" ? "Chưa có vé/hành khách." : "No tickets or passengers yet."}</p>
-          )}
-        </div>
-      </section>
+        <AdminBookingTicketsTab
+          lang={lang}
+          booking={booking}
+          tickets={tickets}
+          formatDate={formatDate}
+          formatDateTime={formatDateTime}
+          formatPassengerSummary={formatPassengerSummary}
+          getPaymentStatusInfo={getPaymentStatusInfo}
+        />
       )}
     </div>
   );

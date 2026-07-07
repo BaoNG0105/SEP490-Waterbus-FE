@@ -337,7 +337,6 @@ export function CharterRefund() {
                     { label: lang === "VN" ? "Tàu" : "Boat", value: booking.boatName },
                     { label: lang === "VN" ? "Lộ trình" : "Route", value: booking.route },
                     { label: lang === "VN" ? "Khởi hành" : "Departure", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)}` },
-                    { label: "Payment ID", value: paymentId },
                     { label: lang === "VN" ? "Đã thanh toán" : "Paid amount", value: Number(booking.paidAmount || getPaymentAmount(payment)) > 0 ? currencyFormatter.format(Number(booking.paidAmount || getPaymentAmount(payment))) : "--" },
                   ].map((item) => (
                     <div key={item.label} className="flex items-start justify-between gap-3 border-b border-slate-200/70 pb-2 last:border-0 last:pb-0 dark:border-slate-700">
