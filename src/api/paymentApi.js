@@ -6,6 +6,30 @@ const orderCodePattern = /^\d+$/;
 export const createPayment = (data) =>
   api.post("/payments", data).then((response) => response.data);
 
+export const refundPayment = (paymentId, refundPayload = {}) => {
+  const value = String(paymentId || "").trim();
+
+  if (!value) {
+    return Promise.reject(new Error("paymentId is required to refund a payment."));
+  }
+
+  return api
+    .post(`/payments/${encodeURIComponent(value)}/refund`, refundPayload)
+    .then((response) => response.data);
+};
+
+export const manualRefundPayment = (paymentId, manualPayload = {}) => {
+  const value = String(paymentId || "").trim();
+
+  if (!value) {
+    return Promise.reject(new Error("paymentId is required to record a manual refund."));
+  }
+
+  return api
+    .post(`/payments/${encodeURIComponent(value)}/manual-refund`, manualPayload)
+    .then((response) => response.data);
+};
+
 export const syncPayment = (paymentId) => {
   const value = String(paymentId || "").trim();
 

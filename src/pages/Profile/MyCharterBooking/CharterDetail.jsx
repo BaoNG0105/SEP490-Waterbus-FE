@@ -18,6 +18,9 @@ import {
 } from "../../../services/charterBookingService";
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { CharterPaymentLedger } from "../../../components/CharterPaymentLedger";
+import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
+import { shouldShowBookingHoldCountdown, shouldShowPaymentDeadlineCountdown } from "../../../utils/charterBookingActions";
 import { PaymentLottieIcon } from "../../../components/PaymentLottieIcon";
 
 const pick = (source, keys, fallback = "") => {
@@ -89,7 +92,35 @@ const getPaymentPurpose = (payment) =>
   String(pick(payment, ["paymentPurpose", "purpose", "type"], "")).toLowerCase();
 
 const isPaidPayment = (payment) =>
-  ["paid", "success", "succeeded", "completed"].includes(String(payment?.paymentStatus).toLowerCase());
+  ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(payment?.paymentStatus).toLowerCase());
+
+const getPaymentId = (payment) => pick(payment, [
+  "paymentId",
+  "id",
+  "payment.id",
+  "payment.paymentId",
+  "paymentLinkId",
+  "paymentLink.id",
+  "linkPaymentId",
+], "");
+
+const getRefundablePayment = (booking) => {
+  const payments = Array.isArray(booking?.payments) ? booking.payments : [];
+  const paidPayment = payments.find((payment) => isPaidPayment(payment) && getPaymentId(payment));
+  if (paidPayment) return paidPayment;
+
+  const bookingPaymentId = pick(booking, ["paidPaymentId", "latestPaymentId", "paymentId", "payment.id"], "");
+  if (bookingPaymentId) {
+    return { paymentId: bookingPaymentId, paymentStatus: booking.paymentStatus, amount: booking.paidAmount };
+  }
+
+  const storedPaymentId = booking?.id ? sessionStorage.getItem(`charterPayment:${booking.id}`) : "";
+  if (storedPaymentId) {
+    return { paymentId: storedPaymentId, paymentStatus: booking.paymentStatus, amount: booking.paidAmount };
+  }
+
+  return null;
+};
 
 const getEstimatedPaymentDeadline = (payment) => {
   const createdAt = getPaymentCreatedAt(payment);
@@ -106,6 +137,7 @@ const normalizeBooking = (item) => {
   const payments = Array.isArray(item?.payments) ? item.payments : [];
   const pendingPayment = payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending");
   const paidPayments = payments.filter(isPaidPayment);
+  const paidPaymentWithId = paidPayments.find((payment) => getPaymentId(payment));
   const paymentStatus = pick(item, ["paymentStatus"], "--");
   const rawDepositAmount = Number(pick(item, ["depositAmount"], 0)) || 0;
   const paidAmountFromPayments = paidPayments.reduce((total, payment) => total + getPaymentAmount(payment), 0);
@@ -160,6 +192,7 @@ const normalizeBooking = (item) => {
     paidAmount,
     paidDepositAmount,
     hasDepositPaid,
+    paidPaymentId: getPaymentId(paidPaymentWithId || {}) || pick(item, ["paidPaymentId", "paymentId", "payment.id"], ""),
     latestPaymentId: pick(pendingPayment, ["paymentId", "id"], pick(item, ["paymentId", "latestPaymentId", "payment.id"], "")),
     latestPaymentOrderCode: pick(pendingPayment, ["orderCode", "paymentOrderCode", "payosOrderCode"], pick(item, ["orderCode", "paymentOrderCode", "latestPaymentOrderCode", "payment.orderCode"], "")),
     latestPaymentAmount: getPaymentAmount(pendingPayment) || Number(pick(item, ["paymentAmount", "latestPaymentAmount", "payment.amount"], 0)) || 0,
@@ -250,6 +283,166 @@ const downloadBlobResponse = (response, fallbackName) => {
   URL.revokeObjectURL(url);
 };
 
+const isUsableText = (value) => {
+  const text = String(value || "").trim();
+  return Boolean(text && text !== "--");
+};
+
+const hasPassengerName = (passenger) =>
+  isUsableText(pick(passenger, ["fullName", "passengerName", "name"], ""));
+
+const hasSavedPassengerManifest = (booking) =>
+  (Array.isArray(booking?.passengers) && booking.passengers.some(hasPassengerName))
+  || (Array.isArray(booking?.tickets) && booking.tickets.some(hasPassengerName));
+
+const getBookingPassengerCount = (booking) => {
+  const declaredPassengerCount = Number(booking?.passengerCount || 0) || 0;
+  const summedPassengerCount = (Number(booking?.adultCount || 0) || 0) + (Number(booking?.childCount || 0) || 0);
+  return Math.max(declaredPassengerCount, summedPassengerCount, 1);
+};
+
+const isSinglePassengerWithContact = (booking) =>
+  getBookingPassengerCount(booking) <= 1 && isUsableText(booking?.contactName);
+
+const buildEmptyPassengerRows = (booking) => {
+  const adultCount = Number(booking?.adultCount || 0);
+  const childCount = Number(booking?.childCount || 0);
+  const passengerCount = getBookingPassengerCount(booking);
+
+  if (isSinglePassengerWithContact(booking)) {
+    return [{
+      fullName: booking.contactName.trim(),
+      dateOfBirth: "",
+      passengerType: "Adult",
+      isContactPassenger: true,
+    }];
+  }
+
+  if (adultCount > 0 || childCount > 0) {
+    return [
+      ...Array.from({ length: adultCount }, () => ({ fullName: "", dateOfBirth: "", passengerType: "Adult" })),
+      ...Array.from({ length: childCount }, () => ({ fullName: "", dateOfBirth: "", passengerType: "Child" })),
+    ];
+  }
+
+  return Array.from({ length: Math.max(passengerCount, 1) }, () => ({ fullName: "", dateOfBirth: "", passengerType: "Adult" }));
+};
+
+const parsePassengerDate = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const vnMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const date = isoMatch
+    ? new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
+    : vnMatch
+      ? new Date(Number(vnMatch[3]), Number(vnMatch[2]) - 1, Number(vnMatch[1]))
+      : new Date(text);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatPassengerDateForApi = (value) => {
+  const date = parsePassengerDate(value);
+  if (!date) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getPassengerAge = (dateOfBirth, referenceDate) => {
+  const birthDate = parsePassengerDate(dateOfBirth);
+  const refDate = parsePassengerDate(referenceDate) || new Date();
+  if (!birthDate) return null;
+
+  let age = refDate.getFullYear() - birthDate.getFullYear();
+  const monthDelta = refDate.getMonth() - birthDate.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && refDate.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age;
+};
+
+const buildPassengerPayload = (booking, rows, lang, { allowSingleContactWithoutDob = false } = {}) => {
+  const passengerCount = getBookingPassengerCount(booking);
+  const normalizedRows = rows.map((row, index) => ({
+    ...row,
+    passengerType: row.passengerType || (index < Number(booking?.adultCount || 0) ? "Adult" : "Child"),
+  }));
+  const filledRows = normalizedRows.filter((row) => row.fullName?.trim() || row.dateOfBirth?.trim());
+  const canUseSingleContact = allowSingleContactWithoutDob && isSinglePassengerWithContact(booking);
+  const rowsToSubmit = canUseSingleContact
+    ? (filledRows.length > 0 ? [filledRows[0]] : buildEmptyPassengerRows(booking))
+    : filledRows;
+
+  if (rowsToSubmit.length === 0) {
+    return {
+      errorTitle: lang === "VN" ? "Chưa có hành khách" : "No passengers",
+      errorText: lang === "VN" ? "Vui lòng nhập ít nhất một hành khách." : "Please enter at least one passenger.",
+    };
+  }
+
+  if (rowsToSubmit.length > passengerCount) {
+    return {
+      errorTitle: lang === "VN" ? "Vượt quá số khách" : "Too many passengers",
+      errorText: lang === "VN" ? "Tổng số hành khách không được vượt quá số lượng đã đăng ký." : "Passenger count must not exceed the registered count.",
+    };
+  }
+
+  if (!canUseSingleContact && passengerCount > 1 && rowsToSubmit.length < passengerCount) {
+    return {
+      errorTitle: lang === "VN" ? "Chưa đủ hành khách" : "Missing passengers",
+      errorText: lang === "VN" ? `Booking có ${passengerCount} khách, vui lòng nhập đủ ${passengerCount} dòng hành khách.` : `This booking has ${passengerCount} passengers. Please enter all ${passengerCount} passenger rows.`,
+    };
+  }
+
+  for (const row of rowsToSubmit) {
+    const fullName = row.fullName?.trim();
+    const dateOfBirth = row.dateOfBirth?.trim();
+    const skipDateValidation = canUseSingleContact && !dateOfBirth;
+
+    if (!fullName || (!dateOfBirth && !skipDateValidation)) {
+      return {
+        errorTitle: lang === "VN" ? "Thiếu thông tin hành khách" : "Missing passenger info",
+        errorText: lang === "VN" ? "Vui lòng nhập đủ họ tên và ngày sinh cho từng hành khách." : "Please enter full name and date of birth for each passenger.",
+      };
+    }
+
+    if (!skipDateValidation) {
+      const age = getPassengerAge(dateOfBirth, booking?.departureDate);
+      if (age === null) {
+        return {
+          errorTitle: lang === "VN" ? "Ngày sinh không hợp lệ" : "Invalid date of birth",
+          errorText: lang === "VN" ? "Ngày sinh dùng định dạng dd/MM/yyyy hoặc yyyy-MM-dd." : "Use dd/MM/yyyy or yyyy-MM-dd for date of birth.",
+        };
+      }
+      if (row.passengerType === "Adult" && age < 12) {
+        return {
+          errorTitle: lang === "VN" ? "Tuổi người lớn chưa hợp lệ" : "Invalid adult age",
+          errorText: lang === "VN" ? "Hành khách người lớn phải từ 12 tuổi trở lên." : "Adult passengers must be at least 12 years old.",
+        };
+      }
+      if (row.passengerType === "Child" && age >= 12) {
+        return {
+          errorTitle: lang === "VN" ? "Tuổi trẻ em chưa hợp lệ" : "Invalid child age",
+          errorText: lang === "VN" ? "Hành khách trẻ em phải dưới 12 tuổi." : "Child passengers must be under 12 years old.",
+        };
+      }
+    }
+  }
+
+  return {
+    passengers: rowsToSubmit.map((row) => {
+      const passenger = { fullName: row.fullName.trim() };
+      const dateOfBirth = formatPassengerDateForApi(row.dateOfBirth);
+      if (dateOfBirth) passenger.dateOfBirth = dateOfBirth;
+      return passenger;
+    }),
+  };
+};
+
 export function CharterDetail() {
   const { lang } = useApp();
   const { id } = useParams();
@@ -285,35 +478,14 @@ export function CharterDetail() {
   const [nowTick, setNowTick] = useState(() => Date.now());
   const loadedIdRef = useRef("");
   const importInputRef = useRef(null);
+  const paymentSectionRef = useRef(null);
   const syncedPaymentRef = useRef("");
   const autoSyncPaymentRef = useRef("");
   const refreshedDeadlineRef = useRef("");
-  const paymentWindowRef = useRef(null);
 
   const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 
-  const getStatusInfo = (status) => {
-    switch (status) {
-      case "PendingQuote":
-        return { label: lang === "VN" ? "Chờ báo giá" : "Pending Quote", classes: "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20", dot: "bg-amber-500" };
-      case "Quoted":
-        return { label: lang === "VN" ? "Đã báo giá" : "Quoted", classes: "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20", dot: "bg-indigo-500" };
-      case "PendingPayment":
-        return { label: lang === "VN" ? "Chờ thanh toán" : "Pending Payment", classes: "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20", dot: "bg-orange-500" };
-      case "Confirmed":
-        return { label: lang === "VN" ? "Đã xác nhận" : "Confirmed", classes: "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20", dot: "bg-sky-500" };
-      case "Completed":
-        return { label: lang === "VN" ? "Hoàn tất" : "Completed", classes: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20", dot: "bg-emerald-500" };
-      case "Cancelled":
-        return { label: lang === "VN" ? "Đã hủy" : "Cancelled", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20", dot: "bg-rose-500" };
-      case "Expired":
-        return { label: lang === "VN" ? "Hết hạn" : "Expired", classes: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700", dot: "bg-slate-400" };
-      case "Refunded":
-        return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20", dot: "bg-teal-500" };
-      default:
-        return { label: status || "--", classes: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700", dot: "bg-slate-400" };
-    }
-  };
+  const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
 
   const loadDetail = useCallback(async () => {
     if (!isAuthenticated) {
@@ -344,9 +516,10 @@ export function CharterDetail() {
             qrToken: pick(passenger, ["qrToken"], pick(matchingTicket, ["qrToken"], "")),
             fullName: pick(passenger, ["fullName", "passengerName", "name"], ""),
             dateOfBirth: pick(passenger, ["dateOfBirth", "dob"], ""),
+            passengerType: index < normalized.adultCount ? "Adult" : "Child",
           };
         })
-        : Array.from({ length: Math.max(normalized.passengerCount, 1) }, () => ({ fullName: "", dateOfBirth: "" }));
+        : buildEmptyPassengerRows(normalized);
       setPassengerRows(initialPassengers);
       setSelectedTicketIds([]);
     } catch (error) {
@@ -367,6 +540,14 @@ export function CharterDetail() {
     loadedIdRef.current = id;
     loadDetail();
   }, [id, loadDetail]);
+
+  useEffect(() => {
+    if (!location.state?.focusPayment || isLoading || !booking) return;
+    const timer = window.setTimeout(() => {
+      paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [booking, isLoading, location.state?.focusPayment]);
 
   useEffect(() => {
     if (!booking?.qrToken) {
@@ -410,34 +591,29 @@ export function CharterDetail() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const openPaymentTab = useCallback((checkoutUrl = "", { orderCode = "", amount = 0, expiresAt = "" } = {}) => {
-    const paymentTab = window.open(checkoutUrl || "about:blank", "_blank");
+  const openPaymentPage = useCallback((checkoutUrl = "", { orderCode = "", amount = 0, expiresAt = "" } = {}) => {
+    if (!checkoutUrl) return false;
 
-    if (!paymentTab) {
-      Swal.fire({
-        icon: "warning",
-        title: lang === "VN" ? "Trình duyệt đã chặn tab thanh toán" : "Payment tab was blocked",
-        text: lang === "VN"
-          ? "Vui lòng cho phép popup cho trang này rồi bấm thanh toán lại."
-          : "Please allow popups for this site and try again.",
-        confirmButtonColor: "#124757",
-      });
-      return null;
+    if (booking?.id) {
+      sessionStorage.setItem("latestCharterPaymentBooking", booking.id);
+      if (orderCode) {
+        sessionStorage.setItem(`charterPaymentOrderCode:${booking.id}`, orderCode);
+        sessionStorage.removeItem(`charterPayment:${booking.id}`);
+      }
     }
 
-    paymentWindowRef.current = paymentTab;
     const deadline = expiresAt || new Date(Date.now() + DEFAULT_PAYMENT_LINK_MS).toISOString();
     setPaymentWatcher({
-      isActive: true,
+      isActive: false,
       orderCode,
       checkoutUrl,
       amount: Number(amount || 0),
       deadline,
       statusText: lang === "VN" ? "Đang chờ thanh toán trên PayOS" : "Waiting for PayOS payment",
     });
-    paymentTab.focus();
-    return paymentTab;
-  }, [lang]);
+    window.location.assign(checkoutUrl);
+    return true;
+  }, [booking?.id, lang]);
 
   const handleSyncPayment = useCallback(async (paymentId, { silent = false } = {}) => {
     if (!paymentId) return;
@@ -496,58 +672,25 @@ export function CharterDetail() {
   }, [lang, loadDetail]);
 
   useEffect(() => {
-    if (!paymentWatcher.isActive) return undefined;
-
-    const isBookingPaid = String(booking?.paymentStatus).toLowerCase() === "paid";
-    if (isBookingPaid) {
-      setPaymentWatcher((current) => ({ ...current, isActive: false, statusText: "" }));
-      return undefined;
-    }
-
-    let active = true;
-    const checkPaymentState = async () => {
-      const paymentTabClosed = paymentWindowRef.current && paymentWindowRef.current.closed;
-
-      if (paymentWatcher.orderCode) {
-        try {
-          await syncBookingPaymentByOrderCode(paymentWatcher.orderCode);
-        } catch {
-          // Payment may still be pending while the PayOS tab is open.
-        }
-      }
-
-      if (!active) return;
-      await loadDetail();
-
-      if (!active) return;
-      if (paymentTabClosed && String(booking?.paymentStatus).toLowerCase() !== "paid") {
-        setPaymentWatcher((current) => ({
-          ...current,
-          isActive: false,
-          statusText: lang === "VN" ? "Tab PayOS đã đóng, thanh toán chưa hoàn tất" : "PayOS tab closed, payment is not completed",
-        }));
-      }
-    };
-
-    const interval = window.setInterval(checkPaymentState, 3000);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, [booking?.paymentStatus, lang, loadDetail, paymentWatcher.isActive, paymentWatcher.orderCode]);
-
-  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const orderCode = params.get("orderCode") || "";
     const returnedFromPayOs = params.has("status") || params.has("code") || Boolean(orderCode);
 
-    if (!returnedFromPayOs || !orderCode || syncedPaymentRef.current === orderCode) return;
+    if (!returnedFromPayOs) return;
+
+    setPaymentWatcher((current) => ({ ...current, isActive: false }));
+
+    if (!orderCode || syncedPaymentRef.current === orderCode) {
+      navigate(location.pathname, { replace: true });
+      return;
+    }
 
     syncedPaymentRef.current = orderCode;
     sessionStorage.setItem(`charterPaymentOrderCode:${id}`, orderCode);
     sessionStorage.removeItem(`charterPayment:${id}`);
     handleSyncPaymentByOrderCode(orderCode, { silent: true });
-  }, [handleSyncPaymentByOrderCode, id, location.search]);
+    navigate(location.pathname, { replace: true });
+  }, [handleSyncPaymentByOrderCode, id, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     const orderCode = booking?.latestPaymentOrderCode || (booking?.id ? sessionStorage.getItem(`charterPaymentOrderCode:${booking.id}`) : "");
@@ -605,7 +748,7 @@ export function CharterDetail() {
 
     if (existingPaymentId || existingCheckoutUrl) {
       if (existingCheckoutUrl) {
-        openPaymentTab(existingCheckoutUrl, {
+        openPaymentPage(existingCheckoutUrl, {
           orderCode: existingOrderCode,
           amount: existingPaymentAmount || selectedPaymentAmount,
           expiresAt: existingExpiresAt,
@@ -620,17 +763,14 @@ export function CharterDetail() {
       return;
     }
 
-    const paymentTab = openPaymentTab("", { amount: selectedPaymentAmount });
-    if (!paymentTab) return;
-
     try {
       setIsSubmitting(true);
       const paymentPayload = {
         bookingId: booking.id,
-        paymentOption,
+        paymentOption: normalizedPaymentOption,
         promotionCode: paymentPromotionCode.trim() || null,
       };
-      if (paymentOption === "Deposit") {
+      if (normalizedPaymentOption === "Deposit") {
         paymentPayload.depositPercent = Number(depositPercent);
       }
       const payment = await createBookingPayment(paymentPayload);
@@ -668,9 +808,9 @@ export function CharterDetail() {
       } else if (paymentId) {
         sessionStorage.setItem(`charterPayment:${booking.id}`, paymentId);
       }
+      sessionStorage.setItem("latestCharterPaymentBooking", booking.id);
       if (paymentId) {
         sessionStorage.setItem(`paymentBooking:${paymentId}`, booking.id);
-        sessionStorage.setItem("latestCharterPaymentBooking", booking.id);
       }
       setPaymentCheckoutUrl(checkoutUrl || "");
       setPaymentExpiresAt(expiresAt || "");
@@ -679,7 +819,7 @@ export function CharterDetail() {
       setPaymentAmount(createdPaymentAmount);
       setPaymentWatcher((current) => ({
         ...current,
-        isActive: Boolean(checkoutUrl),
+        isActive: false,
         orderCode,
         checkoutUrl,
         amount: createdPaymentAmount,
@@ -688,11 +828,14 @@ export function CharterDetail() {
       }));
 
       if (checkoutUrl) {
-        paymentTab.location.href = checkoutUrl;
+        openPaymentPage(checkoutUrl, {
+          orderCode,
+          amount: createdPaymentAmount,
+          expiresAt: expiresAt || new Date(Date.now() + DEFAULT_PAYMENT_LINK_MS).toISOString(),
+        });
         return;
       }
 
-      paymentTab.close();
       setPaymentWatcher((current) => ({ ...current, isActive: false }));
 
       Swal.fire({
@@ -702,7 +845,6 @@ export function CharterDetail() {
         confirmButtonColor: "#124757",
       });
     } catch (error) {
-      paymentTab.close();
       setPaymentWatcher((current) => ({ ...current, isActive: false }));
       Swal.fire({
         icon: "error",
@@ -736,21 +878,58 @@ export function CharterDetail() {
 
   const handleCancelBooking = async () => {
     if (!booking) return;
-    const result = await Swal.fire({
-      icon: "warning",
-      title: lang === "VN" ? "Hủy yêu cầu thuê tàu?" : "Cancel charter request?",
-      text: lang === "VN" ? `Mã đặt chỗ ${booking.bookingCode} sẽ được hủy nếu còn hợp lệ.` : `Booking ${booking.bookingCode} will be cancelled if it is still eligible.`,
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#124757",
-      confirmButtonText: lang === "VN" ? "Hủy yêu cầu" : "Cancel request",
-      cancelButtonText: lang === "VN" ? "Đóng" : "Close",
-    });
-    if (!result.isConfirmed) return;
+    const hasPaidPayment = ["paid", "depositpaid"].includes(String(booking.paymentStatus).toLowerCase())
+      || Number(booking.paidAmount || 0) > 0;
+    const refundablePayment = hasPaidPayment ? getRefundablePayment(booking) : null;
+    const refundablePaymentId = getPaymentId(refundablePayment || {});
+
+    if (hasPaidPayment) {
+      if (!refundablePaymentId) {
+        Swal.fire({
+          icon: "error",
+          title: lang === "VN" ? "Không tìm thấy paymentId" : "Payment ID not found",
+          text: lang === "VN"
+            ? "Booking đã có thanh toán nhưng hệ thống chưa xác định được mã giao dịch cần hoàn tiền."
+            : "This booking has a paid amount, but the system cannot identify the transaction to refund.",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
+
+      console.log("Resolved refund payment:", {
+        paymentId: refundablePaymentId,
+        payment: refundablePayment,
+        bookingPaymentIds: {
+          paidPaymentId: booking.paidPaymentId,
+          latestPaymentId: booking.latestPaymentId,
+          storedPaymentId: sessionStorage.getItem(`charterPayment:${booking.id}`),
+        },
+      });
+      navigate(`/profile/my-charter-booking/${booking.id}/refund`, {
+        state: {
+          booking,
+          payment: refundablePayment,
+          paymentId: refundablePaymentId,
+        },
+      });
+      return;
+    } else {
+      const result = await Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "Hủy yêu cầu thuê tàu?" : "Cancel charter request?",
+        text: lang === "VN" ? `Mã đặt chỗ ${booking.bookingCode} sẽ được hủy nếu còn hợp lệ.` : `Booking ${booking.bookingCode} will be cancelled if it is still eligible.`,
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#124757",
+        confirmButtonText: lang === "VN" ? "Hủy yêu cầu" : "Cancel request",
+        cancelButtonText: lang === "VN" ? "Đóng" : "Close",
+      });
+      if (!result.isConfirmed) return;
+    }
 
     try {
       setIsSubmitting(true);
-      await cancelMyCharterBooking(booking.id);
+      await cancelMyCharterBooking(booking.id, {});
       await loadDetail();
       Swal.fire({
         icon: "success",
@@ -761,7 +940,10 @@ export function CharterDetail() {
       Swal.fire({
         icon: "error",
         title: lang === "VN" ? "Không thể hủy" : "Unable to cancel",
-        text: error.response?.data?.message || (lang === "VN" ? "Yêu cầu này có thể không còn được phép hủy." : "This request may no longer be cancellable."),
+        text: getApiErrorMessage(
+          error,
+          lang === "VN" ? "Yêu cầu này có thể không còn được phép hủy." : "This request may no longer be cancellable.",
+        ),
         confirmButtonColor: "#124757",
       });
     } finally {
@@ -804,10 +986,28 @@ export function CharterDetail() {
     if (!booking?.id) return;
     if (String(booking.paymentStatus).toLowerCase() !== "paid") return;
 
+    const missingManifestPayload = !hasSavedPassengerManifest(booking)
+      ? buildPassengerPayload(booking, passengerRows, lang, { allowSingleContactWithoutDob: true })
+      : null;
+
+    if (missingManifestPayload?.errorTitle) {
+      Swal.fire({
+        icon: "info",
+        title: missingManifestPayload.errorTitle,
+        text: missingManifestPayload.errorText,
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+
     const popup = action === "print" ? window.open("", "_blank") : null;
 
     try {
       setIsSubmitting(true);
+      if (missingManifestPayload?.passengers) {
+        await updateMyCharterBookingPassengers(booking.id, { passengers: missingManifestPayload.passengers });
+      }
+
       const ticketIds = selectedTicketIds.length > 0 ? selectedTicketIds : null;
       let response;
 
@@ -817,9 +1017,12 @@ export function CharterDetail() {
           : await downloadAllCharterBookingTickets(booking.id);
         downloadBlobResponse(response, `${booking.bookingCode}-tickets.zip`);
       } else if (action === "pdf") {
-        response = booking.qrToken && !ticketIds
-          ? await downloadCharterBookingTicketsPdfByQrToken(booking.qrToken)
-          : await downloadCharterBookingTicketsPdf(booking.id, ticketIds);
+        try {
+          response = await downloadCharterBookingTicketsPdf(booking.id, ticketIds);
+        } catch (pdfError) {
+          if (ticketIds || !booking.qrToken) throw pdfError;
+          response = await downloadCharterBookingTicketsPdfByQrToken(booking.qrToken);
+        }
         downloadBlobResponse(response, `${booking.bookingCode}-tickets.pdf`);
       } else {
         response = await printSelectedCharterBookingTickets(booking.id, ticketIds);
@@ -833,7 +1036,7 @@ export function CharterDetail() {
       Swal.fire({
         icon: "error",
         title: lang === "VN" ? "Không thể xuất vé" : "Unable to export tickets",
-        text: error.response?.data?.message || (lang === "VN" ? "Booking cần được thanh toán đủ và có danh sách hành khách." : "The booking must be fully paid and have a passenger list."),
+        text: getApiErrorMessage(error, lang === "VN" ? "Không thể xuất PDF/vé. Vui lòng lưu danh sách hành khách rồi thử lại." : "Unable to export tickets. Please save the passenger list and try again."),
         confirmButtonColor: "#124757",
       });
     } finally {
@@ -852,15 +1055,12 @@ export function CharterDetail() {
       });
       return;
     }
-    const passengers = passengerRows
-      .filter((row) => row.fullName.trim() || row.dateOfBirth.trim())
-      .map((row) => ({ fullName: row.fullName.trim(), dateOfBirth: row.dateOfBirth.trim() }));
-
-    if (passengers.length === 0) {
+    const passengerPayload = buildPassengerPayload(booking, passengerRows, lang, { allowSingleContactWithoutDob: true });
+    if (passengerPayload.errorTitle) {
       Swal.fire({
         icon: "info",
-        title: lang === "VN" ? "Chưa có hành khách" : "No passengers",
-        text: lang === "VN" ? "Vui lòng nhập ít nhất một hành khách." : "Please enter at least one passenger.",
+        title: passengerPayload.errorTitle,
+        text: passengerPayload.errorText,
         confirmButtonColor: "#124757",
       });
       return;
@@ -868,7 +1068,7 @@ export function CharterDetail() {
 
     try {
       setIsSubmitting(true);
-      await updateMyCharterBookingPassengers(booking.id, { passengers });
+      await updateMyCharterBookingPassengers(booking.id, { passengers: passengerPayload.passengers });
       await loadDetail();
       Swal.fire({
         icon: "success",
@@ -876,10 +1076,23 @@ export function CharterDetail() {
         confirmButtonColor: "#124757",
       });
     } catch (error) {
+      console.error("Không thể lưu hành khách charter:", {
+        bookingId: booking.id,
+        passengerCount: booking.passengerCount,
+        adultCount: booking.adultCount,
+        childCount: booking.childCount,
+        submittedPassengers: passengerPayload.passengers,
+        response: error.response?.data,
+      });
       Swal.fire({
         icon: "error",
         title: lang === "VN" ? "Không thể lưu hành khách" : "Unable to save passengers",
-        text: error.response?.data?.message || (lang === "VN" ? "Số hành khách không được vượt quá số lượng đã đăng ký." : "Passenger count must not exceed the registered count."),
+        text: getApiErrorMessage(
+          error,
+          lang === "VN"
+            ? "Hệ thống chưa lưu được danh sách hành khách này. Vui lòng kiểm tra lại tổng số khách, số người lớn và số trẻ em của booking."
+            : "The system could not save this passenger list. Please verify the booking passenger totals, adult count, and child count.",
+        ),
         confirmButtonColor: "#124757",
       });
     } finally {
@@ -921,8 +1134,9 @@ export function CharterDetail() {
     );
   }
 
-  const statusInfo = getStatusInfo(booking.status);
+  const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
   const isPaid = String(booking.paymentStatus).toLowerCase() === "paid";
+  const canUseContactAsSinglePassenger = isSinglePassengerWithContact(booking) && !hasSavedPassengerManifest(booking);
   const paidAmount = Number(booking.paidAmount || 0);
   const quoteBoatRows = (Array.isArray(booking.quoteBoats) && booking.quoteBoats.length > 0
     ? booking.quoteBoats
@@ -990,8 +1204,9 @@ export function CharterDetail() {
   const hasPaymentDeadline = Boolean(getDeadlineTime(effectivePaymentExpiresAt));
   const isPaymentLinkExpired = hasPaymentDeadline && paymentRemainingMs <= 0;
   const bookingHoldDeadline = paymentBookingHoldExpiresAt || booking.bookingHoldExpiresAt;
-  const bookingHoldRemainingMs = getRemainingMs(bookingHoldDeadline, nowTick);
-  const hasBookingHoldDeadline = Boolean(getDeadlineTime(bookingHoldDeadline));
+  const showBookingHoldCountdown = shouldShowBookingHoldCountdown(booking);
+  const bookingHoldRemainingMs = showBookingHoldCountdown ? getRemainingMs(bookingHoldDeadline, nowTick) : 0;
+  const hasBookingHoldDeadline = showBookingHoldCountdown && Boolean(getDeadlineTime(bookingHoldDeadline));
   const isBookingHoldExpired = hasBookingHoldDeadline && bookingHoldRemainingMs <= 0;
   const hasPendingPayOs = Boolean(pendingPaymentId || effectiveCheckoutUrl);
   const canCreatePayment = ["Quoted", "PendingPayment", "Confirmed"].includes(booking.status)
@@ -1006,9 +1221,14 @@ export function CharterDetail() {
     : Math.round((quoteTotal * Number(depositPercent || 0)) / 100);
   const effectivePaidAmount = Math.max(paidAmount, booking.hasDepositPaid ? paidDepositAmount || depositPaymentAmount : 0);
   const remainingAmount = Math.max(quoteTotal - effectivePaidAmount, 0);
-  const selectedPaymentAmount = paymentOption === "Deposit"
-    ? depositPaymentAmount
+  const normalizedPaymentOption = booking.hasDepositPaid
+    ? "Remaining"
     : paymentOption === "Remaining"
+      ? "Full"
+      : paymentOption;
+  const selectedPaymentAmount = normalizedPaymentOption === "Deposit"
+    ? depositPaymentAmount
+    : normalizedPaymentOption === "Remaining"
       ? remainingAmount
       : booking.hasDepositPaid
         ? remainingAmount
@@ -1020,12 +1240,17 @@ export function CharterDetail() {
   const effectivePaymentDeadline = effectivePaymentExpiresAt || paymentWatcher.deadline || estimatedPendingPaymentDeadline;
   const isEstimatedPaymentDeadline = Boolean(!effectivePaymentExpiresAt && effectivePaymentDeadline);
   const paymentWatcherRemainingMs = getRemainingMs(effectivePaymentDeadline, nowTick);
-  const paymentWatcherAmount = paymentWatcher.amount || effectivePendingPaymentAmount;
   const paymentChoices = [
     { id: "Deposit", label: lang === "VN" ? "Đặt cọc" : "Deposit", disabled: booking.hasDepositPaid, amount: depositPaymentAmount },
     { id: "Full", label: lang === "VN" ? "Thanh toán đủ" : "Full", disabled: false, amount: booking.hasDepositPaid ? remainingAmount : quoteTotal },
     { id: "Remaining", label: lang === "VN" ? "Phần còn lại" : "Remaining", disabled: !booking.hasDepositPaid, amount: remainingAmount },
   ];
+  const selectablePaymentChoices = booking.hasDepositPaid
+    ? paymentChoices.filter((choice) => choice.id === "Remaining")
+    : paymentChoices.filter((choice) => choice.id !== "Remaining");
+  const paymentSelectValue = selectablePaymentChoices.some((choice) => choice.id === normalizedPaymentOption)
+    ? normalizedPaymentOption
+    : selectablePaymentChoices[0]?.id || "Full";
   const routeStops = booking.route && booking.route !== "--" ? booking.route.split(/\s+-\s+/) : [];
   const routeFrom = booking.fromStationName || routeStops[0] || "--";
   const routeTo = booking.toStationName || routeStops[1] || "--";
@@ -1290,7 +1515,7 @@ export function CharterDetail() {
                 <span className="material-symbols-outlined text-3xl">hourglass_top</span>
                 <div>
                   <h3 className="font-headline text-lg font-black">{lang === "VN" ? "Chưa có báo giá" : "No quote yet"}</h3>
-                  <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Admin đang chọn tàu và chốt giá. Khi có báo giá, ảnh tàu và chi tiết giá sẽ hiển thị ở mục này." : "The administrator is assigning boats and pricing. Boat photos and quote details will appear here."}</p>
+                  <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Đội vận hành đang chọn tàu và chốt giá. Khi có báo giá, ảnh tàu và chi tiết giá sẽ hiển thị ở mục này." : "The operations team is assigning boats and pricing. Boat photos and quote details will appear here."}</p>
                 </div>
               </div>
             </div>
@@ -1380,31 +1605,37 @@ export function CharterDetail() {
                   </div>
                 </div>
 
-                {hasHoldDeadline && booking.status === "Quoted" && (
+                {showBookingHoldCountdown && (
                   <div className={`mt-5 rounded-2xl border px-4 py-3 ${
-                    isQuoteHoldExpired
+                    isBookingHoldExpired
                       ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
-                      : "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300"
+                      : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300"
                   }`}
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-xl">{isQuoteHoldExpired ? "timer_off" : "hourglass_top"}</span>
+                        <span className="material-symbols-outlined text-xl">{isBookingHoldExpired ? "timer_off" : "hourglass_top"}</span>
                         <div>
                           <p className="text-[10px] font-headline font-black uppercase tracking-widest">
-                            {lang === "VN" ? "Thời hạn phản hồi báo giá" : "Quote response deadline"}
+                            {lang === "VN" ? "Hạn thanh toán sau chấp nhận" : "Payment deadline after acceptance"}
                           </p>
-                          <p className="text-xs font-bold opacity-80">{formatDateTime(booking.holdExpiresAt)}</p>
+                          <p className="text-xs font-bold opacity-80">{formatDateTime(bookingHoldDeadline)}</p>
                         </div>
                       </div>
                       <p className="font-headline text-2xl font-black tabular-nums">
-                        {isQuoteHoldExpired ? (lang === "VN" ? "Hết hạn" : "Expired") : formatCountdown(holdRemainingMs)}
+                        {isBookingHoldExpired ? (lang === "VN" ? "Hết hạn" : "Expired") : formatCountdown(bookingHoldRemainingMs)}
                       </p>
                     </div>
                   </div>
                 )}
 
-                <div className="mt-5 border-t border-dashed border-slate-200 dark:border-slate-700 pt-4">
+                <CharterPaymentLedger
+                  payments={booking.payments}
+                  lang={lang}
+                  currencyFormatter={currencyFormatter}
+                />
+
+                <div ref={paymentSectionRef} className="mt-5 border-t border-dashed border-slate-200 dark:border-slate-700 pt-4 scroll-mt-28">
                   {isPaid ? (
                     <div className="flex items-center gap-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
                       <span className="material-symbols-outlined text-xl">verified</span>
@@ -1418,7 +1649,7 @@ export function CharterDetail() {
                   ) : isQuoteHoldExpired ? (
                     <div className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
                       <p className="text-xs font-bold">
-                        {lang === "VN" ? "Báo giá đã quá hạn phản hồi. FE đã tải lại booking để nhận trạng thái mới nhất từ backend." : "The quote response deadline has passed. The booking has been refreshed for the latest backend state."}
+                        {lang === "VN" ? "Báo giá đã quá hạn phản hồi. Booking đã được tải lại để cập nhật trạng thái mới nhất." : "The quote response deadline has passed. The booking has been refreshed with the latest status."}
                       </p>
                       <button type="button" onClick={loadDetail} className="w-max rounded-lg border border-rose-300 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider">
                         {lang === "VN" ? "Tải lại booking" : "Refresh booking"}
@@ -1438,7 +1669,7 @@ export function CharterDetail() {
                       <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
                         <span className="material-symbols-outlined text-xl text-slate-400">timer_off</span>
                         <p className="text-xs font-bold">
-                          {lang === "VN" ? "Link/QR thanh toán cũ đã hết hạn. Tạo lại link thanh toán để backend cấp giao dịch mới." : "The previous payment link or QR has expired. Create a new payment link."}
+                          {lang === "VN" ? "Link/QR thanh toán cũ đã hết hạn. Vui lòng tạo giao dịch thanh toán mới." : "The previous payment link or QR has expired. Create a new payment transaction."}
                         </p>
                       </div>
                       <button type="button" onClick={handleCreatePayment} disabled={isSubmitting} className="w-max rounded-lg bg-[#124757] px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900">
@@ -1456,24 +1687,18 @@ export function CharterDetail() {
                           <span className="rounded-lg bg-white px-3 py-1.5 font-headline text-sm font-black text-[#0E4050] ring-1 ring-amber-200 dark:bg-slate-900 dark:text-yellow-400 dark:ring-amber-500/20">
                             {effectivePendingPaymentAmount > 0 ? currencyFormatter.format(effectivePendingPaymentAmount) : "--"}
                           </span>
-                          {effectivePaymentDeadline && (
+                          {effectivePaymentDeadline && shouldShowPaymentDeadlineCountdown({ paymentStatus: "pending" }, booking) && (
                             <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 font-headline text-sm font-black tabular-nums text-amber-700 ring-1 ring-amber-200 dark:bg-slate-900 dark:text-amber-300 dark:ring-amber-500/20">
                               <span className="material-symbols-outlined text-base">timer</span>
                               {formatCountdown(paymentWatcherRemainingMs)}
                             </span>
                           )}
                         </div>
-                        {effectivePaymentDeadline && (
+                        {effectivePaymentDeadline && shouldShowPaymentDeadlineCountdown({ paymentStatus: "pending" }, booking) && (
                           <p className="text-[11px] opacity-80">
                             {isEstimatedPaymentDeadline
-                              ? (lang === "VN" ? "Thời gian tạm tính vì backend chưa trả hạn link PayOS." : "Estimated time because the backend has not returned the PayOS link deadline.")
+                              ? (lang === "VN" ? "Thời gian tạm tính trong lúc chờ hạn thanh toán PayOS chính thức." : "Estimated time while waiting for the confirmed PayOS payment deadline.")
                               : (lang === "VN" ? "Thời gian còn lại để hoàn tất thanh toán PayOS." : "Time left to complete the PayOS payment.")}
-                          </p>
-                        )}
-                        {hasBookingHoldDeadline && (
-                          <p className="text-[11px] opacity-80">
-                            {lang === "VN" ? "Giữ booking/tàu đến " : "Booking hold until "}{formatDateTime(bookingHoldDeadline)}
-                            {bookingHoldRemainingMs > 0 ? ` (${formatCountdown(bookingHoldRemainingMs)})` : ""}
                           </p>
                         )}
                         {!effectiveCheckoutUrl && effectivePaymentQrCode && (
@@ -1484,7 +1709,7 @@ export function CharterDetail() {
                         {effectiveCheckoutUrl && (
                           <button
                             type="button"
-                            onClick={() => openPaymentTab(effectiveCheckoutUrl, { orderCode: pendingPaymentOrderCode, amount: effectivePendingPaymentAmount, expiresAt: effectivePaymentDeadline })}
+                            onClick={() => openPaymentPage(effectiveCheckoutUrl, { orderCode: pendingPaymentOrderCode, amount: effectivePendingPaymentAmount, expiresAt: effectivePaymentDeadline })}
                             className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#124757] dark:bg-yellow-400 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:text-slate-900"
                           >
                             <PayOSLogo inverted />
@@ -1503,26 +1728,50 @@ export function CharterDetail() {
                     </div>
                   ) : canCreatePayment ? (
                     <div className="space-y-3">
-                      <div className="flex flex-wrap gap-2">
-                        {paymentChoices.map((choice) => (
-                          <button
-                            key={choice.id}
-                            type="button"
-                            disabled={choice.disabled}
-                            onClick={() => setPaymentOption(choice.id)}
-                            className={`min-w-28 flex-1 rounded-xl border px-3 py-2.5 text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
-                              paymentOption === choice.id
-                                ? "border-[#124757] bg-[#F2F8F9] dark:border-yellow-400 dark:bg-slate-900"
-                                : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
-                            }`}
+                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                        <label className="block">
+                          <span className="mb-1.5 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                            {lang === "VN" ? "Trạng thái thanh toán" : "Payment option"}
+                          </span>
+                          <select
+                            value={paymentSelectValue}
+                            onChange={(event) => setPaymentOption(event.target.value)}
+                            disabled={booking.hasDepositPaid}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-headline font-black text-[#0E4050] outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-80 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
                           >
-                            <span className="block text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">{choice.label}</span>
-                            <span className="block text-sm font-headline font-black text-[#0E4050] dark:text-yellow-400">{choice.amount > 0 ? currencyFormatter.format(choice.amount) : "--"}</span>
-                          </button>
-                        ))}
+                            {selectablePaymentChoices.map((choice) => (
+                              <option key={choice.id} value={choice.id}>
+                                {choice.label} - {choice.amount > 0 ? currencyFormatter.format(choice.amount) : "--"}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
+                          <div className="border-r border-slate-200 px-3 py-2 dark:border-slate-700">
+                            <p className="text-[9px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Đã chuyển" : "Paid"}</p>
+                            <p className="mt-1 text-xs font-headline font-black text-[#0E4050] dark:text-yellow-400">{effectivePaidAmount > 0 ? currencyFormatter.format(effectivePaidAmount) : "--"}</p>
+                          </div>
+                          <div className="border-r border-slate-200 px-3 py-2 dark:border-slate-700">
+                            <p className="text-[9px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Còn lại" : "Remaining"}</p>
+                            <p className="mt-1 text-xs font-headline font-black text-[#0E4050] dark:text-yellow-400">{remainingAmount > 0 ? currencyFormatter.format(remainingAmount) : "--"}</p>
+                          </div>
+                          <div className="px-3 py-2">
+                            <p className="text-[9px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Lần này" : "This payment"}</p>
+                            <p className="mt-1 text-xs font-headline font-black text-[#0E4050] dark:text-yellow-400">{selectedPaymentAmount > 0 ? currencyFormatter.format(selectedPaymentAmount) : "--"}</p>
+                          </div>
+                        </div>
                       </div>
 
-                      {paymentOption === "Deposit" && (
+                      {booking.hasDepositPaid && (
+                        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                          {lang === "VN"
+                            ? `Booking đã ghi nhận ${currencyFormatter.format(effectivePaidAmount)}. Lần thanh toán tiếp theo chỉ thu phần còn lại ${currencyFormatter.format(remainingAmount)}.`
+                            : `This booking has recorded ${currencyFormatter.format(effectivePaidAmount)}. The next payment only charges the remaining ${currencyFormatter.format(remainingAmount)}.`}
+                        </p>
+                      )}
+
+                      {normalizedPaymentOption === "Deposit" && (
                         <div className="flex items-center gap-2">
                           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{lang === "VN" ? "Tỷ lệ đặt cọc" : "Deposit rate"}</span>
                           <input
@@ -1585,13 +1834,7 @@ export function CharterDetail() {
                       : (lang === "VN" ? "Không chọn vé để xuất toàn bộ danh sách." : "Leave tickets unselected to export all.")}
                   </p>
 
-                  <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-5">
-                    <button type="button" onClick={() => importInputRef.current?.click()} disabled={isSubmitting || !isPaid} className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[#124757] dark:text-yellow-400 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
-                      {lang === "VN" ? "Nhập file khách" : "Import Passengers"}
-                    </button>
-                    <button type="button" onClick={() => handleTicketFileAction("zip")} disabled={isSubmitting || !isPaid} className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[#124757] dark:text-yellow-400 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
-                      {lang === "VN" ? "Tải ZIP vé/QR" : "Download ZIP"}
-                    </button>
+                  <div className="grid sm:grid-cols-2 gap-3 mt-5">
                     <button type="button" onClick={() => handleTicketFileAction("print")} disabled={isSubmitting || !isPaid} className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[#124757] dark:text-yellow-400 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
                       {lang === "VN" ? "In vé" : "Print Tickets"}
                     </button>
@@ -1599,7 +1842,6 @@ export function CharterDetail() {
                       {lang === "VN" ? "Tải PDF" : "Download PDF"}
                     </button>
                   </div>
-                  <input ref={importInputRef} type="file" accept=".xlsx,.csv,.tsv,.txt" onChange={handleImportPassengers} className="hidden" />
                 </div>
 
                 <div className="w-36 h-36 shrink-0 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
@@ -1616,12 +1858,33 @@ export function CharterDetail() {
             </section>
 
             <section className="bg-white dark:bg-slate-800 rounded-4xl p-6 md:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
-              <div>
-                <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"}</h2>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"}</h2>
+                  <p className="mt-1 text-xs font-bold text-slate-400">
+                    {canUseContactAsSinglePassenger
+                      ? (lang === "VN" ? "Booking 1 khách sẽ dùng thông tin liên hệ làm hành khách." : "Single-passenger bookings use the contact information.")
+                      : (lang === "VN" ? "Nhập file hoặc chỉnh trực tiếp từng hành khách." : "Import a file or edit passengers directly.")}
+                  </p>
+                </div>
+                <button type="button" onClick={() => importInputRef.current?.click()} disabled={isSubmitting || !isPaid} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400 sm:w-auto">
+                  {lang === "VN" ? "Nhập file khách" : "Import Passengers"}
+                </button>
+                <input ref={importInputRef} type="file" accept=".xlsx,.csv,.tsv,.txt" onChange={handleImportPassengers} className="hidden" />
               </div>
 
               <div className="space-y-3 mt-6">
-                {passengerRows.map((row, index) => (
+                {canUseContactAsSinglePassenger ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
+                      {lang === "VN" ? "Tự dùng thông tin liên hệ" : "Using contact info"}
+                    </p>
+                    <p className="mt-2 font-headline text-lg font-black text-[#0E4050] dark:text-yellow-400">{booking.contactName}</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">
+                      {[booking.contactPhone, booking.contactEmail].filter(isUsableText).join(" · ") || "--"}
+                    </p>
+                  </div>
+                ) : passengerRows.map((row, index) => (
                   <div key={row.id || `passenger-${index}`} className="grid grid-cols-[42px_1fr] md:grid-cols-[42px_1fr_170px] gap-2 items-center">
                     <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400" title={row.ticketCode || undefined}>
                       {row.id ? (
@@ -1633,7 +1896,12 @@ export function CharterDetail() {
                         />
                       ) : index + 1}
                     </label>
-                    <input value={row.fullName} onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)} disabled={!isPaid} placeholder={lang === "VN" ? "Họ tên" : "Full name"} className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60" />
+                    <div className="relative">
+                      <input value={row.fullName} onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)} disabled={!isPaid} placeholder={lang === "VN" ? "Họ tên" : "Full name"} className="w-full px-3 py-3 pr-20 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60" />
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-white px-2 py-1 text-[9px] font-headline font-black uppercase tracking-wider text-slate-400 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+                        {row.passengerType === "Child" ? (lang === "VN" ? "Trẻ em" : "Child") : (lang === "VN" ? "Người lớn" : "Adult")}
+                      </span>
+                    </div>
                     <input value={row.dateOfBirth} onChange={(e) => handlePassengerChange(index, "dateOfBirth", e.target.value)} disabled={!isPaid} placeholder="dd/MM/yyyy" className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] col-start-2 md:col-start-auto disabled:opacity-60" />
                   </div>
                 ))}
@@ -1641,7 +1909,11 @@ export function CharterDetail() {
 
               <div className="flex justify-end mt-6">
                 <button onClick={handleSavePassengers} disabled={isSubmitting || !isPaid} className="w-full sm:w-auto min-w-56 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 py-3 px-6 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60">
-                  {isSubmitting ? (lang === "VN" ? "Đang lưu..." : "Saving...") : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}
+                  {isSubmitting
+                    ? (lang === "VN" ? "Đang lưu..." : "Saving...")
+                    : canUseContactAsSinglePassenger
+                      ? (lang === "VN" ? "Lưu thông tin liên hệ" : "Save Contact Info")
+                      : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}
                 </button>
               </div>
             </section>
@@ -1649,62 +1921,40 @@ export function CharterDetail() {
         )}
       </main>
     </div>
-    {paymentWatcher.isActive && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-md">
-        <div className="w-full max-w-lg overflow-hidden rounded-[2rem] border border-white/20 bg-white shadow-[0_30px_90px_rgba(2,6,23,0.35)] dark:border-slate-700 dark:bg-slate-900">
-          <div className="bg-[#124757] px-6 py-6 text-center text-white dark:bg-slate-950">
-            <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-3xl bg-white/10 ring-1 ring-white/20">
-              <PaymentLottieIcon className="h-20 w-20" />
-            </div>
-            <h2 className="mt-4 font-headline text-2xl font-black">
-              {lang === "VN" ? "Đang chờ thanh toán PayOS" : "Waiting for PayOS payment"}
-            </h2>
-            <p className="mx-auto mt-2 max-w-sm text-sm font-bold text-white/70">
-              {lang === "VN" ? "Tab thanh toán đã được mở. Trang này sẽ tự cập nhật khi giao dịch hoàn tất." : "The payment tab is open. This page will update automatically when payment is completed."}
+
+    {(canCreatePayment || hasPendingPayOs) && !isPaid && (
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 backdrop-blur-lg shadow-[0_-8px_30px_rgba(15,23,42,0.08)] dark:border-slate-700 dark:bg-slate-900/95 md:hidden">
+        <div className="mx-auto flex max-w-6xl items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+              {hasPendingPayOs
+                ? (lang === "VN" ? "Đang chờ thanh toán PayOS" : "PayOS payment pending")
+                : (lang === "VN" ? "Cần thanh toán" : "Payment due")}
+            </p>
+            <p className="font-headline text-sm font-black text-[#124757] dark:text-yellow-400">
+              {selectedPaymentAmount > 0 ? currencyFormatter.format(hasPendingPayOs ? effectivePendingPaymentAmount : selectedPaymentAmount) : "--"}
             </p>
           </div>
-          <div className="space-y-4 px-6 py-6">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Số tiền" : "Amount"}</p>
-                <p className="mt-1 font-headline text-lg font-black text-[#0E4050] dark:text-yellow-400">
-                  {paymentWatcherAmount > 0 ? currencyFormatter.format(paymentWatcherAmount) : "--"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                  {isEstimatedPaymentDeadline
-                    ? (lang === "VN" ? "Thời gian ước tính" : "Estimated time")
-                    : (lang === "VN" ? "Thời gian còn" : "Time left")}
-                </p>
-                <p className="mt-1 font-headline text-lg font-black tabular-nums text-[#0E4050] dark:text-yellow-400">
-                  {effectivePaymentDeadline ? formatCountdown(paymentWatcherRemainingMs) : "--:--"}
-                </p>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-              {lang === "VN" ? "Không đóng trang này trong lúc thanh toán. Nếu bạn đóng tab PayOS trước khi thanh toán, booking vẫn ở trạng thái chưa thanh toán." : "Keep this page open during payment. If the PayOS tab closes before payment, the booking remains unpaid."}
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              {paymentWatcher.checkoutUrl && (
-                <button
-                  type="button"
-                  onClick={() => openPaymentTab(paymentWatcher.checkoutUrl, { orderCode: paymentWatcher.orderCode, amount: paymentWatcherAmount, expiresAt: effectivePaymentDeadline })}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#124757] px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
-                >
-                  <PayOSLogo inverted />
-                  {lang === "VN" ? "Mở lại PayOS" : "Reopen PayOS"}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => paymentWatcher.orderCode ? handleSyncPaymentByOrderCode(paymentWatcher.orderCode) : loadDetail()}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400"
-              >
-                {lang === "VN" ? "Kiểm tra trạng thái" : "Check status"}
-              </button>
-            </div>
-          </div>
+          {hasPendingPayOs && effectiveCheckoutUrl ? (
+            <a
+              href={effectiveCheckoutUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#124757] px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
+            >
+              PayOS
+              <span className="material-symbols-outlined text-base">open_in_new</span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCreatePayment}
+              disabled={isSubmitting || !canCreatePayment}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#124757] px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
+            >
+              {lang === "VN" ? "Thanh toán" : "Pay"}
+            </button>
+          )}
         </div>
       </div>
     )}

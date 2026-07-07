@@ -32,8 +32,8 @@ export const getCharterBookingById = async (id) => {
     }
 };
 
-export const cancelCharterBooking = (id) =>
-    api.post(`/charter-bookings/${id}/cancel`).then(response => response.data);
+export const cancelCharterBooking = (id, data = {}) =>
+    api.post(`/charter-bookings/${id}/cancel`, data).then(response => response.data);
 
 export const updateCharterBookingPassengers = (id, data) =>
     api.put(`/charter-bookings/${id}/passengers`, data).then(response => response.data);

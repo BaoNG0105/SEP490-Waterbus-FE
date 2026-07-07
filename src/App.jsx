@@ -21,6 +21,7 @@ import { ChangePassword } from "./pages/Profile/ChangePassword";
 import { CharterDetail } from "./pages/Profile/MyCharterBooking/CharterDetail";
 import { EditCharter } from "./pages/Profile/MyCharterBooking/EditCharter";
 import { CharterList } from "./pages/Profile/MyCharterBooking/CharterList";
+import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefund";
 import { Booking } from "./pages/Booking";
 import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
@@ -31,7 +32,7 @@ import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor } from "./pages/
 import { StationManagement } from "./pages/Admin/StationManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
-import { AdminCharterBookingDetail, CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
+import { AdminCharterBookingDetail, AdminCharterBookingRefund, CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
 
 function App() {
   return (
@@ -142,6 +143,16 @@ function App() {
           element={
             <MainLayout>
               <EditCharter />
+            </MainLayout>
+          }
+        />
+
+        {/* My Charter Booking Refund Page */}
+        <Route
+          path="/profile/my-charter-booking/:id/refund"
+          element={
+            <MainLayout>
+              <CharterRefund />
             </MainLayout>
           }
         />
@@ -306,6 +317,14 @@ function App() {
             element={
               <AdminLayout title="Charter Booking Management">
                 <CharterBookingManagement />
+              </AdminLayout>
+            }
+          />
+          <Route
+            path="/admin/charter-bookings-management/:id/payments/:paymentId/refund"
+            element={
+              <AdminLayout title="Refund Payment">
+                <AdminCharterBookingRefund />
               </AdminLayout>
             }
           />

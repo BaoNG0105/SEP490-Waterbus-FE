@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
 import { useApp } from "../../../context/AppContext";
 import { fetchMyCharterBookings } from "../../../services/charterBookingService";
+import {
+  getCustomerActionInfo,
+  matchesSmartFilter,
+} from "../../../utils/charterBookingActions";
+import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 
 const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Refunded"];
 
@@ -36,6 +42,7 @@ const normalizeBooking = (item) => {
     status: pick(item, ["bookingStatus", "status"], "PendingQuote"),
     paymentStatus: pick(item, ["paymentStatus"], "--"),
     estimatedPrice: Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0)),
+    holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
   };
 };
 
@@ -45,6 +52,23 @@ const formatDate = (value) => {
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
   return date.toLocaleDateString("vi-VN");
 };
+
+const ListSkeleton = () => (
+  <div className="space-y-3">
+    {[1, 2, 3].map((item) => (
+      <div key={item} className="animate-pulse rounded-3xl border border-slate-100 bg-white p-5 dark:border-slate-700/50 dark:bg-slate-800">
+        <div className="flex gap-4">
+          <div className="h-12 w-1 rounded-full bg-slate-200 dark:bg-slate-700" />
+          <div className="flex-1 space-y-3">
+            <div className="h-4 w-32 rounded-lg bg-slate-200 dark:bg-slate-700" />
+            <div className="h-3 w-2/3 rounded-lg bg-slate-100 dark:bg-slate-700/70" />
+            <div className="h-8 w-full max-w-md rounded-xl bg-slate-100 dark:bg-slate-700/70" />
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 export function CharterList() {
   const { lang } = useApp();
@@ -56,7 +80,10 @@ export function CharterList() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),
+    []
+  );
 
   const loadBookings = useCallback(async () => {
     if (!isAuthenticated) {
@@ -82,214 +109,247 @@ export function CharterList() {
     loadBookings();
   }, [loadBookings]);
 
-  const getStatusInfo = (status) => {
-    switch (status) {
-      case "PendingQuote":
-        return { label: lang === "VN" ? "Chờ báo giá" : "Pending Quote", classes: "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20", dot: "bg-amber-500" };
-      case "Quoted":
-        return { label: lang === "VN" ? "Đã báo giá" : "Quoted", classes: "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20", dot: "bg-indigo-500" };
-      case "PendingPayment":
-        return { label: lang === "VN" ? "Chờ thanh toán" : "Pending Payment", classes: "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20", dot: "bg-orange-500" };
-      case "Confirmed":
-        return { label: lang === "VN" ? "Đã xác nhận" : "Confirmed", classes: "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20", dot: "bg-sky-500" };
-      case "Completed":
-        return { label: lang === "VN" ? "Hoàn tất" : "Completed", classes: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20", dot: "bg-emerald-500" };
-      case "Cancelled":
-        return { label: lang === "VN" ? "Đã hủy" : "Cancelled", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20", dot: "bg-rose-500" };
-      case "Expired":
-        return { label: lang === "VN" ? "Hết hạn" : "Expired", classes: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700", dot: "bg-slate-400" };
-      case "Refunded":
-        return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20", dot: "bg-teal-500" };
-      default:
-        return { label: status || "--", classes: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700", dot: "bg-slate-400" };
-    }
-  };
+  const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
 
-  const getActionInfo = (booking) => {
-    const paymentStatus = String(booking.paymentStatus).toLowerCase();
-
-    if (booking.status === "PendingQuote") {
-      return {
-        icon: "hourglass_top",
-        label: lang === "VN" ? "Chờ báo giá" : "Waiting for quote",
-        classes: "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
-      };
-    }
-
-    if (booking.status === "Quoted" && paymentStatus !== "paid") {
-      return {
-        icon: "payments",
-        label: lang === "VN" ? "Xem báo giá & thanh toán" : "Review quote & pay",
-        classes: "bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
-      };
-    }
-
-    if (booking.status === "PendingPayment") {
-      return {
-        icon: "sync",
-        label: lang === "VN" ? "Tiếp tục hoặc đồng bộ thanh toán" : "Continue or sync payment",
-        classes: "bg-orange-50 text-orange-700 border-orange-100 dark:bg-orange-500/10 dark:text-orange-300 dark:border-orange-500/20",
-      };
-    }
-
-    if (["Confirmed", "Completed"].includes(booking.status) || paymentStatus === "paid") {
-      return {
-        icon: "confirmation_number",
-        label: lang === "VN" ? "Quản lý hành khách/vé" : "Manage passengers/tickets",
-        classes: "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
-      };
-    }
-
-    if (["Cancelled", "Expired", "Refunded"].includes(booking.status)) {
-      return {
-        icon: "event_busy",
-        label: getStatusInfo(booking.status).label,
-        classes: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700",
-      };
-    }
-
-    return {
-      icon: "visibility",
-      label: lang === "VN" ? "Xem chi tiết" : "View details",
-      classes: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700",
-    };
-  };
-
-  const filteredBookings = bookings.filter((booking) => {
+  const filteredBookings = useMemo(() => bookings.filter((booking) => {
     const searchValue = searchTerm.toLowerCase();
     const matchesSearch =
-      booking.bookingCode.toLowerCase().includes(searchValue) ||
-      booking.boatName.toLowerCase().includes(searchValue) ||
-      booking.route.toLowerCase().includes(searchValue);
+      booking.bookingCode.toLowerCase().includes(searchValue)
+      || booking.boatName.toLowerCase().includes(searchValue)
+      || booking.route.toLowerCase().includes(searchValue);
     const matchesStatus = statusFilter === "All" || booking.status === statusFilter;
     return matchesSearch && matchesStatus;
-  });
+  }), [bookings, searchTerm, statusFilter]);
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: bookings.length,
     waitingQuote: bookings.filter((booking) => booking.status === "PendingQuote").length,
     readyToPay: bookings.filter((booking) => booking.status === "Quoted" && String(booking.paymentStatus).toLowerCase() !== "paid").length,
     activeTrips: bookings.filter((booking) => ["PendingPayment", "Confirmed"].includes(booking.status)).length,
     paidTrips: bookings.filter((booking) => String(booking.paymentStatus).toLowerCase() === "paid").length,
+    needsAction: bookings.filter((booking) => matchesSmartFilter(booking, "needsAction")).length,
+  }), [bookings]);
+
+  const openBooking = (booking, focusPayment = false) => {
+    navigate(`/profile/my-charter-booking/${booking.id}`, {
+      state: { booking, focusPayment },
+    });
   };
 
-  const workflowSteps = ["PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed"];
-  const getProgressPercent = (status) => {
-    if (["Cancelled", "Expired", "Refunded"].includes(status)) return 100;
-    const stepIndex = Math.max(workflowSteps.indexOf(status), 0);
-    return Math.round((stepIndex / (workflowSteps.length - 1)) * 100);
-  };
+  const statCards = [
+    { key: "all", icon: "folder_open", label: lang === "VN" ? "Tổng yêu cầu" : "Total", value: stats.total, tone: "text-[#124757] dark:text-yellow-400", ring: "ring-[#124757]/10 dark:ring-yellow-400/20", bg: "bg-slate-50 dark:bg-slate-900" },
+    { key: "needsAction", icon: "priority_high", label: lang === "VN" ? "Cần xử lý" : "Action needed", value: stats.needsAction, tone: "text-rose-600 dark:text-rose-300", ring: "ring-rose-500/15", bg: "bg-rose-50 dark:bg-rose-500/10" },
+    { key: "waitingQuote", icon: "request_quote", label: lang === "VN" ? "Chờ báo giá" : "Waiting", value: stats.waitingQuote, tone: "text-amber-600 dark:text-amber-300", ring: "ring-amber-500/15", bg: "bg-amber-50 dark:bg-amber-500/10" },
+    { key: "toPay", icon: "payments", label: lang === "VN" ? "Cần thanh toán" : "To pay", value: stats.readyToPay, tone: "text-indigo-600 dark:text-indigo-300", ring: "ring-indigo-500/15", bg: "bg-indigo-50 dark:bg-indigo-500/10" },
+    { key: "active", icon: "event_available", label: lang === "VN" ? "Đang hiệu lực" : "Active", value: stats.activeTrips, tone: "text-sky-600 dark:text-sky-300", ring: "ring-sky-500/15", bg: "bg-sky-50 dark:bg-sky-500/10" },
+  ];
+
+  const hasFilters = searchTerm || statusFilter !== "All";
+  const emptyMessage = bookings.length === 0
+    ? (lang === "VN" ? "Bạn chưa có yêu cầu thuê tàu nào." : "You have no charter requests yet.")
+    : (lang === "VN" ? "Không có yêu cầu phù hợp với bộ lọc hiện tại." : "No requests match your current filters.");
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-30 px-4 sm:px-6 lg:px-8 font-body transition-colors">
-      <main className="max-w-5xl mx-auto space-y-6">
-        <section className="bg-white dark:bg-slate-800 rounded-4xl p-6 md:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-headline font-black text-[#124757] dark:text-yellow-400">
-                {lang === "VN" ? "Yêu cầu thuê tàu của tôi" : "My Charter Requests"}
-              </h1>
-              <p className="text-xs text-slate-400 mt-1">
-                {lang === "VN" ? "Theo dõi báo giá, thanh toán và danh sách hành khách." : "Track quotes, payments, and passenger manifests."}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={loadBookings} className="w-11 h-11 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[#124757] dark:text-yellow-400 flex items-center justify-center">
-                <span className={`material-symbols-outlined ${isLoading ? "animate-spin" : ""}`}>refresh</span>
-              </button>
-              <button onClick={() => navigate("/charter-booking")} className="px-5 py-3 rounded-xl bg-yellow-400 text-slate-900 font-headline font-black uppercase tracking-widest text-xs">
-                {lang === "VN" ? "Tạo yêu cầu" : "New Request"}
-              </button>
+    <div className="min-h-screen bg-slate-50 py-30 px-4 font-body transition-colors dark:bg-slate-900 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-5xl space-y-6">
+        <section className="overflow-hidden rounded-4xl border border-slate-100 bg-white shadow-xl dark:border-slate-700/50 dark:bg-slate-800">
+          <div className="bg-gradient-to-br from-[#124757] via-[#165a6d] to-[#0e3540] px-6 py-8 text-white md:px-8 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+              <div>
+                <p className="text-[10px] font-headline font-black uppercase tracking-[0.2em] text-white/60">
+                  Waterbus Charter
+                </p>
+                <h1 className="mt-1 font-headline text-2xl font-black md:text-3xl">
+                  {lang === "VN" ? "Yêu cầu thuê tàu" : "My Charter Requests"}
+                </h1>
+                <p className="mt-2 max-w-lg text-sm font-medium text-white/75">
+                  {lang === "VN"
+                    ? "Theo dõi tiến trình, thanh toán và quản lý hành khách — mọi thứ ở một nơi."
+                    : "Track progress, payments, and passengers — everything in one place."}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={loadBookings}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:bg-white/20"
+                >
+                  <span className={`material-symbols-outlined ${isLoading ? "animate-spin" : ""}`}>refresh</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/charter-booking")}
+                  className="rounded-xl bg-[#FFD100] px-5 py-3 font-headline text-xs font-black uppercase tracking-widest text-slate-900 shadow-lg shadow-black/10 transition hover:scale-[1.02] active:scale-95"
+                >
+                  {lang === "VN" ? "Tạo yêu cầu" : "New request"}
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="mt-6 grid md:grid-cols-[1fr_220px] gap-3">
-            <div className="relative">
-              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-              <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder={lang === "VN" ? "Tìm mã đặt chỗ, tàu, lộ trình..." : "Search booking code, boat, route..."} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-11 pr-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white" />
+          <div className="space-y-4 p-6 md:p-8">
+            <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-400">search</span>
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder={lang === "VN" ? "Tìm mã đặt chỗ, tàu, lộ trình..." : "Search code, boat, route..."}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-medium outline-none transition focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                />
+              </div>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-headline font-black uppercase text-[#124757] outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+              >
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status === "All" ? (lang === "VN" ? "Tất cả trạng thái" : "All statuses") : getStatusInfo(status).label}
+                  </option>
+                ))}
+              </select>
             </div>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-headline font-black uppercase text-[#124757] dark:text-yellow-400 outline-none">
-              {statusOptions.map((status) => <option key={status} value={status}>{status === "All" ? (lang === "VN" ? "Tất cả" : "All") : getStatusInfo(status).label}</option>)}
-            </select>
-          </div>
 
-          {errorMsg && <div className="mt-4 rounded-2xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 text-xs font-bold border border-red-100 dark:border-red-500/20">{errorMsg}</div>}
+            {errorMsg && (
+              <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-xs font-bold text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+                {errorMsg}
+              </div>
+            )}
+          </div>
         </section>
 
-        <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          {[
-            { icon: "folder_open", label: lang === "VN" ? "Tổng yêu cầu" : "Total", value: stats.total, tone: "text-[#124757] dark:text-yellow-400", bg: "bg-slate-100 dark:bg-slate-900" },
-            { icon: "request_quote", label: lang === "VN" ? "Chờ báo giá" : "Waiting", value: stats.waitingQuote, tone: "text-amber-600 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-500/10" },
-            { icon: "payments", label: lang === "VN" ? "Cần thanh toán" : "To Pay", value: stats.readyToPay, tone: "text-indigo-600 dark:text-indigo-300", bg: "bg-indigo-50 dark:bg-indigo-500/10" },
-            { icon: "verified", label: lang === "VN" ? "Đã thanh toán" : "Paid", value: stats.paidTrips, tone: "text-emerald-600 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
-            { icon: "event_available", label: lang === "VN" ? "Đang hiệu lực" : "Active", value: stats.activeTrips, tone: "text-sky-600 dark:text-sky-300", bg: "bg-sky-50 dark:bg-sky-500/10" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          {statCards.map((item) => (
+            <div
+              key={item.key}
+              className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800"
+            >
               <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${item.bg} ${item.tone}`}>
                 <span className="material-symbols-outlined text-xl">{item.icon}</span>
               </div>
               <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{item.label}</p>
-              <p className={`mt-1 text-2xl font-headline font-black ${item.tone}`}>{item.value}</p>
+              <p className={`mt-1 font-headline text-2xl font-black ${item.tone}`}>{item.value}</p>
             </div>
           ))}
         </section>
 
         <section className="space-y-3">
           {isLoading ? (
-            <div className="bg-white dark:bg-slate-800 rounded-4xl p-16 border border-slate-100 dark:border-slate-700/50 flex justify-center">
-              <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
-            </div>
+            <ListSkeleton />
           ) : filteredBookings.length === 0 ? (
-            <div className="bg-white dark:bg-slate-800 rounded-4xl p-16 border border-slate-100 dark:border-slate-700/50 text-center text-slate-400 font-bold">
-              <span className="material-symbols-outlined text-4xl block mb-2">event_busy</span>
-              {lang === "VN" ? "Chưa có yêu cầu thuê tàu phù hợp." : "No matching charter requests."}
+            <div className="rounded-4xl border border-dashed border-slate-200 bg-white p-16 text-center dark:border-slate-700 dark:bg-slate-800">
+              <span className="material-symbols-outlined mb-3 block text-5xl text-slate-300 dark:text-slate-600">sailing</span>
+              <p className="font-headline text-lg font-black text-slate-500 dark:text-slate-300">{emptyMessage}</p>
+              {hasFilters ? (
+                <button
+                  type="button"
+                  onClick={() => { setSearchTerm(""); setStatusFilter("All"); }}
+                  className="mt-4 rounded-xl border border-slate-200 px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:text-yellow-400"
+                >
+                  {lang === "VN" ? "Xóa bộ lọc" : "Clear filters"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navigate("/charter-booking")}
+                  className="mt-4 rounded-xl bg-[#FFD100] px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-900"
+                >
+                  {lang === "VN" ? "Tạo yêu cầu đầu tiên" : "Create your first request"}
+                </button>
+              )}
             </div>
           ) : (
             filteredBookings.map((booking) => {
-              const statusInfo = getStatusInfo(booking.status);
-              const actionInfo = getActionInfo(booking);
+              const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
+              const actionInfo = getCustomerActionInfo(booking, lang);
+              const focusPayment = ["pay", "manage"].includes(actionInfo.tone) && actionInfo.urgent;
+
               return (
-                <article key={booking.id || booking.bookingCode} className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-100 dark:border-slate-700/50 shadow-sm">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="space-y-2 min-w-0">
+                <article
+                  key={booking.id || booking.bookingCode}
+                  className={`group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg dark:bg-slate-800 ${
+                    actionInfo.urgent
+                      ? "border-[#124757]/20 ring-1 ring-[#124757]/10 dark:border-yellow-400/20 dark:ring-yellow-400/10"
+                      : "border-slate-100 dark:border-slate-700/50"
+                  }`}
+                >
+                  <div
+                    className={`absolute inset-y-0 left-0 w-1 ${
+                      actionInfo.urgent ? "bg-[#FFD100]" : "bg-slate-200 dark:bg-slate-700"
+                    }`}
+                  />
+
+                  <div className="flex flex-col gap-5 p-5 pl-6 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0 flex-1 space-y-4">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-headline font-black text-[#124757] dark:text-white">{booking.bookingCode}</h3>
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusInfo.classes}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot}`}></span>
+                        <button
+                          type="button"
+                          onClick={() => openBooking(booking)}
+                          className="font-headline text-lg font-black text-[#124757] transition hover:text-[#0d3541] dark:text-white dark:hover:text-yellow-400"
+                        >
+                          {booking.bookingCode}
+                        </button>
+                        <span className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${statusInfo.classes}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot}`} />
                           {statusInfo.label}
                         </span>
-                      </div>
-                      <p className="text-sm font-bold text-slate-600 dark:text-slate-200 truncate">{booking.route}</p>
-                      <p className="text-[11px] text-slate-400">
-                        {formatDate(booking.departureDate)} {String(booking.startTime).slice(0, 5)} / {booking.passengerCount} {lang === "VN" ? "khách" : "guests"} / {booking.durationValue} {booking.rentalUnit}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/profile/my-charter-booking/${booking.id}`, { state: { booking } })}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-colors shrink-0"
-                      >
-                        {lang === "VN" ? "Xem chi tiết" : "View details"}
-                        <span className="material-symbols-outlined text-[18px]">chevron_right</span>
-                      </button>
-                      <div className="h-2 max-w-xl overflow-hidden rounded-full bg-slate-100 dark:bg-slate-900">
-                        <div
-                          className={`h-full rounded-full ${["Cancelled", "Expired", "Refunded"].includes(booking.status) ? "bg-slate-400" : "bg-[#FFD100]"}`}
-                          style={{ width: `${getProgressPercent(booking.status)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between lg:justify-end gap-4">
-                      <div className={`hidden min-w-44 rounded-2xl border px-3 py-2 text-left sm:block ${actionInfo.classes}`}>
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-lg">{actionInfo.icon}</span>
-                          <span className="text-[10px] font-headline font-black uppercase tracking-wider leading-4">{actionInfo.label}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] uppercase font-black text-slate-400">{lang === "VN" ? "Giá chốt" : "Quote"}</p>
-                        <p className="font-headline font-black text-[#124757] dark:text-yellow-400">{booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--"}</p>
+                        {actionInfo.urgent && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#FFD100]/20 px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FFD100]" />
+                            {lang === "VN" ? "Ưu tiên" : "Priority"}
+                          </span>
+                        )}
                       </div>
 
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        <p className="truncate text-sm font-bold text-slate-700 dark:text-slate-200">{booking.route}</p>
+                        {booking.boatName !== "--" && (
+                          <p className="truncate text-xs font-bold text-slate-400">
+                            <span className="material-symbols-outlined mr-1 align-middle text-sm">directions_boat</span>
+                            {booking.boatName}
+                          </p>
+                        )}
+                        <p className="text-[11px] font-bold text-slate-400 sm:col-span-2">
+                          {formatDate(booking.departureDate)} · {String(booking.startTime).slice(0, 5)} · {booking.passengerCount} {lang === "VN" ? "khách" : "guests"} · {booking.durationValue} {booking.rentalUnit}
+                        </p>
+                      </div>
+
+                      <div className={`inline-flex max-w-full items-center gap-2 rounded-2xl border px-3 py-2 ${actionInfo.classes}`}>
+                        <span className="material-symbols-outlined text-lg">{actionInfo.icon}</span>
+                        <span className="text-[10px] font-headline font-black uppercase tracking-wider leading-4">{actionInfo.label}</span>
+                      </div>
+
+                      <CharterWorkflowStepper status={booking.status} lang={lang} compact />
+                    </div>
+
+                    <div className="flex shrink-0 flex-col items-stretch gap-3 sm:min-w-52 lg:items-end">
+                      <div className="text-left lg:text-right">
+                        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                          {lang === "VN" ? "Giá chốt" : "Quote"}
+                        </p>
+                        <p className="font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
+                          {booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--"}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => openBooking(booking, focusPayment)}
+                        className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider shadow-sm transition hover:scale-[1.02] active:scale-95 ${actionInfo.buttonClasses}`}
+                      >
+                        <span className="material-symbols-outlined text-base">{actionInfo.icon}</span>
+                        {actionInfo.cta}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openBooking(booking)}
+                        className="inline-flex items-center justify-center gap-1 text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 transition hover:text-[#124757] dark:hover:text-yellow-400"
+                      >
+                        {lang === "VN" ? "Xem chi tiết" : "View details"}
+                        <span className="material-symbols-outlined text-base">chevron_right</span>
+                      </button>
                     </div>
                   </div>
                 </article>
