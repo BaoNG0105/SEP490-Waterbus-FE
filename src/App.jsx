@@ -37,6 +37,7 @@ import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 import { RouteManagement } from "./pages/Admin/RouteManagement";
 import { CreateRoute } from "./pages/Admin/RouteManagement/CreateRoute";
 import { RouteDetail } from "./pages/Admin/RouteManagement/RouteDetail";
+import { DrawWaterway } from "./pages/Admin/RouteManagement/DrawWaterway";
 import { AdminCharterBookingDetail, AdminCharterBookingRefund, CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
 
 function App() {
@@ -368,7 +369,7 @@ function App() {
 
           {/* ******* Route Management: List Page ******* */}
           <Route
-            path="/admin/routes"
+            path="/admin/routes-management"
             element={
               <AdminLayout title="Route Management">
                 <RouteManagement />
@@ -378,7 +379,7 @@ function App() {
 
           {/* Route Management: Create Page */}
           <Route
-            path="/admin/routes/create"
+            path="/admin/routes-management/create"
             element={
               <AdminLayout title="Create Route">
                 <CreateRoute />
@@ -386,9 +387,19 @@ function App() {
             }
           />
 
+          {/* Route Management: Draw Waterway Manually */}
+          <Route
+            path="/admin/routes-management/draw-waterway"
+            element={
+              <AdminLayout title="Draw Waterway">
+                <DrawWaterway />
+              </AdminLayout>
+            }
+          />
+
           {/* Route Management: Detail Page */}
           <Route
-            path="/admin/routes/:id"
+            path="/admin/routes-management/:id"
             element={
               <AdminLayout title="Route Detail">
                 <RouteDetail />

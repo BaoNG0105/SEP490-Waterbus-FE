@@ -142,13 +142,22 @@ export function RouteManagement() {
                         {lang === "VN" ? "Danh sách các tuyến đường sông, lộ trình bến dừng và khoảng cách vận hành." : "Manage waterway routes, stop sequencing and operational distances."}
                     </p>
                 </div>
-                <button
-                    onClick={() => navigate("/admin/routes/create")}
-                    className="px-5 py-3 bg-yellow-400 text-slate-900 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 shrink-0"
-                >
-                    <span className="material-symbols-outlined text-sm font-bold">add_circle</span>
-                    {lang === "VN" ? "Thêm tuyến mới" : "Create Route"}
-                </button>
+                <div className="flex gap-2 shrink-0">
+                    <button
+                        onClick={() => navigate("/admin/routes-management/draw-waterway")}
+                        className="px-5 py-3 bg-white dark:bg-slate-800 text-[#124757] dark:text-yellow-400 border border-slate-200 dark:border-slate-700 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2"
+                    >
+                        <span className="material-symbols-outlined text-sm font-bold">draw</span>
+                        {lang === "VN" ? "Vẽ tuyến sông" : "Draw Waterway"}
+                    </button>
+                    <button
+                        onClick={() => navigate("/admin/routes-management/create")}
+                        className="px-5 py-3 bg-yellow-400 text-slate-900 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
+                    >
+                        <span className="material-symbols-outlined text-sm font-bold">add_circle</span>
+                        {lang === "VN" ? "Thêm tuyến mới" : "Create Route"}
+                    </button>
+                </div>
             </div>
 
             {errorMsg && (
@@ -283,7 +292,7 @@ export function RouteManagement() {
                                         <td className="py-4 px-6 text-center">
                                             <div className="flex items-center justify-center gap-2">
                                                 <button
-                                                    onClick={() => navigate(`/admin/routes/${route.routeId}`)}
+                                                    onClick={() => navigate(`/admin/routes-management/${route.routeId}`)}
                                                     className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#124757] hover:bg-slate-50 dark:hover:bg-slate-700 dark:hover:text-yellow-400 hover:border-slate-300 transition-all shadow-sm"
                                                     title={lang === "VN" ? "Xem chi tiết tuyến" : "View Route Detail"}
                                                 >

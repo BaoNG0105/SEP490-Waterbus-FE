@@ -91,9 +91,9 @@ export const removeRouteStop = async (routeId, stopId) => {
 };
 
 // Service: Import mạng lưới sông rạch và bến từ file GeoJSON
-export const importGeoJsonNetwork = async (file) => {
+export const importGeoJsonNetwork = async (file, filename) => {
     try {
-        return await apiImportRoutesGeoJson(file);
+        return await apiImportRoutesGeoJson(file, filename);
     } catch (error) {
         console.error('Lỗi khi import mạng lưới sông rạch từ GeoJSON:', error);
         throw error;

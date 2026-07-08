@@ -33,9 +33,15 @@ export const deleteRouteStop = (routeId, stopId) =>
     api.delete(`/routes/${routeId}/stops/${stopId}`).then(response => response.data);
 
 // API: Import mạng lưới sông rạch và bến từ file GeoJSON (multipart/form-data, field "file")
-export const importRoutesGeoJson = (file) => {
+// filename: tùy chọn, dùng khi "file" là Blob dựng thủ công (vd từ công cụ vẽ tay) chứ không phải
+// input[type=file], vì Blob không tự mang theo tên file.
+export const importRoutesGeoJson = (file, filename) => {
     const formData = new FormData();
-    formData.append('file', file);
+    if (filename) {
+        formData.append('file', file, filename);
+    } else {
+        formData.append('file', file);
+    }
     return api.post('/routes/geojson-import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
     }).then(response => response.data);

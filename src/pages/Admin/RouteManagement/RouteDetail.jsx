@@ -194,7 +194,7 @@ export function RouteDetail() {
                     text: lang === "VN" ? "Mã định danh tuyến đường không tồn tại. Quay về danh sách." : "The requested route logs do not exist.",
                     confirmButtonColor: "#124757",
                     allowOutsideClick: false
-                }).then(() => navigate("/admin/routes"));
+                }).then(() => navigate("/admin/routes-management"));
             } else {
                 setErrorMsg(lang === "VN" ? "Không thể lấy thông tin tuyến đường do lỗi kết nối mạng." : "Failed to retrieve route details.");
             }
@@ -261,7 +261,7 @@ export function RouteDetail() {
                 icon: "success",
                 title: lang === "VN" ? "Đã xóa tuyến đường!" : "Route Deleted!",
                 confirmButtonColor: "#124757"
-            }).then(() => navigate("/admin/routes"));
+            }).then(() => navigate("/admin/routes-management"));
         } catch (error) {
             console.error("Lỗi khi xóa tuyến đường:", error);
             Swal.fire({
@@ -394,7 +394,7 @@ export function RouteDetail() {
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
                 <button
                     type="button"
-                    onClick={() => navigate("/admin/routes")}
+                    onClick={() => navigate("/admin/routes-management")}
                     className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner shrink-0"
                 >
                     <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>

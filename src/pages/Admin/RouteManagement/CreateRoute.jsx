@@ -178,7 +178,7 @@ export function CreateRoute() {
                 title: lang === "VN" ? "Tạo tuyến thành công!" : "Route Created!",
                 text: lang === "VN" ? "Tuyến đường sông mới đã được lưu trữ an toàn." : "New river route has been successfully saved.",
                 confirmButtonColor: "#124757"
-            }).then(() => navigate("/admin/routes"));
+            }).then(() => navigate("/admin/routes-management"));
 
         } catch (error) {
             console.error("Lỗi tạo tuyến đường:", error);
@@ -202,7 +202,7 @@ export function CreateRoute() {
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
                 <button
                     type="button"
-                    onClick={() => navigate("/admin/routes")}
+                    onClick={() => navigate("/admin/routes-management")}
                     className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner shrink-0"
                 >
                     <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
@@ -233,6 +233,14 @@ export function CreateRoute() {
                         {lang === "VN"
                             ? "Tùy chọn: tải lên file .geojson chứa mạng lưới sông/kênh rạch và bến tàu để bổ sung dữ liệu waterway/station dùng cho waypoints bên dưới."
                             : "Optional: upload a .geojson file containing the river/canal network and ferry stations to populate the waterway/station data used by the waypoints below."}
+                        {" "}
+                        <button
+                            type="button"
+                            onClick={() => navigate("/admin/routes-management/draw-waterway")}
+                            className="text-[#124757] dark:text-yellow-400 font-bold underline underline-offset-2 hover:brightness-110"
+                        >
+                            {lang === "VN" ? "Chưa có file? Vẽ tay tại đây →" : "No file yet? Draw it manually →"}
+                        </button>
                     </p>
                 </div>
 
