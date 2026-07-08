@@ -34,6 +34,9 @@ import { UserManagement } from "./pages/Admin/UserManagement";
 import { CreateUser } from "./pages/Admin/UserManagement/CreateUser";
 import { EditUser } from "./pages/Admin/UserManagement/EditUser";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
+import { RouteManagement } from "./pages/Admin/RouteManagement";
+import { CreateRoute } from "./pages/Admin/RouteManagement/CreateRoute";
+import { RouteDetail } from "./pages/Admin/RouteManagement/RouteDetail";
 import { AdminCharterBookingDetail, AdminCharterBookingRefund, CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
 
 function App() {
@@ -359,6 +362,36 @@ function App() {
             element={
               <AdminLayout title="Waterways Management">
                 <Waterway />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Route Management: List Page ******* */}
+          <Route
+            path="/admin/routes"
+            element={
+              <AdminLayout title="Route Management">
+                <RouteManagement />
+              </AdminLayout>
+            }
+          />
+
+          {/* Route Management: Create Page */}
+          <Route
+            path="/admin/routes/create"
+            element={
+              <AdminLayout title="Create Route">
+                <CreateRoute />
+              </AdminLayout>
+            }
+          />
+
+          {/* Route Management: Detail Page */}
+          <Route
+            path="/admin/routes/:id"
+            element={
+              <AdminLayout title="Route Detail">
+                <RouteDetail />
               </AdminLayout>
             }
           />
