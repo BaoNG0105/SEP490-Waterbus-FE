@@ -1,0 +1,113 @@
+import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
+import { getCharterBookingHubUrl } from "../utils/hubBaseUrl";
+
+class CharterBookingHubClient {
+  constructor() {
+    this.connection = null;
+    this.startPromise = null;
+    this.assignedListeners = new Set();
+    this.bookingChangedListeners = new Set();
+    this.listMode = null;
+    this.listRefCount = 0;
+    this.detailJoins = new Map();
+  }
+
+  getAccessToken() {
+    return localStorage.getItem("accessToken") || "";
+  }
+
+  async ensureConnection() {
+    if (this.connection?.state === HubConnectionState.Connected) {
+      return this.connection;
+    }
+
+    if (this.startPromise) {
+      await this.startPromise;
+      return this.connection;
+    }
+
+    this.connection = new HubConnectionBuilder()
+      .withUrl(getCharterBookingHubUrl(), {
+        accessTokenFactory: () => this.getAccessToken(),
+      })
+      .withAutomaticReconnect()
+      .build();
+
+    this.connection.on("AssignedCharterBookingsChanged", () => {
+      this.assignedListeners.forEach((listener) => listener());
+    });
+
+    this.connection.on("CharterBookingChanged", (event) => {
+      this.bookingChangedListeners.forEach((listener) => listener(event));
+    });
+
+    this.startPromise = this.connection.start().catch((error) => {
+      this.startPromise = null;
+      this.connection = null;
+      throw error;
+    });
+
+    await this.startPromise;
+    return this.connection;
+  }
+
+  subscribeAssignedChanged(listener) {
+    this.assignedListeners.add(listener);
+    return () => this.assignedListeners.delete(listener);
+  }
+
+  subscribeBookingChanged(listener) {
+    this.bookingChangedListeners.add(listener);
+    return () => this.bookingChangedListeners.delete(listener);
+  }
+
+  async joinList(mode) {
+    await this.ensureConnection();
+    if (this.listMode === mode) {
+      this.listRefCount += 1;
+      return;
+    }
+
+    this.listMode = mode;
+    this.listRefCount = 1;
+    const method = mode === "admin" ? "JoinAdminCharterBookings" : "JoinAssignedCharterBookings";
+    await this.connection.invoke(method);
+  }
+
+  async leaveList(mode) {
+    if (this.listMode !== mode) return;
+    this.listRefCount = Math.max(0, this.listRefCount - 1);
+    if (this.listRefCount > 0) return;
+    this.listMode = null;
+  }
+
+  async joinBooking(bookingId) {
+    const key = String(bookingId || "");
+    if (!key) return;
+
+    await this.ensureConnection();
+    const nextCount = (this.detailJoins.get(key) || 0) + 1;
+    this.detailJoins.set(key, nextCount);
+    if (nextCount === 1) {
+      await this.connection.invoke("JoinCharterBooking", key);
+    }
+  }
+
+  async leaveBooking(bookingId) {
+    const key = String(bookingId || "");
+    if (!key || !this.connection) return;
+
+    const current = this.detailJoins.get(key) || 0;
+    if (current <= 1) {
+      this.detailJoins.delete(key);
+      if (this.connection.state === HubConnectionState.Connected) {
+        await this.connection.invoke("LeaveCharterBooking", key).catch(() => {});
+      }
+      return;
+    }
+
+    this.detailJoins.set(key, current - 1);
+  }
+}
+
+export const charterBookingHub = new CharterBookingHubClient();

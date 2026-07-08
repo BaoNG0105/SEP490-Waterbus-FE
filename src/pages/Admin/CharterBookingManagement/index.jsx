@@ -20,11 +20,12 @@ import {
 } from "../../../utils/charterBookingAdmin";
 import { shouldUseAssignedCharterApi, getCharterCapabilities, getDefaultCharterTab } from "../../../utils/charterBookingAccess";
 import { isAdminUser } from "../../../utils/roleHelpers";
+import { useCharterBookingListHub } from "../../../hooks/useCharterBookingListHub";
 
 export function CharterBookingManagement() {
   const { lang } = useApp();
   const navigate = useNavigate();
-  const { user } = useSelector((state) => state.auth);
+  const { user, isAuthenticated } = useSelector((state) => state.auth);
   const useAssignedApi = shouldUseAssignedCharterApi(user);
   const [bookings, setBookings] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -36,9 +37,9 @@ export function CharterBookingManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async ({ silent = false } = {}) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setErrorMsg("");
       const bookingData = useAssignedApi
         ? await fetchAssignedCharterBookings()
@@ -46,13 +47,25 @@ export function CharterBookingManagement() {
       setBookings(Array.isArray(bookingData) ? bookingData.map(normalizeBooking) : []);
     } catch (error) {
       console.error("Lỗi tải charter booking:", error);
-      setErrorMsg(error.response?.data?.message || (lang === "VN"
-        ? "Không thể tải danh sách yêu cầu thuê tàu."
-        : "Unable to load charter booking requests."));
+      if (!silent) {
+        setErrorMsg(error.response?.data?.message || (lang === "VN"
+          ? "Không thể tải danh sách yêu cầu thuê tàu."
+          : "Unable to load charter booking requests."));
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [lang, useAssignedApi]);
+
+  const refreshListSilently = useCallback(() => {
+    loadData({ silent: true });
+  }, [loadData]);
+
+  useCharterBookingListHub({
+    enabled: isAuthenticated,
+    listMode: useAssignedApi ? "assigned" : "admin",
+    onRefresh: refreshListSilently,
+  });
 
   useEffect(() => {
     loadData();

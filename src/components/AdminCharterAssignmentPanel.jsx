@@ -7,6 +7,7 @@ import {
   replaceCharterBookingStaffAssignment,
 } from "../services/charterBookingService";
 import { fetchManagerUsers, fetchStaffUsers } from "../services/userService";
+import { fetchStationManagers } from "../services/stationService";
 import { getApiErrorMessage } from "../utils/apiError";
 import { getBoatId, getBoatNameOnly, pick } from "../utils/charterBookingAdmin";
 
@@ -155,9 +156,16 @@ function UserPicker({
         {getUserInitials(option.fullName)}
       </span>
       <div className="min-w-0">
-        <p className={`truncate font-bold text-slate-800 dark:text-white ${compact ? "text-sm" : "text-sm"}`}>
-          {option.fullName}
-        </p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className={`truncate font-bold text-slate-800 dark:text-white ${compact ? "text-sm" : "text-sm"}`}>
+            {option.fullName}
+          </p>
+          {option.isPrimary ? (
+            <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">
+              {lang === "VN" ? "Chính" : "Primary"}
+            </span>
+          ) : null}
+        </div>
         <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
           {[option.phone, option.email].filter(Boolean).join(" · ") || (lang === "VN" ? "Không có liên hệ" : "No contact")}
         </p>
@@ -276,6 +284,9 @@ export function AdminCharterAssignmentPanel({
   const [assignments, setAssignments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [usersLoadError, setUsersLoadError] = useState("");
+  const [managerSource, setManagerSource] = useState("station");
+  const [fromStationName, setFromStationName] = useState(booking?.fromStationName || "");
   const [selectedManagerId, setSelectedManagerId] = useState(booking?.assignedManagerId || "");
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [selectedBoatId, setSelectedBoatId] = useState("");
@@ -283,6 +294,12 @@ export function AdminCharterAssignmentPanel({
   const [dutyRole, setDutyRole] = useState("Captain");
   const [replaceStaffByAssignment, setReplaceStaffByAssignment] = useState({});
   const [replaceReasonByAssignment, setReplaceReasonByAssignment] = useState({});
+
+  const fromStationId = String(
+    booking?.fromStationId
+    || pick(booking?.raw, ["fromStationId", "fromStation.id", "fromStation.stationId"], "")
+    || "",
+  );
 
   const boatOptions = useMemo(() => selectedBoats.map((boat) => ({
     id: getBoatId(boat),
@@ -294,19 +311,59 @@ export function AdminCharterAssignmentPanel({
     if (!booking?.id) return;
     try {
       setIsLoading(true);
+      setUsersLoadError("");
       let managerUsers = [];
       let staffUsers = [];
       let assignmentData = [];
+      let nextManagerSource = "station";
+      let nextStationName = booking?.fromStationName || "";
+      const userErrors = [];
 
       if (capabilities.canAssignManager) {
-        managerUsers = await fetchManagerUsers().catch(() => []);
+        try {
+          if (fromStationId) {
+            const stationResult = await fetchStationManagers(fromStationId);
+            nextStationName = stationResult.stationName || nextStationName;
+            if (stationResult.managers.length > 0) {
+              managerUsers = stationResult.managers;
+              nextManagerSource = "station";
+            } else {
+              managerUsers = await fetchManagerUsers({ force: true });
+              nextManagerSource = "all";
+            }
+          } else {
+            managerUsers = await fetchManagerUsers({ force: true });
+            nextManagerSource = "all";
+          }
+        } catch (error) {
+          try {
+            managerUsers = await fetchManagerUsers({ force: true });
+            nextManagerSource = "fallback";
+          } catch (fallbackError) {
+            userErrors.push(getApiErrorMessage(
+              fallbackError || error,
+              lang === "VN" ? "Không tải được danh sách quản lý." : "Unable to load managers.",
+            ));
+          }
+        }
       }
 
       if (capabilities.canAssignStaff) {
-        [staffUsers, assignmentData] = await Promise.all([
-          fetchStaffUsers().catch(() => []),
-          fetchCharterBookingStaffAssignments(booking.id).catch(() => []),
+        const [staffResult, assignmentResult] = await Promise.allSettled([
+          fetchStaffUsers({ force: true }),
+          fetchCharterBookingStaffAssignments(booking.id),
         ]);
+        if (staffResult.status === "fulfilled") {
+          staffUsers = staffResult.value;
+        } else {
+          userErrors.push(getApiErrorMessage(
+            staffResult.reason,
+            lang === "VN" ? "Không tải được danh sách nhân viên." : "Unable to load staff.",
+          ));
+        }
+        if (assignmentResult.status === "fulfilled") {
+          assignmentData = assignmentResult.value;
+        }
       }
 
       const rows = Array.isArray(assignmentData)
@@ -315,7 +372,14 @@ export function AdminCharterAssignmentPanel({
       setAssignments(rows.map(normalizeStaffAssignment));
       setManagerOptions(managerUsers);
       setStaffOptions(staffUsers);
-      setSelectedManagerId(booking.assignedManagerId || "");
+      setManagerSource(nextManagerSource);
+      setFromStationName(nextStationName);
+      const preferredManagerId = booking.assignedManagerId
+        || managerUsers.find((item) => item.isPrimary)?.id
+        || (managerUsers.length === 1 ? managerUsers[0].id : "")
+        || "";
+      setSelectedManagerId(preferredManagerId);
+      setUsersLoadError(userErrors[0] || "");
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -326,7 +390,15 @@ export function AdminCharterAssignmentPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [booking?.assignedManagerId, booking?.id, capabilities.canAssignManager, capabilities.canAssignStaff, lang]);
+  }, [
+    booking?.assignedManagerId,
+    booking?.fromStationName,
+    booking?.id,
+    capabilities.canAssignManager,
+    capabilities.canAssignStaff,
+    fromStationId,
+    lang,
+  ]);
 
   useEffect(() => {
     if (!selectedBoatId && boatOptions[0]?.id) {
@@ -449,7 +521,7 @@ export function AdminCharterAssignmentPanel({
   const isManagerView = capabilities.canAssignStaff;
 
   return (
-    <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+    <section className="rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
       <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
         <h2 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
           {isManagerView
@@ -462,39 +534,69 @@ export function AdminCharterAssignmentPanel({
               ? "Chọn nhân viên trực chuyến cho booking này."
               : "Assign operating staff for this booking.")
             : (lang === "VN"
-              ? "Chọn quản lý nhận booking. Quản lý sẽ tự phân công nhân viên sau."
-              : "Pick the manager in charge. They will assign staff themselves.")}
+              ? "Gán sau khi báo giá / xác nhận chuyến. Quản lý được chọn sẽ tự phân công nhân viên vận hành."
+              : "Assign after quoting / confirming the trip. The selected manager will assign operating staff.")}
         </p>
       </div>
 
       <div className="space-y-6 px-6 py-6 md:px-8">
         {!isManagerView ? (
           <>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
-                {lang === "VN" ? "Quản lý hiện tại" : "Current manager"}
-              </p>
-              <p className="mt-2 text-sm font-bold text-slate-800 dark:text-white">
-                {booking?.assignedManagerName || (lang === "VN" ? "Chưa gán" : "Not assigned")}
-              </p>
-            </div>
-
             {capabilities.canAssignManager ? (
-              <>
-                {managerOptions.length === 0 && !isLoading ? (
+              <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/60 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                      {lang === "VN" ? "Quản lý hiện tại" : "Current manager"}
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">
+                      {booking?.assignedManagerName || (lang === "VN" ? "Chưa gán" : "Not assigned")}
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${
+                    booking?.assignedManagerId
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "bg-slate-200/80 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                  }`}>
+                    {booking?.assignedManagerId
+                      ? (lang === "VN" ? "Đã gán" : "Assigned")
+                      : (lang === "VN" ? "Chưa gán" : "Unassigned")}
+                  </span>
+                </div>
+
+                {usersLoadError ? (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+                    {usersLoadError}
+                    <button
+                      type="button"
+                      onClick={loadAssignments}
+                      className="ml-2 font-bold underline"
+                    >
+                      {lang === "VN" ? "Thử lại" : "Retry"}
+                    </button>
+                  </div>
+                ) : null}
+                {managerOptions.length === 0 && !isLoading && !usersLoadError ? (
                   <p className="text-xs font-medium text-amber-600 dark:text-amber-300">
-                    {lang === "VN" ? "Không tìm thấy tài khoản role MANAGER." : "No MANAGER role accounts found."}
+                    {lang === "VN"
+                      ? "Không tìm thấy tài khoản role MANAGER. Kiểm tra màn Quản lý nhân viên đã tạo user MANAGER chưa."
+                      : "No MANAGER role accounts found. Create a MANAGER user first."}
                   </p>
                 ) : null}
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                   <UserPicker
                     lang={lang}
-                    label={lang === "VN" ? "Chọn quản lý" : "Select manager"}
+                    label={lang === "VN" ? "Chọn quản lý phụ trách" : "Select manager"}
                     value={selectedManagerId}
                     options={managerOptions}
                     onChange={setSelectedManagerId}
                     disabled={isSubmitting || isSaving || isLoading}
-                    placeholder={lang === "VN" ? "Chọn quản lý phụ trách" : "Choose manager"}
+                    placeholder={
+                      isLoading
+                        ? (lang === "VN" ? "Đang tải danh sách..." : "Loading managers...")
+                        : (lang === "VN" ? "Tìm và chọn quản lý..." : "Search and choose manager...")
+                    }
                     emptyMessage={lang === "VN" ? "Không tìm thấy tài khoản MANAGER." : "No MANAGER accounts found."}
                     icon="supervisor_account"
                   />
@@ -508,13 +610,37 @@ export function AdminCharterAssignmentPanel({
                       || isSaving
                       || isLoading
                     }
-                    className="h-[52px] rounded-2xl bg-[#124757] px-6 text-[10px] font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
+                    className="h-[52px] w-full rounded-2xl bg-[#124757] px-6 text-[10px] font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-60 sm:min-w-[148px] dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
                   >
-                    {lang === "VN" ? "Gán quản lý" : "Assign manager"}
+                    {booking?.assignedManagerId
+                      ? (lang === "VN" ? "Đổi quản lý" : "Change manager")
+                      : (lang === "VN" ? "Gán quản lý" : "Assign manager")}
                   </button>
                 </div>
-              </>
-            ) : null}
+                <p className="text-[11px] font-medium text-slate-400">
+                  {managerSource === "station"
+                    ? (lang === "VN"
+                      ? `Đang lấy manager thuộc bến đi${fromStationName ? `: ${fromStationName}` : ""}.`
+                      : `Showing managers of departure station${fromStationName ? `: ${fromStationName}` : ""}.`)
+                    : managerSource === "fallback"
+                      ? (lang === "VN"
+                        ? "Không lấy được manager theo bến — đang hiện toàn bộ MANAGER."
+                        : "Could not load station managers — showing all MANAGER accounts.")
+                      : (lang === "VN"
+                        ? "Bến chưa có manager gắn sẵn — đang hiện toàn bộ MANAGER."
+                        : "Station has no linked managers — showing all MANAGER accounts.")}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Quản lý hiện tại" : "Current manager"}
+                </p>
+                <p className="mt-2 text-sm font-bold text-slate-800 dark:text-white">
+                  {booking?.assignedManagerName || (lang === "VN" ? "Chưa gán" : "Not assigned")}
+                </p>
+              </div>
+            )}
 
             {!capabilities.canAssignStaff && Array.isArray(booking?.staffAssignments) && booking.staffAssignments.length > 0 ? (
               <div className="space-y-3">
