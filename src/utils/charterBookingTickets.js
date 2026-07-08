@@ -52,6 +52,38 @@ export const formatCharterPassengerType = (value, lang = "VN") => {
   return value || "";
 };
 
+export const getYearFromDateValue = (value) => {
+  if (!value) return "";
+  const directYear = Number(value);
+  if (Number.isInteger(directYear) && directYear >= 1900 && directYear <= 9999) {
+    return String(directYear);
+  }
+
+  const text = String(value).trim();
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return isoMatch[1];
+
+  const vnMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (vnMatch) return vnMatch[3];
+
+  const yearMatch = text.match(/\b(19|20)\d{2}\b/);
+  return yearMatch ? yearMatch[0] : "";
+};
+
+export const getPassengerBirthYear = (passenger) => {
+  const birthYear = pick(passenger, ["birthYear"], "");
+  if (birthYear !== "" && birthYear !== null && birthYear !== undefined) {
+    return String(birthYear);
+  }
+  return getYearFromDateValue(pick(passenger, ["dateOfBirth", "dob", "birthDate"], ""));
+};
+
+export const formatPassengerBirthYearDisplay = (passenger, lang = "VN") => {
+  const birthYear = getPassengerBirthYear(passenger);
+  if (!birthYear) return "";
+  return lang === "VN" ? `Năm sinh: ${birthYear}` : `Birth year: ${birthYear}`;
+};
+
 const normalizeTicketRow = (passenger, ticket, index, adultCount) => {
   const merged = { ...passenger, ...ticket };
   const fullName = pick(merged, ["fullName", "passengerName", "name", "contactName"], "");
@@ -67,6 +99,7 @@ const normalizeTicketRow = (passenger, ticket, index, adultCount) => {
     passengerName: fullName,
     passengerType,
     dateOfBirth: pick(merged, ["dateOfBirth", "dob", "birthDate"], ""),
+    birthYear: getPassengerBirthYear(merged),
     status: pick(merged, ["attendanceStatus", "ticketStatus", "status"], "Active"),
     qrToken: pick(merged, ["qrToken", "ticketQrToken", "charterTicketQrToken"], ""),
   };

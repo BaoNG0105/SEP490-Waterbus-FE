@@ -11,7 +11,7 @@ import {
 import {
   canShowCharterTickets,
   formatCharterPassengerType,
-  formatCharterTicketDate,
+  getPassengerBirthYear,
   getCharterTicketId,
   hasCharterPassengerManifest,
   isCharterFullyPaid,
@@ -491,7 +491,9 @@ export function AdminBookingOverviewTab({
                   {lang === "VN" ? "Phân công vận hành" : "Operations assignment"}
                 </h2>
                 <p className="mt-1 text-xs font-medium text-slate-400">
-                  {lang === "VN" ? "Quản lý phụ trách và nhân viên trực chuyến" : "Manager in charge and operating staff"}
+                  {lang === "VN"
+                    ? "Nên gán sau khi xác nhận chuyến. Có thể gán sớm từ tab Gán quản lý nếu cần."
+                    : "Preferably assign after trip confirmation. You can still assign early from the Assign manager tab."}
                 </p>
               </div>
               {capabilities?.canViewAssignmentTab && onNavigateTab ? (
@@ -1046,7 +1048,7 @@ export function AdminBookingTicketsTab({
     const ticketCode = pick(ticket, ["ticketCode", "code", "ticketNumber"], "");
     const fullName = pick(ticket, ["fullName", "passengerName", "name", "contactName"], "");
     const passengerType = pick(ticket, ["passengerType", "type"], "");
-    const dateOfBirth = formatCharterTicketDate(pick(ticket, ["dateOfBirth", "dob", "birthDate"], ""));
+    const birthYear = getPassengerBirthYear(ticket);
     const status = pick(ticket, ["attendanceStatus", "ticketStatus", "status"], "Active");
 
     return {
@@ -1056,7 +1058,7 @@ export function AdminBookingTicketsTab({
       ticketCode: ticketCode || (ticketId ? `ID ···${String(ticketId).slice(-8)}` : `#${index + 1}`),
       fullName: fullName || (lang === "VN" ? "Chưa có tên" : "No name"),
       passengerType: formatCharterPassengerType(passengerType, lang),
-      dateOfBirth,
+      birthYear,
       status,
       hasTicketId: Boolean(ticketId),
     };
@@ -1325,8 +1327,8 @@ export function AdminBookingTicketsTab({
                         {row.passengerType && (
                           <span>{lang === "VN" ? "Loại" : "Type"}: {row.passengerType}</span>
                         )}
-                        {row.dateOfBirth && (
-                          <span>{lang === "VN" ? "Ngày sinh" : "DOB"}: {row.dateOfBirth}</span>
+                        {row.birthYear && (
+                          <span>{lang === "VN" ? "Năm sinh" : "Birth year"}: {row.birthYear}</span>
                         )}
                         {row.hasTicketId && (
                           <span className="font-mono text-[10px]">ID: {row.ticketId}</span>

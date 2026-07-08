@@ -28,6 +28,7 @@ import {
 } from "../../../utils/charterBookingActions";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { getCharterCapabilities, shouldUseAssignedCharterApi, getDefaultCharterTab } from "../../../utils/charterBookingAccess";
+import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
 import {
   buildQuoteFormFromBooking,
   canAdminHandleRefund,
@@ -66,7 +67,7 @@ import {
 
 export function AdminCharterBookingDetail() {
   const { lang } = useApp();
-  const { user } = useSelector((state) => state.auth);
+  const { user, isAuthenticated } = useSelector((state) => state.auth);
   const useAssignedApi = shouldUseAssignedCharterApi(user);
   const { id } = useParams();
   const navigate = useNavigate();
@@ -103,10 +104,10 @@ export function AdminCharterBookingDetail() {
     setAcknowledgedBadges((prev) => ({ ...prev, [tabId]: String(badgeValue) }));
   }, [id]);
 
-  const loadDetail = useCallback(async () => {
+  const loadDetail = useCallback(async ({ silent = false } = {}) => {
     if (!id) return;
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setLoadError("");
       const fetchDetail = useAssignedApi ? fetchAssignedCharterBookingDetail : fetchAdminCharterBookingDetail;
       const [detail, boatData] = await Promise.all([
@@ -119,7 +120,7 @@ export function AdminCharterBookingDetail() {
       setQuoteForm(buildQuoteFormFromBooking(normalized));
       setQuotePreview(null);
       setQuotePreviewError("");
-      if (!location.state?.tab) {
+      if (!location.state?.tab && !silent) {
         const caps = getCharterCapabilities(user, normalized);
         let defaultTab = getDefaultCharterTab(normalized, caps);
         if (defaultTab === "actions" && !caps.canQuote) defaultTab = "overview";
@@ -127,14 +128,26 @@ export function AdminCharterBookingDetail() {
       }
     } catch (error) {
       console.error("Lỗi tải chi tiết charter booking:", error);
-      setLoadError(getApiErrorMessage(
-        error,
-        lang === "VN" ? "Không thể tải chi tiết thuê tàu." : "Unable to load charter booking detail.",
-      ));
+      if (!silent) {
+        setLoadError(getApiErrorMessage(
+          error,
+          lang === "VN" ? "Không thể tải chi tiết thuê tàu." : "Unable to load charter booking detail.",
+        ));
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [id, lang, location.state?.tab, useAssignedApi, user]);
+
+  const refreshDetailSilently = useCallback(() => {
+    loadDetail({ silent: true });
+  }, [loadDetail]);
+
+  useCharterBookingDetailHub({
+    enabled: isAuthenticated && Boolean(id),
+    bookingId: id,
+    onRefresh: refreshDetailSilently,
+  });
 
   useEffect(() => {
     if (location.state?.tab) {

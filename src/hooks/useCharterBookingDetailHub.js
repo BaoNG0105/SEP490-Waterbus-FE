@@ -1,0 +1,52 @@
+import { useCallback, useEffect, useRef } from "react";
+import { charterBookingHub } from "../services/charterBookingHubClient";
+
+export function useCharterBookingDetailHub({ enabled, bookingId, onRefresh }) {
+  const refreshRef = useRef(onRefresh);
+  const debounceRef = useRef(null);
+  const bookingIdRef = useRef(String(bookingId || ""));
+
+  useEffect(() => {
+    refreshRef.current = onRefresh;
+  }, [onRefresh]);
+
+  useEffect(() => {
+    bookingIdRef.current = String(bookingId || "");
+  }, [bookingId]);
+
+  const scheduleRefresh = useCallback(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => {
+      refreshRef.current?.();
+    }, 300);
+  }, []);
+
+  useEffect(() => {
+    const currentBookingId = String(bookingId || "");
+    if (!enabled || !currentBookingId) return undefined;
+
+    let active = true;
+
+    const unsubscribe = charterBookingHub.subscribeBookingChanged((event) => {
+      if (!active) return;
+      if (String(event?.bookingId || "") === bookingIdRef.current) {
+        scheduleRefresh();
+      }
+    });
+
+    charterBookingHub.joinBooking(currentBookingId).catch((error) => {
+      console.warn("Charter booking detail hub join failed:", error);
+    });
+
+    const handleFocus = () => scheduleRefresh();
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      active = false;
+      unsubscribe();
+      window.removeEventListener("focus", handleFocus);
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      charterBookingHub.leaveBooking(currentBookingId).catch(() => {});
+    };
+  }, [bookingId, enabled, scheduleRefresh]);
+}

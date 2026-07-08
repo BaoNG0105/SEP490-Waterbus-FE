@@ -13,6 +13,11 @@ export const USER_ROLE = {
   STAFF: "STAFF",
 };
 
+const ROLE_ALIASES = {
+  MANAGER: ["MANAGER", "QUAN LY", "QUẢN LÝ", "MANAGEMENT"],
+  STAFF: ["STAFF", "NHAN VIEN", "NHÂN VIÊN", "EMPLOYEE"],
+};
+
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
     const value = key.split(".").reduce((obj, part) => obj?.[part], source);
@@ -21,46 +26,107 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
+const normalizeText = (value) => String(value || "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-zA-Z0-9\s]/g, " ")
+  .replace(/\s+/g, " ")
+  .trim()
+  .toUpperCase();
+
+const collectRoleTokens = (entry) => {
+  if (entry == null) return [];
+  if (typeof entry === "string") return [entry];
+  return [
+    getRoleSystemName(entry),
+    entry?.name,
+    entry?.displayName,
+    entry?.roleName,
+    entry?.role,
+  ].filter(Boolean);
+};
+
 const normalizeUserOption = (item) => ({
   id: String(pick(item, ["id", "userId", "accountId"], "")),
   fullName: pick(item, ["fullName", "name", "displayName"], "--"),
   phone: pick(item, ["phoneNumber", "phone"], ""),
   email: pick(item, ["email"], ""),
-  roles: Array.isArray(item?.roles) ? item.roles : [],
+  roles: Array.isArray(item?.roles)
+    ? item.roles
+    : (item?.role ? [item.role] : []),
+  raw: item,
 });
 
 const extractUserRows = (data) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.content)) return data.content;
   if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.users)) return data.users;
   if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.data?.content)) return data.data.content;
+  if (Array.isArray(data?.data?.items)) return data.data.items;
   return [];
 };
 
 const userMatchesRole = (item, role) => {
   const targetRole = String(role || "").toUpperCase();
-  const roles = Array.isArray(item?.roles) ? item.roles : [];
-  return roles.some((entry) => getRoleSystemName(entry).toUpperCase() === targetRole);
+  const aliases = ROLE_ALIASES[targetRole] || [targetRole];
+  const roles = Array.isArray(item?.roles)
+    ? item.roles
+    : (item?.role ? [item.role] : []);
+
+  const tokens = [
+    ...roles.flatMap(collectRoleTokens),
+    item?.roleSystemName,
+    item?.roleCode,
+    item?.roleName,
+    item?.role,
+  ].map(normalizeText).filter(Boolean);
+
+  return tokens.some((token) => aliases.some((alias) => {
+    const normalizedAlias = normalizeText(alias);
+    return token === normalizedAlias || token.includes(normalizedAlias);
+  }));
 };
 
 let cachedUsers = null;
+let cachedUsersPromise = null;
+
+export const clearUsersCache = () => {
+  cachedUsers = null;
+  cachedUsersPromise = null;
+};
 
 export const fetchAllUsers = async ({ force = false } = {}) => {
   if (!force && cachedUsers) return cachedUsers;
-  const data = await getAllUsers();
-  cachedUsers = extractUserRows(data).map(normalizeUserOption).filter((item) => item.id);
-  return cachedUsers;
+  if (!force && cachedUsersPromise) return cachedUsersPromise;
+
+  cachedUsersPromise = getAllUsers()
+    .then((data) => {
+      cachedUsers = extractUserRows(data).map(normalizeUserOption).filter((item) => item.id);
+      return cachedUsers;
+    })
+    .catch((error) => {
+      cachedUsersPromise = null;
+      throw error;
+    });
+
+  return cachedUsersPromise;
 };
 
-export const fetchUsersByRole = async (role) => {
+export const fetchUsersByRole = async (role, options = {}) => {
   const normalizedRole = String(role || "").toUpperCase();
-  const users = await fetchAllUsers();
+  const users = await fetchAllUsers(options);
   return users.filter((item) => userMatchesRole(item, normalizedRole));
 };
 
-export const fetchManagerUsers = () => fetchUsersByRole(USER_ROLE.MANAGER);
+export const fetchManagerUsers = (options = {}) => fetchUsersByRole(USER_ROLE.MANAGER, options);
 
-export const fetchStaffUsers = () => fetchUsersByRole(USER_ROLE.STAFF);
+export const fetchStaffUsers = (options = {}) => fetchUsersByRole(USER_ROLE.STAFF, options);
+
+let cachedUserRows = null;
+let cachedRoles = null;
 
 // Danh sách người dùng "thô" (đầy đủ trường) phục vụ trang quản lý User
 export const fetchUserList = async ({ force = false } = {}) => {
@@ -69,9 +135,6 @@ export const fetchUserList = async ({ force = false } = {}) => {
   cachedUserRows = extractUserRows(data);
   return cachedUserRows;
 };
-
-let cachedUserRows = null;
-let cachedRoles = null;
 
 export const fetchUserRoles = async ({ force = false } = {}) => {
   if (!force && cachedRoles) return cachedRoles;
@@ -84,6 +147,7 @@ export const fetchUserDetail = (userId) => getUserDetail(userId);
 
 const invalidateUserCaches = () => {
   cachedUsers = null;
+  cachedUsersPromise = null;
   cachedUserRows = null;
 };
 

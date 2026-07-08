@@ -22,7 +22,8 @@ import { CharterPaymentLedger } from "../../../components/CharterPaymentLedger";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { shouldShowCharterQuotePaymentCountdown, shouldShowPaymentDeadlineCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount } from "../../../utils/charterBookingActions";
 import { formatQuoteChargeableDuration, formatQuoteUnitPriceLabel } from "../../../utils/charterQuotePreview";
-import { PayOSLogo, payosButtonClassName, payosButtonLgClassName } from "../../../components/PayOSLogo";
+import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
+import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -297,6 +298,9 @@ const getBookingPassengerCount = (booking) => {
 const isSinglePassengerWithContact = (booking) =>
   getBookingPassengerCount(booking) <= 1 && isUsableText(booking?.contactName);
 
+const CURRENT_YEAR = new Date().getFullYear();
+const MIN_BIRTH_YEAR = 1900;
+
 const buildEmptyPassengerRows = (booking) => {
   const adultCount = Number(booking?.adultCount || 0);
   const childCount = Number(booking?.childCount || 0);
@@ -305,7 +309,7 @@ const buildEmptyPassengerRows = (booking) => {
   if (isSinglePassengerWithContact(booking)) {
     return [{
       fullName: booking.contactName.trim(),
-      dateOfBirth: "",
+      birthYear: "",
       passengerType: "Adult",
       isContactPassenger: true,
     }];
@@ -313,12 +317,12 @@ const buildEmptyPassengerRows = (booking) => {
 
   if (adultCount > 0 || childCount > 0) {
     return [
-      ...Array.from({ length: adultCount }, () => ({ fullName: "", dateOfBirth: "", passengerType: "Adult" })),
-      ...Array.from({ length: childCount }, () => ({ fullName: "", dateOfBirth: "", passengerType: "Child" })),
+      ...Array.from({ length: adultCount }, () => ({ fullName: "", birthYear: "", passengerType: "Adult" })),
+      ...Array.from({ length: childCount }, () => ({ fullName: "", birthYear: "", passengerType: "Child" })),
     ];
   }
 
-  return Array.from({ length: Math.max(passengerCount, 1) }, () => ({ fullName: "", dateOfBirth: "", passengerType: "Adult" }));
+  return Array.from({ length: Math.max(passengerCount, 1) }, () => ({ fullName: "", birthYear: "", passengerType: "Adult" }));
 };
 
 const parsePassengerDate = (value) => {
@@ -336,36 +340,21 @@ const parsePassengerDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const formatPassengerDateForApi = (value) => {
-  const date = parsePassengerDate(value);
-  if (!date) return "";
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+const getPassengerAgeFromBirthYear = (birthYear, referenceDate) => {
+  const year = Number(birthYear);
+  if (!Number.isInteger(year) || year < MIN_BIRTH_YEAR || year > CURRENT_YEAR) return null;
+  const refYear = (parsePassengerDate(referenceDate) || new Date()).getFullYear();
+  return refYear - year;
 };
 
-const getPassengerAge = (dateOfBirth, referenceDate) => {
-  const birthDate = parsePassengerDate(dateOfBirth);
-  const refDate = parsePassengerDate(referenceDate) || new Date();
-  if (!birthDate) return null;
-
-  let age = refDate.getFullYear() - birthDate.getFullYear();
-  const monthDelta = refDate.getMonth() - birthDate.getMonth();
-  if (monthDelta < 0 || (monthDelta === 0 && refDate.getDate() < birthDate.getDate())) {
-    age -= 1;
-  }
-  return age;
-};
-
-const buildPassengerPayload = (booking, rows, lang, { allowSingleContactWithoutDob = false } = {}) => {
+const buildPassengerPayload = (booking, rows, lang, { allowSingleContactWithoutBirthYear = false } = {}) => {
   const passengerCount = getBookingPassengerCount(booking);
   const normalizedRows = rows.map((row, index) => ({
     ...row,
     passengerType: row.passengerType || (index < Number(booking?.adultCount || 0) ? "Adult" : "Child"),
   }));
-  const filledRows = normalizedRows.filter((row) => row.fullName?.trim() || row.dateOfBirth?.trim());
-  const canUseSingleContact = allowSingleContactWithoutDob && isSinglePassengerWithContact(booking);
+  const filledRows = normalizedRows.filter((row) => row.fullName?.trim() || String(row.birthYear || "").trim());
+  const canUseSingleContact = allowSingleContactWithoutBirthYear && isSinglePassengerWithContact(booking);
   const rowsToSubmit = canUseSingleContact
     ? (filledRows.length > 0 ? [filledRows[0]] : buildEmptyPassengerRows(booking))
     : filledRows;
@@ -393,22 +382,22 @@ const buildPassengerPayload = (booking, rows, lang, { allowSingleContactWithoutD
 
   for (const row of rowsToSubmit) {
     const fullName = row.fullName?.trim();
-    const dateOfBirth = row.dateOfBirth?.trim();
-    const skipDateValidation = canUseSingleContact && !dateOfBirth;
+    const birthYear = String(row.birthYear || "").trim();
+    const skipBirthYearValidation = canUseSingleContact && !birthYear;
 
-    if (!fullName || (!dateOfBirth && !skipDateValidation)) {
+    if (!fullName || (!birthYear && !skipBirthYearValidation)) {
       return {
         errorTitle: lang === "VN" ? "Thiếu thông tin hành khách" : "Missing passenger info",
-        errorText: lang === "VN" ? "Vui lòng nhập đủ họ tên và ngày sinh cho từng hành khách." : "Please enter full name and date of birth for each passenger.",
+        errorText: lang === "VN" ? "Vui lòng nhập đủ họ tên và năm sinh cho từng hành khách." : "Please enter full name and birth year for each passenger.",
       };
     }
 
-    if (!skipDateValidation) {
-      const age = getPassengerAge(dateOfBirth, booking?.departureDate);
+    if (!skipBirthYearValidation) {
+      const age = getPassengerAgeFromBirthYear(birthYear, booking?.departureDate);
       if (age === null) {
         return {
-          errorTitle: lang === "VN" ? "Ngày sinh không hợp lệ" : "Invalid date of birth",
-          errorText: lang === "VN" ? "Ngày sinh dùng định dạng dd/MM/yyyy hoặc yyyy-MM-dd." : "Use dd/MM/yyyy or yyyy-MM-dd for date of birth.",
+          errorTitle: lang === "VN" ? "Năm sinh không hợp lệ" : "Invalid birth year",
+          errorText: lang === "VN" ? `Năm sinh phải từ ${MIN_BIRTH_YEAR} đến ${CURRENT_YEAR}.` : `Birth year must be between ${MIN_BIRTH_YEAR} and ${CURRENT_YEAR}.`,
         };
       }
       if (row.passengerType === "Adult" && age < 12) {
@@ -427,12 +416,10 @@ const buildPassengerPayload = (booking, rows, lang, { allowSingleContactWithoutD
   }
 
   return {
-    passengers: rowsToSubmit.map((row) => {
-      const passenger = { fullName: row.fullName.trim() };
-      const dateOfBirth = formatPassengerDateForApi(row.dateOfBirth);
-      if (dateOfBirth) passenger.dateOfBirth = dateOfBirth;
-      return passenger;
-    }),
+    passengers: rowsToSubmit.map((row) => ({
+      fullName: row.fullName.trim(),
+      birthYear: Number(row.birthYear),
+    })),
   };
 };
 
@@ -446,7 +433,7 @@ export function CharterDetail() {
     const fallbackBooking = location.state?.booking;
     return fallbackBooking ? normalizeBooking(fallbackBooking) : null;
   });
-  const [passengerRows, setPassengerRows] = useState([{ fullName: "", dateOfBirth: "" }]);
+  const [passengerRows, setPassengerRows] = useState([{ fullName: "", birthYear: "" }]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -479,14 +466,14 @@ export function CharterDetail() {
 
   const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
 
-  const loadDetail = useCallback(async () => {
+  const loadDetail = useCallback(async ({ silent = false } = {}) => {
     if (!isAuthenticated) {
       navigate("/login");
       return;
     }
 
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setLoadError("");
       let detail;
       try {
@@ -507,7 +494,7 @@ export function CharterDetail() {
             ticketCode: pick(passenger, ["ticketCode", "code"], pick(matchingTicket, ["ticketCode", "code"], "")),
             qrToken: pick(passenger, ["qrToken"], pick(matchingTicket, ["qrToken"], "")),
             fullName: pick(passenger, ["fullName", "passengerName", "name"], ""),
-            dateOfBirth: pick(passenger, ["dateOfBirth", "dob"], ""),
+            birthYear: getPassengerBirthYear(passenger),
             passengerType: index < normalized.adultCount ? "Adult" : "Child",
           };
         })
@@ -515,16 +502,28 @@ export function CharterDetail() {
       setPassengerRows(initialPassengers);
       setSelectedTicketIds([]);
     } catch (error) {
-      setLoadError(
-        error.response?.data?.message
-          || (lang === "VN"
-            ? "Máy chủ chưa thể trả về đầy đủ chi tiết. Dữ liệu tóm tắt từ danh sách đang được hiển thị."
-            : "The server could not return full details. Summary data from the list is being shown."),
-      );
+      if (!silent) {
+        setLoadError(
+          error.response?.data?.message
+            || (lang === "VN"
+              ? "Máy chủ chưa thể trả về đầy đủ chi tiết. Dữ liệu tóm tắt từ danh sách đang được hiển thị."
+              : "The server could not return full details. Summary data from the list is being shown."),
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [booking?.bookingCode, id, isAuthenticated, lang, navigate]);
+
+  const refreshDetailSilently = useCallback(() => {
+    loadDetail({ silent: true });
+  }, [loadDetail]);
+
+  useCharterBookingDetailHub({
+    enabled: isAuthenticated && Boolean(id),
+    bookingId: id,
+    onRefresh: refreshDetailSilently,
+  });
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -978,7 +977,7 @@ export function CharterDetail() {
     if (String(booking.paymentStatus).toLowerCase() !== "paid") return;
 
     const missingManifestPayload = !hasSavedPassengerManifest(booking)
-      ? buildPassengerPayload(booking, passengerRows, lang, { allowSingleContactWithoutDob: true })
+      ? buildPassengerPayload(booking, passengerRows, lang, { allowSingleContactWithoutBirthYear: true })
       : null;
 
     if (missingManifestPayload?.errorTitle) {
@@ -1046,7 +1045,7 @@ export function CharterDetail() {
       });
       return;
     }
-    const passengerPayload = buildPassengerPayload(booking, passengerRows, lang, { allowSingleContactWithoutDob: true });
+    const passengerPayload = buildPassengerPayload(booking, passengerRows, lang, { allowSingleContactWithoutBirthYear: true });
     if (passengerPayload.errorTitle) {
       Swal.fire({
         icon: "info",
@@ -1894,8 +1893,15 @@ export function CharterDetail() {
                   <p className="mt-1 text-xs font-bold text-slate-400">
                     {canUseContactAsSinglePassenger
                       ? (lang === "VN" ? "Booking 1 khách sẽ dùng thông tin liên hệ làm hành khách." : "Single-passenger bookings use the contact information.")
-                      : (lang === "VN" ? "Nhập file hoặc chỉnh trực tiếp từng hành khách." : "Import a file or edit passengers directly.")}
+                      : (lang === "VN" ? "Nhập file hoặc chỉnh trực tiếp từng hành khách. File mẫu: fullName,birthYear" : "Import a file or edit passengers directly. Template: fullName,birthYear")}
                   </p>
+                  {!canUseContactAsSinglePassenger ? (
+                    <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-mono text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                      fullName,birthYear<br />
+                      Nguyen Van A,2003<br />
+                      Tran Thi B,2016
+                    </p>
+                  ) : null}
                 </div>
                 <button type="button" onClick={() => importInputRef.current?.click()} disabled={isSubmitting || !isPaid} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400 sm:w-auto">
                   {lang === "VN" ? "Nhập file khách" : "Import Passengers"}
@@ -1932,7 +1938,16 @@ export function CharterDetail() {
                         {row.passengerType === "Child" ? (lang === "VN" ? "Trẻ em" : "Child") : (lang === "VN" ? "Người lớn" : "Adult")}
                       </span>
                     </div>
-                    <input value={row.dateOfBirth} onChange={(e) => handlePassengerChange(index, "dateOfBirth", e.target.value)} disabled={!isPaid} placeholder="dd/MM/yyyy" className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] col-start-2 md:col-start-auto disabled:opacity-60" />
+                    <input
+                      type="number"
+                      min={MIN_BIRTH_YEAR}
+                      max={CURRENT_YEAR}
+                      value={row.birthYear}
+                      onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
+                      disabled={!isPaid}
+                      placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
+                      className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] col-start-2 md:col-start-auto disabled:opacity-60"
+                    />
                   </div>
                 ))}
               </div>
