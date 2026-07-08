@@ -18,7 +18,6 @@ import {
 } from "../utils/charterBookingTickets";
 import { getApiErrorMessage } from "../utils/apiError";
 import { CharterPaymentLedger } from "./CharterPaymentLedger";
-import { CharterQuotePreviewPanel } from "./CharterQuotePreviewTable";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -27,6 +26,66 @@ const pick = (source, keys, fallback = "") => {
   }
   return fallback;
 };
+
+function QuotePreviewPanel({
+  lang,
+  currencyFormatter,
+  isPreviewLoading,
+  quotePreviewError,
+  quotePreview,
+  isQuoteBoatSelectionComplete,
+}) {
+  return (
+    <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+      <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
+        {lang === "VN" ? "Preview giá" : "Quote Preview"}
+      </h3>
+      {isPreviewLoading ? (
+        <p className="mt-4 text-xs font-bold text-slate-400">{lang === "VN" ? "Đang tính..." : "Calculating..."}</p>
+      ) : quotePreviewError ? (
+        <p className="mt-4 text-xs font-bold text-red-500">{quotePreviewError}</p>
+      ) : quotePreview ? (
+        <div className="mt-4 space-y-3">
+          {Array.isArray(quotePreview.boats) && quotePreview.boats.map((boat, index) => (
+            <div key={`${pick(boat, ["boatOrder"], index + 1)}-${index}`} className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-900">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-black text-slate-500 dark:text-slate-300">
+                  {lang === "VN" ? `Tàu ${pick(boat, ["boatOrder"], index + 1)}` : `Boat ${pick(boat, ["boatOrder"], index + 1)}`}
+                </span>
+                <span className="font-headline font-black text-[#124757] dark:text-yellow-400">
+                  {currencyFormatter.format(Number(pick(boat, ["subtotalAmount"], 0)) || 0)}
+                </span>
+              </div>
+              <p className="mt-1 text-[10px] text-slate-400">
+                {lang === "VN" ? "Đơn giá" : "Unit price"}: {currencyFormatter.format(Number(pick(boat, ["unitPrice"], 0)) || 0)}
+              </p>
+            </div>
+          ))}
+          <div className="space-y-2 border-t border-slate-100 pt-3 text-xs font-bold text-slate-500 dark:border-slate-700 dark:text-slate-300">
+            <div className="flex justify-between">
+              <span>{lang === "VN" ? "Tổng trước giảm" : "Subtotal"}</span>
+              <span>{currencyFormatter.format(Number(pick(quotePreview, ["subtotalAmount"], 0)) || 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{lang === "VN" ? "Giảm giá" : "Discount"}</span>
+              <span>{currencyFormatter.format(Number(pick(quotePreview, ["discountAmount"], 0)) || 0)}</span>
+            </div>
+            <div className="flex justify-between font-headline font-black text-[#124757] dark:text-yellow-400">
+              <span>{lang === "VN" ? "Tổng cuối" : "Total"}</span>
+              <span>{currencyFormatter.format(Number(pick(quotePreview, ["totalAmount"], 0)) || 0)}</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-4 rounded-2xl border border-dashed border-slate-200 p-4 text-xs font-bold text-slate-400 dark:border-slate-700">
+          {isQuoteBoatSelectionComplete
+            ? (lang === "VN" ? "Preview sẽ hiển thị sau khi hệ thống tính giá." : "Preview will appear after pricing is calculated.")
+            : (lang === "VN" ? "Chọn đủ tàu để preview giá." : "Select all boats to preview pricing.")}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function ManualStatusPanel({ lang, isSubmitting, manualStatusOptions, getStatusInfo, onStatusChange }) {
   return (
@@ -74,7 +133,7 @@ function OverviewField({ icon, label, value, hint }) {
       </span>
       <div className="min-w-0">
         <p className="text-[11px] font-bold text-slate-400">{label}</p>
-        <p className="mt-0.5 break-words text-sm font-bold leading-snug text-slate-800 dark:text-white">{value || "--"}</p>
+        <p className="mt-0.5 wrap-break-word text-sm font-bold leading-snug text-slate-800 dark:text-white">{value || "--"}</p>
         {hint ? <p className="mt-1 text-xs font-medium text-slate-400">{hint}</p> : null}
       </div>
     </div>
@@ -102,9 +161,9 @@ function OverviewStat({ label, value, tone = "default" }) {
 export function AdminBookingOverviewTab({
   lang,
   booking,
+  adminActionInfo,
   showBookingHoldCountdown,
   bookingHoldRemainingMs,
-  quotePaymentDeadline,
   formatDate,
   formatDateTime,
   formatCountdown,
@@ -114,7 +173,6 @@ export function AdminBookingOverviewTab({
   getRequestedDeckCount,
   getBoatDeckCount,
   getBoatSeatSetupType,
-  getBoatId,
   getBoatSeatCount,
   getPaymentStatusInfo,
   currencyFormatter,
@@ -123,6 +181,7 @@ export function AdminBookingOverviewTab({
   remainingAmount,
   requestedBoats,
   selectedBoats,
+  onNavigateTab,
 }) {
   const boatRows = [];
   const maxBoats = Math.max(requestedBoats.length, selectedBoats.length, 0);
@@ -138,25 +197,45 @@ export function AdminBookingOverviewTab({
 
   return (
     <div className="space-y-5">
-      {showBookingHoldCountdown ? (
-        <section className="overflow-hidden rounded-[2rem] border border-sky-200/80 bg-sky-50 shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-sky-500/20 dark:bg-sky-500/10">
-          <div className="px-6 py-5 md:px-8">
+      <section className={`overflow-hidden rounded-4xl border shadow-[0_18px_50px_rgba(15,23,42,0.06)] ${adminActionInfo.urgent ? "border-amber-200/80 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10" : "border-slate-200/70 bg-white dark:border-slate-700/70 dark:bg-slate-800"}`}>
+        <div className="flex flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between md:px-8">
+          <div className="flex items-start gap-4">
+            <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-sm ${adminActionInfo.urgent ? "bg-amber-500 text-white" : "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"}`}>
+              <span className="material-symbols-outlined text-2xl">{adminActionInfo.icon}</span>
+            </span>
+            <div>
+              <p className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Việc cần làm tiếp theo" : "Next action"}</p>
+              <p className="mt-1 font-headline text-xl font-black text-slate-800 dark:text-white">{adminActionInfo.label}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigateTab(adminActionInfo.tab || "actions")}
+            className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-xs font-headline font-black uppercase tracking-wider md:w-auto ${adminActionInfo.buttonClasses}`}
+          >
+            {adminActionInfo.cta}
+            <span className="material-symbols-outlined text-base">arrow_forward</span>
+          </button>
+        </div>
+
+        {showBookingHoldCountdown && (
+          <div className="border-t border-sky-100 bg-sky-50/80 px-6 py-4 dark:border-sky-500/20 dark:bg-sky-500/10 md:px-8">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-[11px] font-bold text-sky-600 dark:text-sky-300">
-                  {lang === "VN" ? "Hạn thanh toán 12h sau khi chốt giá" : "12h payment window after quote"}
+                  {lang === "VN" ? "Hạn thanh toán sau khi khách chấp nhận" : "Payment deadline after acceptance"}
                 </p>
-                <p className="mt-1 text-sm font-bold text-sky-700 dark:text-sky-200">{formatDateTime(quotePaymentDeadline)}</p>
+                <p className="mt-1 text-sm font-bold text-sky-700 dark:text-sky-200">{formatDateTime(booking.bookingHoldExpiresAt)}</p>
               </div>
               <p className="font-headline text-3xl font-black tabular-nums text-sky-700 dark:text-sky-200">
                 {bookingHoldRemainingMs > 0 ? formatCountdown(bookingHoldRemainingMs) : (lang === "VN" ? "Hết hạn" : "Expired")}
               </p>
             </div>
           </div>
-        </section>
-      ) : null}
+        )}
+      </section>
 
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -231,16 +310,24 @@ export function AdminBookingOverviewTab({
               />
               <OverviewField
                 icon="sticky_note_2"
-                label={lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}
-                value={booking.specialRequests || (lang === "VN" ? "Không có" : "None")}
+                label={lang === "VN" ? "Ghi chú" : "Notes"}
+                value={booking.note || (lang === "VN" ? "Không có ghi chú" : "No notes")}
               />
             </div>
           </div>
 
+          <button
+            type="button"
+            onClick={() => onNavigateTab("payments")}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-headline font-black uppercase tracking-wider text-[#124757] transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400 dark:hover:bg-slate-800"
+          >
+            <span className="material-symbols-outlined text-base">payments</span>
+            {lang === "VN" ? "Mở tab thanh toán" : "Open payments tab"}
+          </button>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
           <h2 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
             {lang === "VN" ? "Tàu yêu cầu & đã gán" : "Requested vs assigned boats"}
@@ -319,7 +406,6 @@ export function AdminBookingActionsTab({
   formatDuration,
   formatPassengerSummary,
   formatDeckCount,
-  getRequestedDeckCount,
   getBoatDeckCount,
   getBoatSeatSetupType,
   getBoatId,
@@ -328,7 +414,6 @@ export function AdminBookingActionsTab({
   isActiveBoat,
   showBookingHoldCountdown,
   bookingHoldRemainingMs,
-  quotePaymentDeadline,
   formatDateTime,
   formatCountdown,
   quoteTotal,
@@ -352,22 +437,14 @@ export function AdminBookingActionsTab({
                 <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
                   {lang === "VN" ? "Gán tàu & chốt giá" : "Assign Boats & Quote"}
                 </h3>
+                <p className="mt-1 text-xs font-bold text-slate-400">
+                  {lang === "VN" ? "Bước 1: chọn tàu và xác nhận giá cho khách." : "Step 1: assign boats and confirm pricing."}
+                </p>
               </div>
               <span className={`w-max rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider ${statusInfo.classes}`}>
                 {statusInfo.label}
               </span>
             </div>
-
-            {booking.specialRequests ? (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
-                  {lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}
-                </p>
-                <p className="mt-1 text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">
-                  {booking.specialRequests}
-                </p>
-              </div>
-            ) : null}
 
             {!canManageQuote && (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
@@ -425,7 +502,7 @@ export function AdminBookingActionsTab({
                 })}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-4">
                 <label className="block">
                   <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Đơn vị" : "Unit"}</span>
                   <select value={quoteForm.rentalUnit} onChange={(event) => setQuoteForm((prev) => ({ ...prev, rentalUnit: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white">
@@ -437,9 +514,13 @@ export function AdminBookingActionsTab({
                   <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thời lượng" : "Duration"}</span>
                   <input type="number" min="1" max="60" value={quoteForm.durationValue} onChange={(event) => setQuoteForm((prev) => ({ ...prev, durationValue: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
                 </label>
-                <label className="block">
+                <label className="block md:col-span-2">
+                  <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Tổng giá thủ công" : "Manual total"}</span>
+                  <input type="number" min="0" value={quoteForm.subtotalAmount} onChange={(event) => setQuoteForm((prev) => ({ ...prev, subtotalAmount: event.target.value }))} placeholder={lang === "VN" ? "Để trống = tự tính" : "Empty = auto"} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                </label>
+                <label className="block md:col-span-4">
                   <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Mã khuyến mãi" : "Promo code"}</span>
-                  <input value={quoteForm.promotionCode} onChange={(event) => setQuoteForm((prev) => ({ ...prev, promotionCode: event.target.value }))} placeholder={lang === "VN" ? "Tùy chọn" : "Optional"} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                  <input value={quoteForm.promotionCode} onChange={(event) => setQuoteForm((prev) => ({ ...prev, promotionCode: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
                 </label>
               </div>
 
@@ -449,13 +530,12 @@ export function AdminBookingActionsTab({
             </fieldset>
           </form>
 
-          <CharterQuotePreviewPanel
+          <QuotePreviewPanel
             lang={lang}
             currencyFormatter={currencyFormatter}
             isPreviewLoading={isPreviewLoading}
             quotePreviewError={quotePreviewError}
             quotePreview={quotePreview}
-            quoteForm={quoteForm}
             isQuoteBoatSelectionComplete={isQuoteBoatSelectionComplete}
           />
         </div>
@@ -506,15 +586,23 @@ export function AdminBookingActionsTab({
           {showBookingHoldCountdown && (
             <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-500/20 dark:bg-sky-500/10">
               <p className="text-[10px] font-headline font-black uppercase tracking-widest text-sky-700 dark:text-sky-300">
-                {lang === "VN" ? "Hạn thanh toán 12h sau khi chốt giá" : "12h payment window after quote"}
+                {lang === "VN" ? "Hạn thanh toán sau chấp nhận" : "Payment deadline"}
               </p>
               <p className="mt-1 font-headline text-2xl font-black tabular-nums text-sky-700 dark:text-sky-300">
                 {bookingHoldRemainingMs > 0 ? formatCountdown(bookingHoldRemainingMs) : (lang === "VN" ? "Hết hạn" : "Expired")}
               </p>
-              <p className="mt-1 text-xs font-bold text-sky-600/80 dark:text-sky-200">{formatDateTime(quotePaymentDeadline)}</p>
+              <p className="mt-1 text-xs font-bold text-sky-600/80 dark:text-sky-200">{formatDateTime(booking.bookingHoldExpiresAt)}</p>
             </div>
           )}
 
+          <button
+            type="button"
+            onClick={() => onNavigateTab("payments")}
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#124757] px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
+          >
+            <span className="material-symbols-outlined text-base">payments</span>
+            {lang === "VN" ? "Mở tab thanh toán" : "Open payments tab"}
+          </button>
         </div>
 
         <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
@@ -682,7 +770,6 @@ export function AdminBookingTicketsTab({
   booking,
   tickets,
   formatDate,
-  formatDateTime,
   formatPassengerSummary,
   getPaymentStatusInfo,
 }) {
@@ -834,7 +921,7 @@ export function AdminBookingTicketsTab({
 
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-[#F8FBFC] shadow-sm dark:border-slate-700/70 dark:bg-slate-900">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-[#F8FBFC] shadow-sm dark:border-slate-700/70 dark:bg-slate-900">
         <div className="grid gap-3 px-6 py-5 md:grid-cols-2 xl:grid-cols-4 md:px-8">
           {[
             { icon: "person", label: lang === "VN" ? "Khách đặt" : "Booker", value: booking.customerName },
@@ -847,7 +934,7 @@ export function AdminBookingTicketsTab({
                 <span className="material-symbols-outlined text-base">{item.icon}</span>
                 <p className="text-[11px] font-bold">{item.label}</p>
               </div>
-              <p className="mt-2 break-words text-sm font-bold text-slate-800 dark:text-white">{item.value || "--"}</p>
+              <p className="mt-2 wrap-break-word text-sm font-bold text-slate-800 dark:text-white">{item.value || "--"}</p>
             </div>
           ))}
         </div>
@@ -860,7 +947,7 @@ export function AdminBookingTicketsTab({
         )}
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -953,7 +1040,7 @@ export function AdminBookingTicketsTab({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
           <h3 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
             {lang === "VN" ? "Danh sách vé" : "Ticket list"}

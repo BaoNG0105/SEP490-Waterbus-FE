@@ -33,6 +33,10 @@ export const Header = ({ isNoticeVisible }) => {
   const displayAvatar = user?.avatarUrl || defaultAvatar;
   const displayUserName = user?.fullName || (lang === "VN" ? "Thành viên" : "Member");
 
+  // Kiểm tra quyền quản trị để hiển thị nút chuyển đến trang Admin Dashboard
+  const adminRoles = ["ADMIN", "STAFF", "MANAGER"];
+  const isAdminUser = isAuthenticated && user?.roles?.some((role) => adminRoles.includes(role.systemName));
+
   // Logic tự động đăng xuất sau 30p bảo mật
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -197,6 +201,15 @@ export const Header = ({ isNoticeVisible }) => {
 
           {/* Profile cá nhân */}
           <div className="flex items-center gap-2 lg:pl-4 lg:border-l border-white/20 dark:border-slate-700">
+            {isAdminUser && (
+              <Link
+                to="/admin"
+                className="hidden sm:flex items-center justify-center w-8 h-8 rounded-full bg-white/10 dark:bg-slate-800 border border-white/10 dark:border-slate-700 hover:border-yellow-400 dark:hover:border-yellow-400 transition-colors text-white hover:text-yellow-400 shrink-0"
+                title={lang === "VN" ? "Trang quản trị" : "Admin Dashboard"}
+              >
+                <span className="material-symbols-outlined text-lg">admin_panel_settings</span>
+              </Link>
+            )}
             {isAuthenticated ? (
               <Link
                 to="/profile"
@@ -320,6 +333,17 @@ export const Header = ({ isNoticeVisible }) => {
           >
             {lang === "VN" ? "Liên hệ" : "Contact"}
           </Link>
+
+          {isAdminUser && (
+            <Link
+              to="/admin"
+              className="flex items-center gap-2 font-bold text-base text-white hover:text-yellow-400 transition-colors"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <span className="material-symbols-outlined text-xl">admin_panel_settings</span>
+              {lang === "VN" ? "Trang quản trị" : "Admin Dashboard"}
+            </Link>
+          )}
 
           <hr className="border-white/10 dark:border-slate-800 my-2" />
 

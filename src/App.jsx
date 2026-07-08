@@ -18,10 +18,10 @@ import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
 import { EditProfile } from "./pages/Profile/EditProfie";
 import { ChangePassword } from "./pages/Profile/ChangePassword";
-import { CharterDetail } from "./pages/Profile/MyCharterBooking/CharterDetail";
+import { CharterDetail } from "./pages/Profile/MyCharterBooking/MyCharterDetail";
 import { EditCharter } from "./pages/Profile/MyCharterBooking/EditCharter";
-import { CharterList } from "./pages/Profile/MyCharterBooking/CharterList";
-import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefund";
+import { CharterList } from "./pages/Profile/MyCharterBooking";
+import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefundRequest";
 import { Booking } from "./pages/Booking";
 import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
@@ -99,6 +99,26 @@ function App() {
           }
         />
 
+        {/* Normal Booking Page */}
+        <Route
+          path="/waterbus-booking"
+          element={
+            <MainLayout>
+              <Booking />
+            </MainLayout>
+          }
+        />
+
+        {/* Charter Booking Page */}
+        <Route
+          path="/charter-booking"
+          element={
+            <MainLayout>
+              <CharterBooking />
+            </MainLayout>
+          }
+        />
+
         {/* Profile Page */}
         <Route
           path="/profile"
@@ -167,26 +187,6 @@ function App() {
           }
         />
 
-        {/* Normal Booking Page */}
-        <Route
-          path="/waterbus-booking"
-          element={
-            <MainLayout>
-              <Booking />
-            </MainLayout>
-          }
-        />
-
-        {/* Charter Booking Page */}
-        <Route
-          path="/charter-booking"
-          element={
-            <MainLayout>
-              <CharterBooking />
-            </MainLayout>
-          }
-        />
-
         {/* Charter Booking Payment Result Page */}
         <Route
           path="/payment/result"
@@ -232,7 +232,7 @@ function App() {
             }
           />
 
-          {/* Admin Customers Page */}
+          {/* ******* Customer Management Page ******* */}
           <Route
             path="/admin/customers-management"
             element={
@@ -242,7 +242,7 @@ function App() {
             }
           />
 
-          {/* Admin Boats Page */}
+          {/* ******* Boat Management Page ******* */}
           <Route
             path="/admin/boats-management"
             element={
@@ -281,7 +281,7 @@ function App() {
             }
           />
 
-          {/* Station Managment Page */}
+          {/* ******* Station Managment Page ******* */}
           <Route
             path="/admin/stations-management"
             element={
@@ -301,17 +301,7 @@ function App() {
             }
           />
 
-          {/* Waterways Page */}
-          <Route
-            path="/admin/waterways-management"
-            element={
-              <AdminLayout title="Waterways Management">
-                <Waterway />
-              </AdminLayout>
-            }
-          />
-
-          {/* Charter Booking Management Page */}
+          {/* ******* Charter Booking Management: List Page ******* */}
           <Route
             path="/admin/charter-bookings-management"
             element={
@@ -320,6 +310,18 @@ function App() {
               </AdminLayout>
             }
           />
+
+          {/* Charter Booking Managment: Detail Page */}
+          <Route
+            path="/admin/charter-bookings-management/:id"
+            element={
+              <AdminLayout title="Charter Booking Detail">
+                <AdminCharterBookingDetail />
+              </AdminLayout>
+            }
+          />
+
+          {/* Charter Booking Management: Refund Page */}
           <Route
             path="/admin/charter-bookings-management/:id/payments/:paymentId/refund"
             element={
@@ -328,11 +330,13 @@ function App() {
               </AdminLayout>
             }
           />
+
+          {/* Waterways Page : Để test */}
           <Route
-            path="/admin/charter-bookings-management/:id"
+            path="/admin/waterways-management"
             element={
-              <AdminLayout title="Charter Booking Detail">
-                <AdminCharterBookingDetail />
+              <AdminLayout title="Waterways Management">
+                <Waterway />
               </AdminLayout>
             }
           />
