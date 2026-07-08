@@ -15,54 +15,57 @@ export function CharterWorkflowStepper({ status, lang = "VN", compact = false })
     );
   }
 
-  return (
-    <div className={`grid grid-cols-5 gap-1 ${compact ? "" : "gap-2"}`}>
-      {WORKFLOW_STEPS.map((step, index) => {
-        const done = index < currentIndex;
-        const active = index === currentIndex;
-        const upcoming = index > currentIndex;
+  const stepCount = WORKFLOW_STEPS.length;
+  const progressRatio = stepCount > 1 ? Math.max(0, currentIndex) / (stepCount - 1) : 0;
 
-        return (
-          <div key={step.id} className="min-w-0 text-center">
-            <div className="relative flex items-center justify-center">
-              {index > 0 && (
+  return (
+    <div className={`relative ${compact ? "" : "px-1"}`}>
+      <div className="pointer-events-none absolute left-[10%] right-[10%] top-[14px] z-0 h-0.5 -translate-y-1/2 bg-slate-200 dark:bg-slate-700" />
+      <div
+        className="pointer-events-none absolute left-[10%] top-[14px] z-0 h-0.5 -translate-y-1/2 bg-[#FFD100] transition-all duration-300"
+        style={{ width: `calc(80% * ${progressRatio})` }}
+      />
+
+      <div className={`relative z-10 grid grid-cols-5 ${compact ? "gap-1" : "gap-2"}`}>
+        {WORKFLOW_STEPS.map((step, index) => {
+          const done = index < currentIndex;
+          const active = index === currentIndex;
+          const upcoming = index > currentIndex;
+
+          return (
+            <div key={step.id} className="min-w-0 text-center">
+              <div className="flex items-center justify-center">
                 <span
-                  className={`absolute right-1/2 top-1/2 h-0.5 w-full -translate-y-1/2 translate-x-[-50%] ${
-                    done || active ? "bg-[#FFD100]" : "bg-slate-200 dark:bg-slate-700"
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all ${
+                    active
+                      ? "border-[#124757] bg-[#124757] text-white shadow-md shadow-[#124757]/20 dark:border-yellow-400 dark:bg-yellow-400 dark:text-slate-900"
+                      : done
+                        ? "border-[#FFD100] bg-[#FFD100] text-[#124757]"
+                        : "border-slate-200 bg-white text-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
                   }`}
-                  style={{ width: "calc(100% + 0.25rem)", left: "-50%" }}
-                />
-              )}
-              <span
-                className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all ${
-                  active
-                    ? "border-[#124757] bg-[#124757] text-white shadow-md shadow-[#124757]/20 dark:border-yellow-400 dark:bg-yellow-400 dark:text-slate-900"
-                    : done
-                      ? "border-[#FFD100] bg-[#FFD100] text-[#124757]"
-                      : "border-slate-200 bg-white text-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
-                }`}
-              >
-                <span className="material-symbols-outlined text-[14px]">
-                  {done ? "check" : step.icon}
+                >
+                  <span className="material-symbols-outlined text-[14px]">
+                    {done ? "check" : step.icon}
+                  </span>
                 </span>
-              </span>
+              </div>
+              {!compact && (
+                <p
+                  className={`mt-1.5 truncate text-[9px] font-headline font-black uppercase tracking-wide ${
+                    active
+                      ? "text-[#124757] dark:text-yellow-400"
+                      : upcoming
+                        ? "text-slate-300 dark:text-slate-600"
+                        : "text-slate-400"
+                  }`}
+                >
+                  {lang === "VN" ? step.labelVn : step.labelEn}
+                </p>
+              )}
             </div>
-            {!compact && (
-              <p
-                className={`mt-1.5 truncate text-[9px] font-headline font-black uppercase tracking-wide ${
-                  active
-                    ? "text-[#124757] dark:text-yellow-400"
-                    : upcoming
-                      ? "text-slate-300 dark:text-slate-600"
-                      : "text-slate-400"
-                }`}
-              >
-                {lang === "VN" ? step.labelVn : step.labelEn}
-              </p>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

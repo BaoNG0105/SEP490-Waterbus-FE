@@ -74,9 +74,10 @@ export const Login = () => {
       if (response.tokens && response.tokens.accessToken) {
         // Gom dữ liệu user lại cho khớp với cấu trúc authSlice đang chờ
         const userInfo = {
+          id: String(response.user?.id || response.user?.userId || ""),
           fullName: response.user?.fullName || '',
           avatarUrl: response.user?.avatarUrl || '',
-          roles: response.user?.roles || [],  // ← Lưu nguyên mảng roles từ API
+          roles: response.user?.roles || [],
         };
         // Dispatch với đúng key "accessToken" và "user"
         dispatch(loginSuccess({

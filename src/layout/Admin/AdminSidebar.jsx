@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { useApp } from "../../context/AppContext";
 import { fetchCurrentUserProfile } from "../../services/authService";
+import { hasRole } from "../../utils/roleHelpers";
 import { logout, updateUserProfile } from "../../redux/authSlice";
 
 export const AdminSidebar = ({ isOpen, onClose }) => {
@@ -29,6 +30,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
       try {
         const data = await fetchCurrentUserProfile();
         dispatch(updateUserProfile({
+          id: String(data.id || data.userId || ""),
           fullName: data.fullName || "",
           avatarUrl: data.avatarUrl || "",
           roles: data.roles || [],
@@ -43,23 +45,23 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
 
   // MẢNG DỮ LIỆU ĐỊNH NGHĨA 16 DANH MỤC QUẢN TRỊ NGHIỆP VỤ
   const menuItems = [
-    { path: "/admin", icon: "dashboard", labelVn: "Dashboard", labelEn: "Dashboard" },
-    { path: "/admin/revenue", icon: "payments", labelVn: "Doanh thu", labelEn: "Revenue" },
-    { path: "/admin/staff-management", icon: "badge", labelVn: "Quản lý nhân viên", labelEn: "Staff Management" },
-    { path: "/admin/customers-management", icon: "groups", labelVn: "Quản lý KH", labelEn: "Customer Management" },
-    { path: "/admin/ticketing", icon: "local_activity", labelVn: "Bán vé", labelEn: "Ticket Sales" },
-    { path: "/admin/verification", icon: "qr_code_scanner", labelVn: "Soát vé", labelEn: "Ticket Scanning" },
-    { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Quản lý thuê tàu", labelEn: "Charter Booking Management" },
-    { path: "/admin/orders", icon: "receipt_long", labelVn: "Quản lý order", labelEn: "Order Management" },
-    { path: "/admin/stations-management", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station" },
-    { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Quản lý tàu", labelEn: "Boat Fleet" },
-    { path: "/admin/schedules", icon: "calendar_month", labelVn: "Quản lý lịch trình", labelEn: "Trip Schedules" },
-    { path: "/admin/routes", icon: "alt_route", labelVn: "Quản lý tuyển", labelEn: "Route Networks" },
-    { path: "/admin/promotions", icon: "local_offer", labelVn: "Quản lý khuyến mãi", labelEn: "Promotions & Deals" },
-    { path: "/admin/news", icon: "feed", labelVn: "Quản lý Blog/News", labelEn: "Blog & Articles" },
-    { path: "/admin/cskh", icon: "support_agent", labelVn: "CSKH", labelEn: "Customer Support" },
-    { path: "/admin/ai-data", icon: "database", labelVn: "Quản lý AI data", labelEn: "AI Data Context" },
+    { path: "/admin", icon: "dashboard", labelVn: "Dashboard", labelEn: "Dashboard", roles: ["ADMIN", "MANAGER", "STAFF"] },
+    { path: "/admin/revenue", icon: "payments", labelVn: "Doanh thu", labelEn: "Revenue", roles: ["ADMIN"] },
+    { path: "/admin/staff-management", icon: "badge", labelVn: "Quản lý nhân viên", labelEn: "Staff Management", roles: ["ADMIN"] },
+    { path: "/admin/customers-management", icon: "groups", labelVn: "Quản lý KH", labelEn: "Customer Management", roles: ["ADMIN"] },
+    { path: "/admin/ticketing", icon: "local_activity", labelVn: "Bán vé", labelEn: "Ticket Sales", roles: ["ADMIN", "MANAGER", "STAFF"] },
+    { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Quản lý thuê tàu", labelEn: "Charter Booking Management", roles: ["ADMIN", "MANAGER", "STAFF"] },
+    { path: "/admin/orders", icon: "receipt_long", labelVn: "Quản lý order", labelEn: "Order Management", roles: ["ADMIN"] },
+    { path: "/admin/stations-management", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station", roles: ["ADMIN", "MANAGER"] },
+    { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Quản lý tàu", labelEn: "Boat Fleet", roles: ["ADMIN", "MANAGER"] },
+    { path: "/admin/schedules", icon: "calendar_month", labelVn: "Quản lý lịch trình", labelEn: "Trip Schedules", roles: ["ADMIN"] },
+    { path: "/admin/routes", icon: "alt_route", labelVn: "Quản lý tuyển", labelEn: "Route Networks", roles: ["ADMIN"] },
+    { path: "/admin/promotions", icon: "local_offer", labelVn: "Quản lý khuyến mãi", labelEn: "Promotions & Deals", roles: ["ADMIN"] },
+    { path: "/admin/news", icon: "feed", labelVn: "Quản lý Blog/News", labelEn: "Blog & Articles", roles: ["ADMIN"] },
+    { path: "/admin/cskh", icon: "support_agent", labelVn: "CSKH", labelEn: "Customer Support", roles: ["ADMIN", "MANAGER", "STAFF"] },
+    { path: "/admin/ai-data", icon: "database", labelVn: "Quản lý AI data", labelEn: "AI Data Context", roles: ["ADMIN"] },
   ];
+  const visibleMenuItems = menuItems.filter((item) => !item.roles || hasRole(user, ...item.roles));
 
   return (
     <>
@@ -118,7 +120,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
 
         {/* Khối Danh mục menu */}
         <nav className="flex-1 flex flex-col gap-1 p-4 overflow-y-auto no-scrollbar custom-scrollbar">
-          {menuItems.map((item) => {
+          {visibleMenuItems.map((item) => {
             const isActive = currentPath === item.path;
             const label = lang === "VN" ? item.labelVn : item.labelEn;
             

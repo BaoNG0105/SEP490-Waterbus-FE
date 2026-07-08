@@ -1,9 +1,41 @@
 import { normalizeCharterTicketRows } from "./charterBookingTickets";
+import { getCharterDepositAmount } from "./charterBookingActions";
 
 export const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Refunded"];
 export const manualStatusOptions = ["Cancelled", "Expired", "Completed"];
 export const rentalUnits = ["Day", "Hour"];
 export const itemsPerPage = 8;
+const ADMIN_CHARTER_TAB_BADGES_KEY = "adminCharterAcknowledgedTabBadges";
+
+export const readAcknowledgedTabBadges = (bookingId) => {
+  if (!bookingId) return {};
+  try {
+    const stored = localStorage.getItem(ADMIN_CHARTER_TAB_BADGES_KEY);
+    if (!stored) return {};
+    const map = JSON.parse(stored);
+    const bookingState = map[bookingId];
+    return bookingState && typeof bookingState === "object" ? bookingState : {};
+  } catch {
+    return {};
+  }
+};
+
+export const acknowledgeTabBadge = (bookingId, tabId, badgeValue) => {
+  if (!bookingId || !tabId || !badgeValue) return;
+  try {
+    const stored = localStorage.getItem(ADMIN_CHARTER_TAB_BADGES_KEY);
+    const map = stored ? JSON.parse(stored) : {};
+    map[bookingId] = { ...(map[bookingId] || {}), [tabId]: String(badgeValue) };
+    localStorage.setItem(ADMIN_CHARTER_TAB_BADGES_KEY, JSON.stringify(map));
+  } catch {
+    // ignore storage errors
+  }
+};
+
+export const shouldShowTabBadge = (bookingId, tabId, badgeValue, acknowledged = readAcknowledgedTabBadges(bookingId)) => {
+  if (!badgeValue) return false;
+  return acknowledged[tabId] !== String(badgeValue);
+};
 
 export const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -11,6 +43,49 @@ export const pick = (source, keys, fallback = "") => {
     if (value !== undefined && value !== null && value !== "") return value;
   }
   return fallback;
+};
+
+export const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
+
+export const getBoatImageUrl = (boat, fallback = DEFAULT_BOAT_IMAGE) => {
+  if (!boat) return fallback;
+  const direct = pick(boat, ["imageUrl", "thumbnailUrl", "boat.imageUrl", "boat.thumbnailUrl"], "");
+  if (direct) return direct;
+  const nestedUrls = boat?.boat?.imageUrls ?? boat?.imageUrls;
+  if (Array.isArray(nestedUrls) && nestedUrls[0]) return nestedUrls[0];
+  return fallback;
+};
+
+export const getBoatCode = (boat) => pick(boat, ["code", "boatCode", "boat.code"], "");
+
+export const getBoatNameOnly = (boat, fallback = "--") =>
+  pick(boat, ["name", "boatName", "boat.name"], fallback);
+
+export const getBoatDisplayName = (boat, fallback = "--") => {
+  const code = pick(boat, ["code", "boatCode", "boat.code"], "");
+  const name = pick(boat, ["name", "boatName", "boat.name"], "");
+  if (code && name) return `${code} · ${name}`;
+  return name || code || fallback;
+};
+
+export const getBoatStatusLabel = (boat) => pick(boat, ["status", "boat.status"], "");
+
+export const enrichAssignedBoat = (assigned, catalogBoats = []) => {
+  if (!assigned) return null;
+  const boatId = getBoatId(assigned);
+  const catalogBoat = catalogBoats.find((boat) => getBoatId(boat) === boatId);
+  if (!catalogBoat) return assigned;
+  return {
+    ...catalogBoat,
+    ...assigned,
+    code: getBoatCode(catalogBoat) || getBoatCode(assigned),
+    name: getBoatNameOnly(catalogBoat, getBoatNameOnly(assigned)),
+    imageUrl: getBoatImageUrl(catalogBoat, getBoatImageUrl(assigned)),
+    imageUrls: Array.isArray(catalogBoat.imageUrls) && catalogBoat.imageUrls.length > 0
+      ? catalogBoat.imageUrls
+      : assigned.imageUrls,
+    status: getBoatStatusLabel(catalogBoat) || getBoatStatusLabel(assigned),
+  };
 };
 
 export const formatDate = (value) => {
@@ -330,11 +405,15 @@ export const buildQuoteBoatRows = (booking) => {
 
 export const buildQuoteFormFromBooking = (booking) => ({
   boats: buildQuoteBoatRows(booking),
-  subtotalAmount: Number(booking?.estimatedPrice) > 0 ? booking.estimatedPrice : "",
   rentalUnit: booking?.rentalUnit || "Day",
   durationValue: booking?.durationValue || 1,
   promotionCode: booking?.promotionCode || "",
 });
+
+export const resolveQuoteDepositAmount = (quotePreview) => {
+  const total = Number(pick(quotePreview, ["totalAmount", "finalAmount"], 0)) || 0;
+  return getCharterDepositAmount(total, 0) || null;
+};
 
 export const normalizeBooking = (item) => {
   const adultCount = Number(pick(item, ["adultCount"], 0));
@@ -371,7 +450,8 @@ export const normalizeBooking = (item) => {
     estimatedPrice: Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0)),
     depositAmount: Number(pick(item, ["depositAmount"], 0)),
     promotionCode: pick(item, ["promotionCode"], ""),
-    note: pick(item, ["specialRequests", "boatRequirements", "note"], "--"),
+    specialRequests: pick(item, ["specialRequests"], ""),
+    note: pick(item, ["specialRequests"], "--"),
     qrToken: pick(item, ["charterBookingQrToken", "qrToken"], ""),
     passengers: Array.isArray(item?.passengers) ? item.passengers : [],
     tickets: normalizeCharterTicketRows(item, {
@@ -381,5 +461,8 @@ export const normalizeBooking = (item) => {
     }),
     payments: pick(item, ["payments"], []),
     createdAt: pick(item, ["createdAt", "createdDate"]),
+    assignedManagerId: String(pick(item, ["assignedManagerId", "managerUserId", "assignedManager.id", "assignedManager.userId"], "")),
+    assignedManagerName: pick(item, ["assignedManagerName", "assignedManager.fullName", "assignedManager.name"], ""),
+    staffAssignments: Array.isArray(item?.staffAssignments) ? item.staffAssignments : [],
   };
 };
