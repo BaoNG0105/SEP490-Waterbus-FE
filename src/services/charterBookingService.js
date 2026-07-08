@@ -10,6 +10,12 @@ import {
     updateCharterBookingPassengers as apiUpdateCharterBookingPassengers,
     previewAdminCharterBookingQuote as apiPreviewAdminCharterBookingQuote,
     quoteAdminCharterBooking as apiQuoteAdminCharterBooking,
+    assignAdminCharterBookingManager as apiAssignAdminCharterBookingManager,
+    getAssignedCharterBookings as apiGetAssignedCharterBookings,
+    getAssignedCharterBookingById as apiGetAssignedCharterBookingById,
+    getCharterBookingStaffAssignments as apiGetCharterBookingStaffAssignments,
+    createCharterBookingStaffAssignment as apiCreateCharterBookingStaffAssignment,
+    replaceCharterBookingStaffAssignment as apiReplaceCharterBookingStaffAssignment,
     importCharterBookingPassengers as apiImportCharterBookingPassengers,
     getCharterBookingManifestByCode as apiGetCharterBookingManifestByCode,
     getCharterBookingManifestByQrToken as apiGetCharterBookingManifestByQrToken,
@@ -136,6 +142,69 @@ export const previewAdminCharterBookingQuote = async (id, quotePayload) => {
         return await apiPreviewAdminCharterBookingQuote(id, quotePayload);
     } catch (error) {
         console.error(`Lỗi khi preview giá charter booking ${id}:`, error);
+        throw error;
+    }
+};
+
+export const assignAdminCharterBookingManager = async (id, managerPayload) => {
+    const managerUserId = managerPayload?.managerUserId ?? managerPayload?.managerId ?? null;
+    try {
+        return await apiAssignAdminCharterBookingManager(id, { managerUserId });
+    } catch (error) {
+        console.error(`Lỗi khi gán manager charter booking ${id}:`, error);
+        throw error;
+    }
+};
+
+export const fetchAssignedCharterBookings = async () => {
+    try {
+        return await apiGetAssignedCharterBookings();
+    } catch (error) {
+        console.error('Lỗi khi lấy danh sách charter booking được gán:', error);
+        throw error;
+    }
+};
+
+export const fetchAssignedCharterBookingDetail = async (id) => {
+    try {
+        return await apiGetAssignedCharterBookingById(id);
+    } catch (error) {
+        console.error(`Lỗi khi lấy chi tiết charter booking được gán ${id}:`, error);
+        throw error;
+    }
+};
+
+export const fetchCharterBookingStaffAssignments = async (id) => {
+    try {
+        return await apiGetCharterBookingStaffAssignments(id);
+    } catch (error) {
+        console.error(`Lỗi khi lấy staff assignments charter booking ${id}:`, error);
+        throw error;
+    }
+};
+
+export const createCharterBookingStaffAssignment = async (id, payload) => {
+    try {
+        return await apiCreateCharterBookingStaffAssignment(id, {
+            staffUserId: payload.staffUserId,
+            boatId: payload.boatId || null,
+            shiftCode: payload.shiftCode || "Day",
+            dutyRole: payload.dutyRole || "Captain",
+        });
+    } catch (error) {
+        console.error(`Lỗi khi gán staff charter booking ${id}:`, error);
+        throw error;
+    }
+};
+
+export const replaceCharterBookingStaffAssignment = async (id, assignmentId, payload) => {
+    try {
+        return await apiReplaceCharterBookingStaffAssignment(id, assignmentId, {
+            replacementStaffUserId: payload.replacementStaffUserId,
+            reason: payload.reason || "",
+        });
+    } catch (error) {
+        console.error(`Lỗi khi thay staff charter booking ${id}:`, error);
         throw error;
     }
 };

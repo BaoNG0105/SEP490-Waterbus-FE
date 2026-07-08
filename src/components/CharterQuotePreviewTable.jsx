@@ -98,11 +98,6 @@ export function CharterQuotePreviewTable({
           </div>
         ))}
 
-        <InvoiceRow
-          label={lang === "VN" ? "Cộng tự động" : "Auto subtotal"}
-          amount={fmt(model.autoSubtotal)}
-        />
-
         {model.discountAmount > 0 ? (
           <InvoiceRow
             label={getQuoteDiscountLabel(model, lang)}

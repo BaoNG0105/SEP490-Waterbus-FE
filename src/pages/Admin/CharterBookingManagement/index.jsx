@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { fetchAdminCharterBookings } from "../../../services/charterBookingService";
+import { fetchAdminCharterBookings, fetchAssignedCharterBookings } from "../../../services/charterBookingService";
 import {
   getAdminActionInfo,
   getPaginationWindow,
@@ -17,10 +18,14 @@ import {
   normalizeBooking,
   statusOptions,
 } from "../../../utils/charterBookingAdmin";
+import { shouldUseAssignedCharterApi, getCharterCapabilities, getDefaultCharterTab } from "../../../utils/charterBookingAccess";
+import { isAdminUser } from "../../../utils/roleHelpers";
 
 export function CharterBookingManagement() {
   const { lang } = useApp();
   const navigate = useNavigate();
+  const { user } = useSelector((state) => state.auth);
+  const useAssignedApi = shouldUseAssignedCharterApi(user);
   const [bookings, setBookings] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -35,7 +40,9 @@ export function CharterBookingManagement() {
     try {
       setIsLoading(true);
       setErrorMsg("");
-      const bookingData = await fetchAdminCharterBookings();
+      const bookingData = useAssignedApi
+        ? await fetchAssignedCharterBookings()
+        : await fetchAdminCharterBookings();
       setBookings(Array.isArray(bookingData) ? bookingData.map(normalizeBooking) : []);
     } catch (error) {
       console.error("Lỗi tải charter booking:", error);
@@ -45,7 +52,7 @@ export function CharterBookingManagement() {
     } finally {
       setIsLoading(false);
     }
-  }, [lang]);
+  }, [lang, useAssignedApi]);
 
   useEffect(() => {
     loadData();
@@ -102,12 +109,21 @@ export function CharterBookingManagement() {
   };
 
   const priorityBookings = getPriorityBookings(bookings, 4);
+  const showManagerColumn = isAdminUser(user);
+
+  const resolveBookingTab = (booking) => {
+    const caps = getCharterCapabilities(user, booking);
+    const assignmentTab = getDefaultCharterTab(booking, caps);
+    if (assignmentTab === "assignment") return "assignment";
+    return getAdminActionInfo(booking, lang).tab;
+  };
 
   const openAdminBooking = (booking, tab) => {
     navigate(`/admin/charter-bookings-management/${booking.id}`, { state: tab ? { tab } : undefined });
   };
 
   const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
+  const tableColSpan = showManagerColumn ? 6 : 5;
 
   return (
     <div className="space-y-8 font-body pb-10">
@@ -117,9 +133,13 @@ export function CharterBookingManagement() {
             {lang === "VN" ? "Quản Lý Thuê Tàu" : "Charter Booking Management"}
           </h2>
           <p className="text-sm font-medium text-slate-400">
-            {lang === "VN"
-              ? "Xử lý yêu cầu thuê tàu, nhập tàu, chốt giá và cập nhật trạng thái booking."
-              : "Handle charter requests, assign boats, submit quotes, and update booking status."}
+            {isAdminUser(user)
+              ? (lang === "VN"
+                ? "Xử lý yêu cầu thuê tàu, nhập tàu, chốt giá và cập nhật trạng thái booking."
+                : "Handle charter requests, assign boats, submit quotes, and update booking status.")
+              : (lang === "VN"
+                ? "Chỉ hiển thị các chuyến thuê tàu được phân công cho bạn."
+                : "Only shows charter bookings assigned to you.")}
           </p>
         </div>
         <button
@@ -183,7 +203,7 @@ export function CharterBookingManagement() {
                 <button
                   key={`queue-${booking.id || booking.bookingCode}`}
                   type="button"
-                  onClick={() => openAdminBooking(booking, actionInfo.tab)}
+                  onClick={() => openAdminBooking(booking, resolveBookingTab(booking))}
                   className="rounded-3xl border border-white bg-white/90 p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -291,6 +311,9 @@ export function CharterBookingManagement() {
                   </button>
                 </th>
                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                {showManagerColumn ? (
+                  <th className="py-4 px-4">{lang === "VN" ? "Quản lý phụ trách" : "Manager"}</th>
+                ) : null}
                 <th className="py-4 px-6 text-right">
                   <button
                     type="button"
@@ -306,13 +329,13 @@ export function CharterBookingManagement() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-14">
+                  <td colSpan={tableColSpan} className="text-center py-14">
                     <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin mx-auto"></div>
                   </td>
                 </tr>
               ) : currentBookings.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                  <td colSpan={tableColSpan} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                     <span className="material-symbols-outlined text-4xl block mb-2">event_busy</span>
                     {lang === "VN" ? "Không có yêu cầu thuê tàu phù hợp." : "No charter requests match your filters."}
                   </td>
@@ -320,11 +343,10 @@ export function CharterBookingManagement() {
               ) : (
                 currentBookings.map((booking) => {
                   const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
-                  const actionInfo = getAdminActionInfo(booking, lang);
                   return (
                     <tr
                       key={booking.id || booking.bookingCode}
-                      onClick={() => openAdminBooking(booking, actionInfo.tab)}
+                      onClick={() => openAdminBooking(booking, resolveBookingTab(booking))}
                       className="cursor-pointer transition-colors hover:bg-[#124757]/5 dark:hover:bg-yellow-400/5 group"
                     >
                       <td className="py-4 px-6">
@@ -346,6 +368,22 @@ export function CharterBookingManagement() {
                         </span>
                         <p className="text-[9px] text-slate-400 mt-1">{getPaymentStatusInfo(booking.paymentStatus, lang).label}</p>
                       </td>
+                      {showManagerColumn ? (
+                        <td className="py-4 px-4">
+                          {booking.assignedManagerName ? (
+                            <p className="font-bold text-slate-800 dark:text-white">{booking.assignedManagerName}</p>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                              {lang === "VN" ? "Chưa gán" : "Unassigned"}
+                            </span>
+                          )}
+                          {Array.isArray(booking.staffAssignments) && booking.staffAssignments.length > 0 ? (
+                            <p className="mt-1 text-[10px] text-slate-400">
+                              {booking.staffAssignments.length} {lang === "VN" ? "NV" : "staff"}
+                            </p>
+                          ) : null}
+                        </td>
+                      ) : null}
                       <td className="py-4 px-6 text-right">
                         <p className="font-bold text-slate-800 dark:text-white">{formatDate(booking.createdAt)}</p>
                         <p className="text-[10px] text-slate-400 mt-1">{booking.createdAt ? new Date(booking.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "--"}</p>

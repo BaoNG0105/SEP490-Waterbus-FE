@@ -63,7 +63,6 @@ const buildFormDataFromDetail = (detail, user) => ({
       note: pick(stop, ["note"], ""),
     }))
     : [],
-  boatRequirements: pick(detail, ["boatRequirements"], ""),
   specialRequests: pick(detail, ["specialRequests"], ""),
 });
 

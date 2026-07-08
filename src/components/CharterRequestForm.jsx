@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import { useDispatch } from "react-redux";
 import { fetchAllStations } from "../services/stationService";
@@ -17,6 +17,138 @@ const deckOptionImages = {
   1: "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/15/5b/30/ea/saigon-waterbus-lu-t.jpg?w=1200&h=-1&s=1",
   2: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQNjBezqsnPRbARMzFhnjKsf9iQcLUnZLV9CEBL1zV7w6uOrEm6V33a2Oo&s=10",
 };
+
+const getStationId = (station) => String(station.stationId || station.id);
+const getStationName = (station) => station.stationName || station.name || "--";
+const isActiveStation = (station) => station?.status !== "Inactive";
+
+const filterActiveStations = (stationList) =>
+  (Array.isArray(stationList) ? stationList : []).filter(isActiveStation);
+
+const filterWaterbusStations = (stationList) =>
+  filterActiveStations(stationList).filter((station) => station?.isWaterbusStation === true);
+
+function CharterStationSelect({
+  value,
+  stations,
+  onChange,
+  placeholder,
+  searchPlaceholder,
+  emptyMessage,
+  required = false,
+  disabled = false,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const searchRef = useRef(null);
+
+  const selectedStation = stations.find((station) => getStationId(station) === String(value));
+  const selectedLabel = selectedStation ? getStationName(selectedStation) : "";
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredStations = normalizedSearch
+    ? stations.filter((station) => getStationName(station).toLowerCase().includes(normalizedSearch))
+    : stations;
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch("");
+      return;
+    }
+    searchRef.current?.focus();
+  }, [isOpen]);
+
+  const triggerClass = `flex w-full items-center justify-between gap-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm font-bold outline-none transition-all dark:bg-slate-900 ${
+    disabled
+      ? "cursor-not-allowed opacity-55"
+      : isOpen
+        ? "border-[#FFD100] ring-2 ring-[#FFD100] dark:border-yellow-400 dark:ring-yellow-400"
+        : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
+  }`;
+
+  return (
+    <div
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setIsOpen(false);
+      }}
+    >
+      {required ? (
+        <input
+          type="text"
+          value={value || ""}
+          readOnly
+          required
+          tabIndex={-1}
+          aria-hidden
+          className="pointer-events-none absolute h-0 w-0 opacity-0"
+        />
+      ) : null}
+
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen((open) => !open)}
+        className={triggerClass}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+      >
+        <span className={`min-w-0 truncate ${selectedLabel ? "text-slate-800 dark:text-white" : "text-slate-400"}`}>
+          {selectedLabel || placeholder}
+        </span>
+        <span className={`material-symbols-outlined shrink-0 text-xl text-slate-500 transition-transform ${isOpen ? "rotate-180" : ""}`}>
+          expand_more
+        </span>
+      </button>
+
+      {isOpen && !disabled ? (
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/15 dark:border-slate-700 dark:bg-slate-900">
+          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+            <input
+              ref={searchRef}
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 outline-none focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-yellow-400 dark:focus:ring-yellow-400"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto p-1.5" role="listbox">
+            {filteredStations.length > 0 ? filteredStations.map((station) => {
+              const stationId = getStationId(station);
+              const isSelected = stationId === String(value);
+              return (
+                <button
+                  key={stationId}
+                  type="button"
+                  onClick={() => {
+                    onChange(stationId);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold transition-colors ${
+                    isSelected
+                      ? "bg-yellow-50 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
+                      : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                  }`}
+                  role="option"
+                  aria-selected={isSelected}
+                >
+                  {getStationName(station)}
+                </button>
+              );
+            }) : (
+              <p className="px-3 py-4 text-center text-xs font-bold text-slate-400">
+                {emptyMessage}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 const STYLES = {
   formBg: "bg-[#124757] dark:bg-slate-800",
@@ -70,7 +202,7 @@ export function CharterRequestForm({
   const loadStations = useCallback(async () => {
     try {
       const stationData = await fetchAllStations();
-      setStations(Array.isArray(stationData) ? stationData.filter((station) => station.status !== "Inactive") : []);
+      setStations(filterActiveStations(stationData));
     } catch (error) {
       console.error("Lỗi tải danh sách bến:", error);
     }
@@ -145,6 +277,11 @@ export function CharterRequestForm({
     { value: "Hour", label: lang === "VN" ? "Theo giờ" : "Hour", icon: "schedule" },
   ];
   const selectedRentalUnitOption = rentalUnitOptions.find((option) => option.value === formData.rentalUnit) || rentalUnitOptions[0];
+
+  const waterbusStations = useMemo(
+    () => filterWaterbusStations(stations),
+    [stations],
+  );
 
   const getStationById = (stationId) => stations.find((station) => String(station.stationId || station.id) === String(stationId));
   const routeStopStationIds = [
@@ -545,11 +682,11 @@ export function CharterRequestForm({
       return;
     }
 
-    if (formData.boatRequirements.length > 1000 || formData.specialRequests.length > 1000) {
+    if (formData.specialRequests.length > 1000) {
       Swal.fire({
         icon: "warning",
         title: lang === "VN" ? "Nội dung nhập quá dài" : "Input is too long",
-        text: lang === "VN" ? "Yêu cầu và ghi chú tối đa 1000 ký tự." : "Notes are limited to 1000 characters.",
+        text: lang === "VN" ? "Ghi chú tối đa 1000 ký tự." : "Notes are limited to 1000 characters.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -581,7 +718,6 @@ export function CharterRequestForm({
         };
       }),
       preferredNumberOfDecks: normalizeDeckCount(formData.requestedBoats[0]?.numberOfDecks),
-      boatRequirements: formData.boatRequirements || null,
       specialRequests: formData.specialRequests || null,
     };
 
@@ -804,23 +940,37 @@ export function CharterRequestForm({
           <div className="flex flex-col items-center text-center gap-3">
             <div>
               <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Lộ trình & hành khách" : "Route & Guests"}</h3>
-              <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Thiết lập lộ trình, điểm dừng và số lượng tàu bạn cần." : "Set up your route, stops, and the boats you need."}</p>
+              <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>
+                {lang === "VN"
+                  ? "Bến đi phải thuộc hệ thống Waterbus. Bến đến và điểm dừng có thể chọn bến khác."
+                  : "Departure must be a Waterbus station. Destination and stops can be any active station."}
+              </p>
             </div>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className={contactLabelClass}>{lang === "VN" ? "Bến đi" : "From Station"}{requiredMark}</label>
-              <select value={formData.fromStationId} onChange={(e) => handleFieldChange("fromStationId", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
-                <option value="">{lang === "VN" ? "Chưa chọn" : "Not selected"}</option>
-                {stations.map((station) => <option key={station.stationId || station.id} value={station.stationId || station.id}>{station.stationName || station.name}</option>)}
-              </select>
+              <CharterStationSelect
+                value={formData.fromStationId}
+                stations={waterbusStations}
+                onChange={(nextValue) => handleFieldChange("fromStationId", nextValue)}
+                placeholder={lang === "VN" ? "Chọn bến Waterbus" : "Select Waterbus station"}
+                searchPlaceholder={lang === "VN" ? "Tìm bến Waterbus..." : "Search Waterbus station..."}
+                emptyMessage={lang === "VN" ? "Không tìm thấy bến Waterbus" : "No Waterbus stations found"}
+                required
+              />
             </div>
             <div className="space-y-2">
               <label className={contactLabelClass}>{lang === "VN" ? "Bến đến" : "To Station"}{requiredMark}</label>
-              <select value={formData.toStationId} onChange={(e) => handleFieldChange("toStationId", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
-                <option value="">{lang === "VN" ? "Chưa chọn" : "Not selected"}</option>
-                {stations.map((station) => <option key={station.stationId || station.id} value={station.stationId || station.id}>{station.stationName || station.name}</option>)}
-              </select>
+              <CharterStationSelect
+                value={formData.toStationId}
+                stations={stations}
+                onChange={(nextValue) => handleFieldChange("toStationId", nextValue)}
+                placeholder={lang === "VN" ? "Chưa chọn" : "Not selected"}
+                searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
+                emptyMessage={lang === "VN" ? "Không tìm thấy bến" : "No stations found"}
+                required
+              />
             </div>
           </div>
           <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
@@ -849,10 +999,14 @@ export function CharterRequestForm({
                   <div key={`stop-${index}`} className="grid lg:grid-cols-[1.4fr_120px_160px_1fr_auto] gap-3 items-end rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
                     <div className="space-y-2">
                       <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến dừng" : "Stop Station"}</label>
-                      <select value={stop.stationId} onChange={(e) => handleStopChange(index, "stationId", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
-                        <option value="">{lang === "VN" ? "Chọn bến" : "Choose station"}</option>
-                        {stations.map((station) => <option key={station.stationId || station.id} value={station.stationId || station.id}>{station.stationName || station.name}</option>)}
-                      </select>
+                      <CharterStationSelect
+                        value={stop.stationId}
+                        stations={stations}
+                        onChange={(nextValue) => handleStopChange(index, "stationId", nextValue)}
+                        placeholder={lang === "VN" ? "Chọn bến" : "Choose station"}
+                        searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
+                        emptyMessage={lang === "VN" ? "Không tìm thấy bến" : "No stations found"}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thứ tự" : "Order"}</label>
@@ -967,21 +1121,12 @@ export function CharterRequestForm({
               <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Thêm yêu cầu đặc biệt để chúng tôi phục vụ bạn tốt hơn (không bắt buộc)." : "Add any special requests to help us serve you better (optional)."}</p>
             </div>
           </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <label className={contactLabelClass}>{lang === "VN" ? "Yêu cầu về tàu" : "Boat Requirements"}</label>
-                <span className="text-[10px] font-bold text-slate-400">{String(formData.boatRequirements || "").length}/1000</span>
-              </div>
-              <textarea value={formData.boatRequirements} onChange={(e) => handleFieldChange("boatRequirements", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: cần khu VIP, âm thanh, bàn trang trí, không gian tổ chức sinh nhật..." : "e.g. VIP area, sound setup, decorated table, birthday space..."} />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <label className={contactLabelClass}>{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</label>
+              <span className="text-[10px] font-bold text-slate-400">{String(formData.specialRequests || "").length}/1000</span>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <label className={contactLabelClass}>{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</label>
-                <span className="text-[10px] font-bold text-slate-400">{String(formData.specialRequests || "").length}/1000</span>
-              </div>
-              <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: đón khách lớn tuổi, chuẩn bị nước uống, cần hỗ trợ khi lên tàu..." : "e.g. elderly guests, drinks prepared, boarding support needed..."} />
-            </div>
+            <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: cần khu VIP, đón khách lớn tuổi, chuẩn bị nước uống, cần hỗ trợ khi lên tàu..." : "e.g. VIP area, elderly guests, drinks prepared, boarding support needed..."} />
           </div>
         </section>
         )}

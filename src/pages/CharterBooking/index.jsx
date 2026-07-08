@@ -31,7 +31,6 @@ export function CharterBooking() {
     toStationId: "",
     requestedBoats: [createEmptyBoatRequest()],
     itineraryStops: [],
-    boatRequirements: "",
     specialRequests: "",
   };
 

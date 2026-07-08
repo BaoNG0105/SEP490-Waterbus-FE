@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useSelector } from "react-redux";
 import Swal from "sweetalert2";
+import { AdminCharterAssignmentPanel } from "../../../components/AdminCharterAssignmentPanel";
 import {
   AdminBookingActionsTab,
   AdminBookingOverviewTab,
@@ -11,6 +13,7 @@ import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats } from "../../../services/boatService";
 import {
   fetchAdminCharterBookingDetail,
+  fetchAssignedCharterBookingDetail,
   modifyAdminCharterBookingStatus,
   previewAdminCharterBookingQuote,
   submitAdminCharterBookingQuote,
@@ -19,15 +22,16 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { canShowCharterTickets } from "../../../utils/charterBookingTickets";
 import {
   bookingNeedsRefundAttention,
-  getAdminActionInfo,
-  getDefaultAdminTab,
+  getCharterQuotePaymentDeadline,
   isBookingPaymentClosed,
   shouldShowBookingHoldCountdown,
 } from "../../../utils/charterBookingActions";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
+import { getCharterCapabilities, shouldUseAssignedCharterApi, getDefaultCharterTab } from "../../../utils/charterBookingAccess";
 import {
   buildQuoteFormFromBooking,
   canAdminHandleRefund,
+  enrichAssignedBoat,
   formatCountdown,
   formatDate,
   formatDateTime,
@@ -54,11 +58,16 @@ import {
   normalizeBooking,
   normalizeRequestedBoats,
   pick,
-  rentalUnits,
+  resolveQuoteDepositAmount,
+  readAcknowledgedTabBadges,
+  acknowledgeTabBadge,
+  shouldShowTabBadge,
 } from "../../../utils/charterBookingAdmin";
 
 export function AdminCharterBookingDetail() {
   const { lang } = useApp();
+  const { user } = useSelector((state) => state.auth);
+  const useAssignedApi = shouldUseAssignedCharterApi(user);
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -67,7 +76,6 @@ export function AdminCharterBookingDetail() {
   const [activeTab, setActiveTab] = useState(() => location.state?.tab || "overview");
   const [quoteForm, setQuoteForm] = useState({
     boats: [],
-    subtotalAmount: "",
     rentalUnit: "",
     durationValue: "",
     promotionCode: "",
@@ -79,6 +87,7 @@ export function AdminCharterBookingDetail() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [acknowledgedBadges, setAcknowledgedBadges] = useState(() => readAcknowledgedTabBadges(id));
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }),
@@ -87,13 +96,21 @@ export function AdminCharterBookingDetail() {
 
   const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
 
+  const goToTab = useCallback((tabId, badgeValue) => {
+    setActiveTab(tabId);
+    if (!badgeValue) return;
+    acknowledgeTabBadge(id, tabId, badgeValue);
+    setAcknowledgedBadges((prev) => ({ ...prev, [tabId]: String(badgeValue) }));
+  }, [id]);
+
   const loadDetail = useCallback(async () => {
     if (!id) return;
     try {
       setIsLoading(true);
       setLoadError("");
+      const fetchDetail = useAssignedApi ? fetchAssignedCharterBookingDetail : fetchAdminCharterBookingDetail;
       const [detail, boatData] = await Promise.all([
-        fetchAdminCharterBookingDetail(id),
+        fetchDetail(id),
         fetchAllBoats({ status: "Active" }).catch(() => []),
       ]);
       const normalized = normalizeBooking(detail);
@@ -103,7 +120,10 @@ export function AdminCharterBookingDetail() {
       setQuotePreview(null);
       setQuotePreviewError("");
       if (!location.state?.tab) {
-        setActiveTab(getDefaultAdminTab(normalized));
+        const caps = getCharterCapabilities(user, normalized);
+        let defaultTab = getDefaultCharterTab(normalized, caps);
+        if (defaultTab === "actions" && !caps.canQuote) defaultTab = "overview";
+        setActiveTab(defaultTab);
       }
     } catch (error) {
       console.error("Lỗi tải chi tiết charter booking:", error);
@@ -114,13 +134,17 @@ export function AdminCharterBookingDetail() {
     } finally {
       setIsLoading(false);
     }
-  }, [id, lang, location.state?.tab]);
+  }, [id, lang, location.state?.tab, useAssignedApi, user]);
 
   useEffect(() => {
     if (location.state?.tab) {
       setActiveTab(location.state.tab);
     }
   }, [location.state?.tab]);
+
+  useEffect(() => {
+    setAcknowledgedBadges(readAcknowledgedTabBadges(id));
+  }, [id]);
 
   useEffect(() => {
     loadDetail();
@@ -136,11 +160,12 @@ export function AdminCharterBookingDetail() {
       boatOrder: Number(boat.boatOrder),
       boatId: boat.boatId,
     })),
-    subtotalAmount: quoteForm.subtotalAmount === "" ? null : Number(quoteForm.subtotalAmount),
+    subtotalAmount: null,
     rentalUnit: quoteForm.rentalUnit || null,
     durationValue: quoteForm.durationValue === "" ? null : Number(quoteForm.durationValue),
     promotionCode: quoteForm.promotionCode?.trim() || null,
-  }), [quoteForm]);
+    depositAmount: resolveQuoteDepositAmount(quotePreview),
+  }), [quoteForm, quotePreview]);
 
   const requiredQuoteBoatCount = booking ? normalizeRequestedBoats(booking, booking.selectedBoats).length : 0;
   const isQuoteBoatSelectionComplete = requiredQuoteBoatCount > 0
@@ -148,7 +173,9 @@ export function AdminCharterBookingDetail() {
     && quoteForm.boats.every((boat) => boat.boatId);
   const hasBlockingPayment = Array.isArray(booking?.payments)
     && booking.payments.some((payment) => ["pending", "paid"].includes(String(payment.paymentStatus).toLowerCase()));
+  const capabilities = useMemo(() => getCharterCapabilities(user, booking), [user, booking]);
   const canManageQuote = Boolean(booking)
+    && capabilities.canQuote
     && ["PendingQuote", "Quoted"].includes(booking.status)
     && !hasBlockingPayment;
 
@@ -158,6 +185,12 @@ export function AdminCharterBookingDetail() {
       .filter((payment) => isPaidPayment(payment))
       .reduce((sum, payment) => sum + getPaymentAmount(payment), 0);
   }, [booking?.payments]);
+
+  const selectedBoats = useMemo(() => (
+    Array.isArray(booking?.selectedBoats)
+      ? booking.selectedBoats.map((assigned) => enrichAssignedBoat(assigned, boats))
+      : []
+  ), [booking?.selectedBoats, boats]);
 
   const adminActionsPhase = useMemo(() => {
     if (!booking) return "closed";
@@ -298,6 +331,39 @@ export function AdminCharterBookingDetail() {
     navigate(`/admin/charter-bookings-management/${booking.id}/payments/${encodeURIComponent(paymentId)}/refund`);
   };
 
+  const workspaceTabs = useMemo(() => {
+    const tabs = [];
+    if (capabilities.canQuote) {
+      tabs.push({ id: "actions", icon: "edit_square", label: lang === "VN" ? "Thao tác" : "Actions" });
+    }
+    tabs.push({ id: "overview", icon: "dashboard", label: lang === "VN" ? "Tổng quan" : "Overview" });
+    if (capabilities.canViewAssignmentTab) {
+      tabs.push({
+        id: "assignment",
+        icon: "group",
+        label: capabilities.canAssignStaff
+          ? (lang === "VN" ? "Phân công NV" : "Assign staff")
+          : (lang === "VN" ? "Gán quản lý" : "Assign manager"),
+      });
+    }
+    const paymentList = Array.isArray(booking?.payments) ? booking.payments : [];
+    const ticketList = canShowCharterTickets(booking)
+      ? (Array.isArray(booking?.tickets) ? booking.tickets : [])
+      : [];
+    if (capabilities.canViewPayments) {
+      tabs.push({
+        id: "payments",
+        icon: "payments",
+        label: lang === "VN" ? "Thanh toán" : "Payments",
+        badge: paymentList.length || (booking && bookingNeedsRefundAttention(booking) ? "!" : ""),
+      });
+    }
+    if (capabilities.canViewTickets) {
+      tabs.push({ id: "tickets", icon: "confirmation_number", label: lang === "VN" ? "Vé/khách" : "Tickets", badge: ticketList.length || "" });
+    }
+    return tabs;
+  }, [booking, capabilities, lang]);
+
   if (isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -321,25 +387,18 @@ export function AdminCharterBookingDetail() {
   }
 
   const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
-  const adminActionInfo = getAdminActionInfo(booking, lang);
   const showBookingHoldCountdown = shouldShowBookingHoldCountdown(booking);
+  const quotePaymentDeadline = getCharterQuotePaymentDeadline(booking);
   const bookingHoldRemainingMs = showBookingHoldCountdown
-    ? getRemainingMs(booking.bookingHoldExpiresAt, nowTick)
+    ? getRemainingMs(quotePaymentDeadline, nowTick)
     : 0;
   const quoteTotal = Number(booking?.estimatedPrice || 0);
   const remainingAmount = Math.max(quoteTotal - bookingPaidAmount, 0);
-  const selectedBoats = Array.isArray(booking.selectedBoats) ? booking.selectedBoats : [];
   const requestedBoats = Array.isArray(booking.requestedBoats) ? booking.requestedBoats : [];
   const payments = Array.isArray(booking.payments) ? booking.payments : [];
   const tickets = canShowCharterTickets(booking)
     ? (Array.isArray(booking.tickets) ? booking.tickets : [])
     : [];
-  const workspaceTabs = [
-    { id: "actions", icon: "edit_square", label: lang === "VN" ? "Thao tác" : "Actions" },
-    { id: "overview", icon: "dashboard", label: lang === "VN" ? "Tổng quan" : "Overview" },
-    { id: "payments", icon: "payments", label: lang === "VN" ? "Thanh toán" : "Payments", badge: payments.length || (bookingNeedsRefundAttention(booking) ? "!" : "") },
-    { id: "tickets", icon: "confirmation_number", label: lang === "VN" ? "Vé/khách" : "Tickets", badge: tickets.length || "" },
-  ];
 
   return (
     <div className="space-y-6 pb-10 font-body">
@@ -367,14 +426,23 @@ export function AdminCharterBookingDetail() {
       </div>
 
       <div className="sticky top-4 z-20 rounded-3xl border border-slate-100 bg-white/95 p-2 shadow-lg backdrop-blur dark:border-slate-700/60 dark:bg-slate-800/95">
-        <div className={`grid grid-cols-2 gap-2 ${workspaceTabs.length >= 4 ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+        <div className={`grid grid-cols-2 gap-2 ${
+          workspaceTabs.length >= 5
+            ? "md:grid-cols-5"
+            : workspaceTabs.length >= 4
+              ? "md:grid-cols-4"
+              : "md:grid-cols-3"
+        }`}>
           {workspaceTabs.map((tab) => {
             const active = activeTab === tab.id;
+            const showBadge = tab.badge
+              && activeTab !== tab.id
+              && shouldShowTabBadge(id, tab.id, tab.badge, acknowledgedBadges);
             return (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => goToTab(tab.id, tab.badge)}
                 className={`relative flex h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
                   active
                     ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
@@ -383,7 +451,7 @@ export function AdminCharterBookingDetail() {
               >
                 <span className="material-symbols-outlined text-base">{tab.icon}</span>
                 <span className="truncate">{tab.label}</span>
-                {tab.badge ? (
+                {showBadge ? (
                   <span className={`absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-black ${
                     tab.badge === "!" ? "bg-rose-500 text-white" : "bg-[#FFD100] text-slate-900"
                   }`}
@@ -404,7 +472,7 @@ export function AdminCharterBookingDetail() {
         <CharterWorkflowStepper status={booking.status} lang={lang} />
       </div>
 
-      {bookingNeedsRefundAttention(booking) && (
+      {bookingNeedsRefundAttention(booking) && capabilities.canViewPayments && (
         <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/20 dark:bg-rose-500/10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -418,7 +486,7 @@ export function AdminCharterBookingDetail() {
                 </p>
               </div>
             </div>
-            <button type="button" onClick={() => setActiveTab("payments")} className="rounded-xl bg-rose-600 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white">
+            <button type="button" onClick={() => goToTab("payments", payments.length || (bookingNeedsRefundAttention(booking) ? "!" : ""))} className="rounded-xl bg-rose-600 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white">
               {lang === "VN" ? "Đến thanh toán" : "Go to payments"}
             </button>
           </div>
@@ -434,7 +502,6 @@ export function AdminCharterBookingDetail() {
           boats={boats}
           quoteForm={quoteForm}
           setQuoteForm={setQuoteForm}
-          rentalUnits={rentalUnits}
           canManageQuote={canManageQuote}
           hasBlockingPayment={hasBlockingPayment}
           isSubmitting={isSubmitting}
@@ -456,6 +523,7 @@ export function AdminCharterBookingDetail() {
           isActiveBoat={isActiveBoat}
           showBookingHoldCountdown={showBookingHoldCountdown}
           bookingHoldRemainingMs={bookingHoldRemainingMs}
+          quotePaymentDeadline={quotePaymentDeadline}
           formatDateTime={formatDateTime}
           formatCountdown={formatCountdown}
           quoteTotal={quoteTotal}
@@ -467,7 +535,10 @@ export function AdminCharterBookingDetail() {
           onSubmitQuote={handleDetailSubmitQuote}
           onQuoteBoatChange={handleDetailQuoteBoatChange}
           onStatusChange={handleDetailStatusChange}
-          onNavigateTab={setActiveTab}
+          onNavigateTab={(tabId) => {
+            const tab = workspaceTabs.find((item) => item.id === tabId);
+            goToTab(tabId, tab?.badge);
+          }}
         />
       )}
 
@@ -475,9 +546,9 @@ export function AdminCharterBookingDetail() {
         <AdminBookingOverviewTab
           lang={lang}
           booking={booking}
-          adminActionInfo={adminActionInfo}
           showBookingHoldCountdown={showBookingHoldCountdown}
           bookingHoldRemainingMs={bookingHoldRemainingMs}
+          quotePaymentDeadline={quotePaymentDeadline}
           formatDate={formatDate}
           formatDateTime={formatDateTime}
           formatCountdown={formatCountdown}
@@ -496,11 +567,23 @@ export function AdminCharterBookingDetail() {
           remainingAmount={remainingAmount}
           requestedBoats={requestedBoats}
           selectedBoats={selectedBoats}
-          onNavigateTab={setActiveTab}
+          capabilities={capabilities}
+          onNavigateTab={(tabId) => goToTab(tabId)}
         />
       )}
 
-      {activeTab === "payments" && (
+      {activeTab === "assignment" && (
+        <AdminCharterAssignmentPanel
+          lang={lang}
+          booking={booking}
+          capabilities={capabilities}
+          selectedBoats={selectedBoats}
+          isSubmitting={isSubmitting}
+          onReload={loadDetail}
+        />
+      )}
+
+      {activeTab === "payments" && capabilities.canViewPayments && (
       <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -593,9 +676,6 @@ export function AdminCharterBookingDetail() {
           booking={booking}
           tickets={tickets}
           formatDate={formatDate}
-          formatDateTime={formatDateTime}
-          formatPassengerSummary={formatPassengerSummary}
-          getPaymentStatusInfo={getPaymentStatusInfo}
         />
       )}
     </div>
