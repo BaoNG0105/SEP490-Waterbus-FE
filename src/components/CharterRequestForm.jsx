@@ -49,30 +49,30 @@ function CharterStationSelect({
     ? stations.filter((station) => getStationName(station).toLowerCase().includes(normalizedSearch))
     : stations;
 
+  const closeDropdown = () => {
+    setIsOpen(false);
+    setSearch("");
+  };
+
   useEffect(() => {
-    if (!isOpen) {
-      setSearch("");
-      return;
-    }
-    searchRef.current?.focus();
+    if (isOpen) searchRef.current?.focus();
   }, [isOpen]);
 
-  const triggerClass = `flex w-full items-center justify-between gap-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm font-bold outline-none transition-all dark:bg-slate-900 ${
-    disabled
+  const triggerClass = `flex w-full items-center justify-between gap-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm font-bold outline-none transition-all dark:bg-slate-900 ${disabled
       ? "cursor-not-allowed opacity-55"
       : isOpen
         ? "border-[#FFD100] ring-2 ring-[#FFD100] dark:border-yellow-400 dark:ring-yellow-400"
         : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
-  }`;
+    }`;
 
   return (
     <div
       className="relative"
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setIsOpen(false);
+        if (!event.currentTarget.contains(event.relatedTarget)) closeDropdown();
       }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") setIsOpen(false);
+        if (event.key === "Escape") closeDropdown();
       }}
     >
       {required ? (
@@ -90,7 +90,7 @@ function CharterStationSelect({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen((open) => !open)}
+        onClick={() => (isOpen ? closeDropdown() : setIsOpen(true))}
         className={triggerClass}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -125,13 +125,12 @@ function CharterStationSelect({
                   type="button"
                   onClick={() => {
                     onChange(stationId);
-                    setIsOpen(false);
+                    closeDropdown();
                   }}
-                  className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold transition-colors ${
-                    isSelected
+                  className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold transition-colors ${isSelected
                       ? "bg-yellow-50 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
                       : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                  }`}
+                    }`}
                   role="option"
                   aria-selected={isSelected}
                 >
@@ -802,333 +801,353 @@ export function CharterRequestForm({
             {lang === "VN" ? "Bạn cần đăng nhập trước khi gửi yêu cầu thuê tàu." : "You need to sign in before submitting a charter request."}
           </div>
         )}
-        {/* Thông tin khách hàng */}
+        {/* STEP 1: Thông tin khách hàng */}
         {currentStep === 0 && (
-        <section className="space-y-6 max-w-3xl mx-auto">
-          <div className="flex flex-col items-center text-center gap-3">
-            <div>
-              <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Thông tin khách hàng" : "Customer Information"}</h3>
-              <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Cho chúng tôi biết ai là người liên hệ chính của yêu cầu này." : "Tell us who the main contact for this request is."}</p>
-            </div>
-          </div>
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="flex flex-col gap-2.5">
-              <label className={contactLabelClass}>{lang === "VN" ? "Họ tên người đặt" : "Contact Name"}{requiredMark}</label>
-              <input id={`${idPrefix}-customerName`} value={formData.customerName} onChange={(e) => handleFieldChange("customerName", e.target.value)} disabled={useAccountInfo} required maxLength={120} className={getContactInputClass("customerName")} placeholder={lang === "VN" ? "Nhập họ tên" : "Full name"} aria-invalid={Boolean(fieldErrors.customerName)} aria-describedby={fieldErrors.customerName ? `${idPrefix}-customerName-error` : undefined} />
-              {fieldErrors.customerName && <p id={`${idPrefix}-customerName-error`} className={contactErrorTextClass}>{fieldErrors.customerName}</p>}
-            </div>
-            <div className="flex flex-col gap-2.5">
-              <label className={contactLabelClass}>{lang === "VN" ? "Số điện thoại" : "Phone Number"}{requiredMark}</label>
-              <input id={`${idPrefix}-contactPhone`} value={formData.contactPhone} onChange={(e) => handleFieldChange("contactPhone", e.target.value)} disabled={useAccountInfo} required maxLength={30} className={getContactInputClass("contactPhone")} placeholder={lang === "VN" ? "Nhập số điện thoại" : "Phone number"} aria-invalid={Boolean(fieldErrors.contactPhone)} aria-describedby={fieldErrors.contactPhone ? `${idPrefix}-contactPhone-error` : undefined} />
-              {fieldErrors.contactPhone && <p id={`${idPrefix}-contactPhone-error`} className={contactErrorTextClass}>{fieldErrors.contactPhone}</p>}
-            </div>
-            <div className="flex flex-col gap-2.5">
-              <label className={contactLabelClass}>Email{requiredMark}</label>
-              <input id={`${idPrefix}-contactEmail`} type="email" value={formData.contactEmail} onChange={(e) => handleFieldChange("contactEmail", e.target.value)} disabled={useAccountInfo} required maxLength={160} className={getContactInputClass("contactEmail")} placeholder="email@example.com" aria-invalid={Boolean(fieldErrors.contactEmail)} aria-describedby={fieldErrors.contactEmail ? `${idPrefix}-contactEmail-error` : undefined} />
-              {fieldErrors.contactEmail && <p id={`${idPrefix}-contactEmail-error`} className={contactErrorTextClass}>{fieldErrors.contactEmail}</p>}
-            </div>
-          </div>
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={handleAccountInfoToggle}
-              disabled={isLoadingProfile}
-              className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider transition-all disabled:opacity-50 ${accountInfoApplied
-                ? "bg-[#124757] text-white border-[#124757] dark:bg-yellow-400 dark:text-slate-900 dark:border-yellow-400"
-                : t.accountInfoIdle
-                }`}
-            >
-              <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 border-current ${isLoadingProfile ? "animate-spin" : ""}`}>
-                {accountInfoApplied && !isLoadingProfile && <span className="h-2 w-2 rounded-full bg-current"></span>}
-              </span>
-              <span className="hidden sm:inline">{lang === "VN" ? "Dùng thông tin tài khoản" : "Use Account Info"}</span>
-              <span className="sm:hidden">{lang === "VN" ? "Dùng tài khoản" : "Account Info"}</span>
-            </button>
-          </div>
-        </section>
-        )}
-        {/* Lịch trình */}
-        {currentStep === 1 && (
-        <section className="space-y-6 max-w-3xl mx-auto">
-          <div className="flex flex-col items-center text-center gap-3">
-            <div>
-              <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Lịch trình" : "Schedule"}</h3>
-              <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Chọn thời gian bạn muốn khởi hành và thời lượng thuê tàu." : "Choose when you'd like to depart and how long you need the boat."}</p>
-            </div>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="flex flex-col gap-2.5">
-              <label className={contactLabelClass}>{lang === "VN" ? "Ngày khởi hành" : "Departure Date"}{requiredMark}</label>
-              <input type="date" min={getMinDepartureDate()} value={formData.departureDate} onChange={(e) => handleFieldChange("departureDate", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
-            </div>
-            <div className="flex flex-col gap-2.5">
-              <label className={contactLabelClass}>{lang === "VN" ? "Giờ đi" : "Start Time"}{requiredMark}</label>
-              <input type="time" value={formData.startTime} onChange={(e) => handleFieldChange("startTime", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
-            </div>
-            <div className="flex flex-col gap-2.5">
-              <label className={contactLabelClass}>
-                {lang === "VN" ? `Thời lượng (${durationUnitLabel})` : `Duration (${durationUnitLabel})`}{requiredMark}
-              </label>
-              <div className="flex overflow-hidden rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-[#FFD100]">
-                <input type="number" min="1" max="60" value={formData.durationValue} onChange={(e) => handleFieldChange("durationValue", e.target.value)} required className="min-w-0 flex-1 px-4 py-3 bg-transparent text-sm font-bold text-slate-800 dark:text-white outline-none" />
-                <span className="flex min-w-16 items-center justify-center border-l border-yellow-300/70 bg-yellow-100 px-3 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757]">
-                  {durationUnitLabel}
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2.5">
-              <label className={contactLabelClass}>{lang === "VN" ? "Đơn vị thuê" : "Rental Unit"}{requiredMark}</label>
-              <div
-                className="relative"
-                onBlur={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget)) setIsRentalUnitOpen(false);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") setIsRentalUnitOpen(false);
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setIsRentalUnitOpen((prev) => !prev)}
-                  className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm font-bold text-slate-800 outline-none transition-all dark:bg-slate-900 dark:text-white ${isRentalUnitOpen
-                    ? "border-[#FFD100] ring-2 ring-[#FFD100]"
-                    : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
-                    }`}
-                  aria-haspopup="listbox"
-                  aria-expanded={isRentalUnitOpen}
-                >
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <span className="material-symbols-outlined text-lg text-[#124757] dark:text-yellow-400">{selectedRentalUnitOption.icon}</span>
-                    <span className="truncate">{selectedRentalUnitOption.label}</span>
-                  </span>
-                  <span className={`material-symbols-outlined text-xl text-slate-500 transition-transform ${isRentalUnitOpen ? "rotate-180" : ""}`}>expand_more</span>
-                </button>
-                {isRentalUnitOpen && (
-                  <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-900/15 dark:border-slate-700 dark:bg-slate-900" role="listbox">
-                    {rentalUnitOptions.map((option) => {
-                      const isSelected = formData.rentalUnit === option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => handleRentalUnitChange(option.value)}
-                          className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm font-bold transition-colors ${isSelected
-                            ? "bg-yellow-50 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
-                            : "text-slate-600 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                            }`}
-                          role="option"
-                          aria-selected={isSelected}
-                        >
-                          <span className="flex min-w-0 items-center gap-2.5">
-                            <span className="material-symbols-outlined text-lg">{option.icon}</span>
-                            <span className="truncate">{option.label}</span>
-                          </span>
-                          {isSelected && <span className="material-symbols-outlined text-lg">check</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-        )}
-        {/* Lộ trình và hành khách */}
-        {currentStep === 2 && (
-        <section className="space-y-6">
-          <div className="flex flex-col items-center text-center gap-3">
-            <div>
-              <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Lộ trình & hành khách" : "Route & Guests"}</h3>
-              <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>
-                {lang === "VN"
-                  ? "Bến đi phải thuộc hệ thống Waterbus. Bến đến và điểm dừng có thể chọn bến khác."
-                  : "Departure must be a Waterbus station. Destination and stops can be any active station."}
-              </p>
-            </div>
-          </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className={contactLabelClass}>{lang === "VN" ? "Bến đi" : "From Station"}{requiredMark}</label>
-              <CharterStationSelect
-                value={formData.fromStationId}
-                stations={waterbusStations}
-                onChange={(nextValue) => handleFieldChange("fromStationId", nextValue)}
-                placeholder={lang === "VN" ? "Chọn bến Waterbus" : "Select Waterbus station"}
-                searchPlaceholder={lang === "VN" ? "Tìm bến Waterbus..." : "Search Waterbus station..."}
-                emptyMessage={lang === "VN" ? "Không tìm thấy bến Waterbus" : "No Waterbus stations found"}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label className={contactLabelClass}>{lang === "VN" ? "Bến đến" : "To Station"}{requiredMark}</label>
-              <CharterStationSelect
-                value={formData.toStationId}
-                stations={stations}
-                onChange={(nextValue) => handleFieldChange("toStationId", nextValue)}
-                placeholder={lang === "VN" ? "Chưa chọn" : "Not selected"}
-                searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
-                emptyMessage={lang === "VN" ? "Không tìm thấy bến" : "No stations found"}
-                required
-              />
-            </div>
-          </div>
-          <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
-            <div>
-              <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Xem trên bản đồ" : "View on Map"}</label>
-              <p className="text-[11px] text-slate-400 mt-1">{lang === "VN" ? "Bến đi, bến đến và các điểm dừng sẽ hiện trên bản đồ." : "Origin, destination, and stops will appear on the map."}</p>
-            </div>
-            <div className="h-72 rounded-xl overflow-hidden">
-              <WaterwayMap stationsList={routeMapStations} coordinates={routeMapCoordinates} hideStationLink />
-            </div>
-          </div>
-          <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <section className="space-y-6 max-w-3xl mx-auto">
+            <div className="flex flex-col items-center text-center gap-3">
               <div>
-                <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Điểm dừng trung gian" : "Itinerary Stops"}</label>
-                <p className="text-[11px] text-slate-400 mt-1">{lang === "VN" ? "Có thể bỏ trống nếu không có điểm dừng." : "Leave empty if there are no extra stops."}</p>
+                <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Thông tin khách hàng" : "Customer Information"}</h3>
+                <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Cho chúng tôi biết ai là người liên hệ chính của yêu cầu này." : "Tell us who the main contact for this request is."}</p>
               </div>
-              <button type="button" onClick={handleAddStop} disabled={formData.itineraryStops.length >= 50} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 disabled:opacity-50">
-                <span className="material-symbols-outlined text-base">add_location_alt</span>
-                {lang === "VN" ? "Thêm điểm dừng" : "Add Stop"}
+            </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="flex flex-col gap-2.5">
+                <label className={contactLabelClass}>{lang === "VN" ? "Họ tên người đặt" : "Contact Name"}{requiredMark}</label>
+                <input id={`${idPrefix}-customerName`} value={formData.customerName} onChange={(e) => handleFieldChange("customerName", e.target.value)} disabled={useAccountInfo} required maxLength={120} className={getContactInputClass("customerName")} placeholder={lang === "VN" ? "Nhập họ tên" : "Full name"} aria-invalid={Boolean(fieldErrors.customerName)} aria-describedby={fieldErrors.customerName ? `${idPrefix}-customerName-error` : undefined} />
+                {fieldErrors.customerName && <p id={`${idPrefix}-customerName-error`} className={contactErrorTextClass}>{fieldErrors.customerName}</p>}
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <label className={contactLabelClass}>{lang === "VN" ? "Số điện thoại" : "Phone Number"}{requiredMark}</label>
+                <input id={`${idPrefix}-contactPhone`} value={formData.contactPhone} onChange={(e) => handleFieldChange("contactPhone", e.target.value)} disabled={useAccountInfo} required maxLength={30} className={getContactInputClass("contactPhone")} placeholder={lang === "VN" ? "Nhập số điện thoại" : "Phone number"} aria-invalid={Boolean(fieldErrors.contactPhone)} aria-describedby={fieldErrors.contactPhone ? `${idPrefix}-contactPhone-error` : undefined} />
+                {fieldErrors.contactPhone && <p id={`${idPrefix}-contactPhone-error`} className={contactErrorTextClass}>{fieldErrors.contactPhone}</p>}
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <label className={contactLabelClass}>Email{requiredMark}</label>
+                <input id={`${idPrefix}-contactEmail`} type="email" value={formData.contactEmail} onChange={(e) => handleFieldChange("contactEmail", e.target.value)} disabled={useAccountInfo} required maxLength={160} className={getContactInputClass("contactEmail")} placeholder="email@example.com" aria-invalid={Boolean(fieldErrors.contactEmail)} aria-describedby={fieldErrors.contactEmail ? `${idPrefix}-contactEmail-error` : undefined} />
+                {fieldErrors.contactEmail && <p id={`${idPrefix}-contactEmail-error`} className={contactErrorTextClass}>{fieldErrors.contactEmail}</p>}
+              </div>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={handleAccountInfoToggle}
+                disabled={isLoadingProfile}
+                className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider transition-all disabled:opacity-50 ${accountInfoApplied
+                  ? "bg-[#124757] text-white border-[#124757] dark:bg-yellow-400 dark:text-slate-900 dark:border-yellow-400"
+                  : t.accountInfoIdle
+                  }`}
+              >
+                <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 border-current ${isLoadingProfile ? "animate-spin" : ""}`}>
+                  {accountInfoApplied && !isLoadingProfile && <span className="h-2 w-2 rounded-full bg-current"></span>}
+                </span>
+                <span className="hidden sm:inline">{lang === "VN" ? "Dùng thông tin tài khoản" : "Use Account Info"}</span>
+                <span className="sm:hidden">{lang === "VN" ? "Dùng tài khoản" : "Account Info"}</span>
               </button>
             </div>
-            {formData.itineraryStops.length > 0 && (
-              <div className="space-y-3">
-                {formData.itineraryStops.map((stop, index) => (
-                  <div key={`stop-${index}`} className="grid lg:grid-cols-[1.4fr_120px_160px_1fr_auto] gap-3 items-end rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến dừng" : "Stop Station"}</label>
-                      <CharterStationSelect
-                        value={stop.stationId}
-                        stations={stations}
-                        onChange={(nextValue) => handleStopChange(index, "stationId", nextValue)}
-                        placeholder={lang === "VN" ? "Chọn bến" : "Choose station"}
-                        searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
-                        emptyMessage={lang === "VN" ? "Không tìm thấy bến" : "No stations found"}
-                      />
+          </section>
+        )}
+        {/* STEP 2: Lịch trình */}
+        {currentStep === 1 && (
+          <section className="space-y-6 max-w-3xl mx-auto">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div>
+                <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Lịch trình" : "Schedule"}</h3>
+                <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Chọn thời gian bạn muốn khởi hành và thời lượng thuê tàu." : "Choose when you'd like to depart and how long you need the boat."}</p>
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="flex flex-col gap-2.5">
+                <label className={contactLabelClass}>{lang === "VN" ? "Ngày khởi hành" : "Departure Date"}{requiredMark}</label>
+                <input type="date" min={getMinDepartureDate()} value={formData.departureDate} onChange={(e) => handleFieldChange("departureDate", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <label className={contactLabelClass}>{lang === "VN" ? "Giờ đi" : "Start Time"}{requiredMark}</label>
+                <input type="time" value={formData.startTime} onChange={(e) => handleFieldChange("startTime", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <label className={contactLabelClass}>
+                  {lang === "VN" ? `Thời lượng (${durationUnitLabel})` : `Duration (${durationUnitLabel})`}{requiredMark}
+                </label>
+                <div className="flex overflow-hidden rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-[#FFD100]">
+                  <input type="number" min="1" max="60" value={formData.durationValue} onChange={(e) => handleFieldChange("durationValue", e.target.value)} required className="min-w-0 flex-1 px-4 py-3 bg-transparent text-sm font-bold text-slate-800 dark:text-white outline-none" />
+                  <span className="flex min-w-16 items-center justify-center border-l border-yellow-300/70 bg-yellow-100 px-3 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757]">
+                    {durationUnitLabel}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2.5">
+                <label className={contactLabelClass}>{lang === "VN" ? "Đơn vị thuê" : "Rental Unit"}{requiredMark}</label>
+                <div
+                  className="relative"
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget)) setIsRentalUnitOpen(false);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsRentalUnitOpen(false);
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setIsRentalUnitOpen((prev) => !prev)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm font-bold text-slate-800 outline-none transition-all dark:bg-slate-900 dark:text-white ${isRentalUnitOpen
+                      ? "border-[#FFD100] ring-2 ring-[#FFD100]"
+                      : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
+                      }`}
+                    aria-haspopup="listbox"
+                    aria-expanded={isRentalUnitOpen}
+                  >
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <span className="material-symbols-outlined text-lg text-[#124757] dark:text-yellow-400">{selectedRentalUnitOption.icon}</span>
+                      <span className="truncate">{selectedRentalUnitOption.label}</span>
+                    </span>
+                    <span className={`material-symbols-outlined text-xl text-slate-500 transition-transform ${isRentalUnitOpen ? "rotate-180" : ""}`}>expand_more</span>
+                  </button>
+                  {isRentalUnitOpen && (
+                    <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-900/15 dark:border-slate-700 dark:bg-slate-900" role="listbox">
+                      {rentalUnitOptions.map((option) => {
+                        const isSelected = formData.rentalUnit === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => handleRentalUnitChange(option.value)}
+                            className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm font-bold transition-colors ${isSelected
+                              ? "bg-yellow-50 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
+                              : "text-slate-600 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                              }`}
+                            role="option"
+                            aria-selected={isSelected}
+                          >
+                            <span className="flex min-w-0 items-center gap-2.5">
+                              <span className="material-symbols-outlined text-lg">{option.icon}</span>
+                              <span className="truncate">{option.label}</span>
+                            </span>
+                            {isSelected && <span className="material-symbols-outlined text-lg">check</span>}
+                          </button>
+                        );
+                      })}
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thứ tự" : "Order"}</label>
-                      <input type="number" min="0" value={stop.stopOrder} onChange={(e) => handleStopChange(index, "stopOrder", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* STEP 3: Lộ trình và hành khách */}
+        {currentStep === 2 && (
+          <section className="space-y-6">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div>
+                <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Lộ trình & hành khách" : "Route & Guests"}</h3>
+                <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>
+                  {lang === "VN"
+                    ? "Bến đi phải thuộc hệ thống Waterbus. Bến đến và điểm dừng có thể chọn bến khác."
+                    : "Departure must be a Waterbus station. Destination and stops can be any active station."}
+                </p>
+              </div>
+            </div>
+            {/* Chọn bến đi */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className={contactLabelClass}>{lang === "VN" ? "Bến đi" : "From Station"}{requiredMark}</label>
+                <CharterStationSelect
+                  value={formData.fromStationId}
+                  stations={waterbusStations}
+                  onChange={(nextValue) => handleFieldChange("fromStationId", nextValue)}
+                  placeholder={lang === "VN" ? "Chọn bến Waterbus" : "Select Waterbus station"}
+                  searchPlaceholder={lang === "VN" ? "Tìm bến Waterbus..." : "Search Waterbus station..."}
+                  emptyMessage={lang === "VN" ? "Không tìm thấy bến Waterbus" : "No Waterbus stations found"}
+                  required
+                />
+              </div>
+              {/* Chọn bến đến */}
+              <div className="space-y-2">
+                <label className={contactLabelClass}>{lang === "VN" ? "Bến đến" : "To Station"}{requiredMark}</label>
+                <CharterStationSelect
+                  value={formData.toStationId}
+                  stations={stations}
+                  onChange={(nextValue) => handleFieldChange("toStationId", nextValue)}
+                  placeholder={lang === "VN" ? "Chưa chọn" : "Not selected"}
+                  searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
+                  emptyMessage={lang === "VN" ? "Không tìm thấy bến" : "No stations found"}
+                  required
+                />
+              </div>
+            </div>
+            {/* Map */}
+            <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
+              <div>
+                <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Xem trên bản đồ" : "View on Map"}</label>
+                <p className="text-[11px] text-slate-400 mt-1">{lang === "VN" ? "Bến đi, bến đến và các điểm dừng sẽ hiện trên bản đồ." : "Origin, destination, and stops will appear on the map."}</p>
+              </div>
+              <div className="h-72 rounded-xl overflow-hidden">
+                <WaterwayMap stationsList={routeMapStations} coordinates={routeMapCoordinates} hideStationLink />
+              </div>
+            </div>
+
+            {/* Chọn điểm dừng */}
+            <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Điểm dừng trung gian" : "Itinerary Stops"}</label>
+                  <p className="text-[11px] text-slate-400 mt-1">{lang === "VN" ? "Có thể bỏ trống nếu không có điểm dừng." : "Leave empty if there are no extra stops."}</p>
+                </div>
+                <button type="button" onClick={handleAddStop} disabled={formData.itineraryStops.length >= 50} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 disabled:opacity-50">
+                  <span className="material-symbols-outlined text-base">add_location_alt</span>
+                  {lang === "VN" ? "Thêm điểm dừng" : "Add Stop"}
+                </button>
+              </div>
+              {formData.itineraryStops.length > 0 && (
+                <div className="space-y-3">
+                  {formData.itineraryStops.map((stop, index) => (
+                    <div key={`stop-${index}`} className="grid lg:grid-cols-[1.4fr_120px_160px_1fr_auto] gap-3 items-end rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến dừng" : "Stop Station"}</label>
+                        <CharterStationSelect
+                          value={stop.stationId}
+                          stations={stations}
+                          onChange={(nextValue) => handleStopChange(index, "stationId", nextValue)}
+                          placeholder={lang === "VN" ? "Chọn bến" : "Choose station"}
+                          searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
+                          emptyMessage={lang === "VN" ? "Không tìm thấy bến" : "No stations found"}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thứ tự" : "Order"}</label>
+                        <input type="number" min="0" value={stop.stopOrder} onChange={(e) => handleStopChange(index, "stopOrder", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thời gian dừng" : "Stay Minutes"}</label>
+                        <input type="number" min="0" value={stop.stayDurationMinutes} onChange={(e) => handleStopChange(index, "stayDurationMinutes", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ghi chú" : "Note"}</label>
+                        <input value={stop.note} onChange={(e) => handleStopChange(index, "note", e.target.value)} maxLength={1000} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" placeholder={lang === "VN" ? "Ghi chú" : "Note"} />
+                      </div>
+                      <button type="button" onClick={() => handleRemoveStop(index)} className="h-12 w-12 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-xl">delete</span>
+                      </button>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thời gian dừng" : "Stay Minutes"}</label>
-                      <input type="number" min="0" value={stop.stayDurationMinutes} onChange={(e) => handleStopChange(index, "stayDurationMinutes", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Lượng ành khách */}
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Người lớn" : "Adults"}</label>
+                <input type="number" min="0" max="1000" value={formData.adultCount} onChange={(e) => handleFieldChange("adultCount", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+              </div>
+              <div className="space-y-2">
+                <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Trẻ em" : "Children"}</label>
+                <input type="number" min="0" max="1000" value={formData.childCount} onChange={(e) => handleFieldChange("childCount", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+              </div>
+            </div>
+
+            {/* Chọn tàu */}
+            <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Danh sách tàu mong muốn" : "Requested Boats"}</label>
+                </div>
+                <button type="button" onClick={handleAddBoatRequest} disabled={formData.requestedBoats.length >= 20} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 disabled:opacity-50">
+                  <span className="material-symbols-outlined text-base">add</span>
+                  {lang === "VN" ? "Thêm tàu" : "Add Boat"}
+                </button>
+              </div>
+              {/* Danh sách tàu */}
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+                  <div className="relative h-28 overflow-hidden bg-slate-100 dark:bg-slate-800">
+                    <img src={deckOptionImages[1]} alt={lang === "VN" ? "1 tầng" : "1 deck"} loading="lazy" className="h-full w-full object-cover" />
+                    <span className="absolute inset-0 bg-linear-to-t from-slate-950/50 via-transparent to-transparent"></span>
+                  </div>
+                  <div className="flex items-center gap-2.5 p-3">
+                    <span className="material-symbols-outlined text-xl text-[#124757] dark:text-yellow-400">directions_boat</span>
+                    <div>
+                      <p className="text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">{lang === "VN" ? "1 tầng" : "1 deck"}</p>
+                      <p className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "Sức chứa tối đa 65-75 khách." : "Max capacity of 65-75 guests."}</p>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ghi chú" : "Note"}</label>
-                      <input value={stop.note} onChange={(e) => handleStopChange(index, "note", e.target.value)} maxLength={1000} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" placeholder={lang === "VN" ? "Ghi chú" : "Note"} />
+                  </div>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+                  <div className="relative h-28 overflow-hidden bg-slate-100 dark:bg-slate-800">
+                    <img src={deckOptionImages[2]} alt={lang === "VN" ? "2 tầng" : "2 decks"} loading="lazy" className="h-full w-full object-cover" />
+                    <span className="absolute inset-0 bg-linear-to-t from-slate-950/50 via-transparent to-transparent"></span>
+                  </div>
+                  <div className="flex items-center gap-2.5 p-3">
+                    <span className="material-symbols-outlined text-xl text-[#124757] dark:text-yellow-400">directions_boat</span>
+                    <div>
+                      <p className="text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">{lang === "VN" ? "2 tầng" : "2 decks"}</p>
+                      <p className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "Sức chứa tối đa 55-65 khách." : "Max capacity of 55-65 guests."}</p>
                     </div>
-                    <button type="button" onClick={() => handleRemoveStop(index)} className="h-12 w-12 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center">
+                  </div>
+                </div>
+              </div>
+              {/* Yêu cầu tàu */}
+              <div className="space-y-2">
+                {formData.requestedBoats.map((boat, index) => (
+                  <div key={`boat-${index}`} className="grid gap-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 md:grid-cols-[minmax(140px,1fr)_minmax(260px,360px)_44px] md:items-center">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
+                        <span className="material-symbols-outlined text-lg">directions_boat</span>
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">
+                          {lang === "VN" ? `Tàu ${index + 1}` : `Boat ${index + 1}`}
+                        </p>
+                        <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                          {lang === "VN" ? "Chọn số tầng" : "Choose decks"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                      {deckOptions.map((deckCount) => {
+                        const isSelected = Number(boat.numberOfDecks) === deckCount;
+                        return (
+                          <button
+                            key={`${index}-deck-${deckCount}`}
+                            type="button"
+                            onClick={() => handleBoatRequestChange(index, deckCount)}
+                            className={`flex h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${isSelected
+                              ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
+                              : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
+                              }`}
+                          >
+                            <span className="material-symbols-outlined text-base">{isSelected ? "check_circle" : "radio_button_unchecked"}</span>
+                            {lang === "VN" ? `${deckCount} tầng` : `${deckCount} ${deckCount === 1 ? "deck" : "decks"}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button type="button" onClick={() => handleRemoveBoatRequest(index)} disabled={formData.requestedBoats.length <= 1} className="h-11 w-11 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center disabled:opacity-40">
                       <span className="material-symbols-outlined text-xl">delete</span>
                     </button>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Người lớn" : "Adults"}</label>
-              <input type="number" min="0" max="1000" value={formData.adultCount} onChange={(e) => handleFieldChange("adultCount", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
             </div>
-            <div className="space-y-2">
-              <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Trẻ em" : "Children"}</label>
-              <input type="number" min="0" max="1000" value={formData.childCount} onChange={(e) => handleFieldChange("childCount", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
-            </div>
-          </div>
-          <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Danh sách tàu mong muốn" : "Requested Boats"}</label>
-              </div>
-              <button type="button" onClick={handleAddBoatRequest} disabled={formData.requestedBoats.length >= 20} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 disabled:opacity-50">
-                <span className="material-symbols-outlined text-base">add</span>
-                {lang === "VN" ? "Thêm tàu" : "Add Boat"}
-              </button>
-            </div>
-            <div className="grid sm:grid-cols-2 gap-3">
-              {deckOptions.map((deckCount) => {
-                const deckLabel = lang === "VN" ? `${deckCount} tầng` : `${deckCount} ${deckCount === 1 ? "deck" : "decks"}`;
-                return (
-                  <div key={`deck-preview-${deckCount}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-                    <div className="relative h-28 overflow-hidden bg-slate-100 dark:bg-slate-800">
-                      <img src={deckOptionImages[deckCount]} alt={deckLabel} loading="lazy" className="h-full w-full object-cover" />
-                      <span className="absolute inset-0 bg-linear-to-t from-slate-950/50 via-transparent to-transparent"></span>
-                    </div>
-                    <div className="flex items-center gap-2.5 p-3">
-                      <span className="material-symbols-outlined text-xl text-[#124757] dark:text-yellow-400">directions_boat</span>
-                      <div>
-                        <p className="text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">{deckLabel}</p>
-                        <p className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "Ảnh mẫu để nhận diện loại tàu." : "Reference image for this boat type."}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="space-y-2">
-              {formData.requestedBoats.map((boat, index) => (
-                <div key={`boat-${index}`} className="grid gap-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 md:grid-cols-[minmax(140px,1fr)_minmax(260px,360px)_44px] md:items-center">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
-                      <span className="material-symbols-outlined text-lg">directions_boat</span>
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">
-                        {lang === "VN" ? `Tàu ${index + 1}` : `Boat ${index + 1}`}
-                      </p>
-                      <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
-                        {lang === "VN" ? "Chọn số tầng" : "Choose decks"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                    {deckOptions.map((deckCount) => {
-                      const isSelected = Number(boat.numberOfDecks) === deckCount;
-                      return (
-                        <button
-                          key={`${index}-deck-${deckCount}`}
-                          type="button"
-                          onClick={() => handleBoatRequestChange(index, deckCount)}
-                          className={`flex h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${isSelected
-                            ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                            : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                            }`}
-                        >
-                          <span className="material-symbols-outlined text-base">{isSelected ? "check_circle" : "radio_button_unchecked"}</span>
-                          {lang === "VN" ? `${deckCount} tầng` : `${deckCount} ${deckCount === 1 ? "deck" : "decks"}`}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <button type="button" onClick={() => handleRemoveBoatRequest(index)} disabled={formData.requestedBoats.length <= 1} className="h-11 w-11 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 flex items-center justify-center disabled:opacity-40">
-                    <span className="material-symbols-outlined text-xl">delete</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+          </section>
         )}
+
         {/* Ghi chú */}
         {currentStep === 3 && (
-        <section className="space-y-6 max-w-3xl mx-auto">
-          <div className="flex flex-col items-center text-center gap-3">
-            <div>
-              <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Ghi chú" : "Notes"}</h3>
-              <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Thêm yêu cầu đặc biệt để chúng tôi phục vụ bạn tốt hơn (không bắt buộc)." : "Add any special requests to help us serve you better (optional)."}</p>
+          <section className="space-y-6 max-w-3xl mx-auto">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div>
+                <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Ghi chú" : "Notes"}</h3>
+                <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Có thể thêm cầu đặc biệt để chúng tôi phục vụ bạn tốt hơn." : "Add any special requests to help us serve you better."}</p>
+              </div>
             </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label className={contactLabelClass}>{lang === "VN" ? "Ghi chú đặc biệt" : "Special Requests"}</label>
-              <span className="text-[10px] font-bold text-slate-400">{String(formData.specialRequests || "").length}/1000</span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] font-bold text-slate-400">{String(formData.specialRequests || "").length}/1000</span>
+              </div>
+              <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: cần khu VIP, đón khách lớn tuổi, chuẩn bị nước uống, cần hỗ trợ khi lên tàu..." : "e.g. VIP area, elderly guests, drinks prepared, boarding support needed..."} />
             </div>
-            <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: cần khu VIP, đón khách lớn tuổi, chuẩn bị nước uống, cần hỗ trợ khi lên tàu..." : "e.g. VIP area, elderly guests, drinks prepared, boarding support needed..."} />
-          </div>
-        </section>
+          </section>
         )}
 
         <div className={`flex items-center justify-between gap-4 pt-2 border-t ${t.footerBorder}`}>

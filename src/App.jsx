@@ -27,10 +27,12 @@ import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
-import { CustomerManagement } from "./pages/Admin/CustomerManagement";
 import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor } from "./pages/Admin/BoatManagement";
 import { StationManagement } from "./pages/Admin/StationManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
+import { UserManagement } from "./pages/Admin/UserManagement";
+import { CreateUser } from "./pages/Admin/UserManagement/CreateUser";
+import { EditUser } from "./pages/Admin/UserManagement/EditUser";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 import { AdminCharterBookingDetail, AdminCharterBookingRefund, CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
 
@@ -232,12 +234,32 @@ function App() {
             }
           />
 
-          {/* ******* Customer Management Page ******* */}
+          {/* ******* User Management Page ******* */}
           <Route
-            path="/admin/customers-management"
+            path="/admin/users-management"
             element={
-              <AdminLayout title="Customers Management">
-                <CustomerManagement />
+              <AdminLayout title="User Management">
+                <UserManagement />
+              </AdminLayout>
+            }
+          />
+
+          {/* Create User Page */}
+          <Route
+            path="/admin/users-management/create"
+            element={
+              <AdminLayout title="Create User">
+                <CreateUser />
+              </AdminLayout>
+            }
+          />
+
+          {/* Edit User Page */}
+          <Route
+            path="/admin/users-management/edit/:id"
+            element={
+              <AdminLayout title="Edit User">
+                <EditUser />
               </AdminLayout>
             }
           />

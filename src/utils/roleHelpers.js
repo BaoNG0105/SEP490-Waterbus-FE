@@ -15,6 +15,20 @@ export const isOperationsUser = (user) => hasRole(user, "ADMIN", "MANAGER", "STA
 
 export const getUserId = (user) => String(user?.id || user?.userId || user?.accountId || "");
 
+// Kiểm tra xem người dùng hiện tại có được phép Sửa/Xóa 1 user (dựa vào role của user đó) hay không
+// Quy tắc: Admin quản lý Staff + Manager. Manager chỉ quản lý Staff. Không ai được sửa Admin/Customer qua trang này.
+export const canManageUserRow = (currentUser, rowRoles) => {
+  const systemNames = (rowRoles || []).map(getRoleSystemName);
+  if (systemNames.includes("ADMIN")) return false;
+  if (isAdminUser(currentUser)) {
+    return systemNames.includes("STAFF") || systemNames.includes("MANAGER");
+  }
+  if (isManagerUser(currentUser)) {
+    return systemNames.includes("STAFF");
+  }
+  return false;
+};
+
 export const getPrimaryRoleLabel = (user, lang = "VN") => {
   const role = (user?.roles || []).find((item) => ADMIN_ROLES.includes(getRoleSystemName(item)));
   if (role?.displayName || role?.name) return role.displayName || role.name;

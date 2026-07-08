@@ -25,22 +25,13 @@ export const Dashboard = () => {
       color: "from-emerald-500/10 to-teal-500/10 text-emerald-600 dark:text-emerald-400"
     },
     {
-      path: "/admin/staff-management",
-      icon: "badge",
-      titleVn: "Quản lý nhân viên",
-      titleEn: "Staff Management",
-      descVn: "Điều hành thủy thủ đoàn, nhân viên bến tàu.",
-      descEn: "Manage captain crews and station officers.",
-      color: "from-purple-500/10 to-indigo-500/10 text-purple-600 dark:text-purple-400"
-    },
-    {
-      path: "/admin/customers-management",
-      icon: "groups",
-      titleVn: "Quản lý khách hàng",
-      titleEn: "CRM Analytics",
-      descVn: "Thông tin tài khoản, lịch sử đặt vé khách.",
-      descEn: "Customer accounts and booking footprints.",
-      color: "from-orange-500/10 to-amber-500/10 text-orange-600 dark:text-orange-400"
+      path: "/admin/users-management",
+      icon: "manage_accounts",
+      titleVn: "Quản lý người dùng",
+      titleEn: "User Management",
+      descVn: "Quản lý tài khoản Nhân viên, Quản lý và Khách hàng.",
+      descEn: "Manage staff, manager, and customer accounts.",
+      color: "from-indigo-500/10 to-blue-500/10 text-indigo-600 dark:text-indigo-400"
     },
     {
       path: "/admin/ticketing",
@@ -51,15 +42,15 @@ export const Dashboard = () => {
       descEn: "Issue physical tickets at wharf box office.",
       color: "from-pink-500/10 to-rose-500/10 text-pink-600 dark:text-pink-400"
     },
-    {
-      path: "/admin/verification",
-      icon: "qr_code_scanner",
-      titleVn: "Kiểm soát soát vé",
-      titleEn: "Ticket Gate Scanning",
-      descVn: "Giám sát quét mã QR tại các cửa kiểm soát.",
-      descEn: "Monitor QR access control at boat boarding.",
-      color: "from-sky-500/10 to-blue-500/10 text-sky-600 dark:text-sky-400"
-    },
+    // {
+    //   path: "/admin/verification",
+    //   icon: "qr_code_scanner",
+    //   titleVn: "Kiểm soát soát vé",
+    //   titleEn: "Ticket Gate Scanning",
+    //   descVn: "Giám sát quét mã QR tại các cửa kiểm soát.",
+    //   descEn: "Monitor QR access control at boat boarding.",
+    //   color: "from-sky-500/10 to-blue-500/10 text-sky-600 dark:text-sky-400"
+    // },
     {
       path: "/admin/charter-bookings-management",
       icon: "directions_boat",
@@ -70,11 +61,11 @@ export const Dashboard = () => {
       color: "from-violet-500/10 to-purple-500/10 text-violet-600 dark:text-violet-400"
     },
     {
-      path: "/admin/orders",
+      path: "/admin/bookings",
       icon: "receipt_long",
-      titleVn: "Quản lý đơn đặt hàng",
+      titleVn: "Quản lý Booking Waterbus",
       titleEn: "Order Invoice Logs",
-      descVn: "Danh sách giao dịch hóa đơn và trạng thái.",
+      descVn: "Danh sách các Booking của Waterbus & Water SightSeeing.",
       descEn: "Full invoice transactions and status codes.",
       color: "from-amber-500/10 to-yellow-500/10 text-amber-600 dark:text-amber-500"
     },
