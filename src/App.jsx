@@ -40,6 +40,9 @@ import { CreateRoute } from "./pages/Admin/RouteManagement/CreateRoute";
 import { RouteDetail } from "./pages/Admin/RouteManagement/RouteDetail";
 import { DrawWaterway } from "./pages/Admin/RouteManagement/DrawWaterway";
 import { AdminCharterBookingDetail, AdminCharterBookingRefund, CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
+import { PromotionManagement } from "./pages/Admin/PromotionManagement";
+import { CreatePromotion } from "./pages/Admin/PromotionManagement/CreatePromotion";
+import { EditPromotion } from "./pages/Admin/PromotionManagement/EditPromotion";
 
 function App() {
   return (
@@ -423,6 +426,36 @@ function App() {
             element={
               <AdminLayout title="Route Detail">
                 <RouteDetail />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Promotion Management: List Page ******* */}
+          <Route
+            path="/admin/promotions"
+            element={
+              <AdminLayout title="Promotion Management">
+                <PromotionManagement />
+              </AdminLayout>
+            }
+          />
+
+          {/* Promotion Management: Create Page */}
+          <Route
+            path="/admin/promotions/create"
+            element={
+              <AdminLayout title="Create Promotion">
+                <CreatePromotion />
+              </AdminLayout>
+            }
+          />
+
+          {/* Promotion Management: Edit Page */}
+          <Route
+            path="/admin/promotions/edit/:id"
+            element={
+              <AdminLayout title="Edit Promotion">
+                <EditPromotion />
               </AdminLayout>
             }
           />
