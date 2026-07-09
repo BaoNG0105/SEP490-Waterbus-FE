@@ -22,3 +22,13 @@ export const updateBoatStatus = (id, data) =>
 
 // API Xóa tàu
 export const deleteBoat = (id) => api.delete(`/boats/${id}`).then(r => r.data);
+
+// API Hồ sơ pháp lý tàu
+export const getBoatDocuments = (boatId) =>
+    api.get(`/boats/${boatId}/documents`).then((response) => response.data);
+
+export const uploadBoatDocument = (boatId, documentType, formData) =>
+    api.put(`/boats/${boatId}/documents/${documentType}`, formData).then((response) => response.data);
+
+export const deleteBoatDocument = (boatId, documentType) =>
+    api.delete(`/boats/${boatId}/documents/${documentType}`).then((response) => response.data);

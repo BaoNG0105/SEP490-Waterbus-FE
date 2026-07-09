@@ -4,7 +4,10 @@ import {
     getBoatById as apiGetBoatById,
     updateBoat as apiUpdateBoat,
     updateBoatStatus as apiUpdateBoatStatus,
-    deleteBoat as apiDeleteBoat
+    deleteBoat as apiDeleteBoat,
+    getBoatDocuments as apiGetBoatDocuments,
+    uploadBoatDocument as apiUploadBoatDocument,
+    deleteBoatDocument as apiDeleteBoatDocument,
 } from '../api/boatApi';
 
 // Hàm Service lấy danh sách tàu
@@ -65,6 +68,33 @@ export const deleteBoat = async (boatId) => {
         return await apiDeleteBoat(boatId);
     } catch (error) {
         console.error(`Lỗi khi xóa tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+export const fetchBoatDocuments = async (boatId) => {
+    try {
+        return await apiGetBoatDocuments(boatId);
+    } catch (error) {
+        console.error(`Lỗi khi lấy hồ sơ tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+export const uploadBoatDocument = async (boatId, documentType, payload) => {
+    try {
+        return await apiUploadBoatDocument(boatId, documentType, payload);
+    } catch (error) {
+        console.error(`Lỗi khi upload hồ sơ ${documentType} cho tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+export const removeBoatDocument = async (boatId, documentType) => {
+    try {
+        return await apiDeleteBoatDocument(boatId, documentType);
+    } catch (error) {
+        console.error(`Lỗi khi xóa hồ sơ ${documentType} của tàu ${boatId}:`, error);
         throw error;
     }
 };
