@@ -12,12 +12,6 @@ import {
   fetchBoatCrewCalendar,
 } from "../services/boatService";
 
-const CREW_ROLE_OPTIONS = ["Captain", "Deckhand"];
-const CREW_ROLE_LABELS = {
-  Captain: { vn: "Thuyền trưởng", en: "Captain" },
-  Deckhand: { vn: "Thủy thủ", en: "Deck hand" },
-};
-
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
     const value = key.split(".").reduce((obj, part) => obj?.[part], source);
@@ -30,14 +24,12 @@ const normalizeCrew = (item) => ({
   assignmentId: String(pick(item, ["assignmentId", "id", "crewAssignmentId"], "")),
   staffUserId: String(pick(item, ["staffUserId", "staffId", "userId", "staff.id"], "")),
   staffName: pick(item, ["staffName", "staff.fullName", "staff.name", "fullName"], "--"),
-  crewRole: pick(item, ["crewRole", "dutyRole", "role"], ""),
   fromDate: pick(item, ["fromDate"], ""),
   toDate: pick(item, ["toDate"], ""),
 });
 
 const normalizeReplacement = (item) => ({
   replacementId: String(pick(item, ["replacementId", "id"], "")),
-  crewRole: pick(item, ["crewRole", "role"], ""),
   replacedStaffUserId: String(pick(item, ["replacedStaffUserId"], "")),
   replacedStaffName: pick(item, ["replacedStaffName", "replacedStaff.fullName"], "--"),
   replacementStaffUserId: String(pick(item, ["replacementStaffUserId"], "")),
@@ -250,7 +242,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
 
   // Thêm crew mặc định
   const [crewStaffId, setCrewStaffId] = useState("");
-  const [crewRole, setCrewRole] = useState(CREW_ROLE_OPTIONS[0]);
   const [crewFromDate, setCrewFromDate] = useState("");
   const [crewToDate, setCrewToDate] = useState("");
   const [isSavingCrew, setIsSavingCrew] = useState(false);
@@ -258,7 +249,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
 
   // Thay thế
   const [showReplaceForm, setShowReplaceForm] = useState(false);
-  const [repRole, setRepRole] = useState(CREW_ROLE_OPTIONS[0]);
   const [repReplacedId, setRepReplacedId] = useState("");
   const [repReplacementId, setRepReplacementId] = useState("");
   const [repFromDate, setRepFromDate] = useState("");
@@ -273,8 +263,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
   const [calendarMap, setCalendarMap] = useState(new Map());
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
-
-  const roleLabel = (role) => (lang === "VN" ? CREW_ROLE_LABELS[role]?.vn : CREW_ROLE_LABELS[role]?.en) || role;
 
   const loadData = async () => {
     try {
@@ -348,9 +336,8 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
 
   // Người bị thay: lấy từ crew hiện tại
   const replacedOptions = useMemo(
-    () => crew.map((c) => ({ id: c.staffUserId, fullName: `${c.staffName} (${roleLabel(c.crewRole)})`, phone: "", email: "" })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [crew, lang]
+    () => crew.map((c) => ({ id: c.staffUserId, fullName: c.staffName, phone: "", email: "" })),
+    [crew]
   );
 
   // Người thay: staff OnBoard không phải người bị thay
@@ -383,7 +370,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
       setIsSavingCrew(true);
       await assignBoatCrew(boatId, {
         staffUserId: crewStaffId,
-        crewRole,
         fromDate: crewFromDate,
         toDate: crewToDate || null,
       });
@@ -399,7 +385,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
   };
 
   const startReplacement = (c) => {
-    setRepRole(c.crewRole || CREW_ROLE_OPTIONS[0]);
     setRepReplacedId(c.staffUserId);
     setRepReplacementId("");
     setRepFromDate("");
@@ -452,7 +437,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
     try {
       setIsSavingRep(true);
       await createBoatCrewReplacement(boatId, {
-        crewRole: repRole,
         replacedStaffUserId: repReplacedId,
         replacementStaffUserId: repReplacementId,
         fromDate: repFromDate,
@@ -566,7 +550,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
           isLoading={isCalendarLoading}
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
-          roleLabel={roleLabel}
         />
       ) : (
       <>
@@ -588,9 +571,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
                   <div className="min-w-0">
                     <p className="text-sm font-headline font-black text-slate-800 dark:text-white truncate">{c.staffName}</p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-300">
-                        {roleLabel(c.crewRole)}
-                      </span>
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400">
                         <span className="material-symbols-outlined text-[13px]">event</span>
                         {formatDate(c.fromDate, lang)} → {c.toDate ? formatDate(c.toDate, lang) : (lang === "VN" ? "dài hạn" : "long-term")}
@@ -632,13 +612,7 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
         <h4 className="font-headline font-black text-xs text-slate-700 dark:text-slate-200 uppercase tracking-wide">
           {lang === "VN" ? "Thêm crew mặc định" : "Add default crew"}
         </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className={labelStyle}>{lang === "VN" ? "Nhiệm vụ" : "Role"}</label>
-            <select value={crewRole} onChange={(e) => setCrewRole(e.target.value)} className={`${inputStyle} cursor-pointer`}>
-              {CREW_ROLE_OPTIONS.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
-            </select>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
             <input type="date" value={crewFromDate} onChange={(e) => setCrewFromDate(e.target.value)} className={inputStyle} />
@@ -702,7 +676,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
                     <span className="text-[#124757] dark:text-yellow-300">{r.replacementStaffName}</span>
                   </p>
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-200/70 text-slate-600 dark:bg-slate-700 dark:text-slate-300">{roleLabel(r.crewRole)}</span>
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400">
                       <span className="material-symbols-outlined text-[13px]">event</span>
                       {formatDate(r.fromDate, lang)} → {formatDate(r.toDate, lang)}
@@ -752,13 +725,7 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className={labelStyle}>{lang === "VN" ? "Nhiệm vụ" : "Role"}</label>
-                <select value={repRole} onChange={(e) => setRepRole(e.target.value)} className={`${inputStyle} cursor-pointer`}>
-                  {CREW_ROLE_OPTIONS.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
-                </select>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
                 <input type="date" value={repFromDate} onChange={(e) => setRepFromDate(e.target.value)} className={inputStyle} />
@@ -790,7 +757,7 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
   );
 }
 
-function CrewCalendarView({ lang, monthValue, setMonthValue, calendarMap, isLoading, selectedDate, setSelectedDate, roleLabel }) {
+function CrewCalendarView({ lang, monthValue, setMonthValue, calendarMap, isLoading, selectedDate, setSelectedDate }) {
   const cells = buildMonthCells(monthValue);
   const weekdays = lang === "VN" ? WEEKDAY_LABELS.vn : WEEKDAY_LABELS.en;
   const selectedEntries = selectedDate ? (calendarMap.get(selectedDate) || []) : [];
@@ -883,7 +850,6 @@ function CrewCalendarView({ lang, monthValue, setMonthValue, calendarMap, isLoad
                     <div key={`${e.staffName}-${i}`} className="flex items-center gap-2 text-xs">
                       <span className={`w-2 h-2 rounded-full ${e.isReplacement ? "bg-amber-500" : "bg-[#124757] dark:bg-yellow-400"}`} />
                       <span className="font-bold text-slate-700 dark:text-slate-200">{e.staffName}</span>
-                      {e.crewRole && <span className="text-slate-400">· {roleLabel(e.crewRole)}</span>}
                       {e.isReplacement && (
                         <span className="text-amber-600 dark:text-amber-300 font-bold">
                           ({lang === "VN" ? "thay" : "replacing"}{e.replacedStaffName ? ` ${e.replacedStaffName}` : ""})
