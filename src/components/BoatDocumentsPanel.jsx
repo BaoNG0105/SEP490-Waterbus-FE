@@ -15,10 +15,6 @@ import {
   normalizeBoatDocuments,
 } from "../utils/boatDocuments";
 
-const emptyDraft = () => ({
-  file: null,
-});
-
 const formatDateTime = (value, lang) => {
   if (!value) return "—";
   const date = new Date(value);
@@ -32,14 +28,16 @@ const formatDateTime = (value, lang) => {
   });
 };
 
+const isValidFile = (file) =>
+  BOAT_DOCUMENT_MIME_TYPES.includes(file.type) && file.size <= BOAT_DOCUMENT_MAX_SIZE;
+
 export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceStartedAt }) {
   const { lang } = useApp();
   const [documents, setDocuments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
-  const [editingType, setEditingType] = useState(null);
-  const [drafts, setDrafts] = useState({});
-  const [submittingType, setSubmittingType] = useState(null);
+  const [pendingFiles, setPendingFiles] = useState({});
+  const [isSavingAll, setIsSavingAll] = useState(false);
   const [deletingType, setDeletingType] = useState(null);
 
   const isUnderMaintenance = boatStatus?.toLowerCase() === "undermaintenance";
@@ -66,26 +64,28 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
     if (boatId) loadDocuments();
   }, [boatId, lang]);
 
-  const getDraft = (type) => drafts[type] || emptyDraft();
-
-  const setDraftFile = (type, file) => {
-    setDrafts((prev) => ({
-      ...prev,
-      [type]: { file },
-    }));
+  const setPendingFile = (type, file) => {
+    if (file && !isValidFile(file)) {
+      Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "File không hợp lệ" : "Invalid file",
+        text: lang === "VN"
+          ? "Chỉ hỗ trợ PDF, JPG, PNG, WEBP và tối đa 10MB."
+          : "Only PDF, JPG, PNG, WEBP files up to 10MB are supported.",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+    setPendingFiles((prev) => {
+      const next = { ...prev };
+      if (file) next[type] = file;
+      else delete next[type];
+      return next;
+    });
   };
 
-  const startUpload = (type) => {
-    setEditingType(type);
-    setDrafts((prev) => ({
-      ...prev,
-      [type]: emptyDraft(),
-    }));
-  };
-
-  const cancelUpload = (type) => {
-    setEditingType((current) => (current === type ? null : current));
-    setDrafts((prev) => {
+  const clearPendingFile = (type) => {
+    setPendingFiles((prev) => {
       const next = { ...prev };
       delete next[type];
       return next;
@@ -96,65 +96,53 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
     if (fileUrl) window.open(fileUrl, "_blank", "noopener,noreferrer");
   };
 
-  const validateDraft = (draft) => {
-    if (!draft.file) {
-      return lang === "VN" ? "Vui lòng chọn file hồ sơ." : "Please select a document file.";
-    }
+  const pendingEntries = useMemo(
+    () => Object.entries(pendingFiles).filter(([, file]) => Boolean(file)),
+    [pendingFiles]
+  );
+  const pendingCount = pendingEntries.length;
 
-    if (!BOAT_DOCUMENT_MIME_TYPES.includes(draft.file.type)) {
-      return lang === "VN"
-        ? "Chỉ hỗ trợ PDF, JPG, PNG hoặc WEBP."
-        : "Only PDF, JPG, PNG or WEBP files are supported.";
-    }
-
-    if (draft.file.size > BOAT_DOCUMENT_MAX_SIZE) {
-      return lang === "VN" ? "File không được vượt quá 10MB." : "File must be 10MB or smaller.";
-    }
-
-    return "";
-  };
-
-  const handleSubmit = async (type) => {
-    const draft = getDraft(type);
-    const validationError = validateDraft(draft);
-    if (validationError) {
-      Swal.fire({
-        icon: "warning",
-        title: lang === "VN" ? "Thiếu thông tin" : "Missing information",
-        text: validationError,
-        confirmButtonColor: "#124757",
-      });
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", draft.file);
+  const handleSaveAll = async () => {
+    if (pendingCount === 0) return;
 
     try {
-      setSubmittingType(type);
-      await uploadBoatDocument(boatId, type, formData);
-      cancelUpload(type);
+      setIsSavingAll(true);
+      const failures = [];
+
+      for (const [type, file] of pendingEntries) {
+        const formData = new FormData();
+        formData.append("file", file);
+        try {
+          await uploadBoatDocument(boatId, type, formData);
+        } catch (error) {
+          console.error(error);
+          const label = lang === "VN" ? BOAT_DOCUMENT_META[type]?.labelVn : BOAT_DOCUMENT_META[type]?.labelEn;
+          failures.push(label || type);
+        }
+      }
+
+      setPendingFiles({});
       await loadDocuments();
 
-      Swal.fire({
-        toast: true,
-        position: "top-end",
-        icon: "success",
-        title: lang === "VN" ? "Đã lưu hồ sơ" : "Document saved",
-        showConfirmButton: false,
-        timer: 1800,
-      });
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: lang === "VN" ? "Upload thất bại" : "Upload failed",
-        text:
-          error.response?.data?.message ||
-          (lang === "VN" ? "Không thể lưu hồ sơ lúc này." : "Could not save the document."),
-        confirmButtonColor: "#124757",
-      });
+      if (failures.length > 0) {
+        Swal.fire({
+          icon: "warning",
+          title: lang === "VN" ? "Một số hồ sơ chưa lưu được" : "Some documents failed",
+          text: (lang === "VN" ? "Không lưu được: " : "Failed: ") + failures.join(", "),
+          confirmButtonColor: "#124757",
+        });
+      } else {
+        Swal.fire({
+          toast: true,
+          position: "top-end",
+          icon: "success",
+          title: lang === "VN" ? "Đã lưu tất cả hồ sơ" : "All documents saved",
+          showConfirmButton: false,
+          timer: 1800,
+        });
+      }
     } finally {
-      setSubmittingType(null);
+      setIsSavingAll(false);
     }
   };
 
@@ -178,7 +166,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
     try {
       setDeletingType(type);
       await removeBoatDocument(boatId, type);
-      cancelUpload(type);
+      clearPendingFile(type);
       await loadDocuments();
 
       Swal.fire({
@@ -231,8 +219,8 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
             </h3>
             <p className="text-xs text-slate-400 mt-1">
               {lang === "VN"
-                ? "Upload hoặc cập nhật file. Bấm Xem file để mở trong tab mới. Sau bảo trì phải upload lại hồ sơ trước khi kích hoạt tàu."
-                : "Upload or replace files. Click View file to open it in a new tab. After maintenance, re-upload before activating the boat."}
+                ? "Chọn file cho các mục cần cập nhật rồi bấm Lưu tất cả một lần."
+                : "Pick files for the slots you want, then click Save all once."}
             </p>
           </div>
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300">
@@ -270,15 +258,17 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
         {documents.map((doc) => {
           const meta = BOAT_DOCUMENT_META[doc.type];
           const label = lang === "VN" ? meta.labelVn : meta.labelEn;
-          const isEditing = editingType === doc.type;
-          const draft = getDraft(doc.type);
-          const isSubmitting = submittingType === doc.type;
           const isDeleting = deletingType === doc.type;
+          const pendingFile = pendingFiles[doc.type] || null;
 
           return (
             <div
               key={doc.type}
-              className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4"
+              className={`bg-white dark:bg-slate-800 p-5 rounded-4xl border shadow-sm space-y-4 transition-colors ${
+                pendingFile
+                  ? "border-[#124757]/40 dark:border-yellow-400/40"
+                  : "border-slate-100 dark:border-slate-700/50"
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
@@ -297,7 +287,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
                   </div>
                 </div>
 
-                {doc.isUploaded && !isEditing && (
+                {doc.isUploaded && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20 shrink-0">
                     <span className="material-symbols-outlined text-[13px]">check_circle</span>
                     {lang === "VN" ? "Đã nộp" : "Uploaded"}
@@ -305,46 +295,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
                 )}
               </div>
 
-              {isEditing ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60 p-4 space-y-3">
-                  <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Chọn tệp hồ sơ (*)" : "Choose document file (*)"}</label>
-                    <input
-                      type="file"
-                      accept={BOAT_DOCUMENT_ACCEPT}
-                      onChange={(e) => setDraftFile(doc.type, e.target.files?.[0] || null)}
-                      className="block w-full text-[11px] font-bold text-slate-600 dark:text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-[#124757] file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900 file:font-bold file:cursor-pointer"
-                    />
-                    {draft.file && (
-                      <p className="text-[11px] text-slate-500 mt-1 truncate">{draft.file.name}</p>
-                    )}
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      {lang === "VN" ? "PDF, JPG, PNG, WEBP · tối đa 10MB" : "PDF, JPG, PNG, WEBP · max 10MB"}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => handleSubmit(doc.type)}
-                      className="px-4 py-2.5 rounded-xl bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 text-[11px] font-black uppercase tracking-wide hover:brightness-110 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      {isSubmitting && (
-                        <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      )}
-                      {lang === "VN" ? "Lưu hồ sơ" : "Save document"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => cancelUpload(doc.type)}
-                      className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold uppercase tracking-wide hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
-                    >
-                      {lang === "VN" ? "Hủy" : "Cancel"}
-                    </button>
-                  </div>
-                </div>
-              ) : doc.isUploaded ? (
+              {doc.isUploaded && (
                 <div className="rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-4 space-y-3">
                   <button
                     type="button"
@@ -380,14 +331,6 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
                     )}
                     <button
                       type="button"
-                      onClick={() => startUpload(doc.type)}
-                      className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold uppercase tracking-wide hover:bg-slate-200 dark:hover:bg-slate-700 transition-all inline-flex items-center gap-1.5"
-                    >
-                      <span className="material-symbols-outlined text-sm">upload</span>
-                      {lang === "VN" ? "Cập nhật file" : "Update file"}
-                    </button>
-                    <button
-                      type="button"
                       disabled={isDeleting}
                       onClick={() => handleDelete(doc.type, label)}
                       className="px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[11px] font-bold uppercase tracking-wide hover:bg-red-100 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
@@ -401,19 +344,63 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
                     </button>
                   </div>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => startUpload(doc.type)}
-                  className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 text-[11px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-all inline-flex items-center justify-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-sm">upload_file</span>
-                  {lang === "VN" ? "Tải hồ sơ lên" : "Upload document"}
-                </button>
               )}
+
+              <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60 p-4 space-y-2">
+                <label className={labelStyle}>
+                  {doc.isUploaded
+                    ? (lang === "VN" ? "Chọn file mới để thay" : "Choose a new file to replace")
+                    : (lang === "VN" ? "Chọn tệp hồ sơ" : "Choose document file")}
+                </label>
+                <input
+                  type="file"
+                  accept={BOAT_DOCUMENT_ACCEPT}
+                  onChange={(e) => setPendingFile(doc.type, e.target.files?.[0] || null)}
+                  className="block w-full text-[11px] font-bold text-slate-600 dark:text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-[#124757] file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900 file:font-bold file:cursor-pointer"
+                />
+                {pendingFile ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-2">
+                    <span className="text-[11px] font-bold text-[#124757] dark:text-yellow-300 truncate inline-flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[14px]">schedule</span>
+                      {pendingFile.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => clearPendingFile(doc.type)}
+                      className="text-slate-400 hover:text-red-500 transition-colors shrink-0"
+                      title={lang === "VN" ? "Bỏ chọn" : "Clear"}
+                    >
+                      <span className="material-symbols-outlined text-base">close</span>
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-slate-400">
+                    {lang === "VN" ? "PDF, JPG, PNG, WEBP · tối đa 10MB" : "PDF, JPG, PNG, WEBP · max 10MB"}
+                  </p>
+                )}
+              </div>
             </div>
           );
         })}
+      </div>
+
+      <div className="sticky bottom-4 z-10">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 backdrop-blur px-5 py-3 shadow-lg">
+          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+            {pendingCount > 0
+              ? (lang === "VN" ? `${pendingCount} hồ sơ đang chờ lưu` : `${pendingCount} document(s) pending`)
+              : (lang === "VN" ? "Chưa có thay đổi cần lưu" : "No changes to save")}
+          </span>
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            disabled={pendingCount === 0 || isSavingAll}
+            className="px-6 py-2.5 rounded-xl bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 text-[11px] font-black uppercase tracking-wide hover:brightness-110 transition-all inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSavingAll && <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+            {lang === "VN" ? "Lưu tất cả" : "Save all"}
+          </button>
+        </div>
       </div>
     </div>
   );

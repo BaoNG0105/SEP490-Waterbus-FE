@@ -35,12 +35,12 @@ export function CharterBooking() {
   };
 
   const handleUnauthenticated = () => {
-    Swal.fire({
-      icon: "info",
-      title: lang === "VN" ? "Bạn cần đăng nhập" : "Sign in required",
-      text: lang === "VN" ? "Vui lòng đăng nhập để gửi yêu cầu thuê tàu." : "Please sign in before creating a charter request.",
-      confirmButtonColor: "#124757",
-    }).then(() => navigate("/login"));
+      Swal.fire({
+        icon: "info",
+        title: lang === "VN" ? "Bạn cần đăng nhập" : "Sign in required",
+        text: lang === "VN" ? "Vui lòng đăng nhập để gửi yêu cầu thuê tàu." : "Please sign in before creating a charter request.",
+        confirmButtonColor: "#124757",
+      }).then(() => navigate("/login"));
   };
 
   const handleSubmit = async (payload) => {
@@ -71,11 +71,11 @@ export function CharterBooking() {
         confirmButtonColor: "#124757",
       });
 
-      if (bookingId) {
-        navigate(`/profile/my-charter-booking/${bookingId}`, { state: { booking: savedBooking } });
-      } else {
-        navigate("/profile/my-charter-booking");
-      }
+        if (bookingId) {
+          navigate(`/profile/my-charter-booking/${bookingId}`, { state: { booking: savedBooking } });
+        } else {
+          navigate("/profile/my-charter-booking");
+        }
     } catch (error) {
       console.error("Lỗi tạo charter booking:", error);
       Swal.fire({

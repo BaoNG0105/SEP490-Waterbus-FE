@@ -27,8 +27,9 @@ import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
-import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor } from "./pages/Admin/BoatManagement";
+import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor, BoatCrewSchedule } from "./pages/Admin/BoatManagement";
 import { StationManagement } from "./pages/Admin/StationManagement";
+import { InsuranceManagement } from "./pages/Admin/InsuranceManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { UserManagement } from "./pages/Admin/UserManagement";
 import { CreateUser } from "./pages/Admin/UserManagement/CreateUser";
@@ -307,6 +308,15 @@ function App() {
             }
           />
 
+          {/* Boat Crew Schedule Page */}
+          <Route path="/admin/boats-management/crew/:id"
+            element={
+              <AdminLayout title="Crew Schedule">
+                <BoatCrewSchedule />
+              </AdminLayout>
+            }
+          />
+
           {/* ******* Station Managment Page ******* */}
           <Route
             path="/admin/stations-management"
@@ -353,6 +363,16 @@ function App() {
             element={
               <AdminLayout title="Refund Payment">
                 <AdminCharterBookingRefund />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Insurance Packages Management ******* */}
+          <Route
+            path="/admin/insurance-management"
+            element={
+              <AdminLayout title="Insurance Packages">
+                <InsuranceManagement />
               </AdminLayout>
             }
           />

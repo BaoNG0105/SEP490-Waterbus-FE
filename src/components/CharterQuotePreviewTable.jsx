@@ -106,6 +106,17 @@ export function CharterQuotePreviewTable({
           />
         ) : null}
 
+        {model.insurance?.selected !== false && model.insurance?.totalAmount > 0 ? (
+          <InvoiceRow
+            label={lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+            detail={model.insurance.quantity > 0
+              ? `${fmt(model.insurance.unitPremiumAmount || 0)}/${lang === "VN" ? "ghế" : "seat"} × ${model.insurance.quantity} ${lang === "VN" ? "ghế" : "seats"}`
+              : (model.insurance.packageName || "")}
+            amount={fmt(model.insurance.totalAmount)}
+            amountClass={`text-sm ${moneyClass}`}
+          />
+        ) : null}
+
         <InvoiceDivider />
 
         <InvoiceRow

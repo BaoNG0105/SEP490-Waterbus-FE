@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import { useDispatch } from "react-redux";
 import { fetchAllStations } from "../services/stationService";
+import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId } from "../services/insuranceService";
 import { fetchCurrentUserProfile } from "../services/authService";
 import { updateUserProfile } from "../redux/authSlice";
 import { WaterwayMap } from "./WaterwayMap";
@@ -12,6 +13,7 @@ import {
   getMinDepartureDate,
   normalizeDeckCount,
 } from "../utils/charterRequestForm";
+import { getInsurancePendingMessage } from "../utils/insurancePreview";
 
 const deckOptionImages = {
   1: "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/15/5b/30/ea/saigon-waterbus-lu-t.jpg?w=1200&h=-1&s=1",
@@ -188,6 +190,10 @@ export function CharterRequestForm({
   const t = STYLES;
 
   const [stations, setStations] = useState([]);
+  const [insurancePackages, setInsurancePackages] = useState([]);
+  const [selectedInsurancePackageId, setSelectedInsurancePackageId] = useState(
+    initialFormData?.insuranceSelected === false ? null : (initialFormData?.insurancePackageId ?? null)
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [useAccountInfo, setUseAccountInfo] = useState(false);
@@ -197,6 +203,7 @@ export function CharterRequestForm({
   const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState(initialFormData);
   const submitInFlightRef = useRef(false);
+  const lastInsurancePackageIdRef = useRef(null);
 
   const loadStations = useCallback(async () => {
     try {
@@ -210,6 +217,31 @@ export function CharterRequestForm({
   useEffect(() => {
     loadStations();
   }, [loadStations]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchActiveInsurancePackages("CharterBooking")
+      .then((packages) => {
+        if (!isMounted) return;
+        setInsurancePackages(packages);
+        setSelectedInsurancePackageId((currentId) => {
+          if (currentId && packages.some((pkg) => isSameInsurancePackageId(getInsurancePackageId(pkg), currentId))) {
+            lastInsurancePackageIdRef.current = String(currentId);
+            return String(currentId);
+          }
+          if (initialFormData?.insuranceSelected === false) return null;
+          const defaultId = getInsurancePackageId(packages[0]);
+          lastInsurancePackageIdRef.current = defaultId;
+          return defaultId;
+        });
+      })
+      .catch((error) => {
+        console.error("Lỗi tải gói bảo hiểm:", error);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const contactInputClass = `w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] transition-all disabled:opacity-55 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-950 disabled:text-slate-500 dark:disabled:text-slate-400`;
   const contactLabelClass = `flex min-h-4 items-center text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`;
@@ -718,6 +750,8 @@ export function CharterRequestForm({
       }),
       preferredNumberOfDecks: normalizeDeckCount(formData.requestedBoats[0]?.numberOfDecks),
       specialRequests: formData.specialRequests || null,
+      insuranceSelected: Boolean(selectedInsurancePackageId),
+      insurancePackageId: selectedInsurancePackageId || null,
     };
 
     if (isSubmitting || submitInFlightRef.current) return;
@@ -1129,6 +1163,136 @@ export function CharterRequestForm({
                 ))}
               </div>
             </div>
+
+            {/* Bảo hiểm hành khách */}
+            {insurancePackages.length > 0 && (() => {
+              const formatVnd = (value) => (Number(value) || 0).toLocaleString("vi-VN") + "đ";
+              const wantsInsurance = selectedInsurancePackageId != null;
+              const selectedPackage = wantsInsurance
+                ? findInsurancePackageById(insurancePackages, selectedInsurancePackageId)
+                : null;
+              const unitPremiumLabel = lang === "VN" ? "ghế" : "seat";
+              const pendingMessage = getInsurancePendingMessage("CharterBooking", lang);
+
+              const handleInsuranceToggle = (enabled) => {
+                if (enabled) {
+                  const restoreId = lastInsurancePackageIdRef.current || getInsurancePackageId(insurancePackages[0]);
+                  setSelectedInsurancePackageId(restoreId);
+                  return;
+                }
+                if (selectedInsurancePackageId != null) {
+                  lastInsurancePackageIdRef.current = String(selectedInsurancePackageId);
+                }
+                setSelectedInsurancePackageId(null);
+              };
+
+              const handleSelectPackage = (pkg) => {
+                const packageId = getInsurancePackageId(pkg);
+                lastInsurancePackageIdRef.current = packageId;
+                setSelectedInsurancePackageId(packageId);
+              };
+
+              return (
+                <div className={`rounded-2xl border overflow-hidden transition-colors ${
+                  wantsInsurance
+                    ? "bg-white dark:bg-slate-900 border-[#124757]/40 dark:border-yellow-400/40"
+                    : "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700"
+                }`}>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-9 h-9 rounded-xl bg-[#124757]/10 dark:bg-yellow-400/10 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-lg text-[#124757] dark:text-yellow-400">shield</span>
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
+                          {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                        </p>
+                        <p className="text-[11px] font-bold text-slate-400 truncate">
+                          {wantsInsurance && selectedPackage
+                            ? `${formatVnd(selectedPackage.unitPremiumAmount)}/${unitPremiumLabel}${Number(selectedPackage.coverageAmount) > 0 ? ` · ${lang === "VN" ? "Quyền lợi" : "Coverage"} ${formatVnd(selectedPackage.coverageAmount)}` : ""}`
+                            : (lang === "VN" ? "Tùy chọn" : "Optional")}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={wantsInsurance}
+                      onClick={() => handleInsuranceToggle(!wantsInsurance)}
+                      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                        wantsInsurance ? "bg-[#124757] dark:bg-yellow-400" : "bg-slate-300 dark:bg-slate-600"
+                      }`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                        wantsInsurance ? "translate-x-5" : "translate-x-0"
+                      }`} />
+                    </button>
+                  </div>
+
+                  {wantsInsurance && (
+                    <div className="border-t border-slate-100 dark:border-slate-700/80">
+                      {insurancePackages.length > 1 && (
+                        <div className="divide-y divide-slate-100 dark:divide-slate-700/80">
+                          {insurancePackages.map((pkg) => {
+                            const packageId = getInsurancePackageId(pkg);
+                            const isSelected = isSameInsurancePackageId(selectedInsurancePackageId, packageId);
+                            const unitPremium = Number(pkg.unitPremiumAmount) || 0;
+
+                            return (
+                              <button
+                                key={packageId}
+                                type="button"
+                                onClick={() => handleSelectPackage(pkg)}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                                  isSelected
+                                    ? "bg-[#124757]/5 dark:bg-yellow-400/5"
+                                    : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                }`}
+                              >
+                                <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                  isSelected
+                                    ? "border-[#124757] dark:border-yellow-400"
+                                    : "border-slate-300 dark:border-slate-600"
+                                }`}>
+                                  {isSelected && (
+                                    <span className="w-2 h-2 rounded-full bg-[#124757] dark:bg-yellow-400" />
+                                  )}
+                                </span>
+                                <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 overflow-hidden ${
+                                  pkg.providerLogoUrl
+                                    ? "bg-white border border-slate-200 p-0.5"
+                                    : "bg-[#124757]/10 dark:bg-yellow-400/10"
+                                }`}>
+                                  {pkg.providerLogoUrl ? (
+                                    <img src={pkg.providerLogoUrl} alt="" className="w-full h-full object-contain" />
+                                  ) : (
+                                    <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">shield</span>
+                                  )}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{pkg.name}</span>
+                                </span>
+                                <span className={`text-xs font-headline font-black whitespace-nowrap shrink-0 ${
+                                  isSelected ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"
+                                }`}>
+                                  {formatVnd(unitPremium)}/{unitPremiumLabel}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <p className="px-4 py-2.5 text-[10px] text-slate-400 flex items-start gap-1.5 border-t border-slate-100 dark:border-slate-700/80">
+                        <span className="material-symbols-outlined text-[13px] mt-0.5 shrink-0">info</span>
+                        <span>{pendingMessage}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </section>
         )}
 

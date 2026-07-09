@@ -8,6 +8,13 @@ import {
     getBoatDocuments as apiGetBoatDocuments,
     uploadBoatDocument as apiUploadBoatDocument,
     deleteBoatDocument as apiDeleteBoatDocument,
+    getBoatCrewAssignments as apiGetBoatCrewAssignments,
+    createBoatCrewAssignment as apiCreateBoatCrewAssignment,
+    deleteBoatCrewAssignment as apiDeleteBoatCrewAssignment,
+    getBoatCrewReplacements as apiGetBoatCrewReplacements,
+    createBoatCrewReplacement as apiCreateBoatCrewReplacement,
+    deleteBoatCrewReplacement as apiDeleteBoatCrewReplacement,
+    getBoatCrewCalendar as apiGetBoatCrewCalendar,
 } from '../api/boatApi';
 
 // Hàm Service lấy danh sách tàu
@@ -95,6 +102,71 @@ export const removeBoatDocument = async (boatId, documentType) => {
         return await apiDeleteBoatDocument(boatId, documentType);
     } catch (error) {
         console.error(`Lỗi khi xóa hồ sơ ${documentType} của tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+const unwrapList = (data) => (Array.isArray(data) ? data : (data?.items || data?.data || []));
+
+export const fetchBoatCrewAssignments = async (boatId, params = { activeOnly: true }) => {
+    try {
+        return unwrapList(await apiGetBoatCrewAssignments(boatId, params));
+    } catch (error) {
+        console.error(`Lỗi khi lấy crew của tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+export const assignBoatCrew = async (boatId, payload) => {
+    try {
+        return await apiCreateBoatCrewAssignment(boatId, payload);
+    } catch (error) {
+        console.error(`Lỗi khi gán crew cho tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+export const removeBoatCrewAssignment = async (boatId, assignmentId) => {
+    try {
+        return await apiDeleteBoatCrewAssignment(boatId, assignmentId);
+    } catch (error) {
+        console.error(`Lỗi khi gỡ crew ${assignmentId} của tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+export const fetchBoatCrewReplacements = async (boatId, params = { activeOnly: true }) => {
+    try {
+        return unwrapList(await apiGetBoatCrewReplacements(boatId, params));
+    } catch (error) {
+        console.error(`Lỗi khi lấy crew thay thế của tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+export const createBoatCrewReplacement = async (boatId, payload) => {
+    try {
+        return await apiCreateBoatCrewReplacement(boatId, payload);
+    } catch (error) {
+        console.error(`Lỗi khi tạo crew thay thế cho tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+export const removeBoatCrewReplacement = async (boatId, replacementId) => {
+    try {
+        return await apiDeleteBoatCrewReplacement(boatId, replacementId);
+    } catch (error) {
+        console.error(`Lỗi khi hủy crew thay thế ${replacementId} của tàu ${boatId}:`, error);
+        throw error;
+    }
+};
+
+export const fetchBoatCrewCalendar = async (boatId, fromDate, toDate) => {
+    try {
+        return unwrapList(await apiGetBoatCrewCalendar(boatId, { fromDate, toDate }));
+    } catch (error) {
+        console.error(`Lỗi khi lấy lịch crew của tàu ${boatId}:`, error);
         throw error;
     }
 };

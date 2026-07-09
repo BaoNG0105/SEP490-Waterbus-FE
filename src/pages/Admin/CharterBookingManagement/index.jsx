@@ -46,9 +46,9 @@ export function CharterBookingManagement() {
     } catch (error) {
       console.error("Lỗi tải charter booking:", error);
       if (!silent) {
-        setErrorMsg(error.response?.data?.message || (lang === "VN"
-          ? "Không thể tải danh sách yêu cầu thuê tàu."
-          : "Unable to load charter booking requests."));
+      setErrorMsg(error.response?.data?.message || (lang === "VN"
+        ? "Không thể tải danh sách yêu cầu thuê tàu."
+        : "Unable to load charter booking requests."));
       }
     } finally {
       if (!silent) setIsLoading(false);
@@ -163,7 +163,7 @@ export function CharterBookingManagement() {
           <p className="text-sm font-medium text-slate-400">
             {isAdminUser(user)
               ? (lang === "VN"
-                ? "Xử lý yêu cầu thuê tàu, nhập tàu, chốt giá và cập nhật trạng thái booking."
+              ? "Xử lý yêu cầu thuê tàu, nhập tàu, chốt giá và cập nhật trạng thái booking."
                 : "Handle charter requests, assign boats, submit quotes, and update booking status.")
               : (lang === "VN"
                 ? "Chỉ hiển thị các chuyến thuê tàu được phân công cho bạn."
@@ -200,9 +200,9 @@ export function CharterBookingManagement() {
           >
             <div className="flex items-center gap-3.5">
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.bg} ${item.color}`}>
-                <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
-              </div>
-              <div className="min-w-0">
+              <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
+            </div>
+            <div className="min-w-0">
                 <p className="truncate text-[11px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? item.labelVn : item.labelEn}</p>
                 <h3 className={`mt-0.5 truncate font-headline text-lg font-black ${item.color}`}>{item.value}</h3>
               </div>
@@ -371,7 +371,7 @@ export function CharterBookingManagement() {
                               {booking.staffAssignments.length} {lang === "VN" ? "NV" : "staff"}
                             </p>
                           ) : null}
-                        </td>
+                      </td>
                       ) : null}
                       <td className="py-4 px-6 text-right">
                         <p className="font-bold text-slate-800 dark:text-white">{formatDate(booking.createdAt)}</p>
