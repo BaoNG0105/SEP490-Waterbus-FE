@@ -1,8 +1,16 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllBoats, modifyBoatStatus, deleteBoat } from "../../../services/boatService";
+import { fetchAllBoats, modifyBoatStatus, deleteBoat, fetchBoatDetail, fetchBoatDocuments } from "../../../services/boatService";
+import { getActivateAfterMaintenanceBlockReason } from "../../../utils/boatDocuments";
 import Swal from "sweetalert2";
+
+const BOAT_STATUS_OPTIONS = [
+    { value: "Active", labelVn: "Hoạt động", labelEn: "Active", hintVn: "Sẵn sàng vận hành", hintEn: "Ready for operation", icon: "check_circle", tone: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", ring: "border-emerald-200 dark:border-emerald-500/30" },
+    { value: "UnderMaintenance", labelVn: "Bảo trì", labelEn: "Under maintenance", hintVn: "Tạm dừng để bảo dưỡng", hintEn: "Temporarily under maintenance", icon: "build", tone: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-500/10", ring: "border-amber-200 dark:border-amber-500/30" },
+    { value: "Inactive", labelVn: "Chưa hoạt động", labelEn: "Inactive", hintVn: "Không đưa vào lịch chạy", hintEn: "Not scheduled for trips", icon: "pause_circle", tone: "text-slate-500 dark:text-slate-300", bg: "bg-slate-50 dark:bg-slate-800", ring: "border-slate-200 dark:border-slate-600" },
+    { value: "Retired", labelVn: "Dừng hoạt động", labelEn: "Retired", hintVn: "Ngừng sử dụng vĩnh viễn", hintEn: "Permanently out of service", icon: "cancel", tone: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-500/10", ring: "border-rose-200 dark:border-rose-500/30" },
+];
 
 export function BoatManagement() {
     const { lang } = useApp();
@@ -20,6 +28,10 @@ export function BoatManagement() {
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("All");
     const [deckFilter, setDeckFilter] = useState("All");
+    const [statusModalBoat, setStatusModalBoat] = useState(null);
+    const [selectedStatus, setSelectedStatus] = useState("");
+    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+    const [isSavingStatus, setIsSavingStatus] = useState(false);
 
     // EFFECT: GỌI API KHI TRANG VỪA LOAD
     useEffect(() => {
@@ -45,7 +57,14 @@ export function BoatManagement() {
     }, [lang]);
 
     // XỬ LÝ: CẬP NHẬT TRẠNG THÁI TÀU
-    const handleUpdateStatus = async (boat) => {
+    const closeStatusModal = () => {
+        if (isSavingStatus) return;
+        setStatusModalBoat(null);
+        setSelectedStatus("");
+        setIsStatusDropdownOpen(false);
+    };
+
+    const handleUpdateStatus = (boat) => {
         // Tàu chưa cấu hình sơ đồ ghế thì BE đã tự set Inactive, không cho đổi sang trạng thái khác
         if (!boat.seatsConfigured) {
             Swal.fire({
@@ -59,66 +78,109 @@ export function BoatManagement() {
             return;
         }
 
-        // Định nghĩa danh sách tùy chọn trạng thái
-        const statusOptions = {
-            Active: lang === "VN" ? "Hoạt động (Active)" : "Active",
-            UnderMaintenance: lang === "VN" ? "Bảo trì (UnderMaintenance)" : "UnderMaintenance",
-            Inactive: lang === "VN" ? "Chưa hoạt động (Inactive)" : "Inactive",
-            Retired: lang === "VN" ? "Dừng hoạt động (Retired)" : "Retired",
-        };
+        setStatusModalBoat(boat);
+        setSelectedStatus(boat.status || "Inactive");
+        setIsStatusDropdownOpen(false);
+    };
 
-        const { value: selectedStatus } = await Swal.fire({
-            title: lang === "VN" ? "Cập nhật trạng thái tàu" : "Update Boat Status",
-            html: lang === "VN"
-                ? `Chọn trạng thái mới cho tàu <b>${boat.name}</b> (${boat.code})`
-                : `Select new status for <b>${boat.name}</b> (${boat.code})`,
-            input: 'select',
-            inputOptions: statusOptions,
-            inputValue: boat.status, // Hiển thị sẵn trạng thái hiện tại
-            showCancelButton: true,
-            confirmButtonColor: '#124757',
-            cancelButtonColor: '#d33',
-            confirmButtonText: lang === "VN" ? "Xác nhận" : "Confirm",
-            cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
-            inputValidator: (value) => {
-                // Nếu chuyển sang Active mà chưa cấu hình ghế thì chặn luôn từ Frontend!
-                if (value === 'Active' && !boat.seatsConfigured) {
-                    return lang === "VN"
-                        ? 'Tàu chưa được setup sơ đồ ghế! Không thể chuyển sang trạng thái Hoạt động (Active).'
-                        : 'Boat seats are not configured! Cannot switch to Active status.';
-                }
-            }
-        });
+    const handleConfirmStatusUpdate = async () => {
+        if (!statusModalBoat || !selectedStatus) return;
 
-        // Nếu người dùng chọn một trạng thái hợp lệ và khác với trạng thái cũ
-        if (selectedStatus && selectedStatus !== boat.status) {
+        if (selectedStatus === "Active" && !statusModalBoat.seatsConfigured) {
+            Swal.fire({
+                icon: "warning",
+                title: lang === "VN" ? "Chưa thể kích hoạt" : "Cannot activate",
+                text: lang === "VN"
+                    ? "Tàu chưa được setup sơ đồ ghế! Không thể chuyển sang trạng thái Hoạt động."
+                    : "Boat seats are not configured! Cannot switch to Active status.",
+                confirmButtonColor: "#124757",
+            });
+            return;
+        }
+
+        if (selectedStatus === statusModalBoat.status) {
+            closeStatusModal();
+            return;
+        }
+
+        const isActivatingAfterMaintenance =
+            statusModalBoat.status?.toLowerCase() === "undermaintenance" &&
+            selectedStatus === "Active";
+
+        if (isActivatingAfterMaintenance) {
             try {
-                setIsLoading(true);
-                // Gọi API PATCH
-                await modifyBoatStatus(boat.id, { status: selectedStatus });
+                setIsSavingStatus(true);
+                const [boatDetail, documents] = await Promise.all([
+                    fetchBoatDetail(statusModalBoat.id),
+                    fetchBoatDocuments(statusModalBoat.id),
+                ]);
 
-                Swal.fire({
-                    icon: 'success',
-                    title: lang === "VN" ? 'Thành công!' : 'Success!',
-                    text: lang === "VN" ? 'Cập nhật trạng thái tàu thành công.' : 'Boat status updated successfully.',
-                    confirmButtonColor: '#124757'
-                });
+                const blockReason = getActivateAfterMaintenanceBlockReason(
+                    { ...statusModalBoat, ...boatDetail },
+                    documents,
+                    lang
+                );
 
-                // Load lại danh sách tàu sau khi cập nhật thành công
-                const data = await fetchAllBoats();
-                setBoats(data || []);
+                if (blockReason) {
+                    const confirmEdit = await Swal.fire({
+                        icon: "warning",
+                        title: lang === "VN" ? "Cần cập nhật hồ sơ mới" : "Fresh documents required",
+                        text: blockReason,
+                        showCancelButton: true,
+                        confirmButtonColor: "#124757",
+                        cancelButtonColor: "#94a3b8",
+                        confirmButtonText: lang === "VN" ? "Mở hồ sơ tàu" : "Open documents",
+                        cancelButtonText: lang === "VN" ? "Đóng" : "Close",
+                    });
 
+                    if (confirmEdit.isConfirmed) {
+                        navigate(`/admin/boats-management/edit/${statusModalBoat.id}`);
+                    }
+                    return;
+                }
             } catch (error) {
-                console.error("Lỗi đổi trạng thái:", error);
+                console.error("Lỗi kiểm tra hồ sơ tàu:", error);
                 Swal.fire({
-                    icon: 'error',
-                    title: lang === "VN" ? 'Lỗi hệ thống' : 'Error',
-                    text: error.response?.data?.message || (lang === "VN" ? "Không thể cập nhật trạng thái lúc này." : "Failed to update status."),
-                    confirmButtonColor: '#124757'
+                    icon: "error",
+                    title: lang === "VN" ? "Không kiểm tra được hồ sơ" : "Document check failed",
+                    text: error.response?.data?.message || (lang === "VN"
+                        ? "Không thể xác minh hồ sơ trước khi kích hoạt tàu."
+                        : "Could not verify documents before activation."),
+                    confirmButtonColor: "#124757",
                 });
+                return;
             } finally {
-                setIsLoading(false);
+                setIsSavingStatus(false);
             }
+        }
+
+        try {
+            setIsSavingStatus(true);
+            await modifyBoatStatus(statusModalBoat.id, { status: selectedStatus });
+            setStatusModalBoat(null);
+            setSelectedStatus("");
+
+            Swal.fire({
+                icon: "success",
+                title: lang === "VN" ? "Thành công!" : "Success!",
+                text: lang === "VN" ? "Cập nhật trạng thái tàu thành công." : "Boat status updated successfully.",
+                confirmButtonColor: "#124757",
+                timer: 1400,
+                showConfirmButton: false,
+            });
+
+            const data = await fetchAllBoats();
+            setBoats(data || []);
+        } catch (error) {
+            console.error("Lỗi đổi trạng thái:", error);
+            Swal.fire({
+                icon: "error",
+                title: lang === "VN" ? "Lỗi hệ thống" : "Error",
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể cập nhật trạng thái lúc này." : "Failed to update status."),
+                confirmButtonColor: "#124757",
+            });
+        } finally {
+            setIsSavingStatus(false);
         }
     };
 
@@ -516,6 +578,143 @@ export function BoatManagement() {
                     </button>
                 </div>
             </div>
+
+            {statusModalBoat ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <button
+                        type="button"
+                        aria-label="Close overlay"
+                        className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]"
+                        onClick={closeStatusModal}
+                        disabled={isSavingStatus}
+                    />
+                    <div className="relative w-full max-w-lg rounded-4xl border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:border-slate-700 dark:bg-slate-800">
+                        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5 dark:border-slate-700">
+                            <div>
+                                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                                    {lang === "VN" ? "Quản lý đội tàu" : "Fleet management"}
+                                </p>
+                                <h3 className="mt-1 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
+                                    {lang === "VN" ? "Cập nhật trạng thái tàu" : "Update boat status"}
+                                </h3>
+                                <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                    {statusModalBoat.name}
+                                    {statusModalBoat.code ? ` · ${statusModalBoat.code}` : ""}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeStatusModal}
+                                disabled={isSavingStatus}
+                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:hover:text-slate-200"
+                            >
+                                <span className="material-symbols-outlined text-xl">close</span>
+                            </button>
+                        </div>
+
+                        <div className="space-y-2 px-6 py-5">
+                            <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                                {lang === "VN" ? "Trạng thái" : "Status"}
+                            </p>
+                            <div
+                                className="relative"
+                                onBlur={(event) => {
+                                    if (!event.currentTarget.contains(event.relatedTarget)) {
+                                        setIsStatusDropdownOpen(false);
+                                    }
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Escape") setIsStatusDropdownOpen(false);
+                                }}
+                            >
+                                <button
+                                    type="button"
+                                    disabled={isSavingStatus}
+                                    onClick={() => setIsStatusDropdownOpen((open) => !open)}
+                                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-white px-4 py-3.5 text-left outline-none transition-all disabled:opacity-60 dark:bg-slate-900 ${
+                                        isStatusDropdownOpen
+                                            ? "border-[#124757] ring-2 ring-[#124757]/15 dark:border-yellow-400 dark:ring-yellow-400/20"
+                                            : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
+                                    }`}
+                                    aria-haspopup="listbox"
+                                    aria-expanded={isStatusDropdownOpen}
+                                >
+                                    <span className="truncate text-sm font-bold text-slate-800 dark:text-white">
+                                        {(() => {
+                                            const selected = BOAT_STATUS_OPTIONS.find((option) => option.value === selectedStatus);
+                                            return selected
+                                                ? (lang === "VN" ? selected.labelVn : selected.labelEn)
+                                                : (lang === "VN" ? "Chọn trạng thái" : "Select status");
+                                        })()}
+                                    </span>
+                                    <span className={`material-symbols-outlined shrink-0 text-xl text-slate-400 transition-transform ${isStatusDropdownOpen ? "rotate-180" : ""}`}>
+                                        expand_more
+                                    </span>
+                                </button>
+
+                                {isStatusDropdownOpen && !isSavingStatus ? (
+                                    <div
+                                        className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-slate-900"
+                                        role="listbox"
+                                    >
+                                        {BOAT_STATUS_OPTIONS.map((option) => {
+                                            const isSelected = selectedStatus === option.value;
+                                            return (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedStatus(option.value);
+                                                        setIsStatusDropdownOpen(false);
+                                                    }}
+                                                    className={`w-full rounded-xl px-4 py-2.5 text-left text-sm font-bold transition-colors ${
+                                                        isSelected
+                                                            ? "bg-[#124757]/5 text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-300"
+                                                            : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                                                    }`}
+                                                    role="option"
+                                                    aria-selected={isSelected}
+                                                >
+                                                    {lang === "VN" ? option.labelVn : option.labelEn}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                ) : null}
+                            </div>
+
+                            {statusModalBoat.status?.toLowerCase() === "undermaintenance" && selectedStatus === "Active" && (
+                                <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] font-bold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                                    {lang === "VN"
+                                        ? "Tàu đang bảo trì. Cần upload lại toàn bộ hồ sơ mới trước khi chuyển sang Hoạt động."
+                                        : "This boat is under maintenance. Re-upload all documents before switching to Active."}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 px-6 py-4 sm:flex-row sm:justify-end dark:border-slate-700">
+                            <button
+                                type="button"
+                                onClick={closeStatusModal}
+                                disabled={isSavingStatus}
+                                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                            >
+                                {lang === "VN" ? "Hủy" : "Cancel"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmStatusUpdate}
+                                disabled={isSavingStatus || !selectedStatus}
+                                className="rounded-2xl bg-[#124757] px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
+                            >
+                                {isSavingStatus
+                                    ? (lang === "VN" ? "Đang lưu..." : "Saving...")
+                                    : (lang === "VN" ? "Cập nhật" : "Update")}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
 
         </div>
     );

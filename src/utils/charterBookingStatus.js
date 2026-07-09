@@ -1,38 +1,47 @@
 const baseClasses = {
   pendingQuote: {
-    classes: "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
+    classes: "bg-amber-50/70 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/15",
+    text: "text-amber-700 dark:text-amber-400",
     dot: "bg-amber-500",
   },
   quoted: {
-    classes: "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20",
+    classes: "bg-indigo-50/70 text-indigo-700 border-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/15",
+    text: "text-indigo-700 dark:text-indigo-400",
     dot: "bg-indigo-500",
   },
   pendingPayment: {
-    classes: "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20",
+    classes: "bg-orange-50/70 text-orange-700 border-orange-100 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/15",
+    text: "text-orange-700 dark:text-orange-400",
     dot: "bg-orange-500",
   },
   confirmed: {
-    classes: "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20",
+    classes: "bg-sky-50/70 text-sky-700 border-sky-100 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/15",
+    text: "text-sky-700 dark:text-sky-400",
     dot: "bg-sky-500",
   },
   completed: {
-    classes: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
+    classes: "bg-emerald-50/70 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/15",
+    text: "text-emerald-700 dark:text-emerald-400",
     dot: "bg-emerald-500",
   },
   cancelled: {
-    classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20",
+    classes: "bg-rose-50/70 text-rose-700 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/15",
+    text: "text-rose-700 dark:text-rose-400",
     dot: "bg-rose-500",
   },
   expired: {
-    classes: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    classes: "bg-slate-50 text-slate-600 border-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    text: "text-slate-600 dark:text-slate-300",
     dot: "bg-slate-400",
   },
   refunded: {
-    classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20",
+    classes: "bg-teal-50/70 text-teal-700 border-teal-100 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/15",
+    text: "text-teal-700 dark:text-teal-400",
     dot: "bg-teal-500",
   },
   default: {
-    classes: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700",
+    classes: "bg-slate-50 text-slate-500 border-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700",
+    text: "text-slate-500 dark:text-slate-400",
     dot: "bg-slate-400",
   },
 };
@@ -52,19 +61,20 @@ export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang) 
     return { label: isVn ? "Đã hoàn tiền" : "Refunded", ...baseClasses.refunded };
   }
   if (status === "completed") {
-    return { label: isVn ? "Hoàn tất chuyến" : "Trip completed", ...baseClasses.completed };
+    return { label: isVn ? "Hoàn tất" : "Completed", ...baseClasses.completed };
   }
   if (status === "pendingquote") {
     return { label: isVn ? "Chờ báo giá" : "Pending quote", ...baseClasses.pendingQuote };
   }
+  // Payment detail stays on the secondary line in list views — keep booking label short.
   if (status === "quoted" && (!payment || payment === "unpaid")) {
-    return { label: isVn ? "Đã báo giá - chờ thanh toán" : "Quoted - waiting for payment", ...baseClasses.quoted };
+    return { label: isVn ? "Đã báo giá" : "Quoted", ...baseClasses.quoted };
   }
   if (status === "confirmed" && payment === "depositpaid") {
-    return { label: isVn ? "Đã đặt cọc - chờ thanh toán phần còn lại" : "Deposit paid - waiting for remaining payment", ...baseClasses.pendingPayment };
+    return { label: isVn ? "Đã xác nhận" : "Confirmed", ...baseClasses.pendingPayment };
   }
   if (status === "confirmed" && payment === "paid") {
-    return { label: isVn ? "Đã thanh toán đủ" : "Fully paid", ...baseClasses.completed };
+    return { label: isVn ? "Đã thanh toán" : "Paid", ...baseClasses.completed };
   }
   if (status === "pendingpayment") {
     return { label: isVn ? "Chờ thanh toán" : "Pending payment", ...baseClasses.pendingPayment };

@@ -42,18 +42,9 @@ export const getCharterCapabilities = (user, booking = null) => {
 export const getDefaultCharterTab = (booking, capabilities = {}) => {
   if (!booking) return "overview";
   if (bookingNeedsRefundAttention(booking) && capabilities.canViewPayments) return "payments";
-  // Chưa báo giá xong → ưu tiên tab Thao tác (không nhảy sang gán quản lý).
-  if (capabilities.canQuote && booking.status === "PendingQuote") return "actions";
-  // Báo giá / chờ thanh toán → tổng quan theo dõi tiến trình.
-  if (["Quoted", "PendingPayment"].includes(booking.status)) return "overview";
-  // Đã xác nhận mà chưa gán quản lý / NV → mới ưu tiên tab phân công.
-  if (
-    capabilities.canAssignManager
-    && !booking.assignedManagerId
-    && booking.status === "Confirmed"
-  ) {
-    return "assignment";
-  }
+  // Admin: luôn ưu tiên tab Thao tác (báo giá / cập nhật) khi mở chi tiết.
+  if (capabilities.canQuote) return "actions";
+  // Manager phụ trách: ưu tiên phân công NV khi đã xác nhận.
   if (
     capabilities.canAssignStaff
     && booking.status === "Confirmed"

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchBoatDetail, modifyBoat } from "../../../services/boatService";
 import { fetchSeatLayout, deleteSeats, changeSeatStatus } from "../../../services/seatService";
+import { BoatDocumentsPanel } from "../../../components/BoatDocumentsPanel";
 import Swal from "sweetalert2";
 
 export function EditBoat() {
@@ -11,6 +12,8 @@ export function EditBoat() {
   const { id } = useParams();
 
   const [formData, setFormData] = useState(null);
+  const [boatStatus, setBoatStatus] = useState("");
+  const [maintenanceStartedAt, setMaintenanceStartedAt] = useState(null);
   const [seatMatrix, setSeatMatrix] = useState(null);
   const [activeDeck, setActiveDeck] = useState(1);
   
@@ -22,6 +25,7 @@ export function EditBoat() {
   const [isDeletingLayout, setIsDeletingLayout] = useState(false);
   const [togglingSeatId, setTogglingSeatId] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [activeTab, setActiveTab] = useState("specs");
 
   const loadBoatAndSeatsData = async () => {
     try {
@@ -42,6 +46,14 @@ export function EditBoat() {
         description: boatDetail.description || "",
         rentalPrices: boatDetail.rentalPrices || []
       });
+      setBoatStatus(boatDetail.status || "");
+      setMaintenanceStartedAt(
+        boatDetail.maintenanceStartedAt ||
+        boatDetail.maintenanceAt ||
+        boatDetail.statusChangedAt ||
+        boatDetail.lastMaintenanceAt ||
+        null
+      );
 
       let legacyImages = [];
       if (boatDetail.imageUrls && boatDetail.imageUrls.length > 0) {
@@ -315,15 +327,47 @@ export function EditBoat() {
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN" ? "Thay đổi thông số cơ bản, cập nhật bộ sưu tập ảnh đại diện và theo dõi sơ đồ phân bổ ghế." : "Modify hardware blueprints, attach media collections and monitor seating grids."}
           </p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => setActiveTab("specs")}
+              className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all ${
+                activeTab === "specs"
+                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md"
+                  : "bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              {lang === "VN" ? "Thông số & ghế" : "Specs & seats"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("documents")}
+              className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all ${
+                activeTab === "documents"
+                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md"
+                  : "bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              {lang === "VN" ? "Hồ sơ pháp lý" : "Legal documents"}
+            </button>
+          </div>
         </div>
       </div>
 
-      {errorMsg && (
+      {errorMsg && activeTab === "specs" && (
         <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20 shadow-sm">
           {errorMsg}
         </div>
       )}
 
+      {activeTab === "documents" ? (
+        <BoatDocumentsPanel
+          boatId={id}
+          boatCode={formData.code}
+          boatStatus={boatStatus}
+          maintenanceStartedAt={maintenanceStartedAt}
+        />
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         
         {/* PANEL TRÁI: FORM ĐIỀN THÔNG TIN */}
@@ -615,6 +659,7 @@ export function EditBoat() {
 
         </div>
       </div>
+      )}
     </div>
   );
 }

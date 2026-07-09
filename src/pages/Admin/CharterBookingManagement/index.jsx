@@ -4,9 +4,7 @@ import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchAdminCharterBookings, fetchAssignedCharterBookings } from "../../../services/charterBookingService";
 import {
-  getAdminActionInfo,
   getPaginationWindow,
-  getPriorityBookings,
   matchesSmartFilter,
 } from "../../../utils/charterBookingActions";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
@@ -84,10 +82,30 @@ export function CharterBookingManagement() {
     return matchesSearch && matchesStatus;
   });
 
+  const getSortableTime = (booking, field) => {
+    if (field === "departureDate") {
+      const datePart = String(booking.departureDate || "").slice(0, 10);
+      const timePart = String(booking.startTime || "00:00:00").slice(0, 8);
+      if (!datePart) return 0;
+      // Prefer local date+time so same-day bookings still reorder by startTime.
+      const combined = `${datePart}T${/^\d{2}:\d{2}$/.test(timePart) ? `${timePart}:00` : timePart}`;
+      const time = new Date(combined).getTime();
+      if (!Number.isNaN(time)) return time;
+      const fallback = new Date(booking.departureDate).getTime();
+      return Number.isNaN(fallback) ? 0 : fallback;
+    }
+
+    const time = new Date(booking[field]).getTime();
+    return Number.isNaN(time) ? 0 : time;
+  };
+
   const sortedBookings = sortField
     ? [...filteredBookings].sort((a, b) => {
-      const timeA = new Date(a[sortField]).getTime() || 0;
-      const timeB = new Date(b[sortField]).getTime() || 0;
+      const timeA = getSortableTime(a, sortField);
+      const timeB = getSortableTime(b, sortField);
+      if (timeA === timeB) {
+        return String(a.bookingCode || "").localeCompare(String(b.bookingCode || ""));
+      }
       return sortDirection === "asc" ? timeA - timeB : timeB - timeA;
     })
     : filteredBookings;
@@ -121,14 +139,11 @@ export function CharterBookingManagement() {
       .reduce((sum, item) => sum + item.estimatedPrice, 0),
   };
 
-  const priorityBookings = getPriorityBookings(bookings, 4);
   const showManagerColumn = isAdminUser(user);
 
   const resolveBookingTab = (booking) => {
     const caps = getCharterCapabilities(user, booking);
-    const assignmentTab = getDefaultCharterTab(booking, caps);
-    if (assignmentTab === "assignment") return "assignment";
-    return getAdminActionInfo(booking, lang).tab;
+    return getDefaultCharterTab(booking, caps);
   };
 
   const openAdminBooking = (booking, tab) => {
@@ -195,51 +210,6 @@ export function CharterBookingManagement() {
           </div>
         ))}
       </div>
-
-      {priorityBookings.length > 0 && (
-        <section className="rounded-4xl border border-amber-100 bg-linear-to-br from-amber-50/80 to-white p-5 shadow-sm dark:border-amber-500/20 dark:from-amber-500/5 dark:to-slate-800">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                {lang === "VN" ? "Hàng đợi ưu tiên" : "Priority queue"}
-              </h3>
-              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                {lang === "VN" ? "Booking cần báo giá, thanh toán hoặc hoàn tiền ngay." : "Bookings needing quote, payment, or refund attention."}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-            {priorityBookings.map((booking) => {
-              const actionInfo = getAdminActionInfo(booking, lang);
-              return (
-                <button
-                  key={`queue-${booking.id || booking.bookingCode}`}
-                  type="button"
-                  onClick={() => openAdminBooking(booking, resolveBookingTab(booking))}
-                  className="rounded-3xl border border-white bg-white/90 p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-headline font-black text-[#124757] dark:text-white">{booking.bookingCode}</p>
-                      <p className="mt-1 truncate text-xs font-bold text-slate-500 dark:text-slate-300">{booking.customerName}</p>
-                    </div>
-                    {actionInfo.urgent && (
-                      <span className="inline-flex h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#FFD100]" />
-                    )}
-                  </div>
-                  <div className={`mt-3 rounded-2xl border px-3 py-2 ${actionInfo.classes}`}>
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-lg">{actionInfo.icon}</span>
-                      <span className="text-[10px] font-headline font-black uppercase tracking-wider">{actionInfo.label}</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
 
       <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col lg:flex-row items-center gap-4 justify-between">
         <div className="relative w-full lg:max-w-md">
@@ -317,7 +287,10 @@ export function CharterBookingManagement() {
                   <button
                     type="button"
                     onClick={() => handleSort("departureDate")}
-                    className="inline-flex items-center gap-1 transition-colors hover:text-[#124757] dark:hover:text-yellow-400"
+                    className={`inline-flex items-center gap-1 transition-colors hover:text-[#124757] dark:hover:text-yellow-400 ${
+                      sortField === "departureDate" ? "text-[#124757] dark:text-yellow-400" : ""
+                    }`}
+                    title={lang === "VN" ? "Sắp xếp theo ngày/giờ khởi hành" : "Sort by departure date/time"}
                   >
                     {lang === "VN" ? "Lịch thuê" : "Schedule"}
                     <span className="material-symbols-outlined text-sm">{getSortIcon("departureDate")}</span>
@@ -331,7 +304,10 @@ export function CharterBookingManagement() {
                   <button
                     type="button"
                     onClick={() => handleSort("createdAt")}
-                    className="inline-flex items-center gap-1 transition-colors hover:text-[#124757] dark:hover:text-yellow-400"
+                    className={`inline-flex items-center gap-1 transition-colors hover:text-[#124757] dark:hover:text-yellow-400 ${
+                      sortField === "createdAt" ? "text-[#124757] dark:text-yellow-400" : ""
+                    }`}
+                    title={lang === "VN" ? "Sắp xếp theo ngày tạo" : "Sort by created date"}
                   >
                     {lang === "VN" ? "Ngày tạo" : "Created At"}
                     <span className="material-symbols-outlined text-sm">{getSortIcon("createdAt")}</span>
@@ -375,18 +351,18 @@ export function CharterBookingManagement() {
                         <p className="text-[10px] text-slate-400 mt-1">{String(booking.startTime).slice(0, 5)}</p>
                       </td>
                       <td className="py-4 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusInfo.classes}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot}`}></span>
+                        <span className={`inline-flex items-center justify-center gap-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${statusInfo.text || "text-slate-600"}`}>
+                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusInfo.dot}`} />
                           {statusInfo.label}
                         </span>
-                        <p className="text-[9px] text-slate-400 mt-1">{getPaymentStatusInfo(booking.paymentStatus, lang).label}</p>
+                        <p className="mt-1 text-[9px] text-slate-400">{getPaymentStatusInfo(booking.paymentStatus, lang).label}</p>
                       </td>
                       {showManagerColumn ? (
                         <td className="py-4 px-4">
                           {booking.assignedManagerName ? (
                             <p className="font-bold text-slate-800 dark:text-white">{booking.assignedManagerName}</p>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                            <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400">
                               {lang === "VN" ? "Chưa gán" : "Unassigned"}
                             </span>
                           )}

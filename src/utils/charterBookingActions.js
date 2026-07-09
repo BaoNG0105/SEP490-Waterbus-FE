@@ -261,23 +261,6 @@ export const matchesSmartFilter = (booking, filterKey) => {
   }
 };
 
-export const getPriorityBookings = (bookings, limit = 4) =>
-  [...bookings]
-    .map((booking) => {
-      const adminAction = getAdminActionInfo(booking, "VN");
-      let score = 0;
-      if (booking.status === "PendingQuote") score += 100;
-      if (bookingNeedsRefundAttention(booking)) score += 95;
-      if (adminAction.urgent) score += 40;
-      if (booking.status === "Quoted") score += 60;
-      if (booking.status === "PendingPayment") score += 70;
-      return { booking, score };
-    })
-    .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map(({ booking }) => booking);
-
 export const getPaginationWindow = (currentPage, totalPages, windowSize = 5) => {
   if (totalPages <= windowSize) {
     return Array.from({ length: totalPages }, (_, index) => index + 1);
