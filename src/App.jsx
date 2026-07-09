@@ -43,6 +43,9 @@ import { AdminCharterBookingDetail, AdminCharterBookingRefund, CharterBookingMan
 import { PromotionManagement } from "./pages/Admin/PromotionManagement";
 import { CreatePromotion } from "./pages/Admin/PromotionManagement/CreatePromotion";
 import { EditPromotion } from "./pages/Admin/PromotionManagement/EditPromotion";
+import { BlogManagement } from "./pages/Admin/BlogManagement";
+import { CreateBlog } from "./pages/Admin/BlogManagement/CreateBlog";
+import { EditBlog } from "./pages/Admin/BlogManagement/EditBlog";
 
 function App() {
   return (
@@ -456,6 +459,36 @@ function App() {
             element={
               <AdminLayout title="Edit Promotion">
                 <EditPromotion />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Blog Management: List Page ******* */}
+          <Route
+            path="/admin/news"
+            element={
+              <AdminLayout title="Blog Management">
+                <BlogManagement />
+              </AdminLayout>
+            }
+          />
+
+          {/* Blog Management: Create Page */}
+          <Route
+            path="/admin/news/create"
+            element={
+              <AdminLayout title="Create Blog Post">
+                <CreateBlog />
+              </AdminLayout>
+            }
+          />
+
+          {/* Blog Management: Edit Page */}
+          <Route
+            path="/admin/news/edit/:id"
+            element={
+              <AdminLayout title="Edit Blog Post">
+                <EditBlog />
               </AdminLayout>
             }
           />
