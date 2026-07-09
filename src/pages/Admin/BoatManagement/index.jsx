@@ -244,6 +244,7 @@ export function BoatManagement() {
     const handleAddBoat = () => navigate("/admin/boats-management/create");
     const handleEditBoat = (id) => navigate(`/admin/boats-management/edit/${id}`);
     const handleConfigureSeats = (id) => navigate(`/admin/boats-management/seats/${id}`);
+    const handleCrewSchedule = (id) => navigate(`/admin/boats-management/crew/${id}`);
     const handleDeleteBoat = async (boat) => {
         const confirmResult = await Swal.fire({
             title: lang === "VN" ? "Xóa tàu?" : "Delete Boat?",
@@ -480,7 +481,7 @@ export function BoatManagement() {
                                             {/* "numberOfDecks": Số tầng */}
                                             <td className="py-4 px-6 text-center">
                                                 <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border dark:border-slate-700 text-slate-600 dark:text-slate-300">
-                                                    {boat.numberOfDecks} {lang === "VN" ? "Tầng" : "Deck(s)"}
+                                                    {boat.numberOfDecks}
                                                 </span>
                                             </td>
 
@@ -520,6 +521,14 @@ export function BoatManagement() {
                                                             : (lang === "VN" ? "Cần cấu hình sơ đồ ghế trước khi đổi trạng thái" : "Configure the seat layout before changing status")}
                                                     >
                                                         <span className="material-symbols-outlined text-[18px]">published_with_changes</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCrewSchedule(boat.id)}
+                                                        className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 flex items-center justify-center transition-all shadow-inner"
+                                                        title={lang === "VN" ? "Phân lịch crew" : "Crew Schedule"}
+                                                    >
+                                                        <span className="material-symbols-outlined text-base">groups</span>
                                                     </button>
                                                     <button
                                                         type="button"
@@ -723,3 +732,4 @@ export function BoatManagement() {
 export { EditBoat } from "./EditBoat";
 export { CreateBoat } from "./CreateBoat";
 export { SeatLayoutEditor } from "./SeatLayoutEditor";
+export { BoatCrewSchedule } from "./BoatCrewSchedule";

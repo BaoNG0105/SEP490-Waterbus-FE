@@ -32,3 +32,27 @@ export const uploadBoatDocument = (boatId, documentType, formData) =>
 
 export const deleteBoatDocument = (boatId, documentType) =>
     api.delete(`/boats/${boatId}/documents/${documentType}`).then((response) => response.data);
+
+// API Crew mặc định của tàu (OnBoard, dài hạn theo fromDate/toDate)
+export const getBoatCrewAssignments = (boatId, params) =>
+    api.get(`/boats/${boatId}/crew-assignments`, { params }).then((response) => response.data);
+
+export const createBoatCrewAssignment = (boatId, data) =>
+    api.post(`/boats/${boatId}/crew-assignments`, data).then((response) => response.data);
+
+export const deleteBoatCrewAssignment = (boatId, assignmentId) =>
+    api.delete(`/boats/${boatId}/crew-assignments/${assignmentId}`).then((response) => response.data);
+
+// API Crew thay thế (khi có người nghỉ/thay tạm thời)
+export const getBoatCrewReplacements = (boatId, params) =>
+    api.get(`/boats/${boatId}/crew-replacements`, { params }).then((response) => response.data);
+
+export const createBoatCrewReplacement = (boatId, data) =>
+    api.post(`/boats/${boatId}/crew-replacements`, data).then((response) => response.data);
+
+export const deleteBoatCrewReplacement = (boatId, replacementId) =>
+    api.delete(`/boats/${boatId}/crew-replacements/${replacementId}`).then((response) => response.data);
+
+// API Lịch crew theo khoảng ngày (xem theo tháng)
+export const getBoatCrewCalendar = (boatId, params) =>
+    api.get(`/boats/${boatId}/crew-calendar`, { params }).then((response) => response.data);

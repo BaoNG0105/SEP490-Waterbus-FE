@@ -1,4 +1,5 @@
 import { getCharterDepositAmount } from "./charterBookingActions";
+import { normalizeInsuranceFromBooking } from "./insurancePreview";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -193,6 +194,7 @@ export const buildQuotePreviewModel = (preview, options = {}) => {
   const promotionValue = Number(pick(preview, ["promotion.discountValue", "promotionDiscountValue"], 0)) || 0;
 
   const deposit = getCharterDepositAmount(totalAmount, Number(pick(preview, ["depositAmount"], 0)) || 0);
+  const insurance = normalizeInsuranceFromBooking(preview);
 
   return {
     rentalUnit,
@@ -207,6 +209,7 @@ export const buildQuotePreviewModel = (preview, options = {}) => {
     promotionType,
     promotionValue,
     deposit,
+    insurance,
     routeEstimate,
     formatMoney,
   };
