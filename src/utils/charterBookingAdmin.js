@@ -354,8 +354,15 @@ export const formatRouteEstimate = (routeEstimate, lang) => {
 
   const parts = [];
   const distance = Number(routeEstimate.totalDistanceKm);
-  const travelMinutes = Number(routeEstimate.estimatedTravelMinutes);
-  const chargeableDurationValue = Number(routeEstimate.chargeableDurationValue);
+  const estimatedDurationMinutes = Number(routeEstimate.estimatedDurationMinutes);
+  const travelMinutes = Number.isFinite(estimatedDurationMinutes) && estimatedDurationMinutes > 0
+    ? estimatedDurationMinutes
+    : Number(routeEstimate.estimatedTravelMinutes);
+  const chargeableDurationMinutes = Number(routeEstimate.chargeableDurationMinutes);
+  const chargeableIsMinutes = Number.isFinite(chargeableDurationMinutes) && chargeableDurationMinutes > 0;
+  const chargeableDurationValue = chargeableIsMinutes
+    ? chargeableDurationMinutes
+    : Number(routeEstimate.chargeableDurationValue);
   const rentalUnit = routeEstimate.rentalUnit;
 
   if (Number.isFinite(distance) && distance > 0) {
@@ -365,7 +372,11 @@ export const formatRouteEstimate = (routeEstimate, lang) => {
     parts.push(`${lang === "VN" ? "Thời gian di chuyển" : "Travel time"}: ${travelMinutes} ${lang === "VN" ? "phút" : "min"}`);
   }
   if (Number.isFinite(chargeableDurationValue) && chargeableDurationValue > 0) {
-    parts.push(`${lang === "VN" ? "Thời lượng tính tiền" : "Chargeable duration"}: ${formatDuration(chargeableDurationValue, rentalUnit, lang)}`);
+    parts.push(
+      chargeableIsMinutes
+        ? `${lang === "VN" ? "Thời lượng tính tiền" : "Chargeable duration"}: ${chargeableDurationValue} ${lang === "VN" ? "phút" : "min"}`
+        : `${lang === "VN" ? "Thời lượng tính tiền" : "Chargeable duration"}: ${formatDuration(chargeableDurationValue, rentalUnit, lang)}`,
+    );
   }
 
   return parts.join(" · ");
@@ -405,9 +416,6 @@ export const buildQuoteBoatRows = (booking) => {
 
 export const buildQuoteFormFromBooking = (booking) => ({
   boats: buildQuoteBoatRows(booking),
-  rentalUnit: booking?.rentalUnit || "Day",
-  durationValue: booking?.durationValue || 1,
-  promotionCode: booking?.promotionCode || "",
 });
 
 export const resolveQuoteDepositAmount = (quotePreview) => {
@@ -467,6 +475,5 @@ export const normalizeBooking = (item) => {
     createdAt: pick(item, ["createdAt", "createdDate"]),
     assignedManagerId: String(pick(item, ["assignedManagerId", "managerUserId", "assignedManager.id", "assignedManager.userId"], "")),
     assignedManagerName: pick(item, ["assignedManagerName", "assignedManager.fullName", "assignedManager.name"], ""),
-    staffAssignments: Array.isArray(item?.staffAssignments) ? item.staffAssignments : [],
   };
 };

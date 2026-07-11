@@ -13,9 +13,7 @@ import {
     assignAdminCharterBookingManager as apiAssignAdminCharterBookingManager,
     getAssignedCharterBookings as apiGetAssignedCharterBookings,
     getAssignedCharterBookingById as apiGetAssignedCharterBookingById,
-    getCharterBookingStaffAssignments as apiGetCharterBookingStaffAssignments,
-    createCharterBookingStaffAssignment as apiCreateCharterBookingStaffAssignment,
-    replaceCharterBookingStaffAssignment as apiReplaceCharterBookingStaffAssignment,
+    respondToCharterBookingQuote as apiRespondToCharterBookingQuote,
     importCharterBookingPassengers as apiImportCharterBookingPassengers,
     getCharterBookingManifestByCode as apiGetCharterBookingManifestByCode,
     getCharterBookingManifestByQrToken as apiGetCharterBookingManifestByQrToken,
@@ -174,37 +172,14 @@ export const fetchAssignedCharterBookingDetail = async (id) => {
     }
 };
 
-export const fetchCharterBookingStaffAssignments = async (id) => {
+export const respondToCharterBookingQuote = async (id, payload) => {
     try {
-        return await apiGetCharterBookingStaffAssignments(id);
-    } catch (error) {
-        console.error(`Lỗi khi lấy staff assignments charter booking ${id}:`, error);
-        throw error;
-    }
-};
-
-export const createCharterBookingStaffAssignment = async (id, payload) => {
-    try {
-        return await apiCreateCharterBookingStaffAssignment(id, {
-            staffUserId: payload.staffUserId,
-            boatId: payload.boatId || null,
-            shiftCode: payload.shiftCode || "Day",
-            dutyRole: payload.dutyRole || "Captain",
+        return await apiRespondToCharterBookingQuote(id, {
+            action: payload.action,
+            note: payload.note || null,
         });
     } catch (error) {
-        console.error(`Lỗi khi gán staff charter booking ${id}:`, error);
-        throw error;
-    }
-};
-
-export const replaceCharterBookingStaffAssignment = async (id, assignmentId, payload) => {
-    try {
-        return await apiReplaceCharterBookingStaffAssignment(id, assignmentId, {
-            replacementStaffUserId: payload.replacementStaffUserId,
-            reason: payload.reason || "",
-        });
-    } catch (error) {
-        console.error(`Lỗi khi thay staff charter booking ${id}:`, error);
+        console.error(`Lỗi khi phản hồi báo giá charter booking ${id}:`, error);
         throw error;
     }
 };

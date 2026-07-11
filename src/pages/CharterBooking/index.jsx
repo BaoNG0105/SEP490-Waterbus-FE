@@ -22,8 +22,6 @@ export function CharterBooking() {
     contactPhone: user?.phoneNumber || user?.phone || "",
     contactEmail: user?.email || "",
     departureDate: getMinDepartureDate(),
-    rentalUnit: "Day",
-    durationValue: 1,
     adultCount: 1,
     childCount: 0,
     startTime: "08:00",

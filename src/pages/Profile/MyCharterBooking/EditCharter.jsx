@@ -45,8 +45,6 @@ const buildFormDataFromDetail = (detail, user) => ({
   contactPhone: pick(detail, ["contactPhone"], user?.phoneNumber || user?.phone || ""),
   contactEmail: pick(detail, ["contactEmail"], user?.email || ""),
   departureDate: toDateInputValue(pick(detail, ["departureDate"])) || getMinDepartureDate(),
-  rentalUnit: pick(detail, ["rentalUnit"], "Day"),
-  durationValue: Number(pick(detail, ["durationValue"], 1)),
   adultCount: Number(pick(detail, ["adultCount"], 1)),
   childCount: Number(pick(detail, ["childCount"], 0)),
   startTime: pick(detail, ["startTime"], "08:00").slice(0, 5),

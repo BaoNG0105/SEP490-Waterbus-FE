@@ -366,11 +366,6 @@ export function CharterBookingManagement() {
                               {lang === "VN" ? "Chưa gán" : "Unassigned"}
                             </span>
                           )}
-                          {Array.isArray(booking.staffAssignments) && booking.staffAssignments.length > 0 ? (
-                            <p className="mt-1 text-[10px] text-slate-400">
-                              {booking.staffAssignments.length} {lang === "VN" ? "NV" : "staff"}
-                            </p>
-                          ) : null}
                       </td>
                       ) : null}
                       <td className="py-4 px-6 text-right">

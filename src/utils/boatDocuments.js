@@ -94,7 +94,7 @@ export const areDocumentsFreshAfterMaintenance = (boat, documents = []) => {
 
   const maintenanceStartedAt = getMaintenanceStartedAt(boat);
   if (!maintenanceStartedAt) {
-    return normalized.every((doc) => doc.isUploaded);
+    return true;
   }
 
   const maintenanceTime = new Date(maintenanceStartedAt).getTime();
@@ -102,29 +102,32 @@ export const areDocumentsFreshAfterMaintenance = (boat, documents = []) => {
     return false;
   }
 
-  return normalized.every((doc) => {
-    const updatedAt = getDocumentUpdatedAt(doc);
-    if (!updatedAt) return false;
-    const updatedTime = new Date(updatedAt).getTime();
-    return !Number.isNaN(updatedTime) && updatedTime > maintenanceTime;
-  });
+  // Sau bảo trì chỉ bắt buộc upload lại Inspection (đăng kiểm) với ngày sau thời điểm bảo trì.
+  const inspection = normalized.find((doc) => doc.type === "Inspection");
+  const updatedAt = getDocumentUpdatedAt(inspection);
+  if (!updatedAt) return false;
+  const updatedTime = new Date(updatedAt).getTime();
+  return !Number.isNaN(updatedTime) && updatedTime > maintenanceTime;
 };
 
-export const getActivateAfterMaintenanceBlockReason = (boat, documents, lang = "VN") => {
+export const getActivateBoatBlockReason = (boat, documents, lang = "VN", { requireFreshInspection = false } = {}) => {
   const normalized = normalizeBoatDocuments(documents);
   const missingCount = normalized.filter((doc) => !doc.isUploaded).length;
 
   if (missingCount > 0) {
     return lang === "VN"
-      ? `Tàu đang bảo trì. Cần upload đủ 4 hồ sơ trước khi kích hoạt lại (còn thiếu ${missingCount}).`
-      : `This boat is under maintenance. Upload all 4 documents before activating (${missingCount} missing).`;
+      ? `Cần upload đủ 4 hồ sơ pháp lý trước khi kích hoạt (còn thiếu ${missingCount}).`
+      : `Upload all 4 legal documents before activating (${missingCount} missing).`;
   }
 
-  if (!areDocumentsFreshAfterMaintenance(boat, documents)) {
+  if (requireFreshInspection && !areDocumentsFreshAfterMaintenance(boat, documents)) {
     return lang === "VN"
-      ? "Tàu đang bảo trì. Vui lòng cập nhật lại toàn bộ hồ sơ sau bảo trì trước khi chuyển sang Hoạt động."
-      : "This boat is under maintenance. Re-upload all documents after maintenance before switching to Active.";
+      ? "Tàu từng bảo trì. Cần upload lại hồ sơ Đăng kiểm (Inspection) sau bảo trì trước khi chuyển sang Hoạt động."
+      : "This boat was under maintenance. Re-upload the Inspection document after maintenance before switching to Active.";
   }
 
   return "";
 };
+
+export const getActivateAfterMaintenanceBlockReason = (boat, documents, lang = "VN") =>
+  getActivateBoatBlockReason(boat, documents, lang, { requireFreshInspection: true });
