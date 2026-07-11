@@ -14,6 +14,7 @@ import {
   fetchMyCharterBookingDetail,
   importMyCharterBookingPassengers,
   printSelectedCharterBookingTickets,
+  respondToCharterBookingQuote,
   updateMyCharterBookingPassengers,
 } from "../../../services/charterBookingService";
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
@@ -849,6 +850,99 @@ export function CharterDetail() {
     }
   };
 
+  const handleRespondToQuote = async (action) => {
+    if (!booking?.id || isSubmitting) return;
+
+    let note = null;
+    if (action === "RequestChanges") {
+      const result = await Swal.fire({
+        icon: "question",
+        title: lang === "VN" ? "Yêu cầu chỉnh sửa báo giá" : "Request quote changes",
+        input: "textarea",
+        inputLabel: lang === "VN" ? "Ghi chú (tuỳ chọn)" : "Note (optional)",
+        inputPlaceholder: lang === "VN" ? "Mô tả thay đổi bạn muốn..." : "Describe the changes you want...",
+        showCancelButton: true,
+        confirmButtonText: lang === "VN" ? "Gửi yêu cầu" : "Submit request",
+        cancelButtonText: lang === "VN" ? "Huỷ" : "Cancel",
+        confirmButtonColor: "#124757",
+      });
+      if (!result.isConfirmed) return;
+      note = String(result.value || "").trim() || null;
+    }
+
+    if (action === "Reject") {
+      const result = await Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "Từ chối báo giá?" : "Reject this quote?",
+        text: lang === "VN"
+          ? "Booking sẽ bị hủy sau khi từ chối."
+          : "The booking will be cancelled after rejection.",
+        showCancelButton: true,
+        confirmButtonText: lang === "VN" ? "Từ chối" : "Reject",
+        cancelButtonText: lang === "VN" ? "Huỷ" : "Cancel",
+        confirmButtonColor: "#dc2626",
+      });
+      if (!result.isConfirmed) return;
+    }
+
+    if (action === "Accept") {
+      const result = await Swal.fire({
+        icon: "question",
+        title: lang === "VN" ? "Chấp nhận báo giá?" : "Accept this quote?",
+        text: lang === "VN"
+          ? "Sau khi chấp nhận, bạn có thể tiếp tục thanh toán."
+          : "After accepting, you can proceed to payment.",
+        showCancelButton: true,
+        confirmButtonText: lang === "VN" ? "Chấp nhận" : "Accept",
+        cancelButtonText: lang === "VN" ? "Huỷ" : "Cancel",
+        confirmButtonColor: "#124757",
+      });
+      if (!result.isConfirmed) return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await respondToCharterBookingQuote(booking.id, { action, note });
+      await loadDetail();
+      if (action === "Accept") {
+        Swal.fire({
+          icon: "success",
+          title: lang === "VN" ? "Đã chấp nhận báo giá" : "Quote accepted",
+          text: lang === "VN" ? "Bạn có thể tiếp tục thanh toán." : "You can proceed to payment.",
+          timer: 1600,
+          showConfirmButton: false,
+        });
+        window.setTimeout(() => {
+          paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 200);
+      } else if (action === "RequestChanges") {
+        Swal.fire({
+          icon: "success",
+          title: lang === "VN" ? "Đã gửi yêu cầu chỉnh sửa" : "Change request sent",
+          text: lang === "VN" ? "Booking đã chuyển về chờ báo giá lại." : "The booking is pending a new quote.",
+          timer: 1600,
+          showConfirmButton: false,
+        });
+      } else {
+        Swal.fire({
+          icon: "success",
+          title: lang === "VN" ? "Đã từ chối báo giá" : "Quote rejected",
+          timer: 1400,
+          showConfirmButton: false,
+        });
+      }
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: lang === "VN" ? "Không thể phản hồi báo giá" : "Unable to respond to quote",
+        text: getApiErrorMessage(error),
+        confirmButtonColor: "#124757",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     if (!booking?.id) return;
 
@@ -1202,7 +1296,7 @@ export function CharterDetail() {
   const hasBookingHoldDeadline = hasQuotePaymentDeadline;
   const isBookingHoldExpired = isQuotePaymentExpired;
   const hasPendingPayOs = Boolean(pendingPaymentId || effectiveCheckoutUrl);
-  const canCreatePayment = ["Quoted", "PendingPayment", "Confirmed"].includes(booking.status)
+  const canCreatePayment = ["PendingPayment", "Confirmed"].includes(booking.status)
     && !isPaid
     && !hasPendingPayOs
     && !isQuoteHoldExpired
@@ -1248,7 +1342,20 @@ export function CharterDetail() {
   const routeTo = booking.toStationName || routeStops[1] || "--";
   const scheduleItems = [
     { icon: "event", label: lang === "VN" ? "Ngày giờ đi" : "Schedule", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)}` },
-    { icon: "timer", label: lang === "VN" ? "Thời lượng thuê" : "Duration", value: `${booking.durationValue} ${booking.rentalUnit}` },
+    {
+      icon: "timer",
+      label: lang === "VN" ? "Thời lượng thuê" : "Duration",
+      value: (() => {
+        const estimatedMinutes = Number(pick(booking.routeEstimate, ["estimatedDurationMinutes"], 0));
+        if (Number.isFinite(estimatedMinutes) && estimatedMinutes > 0) {
+          return lang === "VN" ? `${estimatedMinutes} phút` : `${estimatedMinutes} min`;
+        }
+        if (booking.durationValue) {
+          return `${booking.durationValue} ${booking.rentalUnit}`;
+        }
+        return "--";
+      })(),
+    },
     {
       icon: "groups",
       label: lang === "VN" ? "Hành khách" : "Passengers",
@@ -1601,7 +1708,65 @@ export function CharterDetail() {
                   currencyFormatter={currencyFormatter}
                 />
 
-                {!isPaid && (
+                {booking.status === "Quoted" && !isPaid ? (
+                  <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+                    <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
+                      <div className="flex items-start gap-4">
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#124757] text-white shadow-lg shadow-[#124757]/20 dark:bg-yellow-400 dark:text-slate-900">
+                          <span className="material-symbols-outlined text-2xl">request_quote</span>
+                        </span>
+                        <div>
+                          <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
+                            {lang === "VN" ? "Phản hồi báo giá" : "Respond to quote"}
+                          </h4>
+                          <p className="mt-1 max-w-xl text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
+                            {lang === "VN"
+                              ? "Chấp nhận để thanh toán, yêu cầu chỉnh sửa, hoặc từ chối báo giá này."
+                              : "Accept to proceed to payment, request changes, or reject this quote."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-3 px-5 py-5 sm:flex-row sm:flex-wrap md:px-6">
+                      <button
+                        type="button"
+                        onClick={() => handleRespondToQuote("Accept")}
+                        disabled={isSubmitting || isQuoteHoldExpired}
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#124757] px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
+                      >
+                        <span className="material-symbols-outlined text-base">check_circle</span>
+                        {lang === "VN" ? "Chấp nhận" : "Accept"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRespondToQuote("RequestChanges")}
+                        disabled={isSubmitting || isQuoteHoldExpired}
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-[#124757] transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+                      >
+                        <span className="material-symbols-outlined text-base">edit_note</span>
+                        {lang === "VN" ? "Yêu cầu chỉnh sửa" : "Request changes"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRespondToQuote("Reject")}
+                        disabled={isSubmitting || isQuoteHoldExpired}
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+                      >
+                        <span className="material-symbols-outlined text-base">cancel</span>
+                        {lang === "VN" ? "Từ chối" : "Reject"}
+                      </button>
+                    </div>
+                    {isQuoteHoldExpired ? (
+                      <div className="border-t border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300 md:px-6">
+                        {lang === "VN"
+                          ? "Báo giá đã hết hạn phản hồi. Vui lòng tải lại booking."
+                          : "This quote response window has expired. Please refresh the booking."}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {!isPaid && booking.status !== "Quoted" && (
                   <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
                     <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

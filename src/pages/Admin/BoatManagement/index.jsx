@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats, modifyBoatStatus, deleteBoat, fetchBoatDetail, fetchBoatDocuments } from "../../../services/boatService";
-import { getActivateAfterMaintenanceBlockReason } from "../../../utils/boatDocuments";
+import { getActivateBoatBlockReason } from "../../../utils/boatDocuments";
 import Swal from "sweetalert2";
 
 const BOAT_STATUS_OPTIONS = [
@@ -91,8 +91,8 @@ export function BoatManagement() {
                 icon: "warning",
                 title: lang === "VN" ? "Chưa thể kích hoạt" : "Cannot activate",
                 text: lang === "VN"
-                    ? "Tàu chưa được setup sơ đồ ghế! Không thể chuyển sang trạng thái Hoạt động."
-                    : "Boat seats are not configured! Cannot switch to Active status.",
+                    ? "Tàu Active cần đủ sơ đồ ghế và 4 hồ sơ pháp lý. Hiện chưa cấu hình ghế."
+                    : "Active requires seat layout and all 4 legal documents. Seats are not configured yet.",
                 confirmButtonColor: "#124757",
             });
             return;
@@ -103,11 +103,7 @@ export function BoatManagement() {
             return;
         }
 
-        const isActivatingAfterMaintenance =
-            statusModalBoat.status?.toLowerCase() === "undermaintenance" &&
-            selectedStatus === "Active";
-
-        if (isActivatingAfterMaintenance) {
+        if (selectedStatus === "Active") {
             try {
                 setIsSavingStatus(true);
                 const [boatDetail, documents] = await Promise.all([
@@ -115,16 +111,19 @@ export function BoatManagement() {
                     fetchBoatDocuments(statusModalBoat.id),
                 ]);
 
-                const blockReason = getActivateAfterMaintenanceBlockReason(
+                const wasUnderMaintenance = statusModalBoat.status?.toLowerCase() === "undermaintenance"
+                    || boatDetail?.status?.toLowerCase() === "undermaintenance";
+                const blockReason = getActivateBoatBlockReason(
                     { ...statusModalBoat, ...boatDetail },
                     documents,
-                    lang
+                    lang,
+                    { requireFreshInspection: wasUnderMaintenance },
                 );
 
                 if (blockReason) {
                     const confirmEdit = await Swal.fire({
                         icon: "warning",
-                        title: lang === "VN" ? "Cần cập nhật hồ sơ mới" : "Fresh documents required",
+                        title: lang === "VN" ? "Chưa đủ điều kiện Active" : "Cannot activate yet",
                         text: blockReason,
                         showCancelButton: true,
                         confirmButtonColor: "#124757",
@@ -692,11 +691,11 @@ export function BoatManagement() {
                                 ) : null}
                             </div>
 
-                            {statusModalBoat.status?.toLowerCase() === "undermaintenance" && selectedStatus === "Active" && (
+                            {selectedStatus === "Active" && (
                                 <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] font-bold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
                                     {lang === "VN"
-                                        ? "Tàu đang bảo trì. Cần upload lại toàn bộ hồ sơ mới trước khi chuyển sang Hoạt động."
-                                        : "This boat is under maintenance. Re-upload all documents before switching to Active."}
+                                        ? "Active chỉ khi đã setup ghế đủ và có đủ 4 hồ sơ pháp lý. Nếu từng bảo trì, cần upload lại Đăng kiểm (Inspection)."
+                                        : "Active requires full seat setup and all 4 legal documents. After maintenance, re-upload Inspection."}
                                 </div>
                             )}
                         </div>

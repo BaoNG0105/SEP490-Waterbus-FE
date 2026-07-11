@@ -6,6 +6,7 @@ import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePac
 import { fetchCurrentUserProfile } from "../services/authService";
 import { updateUserProfile } from "../redux/authSlice";
 import { WaterwayMap } from "./WaterwayMap";
+import { fetchAllRoutes, fetchRouteDetail } from "../services/routeService";
 import {
   createEmptyBoatRequest,
   createEmptyStop,
@@ -23,6 +24,38 @@ const deckOptionImages = {
 const getStationId = (station) => String(station.stationId || station.id);
 const getStationName = (station) => station.stationName || station.name || "--";
 const isActiveStation = (station) => station?.status !== "Inactive";
+
+const geometryToMapCoordinates = (geometry) => (
+  Array.isArray(geometry)
+    ? geometry
+      .filter((point) => Array.isArray(point) && point.length >= 2)
+      .map(([longitude, latitude]) => ({ latitude, longitude }))
+    : []
+);
+
+const getRouteId = (route) => route?.routeId ?? route?.id;
+const getRouteStopIds = (route) => (
+  (Array.isArray(route?.stops) ? route.stops : [])
+    .slice()
+    .sort((left, right) => Number(left.stopOrder) - Number(right.stopOrder))
+    .map((stop) => String(stop.stationId ?? stop.station?.stationId ?? stop.station?.id ?? ""))
+    .filter(Boolean)
+);
+
+const routeContainsRequestedStops = (routeStopIds, requestedStopIds) => {
+  if (routeStopIds.length < 2 || requestedStopIds.length < 2) return false;
+  if (routeStopIds[0] !== requestedStopIds[0] || routeStopIds.at(-1) !== requestedStopIds.at(-1)) {
+    return false;
+  }
+
+  let routeIndex = 0;
+  return requestedStopIds.every((stationId) => {
+    const foundIndex = routeStopIds.indexOf(stationId, routeIndex);
+    if (foundIndex < 0) return false;
+    routeIndex = foundIndex + 1;
+    return true;
+  });
+};
 
 const filterActiveStations = (stationList) =>
   (Array.isArray(stationList) ? stationList : []).filter(isActiveStation);
@@ -198,10 +231,11 @@ export function CharterRequestForm({
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [useAccountInfo, setUseAccountInfo] = useState(false);
   const [accountInfoApplied, setAccountInfoApplied] = useState(false);
-  const [isRentalUnitOpen, setIsRentalUnitOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState(initialFormData);
+  const [routeMapGeometry, setRouteMapGeometry] = useState([]);
+  const [routeMapName, setRouteMapName] = useState("");
   const submitInFlightRef = useRef(false);
   const lastInsurancePackageIdRef = useRef(null);
 
@@ -300,14 +334,6 @@ export function CharterRequestForm({
     { titleVn: "Ghi chú", titleEn: "Notes", icon: "notes" },
   ];
   const isLastStep = currentStep === steps.length - 1;
-  const durationUnitLabel = formData.rentalUnit === "Hour"
-    ? (lang === "VN" ? "giờ" : "hour")
-    : (lang === "VN" ? "ngày" : "day");
-  const rentalUnitOptions = [
-    { value: "Day", label: lang === "VN" ? "Theo ngày" : "Day", icon: "calendar_today" },
-    { value: "Hour", label: lang === "VN" ? "Theo giờ" : "Hour", icon: "schedule" },
-  ];
-  const selectedRentalUnitOption = rentalUnitOptions.find((option) => option.value === formData.rentalUnit) || rentalUnitOptions[0];
 
   const waterbusStations = useMemo(
     () => filterWaterbusStations(stations),
@@ -327,6 +353,60 @@ export function CharterRequestForm({
   const routeMapCoordinates = routeStations
     .filter((station) => station.latitude != null && station.longitude != null)
     .map((station) => ({ latitude: station.latitude, longitude: station.longitude }));
+  const displayedRouteCoordinates = routeMapGeometry.length > 1
+    ? routeMapGeometry
+    : routeMapCoordinates;
+
+  useEffect(() => {
+    const requestedStopIds = routeStopStationIds.map(String);
+    if (requestedStopIds.length < 2) {
+      setRouteMapGeometry([]);
+      setRouteMapName("");
+      return undefined;
+    }
+
+    let isCurrent = true;
+
+    const loadMatchingRoute = async () => {
+      try {
+        const routesResult = await fetchAllRoutes();
+        const routes = Array.isArray(routesResult)
+          ? routesResult
+          : (routesResult?.items || routesResult?.data || []);
+
+        const details = await Promise.all(
+          routes
+            .filter((route) => route?.status !== "Inactive")
+            .map((route) => {
+              const routeId = getRouteId(route);
+              return routeId ? fetchRouteDetail(routeId).catch(() => null) : null;
+            })
+        );
+
+        const matchedRoute = details
+          .filter(Boolean)
+          .filter((route) => routeContainsRequestedStops(getRouteStopIds(route), requestedStopIds))
+          .sort((left, right) => getRouteStopIds(left).length - getRouteStopIds(right).length)[0];
+
+        if (!isCurrent) return;
+
+        const geometry = geometryToMapCoordinates(matchedRoute?.routeGeometry);
+        setRouteMapGeometry(geometry);
+        setRouteMapName(geometry.length > 1 ? (matchedRoute?.routeName || "") : "");
+      } catch (error) {
+        console.error("Không tải được hình học tuyến đường:", error);
+        if (isCurrent) {
+          setRouteMapGeometry([]);
+          setRouteMapName("");
+        }
+      }
+    };
+
+    loadMatchingRoute();
+    return () => {
+      isCurrent = false;
+    };
+  }, [formData.fromStationId, formData.toStationId, formData.itineraryStops]);
 
   const validateCustomerStep = () => {
     const errors = getContactFieldErrors();
@@ -339,7 +419,6 @@ export function CharterRequestForm({
   };
 
   const validateScheduleStep = () => {
-    const durationValue = Number(formData.durationValue);
     const minDepartureDate = getMinDepartureDate();
 
     if (!formData.departureDate) {
@@ -350,9 +429,6 @@ export function CharterRequestForm({
     }
     if (!formData.startTime) {
       return lang === "VN" ? "Vui lòng chọn giờ đi." : "Please choose a start time.";
-    }
-    if (!Number.isInteger(durationValue) || durationValue < 1 || durationValue > 60) {
-      return lang === "VN" ? "Thời lượng thuê phải là số nguyên từ 1 đến 60." : "Duration must be an integer from 1 to 60.";
     }
     return null;
   };
@@ -432,15 +508,6 @@ export function CharterRequestForm({
       delete next[field];
       return next;
     });
-  };
-
-  const handleRentalUnitChange = (rentalUnit) => {
-    setFormData((prev) => ({
-      ...prev,
-      rentalUnit,
-      durationValue: 1,
-    }));
-    setIsRentalUnitOpen(false);
   };
 
   const handleAccountInfoToggle = async () => {
@@ -598,7 +665,6 @@ export function CharterRequestForm({
 
     const adultCount = Number(formData.adultCount);
     const childCount = Number(formData.childCount);
-    const durationValue = Number(formData.durationValue);
     const totalPassengerCount = adultCount + childCount;
     const minDepartureDate = getMinDepartureDate();
     const customerName = formData.customerName.trim();
@@ -639,16 +705,6 @@ export function CharterRequestForm({
         icon: "warning",
         title: lang === "VN" ? "Giờ đi chưa hợp lệ" : "Invalid start time",
         text: lang === "VN" ? "Vui lòng chọn giờ đi." : "Please choose a start time.",
-        confirmButtonColor: "#124757",
-      });
-      return;
-    }
-
-    if (!Number.isInteger(durationValue) || durationValue < 1 || durationValue > 60) {
-      Swal.fire({
-        icon: "warning",
-        title: lang === "VN" ? "Thời lượng chưa hợp lệ" : "Invalid duration",
-        text: lang === "VN" ? "Thời lượng thuê phải là số nguyên từ 1 đến 60." : "Duration must be an integer from 1 to 60.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -728,8 +784,6 @@ export function CharterRequestForm({
       contactPhone,
       contactEmail,
       departureDate: formData.departureDate,
-      rentalUnit: formData.rentalUnit,
-      durationValue,
       adultCount,
       childCount,
       startTime: formData.startTime ? `${formData.startTime}:00` : null,
@@ -886,10 +940,10 @@ export function CharterRequestForm({
             <div className="flex flex-col items-center text-center gap-3">
               <div>
                 <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Lịch trình" : "Schedule"}</h3>
-                <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Chọn thời gian bạn muốn khởi hành và thời lượng thuê tàu." : "Choose when you'd like to depart and how long you need the boat."}</p>
+                <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Chọn ngày và giờ bạn muốn khởi hành." : "Choose when you'd like to depart."}</p>
               </div>
             </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid sm:grid-cols-2 gap-4">
               <div className="flex flex-col gap-2.5">
                 <label className={contactLabelClass}>{lang === "VN" ? "Ngày khởi hành" : "Departure Date"}{requiredMark}</label>
                 <input type="date" min={getMinDepartureDate()} value={formData.departureDate} onChange={(e) => handleFieldChange("departureDate", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
@@ -897,72 +951,6 @@ export function CharterRequestForm({
               <div className="flex flex-col gap-2.5">
                 <label className={contactLabelClass}>{lang === "VN" ? "Giờ đi" : "Start Time"}{requiredMark}</label>
                 <input type="time" value={formData.startTime} onChange={(e) => handleFieldChange("startTime", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
-              </div>
-              <div className="flex flex-col gap-2.5">
-                <label className={contactLabelClass}>
-                  {lang === "VN" ? `Thời lượng (${durationUnitLabel})` : `Duration (${durationUnitLabel})`}{requiredMark}
-                </label>
-                <div className="flex overflow-hidden rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-[#FFD100]">
-                  <input type="number" min="1" max="60" value={formData.durationValue} onChange={(e) => handleFieldChange("durationValue", e.target.value)} required className="min-w-0 flex-1 px-4 py-3 bg-transparent text-sm font-bold text-slate-800 dark:text-white outline-none" />
-                  <span className="flex min-w-16 items-center justify-center border-l border-yellow-300/70 bg-yellow-100 px-3 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757]">
-                    {durationUnitLabel}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2.5">
-                <label className={contactLabelClass}>{lang === "VN" ? "Đơn vị thuê" : "Rental Unit"}{requiredMark}</label>
-                <div
-                  className="relative"
-                  onBlur={(event) => {
-                    if (!event.currentTarget.contains(event.relatedTarget)) setIsRentalUnitOpen(false);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setIsRentalUnitOpen(false);
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setIsRentalUnitOpen((prev) => !prev)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm font-bold text-slate-800 outline-none transition-all dark:bg-slate-900 dark:text-white ${isRentalUnitOpen
-                      ? "border-[#FFD100] ring-2 ring-[#FFD100]"
-                      : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
-                      }`}
-                    aria-haspopup="listbox"
-                    aria-expanded={isRentalUnitOpen}
-                  >
-                    <span className="flex min-w-0 items-center gap-2.5">
-                      <span className="material-symbols-outlined text-lg text-[#124757] dark:text-yellow-400">{selectedRentalUnitOption.icon}</span>
-                      <span className="truncate">{selectedRentalUnitOption.label}</span>
-                    </span>
-                    <span className={`material-symbols-outlined text-xl text-slate-500 transition-transform ${isRentalUnitOpen ? "rotate-180" : ""}`}>expand_more</span>
-                  </button>
-                  {isRentalUnitOpen && (
-                    <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-900/15 dark:border-slate-700 dark:bg-slate-900" role="listbox">
-                      {rentalUnitOptions.map((option) => {
-                        const isSelected = formData.rentalUnit === option.value;
-                        return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => handleRentalUnitChange(option.value)}
-                            className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm font-bold transition-colors ${isSelected
-                              ? "bg-yellow-50 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
-                              : "text-slate-600 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                              }`}
-                            role="option"
-                            aria-selected={isSelected}
-                          >
-                            <span className="flex min-w-0 items-center gap-2.5">
-                              <span className="material-symbols-outlined text-lg">{option.icon}</span>
-                              <span className="truncate">{option.label}</span>
-                            </span>
-                            {isSelected && <span className="material-symbols-outlined text-lg">check</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           </section>
@@ -1016,7 +1004,12 @@ export function CharterRequestForm({
                 <p className="text-[11px] text-slate-400 mt-1">{lang === "VN" ? "Bến đi, bến đến và các điểm dừng sẽ hiện trên bản đồ." : "Origin, destination, and stops will appear on the map."}</p>
               </div>
               <div className="h-72 rounded-xl overflow-hidden">
-                <WaterwayMap stationsList={routeMapStations} coordinates={routeMapCoordinates} hideStationLink />
+                <WaterwayMap
+                  stationsList={routeMapStations}
+                  coordinates={displayedRouteCoordinates}
+                  waterwayName={routeMapName}
+                  hideStationLink
+                />
               </div>
             </div>
 

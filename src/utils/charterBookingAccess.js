@@ -28,12 +28,10 @@ export const getCharterCapabilities = (user, booking = null) => {
     canViewAllCharters: admin,
     canQuote: admin,
     canAssignManager: admin,
-    canAssignStaff: manager && assignedManager && !admin,
     canManageStatus: admin,
     canViewPayments: admin,
     canViewTickets: admin || manager || staff,
     canCheckIn: manager || staff,
-    canViewAssignmentTab: admin || (manager && assignedManager),
     isAssignedManager: assignedManager,
     isReadOnlyOperator: staff && !admin && !manager,
   };
@@ -44,12 +42,5 @@ export const getDefaultCharterTab = (booking, capabilities = {}) => {
   if (bookingNeedsRefundAttention(booking) && capabilities.canViewPayments) return "payments";
   // Admin: luôn ưu tiên tab Thao tác (báo giá / cập nhật) khi mở chi tiết.
   if (capabilities.canQuote) return "actions";
-  // Manager phụ trách: ưu tiên phân công NV khi đã xác nhận.
-  if (
-    capabilities.canAssignStaff
-    && booking.status === "Confirmed"
-  ) {
-    return "assignment";
-  }
   return "overview";
 };

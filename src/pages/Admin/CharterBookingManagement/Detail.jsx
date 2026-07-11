@@ -59,7 +59,6 @@ import {
   normalizeBooking,
   normalizeRequestedBoats,
   pick,
-  resolveQuoteDepositAmount,
   readAcknowledgedTabBadges,
   acknowledgeTabBadge,
   shouldShowTabBadge,
@@ -77,9 +76,6 @@ export function AdminCharterBookingDetail() {
   const [activeTab, setActiveTab] = useState(() => location.state?.tab || "overview");
   const [quoteForm, setQuoteForm] = useState({
     boats: [],
-    rentalUnit: "",
-    durationValue: "",
-    promotionCode: "",
   });
   const [quotePreview, setQuotePreview] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -173,12 +169,7 @@ export function AdminCharterBookingDetail() {
       boatOrder: Number(boat.boatOrder),
       boatId: boat.boatId,
     })),
-    subtotalAmount: null,
-    rentalUnit: quoteForm.rentalUnit || null,
-    durationValue: quoteForm.durationValue === "" ? null : Number(quoteForm.durationValue),
-    promotionCode: quoteForm.promotionCode?.trim() || null,
-    depositAmount: resolveQuoteDepositAmount(quotePreview),
-  }), [quoteForm, quotePreview]);
+  }), [quoteForm]);
 
   const requiredQuoteBoatCount = booking ? normalizeRequestedBoats(booking, booking.selectedBoats).length : 0;
   const isQuoteBoatSelectionComplete = requiredQuoteBoatCount > 0
@@ -350,13 +341,11 @@ export function AdminCharterBookingDetail() {
       tabs.push({ id: "actions", icon: "edit_square", label: lang === "VN" ? "Thao tác" : "Actions" });
     }
     tabs.push({ id: "overview", icon: "dashboard", label: lang === "VN" ? "Tổng quan" : "Overview" });
-    if (capabilities.canViewAssignmentTab) {
+    if (capabilities.canAssignManager) {
       tabs.push({
         id: "assignment",
         icon: "group",
-        label: capabilities.canAssignStaff
-          ? (lang === "VN" ? "Phân công NV" : "Assign staff")
-          : (lang === "VN" ? "Gán quản lý" : "Assign manager"),
+        label: lang === "VN" ? "Gán quản lý" : "Assign manager",
       });
     }
     const paymentList = Array.isArray(booking?.payments) ? booking.payments : [];
@@ -585,12 +574,11 @@ export function AdminCharterBookingDetail() {
         />
       )}
 
-      {activeTab === "assignment" && (
+      {activeTab === "assignment" && capabilities.canAssignManager && (
         <AdminCharterAssignmentPanel
           lang={lang}
           booking={booking}
           capabilities={capabilities}
-          selectedBoats={selectedBoats}
           isSubmitting={isSubmitting}
           onReload={loadDetail}
         />

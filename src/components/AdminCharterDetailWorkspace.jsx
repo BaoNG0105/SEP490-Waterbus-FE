@@ -185,83 +185,6 @@ function AdminBoatQuoteSelect({
   );
 }
 
-function AdminRentalUnitSelect({
-  lang,
-  value,
-  onChange,
-  disabled = false,
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const options = [
-    { value: "", label: lang === "VN" ? "Giữ nguyên" : "Keep current" },
-    { value: "Day", label: lang === "VN" ? "Theo ngày" : "Day" },
-    { value: "Hour", label: lang === "VN" ? "Theo giờ" : "Hour" },
-  ];
-
-  const selectedOption = options.find((option) => option.value === value) || options[0];
-
-  return (
-    <div
-      className="relative mt-1"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setIsOpen(false);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setIsOpen(false);
-      }}
-    >
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setIsOpen((open) => !open)}
-        className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-white px-4 py-3 text-left outline-none transition-all disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-900 ${
-          isOpen
-            ? "border-[#124757] ring-2 ring-[#124757]/15 dark:border-yellow-400 dark:ring-yellow-400/20"
-            : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
-        }`}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-      >
-        <span className="truncate text-sm font-bold text-slate-800 dark:text-white">{selectedOption.label}</span>
-        <span className={`material-symbols-outlined shrink-0 text-xl text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}>
-          expand_more
-        </span>
-      </button>
-
-      {isOpen && !disabled ? (
-        <div
-          className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-slate-900"
-          role="listbox"
-        >
-          {options.map((option) => {
-            const isSelected = value === option.value;
-            return (
-              <button
-                key={option.value || "keep"}
-                type="button"
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className={`w-full rounded-xl px-4 py-2.5 text-left text-sm font-bold transition-colors ${
-                  isSelected
-                    ? "bg-[#124757]/5 text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-300"
-                    : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                }`}
-                role="option"
-                aria-selected={isSelected}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
     const value = key.split(".").reduce((obj, part) => obj?.[part], source);
@@ -482,13 +405,13 @@ export function AdminBookingOverviewTab({
         </div>
       </section>
 
-      {(booking.assignedManagerId || (Array.isArray(booking.staffAssignments) && booking.staffAssignments.length > 0) || capabilities?.canViewAssignmentTab) ? (
+      {(booking.assignedManagerId || capabilities?.canAssignManager) ? (
         <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
           <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
-                  {lang === "VN" ? "Phân công vận hành" : "Operations assignment"}
+                  {lang === "VN" ? "Quản lý phụ trách" : "Assigned manager"}
                 </h2>
                 <p className="mt-1 text-xs font-medium text-slate-400">
                   {lang === "VN"
@@ -496,15 +419,13 @@ export function AdminBookingOverviewTab({
                     : "Preferably assign after trip confirmation. You can still assign early from the Assign manager tab."}
                 </p>
               </div>
-              {capabilities?.canViewAssignmentTab && onNavigateTab ? (
+              {capabilities?.canAssignManager && onNavigateTab ? (
                 <button
                   type="button"
                   onClick={() => onNavigateTab("assignment")}
                   className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
                 >
-                  {capabilities.canAssignStaff
-                    ? (lang === "VN" ? "Phân công NV" : "Assign staff")
-                    : (lang === "VN" ? "Gán quản lý" : "Assign manager")}
+                  {lang === "VN" ? "Gán quản lý" : "Assign manager"}
                 </button>
               ) : null}
             </div>
@@ -514,15 +435,6 @@ export function AdminBookingOverviewTab({
               icon="supervisor_account"
               label={lang === "VN" ? "Quản lý phụ trách" : "Manager"}
               value={booking.assignedManagerName || (lang === "VN" ? "Chưa gán" : "Not assigned")}
-            />
-            <OverviewField
-              icon="badge"
-              label={lang === "VN" ? "Nhân viên trực chuyến" : "Operating staff"}
-              value={
-                Array.isArray(booking.staffAssignments) && booking.staffAssignments.length > 0
-                  ? `${booking.staffAssignments.length} ${lang === "VN" ? "người" : "assigned"}`
-                  : (lang === "VN" ? "Chưa phân công" : "Not assigned")
-              }
             />
           </div>
         </section>
@@ -756,7 +668,7 @@ export function AdminBookingActionsTab({
                         lang={lang}
                         boatId={quoteBoat.boatId}
                         availableBoats={availableBoats}
-                        rentalUnit={quoteForm.rentalUnit || booking.rentalUnit || "Day"}
+                        rentalUnit="Day"
                         currencyFormatter={currencyFormatter}
                         onChange={(nextBoatId) => onQuoteBoatChange(quoteBoat.boatOrder, nextBoatId)}
                         getBoatId={getBoatId}
@@ -771,25 +683,11 @@ export function AdminBookingActionsTab({
                 })}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="block">
-                  <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Đơn vị" : "Unit"}</span>
-                  <AdminRentalUnitSelect
-                    lang={lang}
-                    value={quoteForm.rentalUnit}
-                    onChange={(nextRentalUnit) => setQuoteForm((prev) => ({ ...prev, rentalUnit: nextRentalUnit }))}
-                    disabled={!canManageQuote || isSubmitting}
-                  />
-                </div>
-                <label className="block">
-                  <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thời lượng" : "Duration"}</span>
-                  <input type="number" min="1" max="60" value={quoteForm.durationValue} onChange={(event) => setQuoteForm((prev) => ({ ...prev, durationValue: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-                </label>
-                <label className="block">
-                  <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Mã khuyến mãi" : "Promo code"}</span>
-                  <input value={quoteForm.promotionCode} onChange={(event) => setQuoteForm((prev) => ({ ...prev, promotionCode: event.target.value }))} placeholder={lang === "VN" ? "Tùy chọn" : "Optional"} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-                </label>
-              </div>
+              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-bold leading-5 text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                {lang === "VN"
+                  ? "Thời lượng và đơn giá do hệ thống tự tính theo lộ trình thực tế. Chỉ cần chọn đủ tàu rồi xem trước / chốt giá."
+                  : "Duration and pricing are calculated from the actual route. Select boats, then preview / submit the quote."}
+              </p>
 
               <button type="submit" disabled={isSubmitting || !isQuoteBoatSelectionComplete || !canManageQuote} className="w-full rounded-xl bg-[#124757] px-6 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900">
                 {isSubmitting ? (lang === "VN" ? "Đang xử lý..." : "Submitting...") : (lang === "VN" ? "Chốt giá" : "Submit Quote")}

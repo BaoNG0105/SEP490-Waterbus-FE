@@ -17,7 +17,16 @@ export const getQuoteChargeableMinutes = (decimalHours, routeEstimate = null) =>
   if (hours <= 0) return 0;
 
   const fromHours = Math.round(hours * 60);
-  const travelMinutes = Number(routeEstimate?.estimatedTravelMinutes);
+  const chargeableMinutes = Number(routeEstimate?.chargeableDurationMinutes);
+  if (Number.isFinite(chargeableMinutes) && chargeableMinutes > 0) {
+    return chargeableMinutes;
+  }
+
+  const travelMinutes = Number(
+    Number.isFinite(Number(routeEstimate?.estimatedDurationMinutes)) && Number(routeEstimate?.estimatedDurationMinutes) > 0
+      ? routeEstimate.estimatedDurationMinutes
+      : routeEstimate?.estimatedTravelMinutes,
+  );
   if (Number.isFinite(travelMinutes) && travelMinutes > 0) {
     const withBuffer = Math.round(travelMinutes + Math.ceil(travelMinutes * QUOTE_BUFFER_RATE));
     return fromHours || withBuffer;
@@ -81,7 +90,10 @@ const getRoutePricingBreakdown = (routeEstimate, lang = "VN") => {
   if (!routeEstimate || typeof routeEstimate !== "object") return [];
 
   const distance = Number(routeEstimate.totalDistanceKm);
-  const travelMinutes = Number(routeEstimate.estimatedTravelMinutes);
+  const estimatedDurationMinutes = Number(routeEstimate.estimatedDurationMinutes);
+  const travelMinutes = Number.isFinite(estimatedDurationMinutes) && estimatedDurationMinutes > 0
+    ? estimatedDurationMinutes
+    : Number(routeEstimate.estimatedTravelMinutes);
   const bufferMinutes = Number.isFinite(travelMinutes) && travelMinutes > 0
     ? Math.ceil(travelMinutes * QUOTE_BUFFER_RATE)
     : Number(pick(routeEstimate, ["bufferMinutes", "bufferDurationMinutes"], 0)) || 0;

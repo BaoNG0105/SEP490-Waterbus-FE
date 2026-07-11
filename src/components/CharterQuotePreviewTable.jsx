@@ -38,7 +38,7 @@ export function CharterQuotePreviewTable({
   currencyFormatter,
 }) {
   const model = buildQuotePreviewModel(preview, {
-    defaultRentalUnit: quoteForm?.rentalUnit ?? "Day",
+    defaultRentalUnit: "Day",
     currencyFormatter,
     lang,
   });

@@ -116,13 +116,5 @@ export const getAssignedCharterBookings = () =>
 export const getAssignedCharterBookingById = (id) =>
     api.get(`/charter-bookings/assigned/${encodeURIComponent(id)}`).then(response => response.data);
 
-export const getCharterBookingStaffAssignments = (id, params = { activeOnly: true }) =>
-    api.get(`/charter-bookings/${encodeURIComponent(id)}/staff-assignments`, { params })
-        .then(response => response.data);
-
-export const createCharterBookingStaffAssignment = (id, data) =>
-    api.post(`/charter-bookings/${encodeURIComponent(id)}/staff-assignments`, data).then(response => response.data);
-
-export const replaceCharterBookingStaffAssignment = (id, assignmentId, data) =>
-    api.post(`/charter-bookings/${encodeURIComponent(id)}/staff-assignments/${encodeURIComponent(assignmentId)}/replace`, data)
-        .then(response => response.data);
+export const respondToCharterBookingQuote = (id, data) =>
+    api.post(`/charter-bookings/${encodeURIComponent(id)}/quote-response`, data).then(response => response.data);
