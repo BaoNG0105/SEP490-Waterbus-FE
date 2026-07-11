@@ -56,7 +56,6 @@ export function StationDetail() {
                     {/* BADGE TRẠM CHÍNH THỨC HOẶC VỆ TINH */}
                     {station?.isWaterbusStation ? (
                         <div className="absolute top-5 left-5 bg-[#124757] text-yellow-400 text-[10px] font-black uppercase px-3 py-1.5 rounded-xl shadow-md border border-[#124757]/50 flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-sm">directions_boat</span>
                             {lang === "VN" ? "Trạm Saigon Waterbus" : "Official Waterbus Pier"}
                         </div>
                     ) : (
@@ -70,9 +69,6 @@ export function StationDetail() {
                 {/* Khối Phải: Chi tiết hồ sơ hạ tầng bến */}
                 <div className="space-y-6">
                     <div className="space-y-3">
-                        <span className="bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-3 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-widest inline-block">
-                            Mã trạm: {station?.stationCode}
-                        </span>
                         <h1 className="text-2xl md:text-4xl font-headline font-black text-[#124757] dark:text-white leading-tight">
                             {station?.stationName}
                         </h1>
@@ -103,9 +99,9 @@ export function StationDetail() {
                     <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-headline font-black uppercase text-slate-400 tracking-wider">Tiện ích tích hợp tại bến ga</h4>
                         <div className="flex flex-wrap gap-2">
-                            {station?.hasWaitingArea && <span className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold shadow-sm">🛋️ Phòng chờ điều hòa</span>}
-                            {station?.hasParking && <span className="px-3 py-1.5 bg-teal-50 text-teal-600 rounded-xl text-xs font-bold shadow-sm">🅿️ Bãi gửi xe gắn máy</span>}
-                            {station?.hasTicketCounter && <span className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold shadow-sm">🎫 Quầy bán vé trực tiếp</span>}
+                            {station?.hasWaitingArea && <span className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold shadow-sm">Phòng chờ điều hòa</span>}
+                            {station?.hasParking && <span className="px-3 py-1.5 bg-teal-50 text-teal-600 rounded-xl text-xs font-bold shadow-sm">Bãi gửi xe gắn máy</span>}
+                            {station?.hasTicketCounter && <span className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold shadow-sm">Quầy bán vé trực tiếp</span>}
                         </div>
                     </div>
                 </div>

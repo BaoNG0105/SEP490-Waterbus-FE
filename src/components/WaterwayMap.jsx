@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
 
@@ -131,6 +131,9 @@ export const WaterwayMap = ({
               key={station.stationId}
               position={[station.latitude, station.longitude]}
             >
+              <Tooltip permanent direction="top" offset={[0, -38]} className="station-name-tooltip">
+                {station.stationName}
+              </Tooltip>
               <Popup>
                 <div className="text-center font-body p-2 space-y-2 min-w-37.5">
                   <p className="font-black text-[#124757] text-xs uppercase leading-tight m-0">{station.stationName}</p>

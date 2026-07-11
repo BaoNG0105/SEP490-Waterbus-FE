@@ -53,8 +53,8 @@ export const Header = ({ isNoticeVisible }) => {
         icon: 'info',
         title: lang === "VN" ? 'Hết phiên đăng nhập' : 'Session Expired',
         text: lang === "VN"
-          ? 'Tài khoản của bạn đã tự động đăng xuất để bảo mật.'
-          : 'You have been automatically logged out for security.',
+          ? 'Tài khoản của bạn đã hết hạn truy cập. Vui lòng đăng nhập lại để tiếp tục sử dụng dịch vụ.'
+          : 'You have been logged out due to inactivity. Please sign in again to continue using the service.',
         confirmButtonColor: "#3085d6",
         confirmButtonText: lang === "VN" ? 'Đăng nhập lại' : 'Sign in again',
         background: isDarkMode ? '#1e293b' : '#ffffff',
@@ -153,12 +153,6 @@ export const Header = ({ isNoticeVisible }) => {
                 to="/charter-booking"
               >
                 {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
-              </Link>
-              <Link
-                className="block px-5 py-2.5 text-xs font-medium text-[#111C2D] dark:text-white/80 hover:text-[#124757] dark:hover:text-yellow-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                to="/check-ticket"
-              >
-                {lang === "VN" ? "Kiểm tra vé" : "Check Ticket"}
               </Link>
             </div>
           </div>

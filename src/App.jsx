@@ -22,7 +22,8 @@ import { CharterDetail } from "./pages/Profile/MyCharterBooking/MyCharterDetail"
 import { EditCharter } from "./pages/Profile/MyCharterBooking/EditCharter";
 import { CharterList } from "./pages/Profile/MyCharterBooking";
 import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefundRequest";
-import { Booking } from "./pages/Booking";
+import { WaterbusBooking } from "./pages/WaterbusBooking";
+// import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
 import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
 //Admin
@@ -112,15 +113,25 @@ function App() {
           }
         />
 
-        {/* Normal Booking Page */}
+        {/* Waterbus Booking Page */}
         <Route
           path="/waterbus-booking"
           element={
             <MainLayout>
-              <Booking />
+              <WaterbusBooking />
             </MainLayout>
           }
         />
+
+        {/* Watersightseeing Booking Page */}
+        {/* <Route
+          path="/watersightseeing-booking"
+          element={
+            <MainLayout>
+              <WatersightseeingBooking />
+            </MainLayout>
+          }
+        /> */}
 
         {/* Charter Booking Page */}
         <Route

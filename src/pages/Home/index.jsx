@@ -1,23 +1,43 @@
-import { useEffect, useState, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import 'leaflet/dist/leaflet.css';
 import { fetchAllStations } from "../../services/stationService";
 import { WaterwayMap } from "../../components/WaterwayMap";
 import { fetchPublishedBlogPosts } from "../../services/blogService";
+import { ContactForm } from "../../components/ContactForm";
+import heroVideo from "../../assets/hero-video.mp4";
 
 import {
   promoPosters,
-  heroSlides,
-  guidelines,
   promoData,
   testimonialsData,
   appImages
 } from "../../data/homeData";
 
+// Khoảng thời gian phát của video Hero
+const HERO_VIDEO_START = 6;
+const HERO_VIDEO_END = 139;
+
 export const Home = () => {
   const { lang } = useApp(); // Lấy ngôn ngữ hiện tại từ context để hiển thị nội dung phù hợp
-  const navigate = useNavigate(); // Khởi tạo navigate để chuyển hướng khi nhấn nút Đặt vé
+
+  // Ref tham chiếu tới video nền Hero để điều khiển đoạn phát
+  const heroVideoRef = useRef(null);
+
+  // Đặt video bắt đầu từ giây HERO_VIDEO_START khi vừa tải xong metadata
+  const handleHeroVideoLoadedMetadata = () => {
+    if (heroVideoRef.current) {
+      heroVideoRef.current.currentTime = HERO_VIDEO_START;
+    }
+  };
+
+  // Khi phát tới giây HERO_VIDEO_END thì quay lại HERO_VIDEO_START để lặp lại đúng đoạn mong muốn
+  const handleHeroVideoTimeUpdate = () => {
+    if (heroVideoRef.current && heroVideoRef.current.currentTime >= HERO_VIDEO_END) {
+      heroVideoRef.current.currentTime = HERO_VIDEO_START;
+    }
+  };
 
   // Khai báo state quản lý danh sách nhà ga gọi từ API
   const [stationPoints, setStationPoints] = useState([]);
@@ -31,14 +51,6 @@ export const Home = () => {
   // State quản lý danh sách Blog
   const [blogs, setBlogs] = useState([]);
   const [isLoadingBlogs, setIsLoadingBlogs] = useState(true);
-
-  // State quản lý Form Đặt vé Hero
-  const [isRoundTrip, setIsRoundTrip] = useState(false); // false: Một chiều, true: Khứ hồi
-  const [passengerCount, setPassengerCount] = useState(1);
-  const [departureDate, setDepartureDate] = useState("");
-  const [returnDate, setReturnDate] = useState("");
-  const [fromWharf, setFromWharf] = useState("");
-  const [toWharf, setToWharf] = useState("");
 
   // Các state hiển thị
   const [heroSlide, setHeroSlide] = useState(0);
@@ -55,13 +67,14 @@ export const Home = () => {
   const nextTestimonial = () => setCurrentTestimonial((prev) => (prev + 1) % testimonialsData.length);
   const prevTestimonial = () => setCurrentTestimonial((prev) => (prev === 0 ? testimonialsData.length - 1 : prev - 1));
 
-  // Hero Slide tự động chạy sau mỗi 5 giây
+  // Blog Slide tự động chạy sau mỗi 5 giây
   useEffect(() => {
+    if (blogs.length === 0) return;
     const heroTimer = setInterval(() => {
-      setHeroSlide((prev) => (prev + 1) % heroSlides.length);
+      setHeroSlide((prev) => (prev + 1) % blogs.length);
     }, 5000); // Bạn có thể chỉnh 5000 (5 giây) thành thời gian bạn muốn
     return () => clearInterval(heroTimer);
-  }, []);
+  }, [blogs.length]);
 
   // useEffect tải dữ liệu nhà ga
   useEffect(() => {
@@ -150,51 +163,24 @@ export const Home = () => {
     return () => clearInterval(slideTimer);
   }, [showPromoModal]);
 
-  // THÊM HÀM XỬ LÝ KHI BẤM NÚT TÌM KIẾM
-  const handleSearchToBooking = () => {
-    // Basic validation (Bắt buộc điền mới cho đi)
-    if (!fromWharf || !toWharf || !departureDate || (isRoundTrip && !returnDate)) {
-      alert(lang === "VN" ? "Vui lòng chọn đầy đủ bến và ngày đi!" : "Please fill in all required fields!");
-      return;
-    }
-
-    // Chuyển hướng sang trang /booking và mang theo toàn bộ data
-    navigate("/booking", {
-      state: {
-        step: 2, // Chỉ định nhảy thẳng tới Bước 2
-        bookingData: {
-          isRoundTrip,
-          fromWharf,
-          toWharf,
-          departureDate,
-          returnDate,
-          passengerCount,
-          selectedDepartureTrip: null,
-          selectedReturnTrip: null,
-          selectedSeatsDeparture: [],
-          selectedSeatsReturn: [],
-        }
-      }
-    });
-  };
-
   return (
     <main className="dark:bg-slate-900 transition-colors duration-300 relative">
       {/* ===== HERO SECTION & BOOKING FORM ===== */}
       <section id="booking-section" className="relative min-h-[90vh] lg:min-h-screen flex flex-col justify-center items-center overflow-hidden select-none bg-slate-900">
-        {/* Bản Slider ảnh nền Hero chạy tự động */}
+        {/* Video nền Hero tự động phát, lặp lại, tắt tiếng */}
         <div className="absolute inset-0 z-0">
-          {heroSlides.map((slide, index) => (
-            <div
-              key={index}
-              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === heroSlide ? "opacity-40 scale-100" : "opacity-0 scale-105"
-                }`}
-            >
-              <img src={slide.src} alt="Waterbus Background" className="w-full h-full object-cover transform transition-transform duration-[4000ms]" />
-            </div>
-          ))}
+          <video
+            ref={heroVideoRef}
+            src={heroVideo}
+            autoPlay
+            muted
+            playsInline
+            onLoadedMetadata={handleHeroVideoLoadedMetadata}
+            onTimeUpdate={handleHeroVideoTimeUpdate}
+            className="absolute inset-0 w-full h-full object-cover opacity-40"
+          />
           {/* Lớp phủ Gradient */}
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/50 via-slate-900/40 to-[#124757]/30"></div>
+          <div className="absolute inset-0 bg-linear-to-b from-slate-950/50 via-slate-900/40 to-[#124757]/30"></div>
         </div>
         {/* Khối Nội Dung Chính */}
         <div className="relative z-10 max-w-7xl w-full mx-auto px-6 md:px-12 pt-32 pb-20 flex flex-col items-center justify-center space-y-12">
@@ -203,156 +189,19 @@ export const Home = () => {
             <h1 className="text-4xl md:text-6xl font-headline font-black text-white leading-tight drop-shadow-md">
               {lang === "VN" ? "Welcome to" : "Chào mừng đến"}{" "}
               <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-300">
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-yellow-400 to-amber-300">
                 {lang === "VN" ? "Waterbus" : "Waterbus"}
               </span>
             </h1>
           </div>
-          {/* KHỐI FORM ĐẶT VÉ*/}
-          <div className="w-full max-w-5xl bg-white/95 dark:bg-slate-800/95 backdrop-blur-lg p-6 md:p-8 rounded-[2.5rem] shadow-2xl border border-white/20 dark:border-slate-700/50 space-y-6 transform hover:scale-[1.005] transition-all duration-300 gsap-reveal">
-            {/* Chọn loại chuyến đi: Một chiều / Khứ hồi */}
-            <div className="flex gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
-              <button
-                type="button"
-                onClick={() => setIsRoundTrip(false)}
-                className={`px-5 py-2 rounded-xl text-xs md:text-sm font-headline font-bold uppercase tracking-wide transition-all flex items-center gap-2 ${!isRoundTrip
-                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md"
-                  : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 hover:bg-slate-200"
-                  }`}
-              >
-                {lang === "VN" ? "Một chiều" : "One-Way"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsRoundTrip(true)}
-                className={`px-5 py-2 rounded-xl text-xs md:text-sm font-headline font-bold uppercase tracking-wide transition-all flex items-center gap-2 ${isRoundTrip
-                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md"
-                  : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 hover:bg-slate-200"
-                  }`}
-              >
-                {lang === "VN" ? "Khứ hồi" : "Round-Trip"}
-              </button>
-            </div>
-            {/* Lưới ô điền thông tin đặt vé */}
-            <div className={`grid grid-cols-1 md:grid-cols-2 ${isRoundTrip ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-5 items-end transition-all duration-300`}>
-              {/* Ô chọn Bến đi */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">location_on</span>
-                  {lang === "VN" ? "Bến xuất phát" : "Departure Wharf"}
-                </label>
-                <select
-                  value={fromWharf}
-                  onChange={(e) => setFromWharf(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 transition-all cursor-pointer shadow-inner"
-                >
-                  <option value="">-- {lang === "VN" ? "Chọn bến đi" : "Select Wharf"} --</option>
-                  <option value="bach-dang">Bến Bạch Đằng (Q.1)</option>
-                  <option value="thu-thiem">Bến Thủ Thiêm (TP.Thủ Đức)</option>
-                  <option value="binh-an">Bến Bình An (Q.2)</option>
-                  <option value="thanh-da">Bến Thanh Đa (Bình Thạnh)</option>
-                  <option value="linh-dong">Bến Linh Đông (Thủ Đức)</option>
-                </select>
-              </div>
-              {/* Ô chọn Bến đến */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">location_on</span>
-                  {lang === "VN" ? "Bến cập bến" : "Destination Wharf"}
-                </label>
-                <select
-                  value={toWharf}
-                  onChange={(e) => setToWharf(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 transition-all cursor-pointer shadow-inner"
-                >
-                  <option value="">-- {lang === "VN" ? "Chọn bến đến" : "Select Wharf"} --</option>
-                  <option value="bach-dang">Bến Bạch Đằng (Q.1)</option>
-                  <option value="thu-thiem">Bến Thủ Thiêm (TP.Thủ Đức)</option>
-                  <option value="binh-an">Bến Bình An (Q.2)</option>
-                  <option value="thanh-da">Bến Thanh Đa (Bình Thạnh)</option>
-                  <option value="linh-dong">Bến Linh Đông (Thủ Đức)</option>
-                </select>
-              </div>
-              {/* Ô chọn Ngày đi */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">calendar_today</span>
-                  {lang === "VN" ? "Ngày khởi hành" : "Departure Date"}
-                </label>
-                <input
-                  type="date"
-                  value={departureDate}
-                  onChange={(e) => setDepartureDate(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner uppercase cursor-pointer"
-                />
-              </div>
-              {/* Ô CHỌN NGÀY VỀ (Chỉ hiện ra khi nhấn lựa chọn Khứ hồi) */}
-              {isRoundTrip && (
-                <div className="space-y-2 transition-all duration-500 animate-fade-in">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">history</span>
-                    {lang === "VN" ? "Ngày về" : "Return Date"}
-                  </label>
-                  <input
-                    type="date"
-                    value={returnDate}
-                    min={departureDate}
-                    onChange={(e) => setReturnDate(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner uppercase cursor-pointer"
-                  />
-                </div>
-              )}
-              {/* FIELD SỐ LƯỢNG HÀNH KHÁCH */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">group</span>
-                  {lang === "VN" ? "Số lượng hành khách" : "Passengers"}
-                </label>
-                <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 shadow-inner">
-                  <button
-                    type="button"
-                    disabled={passengerCount <= 1}
-                    onClick={() => setPassengerCount(prev => prev - 1)}
-                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-600 shadow-sm active:scale-95 disabled:opacity-40 transition-all outline-none"
-                  >
-                    -
-                  </button>
-                  <span className="text-base font-headline font-black text-[#124757] dark:text-white mx-2 w-6 text-center">
-                    {passengerCount}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPassengerCount(prev => prev + 1)}
-                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-600 shadow-sm active:scale-95 transition-all outline-none"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-
-            </div>
-            {/* Nút Tìm Chuyến Đặt Vé Lớn Nổi Bật Dưới Cùng Form */}
-            <div className="pt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={handleSearchToBooking} // Gắn hàm chuyển trang vào đây
-                className="w-full md:w-auto bg-yellow-400 text-[#124757] dark:bg-yellow-400 dark:text-slate-900 px-12 py-4 rounded-2xl font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-[1.02] hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
-              >
-                {lang === "VN" ? "Tìm chuyến tàu ngay" : "Search Routes Now"}
-                <span className="material-symbols-outlined text-xl font-bold">search</span>
-              </button>
-            </div>
-          </div>
-          {/* Dấu chấm điều hướng Slide Hero */}
-          <div className="flex gap-2 bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm border border-white/5">
-            {heroSlides.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setHeroSlide(index)}
-                className={`h-2 rounded-full transition-all duration-300 outline-none ${index === heroSlide ? "w-6 bg-yellow-400" : "w-2 bg-white/40 hover:bg-white/60"
-                  }`}
-              />
-            ))}
+          {/* Nút Khám phá dịch vụ, scroll xuống Section Các loại dịch vụ */}
+          <div className="gsap-reveal">
+            <a
+              href="/#services-section"
+              className="inline-flex items-center gap-3 bg-yellow-400 text-[#124757] px-10 py-4 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-105 hover:shadow-xl transition-all duration-300"
+            >
+              {lang === "VN" ? "Khám phá dịch vụ" : "Explore Services"}
+            </a>
           </div>
         </div>
       </section>
@@ -375,9 +224,7 @@ export const Home = () => {
                 ? "Waterbus đang định hình lại tương lai của giao thông đô thị bằng cách khai phá tiềm năng to lớn của mạng lưới sông ngòi Sài Gòn. Chúng tôi không chỉ cung cấp một phương tiện đi lại thông thường, mà mang đến một giải pháp di chuyển xanh, bền vững, giúp giảm tải ùn tắc đường bộ nghiêm trọng, tiết kiệm thời gian quý báu của hành khách và kiến tạo những trải nghiệm hành trình thư thái, kết nối sâu sắc con người với cảnh quan thiên nhiên tráng lệ của thành phố."
                 : "Waterbus is reshaping the future of urban transportation by unlocking the immense potential of Saigon's river network. We don't just provide a standard transit method; we offer a green, sustainable mobility solution that alleviates severe road congestion, saves precious passenger time, and creates relaxed journey experiences that deeply connect people with the magnificent natural landscapes of the city."}
             </p>
-            {/* Khối thông số kỹ thuật (Stats) */}
             <div className="grid grid-cols-2 gap-8 pt-6">
-              {/* Tần suất cao điểm */}
               <div className="space-y-2">
                 <div className="text-4xl md:text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400">
                   15min
@@ -389,7 +236,6 @@ export const Home = () => {
                   {lang === "VN" ? "Các chuyến tàu chạy liên tục không lo chờ đợi" : "Continuous trips with zero waiting time"}
                 </p>
               </div>
-              {/* Năng lượng sạch */}
               <div className="space-y-2">
                 <div className="text-4xl md:text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400">
                   100%
@@ -415,49 +261,125 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* ===== GUILINE SECTION ===== */}
-      <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300 select-none">
+      {/* ===== SERVICES SECTION ===== */}
+      <section id="services-section" className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300 select-none">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
-          {/* Tiêu đề chính */}
-          <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white text-center mb-16">
-            {lang === "VN" ? "Hướng dẫn đặt vé" : "Ticketing Guide"}
-          </h2>
-          {/* Grid dàn ngang 4 cột trên Desktop, 2 cột trên Tablet, 1 cột trên Mobile */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10">
-            {guidelines.map((guide, index) => (
-              <div key={guide.id} className="flex flex-col group cursor-pointer">
-                {/* Số thứ tự */}
-                <div className="text-6xl font-headline font-black text-yellow-500 dark:text-yellow-400 mb-4 transition-transform duration-300 group-hover:-translate-y-2">
-                  0{index + 1}
-                </div>
-                {/* Hình ảnh minh họa */}
-                <div className="aspect-4/3 rounded-2xl overflow-hidden shadow-md mb-6">
-                  <img
-                    src={guide.image}
-                    alt={`Guideline step ${index + 1}`}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                </div>
-                {/* Tiêu đề bước */}
-                <h3 className="text-xl font-headline font-bold text-[#124757] dark:text-white mb-3">
-                  {lang === "VN" ? guide.titleVn : guide.titleEn}
-                </h3>
-                {/* Mô tả chi tiết */}
-                <p className="text-slate-600 dark:text-slate-400 font-body text-sm leading-relaxed">
-                  {lang === "VN" ? guide.descVn : guide.descEn}
-                </p>
-
-              </div>
-            ))}
+          {/* Tiêu đề & Subtitle */}
+          <div className="flex flex-col items-center text-center mb-16 space-y-4">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+              {lang === "VN" ? "Đặt vé trực tuyến" : "Online Booking"}
+            </p>
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+              {lang === "VN" ? "Các loại dịch vụ" : "Our Services"}
+            </h2>
           </div>
-          {/* Nút Đặt vé ngay */}
-          <div className="mt-16 flex justify-center">
-            <a
-              href="/#booking-section"
-              className="bg-yellow-400 text-[#124757] px-10 py-3.5 rounded-full font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-105 hover:shadow-xl transition-all duration-300"
+          {/* Grid 3 thẻ điều hướng dịch vụ đặt vé */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 gsap-reveal">
+            {/* Thẻ điều hướng: Đặt vé Waterbus*/}
+            <Link
+              to="/waterbus-booking"
+              className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
             >
-              {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
-            </a>
+              <div className="relative aspect-4/3 overflow-hidden shrink-0">
+                <img
+                  src="https://res.cloudinary.com/dygipvoal/image/upload/v1783792724/cqi2n26pl7etht4ad5q3.webp"
+                  alt={lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
+              </div>
+              <div className="flex flex-col justify-between flex-1 p-7 space-y-3">
+                <div className="space-y-3">
+                  <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+                    {lang === "VN" ? "Tuyến cố định" : "Scheduled Route"}
+                  </span>
+                  <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
+                    {lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                    {lang === "VN"
+                      ? "Di chuyển nhanh chóng theo lịch trình cố định giữa các bến tàu."
+                      : "Travel quickly along fixed schedules between wharves."}
+                  </p>
+                </div>
+                <div className="pt-5 flex items-center gap-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                    {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
+                  </span>
+                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                </div>
+              </div>
+            </Link>
+            {/* Thẻ điều hướng: Đặt vé WaterSightseeing */}
+            <Link
+              to="/watersightseeing-booking"
+              className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
+            >
+              <div className="relative aspect-4/3 overflow-hidden shrink-0">
+                <img
+                  src="https://res.cloudinary.com/dygipvoal/image/upload/v1783792723/qozuixs81skui0fwokvm.webp"
+                  alt={lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
+              </div>
+              <div className="flex flex-col justify-between flex-1 p-7 space-y-3">
+                <div className="space-y-3">
+                  <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+                    {lang === "VN" ? "Trải nghiệm ngắm cảnh" : "Scenic Experience"}
+                  </span>
+                  <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
+                    {lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                    {lang === "VN"
+                      ? "Tận hưởng hành trình ngắm cảnh thành phố dọc theo dòng sông."
+                      : "Enjoy a leisurely sightseeing journey along the river."}
+                  </p>
+                </div>
+                <div className="pt-5 flex items-center gap-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                    {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
+                  </span>
+                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                </div>
+              </div>
+            </Link>
+            {/* Thẻ điều hướng: Dịch vụ thuê tàu (Charter) */}
+            <Link
+              to="/charter-booking"
+              className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
+            >
+              <div className="relative aspect-4/3 overflow-hidden shrink-0">
+                <img
+                  src="https://res.cloudinary.com/dygipvoal/image/upload/v1783792723/leebii37uxivwywdzuic.jpg"
+                  alt={lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
+              </div>
+              <div className="flex flex-col justify-between flex-1 p-7 space-y-3">
+                <div className="space-y-3">
+                  <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+                    {lang === "VN" ? "Riêng tư & Linh hoạt" : "Private & Flexible"}
+                  </span>
+                  <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
+                    {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                    {lang === "VN"
+                      ? "Thiết kế hành trình riêng theo yêu cầu cho nhóm hoặc sự kiện."
+                      : "Design a private journey tailored for groups or events."}
+                  </p>
+                </div>
+                <div className="pt-5 flex items-center gap-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                    {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
+                  </span>
+                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                </div>
+              </div>
+            </Link>
           </div>
         </div>
       </section>
@@ -702,7 +624,7 @@ export const Home = () => {
                   <div className="pt-2">
                     <Link
                       to={`/blog/${blogs[heroSlide].slug}`}
-                      className="inline-flex items-center gap-2 text-sm font-headline font-black text-[#124757] dark:text-yellow-400 group/btn transition-colors w-max uppercase tracking-wider text-xs"
+                      className="inline-flex items-center gap-2 font-headline font-black text-[#124757] dark:text-yellow-400 group/btn transition-colors w-max uppercase tracking-wider text-xs"
                     >
                       <span>{lang === "VN" ? "Xem chi tiết" : "Read Full Story"}</span>
                       <span className="material-symbols-outlined text-lg transition-transform duration-300 group-hover/btn:translate-x-1.5">
@@ -1013,69 +935,8 @@ export const Home = () => {
               </div>
             </div>
             {/* CỘT PHẢI (Tỷ lệ 7/12): FORM GỬI TIN NHẮN */}
-            <div className="lg:col-span-7 bg-[#124757] dark:bg-slate-800 border border-white/10 dark:border-slate-700/50 p-8 md:p-10 rounded-[2.5rem] shadow-xl">
-              <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-                {/* Grid Họ tên & Email */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  {/* Họ và tên */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
-                      {lang === "VN" ? "Họ và tên *" : "Full Name *"}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder={lang === "VN" ? "Nhập họ tên của bạn" : "Enter your full name"}
-                      className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner"
-                    />
-                  </div>
-                  {/* Địa chỉ Email */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
-                      {lang === "VN" ? "Địa chỉ Email *" : "Email Address *"}
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="example@domain.com"
-                      className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner"
-                    />
-                  </div>
-                </div>
-                {/* Tiêu đề tin nhắn */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
-                    {lang === "VN" ? "Tiêu đề liên hệ" : "Subject"}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={lang === "VN" ? "Nhập tiêu đề nội dung" : "What is this regarding?"}
-                    className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner"
-                  />
-                </div>
-                {/* Khối nội dung nhập tin nhắn dài */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
-                    {lang === "VN" ? "Nội dung lời nhắn *" : "Message Contents *"}
-                  </label>
-                  <textarea
-                    rows={4}
-                    required
-                    placeholder={lang === "VN" ? "Viết nội dung tin nhắn của bạn tại đây..." : "Type your message details here..."}
-                    className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner resize-none"
-                  ></textarea>
-                </div>
-                {/* Nút hành động gửi thông tin màu trắng để tương phản cực tốt trên nền xanh */}
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    className="w-full sm:w-auto bg-white text-[#124757] dark:bg-yellow-400 dark:text-slate-900 px-10 py-4 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-md hover:bg-slate-100 dark:hover:bg-yellow-300 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2"
-                  >
-                    {lang === "VN" ? "Gửi lời nhắn ngay" : "Send Message"}
-                    <span className="material-symbols-outlined text-lg">send</span>
-                  </button>
-                </div>
-              </form>
+            <div className="lg:col-span-7">
+              <ContactForm />
             </div>
           </div>
         </div>
