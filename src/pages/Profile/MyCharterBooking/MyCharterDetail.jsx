@@ -22,6 +22,7 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { CharterPaymentLedger } from "../../../components/CharterPaymentLedger";
 import { CharterRouteMapPanel } from "../../../components/CharterRouteMapPanel";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
+import { PayOSLogo, payosButtonClassName, payosButtonLgClassName } from "../../../components/PayOSLogo";
 import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "../../../utils/insurancePreview";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { shouldShowCharterQuotePaymentCountdown, shouldShowPaymentDeadlineCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount } from "../../../utils/charterBookingActions";
@@ -2081,71 +2082,59 @@ export function CharterDetail() {
                       </button>
                     </div>
                   ) : hasPendingPayOs ? (
-                    <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-                      <div className="space-y-4">
-                        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/80 px-4 py-4 dark:border-amber-500/20 dark:bg-amber-500/10">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-white">
-                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-                              {lang === "VN" ? "Đang chờ thanh toán" : "Awaiting payment"}
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-5 py-5 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#00a85e] px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-white">
+                            {lang === "VN" ? "Chờ thanh toán" : "Awaiting payment"}
+                          </span>
+                          {effectivePaymentDeadline && shouldShowPaymentDeadlineCountdown({ paymentStatus: "pending" }, booking) ? (
+                            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-200">
+                              {lang === "VN" ? "Hạn" : "Due"}: {formatCountdown(paymentWatcherRemainingMs)}
                             </span>
-                          </div>
-                          <p className="mt-3 text-sm font-bold text-amber-900 dark:text-amber-100">
-                            {lang === "VN" ? "Giao dịch PayOS đã được tạo. Hoàn tất thanh toán trước khi hết hạn." : "Your PayOS transaction is ready. Complete payment before it expires."}
-                          </p>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            <PayOSSummaryTile
-                              label={lang === "VN" ? "Số tiền" : "Amount"}
-                              value={effectivePendingPaymentAmount > 0 ? currencyFormatter.format(effectivePendingPaymentAmount) : "--"}
-                              highlight
-                            />
-                            {effectivePaymentDeadline && shouldShowPaymentDeadlineCountdown({ paymentStatus: "pending" }, booking) && (
-                              <PayOSSummaryTile
-                                label={lang === "VN" ? "Hạn PayOS" : "PayOS deadline"}
-                                value={formatCountdown(paymentWatcherRemainingMs)}
-                              />
-                            )}
-                          </div>
+                          ) : null}
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          {effectiveCheckoutUrl && (
-                            <button
-                              type="button"
-                              onClick={() => openPaymentPage(effectiveCheckoutUrl, { orderCode: pendingPaymentOrderCode, amount: effectivePendingPaymentAmount, expiresAt: effectivePaymentDeadline })}
-                              className={`flex-1 ${payosButtonClassName}`}
-                            >
-                              <PayOSLogo variant="white" className="h-5 w-auto" />
-                              {lang === "VN" ? "Mở cổng thanh toán" : "Open payment"}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => pendingPaymentOrderCode ? handleSyncPaymentByOrderCode(pendingPaymentOrderCode) : handleSyncPayment(pendingPaymentId)}
-                            disabled={isSubmitting || (!pendingPaymentOrderCode && !pendingPaymentId)}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
-                          >
-                            <span className="material-symbols-outlined text-base">sync</span>
-                            {lang === "VN" ? "Đồng bộ" : "Sync"}
-                          </button>
-                        </div>
+                        <p className="mt-3 text-sm font-bold text-emerald-950 dark:text-emerald-100">
+                          {lang === "VN"
+                            ? "Giao dịch đã sẵn sàng. Bạn sẽ được chuyển sang trang thanh toán PayOS để hoàn tất."
+                            : "Your payment is ready. Continue on the PayOS checkout page to finish."}
+                        </p>
+                        <p className="mt-2 text-lg font-headline font-black text-[#00a85e]">
+                          {effectivePendingPaymentAmount > 0 ? currencyFormatter.format(effectivePendingPaymentAmount) : "--"}
+                        </p>
                       </div>
-                      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-200 bg-white p-5 text-center dark:border-amber-500/20 dark:bg-slate-900">
-                        {effectivePaymentQrCode ? (
-                          <>
-                            <img src={effectivePaymentQrCode} alt="PayOS QR" className="h-44 w-44 rounded-2xl bg-white object-contain p-3 ring-1 ring-amber-100 dark:ring-amber-500/20" />
-                            <p className="mt-3 text-xs font-bold text-slate-500 dark:text-slate-400">
-                              {lang === "VN" ? "Quét QR để thanh toán nhanh" : "Scan QR to pay quickly"}
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <span className="material-symbols-outlined text-5xl text-amber-400">qr_code_2</span>
-                            <p className="mt-3 text-xs font-bold text-slate-500 dark:text-slate-400">
-                              {lang === "VN" ? "Dùng nút Mở cổng PayOS để thanh toán" : "Use Open PayOS to continue payment"}
-                            </p>
-                          </>
-                        )}
-                      </div>
+
+                      {effectiveCheckoutUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => openPaymentPage(effectiveCheckoutUrl, {
+                            orderCode: pendingPaymentOrderCode,
+                            amount: effectivePendingPaymentAmount,
+                            expiresAt: effectivePaymentDeadline,
+                          })}
+                          className={payosButtonLgClassName}
+                        >
+                          <PayOSLogo variant="white" className="h-6 w-auto" />
+                          <span>{lang === "VN" ? "Tiếp tục thanh toán trên PayOS" : "Continue to PayOS checkout"}</span>
+                          <span className="material-symbols-outlined text-xl">arrow_forward</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => pendingPaymentOrderCode ? handleSyncPaymentByOrderCode(pendingPaymentOrderCode) : handleSyncPayment(pendingPaymentId)}
+                          disabled={isSubmitting || (!pendingPaymentOrderCode && !pendingPaymentId)}
+                          className={payosButtonLgClassName}
+                        >
+                          <span className="material-symbols-outlined text-xl">sync</span>
+                          <span>{lang === "VN" ? "Đồng bộ trạng thái thanh toán" : "Sync payment status"}</span>
+                        </button>
+                      )}
+
+                      <p className="text-center text-[11px] font-medium text-slate-400">
+                        {lang === "VN"
+                          ? "Thanh toán trực tiếp trên cổng PayOS — không hiển thị mã QR trên trang này."
+                          : "Pay directly on PayOS — no QR is shown on this page."}
+                      </p>
                     </div>
                   ) : canCreatePayment ? (
                     <div className="space-y-5">
@@ -2395,15 +2384,18 @@ export function CharterDetail() {
             </p>
           </div>
           {hasPendingPayOs && effectiveCheckoutUrl ? (
-            <a
-              href={effectiveCheckoutUrl}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              onClick={() => openPaymentPage(effectiveCheckoutUrl, {
+                orderCode: pendingPaymentOrderCode,
+                amount: effectivePendingPaymentAmount,
+                expiresAt: effectivePaymentDeadline,
+              })}
               className={`shrink-0 px-4 py-3 ${payosButtonClassName}`}
             >
               <PayOSLogo variant="white" className="h-4 w-auto" />
-              <span className="material-symbols-outlined text-base">open_in_new</span>
-            </a>
+              {lang === "VN" ? "PayOS" : "PayOS"}
+            </button>
           ) : (
             <button
               type="button"
