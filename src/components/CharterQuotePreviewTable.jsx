@@ -33,14 +33,27 @@ function InvoiceRow({ label, detail, amount, amountClass = "", indent = false, b
 
 export function CharterQuotePreviewTable({
   preview,
+  booking = null,
   quoteForm = {},
+  boatsCatalog = [],
+  getBoatId,
+  getBoatPrice,
   lang = "VN",
   currencyFormatter,
 }) {
+  const forcedRentalUnit = quoteForm?.rentalUnit === "Day" || quoteForm?.rentalUnit === "Hour"
+    ? quoteForm.rentalUnit
+    : "";
   const model = buildQuotePreviewModel(preview, {
-    defaultRentalUnit: "Day",
+    defaultRentalUnit: forcedRentalUnit || "Day",
+    forcedRentalUnit,
+    boatsCatalog,
+    quoteBoats: Array.isArray(quoteForm?.boats) ? quoteForm.boats : [],
+    getBoatId,
+    getBoatPrice,
     currencyFormatter,
     lang,
+    booking,
   });
 
   if (!model.boatRows.length) return null;
@@ -106,13 +119,13 @@ export function CharterQuotePreviewTable({
           />
         ) : null}
 
-        {model.insurance?.selected !== false && model.insurance?.totalAmount > 0 ? (
+        {model.insurance && model.insurance.selected !== false ? (
           <InvoiceRow
             label={lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
             detail={model.insurance.quantity > 0
               ? `${fmt(model.insurance.unitPremiumAmount || 0)}/${lang === "VN" ? "ghế" : "seat"} × ${model.insurance.quantity} ${lang === "VN" ? "ghế" : "seats"}`
-              : (model.insurance.packageName || "")}
-            amount={fmt(model.insurance.totalAmount)}
+              : (model.insurance.packageName || (lang === "VN" ? "Đã chọn" : "Selected"))}
+            amount={fmt(model.insurance.totalAmount || 0)}
             amountClass={`text-sm ${moneyClass}`}
           />
         ) : null}
@@ -141,7 +154,11 @@ export function CharterQuotePreviewPanel({
   isPreviewLoading,
   quotePreviewError,
   quotePreview,
+  booking = null,
   quoteForm,
+  boatsCatalog = [],
+  getBoatId,
+  getBoatPrice,
   isQuoteBoatSelectionComplete,
   compact = false,
 }) {
@@ -166,7 +183,11 @@ export function CharterQuotePreviewPanel({
         <div className="mt-4">
           <CharterQuotePreviewTable
             preview={quotePreview}
+            booking={booking}
             quoteForm={quoteForm}
+            boatsCatalog={boatsCatalog}
+            getBoatId={getBoatId}
+            getBoatPrice={getBoatPrice}
             lang={lang}
             currencyFormatter={currencyFormatter}
           />

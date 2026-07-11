@@ -20,6 +20,9 @@ import {
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { CharterPaymentLedger } from "../../../components/CharterPaymentLedger";
+import { CharterRouteMapPanel } from "../../../components/CharterRouteMapPanel";
+import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
+import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "../../../utils/insurancePreview";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { shouldShowCharterQuotePaymentCountdown, shouldShowPaymentDeadlineCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount } from "../../../utils/charterBookingActions";
 import { formatQuoteChargeableDuration, formatQuoteUnitPriceLabel } from "../../../utils/charterQuotePreview";
@@ -121,8 +124,48 @@ const normalizeBooking = (item) => {
   const adultCount = Number(pick(item, ["adultCount"], 0));
   const childCount = Number(pick(item, ["childCount"], 0));
   const passengerCount = Number(pick(item, ["passengerCount"], adultCount + childCount));
-  const fromName = pick(item, ["fromStationName", "fromStation.stationName", "fromStation.name"]);
-  const toName = pick(item, ["toStationName", "toStation.stationName", "toStation.name"]);
+  const routeEstimate = pick(item, ["routeEstimate"], null);
+  const estimateLegs = Array.isArray(routeEstimate?.legs) ? routeEstimate.legs : [];
+  const firstLeg = estimateLegs[0] || null;
+  const lastLeg = estimateLegs[estimateLegs.length - 1] || null;
+  const fromName = pick(item, ["fromStationName", "fromStation.stationName", "fromStation.name"], "")
+    || pick(firstLeg, ["fromStationName", "fromStation.stationName", "fromStation.name"], "");
+  const toName = pick(item, ["toStationName", "toStation.stationName", "toStation.name"], "")
+    || pick(lastLeg, ["toStationName", "toStation.stationName", "toStation.name"], "");
+  const routeLegs = estimateLegs.map((leg, index) => ({
+    legOrder: Number(pick(leg, ["legOrder", "order"], index + 1)) || index + 1,
+    fromStationId: String(pick(leg, ["fromStationId"], "")),
+    fromStationName: pick(leg, ["fromStationName"], ""),
+    toStationId: String(pick(leg, ["toStationId"], "")),
+    toStationName: pick(leg, ["toStationName"], ""),
+    matchedRouteId: String(pick(leg, [
+      "matchedRouteId",
+      "routeId",
+      "matchedRoute.routeId",
+      "matchedRoute.id",
+    ], "") || ""),
+    matchedRouteCode: pick(leg, ["matchedRouteCode", "routeCode", "matchedRoute.routeCode"], "") || "",
+    matchedRouteName: pick(leg, ["matchedRouteName", "routeName", "matchedRoute.routeName", "matchedRoute.name"], "") || "",
+  }));
+  const matchedRouteId = String(pick(item, [
+    "matchedRouteId",
+    "routeId",
+    "matchedRoute.routeId",
+    "matchedRoute.id",
+  ], "")
+    || pick(routeEstimate, ["matchedRouteId", "routeId"], "")
+    || pick(firstLeg, ["matchedRouteId", "routeId", "matchedRoute.routeId", "matchedRoute.id"], "")
+    || routeLegs.find((leg) => leg.matchedRouteId)?.matchedRouteId
+    || "");
+  const itineraryStops = Array.isArray(item?.itineraryStops)
+    ? item.itineraryStops.map((stop, index) => ({
+      stationId: String(pick(stop, ["stationId", "station.id", "station.stationId"], "")),
+      stationName: pick(stop, ["stationName", "station.stationName", "station.name"], "") || "--",
+      stopOrder: Number(pick(stop, ["stopOrder"], index + 1)) || index + 1,
+      stayDurationMinutes: Number(pick(stop, ["stayDurationMinutes"], 0)) || 0,
+      note: pick(stop, ["note"], ""),
+    }))
+    : [];
   const payments = Array.isArray(item?.payments) ? item.payments : [];
   const pendingPayment = payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending");
   const paidPayments = payments.filter(isPaidPayment);
@@ -148,8 +191,8 @@ const normalizeBooking = (item) => {
     createdAt: pick(item, ["createdAt"], ""),
     boatName: pick(item, ["boatName", "boat.name"], "--"),
     route: pick(item, ["routeName", "route", "itineraryName"], fromName || toName ? `${fromName || "--"} - ${toName || "--"}` : "--"),
-    fromStationName: fromName,
-    toStationName: toName,
+    fromStationName: fromName || "",
+    toStationName: toName || "",
     departureDate: pick(item, ["departureDate", "startDate"]),
     startTime: pick(item, ["startTime"], "--"),
     rentalUnit: pick(item, ["rentalUnit"], "Day"),
@@ -167,14 +210,27 @@ const normalizeBooking = (item) => {
     depositAmount: rawDepositAmount || paidDepositAmount,
     promotionCode: pick(item, ["promotionCode"], ""),
     specialRequests: pick(item, ["specialRequests"], "--"),
+    insuranceSelected: resolveInsuranceSelected(item),
+    insurancePackageId: getBookingInsurancePackageId(item),
+    insurance: normalizeInsuranceFromBooking(item) || pick(item, ["insurance"], null),
     contactName: pick(item, ["contactName"], "--"),
     contactPhone: pick(item, ["contactPhone"], "--"),
     contactEmail: pick(item, ["contactEmail"], "--"),
     fromStationId: pick(item, ["fromStationId", "fromStation.id", "fromStation.stationId"], ""),
     toStationId: pick(item, ["toStationId", "toStation.id", "toStation.stationId"], ""),
-    itineraryStops: pick(item, ["itineraryStops"], []),
+    itineraryStops,
+    matchedRouteId,
+    matchedRouteCode: pick(item, ["matchedRouteCode", "matchedRoute.routeCode", "routeCode"], "")
+      || pick(routeEstimate, ["matchedRouteCode", "routeCode"], "")
+      || routeLegs.find((leg) => leg.matchedRouteCode)?.matchedRouteCode
+      || "",
+    matchedRouteName: pick(item, ["matchedRouteName", "matchedRoute.routeName", "routeName"], "")
+      || pick(routeEstimate, ["matchedRouteName", "routeName"], "")
+      || routeLegs.find((leg) => leg.matchedRouteName)?.matchedRouteName
+      || "",
+    routeLegs,
     preferredSeatSetupType: pick(item, ["preferredSeatSetupType"], "FullStandard"),
-    routeEstimate: pick(item, ["routeEstimate"], null),
+    routeEstimate,
     requestedBoats: pick(item, ["requestedBoats"], []),
     selectedBoats: pick(item, ["selectedBoats", "boats"], []),
     quoteBoats: pick(item, ["quoteBoats", "quoteBreakdown.boats", "pricing.boats", "pricePreview.boats"], []),
@@ -242,14 +298,25 @@ const formatRouteEstimate = (estimate) => {
   if (typeof estimate === "string" || typeof estimate === "number") return String(estimate);
 
   const distance = pick(estimate, ["distanceKm", "totalDistanceKm", "distance"]);
-  const durationMinutes = pick(estimate, ["durationMinutes", "estimatedDurationMinutes"]);
+  const durationMinutes = pick(estimate, [
+    "durationMinutes",
+    "estimatedDurationMinutes",
+    "estimatedTravelMinutes",
+    "travelMinutes",
+  ]);
   const durationHours = pick(estimate, ["durationHours", "estimatedDurationHours"]);
   const parts = [];
 
-  if (distance !== "") parts.push(`${distance} km`);
-  if (durationMinutes !== "") parts.push(`${durationMinutes} phút`);
-  else if (durationHours !== "") parts.push(`${durationHours} giờ`);
-  return parts.join(" / ") || "--";
+  if (distance !== "" && distance != null) {
+    const distanceNumber = Number(distance);
+    parts.push(Number.isFinite(distanceNumber) ? `${distanceNumber} km` : `${distance} km`);
+  }
+  if (durationMinutes !== "" && durationMinutes != null) {
+    parts.push(`${durationMinutes} phút`);
+  } else if (durationHours !== "" && durationHours != null) {
+    parts.push(`${durationHours} giờ`);
+  }
+  return parts.join(" · ") || "--";
 };
 
 const getDownloadName = (response, fallbackName) => {
@@ -470,7 +537,7 @@ export function CharterDetail() {
   const loadDetail = useCallback(async ({ silent = false } = {}) => {
     if (!isAuthenticated) {
       navigate("/login");
-      return;
+      return null;
     }
 
     try {
@@ -502,6 +569,7 @@ export function CharterDetail() {
         : buildEmptyPassengerRows(normalized);
       setPassengerRows(initialPassengers);
       setSelectedTicketIds([]);
+      return normalized;
     } catch (error) {
       if (!silent) {
         setLoadError(
@@ -511,6 +579,7 @@ export function CharterDetail() {
               : "The server could not return full details. Summary data from the list is being shown."),
         );
       }
+      return null;
     } finally {
       if (!silent) setIsLoading(false);
     }
@@ -863,7 +932,7 @@ export function CharterDetail() {
         inputPlaceholder: lang === "VN" ? "Mô tả thay đổi bạn muốn..." : "Describe the changes you want...",
         showCancelButton: true,
         confirmButtonText: lang === "VN" ? "Gửi yêu cầu" : "Submit request",
-        cancelButtonText: lang === "VN" ? "Huỷ" : "Cancel",
+        cancelButtonText: lang === "VN" ? "Đóng" : "Close",
         confirmButtonColor: "#124757",
       });
       if (!result.isConfirmed) return;
@@ -879,7 +948,7 @@ export function CharterDetail() {
           : "The booking will be cancelled after rejection.",
         showCancelButton: true,
         confirmButtonText: lang === "VN" ? "Từ chối" : "Reject",
-        cancelButtonText: lang === "VN" ? "Huỷ" : "Cancel",
+        cancelButtonText: lang === "VN" ? "Đóng" : "Close",
         confirmButtonColor: "#dc2626",
       });
       if (!result.isConfirmed) return;
@@ -888,13 +957,15 @@ export function CharterDetail() {
     if (action === "Accept") {
       const result = await Swal.fire({
         icon: "question",
-        title: lang === "VN" ? "Chấp nhận báo giá?" : "Accept this quote?",
+        title: lang === "VN" ? "Bạn chắc chắn chấp nhận báo giá?" : "Accept this quote?",
         text: lang === "VN"
-          ? "Sau khi chấp nhận, bạn có thể tiếp tục thanh toán."
+          ? "Sau khi chấp nhận, yêu cầu chuyển sang thanh toán."
           : "After accepting, you can proceed to payment.",
         showCancelButton: true,
-        confirmButtonText: lang === "VN" ? "Chấp nhận" : "Accept",
-        cancelButtonText: lang === "VN" ? "Huỷ" : "Cancel",
+        reverseButtons: true,
+        focusCancel: true,
+        confirmButtonText: lang === "VN" ? "Chấp nhận báo giá" : "Accept quote",
+        cancelButtonText: lang === "VN" ? "Không, xem lại" : "No, go back",
         confirmButtonColor: "#124757",
       });
       if (!result.isConfirmed) return;
@@ -902,42 +973,87 @@ export function CharterDetail() {
 
     try {
       setIsSubmitting(true);
-      await respondToCharterBookingQuote(booking.id, { action, note });
-      await loadDetail();
+      const response = await respondToCharterBookingQuote(booking.id, { action, note });
+
+      // Prefer Accept response body (BE now returns updated booking), then silent refetch.
+      const responseBooking = response?.booking || response?.data || response;
+      const responseStatus = pick(responseBooking, ["bookingStatus", "status"], "");
+      if (responseBooking && typeof responseBooking === "object" && (responseBooking.id || responseBooking.bookingCode || responseStatus)) {
+        const normalizedFromResponse = normalizeBooking({
+          ...booking,
+          ...responseBooking,
+          bookingStatus: responseStatus || responseBooking.bookingStatus || responseBooking.status,
+          paymentStatus: pick(responseBooking, ["paymentStatus"], booking.paymentStatus),
+          holdExpiresAt: pick(responseBooking, ["holdExpiresAt"], booking.holdExpiresAt),
+          bookingHoldExpiresAt: pick(responseBooking, ["bookingHoldExpiresAt", "holdExpiresAt"], booking.bookingHoldExpiresAt),
+        });
+        setBooking(normalizedFromResponse);
+      }
+
+      const refreshed = await loadDetail({ silent: true });
+      const effectiveStatus = refreshed?.status || responseStatus || booking.status;
+
       if (action === "Accept") {
-        Swal.fire({
+        if (effectiveStatus === "Quoted") {
+          await Swal.fire({
+            icon: "warning",
+            title: lang === "VN" ? "Chưa chuyển sang thanh toán" : "Still waiting for payment status",
+            text: lang === "VN"
+              ? "Máy chủ chưa đổi trạng thái sang PendingPayment. Vui lòng thử lại hoặc liên hệ hỗ trợ."
+              : "The server did not change status to PendingPayment. Please try again or contact support.",
+            confirmButtonColor: "#124757",
+          });
+          return;
+        }
+
+        await Swal.fire({
           icon: "success",
           title: lang === "VN" ? "Đã chấp nhận báo giá" : "Quote accepted",
-          text: lang === "VN" ? "Bạn có thể tiếp tục thanh toán." : "You can proceed to payment.",
-          timer: 1600,
+          text: lang === "VN"
+            ? "Yêu cầu đã chuyển sang chờ thanh toán. Bạn có thể thanh toán bên dưới."
+            : "The request is now pending payment. You can pay below.",
+          confirmButtonColor: "#124757",
+          timer: 1800,
           showConfirmButton: false,
         });
         window.setTimeout(() => {
           paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 200);
+        }, 250);
       } else if (action === "RequestChanges") {
-        Swal.fire({
+        await Swal.fire({
           icon: "success",
           title: lang === "VN" ? "Đã gửi yêu cầu chỉnh sửa" : "Change request sent",
           text: lang === "VN" ? "Booking đã chuyển về chờ báo giá lại." : "The booking is pending a new quote.",
+          confirmButtonColor: "#124757",
           timer: 1600,
           showConfirmButton: false,
         });
       } else {
-        Swal.fire({
+        await Swal.fire({
           icon: "success",
           title: lang === "VN" ? "Đã từ chối báo giá" : "Quote rejected",
+          confirmButtonColor: "#124757",
           timer: 1400,
           showConfirmButton: false,
         });
       }
     } catch (error) {
-      Swal.fire({
+      console.error("Lỗi phản hồi báo giá:", error?.response?.data || error);
+      const message = getApiErrorMessage(
+        error,
+        lang === "VN" ? "Không thể phản hồi báo giá. Vui lòng tải lại trang rồi thử lại." : "Unable to respond to the quote. Please refresh and try again.",
+      );
+      await Swal.fire({
         icon: "error",
         title: lang === "VN" ? "Không thể phản hồi báo giá" : "Unable to respond to quote",
-        text: getApiErrorMessage(error),
+        html: `<p style="text-align:left;white-space:pre-wrap;margin:0;font-size:14px;line-height:1.5;">${String(message)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")}</p>`,
         confirmButtonColor: "#124757",
       });
+      await loadDetail({ silent: true });
     } finally {
       setIsSubmitting(false);
     }
@@ -1000,13 +1116,23 @@ export function CharterDetail() {
     } else {
       const result = await Swal.fire({
         icon: "warning",
-        title: lang === "VN" ? "Hủy yêu cầu thuê tàu?" : "Cancel charter request?",
-        text: lang === "VN" ? `Mã đặt chỗ ${booking.bookingCode} sẽ được hủy nếu còn hợp lệ.` : `Booking ${booking.bookingCode} will be cancelled if it is still eligible.`,
+        title: lang === "VN" ? "Bạn chắc chắn muốn hủy?" : "Are you sure you want to cancel?",
+        html: lang === "VN"
+          ? `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
+              Mã yêu cầu <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> sẽ bị hủy và không thể thanh toán tiếp.<br/><br/>
+              Thao tác này không hoàn tác được.
+            </p>`
+          : `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
+              Request <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> will be cancelled and payment will no longer be available.<br/><br/>
+              This action cannot be undone.
+            </p>`,
         showCancelButton: true,
+        reverseButtons: true,
+        focusCancel: true,
         confirmButtonColor: "#d33",
         cancelButtonColor: "#124757",
-        confirmButtonText: lang === "VN" ? "Hủy yêu cầu" : "Cancel request",
-        cancelButtonText: lang === "VN" ? "Đóng" : "Close",
+        confirmButtonText: lang === "VN" ? "Tôi chắc chắn, hủy yêu cầu" : "Yes, cancel request",
+        cancelButtonText: lang === "VN" ? "Không, giữ lại" : "No, keep it",
       });
       if (!result.isConfirmed) return;
     }
@@ -1220,6 +1346,10 @@ export function CharterDetail() {
 
   const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
   const isPaid = String(booking.paymentStatus).toLowerCase() === "paid";
+  const isTerminalBooking = ["Cancelled", "Expired", "Refunded"].includes(booking.status);
+  const canShowPayOsSection = !isPaid
+    && !isTerminalBooking
+    && !["Quoted", "PendingQuote", "Completed"].includes(booking.status);
   const canUseContactAsSinglePassenger = isSinglePassengerWithContact(booking) && !hasSavedPassengerManifest(booking);
   const paidAmount = Number(booking.paidAmount || 0);
   const quoteBoatRows = (Array.isArray(booking.quoteBoats) && booking.quoteBoats.length > 0
@@ -1338,22 +1468,46 @@ export function CharterDetail() {
   const effectivePaymentDeadline = effectivePaymentExpiresAt || paymentWatcher.deadline || estimatedPendingPaymentDeadline;
   const paymentWatcherRemainingMs = getRemainingMs(effectivePaymentDeadline, nowTick);
   const routeStops = booking.route && booking.route !== "--" ? booking.route.split(/\s+-\s+/) : [];
-  const routeFrom = booking.fromStationName || routeStops[0] || "--";
-  const routeTo = booking.toStationName || routeStops[1] || "--";
+  const estimateLegs = Array.isArray(booking.routeEstimate?.legs) ? booking.routeEstimate.legs : [];
+  const routeFrom = booking.fromStationName
+    || estimateLegs[0]?.fromStationName
+    || routeStops[0]
+    || "--";
+  const routeTo = booking.toStationName
+    || estimateLegs[estimateLegs.length - 1]?.toStationName
+    || routeStops[1]
+    || "--";
   const scheduleItems = [
     { icon: "event", label: lang === "VN" ? "Ngày giờ đi" : "Schedule", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)}` },
     {
+      icon: "payments",
+      label: lang === "VN" ? "Hình thức thuê" : "Rental type",
+      value: booking.rentalUnit === "Hour"
+        ? (lang === "VN" ? "Theo giờ" : "Hourly")
+        : (lang === "VN" ? "Theo ngày" : "Daily"),
+      description: lang === "VN"
+        ? "Thời lượng tính tiền do hệ thống ước tính từ lộ trình"
+        : "Chargeable duration is estimated from the route",
+    },
+    {
       icon: "timer",
-      label: lang === "VN" ? "Thời lượng thuê" : "Duration",
+      label: lang === "VN" ? "Thời lượng ước tính" : "Estimated duration",
       value: (() => {
-        const estimatedMinutes = Number(pick(booking.routeEstimate, ["estimatedDurationMinutes"], 0));
+        const estimatedMinutes = Number(pick(booking.routeEstimate, ["estimatedDurationMinutes", "estimatedTravelMinutes"], 0));
+        const chargeableMinutes = Number(pick(booking.routeEstimate, ["chargeableDurationMinutes"], 0));
+        if (booking.rentalUnit === "Hour" && Number.isFinite(chargeableMinutes) && chargeableMinutes > 0) {
+          const hours = Math.max(1, Math.ceil(chargeableMinutes / 60));
+          return lang === "VN" ? `${hours} giờ (tính tiền)` : `${hours} hr (billable)`;
+        }
         if (Number.isFinite(estimatedMinutes) && estimatedMinutes > 0) {
-          return lang === "VN" ? `${estimatedMinutes} phút` : `${estimatedMinutes} min`;
+          return lang === "VN" ? `${estimatedMinutes} phút di chuyển` : `${estimatedMinutes} min travel`;
         }
         if (booking.durationValue) {
-          return `${booking.durationValue} ${booking.rentalUnit}`;
+          return booking.rentalUnit === "Hour"
+            ? (lang === "VN" ? `${booking.durationValue} giờ` : `${booking.durationValue} hr`)
+            : (lang === "VN" ? `${booking.durationValue} ngày` : `${booking.durationValue} day(s)`);
         }
-        return "--";
+        return lang === "VN" ? "Hệ thống sẽ ước tính" : "System will estimate";
       })(),
     },
     {
@@ -1364,7 +1518,6 @@ export function CharterDetail() {
         ? `${booking.adultCount} người lớn / ${booking.childCount} trẻ em`
         : `${booking.adultCount} adults / ${booking.childCount} children`,
     },
-    { icon: "route", label: lang === "VN" ? "Ước tính lộ trình" : "Route Estimate", value: formatRouteEstimate(booking.routeEstimate) },
   ];
   const contactItems = [
     { icon: "person", label: lang === "VN" ? "Người liên hệ" : "Contact Name", value: booking.contactName },
@@ -1583,7 +1736,7 @@ export function CharterDetail() {
               ))}
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
               <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
                 <div className="flex items-center gap-2 text-slate-400">
                   <span className="material-symbols-outlined text-lg">sticky_note_2</span>
@@ -1591,6 +1744,11 @@ export function CharterDetail() {
                 </div>
                 <p className="mt-3 min-h-10 font-medium text-slate-700 dark:text-slate-200 break-words">{booking.specialRequests || (lang === "VN" ? "Không có" : "None")}</p>
               </div>
+              <CharterInsuranceInfo
+                booking={booking}
+                lang={lang}
+                currencyFormatter={currencyFormatter}
+              />
             </div>
           </div>
         </section>
@@ -1617,7 +1775,65 @@ export function CharterDetail() {
                 <div>
                   <h3 className="mt-1 text-xl font-headline font-black text-[#0E4050] dark:text-yellow-400">{lang === "VN" ? "Chi tiết tàu và chi phí" : "Boat and pricing details"}</h3>
                 </div>
-                
+              </div>
+
+              <div className="border-b border-[#D8E7EA] px-5 py-4 dark:border-slate-700">
+                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                  {lang === "VN" ? "Lộ trình" : "Route"}
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến đón" : "Pickup"}</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeFrom}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến trả" : "Drop-off"}</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeTo}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ngày giờ đi" : "Departure"}</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
+                      {formatDate(booking.departureDate)} · {String(booking.startTime).slice(0, 5)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ước tính" : "Estimate"}</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
+                      {formatRouteEstimate(booking.routeEstimate)}
+                    </p>
+                  </div>
+                </div>
+                {Array.isArray(booking.itineraryStops) && booking.itineraryStops.length > 0 ? (
+                  <div className="mt-3 space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {lang === "VN" ? "Điểm dừng" : "Stops"}
+                    </p>
+                    {booking.itineraryStops.map((stop, index) => (
+                      <p key={`${stop.stationId || "stop"}-${index}`} className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                        {lang === "VN" ? `Dừng ${stop.stopOrder || index + 1}` : `Stop ${stop.stopOrder || index + 1}`}
+                        {": "}
+                        {stop.stationName || "--"}
+                        {Number(stop.stayDurationMinutes) > 0
+                          ? ` · ${stop.stayDurationMinutes} ${lang === "VN" ? "phút" : "min"}`
+                          : ""}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-4">
+                  <CharterRouteMapPanel
+                    lang={lang}
+                    booking={booking}
+                    preferOfficial
+                    heightClassName="h-64 md:h-72"
+                    className="border-[#D8E7EA] dark:border-slate-700"
+                    title={lang === "VN" ? "Tuyến đã chốt" : "Confirmed route"}
+                    subtitle={lang === "VN"
+                      ? "Đường đi theo Route Master dùng khi admin chốt giá."
+                      : "Route Master path used when the quote was finalized."}
+                  />
+                </div>
               </div>
 
               {quoteBoatRows.length > 0 ? (
@@ -1695,6 +1911,22 @@ export function CharterDetail() {
                     <span>{lang === "VN" ? "Giảm giá" : "Discount"}</span>
                     <span>{booking.discountAmount > 0 ? `-${currencyFormatter.format(booking.discountAmount)}` : "--"}</span>
                   </div>
+                  {booking.insuranceSelected !== false && booking.insurance?.totalAmount > 0 ? (
+                    <div className="flex items-center justify-between gap-4 text-sm font-bold text-slate-600 dark:text-slate-300">
+                      <span>
+                        {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                        {booking.insurance.quantity > 0
+                          ? ` · ${booking.insurance.quantity} ${lang === "VN" ? "ghế" : "seats"}`
+                          : ""}
+                      </span>
+                      <span>{currencyFormatter.format(booking.insurance.totalAmount)}</span>
+                    </div>
+                  ) : booking.insuranceSelected === true ? (
+                    <div className="flex items-center justify-between gap-4 text-sm font-bold text-slate-600 dark:text-slate-300">
+                      <span>{lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}</span>
+                      <span>{lang === "VN" ? "Đã chọn" : "Selected"}</span>
+                    </div>
+                  ) : null}
                   <div className="flex items-center justify-between gap-4 border-t border-slate-200 dark:border-slate-700 pt-3">
                     <span className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Tổng cuối" : "Total"}</span>
                     <span className="text-xl font-headline font-black text-[#0E4050] dark:text-yellow-400">{quoteTotal > 0 ? currencyFormatter.format(quoteTotal) : "--"}</span>
@@ -1766,7 +1998,29 @@ export function CharterDetail() {
                   </div>
                 ) : null}
 
-                {!isPaid && booking.status !== "Quoted" && (
+                {isTerminalBooking ? (
+                  <div className="mt-5 flex items-start gap-3 rounded-[1.75rem] border border-slate-200 bg-slate-50 px-5 py-5 dark:border-slate-700 dark:bg-slate-900 md:px-6">
+                    <span className="material-symbols-outlined text-3xl text-slate-400">
+                      {booking.status === "Cancelled" ? "cancel" : booking.status === "Expired" ? "timer_off" : "currency_exchange"}
+                    </span>
+                    <div>
+                      <h4 className="font-headline text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
+                        {booking.status === "Cancelled"
+                          ? (lang === "VN" ? "Yêu cầu đã hủy" : "Request cancelled")
+                          : booking.status === "Expired"
+                            ? (lang === "VN" ? "Yêu cầu đã hết hạn" : "Request expired")
+                            : (lang === "VN" ? "Đã hoàn tiền" : "Refunded")}
+                      </h4>
+                      <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        {lang === "VN"
+                          ? "Không còn thao tác thanh toán cho yêu cầu này."
+                          : "Payment actions are no longer available for this request."}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+
+                {canShowPayOsSection ? (
                   <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
                     <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1804,12 +2058,7 @@ export function CharterDetail() {
                     </div>
 
                     <div className="px-5 py-5 md:px-6">
-                  {booking.status === "Cancelled" ? (
-                    <div className="flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
-                      <span className="material-symbols-outlined text-3xl">cancel</span>
-                      <p className="text-sm font-bold">{lang === "VN" ? "Yêu cầu đã hủy, không thể thanh toán" : "Request cancelled, payment unavailable"}</p>
-                    </div>
-                  ) : isQuoteHoldExpired ? (
+                  {isQuoteHoldExpired ? (
                     <div className="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
                       <p className="text-sm font-bold">
                         {lang === "VN" ? "Đã quá 12h kể từ khi admin chốt giá. Vui lòng tải lại booking để cập nhật trạng thái." : "The 12-hour payment window after quoting has passed. Refresh the booking for the latest status."}
@@ -2006,7 +2255,7 @@ export function CharterDetail() {
                   )}
                     </div>
                   </div>
-                )}
+                ) : null}
                 </div>
               </div>
             </div>

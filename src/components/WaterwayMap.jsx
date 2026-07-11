@@ -64,14 +64,21 @@ L.Icon.Default.mergeOptions({
 export const WaterwayMap = ({
   coordinates = [],
   waterwayName = "",
+  overlayEyebrow = "Đang hiển thị tuyến",
   stationPoint = null,
   stationsList = [],
   onLocationSelect,
-  hideStationLink = false
+  hideStationLink = false,
+  lineWeight = 5,
+  lineOpacity = 0.85,
 }) => {
   const navigate = useNavigate();
   const polylinePositions = coordinates.map((point) => [point.latitude, point.longitude]);
   const centerPoint = stationPoint ? [stationPoint.latitude, stationPoint.longitude] : [10.7719, 106.7067];
+  const visibleStations = (stationsList || []).filter((station) => {
+    const status = String(station?.status || "Active").toLowerCase();
+    return status === "active" || status === "";
+  });
 
   return (
     <div className="w-full h-full min-h-112.5 overflow-hidden border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative z-10">
@@ -79,7 +86,7 @@ export const WaterwayMap = ({
       {waterwayName && (
         <div className="absolute top-4 left-4 z-1000 bg-white/90 dark:bg-slate-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm pointer-events-none">
           <span className="text-[10px] font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider block">
-            Đang hiển thị tuyến
+            {overlayEyebrow}
           </span>
           <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
             {waterwayName}
@@ -94,7 +101,15 @@ export const WaterwayMap = ({
         />
 
         {polylinePositions.length > 0 && (
-          <Polyline positions={polylinePositions} pathOptions={{ color: "#124757", weight: 5, opacity: 0.85, lineJoin: "round" }} />
+          <Polyline
+            positions={polylinePositions}
+            pathOptions={{
+              color: "#124757",
+              weight: lineWeight,
+              opacity: lineOpacity,
+              lineJoin: "round",
+            }}
+          />
         )}
 
         {/* TRƯỜNG HỢP 1: HIỂN THỊ 1 ĐIỂM MARKER ĐƠN LẺ (DÀNH CHO ADMIN CONFIG) */}
@@ -110,8 +125,8 @@ export const WaterwayMap = ({
         )}
 
         {/* TRƯỜNG HỢP 2: HIỂN THỊ DANH SÁCH HÀNG LOẠT NHÀ GA (DÀNH CHO TRANG CHỦ HOME TƯƠNG TÁC) */}
-        {stationsList && stationsList.length > 0 && (
-          stationsList.filter(s => s.status === "Active").map((station) => (
+        {visibleStations.length > 0 && (
+          visibleStations.map((station) => (
             <Marker
               key={station.stationId}
               position={[station.latitude, station.longitude]}
@@ -140,7 +155,7 @@ export const WaterwayMap = ({
         <MapController
           positions={polylinePositions}
           centerPoint={stationPoint ? centerPoint : null}
-          multiMarkers={stationsList}
+          multiMarkers={visibleStations}
         />
         <MapClickHandler onLocationSelect={onLocationSelect} />
       </MapContainer>

@@ -44,6 +44,8 @@ import {
   getBoatPrice,
   getBoatSeatCount,
   getBoatSeatSetupType,
+  getCharterRoutePricingWarning,
+  isCharterRoutePricingBlocked,
   getPaymentAmount,
   getPaymentStatusInfo,
   getRefundAmount,
@@ -59,6 +61,8 @@ import {
   normalizeBooking,
   normalizeRequestedBoats,
   pick,
+  resolveQuoteDepositAmount,
+  resolveQuoteDurationValue,
   readAcknowledgedTabBadges,
   acknowledgeTabBadge,
   shouldShowTabBadge,
@@ -75,6 +79,7 @@ export function AdminCharterBookingDetail() {
   const [boats, setBoats] = useState([]);
   const [activeTab, setActiveTab] = useState(() => location.state?.tab || "overview");
   const [quoteForm, setQuoteForm] = useState({
+    rentalUnit: "Hour",
     boats: [],
   });
   const [quotePreview, setQuotePreview] = useState(null);
@@ -164,12 +169,20 @@ export function AdminCharterBookingDetail() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const buildDetailQuotePayload = useCallback(() => ({
-    boats: quoteForm.boats.map((boat) => ({
-      boatOrder: Number(boat.boatOrder),
-      boatId: boat.boatId,
-    })),
-  }), [quoteForm]);
+  const buildDetailQuotePayload = useCallback(() => {
+    const rentalUnit = booking?.rentalUnit === "Day" || booking?.rentalUnit === "Hour"
+      ? booking.rentalUnit
+      : (quoteForm.rentalUnit === "Day" ? "Day" : "Hour");
+    return {
+      rentalUnit,
+      durationValue: resolveQuoteDurationValue(booking, rentalUnit),
+      boats: quoteForm.boats.map((boat) => ({
+        boatOrder: Number(boat.boatOrder),
+        boatId: String(boat.boatId || "").trim(),
+        rentalUnit,
+      })),
+    };
+  }, [booking, quoteForm]);
 
   const requiredQuoteBoatCount = booking ? normalizeRequestedBoats(booking, booking.selectedBoats).length : 0;
   const isQuoteBoatSelectionComplete = requiredQuoteBoatCount > 0
@@ -208,9 +221,13 @@ export function AdminCharterBookingDetail() {
   }, [booking, canManageQuote]);
 
   useEffect(() => {
-    if (!booking?.id || !isQuoteBoatSelectionComplete || !canManageQuote) {
+    if (!booking?.id || !isQuoteBoatSelectionComplete || !canManageQuote || isCharterRoutePricingBlocked(booking)) {
       setQuotePreview(null);
-      setQuotePreviewError("");
+      setQuotePreviewError(
+        booking && isCharterRoutePricingBlocked(booking)
+          ? (lang === "VN" ? "Chưa có ước tính lộ trình hợp lệ — không thể preview giá." : "No valid route estimate — unable to preview quote.")
+          : ""
+      );
       return;
     }
 
@@ -238,7 +255,7 @@ export function AdminCharterBookingDetail() {
       isActive = false;
       clearTimeout(timer);
     };
-  }, [booking?.id, buildDetailQuotePayload, canManageQuote, isQuoteBoatSelectionComplete, lang]);
+  }, [booking, buildDetailQuotePayload, canManageQuote, isQuoteBoatSelectionComplete, lang]);
 
   const handleDetailQuoteBoatChange = (boatOrder, boatId) => {
     setQuoteForm((prev) => ({
@@ -249,11 +266,35 @@ export function AdminCharterBookingDetail() {
     }));
   };
 
+  const handleDetailQuoteRentalUnitChange = (rentalUnit) => {
+    setQuoteForm((prev) => ({
+      ...prev,
+      rentalUnit: rentalUnit === "Day" ? "Day" : "Hour",
+    }));
+    setQuotePreview(null);
+    setQuotePreviewError("");
+  };
+
   const handleDetailSubmitQuote = async (event) => {
     event.preventDefault();
     if (!booking?.id || !isQuoteBoatSelectionComplete || !canManageQuote) return;
 
-    const payload = buildDetailQuotePayload();
+    const routeWarning = getCharterRoutePricingWarning(booking, lang);
+    if (isCharterRoutePricingBlocked(booking)) {
+      Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "Lộ trình chưa đủ để chốt giá" : "Route incomplete for quoting",
+        text: routeWarning,
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+
+    const depositAmount = resolveQuoteDepositAmount(quotePreview);
+    const payload = {
+      ...buildDetailQuotePayload(),
+      ...(depositAmount != null ? { depositAmount } : {}),
+    };
 
     try {
       setIsSubmitting(true);
@@ -265,13 +306,19 @@ export function AdminCharterBookingDetail() {
         confirmButtonColor: "#124757",
       });
     } catch (error) {
+      console.error("Lỗi chốt giá charter booking:", error?.response?.data || error);
+      const message = getApiErrorMessage(
+        error,
+        lang === "VN" ? "Vui lòng kiểm tra tàu, số khách, thời lượng và giá chốt." : "Please check boat, passenger count, duration, and subtotal.",
+      );
       Swal.fire({
         icon: "error",
         title: lang === "VN" ? "Không thể chốt giá" : "Unable to submit quote",
-        text: getApiErrorMessage(
-          error,
-          lang === "VN" ? "Vui lòng kiểm tra tàu, số khách, thời lượng và giá chốt." : "Please check boat, passenger count, duration, and subtotal.",
-        ),
+        html: `<p style="text-align:left;white-space:pre-wrap;margin:0;font-size:14px;line-height:1.5;">${String(message)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")}</p>`,
         confirmButtonColor: "#124757",
       });
     } finally {
@@ -285,18 +332,34 @@ export function AdminCharterBookingDetail() {
     if (nextStatus === "Cancelled") {
       const hasPaid = hasRefundablePayment(booking);
       const result = await Swal.fire({
-        icon: hasPaid ? "warning" : "question",
-        title: lang === "VN" ? "Hủy booking này?" : "Cancel this booking?",
-        text: hasPaid
+        icon: "warning",
+        title: lang === "VN" ? "Bạn chắc chắn muốn hủy booking?" : "Are you sure you want to cancel?",
+        html: hasPaid
           ? (lang === "VN"
-            ? "Booking đã có thanh toán. Sau khi hủy, mở tab Thanh toán để gửi yêu cầu hoàn tiền với tài khoản nhận hoàn."
-            : "This booking has paid payments. After cancellation, use the Payments tab to submit the refund with the recipient bank account.")
-          : (lang === "VN" ? "Booking sẽ chuyển sang trạng thái Đã hủy." : "The booking will be marked as cancelled."),
+            ? `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
+                Booking <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> đã có thanh toán.<br/><br/>
+                Sau khi hủy, vào tab Thanh toán để gửi yêu cầu hoàn tiền. Thao tác này cần xác nhận rõ ràng.
+              </p>`
+            : `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
+                Booking <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> has paid payments.<br/><br/>
+                After cancellation, open the Payments tab to submit a refund. Please confirm carefully.
+              </p>`)
+          : (lang === "VN"
+            ? `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
+                Booking <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> sẽ chuyển sang <strong>Đã hủy</strong>.<br/><br/>
+                Thao tác này không hoàn tác được.
+              </p>`
+            : `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
+                Booking <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> will be marked as <strong>Cancelled</strong>.<br/><br/>
+                This action cannot be undone.
+              </p>`),
         showCancelButton: true,
+        reverseButtons: true,
+        focusCancel: true,
         confirmButtonColor: "#d33",
         cancelButtonColor: "#124757",
-        confirmButtonText: lang === "VN" ? "Xác nhận hủy" : "Cancel booking",
-        cancelButtonText: lang === "VN" ? "Đóng" : "Close",
+        confirmButtonText: lang === "VN" ? "Tôi chắc chắn, hủy booking" : "Yes, cancel booking",
+        cancelButtonText: lang === "VN" ? "Không, giữ lại" : "No, keep it",
       });
       if (!result.isConfirmed) return;
     }
@@ -536,6 +599,7 @@ export function AdminCharterBookingDetail() {
           getStatusInfo={getStatusInfo}
           onSubmitQuote={handleDetailSubmitQuote}
           onQuoteBoatChange={handleDetailQuoteBoatChange}
+          onQuoteRentalUnitChange={handleDetailQuoteRentalUnitChange}
           onStatusChange={handleDetailStatusChange}
           onNavigateTab={(tabId) => {
             const tab = workspaceTabs.find((item) => item.id === tabId);

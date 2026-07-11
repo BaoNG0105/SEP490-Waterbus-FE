@@ -1,5 +1,6 @@
 import { normalizeCharterTicketRows } from "./charterBookingTickets";
 import { getCharterDepositAmount } from "./charterBookingActions";
+import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "./insurancePreview";
 
 export const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Refunded"];
 export const manualStatusOptions = ["Cancelled", "Expired", "Completed"];
@@ -382,6 +383,212 @@ export const formatRouteEstimate = (routeEstimate, lang) => {
   return parts.join(" · ");
 };
 
+/** Normalize routeEstimate.legs with per-leg matched Route Master info (admin pricing). */
+export const normalizeRouteEstimateLegs = (routeEstimate) => {
+  const legs = Array.isArray(routeEstimate?.legs) ? routeEstimate.legs : [];
+  return legs.map((leg, index) => {
+    const distanceKmRaw = pick(leg, ["distanceKm", "totalDistanceKm"], null);
+    const travelMinutesRaw = pick(leg, ["travelMinutes", "estimatedTravelMinutes", "estimatedDurationMinutes"], null);
+    const distanceKm = distanceKmRaw === null || distanceKmRaw === undefined || distanceKmRaw === ""
+      ? null
+      : Number(distanceKmRaw);
+    const travelMinutes = travelMinutesRaw === null || travelMinutesRaw === undefined || travelMinutesRaw === ""
+      ? null
+      : Number(travelMinutesRaw);
+
+    return {
+      legOrder: Number(pick(leg, ["legOrder", "order"], index + 1)) || index + 1,
+      fromStationId: String(pick(leg, ["fromStationId", "fromStation.id"], "")),
+      fromStationName: pick(leg, ["fromStationName", "fromStation.stationName", "fromStation.name"], ""),
+      toStationId: String(pick(leg, ["toStationId", "toStation.id"], "")),
+      toStationName: pick(leg, ["toStationName", "toStation.stationName", "toStation.name"], ""),
+      distanceKm: Number.isFinite(distanceKm) ? distanceKm : null,
+      travelMinutes: Number.isFinite(travelMinutes) ? travelMinutes : null,
+      matchedRouteId: String(pick(leg, ["matchedRouteId", "routeId", "matchedRoute.routeId", "matchedRoute.id"], "") || ""),
+      matchedRouteCode: pick(leg, ["matchedRouteCode", "routeCode", "matchedRoute.routeCode"], "") || "",
+      matchedRouteName: pick(leg, ["matchedRouteName", "routeName", "matchedRoute.routeName", "matchedRoute.name"], "") || "",
+    };
+  });
+};
+
+export const formatMatchedRouteLabel = (legOrRoute) => {
+  if (!legOrRoute) return "";
+  const code = legOrRoute.matchedRouteCode || "";
+  const name = legOrRoute.matchedRouteName || "";
+  if (code && name) return `${code} - ${name}`;
+  return code || name || legOrRoute.matchedRouteId || "";
+};
+
+export const hasMatchedRouteOnLeg = (leg) => Boolean(
+  leg?.matchedRouteId || leg?.matchedRouteCode || leg?.matchedRouteName
+);
+
+/**
+ * Top-level routeEstimate.matchedRoute* exists only when every leg shares the same Route Master.
+ * Falls back to the single matched leg when there is exactly one.
+ */
+export const getMatchedRouteSummary = (routeEstimate, routeLegs = null) => {
+  const legs = Array.isArray(routeLegs) ? routeLegs : normalizeRouteEstimateLegs(routeEstimate);
+  const topLevel = {
+    matchedRouteId: String(pick(routeEstimate, ["matchedRouteId", "routeId"], "") || ""),
+    matchedRouteCode: pick(routeEstimate, ["matchedRouteCode", "routeCode"], "") || "",
+    matchedRouteName: pick(routeEstimate, ["matchedRouteName", "routeName"], "") || "",
+  };
+
+  if (hasMatchedRouteOnLeg(topLevel)) {
+    return { ...topLevel, source: "estimate" };
+  }
+
+  if (legs.length === 1 && hasMatchedRouteOnLeg(legs[0])) {
+    return {
+      matchedRouteId: legs[0].matchedRouteId,
+      matchedRouteCode: legs[0].matchedRouteCode,
+      matchedRouteName: legs[0].matchedRouteName,
+      source: "leg",
+    };
+  }
+
+  const matchedLegs = legs.filter(hasMatchedRouteOnLeg);
+  if (matchedLegs.length > 1) {
+    const firstId = matchedLegs[0].matchedRouteId || matchedLegs[0].matchedRouteCode;
+    const allSame = matchedLegs.every((leg) => (
+      (leg.matchedRouteId && leg.matchedRouteId === matchedLegs[0].matchedRouteId)
+      || (leg.matchedRouteCode && leg.matchedRouteCode === matchedLegs[0].matchedRouteCode)
+    ));
+    if (allSame && firstId) {
+      return {
+        matchedRouteId: matchedLegs[0].matchedRouteId,
+        matchedRouteCode: matchedLegs[0].matchedRouteCode,
+        matchedRouteName: matchedLegs[0].matchedRouteName,
+        source: "legs-same",
+      };
+    }
+  }
+
+  return {
+    matchedRouteId: "",
+    matchedRouteCode: "",
+    matchedRouteName: "",
+    source: "none",
+  };
+};
+
+/** Read BE routeEstimate completeness flags (with numeric / legs fallback). */
+export const getRouteEstimateCompleteness = (routeEstimate) => {
+  if (!routeEstimate || typeof routeEstimate !== "object") {
+    return {
+      hasDistance: false,
+      hasTravelTime: false,
+      isComplete: false,
+      unmatchedRouteLegs: [],
+      incompleteMetricLegs: [],
+    };
+  }
+
+  const legs = normalizeRouteEstimateLegs(routeEstimate);
+  const unmatchedRouteLegs = legs.filter((leg) => !hasMatchedRouteOnLeg(leg));
+  const incompleteMetricLegs = legs.filter((leg) => leg.distanceKm == null || leg.travelMinutes == null);
+
+  const hasDistanceFlag = routeEstimate.hasCompleteDistanceEstimate;
+  const hasTravelTimeFlag = routeEstimate.hasCompleteTravelTimeEstimate;
+  const distance = Number(routeEstimate.totalDistanceKm);
+  const estimatedDurationMinutes = Number(routeEstimate.estimatedDurationMinutes);
+  const travelMinutes = Number(routeEstimate.estimatedTravelMinutes);
+
+  const hasDistance = typeof hasDistanceFlag === "boolean"
+    ? hasDistanceFlag
+    : legs.length > 0
+      ? legs.every((leg) => leg.distanceKm != null)
+      : Number.isFinite(distance) && distance > 0;
+  const hasTravelTime = typeof hasTravelTimeFlag === "boolean"
+    ? hasTravelTimeFlag
+    : legs.length > 0
+      ? legs.every((leg) => leg.travelMinutes != null)
+      : (
+        (Number.isFinite(estimatedDurationMinutes) && estimatedDurationMinutes > 0)
+        || (Number.isFinite(travelMinutes) && travelMinutes > 0)
+      );
+
+  // Valid charter estimate requires BE complete flags AND every leg matched to Route Master.
+  const topLevelMatched = hasMatchedRouteOnLeg({
+    matchedRouteId: pick(routeEstimate, ["matchedRouteId"], ""),
+    matchedRouteCode: pick(routeEstimate, ["matchedRouteCode"], ""),
+    matchedRouteName: pick(routeEstimate, ["matchedRouteName"], ""),
+  });
+  const allLegsMatched = legs.length > 0
+    ? unmatchedRouteLegs.length === 0
+    : topLevelMatched;
+
+  return {
+    hasDistance: hasDistance && allLegsMatched,
+    hasTravelTime: hasTravelTime && allLegsMatched,
+    unmatchedRouteLegs,
+    incompleteMetricLegs,
+    unmatchedLegs: unmatchedRouteLegs,
+    hasRawDistance: hasDistance,
+    hasRawTravelTime: hasTravelTime,
+    allLegsMatched,
+    isComplete: hasDistance && hasTravelTime && allLegsMatched,
+  };
+};
+
+/** True when booking has enough route data for BE to calculate a quote. */
+export const hasCharterRouteForPricing = (booking) => {
+  if (!booking?.fromStationId || !booking?.toStationId) return false;
+  return getRouteEstimateCompleteness(booking.routeEstimate).isComplete;
+};
+
+export const getCharterRoutePricingWarning = (booking, lang = "VN") => {
+  if (!booking?.fromStationId) {
+    return lang === "VN"
+      ? "Thiếu bến đón khách. Yêu cầu khách cập nhật yêu cầu — không sửa lộ trình khi chốt giá."
+      : "Pickup station is missing. Ask the customer to update the request — do not change the route while quoting.";
+  }
+  if (!booking?.toStationId) {
+    return lang === "VN"
+      ? "Thiếu bến trả khách. Yêu cầu khách cập nhật yêu cầu — không sửa lộ trình khi chốt giá."
+      : "Drop-off station is missing. Ask the customer to update the request — do not change the route while quoting.";
+  }
+
+  const completeness = getRouteEstimateCompleteness(booking.routeEstimate);
+  if (completeness.isComplete) return "";
+
+  if (!completeness.allLegsMatched || completeness.unmatchedRouteLegs?.length > 0) {
+    return lang === "VN"
+      ? "Chưa có ước tính lộ trình hợp lệ vì chưa match Route Master. Vui lòng cấu hình Route Master trước khi chốt giá."
+      : "No valid route estimate because Route Master is not matched. Configure Route Master before quoting.";
+  }
+
+  const missing = [];
+  if (!completeness.hasRawDistance) {
+    missing.push(lang === "VN" ? "quãng đường" : "distance");
+  }
+  if (!completeness.hasRawTravelTime) {
+    missing.push(lang === "VN" ? "thời gian di chuyển" : "travel time");
+  }
+
+  return lang === "VN"
+    ? `Chưa có ước tính lộ trình (thiếu ${missing.join(" / ")}). Kiểm tra tọa độ bến / GeoJSON hoặc nhờ khách đổi bến.`
+    : `No route estimate yet (missing ${missing.join(" / ")}). Check station coordinates / GeoJSON or ask the customer to change stations.`;
+};
+
+export const isCharterRoutePricingBlocked = (booking) => {
+  if (!booking?.fromStationId || !booking?.toStationId) return true;
+  return !getRouteEstimateCompleteness(booking.routeEstimate).isComplete;
+};
+
+export const normalizeItineraryStops = (item) => {
+  const stops = pick(item, ["itineraryStops"], []);
+  if (!Array.isArray(stops)) return [];
+  return stops.map((stop, index) => ({
+    stationId: String(pick(stop, ["stationId", "station.id", "station.stationId"], "")),
+    stationName: pick(stop, ["stationName", "station.stationName", "station.name"], ""),
+    stopOrder: Number(pick(stop, ["stopOrder"], index + 1)) || index + 1,
+    stayDurationMinutes: Number(pick(stop, ["stayDurationMinutes"], 0)) || 0,
+    note: pick(stop, ["note"], ""),
+  }));
+};
+
 export const normalizeRequestedBoats = (item, selectedBoats = []) => {
   const requestedBoats = pick(item, ["requestedBoats"], []);
   const requestedBoatCount = Number(pick(item, ["requestedBoatCount"], 0));
@@ -414,13 +621,41 @@ export const buildQuoteBoatRows = (booking) => {
   });
 };
 
-export const buildQuoteFormFromBooking = (booking) => ({
-  boats: buildQuoteBoatRows(booking),
-});
+export const buildQuoteFormFromBooking = (booking) => {
+  const requestedUnit = pick(booking, ["rentalUnit"], "");
+  const estimateUnit = pick(booking?.routeEstimate, ["rentalUnit"], "");
+  const rentalUnit = requestedUnit === "Day" || requestedUnit === "Hour"
+    ? requestedUnit
+    : (estimateUnit === "Day" || estimateUnit === "Hour" ? estimateUnit : "Hour");
+
+  return {
+    rentalUnit,
+    boats: buildQuoteBoatRows(booking),
+  };
+};
 
 export const resolveQuoteDepositAmount = (quotePreview) => {
   const total = Number(pick(quotePreview, ["totalAmount", "finalAmount"], 0)) || 0;
   return getCharterDepositAmount(total, 0) || null;
+};
+
+/** Duration gửi kèm chốt giá — lấy từ routeEstimate khi khách không còn nhập duration. */
+export const resolveQuoteDurationValue = (booking, rentalUnit = "Hour") => {
+  const estimate = booking?.routeEstimate;
+  const bookingDuration = Number(booking?.durationValue) || 0;
+
+  if (rentalUnit === "Day") {
+    const dayValue = Number(estimate?.chargeableDurationValue) || bookingDuration || 1;
+    return Math.max(1, Math.round(dayValue));
+  }
+
+  const chargeableMinutes = Number(estimate?.chargeableDurationMinutes);
+  if (Number.isFinite(chargeableMinutes) && chargeableMinutes > 0) {
+    return Math.max(1, Math.ceil(chargeableMinutes / 60));
+  }
+
+  const hourValue = Number(estimate?.chargeableDurationValue) || bookingDuration || 1;
+  return Math.max(1, Math.round(hourValue));
 };
 
 export const normalizeBooking = (item) => {
@@ -429,7 +664,33 @@ export const normalizeBooking = (item) => {
   const passengerCount = Number(pick(item, ["passengerCount"], adultCount + childCount));
   const fromName = pick(item, ["fromStationName", "fromStation.stationName", "fromStation.name"]);
   const toName = pick(item, ["toStationName", "toStation.stationName", "toStation.name"]);
-  const route = pick(item, ["routeName", "route", "itineraryName"], fromName || toName ? `${fromName || "--"} - ${toName || "--"}` : "--");
+  const routeEstimate = pick(item, ["routeEstimate"], null);
+  const routeLegs = normalizeRouteEstimateLegs(routeEstimate);
+  const matchedSummary = getMatchedRouteSummary(routeEstimate, routeLegs);
+  const matchedRouteId = String(pick(item, [
+    "matchedRouteId",
+    "routeId",
+    "matchedRoute.routeId",
+    "matchedRoute.id",
+    "route.routeId",
+    "route.id",
+  ], "") || matchedSummary.matchedRouteId || "");
+  const matchedRouteCode = pick(item, [
+    "matchedRouteCode",
+    "routeCode",
+    "matchedRoute.routeCode",
+    "route.routeCode",
+  ], "") || matchedSummary.matchedRouteCode || "";
+  const matchedRouteName = pick(item, [
+    "matchedRouteName",
+    "routeName",
+    "matchedRoute.routeName",
+    "route.routeName",
+    "route.name",
+  ], "") || matchedSummary.matchedRouteName || "";
+  const route = matchedRouteName
+    || pick(item, ["route", "itineraryName"], "")
+    || (fromName || toName ? `${fromName || "--"} - ${toName || "--"}` : "--");
 
   return {
     raw: item,
@@ -444,12 +705,18 @@ export const normalizeBooking = (item) => {
     requestedBoats: pick(item, ["requestedBoats"], []),
     selectedBoats: pick(item, ["selectedBoats"], []),
     route,
+    matchedRouteId,
+    matchedRouteCode,
+    matchedRouteName,
+    routeLegs,
     fromStationId: String(pick(item, ["fromStationId", "fromStation.id", "fromStation.stationId"], "")),
     fromStationName: fromName || "",
     toStationId: String(pick(item, ["toStationId", "toStation.id", "toStation.stationId"], "")),
     toStationName: toName || "",
     departureDate: pick(item, ["departureDate", "startDate"]),
     startTime: pick(item, ["startTime"], "--"),
+    itineraryStops: normalizeItineraryStops(item),
+    routeEstimate,
     rentalUnit: pick(item, ["rentalUnit"], "Day"),
     durationValue: Number(pick(item, ["durationValue", "durationHours"], 1)),
     adultCount,
@@ -464,6 +731,9 @@ export const normalizeBooking = (item) => {
     promotionCode: pick(item, ["promotionCode"], ""),
     specialRequests: pick(item, ["specialRequests"], ""),
     note: pick(item, ["specialRequests"], "--"),
+    insuranceSelected: resolveInsuranceSelected(item),
+    insurancePackageId: getBookingInsurancePackageId(item),
+    insurance: normalizeInsuranceFromBooking(item) || pick(item, ["insurance"], null),
     qrToken: pick(item, ["charterBookingQrToken", "qrToken"], ""),
     passengers: Array.isArray(item?.passengers) ? item.passengers : [],
     tickets: normalizeCharterTicketRows(item, {
