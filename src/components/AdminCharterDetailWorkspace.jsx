@@ -256,13 +256,13 @@ function AdminBoatQuoteSelect({
     return { dayLabel, hourLabel, dayPrice, hourPrice };
   };
 
-  const renderBoatLabel = (boat, compact = false) => {
+  const renderBoatLabel = (boat) => {
     const code = getBoatCode(boat);
     const name = getBoatNameOnly(boat);
     const { dayLabel, hourLabel } = formatBoatPrices(boat);
     return (
       <div className="min-w-0 flex-1">
-        <p className={`truncate font-bold text-slate-800 dark:text-white ${compact ? "text-sm" : "text-sm"}`}>
+        <p className="truncate text-sm font-bold text-slate-800 dark:text-white">
           {code ? <span className="text-[#124757] dark:text-yellow-400">{code}</span> : null}
           {code && name ? <span className="text-slate-400"> · </span> : null}
           {name || code || "--"}
@@ -328,7 +328,7 @@ function AdminBoatQuoteSelect({
                 }}
               />
             </div>
-            {renderBoatLabel(selectedBoat, true)}
+            {renderBoatLabel(selectedBoat)}
           </>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-3">

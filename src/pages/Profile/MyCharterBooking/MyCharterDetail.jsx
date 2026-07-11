@@ -19,16 +19,16 @@ import {
 } from "../../../services/charterBookingService";
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
-import { CharterPaymentLedger } from "../../../components/CharterPaymentLedger";
 import { CharterRouteMapPanel } from "../../../components/CharterRouteMapPanel";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
-import { PayOSLogo, payosButtonClassName, payosButtonLgClassName } from "../../../components/PayOSLogo";
 import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "../../../utils/insurancePreview";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
-import { shouldShowCharterQuotePaymentCountdown, shouldShowPaymentDeadlineCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount } from "../../../utils/charterBookingActions";
+import { shouldShowCharterQuotePaymentCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount } from "../../../utils/charterBookingActions";
 import { formatQuoteChargeableDuration, formatQuoteUnitPriceLabel } from "../../../utils/charterQuotePreview";
 import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
 import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
+import { MyCharterPaymentPanel, MyCharterPaymentStickyBar } from "./MyCharterPaymentPanel";
+import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -54,25 +54,6 @@ const DEFAULT_PAYMENT_LINK_MS = 5 * 60 * 1000;
 const isDeadlineExpired = (deadline, now = Date.now()) => {
   const time = getDeadlineTime(deadline);
   return Boolean(time && now >= time);
-};
-
-const PayOSSummaryTile = ({ label, value, highlight = false }) => (
-  <div className={`rounded-2xl border px-4 py-3 ${highlight ? "border-[#124757]/15 bg-[#124757]/5 dark:border-yellow-400/20 dark:bg-yellow-400/10" : "border-slate-200/80 bg-white dark:border-slate-700 dark:bg-slate-900"}`}>
-    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{label}</p>
-    <p className={`mt-1 font-headline text-sm font-black ${highlight ? "text-[#124757] dark:text-yellow-400" : "text-slate-700 dark:text-slate-200"}`}>{value}</p>
-  </div>
-);
-
-const formatCountdown = (milliseconds) => {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const pad = (value) => String(value).padStart(2, "0");
-
-  if (days > 0) return `${days}d ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 };
 
 const getPaymentAmount = (payment) =>
@@ -1405,9 +1386,6 @@ export function CharterDetail() {
   const effectivePaymentExpiresAt = activePendingPayment
     ? pick(activePendingPayment, ["expiresAt"], booking.latestPaymentExpiresAt)
     : (statePaymentIsActive ? (paymentExpiresAt || booking.latestPaymentExpiresAt) : "");
-  const effectivePaymentQrCode = activePendingPayment
-    ? pick(activePendingPayment, ["qrCode"], booking.latestPaymentQrCode)
-    : (statePaymentIsActive ? (paymentQrCode || booking.latestPaymentQrCode) : "");
   const expiredPendingPayment = Array.isArray(booking.payments)
     ? booking.payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending" && isDeadlineExpired(pick(payment, ["expiresAt"], "") || getEstimatedPaymentDeadline(payment), nowTick))
     : null;
@@ -1421,10 +1399,6 @@ export function CharterDetail() {
   const paymentRemainingMs = getRemainingMs(effectivePaymentExpiresAt, nowTick);
   const hasPaymentDeadline = Boolean(getDeadlineTime(effectivePaymentExpiresAt));
   const isPaymentLinkExpired = hasPaymentDeadline && paymentRemainingMs <= 0;
-  const bookingHoldDeadline = quotePaymentDeadline;
-  const showBookingHoldCountdown = showQuotePaymentCountdown;
-  const bookingHoldRemainingMs = quotePaymentRemainingMs;
-  const hasBookingHoldDeadline = hasQuotePaymentDeadline;
   const isBookingHoldExpired = isQuotePaymentExpired;
   const hasPendingPayOs = Boolean(pendingPaymentId || effectiveCheckoutUrl);
   const canCreatePayment = ["PendingPayment", "Confirmed"].includes(booking.status)
@@ -1523,7 +1497,7 @@ export function CharterDetail() {
   const contactItems = [
     { icon: "person", label: lang === "VN" ? "Người liên hệ" : "Contact Name", value: booking.contactName },
     { icon: "call", label: lang === "VN" ? "Số điện thoại" : "Phone", value: booking.contactPhone },
-    { icon: "mail", label: lang === "VN" ? "Email" : "Email", value: booking.contactEmail },
+    { icon: "mail", label: "Email", value: booking.contactEmail },
   ];
   const itineraryTimelineItems = [
     { type: "start", label: lang === "VN" ? "Bến đi" : "From", name: routeFrom },
@@ -1934,318 +1908,48 @@ export function CharterDetail() {
                   </div>
                 </div>
 
-                <div ref={paymentSectionRef} className="mt-5 scroll-mt-28">
-                <CharterPaymentLedger
-                  payments={booking.payments}
+                <MyCharterPaymentPanel
                   lang={lang}
+                  booking={booking}
                   currencyFormatter={currencyFormatter}
+                  paymentSectionRef={paymentSectionRef}
+                  isPaid={isPaid}
+                  isTerminalBooking={isTerminalBooking}
+                  canShowPayOsSection={canShowPayOsSection}
+                  isSubmitting={isSubmitting}
+                  isQuoteHoldExpired={isQuoteHoldExpired}
+                  isQuotePaymentExpired={isQuotePaymentExpired}
+                  showQuotePaymentCountdown={showQuotePaymentCountdown}
+                  quotePaymentRemainingMs={quotePaymentRemainingMs}
+                  expiredPendingPayment={expiredPendingPayment}
+                  expiredPaymentCheckoutUrl={expiredPaymentCheckoutUrl}
+                  paymentCheckoutUrl={paymentCheckoutUrl}
+                  isPaymentLinkExpired={isPaymentLinkExpired}
+                  hasPendingPayOs={hasPendingPayOs}
+                  canCreatePayment={canCreatePayment}
+                  selectablePaymentChoices={selectablePaymentChoices}
+                  paymentSelectValue={paymentSelectValue}
+                  setPaymentOption={setPaymentOption}
+                  usesDefaultDeposit={usesDefaultDeposit}
+                  canPayDeposit={canPayDeposit}
+                  selectedPaymentAmount={selectedPaymentAmount}
+                  effectivePaidAmount={effectivePaidAmount}
+                  remainingAmount={remainingAmount}
+                  paymentPromotionCode={paymentPromotionCode}
+                  setPaymentPromotionCode={setPaymentPromotionCode}
+                  effectiveCheckoutUrl={effectiveCheckoutUrl}
+                  pendingPaymentOrderCode={pendingPaymentOrderCode}
+                  pendingPaymentId={pendingPaymentId}
+                  effectivePendingPaymentAmount={effectivePendingPaymentAmount}
+                  effectivePaymentDeadline={effectivePaymentDeadline}
+                  paymentWatcherRemainingMs={paymentWatcherRemainingMs}
+                  handleRespondToQuote={handleRespondToQuote}
+                  handleCreatePayment={handleCreatePayment}
+                  openPaymentPage={openPaymentPage}
+                  handleSyncPayment={handleSyncPayment}
+                  handleSyncPaymentByOrderCode={handleSyncPaymentByOrderCode}
+                  loadDetail={loadDetail}
                 />
-
-                {booking.status === "Quoted" && !isPaid ? (
-                  <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-                    <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
-                      <div className="flex items-start gap-4">
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#124757] text-white shadow-lg shadow-[#124757]/20 dark:bg-yellow-400 dark:text-slate-900">
-                          <span className="material-symbols-outlined text-2xl">request_quote</span>
-                        </span>
-                        <div>
-                          <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
-                            {lang === "VN" ? "Phản hồi báo giá" : "Respond to quote"}
-                          </h4>
-                          <p className="mt-1 max-w-xl text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
-                            {lang === "VN"
-                              ? "Chấp nhận để thanh toán, yêu cầu chỉnh sửa, hoặc từ chối báo giá này."
-                              : "Accept to proceed to payment, request changes, or reject this quote."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-3 px-5 py-5 sm:flex-row sm:flex-wrap md:px-6">
-                      <button
-                        type="button"
-                        onClick={() => handleRespondToQuote("Accept")}
-                        disabled={isSubmitting || isQuoteHoldExpired}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#124757] px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
-                      >
-                        <span className="material-symbols-outlined text-base">check_circle</span>
-                        {lang === "VN" ? "Chấp nhận" : "Accept"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRespondToQuote("RequestChanges")}
-                        disabled={isSubmitting || isQuoteHoldExpired}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-[#124757] transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
-                      >
-                        <span className="material-symbols-outlined text-base">edit_note</span>
-                        {lang === "VN" ? "Yêu cầu chỉnh sửa" : "Request changes"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRespondToQuote("Reject")}
-                        disabled={isSubmitting || isQuoteHoldExpired}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
-                      >
-                        <span className="material-symbols-outlined text-base">cancel</span>
-                        {lang === "VN" ? "Từ chối" : "Reject"}
-                      </button>
-                    </div>
-                    {isQuoteHoldExpired ? (
-                      <div className="border-t border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300 md:px-6">
-                        {lang === "VN"
-                          ? "Báo giá đã hết hạn phản hồi. Vui lòng tải lại booking."
-                          : "This quote response window has expired. Please refresh the booking."}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {isTerminalBooking ? (
-                  <div className="mt-5 flex items-start gap-3 rounded-[1.75rem] border border-slate-200 bg-slate-50 px-5 py-5 dark:border-slate-700 dark:bg-slate-900 md:px-6">
-                    <span className="material-symbols-outlined text-3xl text-slate-400">
-                      {booking.status === "Cancelled" ? "cancel" : booking.status === "Expired" ? "timer_off" : "currency_exchange"}
-                    </span>
-                    <div>
-                      <h4 className="font-headline text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
-                        {booking.status === "Cancelled"
-                          ? (lang === "VN" ? "Yêu cầu đã hủy" : "Request cancelled")
-                          : booking.status === "Expired"
-                            ? (lang === "VN" ? "Yêu cầu đã hết hạn" : "Request expired")
-                            : (lang === "VN" ? "Đã hoàn tiền" : "Refunded")}
-                      </h4>
-                      <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        {lang === "VN"
-                          ? "Không còn thao tác thanh toán cho yêu cầu này."
-                          : "Payment actions are no longer available for this request."}
-                      </p>
-                    </div>
-                  </div>
-                ) : null}
-
-                {canShowPayOsSection ? (
-                  <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-                    <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start gap-4">
-                          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#00a85e] text-white shadow-lg shadow-[#00a85e]/20">
-                            <span className="material-symbols-outlined text-2xl">account_balance_wallet</span>
-                          </span>
-                          <div>
-                            <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
-                              {lang === "VN" ? "Thanh toán qua PayOS" : "Pay via PayOS"}
-                            </h4>
-                            <p className="mt-1 max-w-xl text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
-                              {lang === "VN"
-                                ? "Chọn hình thức thanh toán, quét QR hoặc mở cổng PayOS để hoàn tất giao dịch."
-                                : "Choose a payment option, scan the QR, or open PayOS to complete your transaction."}
-                            </p>
-                          </div>
-                        </div>
-                        {showQuotePaymentCountdown && (
-                          <div className={`min-w-[9.5rem] rounded-2xl border px-4 py-3 text-center ${
-                            isQuotePaymentExpired
-                              ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
-                              : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
-                          }`}
-                          >
-                            <p className="text-[10px] font-headline font-black uppercase tracking-widest opacity-80">
-                              {lang === "VN" ? "Hạn 12h sau chốt giá" : "12h after quote"}
-                            </p>
-                            <p className="mt-1 font-headline text-2xl font-black tabular-nums">
-                              {isQuotePaymentExpired ? (lang === "VN" ? "Hết hạn" : "Expired") : formatCountdown(quotePaymentRemainingMs)}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="px-5 py-5 md:px-6">
-                  {isQuoteHoldExpired ? (
-                    <div className="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
-                      <p className="text-sm font-bold">
-                        {lang === "VN" ? "Đã quá 12h kể từ khi admin chốt giá. Vui lòng tải lại booking để cập nhật trạng thái." : "The 12-hour payment window after quoting has passed. Refresh the booking for the latest status."}
-                      </p>
-                      <button type="button" onClick={loadDetail} className="w-max rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider dark:bg-slate-900">
-                        {lang === "VN" ? "Tải lại booking" : "Refresh booking"}
-                      </button>
-                    </div>
-                  ) : (expiredPendingPayment || (Boolean(expiredPaymentCheckoutUrl || paymentCheckoutUrl) && isPaymentLinkExpired)) ? (
-                    <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
-                      <div className="flex items-start gap-3 text-slate-600 dark:text-slate-300">
-                        <span className="material-symbols-outlined text-3xl text-slate-400">timer_off</span>
-                        <p className="text-sm font-bold">
-                          {lang === "VN" ? "Link/QR thanh toán cũ đã hết hạn. Vui lòng tạo giao dịch thanh toán mới." : "The previous payment link or QR has expired. Create a new payment transaction."}
-                        </p>
-                      </div>
-                      <button type="button" onClick={handleCreatePayment} disabled={isSubmitting} className={`w-max ${payosButtonClassName}`}>
-                        {!isSubmitting && <PayOSLogo variant="white" className="h-5 w-auto" />}
-                        {isSubmitting ? (lang === "VN" ? "Đang tạo..." : "Creating...") : (lang === "VN" ? "Tạo lại thanh toán" : "Create new payment")}
-                      </button>
-                    </div>
-                  ) : hasPendingPayOs ? (
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 px-5 py-5 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#00a85e] px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-white">
-                            {lang === "VN" ? "Chờ thanh toán" : "Awaiting payment"}
-                          </span>
-                          {effectivePaymentDeadline && shouldShowPaymentDeadlineCountdown({ paymentStatus: "pending" }, booking) ? (
-                            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-200">
-                              {lang === "VN" ? "Hạn" : "Due"}: {formatCountdown(paymentWatcherRemainingMs)}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-3 text-sm font-bold text-emerald-950 dark:text-emerald-100">
-                          {lang === "VN"
-                            ? "Giao dịch đã sẵn sàng. Bạn sẽ được chuyển sang trang thanh toán PayOS để hoàn tất."
-                            : "Your payment is ready. Continue on the PayOS checkout page to finish."}
-                        </p>
-                        <p className="mt-2 text-lg font-headline font-black text-[#00a85e]">
-                          {effectivePendingPaymentAmount > 0 ? currencyFormatter.format(effectivePendingPaymentAmount) : "--"}
-                        </p>
-                      </div>
-
-                      {effectiveCheckoutUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => openPaymentPage(effectiveCheckoutUrl, {
-                            orderCode: pendingPaymentOrderCode,
-                            amount: effectivePendingPaymentAmount,
-                            expiresAt: effectivePaymentDeadline,
-                          })}
-                          className={payosButtonLgClassName}
-                        >
-                          <PayOSLogo variant="white" className="h-6 w-auto" />
-                          <span>{lang === "VN" ? "Tiếp tục thanh toán trên PayOS" : "Continue to PayOS checkout"}</span>
-                          <span className="material-symbols-outlined text-xl">arrow_forward</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => pendingPaymentOrderCode ? handleSyncPaymentByOrderCode(pendingPaymentOrderCode) : handleSyncPayment(pendingPaymentId)}
-                          disabled={isSubmitting || (!pendingPaymentOrderCode && !pendingPaymentId)}
-                          className={payosButtonLgClassName}
-                        >
-                          <span className="material-symbols-outlined text-xl">sync</span>
-                          <span>{lang === "VN" ? "Đồng bộ trạng thái thanh toán" : "Sync payment status"}</span>
-                        </button>
-                      )}
-
-                      <p className="text-center text-[11px] font-medium text-slate-400">
-                        {lang === "VN"
-                          ? "Thanh toán trực tiếp trên cổng PayOS — không hiển thị mã QR trên trang này."
-                          : "Pay directly on PayOS — no QR is shown on this page."}
-                      </p>
-                    </div>
-                  ) : canCreatePayment ? (
-                    <div className="space-y-5">
-                      {selectablePaymentChoices.length > 1 ? (
-                        <div>
-                          <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                            {lang === "VN" ? "Hình thức thanh toán" : "Payment option"}
-                          </p>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            {selectablePaymentChoices.map((choice) => {
-                              const active = paymentSelectValue === choice.id;
-                              return (
-                                <button
-                                  key={choice.id}
-                                  type="button"
-                                  disabled={choice.disabled || booking.hasDepositPaid}
-                                  onClick={() => setPaymentOption(choice.id)}
-                                  className={`rounded-2xl border px-4 py-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                                    active
-                                      ? "border-[#124757] bg-[#124757]/5 shadow-[0_10px_30px_rgba(18,71,87,0.12)] ring-2 ring-[#124757]/10 dark:border-yellow-400 dark:bg-yellow-400/10 dark:ring-yellow-400/20"
-                                      : "border-slate-200 bg-white hover:border-[#124757]/30 dark:border-slate-700 dark:bg-slate-900"
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                      <p className="font-headline text-sm font-black text-[#0E4050] dark:text-white">{choice.label}</p>
-                                      <p className="mt-1 text-lg font-headline font-black text-[#124757] dark:text-yellow-400">
-                                        {currencyFormatter.format(choice.amount)}
-                                      </p>
-                                      {choice.id === "Deposit" && usesDefaultDeposit && canPayDeposit && (
-                                        <p className="mt-1 text-[10px] font-bold text-slate-400">
-                                          {lang === "VN" ? "Mặc định 50% tổng giá" : "Default 50% of total"}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <span className={`flex h-6 w-6 items-center justify-center rounded-full border ${active ? "border-[#124757] bg-[#124757] text-white dark:border-yellow-400 dark:bg-yellow-400 dark:text-slate-900" : "border-slate-300 text-transparent"}`}>
-                                      <span className="material-symbols-outlined text-base">check</span>
-                                    </span>
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="rounded-2xl border border-[#124757]/15 bg-[#124757]/5 px-4 py-4 dark:border-yellow-400/20 dark:bg-yellow-400/10">
-                          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                            {lang === "VN" ? "Số tiền thanh toán" : "Payment amount"}
-                          </p>
-                          <p className="mt-1 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
-                            {currencyFormatter.format(selectedPaymentAmount)}
-                          </p>
-                          {effectivePaidAmount > 0 && (
-                            <p className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400">
-                              {lang === "VN"
-                                ? `Đã chuyển ${currencyFormatter.format(effectivePaidAmount)} · Còn lại ${currencyFormatter.format(remainingAmount)}`
-                                : `Paid ${currencyFormatter.format(effectivePaidAmount)} · Remaining ${currencyFormatter.format(remainingAmount)}`}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {booking.hasDepositPaid && (
-                        <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-bold leading-5 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
-                          {lang === "VN"
-                            ? `Đã thanh toán ${currencyFormatter.format(effectivePaidAmount)}. Lần này chỉ thu phần còn lại ${currencyFormatter.format(remainingAmount)}.`
-                            : `Paid ${currencyFormatter.format(effectivePaidAmount)}. This payment only charges the remaining ${currencyFormatter.format(remainingAmount)}.`}
-                        </p>
-                      )}
-
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                        <label className="block">
-                          <span className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                            {lang === "VN" ? "Mã khuyến mãi" : "Promo code"}
-                          </span>
-                          <input
-                            value={paymentPromotionCode}
-                            onChange={(event) => setPaymentPromotionCode(event.target.value)}
-                            maxLength={80}
-                            placeholder={lang === "VN" ? "Nhập mã nếu có" : "Optional"}
-                            className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold uppercase text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleCreatePayment}
-                          disabled={isSubmitting || !canCreatePayment}
-                          className={`mt-4 ${payosButtonLgClassName}`}
-                        >
-                          {!isSubmitting && <PayOSLogo variant="white" className="h-6 w-auto" />}
-                          <span>
-                            {isSubmitting
-                              ? (lang === "VN" ? "Đang tạo giao dịch..." : "Creating payment...")
-                              : `${lang === "VN" ? "Thanh toán" : "Pay"} ${selectedPaymentAmount > 0 ? currencyFormatter.format(selectedPaymentAmount) : ""}`}
-                          </span>
-                          {!isSubmitting && <span className="material-symbols-outlined text-xl">arrow_forward</span>}
-                        </button>
-                        <p className="mt-3 text-center text-[11px] font-medium text-slate-400">
-                          {lang === "VN" ? "Bạn sẽ được chuyển sang cổng thanh toán PayOS an toàn." : "You will be redirected to the secure PayOS payment gateway."}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm font-bold text-slate-400 dark:border-slate-700">
-                      {lang === "VN" ? "Booking hiện chưa ở trạng thái cho phép thanh toán." : "This booking isn't eligible for payment right now."}
-                    </p>
-                  )}
-                    </div>
-                  </div>
-                ) : null}
-                </div>
               </div>
             </div>
           )}
@@ -2253,163 +1957,42 @@ export function CharterDetail() {
 
         {/* ===== SECTION 3: TICKETS & PASSENGERS ===== */}
         {isPaid && (
-          <>
-            <section className="bg-white dark:bg-slate-800 rounded-4xl p-6 md:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
-              <div className="flex flex-col lg:flex-row gap-6 lg:items-center">
-                <div className="flex-1">
-                  <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">
-                    {lang === "VN" ? "QR tổng & vé hành khách" : "Group QR & Passenger Tickets"}
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {selectedTicketIds.length > 0
-                      ? (lang === "VN" ? `Đã chọn ${selectedTicketIds.length} vé để xuất.` : `${selectedTicketIds.length} tickets selected.`)
-                      : (lang === "VN" ? "Không chọn vé để xuất toàn bộ danh sách." : "Leave tickets unselected to export all.")}
-                  </p>
-
-                  <div className="grid sm:grid-cols-2 gap-3 mt-5">
-                    <button type="button" onClick={() => handleTicketFileAction("print")} disabled={isSubmitting || !isPaid} className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[#124757] dark:text-yellow-400 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
-                      {lang === "VN" ? "In vé" : "Print Tickets"}
-                    </button>
-                    <button type="button" onClick={() => handleTicketFileAction("pdf")} disabled={isSubmitting || !isPaid} className="px-4 py-3 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
-                      {lang === "VN" ? "Tải PDF" : "Download PDF"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="w-36 h-36 shrink-0 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
-                  {qrImageUrl ? (
-                    <img src={qrImageUrl} alt={lang === "VN" ? "QR tổng booking" : "Booking group QR"} className="w-full h-full object-contain p-2" />
-                  ) : (
-                    <div className="text-center text-slate-400 px-3">
-                      <span className="material-symbols-outlined text-3xl">qr_code_2</span>
-                      <p className="text-[9px] font-bold mt-1">{lang === "VN" ? "QR có sau khi booking hợp lệ" : "QR available when eligible"}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <section className="bg-white dark:bg-slate-800 rounded-4xl p-6 md:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"}</h2>
-                  <p className="mt-1 text-xs font-bold text-slate-400">
-                    {canUseContactAsSinglePassenger
-                      ? (lang === "VN" ? "Booking 1 khách sẽ dùng thông tin liên hệ làm hành khách." : "Single-passenger bookings use the contact information.")
-                      : (lang === "VN" ? "Nhập file hoặc chỉnh trực tiếp từng hành khách. File mẫu: fullName,birthYear" : "Import a file or edit passengers directly. Template: fullName,birthYear")}
-                  </p>
-                  {!canUseContactAsSinglePassenger ? (
-                    <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-mono text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                      fullName,birthYear<br />
-                      Nguyen Van A,2003<br />
-                      Tran Thi B,2016
-                    </p>
-                  ) : null}
-                </div>
-                <button type="button" onClick={() => importInputRef.current?.click()} disabled={isSubmitting || !isPaid} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400 sm:w-auto">
-                  {lang === "VN" ? "Nhập file khách" : "Import Passengers"}
-                </button>
-                <input ref={importInputRef} type="file" accept=".xlsx,.csv,.tsv,.txt" onChange={handleImportPassengers} className="hidden" />
-              </div>
-
-              <div className="space-y-3 mt-6">
-                {canUseContactAsSinglePassenger ? (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                      {lang === "VN" ? "Tự dùng thông tin liên hệ" : "Using contact info"}
-                    </p>
-                    <p className="mt-2 font-headline text-lg font-black text-[#0E4050] dark:text-yellow-400">{booking.contactName}</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">
-                      {[booking.contactPhone, booking.contactEmail].filter(isUsableText).join(" · ") || "--"}
-                    </p>
-                  </div>
-                ) : passengerRows.map((row, index) => (
-                  <div key={row.id || `passenger-${index}`} className="grid grid-cols-[42px_1fr] md:grid-cols-[42px_1fr_170px] gap-2 items-center">
-                    <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400" title={row.ticketCode || undefined}>
-                      {row.id ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedTicketIds.includes(row.id)}
-                          onChange={(event) => setSelectedTicketIds((prev) => event.target.checked ? [...prev, row.id] : prev.filter((ticketId) => ticketId !== row.id))}
-                          className="accent-[#124757]"
-                        />
-                      ) : index + 1}
-                    </label>
-                    <div className="relative">
-                      <input value={row.fullName} onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)} disabled={!isPaid} placeholder={lang === "VN" ? "Họ tên" : "Full name"} className="w-full px-3 py-3 pr-20 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60" />
-                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-white px-2 py-1 text-[9px] font-headline font-black uppercase tracking-wider text-slate-400 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
-                        {row.passengerType === "Child" ? (lang === "VN" ? "Trẻ em" : "Child") : (lang === "VN" ? "Người lớn" : "Adult")}
-                      </span>
-                    </div>
-                    <input
-                      type="number"
-                      min={MIN_BIRTH_YEAR}
-                      max={CURRENT_YEAR}
-                      value={row.birthYear}
-                      onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
-                      disabled={!isPaid}
-                      placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
-                      className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] col-start-2 md:col-start-auto disabled:opacity-60"
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-end mt-6">
-                <button onClick={handleSavePassengers} disabled={isSubmitting || !isPaid} className="w-full sm:w-auto min-w-56 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 py-3 px-6 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60">
-                  {isSubmitting
-                    ? (lang === "VN" ? "Đang lưu..." : "Saving...")
-                    : canUseContactAsSinglePassenger
-                      ? (lang === "VN" ? "Lưu thông tin liên hệ" : "Save Contact Info")
-                      : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}
-                </button>
-              </div>
-            </section>
-          </>
+          <MyCharterTicketsPanel
+            lang={lang}
+            booking={booking}
+            isPaid={isPaid}
+            isSubmitting={isSubmitting}
+            qrImageUrl={qrImageUrl}
+            selectedTicketIds={selectedTicketIds}
+            setSelectedTicketIds={setSelectedTicketIds}
+            passengerRows={passengerRows}
+            canUseContactAsSinglePassenger={canUseContactAsSinglePassenger}
+            importInputRef={importInputRef}
+            isUsableText={isUsableText}
+            handleTicketFileAction={handleTicketFileAction}
+            handleImportPassengers={handleImportPassengers}
+            handlePassengerChange={handlePassengerChange}
+            handleSavePassengers={handleSavePassengers}
+          />
         )}
       </main>
     </div>
 
-    {(canCreatePayment || hasPendingPayOs) && !isPaid && (
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 backdrop-blur-lg shadow-[0_-8px_30px_rgba(15,23,42,0.08)] dark:border-slate-700 dark:bg-slate-900/95 md:hidden">
-        <div className="mx-auto flex max-w-6xl items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
-              {hasPendingPayOs
-                ? (lang === "VN" ? "Đang chờ thanh toán PayOS" : "PayOS payment pending")
-                : (lang === "VN" ? "Cần thanh toán" : "Payment due")}
-            </p>
-            <p className="font-headline text-sm font-black text-[#124757] dark:text-yellow-400">
-              {selectedPaymentAmount > 0 ? currencyFormatter.format(hasPendingPayOs ? effectivePendingPaymentAmount : selectedPaymentAmount) : "--"}
-            </p>
-          </div>
-          {hasPendingPayOs && effectiveCheckoutUrl ? (
-            <button
-              type="button"
-              onClick={() => openPaymentPage(effectiveCheckoutUrl, {
-                orderCode: pendingPaymentOrderCode,
-                amount: effectivePendingPaymentAmount,
-                expiresAt: effectivePaymentDeadline,
-              })}
-              className={`shrink-0 px-4 py-3 ${payosButtonClassName}`}
-            >
-              <PayOSLogo variant="white" className="h-4 w-auto" />
-              {lang === "VN" ? "PayOS" : "PayOS"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleCreatePayment}
-              disabled={isSubmitting || !canCreatePayment}
-              className={`shrink-0 px-4 py-3 ${payosButtonClassName}`}
-            >
-              <PayOSLogo variant="white" className="h-4 w-auto" />
-              {lang === "VN" ? "Thanh toán" : "Pay"}
-            </button>
-          )}
-        </div>
-      </div>
-    )}
+    <MyCharterPaymentStickyBar
+      lang={lang}
+      isPaid={isPaid}
+      isSubmitting={isSubmitting}
+      canCreatePayment={canCreatePayment}
+      hasPendingPayOs={hasPendingPayOs}
+      selectedPaymentAmount={selectedPaymentAmount}
+      effectivePendingPaymentAmount={effectivePendingPaymentAmount}
+      effectiveCheckoutUrl={effectiveCheckoutUrl}
+      pendingPaymentOrderCode={pendingPaymentOrderCode}
+      effectivePaymentDeadline={effectivePaymentDeadline}
+      currencyFormatter={currencyFormatter}
+      openPaymentPage={openPaymentPage}
+      handleCreatePayment={handleCreatePayment}
+    />
     </>
   );
 }
