@@ -174,10 +174,11 @@ export const fetchAssignedCharterBookingDetail = async (id) => {
 
 export const respondToCharterBookingQuote = async (id, payload) => {
     try {
-        return await apiRespondToCharterBookingQuote(id, {
+        const body = {
             action: payload.action,
-            note: payload.note || null,
-        });
+        };
+        if (payload.note) body.note = payload.note;
+        return await apiRespondToCharterBookingQuote(id, body);
     } catch (error) {
         console.error(`Lỗi khi phản hồi báo giá charter booking ${id}:`, error);
         throw error;

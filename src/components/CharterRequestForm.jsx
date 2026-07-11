@@ -5,8 +5,6 @@ import { fetchAllStations } from "../services/stationService";
 import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId } from "../services/insuranceService";
 import { fetchCurrentUserProfile } from "../services/authService";
 import { updateUserProfile } from "../redux/authSlice";
-import { WaterwayMap } from "./WaterwayMap";
-import { fetchAllRoutes, fetchRouteDetail } from "../services/routeService";
 import {
   createEmptyBoatRequest,
   createEmptyStop,
@@ -14,7 +12,7 @@ import {
   getMinDepartureDate,
   normalizeDeckCount,
 } from "../utils/charterRequestForm";
-import { getInsurancePendingMessage } from "../utils/insurancePreview";
+import { getCharterInsuranceNote, getInsurancePendingMessage } from "../utils/insurancePreview";
 
 const deckOptionImages = {
   1: "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/15/5b/30/ea/saigon-waterbus-lu-t.jpg?w=1200&h=-1&s=1",
@@ -23,38 +21,9 @@ const deckOptionImages = {
 
 const getStationId = (station) => String(station.stationId || station.id);
 const getStationName = (station) => station.stationName || station.name || "--";
-const isActiveStation = (station) => station?.status !== "Inactive";
-
-const geometryToMapCoordinates = (geometry) => (
-  Array.isArray(geometry)
-    ? geometry
-      .filter((point) => Array.isArray(point) && point.length >= 2)
-      .map(([longitude, latitude]) => ({ latitude, longitude }))
-    : []
-);
-
-const getRouteId = (route) => route?.routeId ?? route?.id;
-const getRouteStopIds = (route) => (
-  (Array.isArray(route?.stops) ? route.stops : [])
-    .slice()
-    .sort((left, right) => Number(left.stopOrder) - Number(right.stopOrder))
-    .map((stop) => String(stop.stationId ?? stop.station?.stationId ?? stop.station?.id ?? ""))
-    .filter(Boolean)
-);
-
-const routeContainsRequestedStops = (routeStopIds, requestedStopIds) => {
-  if (routeStopIds.length < 2 || requestedStopIds.length < 2) return false;
-  if (routeStopIds[0] !== requestedStopIds[0] || routeStopIds.at(-1) !== requestedStopIds.at(-1)) {
-    return false;
-  }
-
-  let routeIndex = 0;
-  return requestedStopIds.every((stationId) => {
-    const foundIndex = routeStopIds.indexOf(stationId, routeIndex);
-    if (foundIndex < 0) return false;
-    routeIndex = foundIndex + 1;
-    return true;
-  });
+const isActiveStation = (station) => {
+  const status = String(station?.status || "Active").toLowerCase();
+  return status === "active";
 };
 
 const filterActiveStations = (stationList) =>
@@ -227,6 +196,7 @@ export function CharterRequestForm({
   const [selectedInsurancePackageId, setSelectedInsurancePackageId] = useState(
     initialFormData?.insuranceSelected === false ? null : (initialFormData?.insurancePackageId ?? null)
   );
+  const [isInsuranceDetailsOpen, setIsInsuranceDetailsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [useAccountInfo, setUseAccountInfo] = useState(false);
@@ -234,8 +204,6 @@ export function CharterRequestForm({
   const [currentStep, setCurrentStep] = useState(0);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState(initialFormData);
-  const [routeMapGeometry, setRouteMapGeometry] = useState([]);
-  const [routeMapName, setRouteMapName] = useState("");
   const submitInFlightRef = useRef(false);
   const lastInsurancePackageIdRef = useRef(null);
 
@@ -259,11 +227,18 @@ export function CharterRequestForm({
         if (!isMounted) return;
         setInsurancePackages(packages);
         setSelectedInsurancePackageId((currentId) => {
+          const preferredId = initialFormData?.insuranceSelected === false
+            ? null
+            : (initialFormData?.insurancePackageId ?? currentId);
+          if (preferredId && packages.some((pkg) => isSameInsurancePackageId(getInsurancePackageId(pkg), preferredId))) {
+            lastInsurancePackageIdRef.current = String(preferredId);
+            return String(preferredId);
+          }
+          if (initialFormData?.insuranceSelected === false) return null;
           if (currentId && packages.some((pkg) => isSameInsurancePackageId(getInsurancePackageId(pkg), currentId))) {
             lastInsurancePackageIdRef.current = String(currentId);
             return String(currentId);
           }
-          if (initialFormData?.insuranceSelected === false) return null;
           const defaultId = getInsurancePackageId(packages[0]);
           lastInsurancePackageIdRef.current = defaultId;
           return defaultId;
@@ -275,7 +250,7 @@ export function CharterRequestForm({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialFormData?.insurancePackageId, initialFormData?.insuranceSelected]);
 
   const contactInputClass = `w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] transition-all disabled:opacity-55 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-950 disabled:text-slate-500 dark:disabled:text-slate-400`;
   const contactLabelClass = `flex min-h-4 items-center text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`;
@@ -340,73 +315,15 @@ export function CharterRequestForm({
     [stations],
   );
 
-  const getStationById = (stationId) => stations.find((station) => String(station.stationId || station.id) === String(stationId));
-  const routeStopStationIds = [
-    formData.fromStationId,
-    ...formData.itineraryStops.map((stop) => stop.stationId),
-    formData.toStationId,
-  ].filter(Boolean);
-  const routeStations = routeStopStationIds.map(getStationById).filter(Boolean);
-  const routeMapStations = routeStations.filter((station, index) => (
-    routeStations.findIndex((other) => (other.stationId || other.id) === (station.stationId || station.id)) === index
-  ));
-  const routeMapCoordinates = routeStations
-    .filter((station) => station.latitude != null && station.longitude != null)
-    .map((station) => ({ latitude: station.latitude, longitude: station.longitude }));
-  const displayedRouteCoordinates = routeMapGeometry.length > 1
-    ? routeMapGeometry
-    : routeMapCoordinates;
-
-  useEffect(() => {
-    const requestedStopIds = routeStopStationIds.map(String);
-    if (requestedStopIds.length < 2) {
-      setRouteMapGeometry([]);
-      setRouteMapName("");
-      return undefined;
-    }
-
-    let isCurrent = true;
-
-    const loadMatchingRoute = async () => {
-      try {
-        const routesResult = await fetchAllRoutes();
-        const routes = Array.isArray(routesResult)
-          ? routesResult
-          : (routesResult?.items || routesResult?.data || []);
-
-        const details = await Promise.all(
-          routes
-            .filter((route) => route?.status !== "Inactive")
-            .map((route) => {
-              const routeId = getRouteId(route);
-              return routeId ? fetchRouteDetail(routeId).catch(() => null) : null;
-            })
-        );
-
-        const matchedRoute = details
-          .filter(Boolean)
-          .filter((route) => routeContainsRequestedStops(getRouteStopIds(route), requestedStopIds))
-          .sort((left, right) => getRouteStopIds(left).length - getRouteStopIds(right).length)[0];
-
-        if (!isCurrent) return;
-
-        const geometry = geometryToMapCoordinates(matchedRoute?.routeGeometry);
-        setRouteMapGeometry(geometry);
-        setRouteMapName(geometry.length > 1 ? (matchedRoute?.routeName || "") : "");
-      } catch (error) {
-        console.error("Không tải được hình học tuyến đường:", error);
-        if (isCurrent) {
-          setRouteMapGeometry([]);
-          setRouteMapName("");
-        }
-      }
-    };
-
-    loadMatchingRoute();
-    return () => {
-      isCurrent = false;
-    };
-  }, [formData.fromStationId, formData.toStationId, formData.itineraryStops]);
+  const sameStationWithoutStopMessage = useMemo(() => {
+    if (!formData.fromStationId || !formData.toStationId) return "";
+    if (String(formData.fromStationId) !== String(formData.toStationId)) return "";
+    const hasStopStation = formData.itineraryStops.some((stop) => Boolean(stop.stationId));
+    if (hasStopStation) return "";
+    return lang === "VN"
+      ? "Bến đón khách và bến trả khách đang trùng nhau. Vui lòng chọn lại, hoặc thêm ít nhất 1 bến dừng."
+      : "Pickup and drop-off are the same. Please choose again, or add at least 1 stop.";
+  }, [formData.fromStationId, formData.toStationId, formData.itineraryStops, lang]);
 
   const validateCustomerStep = () => {
     const errors = getContactFieldErrors();
@@ -439,10 +356,15 @@ export function CharterRequestForm({
     const totalPassengerCount = adultCount + childCount;
 
     if (!formData.fromStationId || !formData.toStationId) {
-      return lang === "VN" ? "Bạn cần chọn cả bến đi và bến đến trước khi tiếp tục." : "Select both origin and destination stations before continuing.";
+      return lang === "VN" ? "Bạn cần chọn cả bến đón khách và bến trả khách trước khi tiếp tục." : "Select both pickup and drop-off stations before continuing.";
     }
     if (formData.fromStationId === formData.toStationId) {
-      return lang === "VN" ? "Bến đến phải khác bến đi." : "Destination station must be different from origin station.";
+      const hasStopStation = formData.itineraryStops.some((stop) => Boolean(stop.stationId));
+      if (!hasStopStation) {
+        return lang === "VN"
+          ? "Bến đón khách và bến trả khách trùng nhau. Vui lòng chọn lại, hoặc thêm ít nhất 1 bến dừng."
+          : "Pickup and drop-off are the same. Please choose again, or add at least 1 stop.";
+      }
     }
     if (!Number.isInteger(adultCount) || !Number.isInteger(childCount) || adultCount < 0 || childCount < 0 || adultCount > 1000 || childCount > 1000 || totalPassengerCount <= 0 || totalPassengerCount > 1000) {
       return lang === "VN" ? "Người lớn và trẻ em từ 0 đến 1000, tổng hành khách phải lớn hơn 0 và không quá 1000." : "Adults and children must be 0-1000, and total passengers must be greater than 0 and no more than 1000.";
@@ -457,7 +379,7 @@ export function CharterRequestForm({
       || String(stop.note || "").length > 1000
     ));
     if (formData.itineraryStops.length > 50 || invalidStop) {
-      return lang === "VN" ? "Tối đa 50 điểm dừng; mỗi điểm cần có bến dừng, thứ tự và thời gian dừng không âm." : "Maximum 50 stops; each stop needs a station, non-negative order, and non-negative stay minutes.";
+      return lang === "VN" ? "Tối đa 50 bến dừng; mỗi điểm cần có bến dừng, thứ tự và thời gian dừng không âm." : "Maximum 50 stops; each stop needs a station, non-negative order, and non-negative stay minutes.";
     }
     if (formData.requestedBoats.length < 1 || formData.requestedBoats.length > 20 || formData.requestedBoats.some((boat) => !deckOptions.includes(Number(boat.numberOfDecks)))) {
       return lang === "VN" ? "Cần ít nhất 1 tàu, tối đa 20 tàu, mỗi tàu chọn 1 tầng hoặc 2 tầng." : "Please request 1-20 boats, each with 1 or 2 decks.";
@@ -724,20 +646,25 @@ export function CharterRequestForm({
       Swal.fire({
         icon: "warning",
         title: lang === "VN" ? "Vui lòng chọn bến" : "Stations are required",
-        text: lang === "VN" ? "Bạn cần chọn cả bến đi và bến đến trước khi tiếp tục." : "Select both origin and destination stations before continuing.",
+        text: lang === "VN" ? "Bạn cần chọn cả bến đón khách và bến trả khách trước khi tiếp tục." : "Select both pickup and drop-off stations before continuing.",
         confirmButtonColor: "#124757",
       });
       return;
     }
 
     if (formData.fromStationId === formData.toStationId) {
-      Swal.fire({
-        icon: "warning",
-        title: lang === "VN" ? "Lộ trình chưa hợp lệ" : "Invalid route",
-        text: lang === "VN" ? "Bến đến phải khác bến đi." : "Destination station must be different from origin station.",
-        confirmButtonColor: "#124757",
-      });
-      return;
+      const hasStopStation = formData.itineraryStops.some((stop) => Boolean(stop.stationId));
+      if (!hasStopStation) {
+        Swal.fire({
+          icon: "warning",
+          title: lang === "VN" ? "Lộ trình chưa hợp lệ" : "Invalid route",
+          text: lang === "VN"
+            ? "Bến đón khách và bến trả khách trùng nhau. Vui lòng chọn lại, hoặc thêm ít nhất 1 bến dừng."
+            : "Pickup and drop-off are the same. Please choose again, or add at least 1 stop.",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
     }
 
     const invalidStop = formData.itineraryStops.some((stop) => (
@@ -752,8 +679,8 @@ export function CharterRequestForm({
     if (formData.itineraryStops.length > 50 || invalidStop) {
       Swal.fire({
         icon: "warning",
-        title: lang === "VN" ? "Điểm dừng chưa hợp lệ" : "Invalid itinerary stops",
-        text: lang === "VN" ? "Tối đa 50 điểm dừng; mỗi điểm cần có bến dừng, thứ tự và thời gian dừng không âm." : "Maximum 50 stops; each stop needs a station, non-negative order, and non-negative stay minutes.",
+        title: lang === "VN" ? "Bến dừng chưa hợp lệ" : "Invalid stop stations",
+        text: lang === "VN" ? "Tối đa 50 bến dừng; mỗi điểm cần có bến dừng, thứ tự và thời gian dừng không âm." : "Maximum 50 stops; each stop needs a station, non-negative order, and non-negative stay minutes.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -804,6 +731,7 @@ export function CharterRequestForm({
       }),
       preferredNumberOfDecks: normalizeDeckCount(formData.requestedBoats[0]?.numberOfDecks),
       specialRequests: formData.specialRequests || null,
+      rentalUnit: formData.rentalUnit === "Day" ? "Day" : "Hour",
       insuranceSelected: Boolean(selectedInsurancePackageId),
       insurancePackageId: selectedInsurancePackageId || null,
     };
@@ -953,6 +881,37 @@ export function CharterRequestForm({
                 <input type="time" value={formData.startTime} onChange={(e) => handleFieldChange("startTime", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
               </div>
             </div>
+
+            <div className="space-y-2.5">
+              <label className={contactLabelClass}>{lang === "VN" ? "Hình thức thuê" : "Rental type"}{requiredMark}</label>
+              <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                {[
+                  { id: "Hour", labelVn: "Theo giờ", labelEn: "Hourly" },
+                  { id: "Day", labelVn: "Theo ngày", labelEn: "Daily" },
+                ].map((option) => {
+                  const active = (formData.rentalUnit === "Day" ? "Day" : "Hour") === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => handleFieldChange("rentalUnit", option.id)}
+                      className={`rounded-xl px-3 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${
+                        active
+                          ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
+                          : "bg-transparent text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      {lang === "VN" ? option.labelVn : option.labelEn}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] font-medium leading-relaxed text-slate-400">
+                {lang === "VN"
+                  ? "Bạn chỉ chọn theo giờ hoặc theo ngày. Số giờ/ngày tính tiền do hệ thống ước tính từ lộ trình — không cần nhập tay."
+                  : "Choose hourly or daily only. Chargeable duration is calculated from the route — you don't enter hours manually."}
+              </p>
+            </div>
           </section>
         )}
 
@@ -964,65 +923,52 @@ export function CharterRequestForm({
                 <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Lộ trình & hành khách" : "Route & Guests"}</h3>
                 <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>
                   {lang === "VN"
-                    ? "Bến đi phải thuộc hệ thống Waterbus. Bến đến và điểm dừng có thể chọn bến khác."
-                    : "Departure must be a Waterbus station. Destination and stops can be any active station."}
+                    ? "Bến đón khách phải thuộc hệ thống Waterbus. Bến trả khách và bến dừng có thể chọn bến khác."
+                    : "Pickup must be a Waterbus station. Drop-off and stops can be any active station."}
                 </p>
               </div>
             </div>
-            {/* Chọn bến đi */}
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className={contactLabelClass}>{lang === "VN" ? "Bến đi" : "From Station"}{requiredMark}</label>
+                <label className={contactLabelClass}>{lang === "VN" ? "Bến đón khách" : "Pickup Station"}{requiredMark}</label>
                 <CharterStationSelect
                   value={formData.fromStationId}
                   stations={waterbusStations}
                   onChange={(nextValue) => handleFieldChange("fromStationId", nextValue)}
-                  placeholder={lang === "VN" ? "Chọn bến Waterbus" : "Select Waterbus station"}
-                  searchPlaceholder={lang === "VN" ? "Tìm bến Waterbus..." : "Search Waterbus station..."}
-                  emptyMessage={lang === "VN" ? "Không tìm thấy bến Waterbus" : "No Waterbus stations found"}
+                  placeholder={lang === "VN" ? "Chọn bến đón khách" : "Select pickup station"}
+                  searchPlaceholder={lang === "VN" ? "Tìm bến đón khách..." : "Search pickup station..."}
+                  emptyMessage={lang === "VN" ? "Không tìm thấy bến đón khách" : "No pickup stations found"}
                   required
                 />
               </div>
-              {/* Chọn bến đến */}
               <div className="space-y-2">
-                <label className={contactLabelClass}>{lang === "VN" ? "Bến đến" : "To Station"}{requiredMark}</label>
+                <label className={contactLabelClass}>{lang === "VN" ? "Bến trả khách" : "Drop-off Station"}{requiredMark}</label>
                 <CharterStationSelect
                   value={formData.toStationId}
                   stations={stations}
                   onChange={(nextValue) => handleFieldChange("toStationId", nextValue)}
-                  placeholder={lang === "VN" ? "Chưa chọn" : "Not selected"}
-                  searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
-                  emptyMessage={lang === "VN" ? "Không tìm thấy bến" : "No stations found"}
+                  placeholder={lang === "VN" ? "Chọn bến trả khách" : "Select drop-off station"}
+                  searchPlaceholder={lang === "VN" ? "Tìm bến trả khách..." : "Search drop-off station..."}
+                  emptyMessage={lang === "VN" ? "Không tìm thấy bến trả khách" : "No drop-off stations found"}
                   required
                 />
               </div>
             </div>
-            {/* Map */}
-            <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
-              <div>
-                <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Xem trên bản đồ" : "View on Map"}</label>
-                <p className="text-[11px] text-slate-400 mt-1">{lang === "VN" ? "Bến đi, bến đến và các điểm dừng sẽ hiện trên bản đồ." : "Origin, destination, and stops will appear on the map."}</p>
-              </div>
-              <div className="h-72 rounded-xl overflow-hidden">
-                <WaterwayMap
-                  stationsList={routeMapStations}
-                  coordinates={displayedRouteCoordinates}
-                  waterwayName={routeMapName}
-                  hideStationLink
-                />
-              </div>
-            </div>
+            {sameStationWithoutStopMessage ? (
+              <p className="text-[11px] font-bold text-rose-600 dark:text-rose-300 -mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 dark:border-rose-500/30 dark:bg-rose-500/10">
+                {sameStationWithoutStopMessage}
+              </p>
+            ) : null}
 
-            {/* Chọn điểm dừng */}
             <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Điểm dừng trung gian" : "Itinerary Stops"}</label>
-                  <p className="text-[11px] text-slate-400 mt-1">{lang === "VN" ? "Có thể bỏ trống nếu không có điểm dừng." : "Leave empty if there are no extra stops."}</p>
+                  <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến dừng" : "Stop Stations"}</label>
+                  <p className="text-[11px] text-slate-400 mt-1">{lang === "VN" ? "Có thể bỏ trống nếu không có bến dừng." : "Leave empty if there are no stops."}</p>
                 </div>
                 <button type="button" onClick={handleAddStop} disabled={formData.itineraryStops.length >= 50} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 disabled:opacity-50">
                   <span className="material-symbols-outlined text-base">add_location_alt</span>
-                  {lang === "VN" ? "Thêm điểm dừng" : "Add Stop"}
+                  {lang === "VN" ? "Thêm bến dừng" : "Add Stop"}
                 </button>
               </div>
               {formData.itineraryStops.length > 0 && (
@@ -1166,6 +1112,11 @@ export function CharterRequestForm({
                 : null;
               const unitPremiumLabel = lang === "VN" ? "ghế" : "seat";
               const pendingMessage = getInsurancePendingMessage("CharterBooking", lang);
+              const insuranceNote = getCharterInsuranceNote(lang);
+
+              const displayPackage = selectedPackage || insurancePackages[0];
+              const providerName = displayPackage?.providerName || "";
+              const providerLogoUrl = displayPackage?.providerLogoUrl || "";
 
               const handleInsuranceToggle = (enabled) => {
                 if (enabled) {
@@ -1185,6 +1136,49 @@ export function CharterRequestForm({
                 setSelectedInsurancePackageId(packageId);
               };
 
+              const handleShowTerms = () => {
+                const pkg = displayPackage;
+                if (!pkg) return;
+
+                const escapeHtml = (value) => String(value ?? "")
+                  .replaceAll("&", "&amp;")
+                  .replaceAll("<", "&lt;")
+                  .replaceAll(">", "&gt;")
+                  .replaceAll('"', "&quot;")
+                  .replaceAll("'", "&#39;");
+
+                const conditions = (Array.isArray(pkg.conditions) ? pkg.conditions : [])
+                  .map((item) => String(item || "").trim())
+                  .filter(Boolean);
+                const name = pkg.providerName || (lang === "VN" ? "Nhà cung cấp bảo hiểm" : "Insurance provider");
+                const safeName = escapeHtml(name);
+                const safeLogoUrl = escapeHtml(pkg.providerLogoUrl || "");
+                const safeTermsUrl = escapeHtml(pkg.termsUrl || "");
+                const logoHtml = pkg.providerLogoUrl
+                  ? `<img src="${safeLogoUrl}" alt="${safeName}" style="width:72px;height:72px;object-fit:contain;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;margin:0 auto 12px;" />`
+                  : "";
+                const conditionsHtml = conditions.length > 0
+                  ? `<ul style="text-align:left;margin:12px 0 0;padding-left:18px;color:#64748b;font-size:12px;line-height:1.7;">${conditions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+                  : `<p style="margin:12px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có điều kiện chi tiết trên hệ thống." : "No detailed conditions on file."}</p>`;
+                const termsHtml = pkg.termsUrl
+                  ? `<a href="${safeTermsUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 14px;border-radius:12px;background:#124757;color:#fff;font-weight:800;font-size:12px;text-decoration:none;">${lang === "VN" ? "Mở điều khoản đầy đủ" : "Open full terms"}</a>`
+                  : `<p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có link điều khoản." : "No terms link available."}</p>`;
+
+                Swal.fire({
+                  title: lang === "VN" ? "Điều khoản bảo hiểm" : "Insurance terms",
+                  html: `
+                    ${logoHtml}
+                    <p style="margin:0;font-weight:800;color:#124757;font-size:15px;">${safeName}</p>
+                    <p style="margin:4px 0 0;color:#94a3b8;font-size:12px;font-weight:700;">${escapeHtml(pkg.name || "")}</p>
+                    <p style="margin:14px 0 0;text-align:left;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">${lang === "VN" ? "Điều kiện áp dụng" : "Applicable conditions"}</p>
+                    ${conditionsHtml}
+                    ${termsHtml}
+                  `,
+                  confirmButtonText: lang === "VN" ? "Đóng" : "Close",
+                  confirmButtonColor: "#124757",
+                });
+              };
+
               return (
                 <div className={`rounded-2xl border overflow-hidden transition-colors ${
                   wantsInsurance
@@ -1192,21 +1186,58 @@ export function CharterRequestForm({
                     : "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700"
                 }`}>
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="w-9 h-9 rounded-xl bg-[#124757]/10 dark:bg-yellow-400/10 flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-lg text-[#124757] dark:text-yellow-400">shield</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsInsuranceDetailsOpen((open) => !open)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      aria-expanded={isInsuranceDetailsOpen}
+                    >
+                      <span className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 overflow-hidden ${
+                        providerLogoUrl
+                          ? "bg-white border border-slate-200 p-1.5"
+                          : "bg-[#124757]/10 dark:bg-yellow-400/10"
+                      }`}>
+                        {providerLogoUrl ? (
+                          <img
+                            src={providerLogoUrl}
+                            alt={providerName || (lang === "VN" ? "Logo bảo hiểm" : "Insurance logo")}
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <span className="material-symbols-outlined text-lg text-[#124757] dark:text-yellow-400">shield</span>
+                        )}
                       </span>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
                           {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
                         </p>
                         <p className="text-[11px] font-bold text-slate-400 truncate">
-                          {wantsInsurance && selectedPackage
-                            ? `${formatVnd(selectedPackage.unitPremiumAmount)}/${unitPremiumLabel}${Number(selectedPackage.coverageAmount) > 0 ? ` · ${lang === "VN" ? "Quyền lợi" : "Coverage"} ${formatVnd(selectedPackage.coverageAmount)}` : ""}`
-                            : (lang === "VN" ? "Tùy chọn" : "Optional")}
+                          {providerName
+                            ? providerName
+                            : (wantsInsurance && selectedPackage
+                              ? `${formatVnd(selectedPackage.unitPremiumAmount)}/${unitPremiumLabel}${Number(selectedPackage.coverageAmount) > 0 ? ` · ${lang === "VN" ? "Quyền lợi" : "Coverage"} ${formatVnd(selectedPackage.coverageAmount)}` : ""}`
+                              : (lang === "VN" ? "Tùy chọn" : "Optional"))}
                         </p>
+                        {providerName && wantsInsurance && selectedPackage ? (
+                          <p className="text-[10px] font-bold text-slate-400 truncate mt-0.5">
+                            {`${formatVnd(selectedPackage.unitPremiumAmount)}/${unitPremiumLabel}${Number(selectedPackage.coverageAmount) > 0 ? ` · ${lang === "VN" ? "Quyền lợi" : "Coverage"} ${formatVnd(selectedPackage.coverageAmount)}` : ""}`}
+                          </p>
+                        ) : null}
                       </div>
-                    </div>
+                      <span className={`material-symbols-outlined shrink-0 text-xl text-slate-400 transition-transform ${isInsuranceDetailsOpen ? "rotate-180" : ""}`}>
+                        expand_more
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleShowTerms}
+                      title={lang === "VN" ? "Xem điều khoản" : "View terms"}
+                      className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-500 hover:text-[#124757] dark:hover:text-yellow-400 hover:border-[#124757]/40 dark:hover:border-yellow-400/40 flex items-center justify-center shrink-0 transition-colors"
+                      aria-label={lang === "VN" ? "Điều khoản bảo hiểm" : "Insurance terms"}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">info</span>
+                    </button>
 
                     <button
                       type="button"
@@ -1223,9 +1254,9 @@ export function CharterRequestForm({
                     </button>
                   </div>
 
-                  {wantsInsurance && (
+                  {isInsuranceDetailsOpen && (
                     <div className="border-t border-slate-100 dark:border-slate-700/80">
-                      {insurancePackages.length > 1 && (
+                      {wantsInsurance && insurancePackages.length > 1 && (
                         <div className="divide-y divide-slate-100 dark:divide-slate-700/80">
                           {insurancePackages.map((pkg) => {
                             const packageId = getInsurancePackageId(pkg);
@@ -1265,6 +1296,9 @@ export function CharterRequestForm({
                                 </span>
                                 <span className="min-w-0 flex-1">
                                   <span className="block text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{pkg.name}</span>
+                                  {pkg.providerName ? (
+                                    <span className="block text-[10px] font-bold text-slate-400 truncate">{pkg.providerName}</span>
+                                  ) : null}
                                 </span>
                                 <span className={`text-xs font-headline font-black whitespace-nowrap shrink-0 ${
                                   isSelected ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"
@@ -1277,10 +1311,45 @@ export function CharterRequestForm({
                         </div>
                       )}
 
-                      <p className="px-4 py-2.5 text-[10px] text-slate-400 flex items-start gap-1.5 border-t border-slate-100 dark:border-slate-700/80">
-                        <span className="material-symbols-outlined text-[13px] mt-0.5 shrink-0">info</span>
-                        <span>{pendingMessage}</span>
-                      </p>
+                      <div className="space-y-2.5 px-4 py-3">
+                        {wantsInsurance && selectedPackage ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
+                              <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
+                                {insuranceNote.unitLabel}
+                              </p>
+                              <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
+                                {formatVnd(selectedPackage.unitPremiumAmount)}/{unitPremiumLabel}
+                              </p>
+                            </div>
+                            <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
+                              <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
+                                {lang === "VN" ? "Quyền lợi" : "Coverage"}
+                              </p>
+                              <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
+                                {Number(selectedPackage.coverageAmount) > 0
+                                  ? formatVnd(selectedPackage.coverageAmount)
+                                  : "--"}
+                              </p>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="flex items-start gap-1.5">
+                          <span className="material-symbols-outlined text-[13px] mt-0.5 shrink-0 text-slate-400">info</span>
+                          <div className="min-w-0 space-y-1">
+                            <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                              {insuranceNote.title}
+                            </p>
+                            <p className="text-[10px] leading-relaxed text-slate-400">
+                              {insuranceNote.body}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-400">
+                              {pendingMessage}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

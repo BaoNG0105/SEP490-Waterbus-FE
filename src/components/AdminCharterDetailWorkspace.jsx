@@ -19,13 +19,204 @@ import {
 import { getApiErrorMessage } from "../utils/apiError";
 import {
   DEFAULT_BOAT_IMAGE,
+  formatMatchedRouteLabel,
+  formatRouteEstimate,
   getBoatCode,
   getBoatImageUrl,
   getBoatNameOnly,
   getBoatStatusLabel,
+  getCharterRoutePricingWarning,
+  getMatchedRouteSummary,
+  getRouteEstimateCompleteness,
+  hasCharterRouteForPricing,
+  hasMatchedRouteOnLeg,
+  isCharterRoutePricingBlocked,
+  normalizeRouteEstimateLegs,
 } from "../utils/charterBookingAdmin";
+import { CharterRouteMapPanel } from "./CharterRouteMapPanel";
 import { CharterPaymentLedger } from "./CharterPaymentLedger";
+import { CharterInsuranceInfo } from "./CharterInsuranceInfo";
 import { CharterQuotePreviewPanel } from "./CharterQuotePreviewTable";
+import {
+  formatQuoteUnitPriceLabel,
+} from "../utils/charterQuotePreview";
+
+function AdminCharterRouteInfoPanel({ lang, booking, formatDate, compact = false }) {
+  const fromName = booking?.fromStationName || "--";
+  const toName = booking?.toStationName || "--";
+  const stops = Array.isArray(booking?.itineraryStops) ? booking.itineraryStops : [];
+  const completeness = getRouteEstimateCompleteness(booking?.routeEstimate);
+  const hasValidEstimate = completeness.isComplete;
+  const estimateText = hasValidEstimate
+    ? (formatRouteEstimate(booking?.routeEstimate, lang) || (lang === "VN" ? "Chưa có ước tính" : "No estimate yet"))
+    : (lang === "VN" ? "Chưa có ước tính" : "No estimate yet");
+  const routeWarning = getCharterRoutePricingWarning(booking, lang);
+  const pricingBlocked = isCharterRoutePricingBlocked(booking);
+  const routeLegs = Array.isArray(booking?.routeLegs) && booking.routeLegs.length > 0
+    ? booking.routeLegs
+    : normalizeRouteEstimateLegs(booking?.routeEstimate);
+  const matchedSummary = getMatchedRouteSummary(booking?.routeEstimate, routeLegs);
+  const summaryLabel = formatMatchedRouteLabel({
+    matchedRouteId: booking?.matchedRouteId || matchedSummary.matchedRouteId,
+    matchedRouteCode: booking?.matchedRouteCode || matchedSummary.matchedRouteCode,
+    matchedRouteName: booking?.matchedRouteName || matchedSummary.matchedRouteName,
+  });
+  const showSummary = Boolean(summaryLabel);
+  const panelTone = pricingBlocked || routeWarning
+    ? "border-amber-200 bg-amber-50/60 dark:border-amber-500/20 dark:bg-amber-500/10"
+    : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900";
+  const warningTone = "border-amber-300 bg-amber-100/80 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200";
+
+  return (
+    <div className={`rounded-3xl border ${panelTone} ${compact ? "p-4" : "p-5"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+            {lang === "VN" ? "Thông tin lộ trình" : "Route information"}
+          </p>
+          <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">
+            {fromName} → {toName}
+          </p>
+          {showSummary ? (
+            <p className="mt-1 text-xs font-bold text-[#124757] dark:text-yellow-400">
+              {lang === "VN" ? "Tuyến hệ thống" : "System route"}
+              {": "}
+              {summaryLabel}
+            </p>
+          ) : null}
+          {!showSummary && routeLegs.length === 0 ? (
+            <p className="mt-1 text-xs font-bold text-amber-700 dark:text-amber-300">
+              {lang === "VN"
+                ? "Chưa match Route Master (matchedRoute* = null)."
+                : "No Route Master match (matchedRoute* = null)."}
+            </p>
+          ) : null}
+          <p className="mt-1 text-[11px] font-medium text-slate-400">
+            {lang === "VN"
+              ? "Chỉ xem — không chỉnh lộ trình khi chốt giá. Thiếu route/GeoJSON thì cập nhật Route Master hoặc nhờ khách đổi bến."
+              : "View only — do not edit the route while quoting. If route/GeoJSON is missing, update Route Master or ask the customer to change stations."}
+          </p>
+        </div>
+        <span className="rounded-lg bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+          {formatDate(booking?.departureDate)} · {String(booking?.startTime || "--").slice(0, 5)}
+        </span>
+      </div>
+
+      <div className={`mt-4 grid gap-3 ${compact ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-4"}`}>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến đón" : "From"}</p>
+          <p className="mt-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">{fromName}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến trả" : "To"}</p>
+          <p className="mt-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">{toName}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Giờ khởi hành" : "Start time"}</p>
+          <p className="mt-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">{String(booking?.startTime || "--").slice(0, 5)}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ngày đi" : "Departure date"}</p>
+          <p className="mt-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">{formatDate(booking?.departureDate)}</p>
+        </div>
+      </div>
+
+      {stops.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            {lang === "VN" ? "Điểm dừng" : "Itinerary stops"}
+          </p>
+          {stops.map((stop, index) => (
+            <div
+              key={`${stop.stationId || "stop"}-${stop.stopOrder || index}`}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
+            >
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                {lang === "VN" ? `Dừng ${stop.stopOrder || index + 1}` : `Stop ${stop.stopOrder || index + 1}`}
+                {": "}
+                {stop.stationName || "--"}
+              </p>
+              <p className="text-[11px] font-medium text-slate-400">
+                {Number(stop.stayDurationMinutes) > 0
+                  ? `${stop.stayDurationMinutes} ${lang === "VN" ? "phút" : "min"}`
+                  : (lang === "VN" ? "Không dừng lâu" : "No stay")}
+                {stop.note ? ` · ${stop.note}` : ""}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 text-xs font-medium text-slate-400">
+          {lang === "VN" ? "Không có điểm dừng trung gian." : "No intermediate stops."}
+        </p>
+      )}
+
+      {routeLegs.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            {lang === "VN" ? "Chặng tính giá (Route Master)" : "Pricing legs (Route Master)"}
+          </p>
+          {routeLegs.map((leg) => {
+            const matched = hasMatchedRouteOnLeg(leg);
+            const label = formatMatchedRouteLabel(leg);
+            return (
+              <div
+                key={`leg-${leg.legOrder}`}
+                className={`rounded-xl border px-3 py-2.5 ${matched ? "border-slate-200/80 bg-white dark:border-slate-700 dark:bg-slate-800" : "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10"}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    {lang === "VN" ? `Chặng ${leg.legOrder}` : `Leg ${leg.legOrder}`}
+                    {": "}
+                    {leg.fromStationName || "--"} → {leg.toStationName || "--"}
+                  </p>
+                  <p className="text-[11px] font-medium text-slate-400">
+                    {matched && leg.distanceKm != null && leg.travelMinutes != null
+                      ? `${leg.distanceKm} km · ${leg.travelMinutes} ${lang === "VN" ? "phút" : "min"}`
+                      : (lang === "VN" ? "Chưa có ước tính" : "No estimate")}
+                  </p>
+                </div>
+                <p className={`mt-1 text-xs font-bold ${matched ? "text-[#124757] dark:text-yellow-400" : "text-amber-700 dark:text-amber-300"}`}>
+                  {matched
+                    ? `${lang === "VN" ? "Tuyến hệ thống" : "System route"}: ${label}`
+                    : (lang === "VN"
+                      ? "Chưa match Route Master — chưa có ước tính hợp lệ"
+                      : "No Route Master match — no valid estimate")}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          {lang === "VN" ? "Ước tính lộ trình" : "Route estimate"}
+        </p>
+        <p className="mt-1 text-sm font-bold leading-snug text-slate-700 dark:text-slate-200">{estimateText}</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider ${hasValidEstimate ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"}`}>
+            {lang === "VN" ? "Quãng đường" : "Distance"}: {hasValidEstimate ? (lang === "VN" ? "Đủ" : "OK") : (lang === "VN" ? "Chưa có" : "None")}
+          </span>
+          <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider ${hasValidEstimate ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"}`}>
+            {lang === "VN" ? "Thời gian" : "Travel time"}: {hasValidEstimate ? (lang === "VN" ? "Đủ" : "OK") : (lang === "VN" ? "Chưa có" : "None")}
+          </span>
+        </div>
+      </div>
+
+      {routeWarning ? (
+        <div className={`mt-4 flex items-start gap-2 rounded-xl px-3 py-2.5 ${warningTone}`}>
+          <span className="material-symbols-outlined mt-0.5 text-base">warning</span>
+          <p className="text-xs font-bold leading-relaxed">{routeWarning}</p>
+        </div>
+      ) : null}
+
+      <div className="mt-4">
+        <CharterRouteMapPanel lang={lang} booking={booking} />
+      </div>
+    </div>
+  );
+}
 
 function AdminBoatQuoteSelect({
   lang,
@@ -43,6 +234,7 @@ function AdminBoatQuoteSelect({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectedBoat = availableBoats.find((boat) => getBoatId(boat) === boatId) || null;
+  const activeUnit = rentalUnit === "Hour" ? "Hour" : "Day";
 
   const formatBoatMeta = (boat) => {
     const deckText = formatDeckCount(getBoatDeckCount(boat), lang);
@@ -51,23 +243,41 @@ function AdminBoatQuoteSelect({
     return [deckText, seatText].filter(Boolean).join(" · ");
   };
 
-  const formatBoatPrice = (boat) =>
-    currencyFormatter.format(getBoatPrice(boat, rentalUnit || "Day"));
+  const formatBoatPrices = (boat) => {
+    const dayPrice = getBoatPrice(boat, "Day");
+    const hourPrice = getBoatPrice(boat, "Hour");
+    const dayLabel = dayPrice > 0
+      ? formatQuoteUnitPriceLabel(dayPrice, "Day", currencyFormatter, lang)
+      : (lang === "VN" ? "Chưa có giá/ngày" : "No daily rate");
+    const hourLabel = hourPrice > 0
+      ? formatQuoteUnitPriceLabel(hourPrice, "Hour", currencyFormatter, lang)
+      : (lang === "VN" ? "Chưa có giá/giờ" : "No hourly rate");
 
-  const renderBoatLabel = (boat, compact = false) => {
+    return { dayLabel, hourLabel, dayPrice, hourPrice };
+  };
+
+  const renderBoatLabel = (boat) => {
     const code = getBoatCode(boat);
     const name = getBoatNameOnly(boat);
+    const { dayLabel, hourLabel } = formatBoatPrices(boat);
     return (
       <div className="min-w-0 flex-1">
-        <p className={`truncate font-bold text-slate-800 dark:text-white ${compact ? "text-sm" : "text-sm"}`}>
+        <p className="truncate text-sm font-bold text-slate-800 dark:text-white">
           {code ? <span className="text-[#124757] dark:text-yellow-400">{code}</span> : null}
           {code && name ? <span className="text-slate-400"> · </span> : null}
           {name || code || "--"}
         </p>
         <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
           {formatBoatMeta(boat)}
-          {formatBoatMeta(boat) ? " · " : ""}
-          <span className="font-headline font-black text-[#124757] dark:text-yellow-400">{formatBoatPrice(boat)}</span>
+        </p>
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-headline font-black">
+          <span className={activeUnit === "Day" ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"}>
+            {dayLabel}
+          </span>
+          <span className="font-medium text-slate-300 dark:text-slate-600">·</span>
+          <span className={activeUnit === "Hour" ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"}>
+            {hourLabel}
+          </span>
         </p>
       </div>
     );
@@ -118,7 +328,7 @@ function AdminBoatQuoteSelect({
                 }}
               />
             </div>
-            {renderBoatLabel(selectedBoat, true)}
+            {renderBoatLabel(selectedBoat)}
           </>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -301,6 +511,7 @@ export function AdminBookingOverviewTab({
   }
 
   const paymentMeta = getPaymentStatusInfo(booking.paymentStatus, lang);
+  const isReleasedAssignment = ["Cancelled", "Expired", "Refunded"].includes(String(booking.status || ""));
 
   return (
     <div className="space-y-5">
@@ -362,17 +573,7 @@ export function AdminBookingOverviewTab({
               <p className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">
                 {lang === "VN" ? "Chuyến đi" : "Trip"}
               </p>
-              <OverviewField
-                icon="route"
-                label={lang === "VN" ? "Lộ trình" : "Route"}
-                value={booking.route}
-              />
-              <OverviewField
-                icon="event"
-                label={lang === "VN" ? "Lịch thuê" : "Schedule"}
-                value={`${formatDate(booking.departureDate)} · ${String(booking.startTime).slice(0, 5)}`}
-                hint={formatDuration(booking.durationValue, booking.rentalUnit, lang)}
-              />
+              <AdminCharterRouteInfoPanel lang={lang} booking={booking} formatDate={formatDate} />
               <OverviewField
                 icon="groups"
                 label={lang === "VN" ? "Hành khách" : "Passengers"}
@@ -399,6 +600,11 @@ export function AdminBookingOverviewTab({
                 icon="sticky_note_2"
                 label={lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}
                 value={booking.specialRequests || (lang === "VN" ? "Không có" : "None")}
+              />
+              <CharterInsuranceInfo
+                booking={booking}
+                lang={lang}
+                currencyFormatter={currencyFormatter}
               />
             </div>
           </div>
@@ -446,7 +652,11 @@ export function AdminBookingOverviewTab({
             {lang === "VN" ? "Tàu yêu cầu & đã gán" : "Requested vs assigned boats"}
           </h2>
           <p className="mt-1 text-xs font-medium text-slate-400">
-            {lang === "VN" ? "So sánh nhanh từng tàu theo yêu cầu khách" : "Quick comparison per requested boat"}
+            {isReleasedAssignment
+              ? (lang === "VN"
+                ? "Đơn đã đóng — tàu đã gắn được xem là đã giải phóng khỏi lịch."
+                : "Closed booking — previously assigned boats are treated as released.")
+              : (lang === "VN" ? "So sánh nhanh từng tàu theo yêu cầu khách" : "Quick comparison per requested boat")}
           </p>
         </div>
 
@@ -467,7 +677,7 @@ export function AdminBookingOverviewTab({
             return (
               <div
                 key={`boat-row-${index}`}
-                className="overflow-hidden rounded-3xl border border-slate-200/80 bg-[#F8FBFC] dark:border-slate-700 dark:bg-slate-900"
+                className={`overflow-hidden rounded-3xl border border-slate-200/80 bg-[#F8FBFC] dark:border-slate-700 dark:bg-slate-900 ${isReleasedAssignment && assigned ? "opacity-80" : ""}`}
               >
                 <div className="flex items-center gap-3 border-b border-slate-200/80 bg-white/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/80 md:px-5">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#124757] font-headline text-sm font-black text-white dark:bg-yellow-400 dark:text-slate-900">
@@ -483,7 +693,7 @@ export function AdminBookingOverviewTab({
 
                 {assigned ? (
                   <div className="grid gap-4 p-4 md:grid-cols-[220px_minmax(0,1fr)] md:items-stretch md:p-5">
-                    <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-slate-200 shadow-inner dark:bg-slate-800 md:h-full md:min-h-[168px] md:aspect-auto">
+                    <div className={`relative aspect-[4/3] overflow-hidden rounded-2xl bg-slate-200 shadow-inner dark:bg-slate-800 md:h-full md:min-h-[168px] md:aspect-auto ${isReleasedAssignment ? "grayscale" : ""}`}>
                       <img
                         src={assignedImageUrl}
                         alt={assignedName}
@@ -494,8 +704,15 @@ export function AdminBookingOverviewTab({
                         }}
                       />
                       <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-[#124757]/50 via-transparent to-transparent" />
-                      <span className="absolute bottom-3 left-3 rounded-lg bg-white/95 px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] shadow-sm dark:bg-slate-900/95 dark:text-yellow-400">
-                        {lang === "VN" ? "Đã gán" : "Assigned"}
+                      <span className={`absolute bottom-3 left-3 rounded-lg px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wider shadow-sm ${
+                        isReleasedAssignment
+                          ? "bg-slate-800/95 text-white"
+                          : "bg-white/95 text-[#124757] dark:bg-slate-900/95 dark:text-yellow-400"
+                      }`}
+                      >
+                        {isReleasedAssignment
+                          ? (lang === "VN" ? "Đã giải phóng" : "Released")
+                          : (lang === "VN" ? "Đã gán" : "Assigned")}
                       </span>
                     </div>
 
@@ -507,6 +724,13 @@ export function AdminBookingOverviewTab({
                         <h3 className="mt-1 font-headline text-xl font-black leading-tight text-[#124757] dark:text-yellow-400 md:text-2xl">
                           {assignedName}
                         </h3>
+                        {isReleasedAssignment ? (
+                          <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                            {lang === "VN"
+                              ? "Chỉ còn lịch sử gán — không còn giữ chỗ trên lịch tàu."
+                              : "Assignment history only — no longer held on the boat schedule."}
+                          </p>
+                        ) : null}
                       </div>
 
                       <div className="grid gap-2 sm:grid-cols-3">
@@ -525,9 +749,28 @@ export function AdminBookingOverviewTab({
                           </div>
                         ) : null}
                         {assignedStatus ? (
-                          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600/80 dark:text-emerald-300">{lang === "VN" ? "Trạng thái" : "Status"}</p>
-                            <p className="mt-1 text-sm font-headline font-black text-emerald-700 dark:text-emerald-300">{assignedStatus}</p>
+                          <div className={`rounded-2xl border px-3 py-2.5 ${
+                            isReleasedAssignment
+                              ? "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
+                              : "border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10"
+                          }`}
+                          >
+                            <p className={`text-[10px] font-bold uppercase tracking-wide ${
+                              isReleasedAssignment
+                                ? "text-slate-400"
+                                : "text-emerald-600/80 dark:text-emerald-300"
+                            }`}
+                            >
+                              {lang === "VN" ? "Trạng thái tàu" : "Boat status"}
+                            </p>
+                            <p className={`mt-1 text-sm font-headline font-black ${
+                              isReleasedAssignment
+                                ? "text-slate-600 dark:text-slate-300"
+                                : "text-emerald-700 dark:text-emerald-300"
+                            }`}
+                            >
+                              {assignedStatus}
+                            </p>
                           </div>
                         ) : null}
                       </div>
@@ -543,7 +786,9 @@ export function AdminBookingOverviewTab({
                         {lang === "VN" ? "Chưa gán tàu" : "Not assigned yet"}
                       </p>
                       <p className="mt-1 text-xs font-medium text-slate-400">
-                        {lang === "VN" ? "Mở tab Thao tác để chọn tàu phù hợp." : "Open the Actions tab to assign a matching boat."}
+                        {isReleasedAssignment
+                          ? (lang === "VN" ? "Đơn đã đóng và không còn tàu được giữ." : "This closed booking has no held boats.")
+                          : (lang === "VN" ? "Mở tab Thao tác để chọn tàu phù hợp." : "Open the Actions tab to assign a matching boat.")}
                       </p>
                     </div>
                   </div>
@@ -600,12 +845,22 @@ export function AdminBookingActionsTab({
   getStatusInfo,
   onSubmitQuote,
   onQuoteBoatChange,
+  onQuoteRentalUnitChange,
   onStatusChange,
   onNavigateTab,
 }) {
+  const routePricingWarning = getCharterRoutePricingWarning(booking, lang);
+  const quoteRentalUnit = quoteForm?.rentalUnit === "Day" ? "Day" : "Hour";
+  const canSubmitQuote = canManageQuote
+    && isQuoteBoatSelectionComplete
+    && hasCharterRouteForPricing(booking)
+    && !isSubmitting;
+
   if (phase === "quote") {
     return (
       <section className="space-y-6">
+        <AdminCharterRouteInfoPanel lang={lang} booking={booking} formatDate={formatDate} />
+
         <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
           <form onSubmit={onSubmitQuote} className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -617,6 +872,31 @@ export function AdminBookingActionsTab({
               <span className={`w-max rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider ${statusInfo.classes}`}>
                 {statusInfo.label}
               </span>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                {lang === "VN" ? "Hình thức thuê (khách chọn)" : "Rental type (customer choice)"}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-xl bg-[#124757] px-3 py-2 text-[11px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900">
+                  {quoteRentalUnit === "Hour"
+                    ? (lang === "VN" ? "Theo giờ" : "Hourly")
+                    : (lang === "VN" ? "Theo ngày" : "Daily")}
+                </span>
+                <span className="text-[11px] font-medium text-slate-400">
+                  {lang === "VN" ? "Admin không đổi — thời lượng do hệ thống tính từ lộ trình." : "Locked for admin — duration comes from the route estimate."}
+                </span>
+              </div>
+              <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-400">
+                {lang === "VN"
+                  ? quoteRentalUnit === "Hour"
+                    ? "Theo giờ: thời lượng tính tiền lấy từ ước tính lộ trình (thường làm tròn tối thiểu 1 giờ)."
+                    : "Theo ngày: dùng đơn giá ngày của tàu; số ngày do hệ thống ước tính."
+                  : quoteRentalUnit === "Hour"
+                    ? "Hourly: chargeable duration comes from the route estimate (usually at least 1 hour)."
+                    : "Daily: uses the boat daily rate; day count comes from the system estimate."}
+              </p>
             </div>
 
             {booking.specialRequests ? (
@@ -637,6 +917,13 @@ export function AdminBookingActionsTab({
                   : (lang === "VN" ? "Trạng thái hiện tại không cho phép cập nhật báo giá." : "The current status does not allow quote changes.")}
               </div>
             )}
+
+            {routePricingWarning ? (
+              <div className="mt-4 flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                <span className="material-symbols-outlined text-base">warning</span>
+                <p className="text-xs font-bold leading-relaxed">{routePricingWarning}</p>
+              </div>
+            ) : null}
 
             <fieldset disabled={!canManageQuote || isSubmitting} className="mt-5 space-y-5 disabled:opacity-60">
               <div className="grid gap-4 xl:grid-cols-2">
@@ -668,7 +955,7 @@ export function AdminBookingActionsTab({
                         lang={lang}
                         boatId={quoteBoat.boatId}
                         availableBoats={availableBoats}
-                        rentalUnit="Day"
+                        rentalUnit={quoteRentalUnit}
                         currencyFormatter={currencyFormatter}
                         onChange={(nextBoatId) => onQuoteBoatChange(quoteBoat.boatOrder, nextBoatId)}
                         getBoatId={getBoatId}
@@ -685,11 +972,11 @@ export function AdminBookingActionsTab({
 
               <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-bold leading-5 text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                 {lang === "VN"
-                  ? "Thời lượng và đơn giá do hệ thống tự tính theo lộ trình thực tế. Chỉ cần chọn đủ tàu rồi xem trước / chốt giá."
-                  : "Duration and pricing are calculated from the actual route. Select boats, then preview / submit the quote."}
+                  ? `Đang báo giá ${quoteRentalUnit === "Hour" ? "theo giờ" : "theo ngày"} — giá tương ứng được tô đậm trong danh sách tàu. Chọn đủ tàu rồi xem trước / chốt giá.`
+                  : `Quoting ${quoteRentalUnit === "Hour" ? "hourly" : "daily"} — matching rates are highlighted in the boat list. Select boats, then preview / submit.`}
               </p>
 
-              <button type="submit" disabled={isSubmitting || !isQuoteBoatSelectionComplete || !canManageQuote} className="w-full rounded-xl bg-[#124757] px-6 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900">
+              <button type="submit" disabled={!canSubmitQuote} className="w-full rounded-xl bg-[#124757] px-6 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900">
                 {isSubmitting ? (lang === "VN" ? "Đang xử lý..." : "Submitting...") : (lang === "VN" ? "Chốt giá" : "Submit Quote")}
               </button>
             </fieldset>
@@ -701,7 +988,11 @@ export function AdminBookingActionsTab({
             isPreviewLoading={isPreviewLoading}
             quotePreviewError={quotePreviewError}
             quotePreview={quotePreview}
+            booking={booking}
             quoteForm={quoteForm}
+            boatsCatalog={boats}
+            getBoatId={getBoatId}
+            getBoatPrice={getBoatPrice}
             isQuoteBoatSelectionComplete={isQuoteBoatSelectionComplete}
           />
         </div>
@@ -735,12 +1026,15 @@ export function AdminBookingActionsTab({
             </span>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-5">
+            <AdminCharterRouteInfoPanel lang={lang} booking={booking} formatDate={formatDate} compact />
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { label: lang === "VN" ? "Lộ trình" : "Route", value: booking.route },
-              { label: lang === "VN" ? "Lịch thuê" : "Schedule", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)} · ${formatDuration(booking.durationValue, booking.rentalUnit, lang)}` },
               { label: lang === "VN" ? "Giá chốt" : "Quote", value: quoteTotal > 0 ? currencyFormatter.format(quoteTotal) : "--" },
               { label: lang === "VN" ? "Đã thu" : "Paid", value: bookingPaidAmount > 0 ? currencyFormatter.format(bookingPaidAmount) : "--" },
+              { label: lang === "VN" ? "Hành khách" : "Passengers", value: formatPassengerSummary(booking, lang) },
             ].map((item) => (
               <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
                 <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
 import { useApp } from "../../../context/AppContext";
@@ -73,12 +73,34 @@ const ListSkeleton = () => (
 export function CharterList() {
   const { lang } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated } = useSelector((state) => state.auth);
   const [bookings, setBookings] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => location.state?.searchCode || "");
+  const [pendingOpenCode, setPendingOpenCode] = useState(() => location.state?.searchCode || "");
   const [statusFilter, setStatusFilter] = useState("All");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    const code = location.state?.searchCode;
+    if (!code) return;
+    setSearchTerm(String(code));
+    setPendingOpenCode(String(code));
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.pathname, location.state?.searchCode, navigate]);
+
+  useEffect(() => {
+    if (!pendingOpenCode || isLoading) return;
+
+    const match = bookings.find(
+      (booking) => String(booking.bookingCode).toLowerCase() === String(pendingOpenCode).toLowerCase()
+    );
+    setPendingOpenCode("");
+    if (match?.id) {
+      navigate(`/profile/my-charter-booking/${match.id}`, { state: { booking: match } });
+    }
+  }, [bookings, isLoading, navigate, pendingOpenCode]);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),

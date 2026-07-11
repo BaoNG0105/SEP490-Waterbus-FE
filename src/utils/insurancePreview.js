@@ -95,22 +95,68 @@ export const getCharterInsuranceNote = (lang = "VN") => (
   CHARTER_INSURANCE_NOTE[lang === "VN" ? "VN" : "EN"]
 );
 
+export const getBookingInsurancePackageId = (booking) => (
+  booking?.insurancePackageId
+  ?? booking?.insurance?.insurancePackageId
+  ?? booking?.insurance?.packageId
+  ?? booking?.insurance?.id
+  ?? null
+);
+
+export const resolveInsuranceSelected = (booking) => {
+  if (typeof booking?.insuranceSelected === "boolean") return booking.insuranceSelected;
+  if (typeof booking?.insurance?.selected === "boolean") return booking.insurance.selected;
+  if (typeof booking?.insurance?.isSelected === "boolean") return booking.insurance.isSelected;
+  if (getBookingInsurancePackageId(booking)) return true;
+  if (booking?.insurance && typeof booking.insurance === "object") {
+    const totalAmount = Number(
+      booking.insurance.totalAmount ?? booking.insurance.amount ?? booking.insurance.premiumAmount,
+    ) || 0;
+    if (totalAmount > 0) return true;
+  }
+  return null;
+};
+
 export const normalizeInsuranceFromBooking = (booking) => {
   const insurance = booking?.insurance;
-  if (!insurance || typeof insurance !== "object") return null;
+  const selected = resolveInsuranceSelected(booking);
+  const packageId = getBookingInsurancePackageId(booking);
+
+  if (!insurance || typeof insurance !== "object") {
+    if (selected === true) {
+      return {
+        packageId,
+        packageName: "",
+        providerName: "",
+        quantity: 0,
+        unitPremiumAmount: 0,
+        totalAmount: 0,
+        terms: "",
+        selected: true,
+      };
+    }
+    return null;
+  }
 
   const quantity = Number(insurance.quantity ?? insurance.seatCount ?? insurance.passengerCount) || 0;
   const totalAmount = Number(insurance.totalAmount ?? insurance.amount ?? insurance.premiumAmount) || 0;
   const unitPremiumAmount = Number(insurance.unitPremiumAmount ?? insurance.unitAmount) || 0;
+  const packageName = insurance.packageName ?? insurance.name ?? "";
+  const providerName = insurance.providerName ?? "";
+  const terms = insurance.terms ?? insurance.conditions ?? insurance.termUrl ?? insurance.termsUrl ?? "";
 
-  if (!quantity && !totalAmount && !unitPremiumAmount) return null;
+  if (!quantity && !totalAmount && !unitPremiumAmount && selected !== true && !packageName && !packageId) {
+    return null;
+  }
 
   return {
-    packageName: insurance.packageName ?? insurance.name ?? "",
-    providerName: insurance.providerName ?? "",
+    packageId,
+    packageName,
+    providerName,
     quantity,
     unitPremiumAmount,
     totalAmount: totalAmount || (unitPremiumAmount * quantity),
-    selected: insurance.selected ?? insurance.isSelected ?? true,
+    terms,
+    selected: selected !== false,
   };
 };

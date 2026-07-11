@@ -5,6 +5,7 @@ import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import { fetchMyCharterBookingDetail, updateMyCharterBooking } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { handleDuplicateCharterBookingError } from "../../../utils/charterDuplicateBooking";
 import { createEmptyBoatRequest, getMinDepartureDate } from "../../../utils/charterRequestForm";
 import { CharterRequestForm } from "../../../components/CharterRequestForm";
 
@@ -62,6 +63,16 @@ const buildFormDataFromDetail = (detail, user) => ({
     }))
     : [],
   specialRequests: pick(detail, ["specialRequests"], ""),
+  rentalUnit: pick(detail, ["rentalUnit"], "Hour") === "Day" ? "Day" : "Hour",
+  insuranceSelected: typeof detail?.insuranceSelected === "boolean"
+    ? detail.insuranceSelected
+    : (typeof detail?.insurance?.selected === "boolean" ? detail.insurance.selected : undefined),
+  insurancePackageId: pick(detail, [
+    "insurancePackageId",
+    "insurance.insurancePackageId",
+    "insurance.packageId",
+    "insurance.id",
+  ], null) || null,
 });
 
 export function EditCharter() {
@@ -126,6 +137,16 @@ export function EditCharter() {
       navigate(`/profile/my-charter-booking/${id}`);
     } catch (error) {
       console.error("Lỗi cập nhật charter booking:", error);
+      const fallback = lang === "VN"
+        ? "Vui lòng kiểm tra ngày đi, số khách và thông tin lộ trình."
+        : "Please check departure date, passenger count, and route information.";
+      const handledDuplicate = await handleDuplicateCharterBookingError(error, {
+        lang,
+        navigate,
+        fallbackMessage: fallback,
+      });
+      if (handledDuplicate) return;
+
       const isConflict = error.response?.status === 409;
       const result = await Swal.fire({
         icon: "error",
@@ -134,7 +155,7 @@ export function EditCharter() {
           ? (lang === "VN"
             ? "Dữ liệu yêu cầu vừa thay đổi hoặc đã có một lần lưu đang xử lý. Vui lòng tải lại rồi thử lại."
             : "This request was just changed or another save is still being processed. Please reload and try again.")
-          : getApiErrorMessage(error, lang === "VN" ? "Vui lòng kiểm tra ngày đi, số khách và thông tin lộ trình." : "Please check departure date, passenger count, and route information."),
+          : getApiErrorMessage(error, fallback),
         confirmButtonColor: "#124757",
         confirmButtonText: isConflict ? (lang === "VN" ? "Tải lại dữ liệu" : "Reload") : "OK",
         showCancelButton: isConflict,

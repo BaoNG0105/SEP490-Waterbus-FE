@@ -5,6 +5,7 @@ import Swal from "sweetalert2";
 import { useApp } from "../../context/AppContext";
 import { createMyCharterBooking } from "../../services/charterBookingService";
 import { getApiErrorMessage } from "../../utils/apiError";
+import { handleDuplicateCharterBookingError } from "../../utils/charterDuplicateBooking";
 import { createEmptyBoatRequest, getMinDepartureDate } from "../../utils/charterRequestForm";
 import { CharterRequestForm } from "../../components/CharterRequestForm";
 
@@ -30,6 +31,7 @@ export function CharterBooking() {
     requestedBoats: [createEmptyBoatRequest()],
     itineraryStops: [],
     specialRequests: "",
+    rentalUnit: "Hour",
   };
 
   const handleUnauthenticated = () => {
@@ -60,12 +62,36 @@ export function CharterBooking() {
         bookingStatus: savedBooking.bookingStatus,
       }));
 
+      const safeBookingCode = String(bookingCode)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+
       await Swal.fire({
         icon: "success",
         title: lang === "VN" ? "Đã gửi yêu cầu thuê tàu" : "Charter request submitted",
-        text: bookingCode !== "--"
-          ? (lang === "VN" ? `Mã yêu cầu: ${bookingCode}` : `Request code: ${bookingCode}`)
-          : (lang === "VN" ? "Bạn có thể theo dõi yêu cầu trong Hồ sơ." : "You can track this request from your profile."),
+        html: lang === "VN"
+          ? `
+            <p style="margin:0 0 8px;color:#64748b;font-size:14px;font-weight:700;text-align:center;">
+              ${bookingCode !== "--" ? `Mã yêu cầu: <span style="color:#124757;">${safeBookingCode}</span>` : "Bạn có thể theo dõi yêu cầu trong Hồ sơ."}
+            </p>
+            <p style="margin:0;color:#64748b;font-size:13px;line-height:1.55;text-align:justify;">
+              Bộ phận vận hành sẽ xem xét lộ trình và tàu phù hợp, sau đó gửi báo giá kèm thời gian dự kiến cho quý khách.
+              Thời gian duyệt yêu cầu trong vòng <strong style="color:#124757;">24 giờ</strong> kể từ lúc gửi.
+              Sau khi nhận báo giá, quý khách có <strong style="color:#124757;">12 giờ</strong> để xác nhận và hoàn tất thủ tục.
+            </p>
+          `
+          : `
+            <p style="margin:0 0 8px;color:#64748b;font-size:14px;font-weight:700;text-align:center;">
+              ${bookingCode !== "--" ? `Request code: <span style="color:#124757;">${safeBookingCode}</span>` : "You can track this request from your profile."}
+            </p>
+            <p style="margin:0;color:#64748b;font-size:13px;line-height:1.55;text-align:justify;">
+              Our operations team will review the route and suitable boats, then send you a quote with the estimated schedule.
+              Requests are reviewed within <strong style="color:#124757;">24 hours</strong> of submission.
+              After receiving the quote, you have <strong style="color:#124757;">12 hours</strong> to confirm and complete the process.
+            </p>
+          `,
         confirmButtonColor: "#124757",
       });
 
@@ -76,10 +102,20 @@ export function CharterBooking() {
         }
     } catch (error) {
       console.error("Lỗi tạo charter booking:", error);
+      const fallback = lang === "VN"
+        ? "Vui lòng kiểm tra ngày đi, số khách và thông tin lộ trình."
+        : "Please check departure date, passenger count, and route information.";
+      const handledDuplicate = await handleDuplicateCharterBookingError(error, {
+        lang,
+        navigate,
+        fallbackMessage: fallback,
+      });
+      if (handledDuplicate) return;
+
       Swal.fire({
         icon: "error",
         title: lang === "VN" ? "Không thể gửi yêu cầu" : "Unable to submit request",
-        text: getApiErrorMessage(error, lang === "VN" ? "Vui lòng kiểm tra ngày đi, số khách và thông tin lộ trình." : "Please check departure date, passenger count, and route information."),
+        text: getApiErrorMessage(error, fallback),
         confirmButtonColor: "#124757",
       });
     }

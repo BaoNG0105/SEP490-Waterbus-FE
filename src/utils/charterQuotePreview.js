@@ -48,7 +48,9 @@ export const formatQuoteHumanDuration = (totalMinutes, lang = "VN") => {
   return lang === "VN" ? `${minutes} phút` : `${minutes} min`;
 };
 
-export const resolveQuoteRentalUnit = (preview, { defaultRentalUnit = "Day" } = {}) => {
+export const resolveQuoteRentalUnit = (preview, { defaultRentalUnit = "Day", forcedRentalUnit = "" } = {}) => {
+  if (forcedRentalUnit === "Day" || forcedRentalUnit === "Hour") return forcedRentalUnit;
+
   const routeEstimate = preview?.routeEstimate;
   const routeUnit = typeof routeEstimate === "object"
     ? pick(routeEstimate, ["rentalUnit"], "")
@@ -154,6 +156,11 @@ const getRoutePricingBreakdown = (routeEstimate, lang = "VN") => {
 export const buildQuotePreviewModel = (preview, options = {}) => {
   const {
     defaultRentalUnit = "Day",
+    forcedRentalUnit = "",
+    boatsCatalog = [],
+    quoteBoats = [],
+    getBoatId = (boat) => String(boat?.id || boat?.boatId || ""),
+    getBoatPrice = null,
     currencyFormatter,
     lang = "VN",
   } = options;
@@ -165,17 +172,47 @@ export const buildQuotePreviewModel = (preview, options = {}) => {
   );
 
   const routeEstimate = pick(preview, ["routeEstimate"], null);
-  const rentalUnit = resolveQuoteRentalUnit(preview, { defaultRentalUnit });
+  const rentalUnit = resolveQuoteRentalUnit(preview, { defaultRentalUnit, forcedRentalUnit });
   const boats = Array.isArray(preview?.boats) ? preview.boats : [];
   const routeLines = isHourlyQuoteRental(rentalUnit) ? getRoutePricingBreakdown(routeEstimate, lang) : [];
+  const findCatalogBoat = (boatId) => (
+    Array.isArray(boatsCatalog)
+      ? boatsCatalog.find((boat) => String(getBoatId(boat)) === String(boatId))
+      : null
+  );
 
   const boatRows = boats.map((boat, index) => {
     const boatOrder = Number(pick(boat, ["boatOrder"], index + 1)) || index + 1;
     const boatName = pick(boat, ["boatName", "name", "boat.name"], "");
-    const rowRentalUnit = pick(boat, ["rentalUnit"], rentalUnit);
-    const unitPrice = Number(pick(boat, ["unitPrice"], 0)) || 0;
-    const chargeableDuration = Number(pick(boat, ["chargeableDurationValue", "durationValue"], 0)) || 0;
-    const lineTotal = Number(pick(boat, ["subtotalAmount", "lineTotal"], 0)) || 0;
+    const selectedBoatId = quoteBoats.find((item) => Number(item.boatOrder) === boatOrder)?.boatId
+      || pick(boat, ["boatId", "id", "boat.id"], "");
+    const catalogBoat = findCatalogBoat(selectedBoatId);
+
+    let rowRentalUnit = pick(boat, ["rentalUnit"], rentalUnit) || rentalUnit;
+    let unitPrice = Number(pick(boat, ["unitPrice"], 0)) || 0;
+    let chargeableDuration = Number(pick(boat, ["chargeableDurationValue", "durationValue"], 0)) || 0;
+    let lineTotal = Number(pick(boat, ["subtotalAmount", "lineTotal"], 0)) || 0;
+
+    // Admin selected Day/Hour must win over BE response when they disagree.
+    if (forcedRentalUnit === "Day" || forcedRentalUnit === "Hour") {
+      rowRentalUnit = forcedRentalUnit;
+      if (typeof getBoatPrice === "function" && catalogBoat) {
+        const catalogPrice = Number(getBoatPrice(catalogBoat, forcedRentalUnit)) || 0;
+        if (catalogPrice > 0) unitPrice = catalogPrice;
+      }
+      if (forcedRentalUnit === "Day") {
+        chargeableDuration = chargeableDuration > 0 && !isHourlyQuoteRental(pick(boat, ["rentalUnit"], ""))
+          ? chargeableDuration
+          : 1;
+        lineTotal = unitPrice * chargeableDuration;
+      } else if (forcedRentalUnit === "Hour") {
+        // Keep BE chargeable duration/minutes when hourly; refresh unit price from catalog if available.
+        if (lineTotal <= 0 && unitPrice > 0 && chargeableDuration > 0) {
+          lineTotal = unitPrice * chargeableDuration;
+        }
+      }
+    }
+
     const chargeableMinutes = isHourlyQuoteRental(rowRentalUnit)
       ? getQuoteChargeableMinutes(chargeableDuration, routeEstimate)
       : 0;
@@ -195,18 +232,32 @@ export const buildQuotePreviewModel = (preview, options = {}) => {
 
   const autoSubtotal = boatRows.reduce((sum, row) => sum + row.lineTotal, 0);
   const apiSubtotal = Number(pick(preview, ["subtotalAmount", "subtotalBeforeDiscount"], 0)) || 0;
-  const subtotalBeforeDiscount = apiSubtotal > 0 ? apiSubtotal : autoSubtotal;
+  const useForcedDayTotals = forcedRentalUnit === "Day";
+  const subtotalBeforeDiscount = useForcedDayTotals
+    ? autoSubtotal
+    : (apiSubtotal > 0 ? apiSubtotal : autoSubtotal);
 
-  const discountAmount = Number(pick(preview, ["discountAmount"], 0)) || 0;
-  const totalAmount = Number(pick(preview, ["totalAmount", "finalAmount"], 0))
-    || Math.max(subtotalBeforeDiscount - discountAmount, 0);
+  const discountAmount = useForcedDayTotals
+    ? 0
+    : (Number(pick(preview, ["discountAmount"], 0)) || 0);
+  const totalAmount = useForcedDayTotals
+    ? Math.max(subtotalBeforeDiscount - discountAmount, 0)
+    : (Number(pick(preview, ["totalAmount", "finalAmount"], 0))
+      || Math.max(subtotalBeforeDiscount - discountAmount, 0));
 
-  const promotionCode = pick(preview, ["promotionCode"], "") || pick(preview, ["promotion.code"], "");
-  const promotionType = pick(preview, ["promotion.type", "promotionType"], "");
-  const promotionValue = Number(pick(preview, ["promotion.discountValue", "promotionDiscountValue"], 0)) || 0;
+  const promotionCode = useForcedDayTotals ? "" : (pick(preview, ["promotionCode"], "") || pick(preview, ["promotion.code"], ""));
+  const promotionType = useForcedDayTotals ? "" : pick(preview, ["promotion.type", "promotionType"], "");
+  const promotionValue = useForcedDayTotals
+    ? 0
+    : (Number(pick(preview, ["promotion.discountValue", "promotionDiscountValue"], 0)) || 0);
 
-  const deposit = getCharterDepositAmount(totalAmount, Number(pick(preview, ["depositAmount"], 0)) || 0);
-  const insurance = normalizeInsuranceFromBooking(preview);
+  const deposit = getCharterDepositAmount(totalAmount, useForcedDayTotals ? 0 : (Number(pick(preview, ["depositAmount"], 0)) || 0));
+  const insuranceSource = {
+    insuranceSelected: preview?.insuranceSelected ?? options.booking?.insuranceSelected,
+    insurancePackageId: preview?.insurancePackageId ?? options.booking?.insurancePackageId,
+    insurance: preview?.insurance ?? options.booking?.insurance,
+  };
+  const insurance = normalizeInsuranceFromBooking(insuranceSource);
 
   return {
     rentalUnit,
