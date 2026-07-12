@@ -7,14 +7,16 @@ import {
   configureSeats
 } from "../../../services/seatService";
 import { fetchBoatDetail } from "../../../services/boatService";
+import { SeatMapIcon, seatToneFromCode } from "../../../components/SeatMapIcon";
+import { BoatBowLabel } from "../../../components/ShipWheelIcon";
 
 // BỘ CÔNG CỤ VẼ Ô
 const ALL_TOOLS = [
   { id: "NONE", label: "Chuột (Chỉ Xem)", icon: "pan_tool", color: "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50" },
-  { id: "SEAT_STANDARD", label: "Ghế Thường (STD)", icon: "chair", color: "bg-gradient-to-b from-blue-100 to-blue-200 border-blue-400 text-blue-800 dark:from-blue-600 dark:to-blue-800 dark:border-blue-500 dark:text-blue-50 shadow-sm" },
-  { id: "SEAT_CABIN", label: "Ghế Cabin (CAB)", icon: "chair_alt", color: "bg-gradient-to-b from-purple-100 to-purple-200 border-purple-400 text-purple-800 dark:from-purple-600 dark:to-purple-800 dark:border-purple-500 dark:text-purple-50 shadow-sm" },
-  { id: "SEAT_RIVER", label: "Ghế River (RIV)", icon: "deck", color: "bg-gradient-to-b from-teal-100 to-teal-200 border-teal-400 text-teal-800 dark:from-teal-600 dark:to-teal-800 dark:border-teal-500 dark:text-teal-50 shadow-sm" },
-  { id: "SEAT_SKY", label: "Ghế Sky (SKY)", icon: "airline_seat_recline_extra", color: "bg-gradient-to-b from-sky-100 to-sky-200 border-sky-400 text-sky-800 dark:from-sky-600 dark:to-sky-800 dark:border-sky-500 dark:text-sky-50 shadow-sm" },
+  { id: "SEAT_STANDARD", label: "Ghế Thường (STD)", icon: "chair", tone: "standard", color: "bg-transparent border-transparent text-blue-600" },
+  { id: "SEAT_CABIN", label: "Ghế Cabin (CAB)", icon: "chair_alt", tone: "cabin", color: "bg-transparent border-transparent text-purple-600" },
+  { id: "SEAT_RIVER", label: "Ghế River (RIV)", icon: "deck", tone: "river", color: "bg-transparent border-transparent text-teal-600" },
+  { id: "SEAT_SKY", label: "Ghế Sky (SKY)", icon: "airline_seat_recline_extra", tone: "sky", color: "bg-transparent border-transparent text-sky-600" },
   { id: "Aisle", label: "Lối đi", icon: "directions_walk", color: "bg-slate-200/60 dark:bg-slate-700/50 border-transparent text-slate-400 dark:text-slate-500 shadow-inner" },
   { id: "Empty", label: "Khoảng trống", icon: "close", color: "bg-transparent border-dashed border-slate-300 dark:border-slate-600 text-slate-300 dark:text-slate-600" },
 ];
@@ -201,7 +203,9 @@ export function SeatLayoutEditor() {
 
   const getCellUI = (cellType) => {
     const tool = ALL_TOOLS.find(t => t.id === cellType);
-    return tool ? { icon: tool.icon, label: tool.label.split(" ")[0], color: tool.color } : { icon: "", label: "", color: "bg-white" };
+    return tool
+      ? { icon: tool.icon, label: tool.label.split(" ")[0], color: tool.color, tone: tool.tone || null, isSeat: Boolean(tool.tone) }
+      : { icon: "", label: "", color: "bg-white", tone: null, isSeat: false };
   };
 
   if (isLoading) {
@@ -276,10 +280,16 @@ export function SeatLayoutEditor() {
                   key={tool.id}
                   onClick={() => setActiveTool(tool.id)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[11px] font-bold transition-all border-2 ${
-                    activeTool === tool.id ? 'border-[#124757] dark:border-yellow-400 scale-105 shadow-lg' : ''
-                  } ${tool.color}`}
+                    activeTool === tool.id ? 'border-[#124757] dark:border-yellow-400 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-700'
+                  } ${tool.tone ? 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200' : tool.color}`}
                 >
-                  <span className="material-symbols-outlined text-lg">{tool.icon}</span>
+                  {tool.tone ? (
+                    <span className="inline-block h-8 w-7 shrink-0">
+                      <SeatMapIcon tone={tool.tone} showLabel={false} />
+                    </span>
+                  ) : (
+                    <span className="material-symbols-outlined text-lg">{tool.icon}</span>
+                  )}
                   {tool.label}
                 </button>
               ))}
@@ -322,35 +332,40 @@ export function SeatLayoutEditor() {
           ) : currentDeckData && (
             <div className="w-full bg-white dark:bg-slate-800 p-6 md:p-10 rounded-4xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center overflow-x-auto">
               
-              <div className="relative bg-slate-100 dark:bg-slate-900/80 border-8 border-slate-300 dark:border-slate-600 rounded-t-[12rem] rounded-b-[3rem] px-6 md:px-12 pt-20 pb-16 shadow-2xl min-w-max flex flex-col items-center">
+              <div className={`relative overflow-visible bg-slate-100 dark:bg-slate-900/80 border-8 border-slate-300 dark:border-slate-600 rounded-t-[12rem] rounded-b-[3rem] px-8 md:px-14 pb-16 shadow-2xl min-w-max flex flex-col items-center ${Number(activeDeck) === 1 ? "pt-16" : "pt-10"}`}>
                 
-                {/* Mũi Tàu */}
-                <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-60">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#124757] dark:text-yellow-400">Mũi Tàu</span>
-                </div>
+                {Number(activeDeck) === 1 ? (
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2">
+                    <BoatBowLabel lang={lang} />
+                  </div>
+                ) : null}
 
                 <div
-                  className="grid gap-2 relative z-10 mx-auto"
+                  className="grid gap-2 relative z-10 mx-auto overflow-visible p-2"
                   style={{
-                    gridTemplateColumns: `repeat(${currentDeckData.columns}, 46px)`,
-                    gridTemplateRows: `repeat(${currentDeckData.rows}, 46px)`
+                    gridTemplateColumns: `repeat(${currentDeckData.columns}, 48px)`,
+                    gridTemplateRows: `repeat(${currentDeckData.rows}, 52px)`
                   }}
                 >
                   {currentDeckData.matrix.map((cell) => {
                     const ui = getCellUI(cell.type);
+                    const isSeatCell = cell.type?.startsWith("SEAT_");
                     return (
                       <div
                         key={`${cell.row}-${cell.column}`}
                         onMouseDown={() => handleCellMouseDown(currentDeckData.id, cell.row, cell.column)}
                         onMouseEnter={() => handleCellMouseEnter(currentDeckData.id, cell.row, cell.column)}
-                        className={`relative flex flex-col items-center justify-center rounded-xl border-2 w-full h-full text-[9px] font-bold cursor-crosshair select-none transition-all duration-300 ${ui.color} ${activeTool !== 'NONE' ? 'hover:scale-90 hover:ring-4 ring-slate-400/20 z-20' : ''}`}
+                        className={`relative z-[1] flex flex-col items-center justify-center rounded-xl border-2 w-full h-full text-[9px] font-bold cursor-crosshair select-none transition-all duration-300 ${ui.color} ${activeTool !== 'NONE' ? 'hover:scale-90 hover:ring-4 ring-slate-400/20 z-20' : ''}`}
                         style={{ gridRow: cell.row, gridColumn: cell.column }}
                       >
-                        {ui.icon && <span className="material-symbols-outlined text-[20px] leading-none mb-0.5 opacity-90">{ui.icon}</span>}
-                        {cell.type?.startsWith("SEAT_") && (
-                          <span className="absolute bottom-1 right-1.5 text-[8px] font-black opacity-60 leading-none tracking-tighter">
-                            {cell.row}-{cell.column}
-                          </span>
+                        {isSeatCell ? (
+                          <SeatMapIcon
+                            label={`${cell.row}-${cell.column}`}
+                            tone={ui.tone || seatToneFromCode(cell.type)}
+                            className="w-[94%] h-[94%] pointer-events-none"
+                          />
+                        ) : (
+                          ui.icon ? <span className="material-symbols-outlined text-[20px] leading-none opacity-90">{ui.icon}</span> : null
                         )}
                       </div>
                     );

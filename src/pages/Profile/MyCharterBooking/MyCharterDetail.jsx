@@ -1862,7 +1862,14 @@ export function CharterDetail() {
                           <BoatSeatLayoutPreviewButton
                             boatId={boat.boatId}
                             boatName={boat.name}
+                            boatImageUrl={boat.imageUrl || DEFAULT_BOAT_IMAGE}
                             lang={lang}
+                            boatMeta={{
+                              seatCount: boat.seatCount,
+                              numberOfDecks: boat.numberOfDecks,
+                              seatSetupType: boat.seatSetupType,
+                              imageUrl: boat.imageUrl || DEFAULT_BOAT_IMAGE,
+                            }}
                           />
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">

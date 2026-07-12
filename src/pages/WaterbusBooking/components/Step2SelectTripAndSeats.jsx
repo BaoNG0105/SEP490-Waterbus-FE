@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../../../context/AppContext";
+import { SeatMapIcon } from "../../../components/SeatMapIcon";
 
 export default function Step2SelectTripAndSeats({ bookingData, updateData, onNext, onBack }) {
   const { lang } = useApp();
@@ -166,9 +167,18 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
             <div className="space-y-6 animate-fade-in">
               {/* Chú thích trạng thái ghế */}
               <div className="flex justify-center gap-4 text-[11px] font-bold text-slate-500">
-                <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-slate-100 border"></div>Trống</div>
-                <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-[#FFD100]"></div>Đang chọn</div>
-                <div className="flex items-center gap-1.5"><div className="w-4 h-4 rounded bg-slate-300 dark:bg-slate-600"></div>Đã khóa</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-6 w-5"><SeatMapIcon tone="cabin" showLabel={false} /></span>
+                  {lang === "VN" ? "Trống" : "Free"}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-6 w-5"><SeatMapIcon tone="cabin" selected showLabel={false} /></span>
+                  {lang === "VN" ? "Đang chọn" : "Selected"}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-6 w-5"><SeatMapIcon disabled showLabel={false} /></span>
+                  {lang === "VN" ? "Đã khóa" : "Locked"}
+                </div>
               </div>
 
               {/* Mô phỏng mô hình tàu */}
@@ -189,13 +199,18 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                           type="button"
                           disabled={isBooked}
                           onClick={() => handleSeatClick(seat, activeLeg)}
-                          className={`aspect-square rounded-lg text-[10px] font-headline font-black border flex items-center justify-center transition-all ${
-                            isBooked ? "bg-slate-300 text-slate-500 dark:bg-slate-600 dark:text-slate-500 cursor-not-allowed border-transparent" :
-                            isSelected ? "bg-[#FFD100] text-[#124757] border-transparent font-black scale-95 ring-2 ring-[#124757]/20" :
-                            "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 hover:border-slate-400"
+                          className={`aspect-[48/52] p-0.5 rounded-lg transition-all ${
+                            isBooked ? "cursor-not-allowed opacity-80" :
+                            isSelected ? "scale-95 ring-2 ring-[#124757]/25 rounded-xl" :
+                            "hover:scale-105"
                           }`}
                         >
-                          {seat}
+                          <SeatMapIcon
+                            label={seat}
+                            tone="cabin"
+                            disabled={isBooked}
+                            selected={isSelected}
+                          />
                         </button>
                       );
                     })}
@@ -212,13 +227,18 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                           type="button"
                           disabled={isBooked}
                           onClick={() => handleSeatClick(seat, activeLeg)}
-                          className={`aspect-square rounded-lg text-[10px] font-headline font-black border flex items-center justify-center transition-all ${
-                            isBooked ? "bg-slate-300 text-slate-500 dark:bg-slate-600 dark:text-slate-500 cursor-not-allowed border-transparent" :
-                            isSelected ? "bg-[#FFD100] text-[#124757] border-transparent font-black scale-95 ring-2 ring-[#124757]/20" :
-                            "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 hover:border-slate-400"
+                          className={`aspect-[48/52] p-0.5 rounded-lg transition-all ${
+                            isBooked ? "cursor-not-allowed opacity-80" :
+                            isSelected ? "scale-95 ring-2 ring-[#124757]/25 rounded-xl" :
+                            "hover:scale-105"
                           }`}
                         >
-                          {seat}
+                          <SeatMapIcon
+                            label={seat}
+                            tone="cabin"
+                            disabled={isBooked}
+                            selected={isSelected}
+                          />
                         </button>
                       );
                     })}

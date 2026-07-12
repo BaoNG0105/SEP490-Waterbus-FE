@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../../../context/AppContext";
+import { NationalitySelect } from "../../../components/NationalitySelect";
 
 export default function Step3Checkout({ bookingData, onBack }) {
   const { lang } = useApp();
@@ -30,7 +31,7 @@ export default function Step3Checkout({ bookingData, onBack }) {
       name: "",
       birthYear: "",
       gender: "Nam", // Nam, Nữ, Khác
-      nationality: "Việt Nam" // Mặc định là Việt Nam
+      nationality: "Vietnam"
     }))
   );
 
@@ -170,14 +171,13 @@ export default function Step3Checkout({ bookingData, onBack }) {
                     </select>
                   </div>
 
-                  <div className="space-y-1.5 sm:col-span-2">
+                  <div className="space-y-1.5 sm:col-span-2 relative z-10">
                     <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
-                    <input 
-                      type="text" 
+                    <NationalitySelect
                       value={passenger.nationality}
-                      onChange={(e) => handlePassengerChange(index, "nationality", e.target.value)}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]" 
-                      required 
+                      onChange={(v) => handlePassengerChange(index, "nationality", v)}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                      required
                     />
                   </div>
                 </div>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { addNewBoat } from "../../../services/boatService";
+import { FormSelect } from "../../../components/FormSelect";
 import Swal from "sweetalert2";
 
 export function CreateBoat() {
@@ -143,6 +144,15 @@ export function CreateBoat() {
 
   const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
   const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+  const selectStyle = `${inputStyle} cursor-pointer`;
+  const deckOptions = [
+    { value: 1, label: lang === "VN" ? "1 Tầng" : "1 Deck" },
+    { value: 2, label: lang === "VN" ? "2 Tầng" : "2 Decks" },
+  ];
+  const seatSetupOptions = [
+    { value: "FullStandard", label: "Full Standard" },
+    { value: "StandardAndVip", label: "Standard & VIP" },
+  ];
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-4xl mx-auto animate-fade-in">
@@ -205,29 +215,32 @@ export function CreateBoat() {
         </div>
 
         {/* KHỐI 2: CẤU HÌNH HẠ TẦNG */}
-        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 overflow-visible">
           <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
             {lang === "VN" ? "Cấu trúc hạ tầng" : "Infrastructure"}
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            {/* Dropdown Select 1 hoặc 2 */}
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 overflow-visible">
+            <div className="relative z-20">
               <label className={labelStyle}>{lang === "VN" ? "Số tầng tàu" : "Decks"}</label>
-              <select value={formData.numberOfDecks} onChange={(e) => handleInputChange("numberOfDecks", Number(e.target.value))} className={`${inputStyle} cursor-pointer`}>
-                <option value={1}>{lang === "VN" ? "1 Tầng" : "1 Deck"}</option>
-                <option value={2}>{lang === "VN" ? "2 Tầng" : "2 Decks"}</option>
-              </select>
+              <FormSelect
+                value={formData.numberOfDecks}
+                onChange={(v) => handleInputChange("numberOfDecks", Number(v))}
+                options={deckOptions}
+                className={selectStyle}
+              />
             </div>
-            <div>
+            <div className="relative z-30">
               <label className={labelStyle}>{lang === "VN" ? "Kiểu thiết lập ghế" : "Seat Setup Type"}</label>
-              <select value={formData.seatSetupType} onChange={(e) => handleInputChange("seatSetupType", e.target.value)} className={`${inputStyle} cursor-pointer font-bold text-[#124757]`}>
-                <option value="FullStandard">Full Standard</option>
-                <option value="StandardAndVip">Standard & VIP</option>
-              </select>
+              <FormSelect
+                value={formData.seatSetupType}
+                onChange={(v) => handleInputChange("seatSetupType", v)}
+                options={seatSetupOptions}
+                className={`${selectStyle} font-bold text-[#124757]`}
+              />
             </div>
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Vận tốc tối đa (Kmh)" : "Max Speed"}</label>
+              <label className={labelStyle}>{lang === "VN" ? "Vận tốc tối đa (Kmh)" : "Max Speed (Kmh)"}</label>
               <input type="number" min={0} required value={formData.maxSpeedKmh} onChange={(e) => handleInputChange("maxSpeedKmh", e.target.value)} className={inputStyle} />
             </div>
           </div>

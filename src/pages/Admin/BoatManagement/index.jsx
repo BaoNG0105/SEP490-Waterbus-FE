@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats, modifyBoatStatus, deleteBoat, fetchBoatDetail, fetchBoatDocuments } from "../../../services/boatService";
 import { getActivateBoatBlockReason } from "../../../utils/boatDocuments";
+import { BoatSeatLayoutPreviewModal } from "../../../components/BoatSeatLayoutPreview";
+import { FormSelect } from "../../../components/FormSelect";
 import Swal from "sweetalert2";
 
 const BOAT_STATUS_OPTIONS = [
@@ -32,6 +34,7 @@ export function BoatManagement() {
     const [selectedStatus, setSelectedStatus] = useState("");
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
     const [isSavingStatus, setIsSavingStatus] = useState(false);
+    const [seatPreviewBoat, setSeatPreviewBoat] = useState(null);
 
     // EFFECT: GỌI API KHI TRANG VỪA LOAD
     useEffect(() => {
@@ -366,7 +369,7 @@ export function BoatManagement() {
             </div>
 
             {/* --- THANH TÌM KIẾM + BỘ LỌC ĐA NĂNG --- */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col md:flex-row items-center gap-4 justify-between">
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col md:flex-row items-center gap-4 justify-between overflow-visible relative z-20">
                 <div className="relative w-full md:max-w-xs">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
                     <input
@@ -378,33 +381,36 @@ export function BoatManagement() {
                     />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4 w-full md:w-auto justify-end">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-4 w-full md:w-auto justify-end overflow-visible">
+                    <div className="relative z-30 flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Số tầng:" : "Decks:"}</span>
-                        <select
+                        <FormSelect
                             value={deckFilter}
-                            onChange={(e) => setDeckFilter(e.target.value)}
-                            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
-                        >
-                            <option value="All">{lang === "VN" ? "Tất cả tầng" : "All Decks"}</option>
-                            <option value="1">{lang === "VN" ? "1 Tầng" : "1 Deck"}</option>
-                            <option value="2">{lang === "VN" ? "2 Tầng" : "2 Decks"}</option>
-                        </select>
+                            onChange={setDeckFilter}
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả tầng" : "All Decks" },
+                                { value: "1", label: lang === "VN" ? "1 Tầng" : "1 Deck" },
+                                { value: "2", label: lang === "VN" ? "2 Tầng" : "2 Decks" },
+                            ]}
+                            className="min-w-[140px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="relative z-20 flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
-                        <select
+                        <FormSelect
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
-                        >
-                            <option value="All">{lang === "VN" ? "Tất cả trạng thái" : "All Status"}</option>
-                            <option value="Active">{lang === "VN" ? "Active (Hoạt động)" : "Active"}</option>
-                            <option value="Inactive">{lang === "VN" ? "Inactive (Chưa hoạt động)" : "Inactive"}</option>
-                            <option value="Retired">{lang === "VN" ? "Retired (Dừng hoạt động)" : "Retired"}</option>
-                            <option value="UnderMaintenance">{lang === "VN" ? "UnderMaintenance (Bảo trì)" : "UnderMaintenance"}</option>
-                        </select>
+                            onChange={setStatusFilter}
+                            menuAlign="right"
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
+                                { value: "Active", label: lang === "VN" ? "Active (Hoạt động)" : "Active" },
+                                { value: "Inactive", label: lang === "VN" ? "Inactive (Chưa hoạt động)" : "Inactive" },
+                                { value: "Retired", label: lang === "VN" ? "Retired (Dừng hoạt động)" : "Retired" },
+                                { value: "UnderMaintenance", label: lang === "VN" ? "UnderMaintenance (Bảo trì)" : "UnderMaintenance" },
+                            ]}
+                            className="min-w-[200px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
                     </div>
                 </div>
             </div>
@@ -495,8 +501,18 @@ export function BoatManagement() {
                                             {/* Thao tác Hành động */}
                                             <td className="py-4 px-6">
                                                 <div className="flex items-center justify-center gap-2">
-                                                    {/* NÚT CẤU HÌNH GHẾ */}
-                                                    {/* CHỈ HIỂN THỊ NÚT KHI tàu chưa cấu hình ghế (seatsConfigured === false) */}
+                                                    {/* Xem sơ đồ ghế (đã cấu hình) */}
+                                                    {boat.seatsConfigured && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSeatPreviewBoat(boat)}
+                                                            className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-[#124757] hover:text-[#124757] dark:hover:border-yellow-400 dark:hover:text-yellow-400 flex items-center justify-center transition-colors shadow-sm"
+                                                            title={lang === "VN" ? "Xem sơ đồ ghế" : "View seat layout"}
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">grid_view</span>
+                                                        </button>
+                                                    )}
+                                                    {/* NÚT CẤU HÌNH GHẾ — chỉ khi chưa cấu hình */}
                                                     {!boat.seatsConfigured && (
                                                         <button
                                                             type="button"
@@ -722,6 +738,24 @@ export function BoatManagement() {
                         </div>
                     </div>
                 </div>
+            ) : null}
+
+            {seatPreviewBoat ? (
+                <BoatSeatLayoutPreviewModal
+                    boatId={seatPreviewBoat.id}
+                    boatName={seatPreviewBoat.name}
+                    boatCode={seatPreviewBoat.code}
+                    boatImageUrl={seatPreviewBoat.imageUrl || seatPreviewBoat.imageUrls?.[0] || DEFAULT_BOAT_IMAGE}
+                    lang={lang}
+                    variant="admin"
+                    boatMeta={{
+                        seatCount: seatPreviewBoat.seatCount,
+                        numberOfDecks: seatPreviewBoat.numberOfDecks,
+                        seatSetupType: seatPreviewBoat.seatSetupType,
+                        imageUrl: seatPreviewBoat.imageUrl || seatPreviewBoat.imageUrls?.[0] || DEFAULT_BOAT_IMAGE,
+                    }}
+                    onClose={() => setSeatPreviewBoat(null)}
+                />
             ) : null}
 
         </div>

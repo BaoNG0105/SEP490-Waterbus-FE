@@ -7,6 +7,8 @@ import { fetchUserRoles, createUser } from "../../../services/userService";
 import { getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
+import { NationalitySelect } from "../../../components/NationalitySelect";
+import { StationAssignField, canAssignStations } from "../../../components/StationAssignField";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
 
@@ -37,6 +39,7 @@ export function CreateUser() {
         email: "",
         roleId: "",
         staffType: "Ground",
+        stationIds: [],
     });
 
     useEffect(() => {
@@ -68,6 +71,10 @@ export function CreateUser() {
         [roles, formData.roleId]
     );
     const isStaffRole = getRoleSystemName(selectedRole) === "STAFF";
+    const showStationAssign = canAssignStations({
+        roleSystemName: getRoleSystemName(selectedRole),
+        staffType: formData.staffType,
+    });
 
     const handleInputChange = (field, value) => {
         setFormData((prev) => {
@@ -78,6 +85,15 @@ export function CreateUser() {
                     next.staffType = canCreateOnBoard ? (prev.staffType || "Ground") : "Ground";
                 } else {
                     next.staffType = "";
+                }
+            }
+            if (field === "roleId" || field === "staffType") {
+                const role = field === "roleId"
+                    ? roles.find((item) => String(item.id) === String(value))
+                    : roles.find((item) => String(item.id) === String(next.roleId));
+                const staffType = field === "staffType" ? value : next.staffType;
+                if (!canAssignStations({ roleSystemName: getRoleSystemName(role), staffType })) {
+                    next.stationIds = [];
                 }
             }
             return next;
@@ -113,6 +129,7 @@ export function CreateUser() {
                 email: formData.email.trim(),
                 roleId: formData.roleId,
                 ...(isStaffRole ? { staffType: formData.staffType } : {}),
+                ...(showStationAssign ? { stationIds: formData.stationIds.map(String) } : {}),
             };
 
             const result = await createUser(payload);
@@ -208,7 +225,7 @@ export function CreateUser() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div className="relative z-20">
+                        <div>
                             <label className={labelStyle}>{lang === "VN" ? "Giới tính" : "Gender"}</label>
                             <FormSelect
                                 value={formData.gender}
@@ -219,12 +236,16 @@ export function CreateUser() {
                         </div>
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
-                            <input type="text" placeholder="Vietnam" value={formData.nationality} onChange={(e) => handleInputChange("nationality", e.target.value)} className={inputStyle} />
+                            <NationalitySelect
+                                value={formData.nationality}
+                                onChange={(v) => handleInputChange("nationality", v)}
+                                className={selectStyle}
+                            />
                         </div>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 overflow-visible">
+                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
                         {lang === "VN" ? "Thông tin liên hệ & Vai trò" : "Contact & Role"}
                     </h3>
@@ -233,11 +254,6 @@ export function CreateUser() {
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Số điện thoại (*)" : "Phone Number (*)"}</label>
                             <input type="tel" required placeholder="0901234567" value={formData.phoneNumber} onChange={(e) => handleInputChange("phoneNumber", e.target.value)} className={inputStyle} />
-                            <p className="text-[10px] text-slate-400 mt-1.5">
-                                {lang === "VN"
-                                    ? "Số VN thật (VD: 0901234567). Số kiểu 0900000011 thường bị BE từ chối."
-                                    : "Use a real VN number (e.g. 0901234567). Fake numbers like 0900000011 are usually rejected."}
-                            </p>
                         </div>
                         <div>
                             <label className={labelStyle}>Email (*)</label>
@@ -249,13 +265,10 @@ export function CreateUser() {
                                 onChange={(e) => handleInputChange("email", e.target.value)}
                                 className={inputStyle}
                             />
-                            <p className="text-[10px] text-slate-400 mt-1.5">
-                                {lang === "VN" ? "Chỉ @gmail.com hoặc @fpt.edu.vn." : "Only @gmail.com or @fpt.edu.vn."}
-                            </p>
                         </div>
                     </div>
 
-                    <div className="relative z-30">
+                    <div>
                         <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán (*)" : "Assigned Role (*)"}</label>
                         <FormSelect
                             required
@@ -266,13 +279,10 @@ export function CreateUser() {
                             placeholder={isLoadingRoles ? (lang === "VN" ? "Đang tải..." : "Loading...") : (lang === "VN" ? "Chọn vai trò" : "Select role")}
                             className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
                         />
-                        <p className="text-[10px] text-slate-400 mt-1.5">
-                            {lang === "VN" ? "Hệ thống tự sinh mật khẩu ban đầu và hiển thị sau khi tạo thành công." : "The system auto-generates an initial password shown after successful creation."}
-                        </p>
                     </div>
 
                     {isStaffRole && (
-                        <div className="relative z-20">
+                        <div>
                             <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
                             <FormSelect
                                 required
@@ -281,16 +291,14 @@ export function CreateUser() {
                                 options={staffTypeOptions}
                                 className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
                             />
-                            <p className="text-[10px] text-slate-400 mt-1.5">
-                                {canCreateOnBoard
-                                    ? (lang === "VN"
-                                        ? "Trên tàu = phân công lên tàu. Mặt đất = nhân viên bến."
-                                        : "Onboard = boat assignment. Ground = station staff.")
-                                    : (lang === "VN"
-                                        ? "Manager chỉ được tạo nhân viên mặt đất."
-                                        : "Managers can only create Ground staff.")}
-                            </p>
                         </div>
+                    )}
+
+                    {showStationAssign && (
+                        <StationAssignField
+                            value={formData.stationIds}
+                            onChange={(ids) => handleInputChange("stationIds", ids)}
+                        />
                     )}
                 </div>
 

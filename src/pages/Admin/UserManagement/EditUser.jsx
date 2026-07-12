@@ -3,10 +3,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
-import { fetchUserDetail, fetchUserRoles, updateUser } from "../../../services/userService";
+import { fetchUserDetail, fetchUserRoles, updateUser, fetchUserStations, assignUserStations } from "../../../services/userService";
 import { canManageUserRow, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
+import { NationalitySelect } from "../../../components/NationalitySelect";
+import { StationAssignField, canAssignStations } from "../../../components/StationAssignField";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
 
@@ -58,6 +60,7 @@ export function EditUser() {
         email: "",
         roleId: "",
         staffType: "",
+        stationIds: [],
     });
 
     useEffect(() => {
@@ -87,6 +90,32 @@ export function EditUser() {
 
                 const currentRoleCode = getRoleSystemName(detail.roles?.[0]);
                 const matchedRole = (roleList || []).find((r) => r.code === currentRoleCode || r.systemName === currentRoleCode);
+                const staffType =
+                    normalizeStaffTypeValue(detail.staffType) ||
+                    (getRoleSystemName(detail.roles?.[0]) === "STAFF" ? "Ground" : "");
+
+                let stationIds = [];
+                const eligible = canAssignStations({
+                    roleSystemName: currentRoleCode,
+                    staffType,
+                });
+                if (eligible) {
+                    try {
+                        stationIds = await fetchUserStations(id);
+                    } catch (stationError) {
+                        console.warn("Không tải được danh sách bến của user:", stationError);
+                        const fromDetail = detail.stationIds || detail.stations;
+                        if (Array.isArray(fromDetail)) {
+                            stationIds = fromDetail
+                                .map((item) =>
+                                    typeof item === "object"
+                                        ? String(item.stationId || item.id || "")
+                                        : String(item || "")
+                                )
+                                .filter(Boolean);
+                        }
+                    }
+                }
 
                 setFormData({
                     fullName: detail.fullName || "",
@@ -96,7 +125,8 @@ export function EditUser() {
                     phoneNumber: detail.phoneNumber || "",
                     email: detail.email || "",
                     roleId: matchedRole?.id || "",
-                    staffType: normalizeStaffTypeValue(detail.staffType) || (getRoleSystemName(detail.roles?.[0]) === "STAFF" ? "Ground" : ""),
+                    staffType,
+                    stationIds,
                 });
             } catch (error) {
                 console.error("Lỗi khi tải chi tiết người dùng:", error);
@@ -132,6 +162,10 @@ export function EditUser() {
         [roles, formData.roleId]
     );
     const isStaffRole = getRoleSystemName(selectedRole) === "STAFF";
+    const showStationAssign = canAssignStations({
+        roleSystemName: getRoleSystemName(selectedRole),
+        staffType: formData.staffType,
+    });
 
     const handleInputChange = (field, value) => {
         setFormData((prev) => {
@@ -142,6 +176,15 @@ export function EditUser() {
                     next.staffType = canEditOnBoard ? (prev.staffType || "Ground") : "Ground";
                 } else {
                     next.staffType = "";
+                }
+            }
+            if (field === "roleId" || field === "staffType") {
+                const role = field === "roleId"
+                    ? roles.find((item) => String(item.id) === String(value))
+                    : roles.find((item) => String(item.id) === String(next.roleId));
+                const staffType = field === "staffType" ? value : next.staffType;
+                if (!canAssignStations({ roleSystemName: getRoleSystemName(role), staffType })) {
+                    next.stationIds = [];
                 }
             }
             return next;
@@ -180,6 +223,25 @@ export function EditUser() {
             };
 
             await updateUser(id, payload);
+
+            // Đồng bộ gắn bến (Manager / Staff Ground). OnBoard → clear [].
+            try {
+                await assignUserStations(
+                    id,
+                    showStationAssign ? formData.stationIds : []
+                );
+            } catch (stationError) {
+                console.error("Lỗi gắn bến:", stationError);
+                setErrorMsg(
+                    getApiErrorMessage(
+                        stationError,
+                        lang === "VN"
+                            ? "Đã lưu hồ sơ nhưng gắn bến thất bại."
+                            : "Profile saved but station assignment failed."
+                    )
+                );
+                return;
+            }
 
             Swal.fire({
                 icon: "success",
@@ -286,7 +348,7 @@ export function EditUser() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div className="relative z-20">
+                        <div>
                             <label className={labelStyle}>{lang === "VN" ? "Giới tính" : "Gender"}</label>
                             <FormSelect
                                 value={formData.gender}
@@ -297,12 +359,16 @@ export function EditUser() {
                         </div>
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
-                            <input type="text" value={formData.nationality} onChange={(e) => handleInputChange("nationality", e.target.value)} className={inputStyle} />
+                            <NationalitySelect
+                                value={formData.nationality}
+                                onChange={(v) => handleInputChange("nationality", v)}
+                                className={selectStyle}
+                            />
                         </div>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 overflow-visible">
+                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
                         {lang === "VN" ? "Thông tin liên hệ & Vai trò" : "Contact & Role"}
                     </h3>
@@ -315,13 +381,10 @@ export function EditUser() {
                         <div>
                             <label className={labelStyle}>Email (*)</label>
                             <input type="email" required value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} className={inputStyle} />
-                            <p className="text-[10px] text-slate-400 mt-1.5">
-                                {lang === "VN" ? "Chỉ @gmail.com hoặc @fpt.edu.vn." : "Only @gmail.com or @fpt.edu.vn."}
-                            </p>
                         </div>
                     </div>
 
-                    <div className="relative z-30">
+                    <div>
                         <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán (*)" : "Assigned Role (*)"}</label>
                         <FormSelect
                             required
@@ -335,7 +398,7 @@ export function EditUser() {
                     </div>
 
                     {isStaffRole && (
-                        <div className="relative z-20">
+                        <div>
                             <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
                             <FormSelect
                                 required
@@ -345,6 +408,13 @@ export function EditUser() {
                                 className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
                             />
                         </div>
+                    )}
+
+                    {showStationAssign && (
+                        <StationAssignField
+                            value={formData.stationIds}
+                            onChange={(ids) => handleInputChange("stationIds", ids)}
+                        />
                     )}
                 </div>
 

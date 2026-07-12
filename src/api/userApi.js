@@ -17,3 +17,9 @@ export const updateManagedUser = (userId, payload) =>
 
 export const deleteManagedUser = (userId) =>
   api.delete(`/users/delete/${userId}`).then((response) => response.data);
+
+export const getUserStations = (userId) =>
+  api.get(`/users/${userId}/stations`).then((response) => response.data);
+
+export const updateUserStations = (userId, payload) =>
+  api.put(`/users/${userId}/stations`, payload).then((response) => response.data);
