@@ -1,10 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserDetail, fetchUserRoles, updateUser } from "../../../services/userService";
-import { canManageUserRow, getRoleSystemName } from "../../../utils/roleHelpers";
+import { canManageUserRow, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
+import { getApiErrorMessage } from "../../../utils/apiError";
+import { FormSelect } from "../../../components/FormSelect";
+
+const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
+
+const isAllowedEmail = (email) => {
+    const trimmed = String(email || "").trim().toLowerCase();
+    if (!trimmed) return true;
+    const at = trimmed.lastIndexOf("@");
+    if (at < 1 || at === trimmed.length - 1) return false;
+    return ALLOWED_EMAIL_DOMAINS.includes(trimmed.slice(at + 1));
+};
 
 const DEFAULT_AVATAR = "https://api.dicebear.com/7.x/avataaars/svg?seed=User";
 
@@ -17,11 +29,19 @@ const toInputDate = (value) => {
     return "";
 };
 
+const normalizeStaffTypeValue = (value) => {
+    const raw = String(value || "").toLowerCase().replace(/[_\s-]/g, "");
+    if (raw === "onboard" || raw === "2") return "OnBoard";
+    if (raw === "ground" || raw === "1") return "Ground";
+    return "";
+};
+
 export function EditUser() {
     const { lang } = useApp();
     const navigate = useNavigate();
     const { id } = useParams();
     const { user: currentUser } = useSelector((state) => state.auth);
+    const canEditOnBoard = isAdminUser(currentUser);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,6 +57,7 @@ export function EditUser() {
         phoneNumber: "",
         email: "",
         roleId: "",
+        staffType: "",
     });
 
     useEffect(() => {
@@ -75,6 +96,7 @@ export function EditUser() {
                     phoneNumber: detail.phoneNumber || "",
                     email: detail.email || "",
                     roleId: matchedRole?.id || "",
+                    staffType: normalizeStaffTypeValue(detail.staffType) || (getRoleSystemName(detail.roles?.[0]) === "STAFF" ? "Ground" : ""),
                 });
             } catch (error) {
                 console.error("Lỗi khi tải chi tiết người dùng:", error);
@@ -105,8 +127,25 @@ export function EditUser() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
+    const selectedRole = useMemo(
+        () => roles.find((role) => String(role.id) === String(formData.roleId)),
+        [roles, formData.roleId]
+    );
+    const isStaffRole = getRoleSystemName(selectedRole) === "STAFF";
+
     const handleInputChange = (field, value) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
+        setFormData((prev) => {
+            const next = { ...prev, [field]: value };
+            if (field === "roleId") {
+                const role = roles.find((item) => String(item.id) === String(value));
+                if (getRoleSystemName(role) === "STAFF") {
+                    next.staffType = canEditOnBoard ? (prev.staffType || "Ground") : "Ground";
+                } else {
+                    next.staffType = "";
+                }
+            }
+            return next;
+        });
     };
 
     const handleFormSubmit = async (e) => {
@@ -114,6 +153,20 @@ export function EditUser() {
         try {
             setIsSubmitting(true);
             setErrorMsg("");
+
+            if (isStaffRole && !formData.staffType) {
+                setErrorMsg(lang === "VN" ? "Chọn loại nhân viên (mặt đất / trên tàu)." : "Select staff type (Ground / OnBoard).");
+                return;
+            }
+
+            if (!isAllowedEmail(formData.email)) {
+                setErrorMsg(
+                    lang === "VN"
+                        ? "Email chỉ hỗ trợ @gmail.com hoặc @fpt.edu.vn."
+                        : "Email must be @gmail.com or @fpt.edu.vn."
+                );
+                return;
+            }
 
             const payload = {
                 fullName: formData.fullName.trim(),
@@ -123,6 +176,7 @@ export function EditUser() {
                 roleId: formData.roleId,
                 gender: formData.gender,
                 nationality: formData.nationality.trim() || null,
+                ...(isStaffRole ? { staffType: formData.staffType } : {}),
             };
 
             await updateUser(id, payload);
@@ -135,11 +189,12 @@ export function EditUser() {
             }).then(() => navigate("/admin/users-management"));
         } catch (error) {
             console.error("Lỗi cập nhật người dùng:", error);
-            let validationError = "";
-            if (error.response?.data?.errors) {
-                validationError = Object.values(error.response.data.errors).flat().join(" | ");
-            }
-            setErrorMsg(validationError || error.response?.data?.message || (lang === "VN" ? "Cập nhật thất bại." : "Failed to update user."));
+            setErrorMsg(
+                getApiErrorMessage(
+                    error,
+                    lang === "VN" ? "Cập nhật thất bại." : "Failed to update user."
+                )
+            );
         } finally {
             setIsSubmitting(false);
         }
@@ -147,6 +202,23 @@ export function EditUser() {
 
     const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+    const selectStyle = `${inputStyle} cursor-pointer`;
+
+    const genderOptions = [
+        { value: "Male", label: lang === "VN" ? "Nam" : "Male" },
+        { value: "Female", label: lang === "VN" ? "Nữ" : "Female" },
+        { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
+    ];
+    const roleOptions = roles.map((role) => ({
+        value: role.id,
+        label: role.displayName || role.systemName,
+    }));
+    const staffTypeOptions = [
+        { value: "Ground", label: lang === "VN" ? "Mặt đất (bến)" : "Ground (station)" },
+        ...((canEditOnBoard || formData.staffType === "OnBoard")
+            ? [{ value: "OnBoard", label: lang === "VN" ? "Trên tàu" : "Onboard" }]
+            : []),
+    ];
 
     if (isLoading) {
         return (
@@ -159,7 +231,7 @@ export function EditUser() {
     if (!userInfo) return null;
 
     return (
-        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-3xl mx-auto animate-fade-in">
+        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-3xl mx-auto">
 
             {/* KHỐI TIÊU ĐỀ HEADER */}
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
@@ -214,13 +286,14 @@ export function EditUser() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
+                        <div className="relative z-20">
                             <label className={labelStyle}>{lang === "VN" ? "Giới tính" : "Gender"}</label>
-                            <select value={formData.gender} onChange={(e) => handleInputChange("gender", e.target.value)} className={`${inputStyle} cursor-pointer`}>
-                                <option value="Male">{lang === "VN" ? "Nam" : "Male"}</option>
-                                <option value="Female">{lang === "VN" ? "Nữ" : "Female"}</option>
-                                <option value="Other">{lang === "VN" ? "Khác" : "Other"}</option>
-                            </select>
+                            <FormSelect
+                                value={formData.gender}
+                                onChange={(v) => handleInputChange("gender", v)}
+                                options={genderOptions}
+                                className={selectStyle}
+                            />
                         </div>
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
@@ -229,7 +302,7 @@ export function EditUser() {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 overflow-visible">
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
                         {lang === "VN" ? "Thông tin liên hệ & Vai trò" : "Contact & Role"}
                     </h3>
@@ -240,26 +313,39 @@ export function EditUser() {
                             <input type="tel" required value={formData.phoneNumber} onChange={(e) => handleInputChange("phoneNumber", e.target.value)} className={inputStyle} />
                         </div>
                         <div>
-                            <label className={labelStyle}>Email</label>
-                            <input type="email" value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} className={inputStyle} />
+                            <label className={labelStyle}>Email (*)</label>
+                            <input type="email" required value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} className={inputStyle} />
+                            <p className="text-[10px] text-slate-400 mt-1.5">
+                                {lang === "VN" ? "Chỉ @gmail.com hoặc @fpt.edu.vn." : "Only @gmail.com or @fpt.edu.vn."}
+                            </p>
                         </div>
                     </div>
 
-                    <div>
+                    <div className="relative z-30">
                         <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán (*)" : "Assigned Role (*)"}</label>
-                        <select
+                        <FormSelect
                             required
                             disabled={roles.length === 0}
                             value={formData.roleId}
-                            onChange={(e) => handleInputChange("roleId", e.target.value)}
-                            className={`${inputStyle} cursor-pointer font-bold text-[#124757] dark:text-yellow-400`}
-                        >
-                            {!formData.roleId && <option value="">{lang === "VN" ? "-- Chọn vai trò --" : "-- Select role --"}</option>}
-                            {roles.map((role) => (
-                                <option key={role.id} value={role.id}>{role.displayName || role.systemName}</option>
-                            ))}
-                        </select>
+                            onChange={(v) => handleInputChange("roleId", v)}
+                            options={roleOptions}
+                            placeholder={lang === "VN" ? "-- Chọn vai trò --" : "-- Select role --"}
+                            className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
+                        />
                     </div>
+
+                    {isStaffRole && (
+                        <div className="relative z-20">
+                            <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
+                            <FormSelect
+                                required
+                                value={formData.staffType || "Ground"}
+                                onChange={(v) => handleInputChange("staffType", v)}
+                                options={staffTypeOptions}
+                                className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 <button

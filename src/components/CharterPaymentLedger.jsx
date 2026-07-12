@@ -17,6 +17,8 @@ const getPaymentStatusMeta = (status, lang) => {
       return { label: lang === "VN" ? "Đã đặt cọc" : "Deposit paid", classes: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20", icon: "savings" };
     case "pending":
       return { label: lang === "VN" ? "Đang chờ" : "Pending", classes: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20", icon: "schedule" };
+    case "expired":
+      return { label: lang === "VN" ? "Hết hạn" : "Expired", classes: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700", icon: "timer_off" };
     case "refunded":
       return { label: lang === "VN" ? "Đã hoàn" : "Refunded", classes: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20", icon: "currency_exchange" };
     case "failed":
@@ -28,10 +30,50 @@ const getPaymentStatusMeta = (status, lang) => {
 };
 
 const formatDateTime = (value) => {
-  if (!value) return "--";
+  if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
   return `${date.toLocaleDateString("vi-VN")} ${date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`;
+};
+
+const getPaymentTimeLabel = (payment, lang, status) => {
+  const paidAt = pick(payment, ["paidAt", "completedAt"], "");
+  const createdAt = pick(payment, ["createdAt", "createdDate"], "");
+  const updatedAt = pick(payment, ["updatedAt"], "");
+  const expiresAt = pick(payment, ["expiresAt", "expiredAt", "paymentExpiresAt"], "");
+  const isExpired = String(status || "").toLowerCase() === "expired";
+
+  if (paidAt) {
+    const formatted = formatDateTime(paidAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Thời điểm thanh toán" : "Paid at" }
+      : null;
+  }
+  if (isExpired && expiresAt) {
+    const formatted = formatDateTime(expiresAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Hết hạn lúc" : "Expired at" }
+      : null;
+  }
+  if (createdAt) {
+    const formatted = formatDateTime(createdAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Tạo lúc" : "Created at" }
+      : null;
+  }
+  if (expiresAt) {
+    const formatted = formatDateTime(expiresAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Hạn thanh toán" : "Expires at" }
+      : null;
+  }
+  if (updatedAt) {
+    const formatted = formatDateTime(updatedAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Cập nhật lúc" : "Updated at" }
+      : null;
+  }
+  return null;
 };
 
 export function CharterPaymentLedger({ payments = [], lang = "VN", currencyFormatter }) {
@@ -51,7 +93,7 @@ export function CharterPaymentLedger({ payments = [], lang = "VN", currencyForma
           const amount = Number(pick(payment, ["amount", "paymentAmount", "paidAmount", "totalAmount"], 0)) || 0;
           const status = pick(payment, ["paymentStatus", "status"], "--");
           const meta = getPaymentStatusMeta(status, lang);
-          const createdAt = pick(payment, ["createdAt", "paidAt", "updatedAt"], "");
+          const timeMeta = getPaymentTimeLabel(payment, lang, status);
           const orderCode = pick(payment, ["orderCode", "paymentOrderCode", "payosOrderCode"], "");
           const refundAmount = Number(pick(payment, ["refundAmount", "refundedAmount"], 0)) || 0;
 
@@ -75,7 +117,16 @@ export function CharterPaymentLedger({ payments = [], lang = "VN", currencyForma
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs font-bold text-slate-400">{formatDateTime(createdAt)}</p>
+                  {timeMeta ? (
+                    <p className="mt-1 text-xs font-bold text-slate-400">
+                      <span className="font-medium text-slate-400/80">{timeMeta.hint}: </span>
+                      {timeMeta.text}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs font-bold text-slate-400">
+                      {lang === "VN" ? "Chưa có thời gian giao dịch" : "No payment timestamp"}
+                    </p>
+                  )}
                   {refundAmount > 0 && (
                     <p className="mt-1 text-[10px] font-bold text-teal-600 dark:text-teal-300">
                       {lang === "VN" ? "Đã hoàn" : "Refunded"}: {currencyFormatter.format(refundAmount)}

@@ -34,12 +34,14 @@ import {
   normalizeRouteEstimateLegs,
 } from "../utils/charterBookingAdmin";
 import { CharterRouteMapPanel } from "./CharterRouteMapPanel";
-import { CharterPaymentLedger } from "./CharterPaymentLedger";
 import { CharterInsuranceInfo } from "./CharterInsuranceInfo";
-import { CharterQuotePreviewPanel } from "./CharterQuotePreviewTable";
+import { CharterQuotePreviewPanel, CharterQuotePreviewTable } from "./CharterQuotePreviewTable";
 import {
+  buildBookingQuotePreview,
+  formatQuoteRentalUnit,
   formatQuoteUnitPriceLabel,
 } from "../utils/charterQuotePreview";
+import { getCharterDepositAmount } from "../utils/charterBookingActions";
 
 function AdminCharterRouteInfoPanel({ lang, booking, formatDate, compact = false }) {
   const fromName = booking?.fromStationName || "--";
@@ -512,6 +514,14 @@ export function AdminBookingOverviewTab({
 
   const paymentMeta = getPaymentStatusInfo(booking.paymentStatus, lang);
   const isReleasedAssignment = ["Cancelled", "Expired", "Refunded"].includes(String(booking.status || ""));
+  const bookingQuotePreview = buildBookingQuotePreview(booking);
+  const depositAmount = getCharterDepositAmount(quoteTotal, booking.depositAmount);
+  const rentalUnitLabel = booking.rentalUnit
+    ? formatQuoteRentalUnit(booking.rentalUnit, lang)
+    : (lang === "VN" ? "Chưa chọn" : "Not set");
+  const createdAtLabel = booking.createdAt
+    ? (typeof formatDateTime === "function" ? formatDateTime(booking.createdAt) : formatDate(booking.createdAt))
+    : "--";
 
   return (
     <div className="space-y-5">
@@ -568,22 +578,26 @@ export function AdminBookingOverviewTab({
             />
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-2">
+          {bookingQuotePreview?.boats?.length > 0 ? (
+            <CharterQuotePreviewTable
+              preview={bookingQuotePreview}
+              booking={booking}
+              lang={lang}
+              currencyFormatter={currencyFormatter}
+            />
+          ) : null}
+
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)]">
             <div className="space-y-3">
               <p className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">
                 {lang === "VN" ? "Chuyến đi" : "Trip"}
               </p>
               <AdminCharterRouteInfoPanel lang={lang} booking={booking} formatDate={formatDate} />
-              <OverviewField
-                icon="groups"
-                label={lang === "VN" ? "Hành khách" : "Passengers"}
-                value={formatPassengerSummary(booking, lang)}
-              />
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 lg:sticky lg:top-24">
               <p className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">
-                {lang === "VN" ? "Khách hàng" : "Customer"}
+                {lang === "VN" ? "Khách & điều kiện thuê" : "Customer & rental terms"}
               </p>
               <OverviewField
                 icon="person"
@@ -597,54 +611,73 @@ export function AdminBookingOverviewTab({
                 hint={booking.email}
               />
               <OverviewField
+                icon="groups"
+                label={lang === "VN" ? "Hành khách" : "Passengers"}
+                value={formatPassengerSummary(booking, lang)}
+              />
+              <OverviewField
+                icon="schedule"
+                label={lang === "VN" ? "Hình thức thuê" : "Rental type"}
+                value={rentalUnitLabel}
+                hint={Number(booking.durationValue) > 0
+                  ? (booking.rentalUnit === "Hour"
+                    ? (lang === "VN" ? `${booking.durationValue} giờ (khách khai)` : `${booking.durationValue} hour(s) declared`)
+                    : (lang === "VN" ? `${booking.durationValue} ngày (khách khai)` : `${booking.durationValue} day(s) declared`))
+                  : undefined}
+              />
+              <OverviewField
+                icon="payments"
+                label={lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
+                value={depositAmount > 0 ? currencyFormatter.format(depositAmount) : "--"}
+              />
+              {booking.promotionCode ? (
+                <OverviewField
+                  icon="sell"
+                  label={lang === "VN" ? "Mã khuyến mãi" : "Promotion"}
+                  value={booking.promotionCode}
+                  hint={booking.discountAmount > 0
+                    ? `-${currencyFormatter.format(booking.discountAmount)}`
+                    : undefined}
+                />
+              ) : null}
+              <OverviewField
+                icon="event"
+                label={lang === "VN" ? "Ngày tạo yêu cầu" : "Request created"}
+                value={createdAtLabel}
+              />
+              <OverviewField
                 icon="sticky_note_2"
                 label={lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}
                 value={booking.specialRequests || (lang === "VN" ? "Không có" : "None")}
               />
+              {(booking.assignedManagerId || capabilities?.canAssignManager) ? (
+                <OverviewField
+                  icon="supervisor_account"
+                  label={lang === "VN" ? "Quản lý phụ trách" : "Assigned manager"}
+                  value={booking.assignedManagerName || (lang === "VN" ? "Chưa gán" : "Not assigned")}
+                  hint={capabilities?.canAssignManager
+                    ? (lang === "VN" ? "Gán ở tab Gán quản lý" : "Assign from Assign manager tab")
+                    : undefined}
+                />
+              ) : null}
               <CharterInsuranceInfo
                 booking={booking}
                 lang={lang}
                 currencyFormatter={currencyFormatter}
               />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {(booking.assignedManagerId || capabilities?.canAssignManager) ? (
-        <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
-          <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
-                  {lang === "VN" ? "Quản lý phụ trách" : "Assigned manager"}
-                </h2>
-                <p className="mt-1 text-xs font-medium text-slate-400">
-                  {lang === "VN"
-                    ? "Nên gán sau khi xác nhận chuyến. Có thể gán sớm từ tab Gán quản lý nếu cần."
-                    : "Preferably assign after trip confirmation. You can still assign early from the Assign manager tab."}
-                </p>
-              </div>
               {capabilities?.canAssignManager && onNavigateTab ? (
                 <button
                   type="button"
                   onClick={() => onNavigateTab("assignment")}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
                 >
-                  {lang === "VN" ? "Gán quản lý" : "Assign manager"}
+                  {lang === "VN" ? "Mở tab gán quản lý" : "Open assign manager"}
                 </button>
               ) : null}
             </div>
           </div>
-          <div className="grid gap-3 px-6 py-6 sm:grid-cols-2 md:px-8">
-            <OverviewField
-              icon="supervisor_account"
-              label={lang === "VN" ? "Quản lý phụ trách" : "Manager"}
-              value={booking.assignedManagerName || (lang === "VN" ? "Chưa gán" : "Not assigned")}
-            />
-          </div>
-        </section>
-      ) : null}
+        </div>
+      </section>
 
       <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
@@ -1018,7 +1051,9 @@ export function AdminBookingActionsTab({
                 {lang === "VN" ? "Báo giá đã chốt" : "Quote confirmed"}
               </h3>
               <p className="mt-1 text-xs font-bold text-slate-400">
-                {lang === "VN" ? "Theo dõi thanh toán của khách trên tab Thanh toán." : "Monitor customer payment on the Payments tab."}
+                {lang === "VN"
+                  ? "Chi tiết giá/lộ trình xem ở Tổng quan. Theo dõi giao dịch ở tab Thanh toán."
+                  : "See price/route details on Overview. Track transactions on the Payments tab."}
               </p>
             </div>
             <span className={`w-max rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider ${statusInfo.classes}`}>
@@ -1026,21 +1061,23 @@ export function AdminBookingActionsTab({
             </span>
           </div>
 
-          <div className="mt-5">
-            <AdminCharterRouteInfoPanel lang={lang} booking={booking} formatDate={formatDate} compact />
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { label: lang === "VN" ? "Giá chốt" : "Quote", value: quoteTotal > 0 ? currencyFormatter.format(quoteTotal) : "--" },
-              { label: lang === "VN" ? "Đã thu" : "Paid", value: bookingPaidAmount > 0 ? currencyFormatter.format(bookingPaidAmount) : "--" },
-              { label: lang === "VN" ? "Hành khách" : "Passengers", value: formatPassengerSummary(booking, lang) },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-                <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{item.value}</p>
-              </div>
-            ))}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                {lang === "VN" ? "Giá chốt" : "Quote"}
+              </p>
+              <p className="mt-1 text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
+                {quoteTotal > 0 ? currencyFormatter.format(quoteTotal) : "--"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                {lang === "VN" ? "Đã thu" : "Paid"}
+              </p>
+              <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">
+                {bookingPaidAmount > 0 ? currencyFormatter.format(bookingPaidAmount) : "--"}
+              </p>
+            </div>
           </div>
 
           {showBookingHoldCountdown && (
@@ -1055,14 +1092,24 @@ export function AdminBookingActionsTab({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => onNavigateTab("payments")}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#124757] px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
-          >
-            <span className="material-symbols-outlined text-base">payments</span>
-            {lang === "VN" ? "Mở tab thanh toán" : "Open payments tab"}
-          </button>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onNavigateTab("overview")}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+            >
+              <span className="material-symbols-outlined text-base">dashboard</span>
+              {lang === "VN" ? "Xem tổng quan / giá" : "Open overview / pricing"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigateTab("payments")}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#124757] px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
+            >
+              <span className="material-symbols-outlined text-base">payments</span>
+              {lang === "VN" ? "Mở tab thanh toán" : "Open payments tab"}
+            </button>
+          </div>
         </div>
 
         <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
@@ -1086,14 +1133,23 @@ export function AdminBookingActionsTab({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => onNavigateTab("tickets")}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white"
-            >
-              {lang === "VN" ? "Quản lý vé/khách" : "Manage tickets"}
-              <span className="material-symbols-outlined text-base">confirmation_number</span>
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onNavigateTab("overview")}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800"
+              >
+                {lang === "VN" ? "Tổng quan" : "Overview"}
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigateTab("tickets")}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white"
+              >
+                {lang === "VN" ? "Quản lý vé/khách" : "Manage tickets"}
+                <span className="material-symbols-outlined text-base">confirmation_number</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1113,43 +1169,27 @@ export function AdminBookingActionsTab({
                 {lang === "VN" ? "Booking đã đóng" : "Booking closed"}
               </h3>
               <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">
-                {statusInfo.label} · {lang === "VN" ? "Không thể chỉnh báo giá hoặc gán tàu." : "Quote and boat assignment are no longer available."}
+                {statusInfo.label} · {lang === "VN"
+                  ? "Chi tiết xem Tổng quan / Thanh toán / Vé."
+                  : "See details on Overview / Payments / Tickets."}
               </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => onNavigateTab("overview")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              {lang === "VN" ? "Tổng quan" : "Overview"}
+            </button>
             <button type="button" onClick={() => onNavigateTab("payments")} className="rounded-xl bg-[#124757] px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900">
-              {lang === "VN" ? "Xem thanh toán" : "View payments"}
+              {lang === "VN" ? "Thanh toán" : "Payments"}
             </button>
             {booking.status === "Completed" && (
               <button type="button" onClick={() => onNavigateTab("tickets")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                {lang === "VN" ? "Xem vé/khách" : "View tickets"}
+                {lang === "VN" ? "Vé/khách" : "Tickets"}
               </button>
             )}
           </div>
         </div>
       </div>
-
-      {payments.length > 0 && (
-        <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-          <CharterPaymentLedger payments={payments} lang={lang} currencyFormatter={currencyFormatter} />
-        </div>
-      )}
-
-      {selectedBoats.length > 0 && (
-        <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-          <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
-            {lang === "VN" ? "Tàu đã gán" : "Assigned boats"}
-          </h3>
-          <div className="mt-4 space-y-2">
-            {selectedBoats.map((boat, index) => (
-              <div key={getBoatId(boat) || index} className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                {boat.code ? `${boat.code} - ` : ""}{boat.name || "--"}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
     </section>

@@ -128,6 +128,7 @@ export const normalizeInsuranceFromBooking = (booking) => {
         packageId,
         packageName: "",
         providerName: "",
+        providerLogoUrl: "",
         quantity: 0,
         unitPremiumAmount: 0,
         totalAmount: 0,
@@ -138,11 +139,16 @@ export const normalizeInsuranceFromBooking = (booking) => {
     return null;
   }
 
-  const quantity = Number(insurance.quantity ?? insurance.seatCount ?? insurance.passengerCount) || 0;
+  const quantity = Number(insurance.quantity ?? insurance.seatCount) || 0;
   const totalAmount = Number(insurance.totalAmount ?? insurance.amount ?? insurance.premiumAmount) || 0;
   const unitPremiumAmount = Number(insurance.unitPremiumAmount ?? insurance.unitAmount) || 0;
   const packageName = insurance.packageName ?? insurance.name ?? "";
   const providerName = insurance.providerName ?? "";
+  const providerLogoUrl = insurance.providerLogoUrl
+    ?? insurance.logoUrl
+    ?? insurance.provider?.logoUrl
+    ?? insurance.provider?.providerLogoUrl
+    ?? "";
   const terms = insurance.terms ?? insurance.conditions ?? insurance.termUrl ?? insurance.termsUrl ?? "";
 
   if (!quantity && !totalAmount && !unitPremiumAmount && selected !== true && !packageName && !packageId) {
@@ -153,9 +159,11 @@ export const normalizeInsuranceFromBooking = (booking) => {
     packageId,
     packageName,
     providerName,
+    providerLogoUrl,
     quantity,
     unitPremiumAmount,
-    totalAmount: totalAmount || (unitPremiumAmount * quantity),
+    // Only invent total from unit × qty when BE already provided a seat quantity (after quote).
+    totalAmount: quantity > 0 ? (totalAmount || unitPremiumAmount * quantity) : totalAmount,
     terms,
     selected: selected !== false,
   };

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
-import { fetchStaffUsers } from "../services/userService";
+import { fetchOnBoardStaffUsers } from "../services/userService";
+import { getApiErrorMessage } from "../utils/apiError";
 import {
   fetchBoatCrewAssignments,
   assignBoatCrew,
@@ -20,12 +22,27 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
+const pad2 = (n) => String(n).padStart(2, "0");
+const toISODate = (year, monthIndex, day) => `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`;
+
+// BE DateOnly thường trả dd/MM/yyyy; input/calendar FE dùng yyyy-MM-dd
+const toISODateString = (value) => {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/.exec(raw);
+  if (dmy) return `${dmy[3]}-${pad2(Number(dmy[2]))}-${pad2(Number(dmy[1]))}`;
+  const date = new Date(raw);
+  if (!Number.isNaN(date.getTime())) return toISODate(date.getFullYear(), date.getMonth(), date.getDate());
+  return "";
+};
+
 const normalizeCrew = (item) => ({
   assignmentId: String(pick(item, ["assignmentId", "id", "crewAssignmentId"], "")),
   staffUserId: String(pick(item, ["staffUserId", "staffId", "userId", "staff.id"], "")),
   staffName: pick(item, ["staffName", "staff.fullName", "staff.name", "fullName"], "--"),
-  fromDate: pick(item, ["fromDate"], ""),
-  toDate: pick(item, ["toDate"], ""),
+  fromDate: toISODateString(pick(item, ["fromDate"], "")),
+  toDate: toISODateString(pick(item, ["toDate"], "")),
 });
 
 const normalizeReplacement = (item) => ({
@@ -34,13 +51,17 @@ const normalizeReplacement = (item) => ({
   replacedStaffName: pick(item, ["replacedStaffName", "replacedStaff.fullName"], "--"),
   replacementStaffUserId: String(pick(item, ["replacementStaffUserId"], "")),
   replacementStaffName: pick(item, ["replacementStaffName", "replacementStaff.fullName"], "--"),
-  fromDate: pick(item, ["fromDate"], ""),
-  toDate: pick(item, ["toDate"], ""),
+  fromDate: toISODateString(pick(item, ["fromDate"], "")),
+  toDate: toISODateString(pick(item, ["toDate"], "")),
   reason: pick(item, ["reason"], ""),
 });
 
-const getStaffType = (staff) =>
-  String(pick(staff?.raw || staff, ["staffType", "staff_type"], "")).toLowerCase();
+const getStaffType = (staff) => {
+  const raw = String(pick(staff?.raw || staff, ["staffType", "staff_type"], "")).toLowerCase().replace(/[_\s-]/g, "");
+  if (raw === "2" || raw === "onboard") return "onboard";
+  if (raw === "1" || raw === "ground") return "ground";
+  return raw;
+};
 
 const isStaffActive = (staff) => {
   const status = String(pick(staff?.raw || staff, ["status", "accountStatus"], "")).toLowerCase();
@@ -57,14 +78,12 @@ const getInitials = (name) => {
 };
 
 const formatDate = (value, lang) => {
-  if (!value) return "";
-  const date = new Date(value);
+  const iso = toISODateString(value);
+  if (!iso) return value || "";
+  const date = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString(lang === "VN" ? "vi-VN" : "en-GB");
 };
-
-const pad2 = (n) => String(n).padStart(2, "0");
-const toISODate = (year, monthIndex, day) => `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`;
 
 const getCurrentMonthValue = () => {
   const now = new Date();
@@ -104,7 +123,7 @@ const normalizeCalendarByDate = (list) => {
   };
 
   (Array.isArray(list) ? list : []).forEach((item) => {
-    const date = pick(item, ["date", "workingDate", "day"], "");
+    const date = toISODateString(pick(item, ["date", "workingDate", "day"], ""));
     const members = pick(item, ["crew", "assignments", "members", "staff"], null);
     if (Array.isArray(members)) {
       members.forEach((m) => addEntry(date, {
@@ -186,7 +205,7 @@ function StaffSelect({ options, value, onChange, placeholder, lang }) {
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/15 dark:border-slate-700 dark:bg-slate-900">
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/15 dark:border-slate-700 dark:bg-slate-900">
           <div className="border-b border-slate-100 p-2 dark:border-slate-800">
             <input
               ref={searchRef}
@@ -218,6 +237,9 @@ function StaffSelect({ options, value, onChange, placeholder, lang }) {
                   <span className="block text-[11px] text-slate-400 truncate">
                     {[o.phone, o.email].filter(Boolean).join(" · ") || (lang === "VN" ? "Không có liên hệ" : "No contact")}
                   </span>
+                </span>
+                <span className="shrink-0 rounded-md bg-teal-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">
+                  {lang === "VN" ? "Trên tàu" : "Onboard"}
                 </span>
               </button>
             )) : (
@@ -262,19 +284,15 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
   const [monthValue, setMonthValue] = useState(getCurrentMonthValue());
   const [calendarMap, setCalendarMap] = useState(new Map());
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("");
 
   const loadData = async () => {
     try {
       setIsLoading(true);
       setErrorMsg("");
       const [staff, crewList, repList] = await Promise.all([
-        fetchStaffUsers(),
-        fetchBoatCrewAssignments(boatId).catch((e) => {
-          if (e.response?.status === 404) return [];
-          throw e;
-        }),
-        fetchBoatCrewReplacements(boatId).catch(() => []),
+        fetchOnBoardStaffUsers({ force: true }),
+        fetchBoatCrewAssignments(boatId),
+        fetchBoatCrewReplacements(boatId),
       ]);
       setStaffOptions(staff || []);
       setCrew((crewList || []).map(normalizeCrew));
@@ -282,8 +300,10 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
     } catch (error) {
       console.error(error);
       setErrorMsg(
-        error.response?.data?.message ||
-          (lang === "VN" ? "Không tải được dữ liệu crew." : "Failed to load crew data.")
+        getApiErrorMessage(
+          error,
+          lang === "VN" ? "Không tải được danh sách nhân viên trên tàu." : "Failed to load onboard staff."
+        )
       );
     } finally {
       setIsLoading(false);
@@ -299,14 +319,21 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
     let active = true;
     const { fromDate, toDate } = getMonthRange(monthValue);
     setIsCalendarLoading(true);
-    setSelectedDate("");
     fetchBoatCrewCalendar(boatId, fromDate, toDate)
       .then((data) => {
         if (active) setCalendarMap(normalizeCalendarByDate(data));
       })
       .catch((error) => {
         console.error(error);
-        if (active) setCalendarMap(new Map());
+        if (active) {
+          setCalendarMap(new Map());
+          setErrorMsg(
+            getApiErrorMessage(
+              error,
+              lang === "VN" ? "Không tải được lịch nhân viên trên tàu." : "Failed to load onboard staff calendar."
+            )
+          );
+        }
       })
       .finally(() => {
         if (active) setIsCalendarLoading(false);
@@ -314,17 +341,13 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
     return () => {
       active = false;
     };
-  }, [viewMode, monthValue, boatId]);
+  }, [viewMode, monthValue, boatId, lang]);
 
-  // Nhân viên OnBoard + Active
-  const onboardStaff = useMemo(() => {
-    const hasStaffType = staffOptions.some((s) => getStaffType(s));
-    return staffOptions.filter((s) => {
-      if (!isStaffActive(s)) return false;
-      if (!hasStaffType) return true;
-      return getStaffType(s) === "onboard";
-    });
-  }, [staffOptions]);
+  // Chỉ nhân viên trên tàu (staffType = OnBoard)
+  const onboardStaff = useMemo(
+    () => staffOptions.filter((s) => isStaffActive(s) && getStaffType(s) === "onboard"),
+    [staffOptions]
+  );
 
   const activeCrewStaffIds = useMemo(() => new Set(crew.map((c) => c.staffUserId)), [crew]);
 
@@ -356,6 +379,18 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
       });
       return;
     }
+    const selected = onboardStaff.find((s) => s.id === crewStaffId);
+    if (!selected) {
+      Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "Sai loại nhân viên" : "Invalid staff type",
+        text: lang === "VN"
+          ? "Chỉ được gán nhân viên loại Trên tàu."
+          : "Only onboard staff can be assigned.",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
     if (crewToDate && crewToDate < crewFromDate) {
       Swal.fire({
         icon: "warning",
@@ -376,9 +411,14 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
       setCrewStaffId("");
       setCrewToDate("");
       await loadData();
-      Swal.fire({ toast: true, position: "top-end", icon: "success", title: lang === "VN" ? "Đã thêm crew" : "Crew added", showConfirmButton: false, timer: 1500 });
+      Swal.fire({ toast: true, position: "top-end", icon: "success", title: lang === "VN" ? "Đã thêm nhân viên" : "Staff assigned", showConfirmButton: false, timer: 1500 });
     } catch (error) {
-      Swal.fire({ icon: "error", title: lang === "VN" ? "Thêm crew thất bại" : "Add crew failed", text: error.response?.data?.message || (lang === "VN" ? "Không thể thêm crew." : "Could not add crew."), confirmButtonColor: "#124757" });
+      Swal.fire({
+        icon: "error",
+        title: lang === "VN" ? "Thêm nhân viên thất bại" : "Assign staff failed",
+        text: getApiErrorMessage(error, lang === "VN" ? "Không thể thêm nhân viên." : "Could not assign staff."),
+        confirmButtonColor: "#124757",
+      });
     } finally {
       setIsSavingCrew(false);
     }
@@ -400,20 +440,27 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
 
   const handleRemoveCrew = async (c) => {
     const confirm = await Swal.fire({
-      icon: "warning",
-      title: lang === "VN" ? "Gỡ crew?" : "Remove crew?",
-      text: lang === "VN" ? `Gỡ ${c.staffName} khỏi tàu ${boatCode}?` : `Remove ${c.staffName} from boat ${boatCode}?`,
-      showCancelButton: true, confirmButtonColor: "#d33", cancelButtonColor: "#124757",
-      confirmButtonText: lang === "VN" ? "Gỡ" : "Remove", cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
+      icon: "question",
+      title: lang === "VN" ? "Gỡ nhân viên khỏi tàu?" : "Remove staff from boat?",
+      html: lang === "VN"
+        ? `Bạn chắc chắn muốn gỡ <b>${c.staffName}</b> khỏi tàu <b>${boatCode || "—"}</b>?<br/><span style="color:#94a3b8;font-size:12px">Lịch mặc định của người này trên tàu sẽ bị gỡ.</span>`
+        : `Remove <b>${c.staffName}</b> from boat <b>${boatCode || "—"}</b>?<br/><span style="color:#94a3b8;font-size:12px">Their default assignment on this boat will be removed.</span>`,
+      showCancelButton: true,
+      focusCancel: true,
+      reverseButtons: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#124757",
+      confirmButtonText: lang === "VN" ? "Xác nhận gỡ" : "Yes, remove",
+      cancelButtonText: lang === "VN" ? "Không" : "No",
     });
     if (!confirm.isConfirmed) return;
     try {
       setRemovingCrewId(c.assignmentId);
       await removeBoatCrewAssignment(boatId, c.assignmentId);
       await loadData();
-      Swal.fire({ toast: true, position: "top-end", icon: "success", title: lang === "VN" ? "Đã gỡ crew" : "Crew removed", showConfirmButton: false, timer: 1500 });
+      Swal.fire({ toast: true, position: "top-end", icon: "success", title: lang === "VN" ? "Đã gỡ nhân viên" : "Staff removed", showConfirmButton: false, timer: 1500 });
     } catch (error) {
-      Swal.fire({ icon: "error", title: lang === "VN" ? "Gỡ thất bại" : "Remove failed", text: error.response?.data?.message || "", confirmButtonColor: "#124757" });
+      Swal.fire({ icon: "error", title: lang === "VN" ? "Gỡ thất bại" : "Remove failed", text: getApiErrorMessage(error), confirmButtonColor: "#124757" });
     } finally {
       setRemovingCrewId(null);
     }
@@ -425,6 +472,17 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
         icon: "warning",
         title: lang === "VN" ? "Thiếu thông tin" : "Missing info",
         text: lang === "VN" ? "Nhập đủ người bị thay, người thay, thời gian và lý do." : "Fill replaced/replacement staff, period and reason.",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+    if (!onboardStaff.some((s) => s.id === repReplacementId)) {
+      Swal.fire({
+        icon: "warning",
+        title: lang === "VN" ? "Sai loại nhân viên" : "Invalid staff type",
+        text: lang === "VN"
+          ? "Người thay phải là nhân viên trên tàu."
+          : "Replacement must be onboard staff.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -452,7 +510,7 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
       await loadData();
       Swal.fire({ toast: true, position: "top-end", icon: "success", title: lang === "VN" ? "Đã tạo thay thế" : "Replacement created", showConfirmButton: false, timer: 1500 });
     } catch (error) {
-      Swal.fire({ icon: "error", title: lang === "VN" ? "Tạo thay thế thất bại" : "Create failed", text: error.response?.data?.message || "", confirmButtonColor: "#124757" });
+      Swal.fire({ icon: "error", title: lang === "VN" ? "Tạo thay thế thất bại" : "Create failed", text: getApiErrorMessage(error), confirmButtonColor: "#124757" });
     } finally {
       setIsSavingRep(false);
     }
@@ -460,11 +518,18 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
 
   const handleCancelReplacement = async (r) => {
     const confirm = await Swal.fire({
-      icon: "warning",
-      title: lang === "VN" ? "Hủy thay thế?" : "Cancel replacement?",
-      text: lang === "VN" ? `Hủy thay thế ${r.replacementStaffName}?` : `Cancel replacement ${r.replacementStaffName}?`,
-      showCancelButton: true, confirmButtonColor: "#d33", cancelButtonColor: "#124757",
-      confirmButtonText: lang === "VN" ? "Hủy thay thế" : "Cancel it", cancelButtonText: lang === "VN" ? "Đóng" : "Close",
+      icon: "question",
+      title: lang === "VN" ? "Hủy lịch thay thế?" : "Cancel replacement schedule?",
+      html: lang === "VN"
+        ? `Bạn chắc chắn muốn hủy lịch thay thế của <b>${r.replacementStaffName}</b>${r.replacedStaffName ? ` (thay cho <b>${r.replacedStaffName}</b>)` : ""}?<br/><span style="color:#94a3b8;font-size:12px">Lịch mặc định gốc vẫn giữ nguyên.</span>`
+        : `Cancel replacement for <b>${r.replacementStaffName}</b>${r.replacedStaffName ? ` (covering <b>${r.replacedStaffName}</b>)` : ""}?<br/><span style="color:#94a3b8;font-size:12px">The original default roster stays unchanged.</span>`,
+      showCancelButton: true,
+      focusCancel: true,
+      reverseButtons: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#124757",
+      confirmButtonText: lang === "VN" ? "Xác nhận hủy" : "Yes, cancel it",
+      cancelButtonText: lang === "VN" ? "Giữ lại" : "Keep it",
     });
     if (!confirm.isConfirmed) return;
     try {
@@ -473,7 +538,7 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
       await loadData();
       Swal.fire({ toast: true, position: "top-end", icon: "success", title: lang === "VN" ? "Đã hủy thay thế" : "Replacement canceled", showConfirmButton: false, timer: 1500 });
     } catch (error) {
-      Swal.fire({ icon: "error", title: lang === "VN" ? "Hủy thất bại" : "Cancel failed", text: error.response?.data?.message || "", confirmButtonColor: "#124757" });
+      Swal.fire({ icon: "error", title: lang === "VN" ? "Hủy thất bại" : "Cancel failed", text: getApiErrorMessage(error), confirmButtonColor: "#124757" });
     } finally {
       setCancelingRepId(null);
     }
@@ -493,17 +558,17 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-              {lang === "VN" ? "Crew mặc định của tàu" : "Default Boat Crew"}
+              {lang === "VN" ? "Nhân viên mặc định trên tàu" : "Default onboard staff"}
             </h3>
             <p className="text-xs text-slate-400 mt-1">
               {lang === "VN"
-                ? "Gán nhân viên OnBoard làm dài hạn (theo ngày bắt đầu/kết thúc), không cần setup từng ngày. Có người nghỉ thì tạo bản thay thế."
-                : "Assign OnBoard staff long-term (from/to date). Create a replacement when someone is off."}
+                ? "Gán nhân viên trên tàu theo khoảng ngày (để trống ngày kết thúc = dài hạn). Khi có người nghỉ, tạo lịch thay thế."
+                : "Assign onboard staff by date range (blank end date = long-term). Create a replacement when someone is off."}
             </p>
           </div>
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300">
             <span className="material-symbols-outlined text-sm">groups</span>
-            {crew.length} crew
+            {crew.length} {lang === "VN" ? "người" : "staff"}
           </div>
         </div>
 
@@ -548,8 +613,6 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
           setMonthValue={setMonthValue}
           calendarMap={calendarMap}
           isLoading={isCalendarLoading}
-          selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
         />
       ) : (
       <>
@@ -558,7 +621,7 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
         {crew.length === 0 ? (
           <div className="text-center py-8">
             <span className="material-symbols-outlined text-3xl text-slate-300 block mb-1">group_off</span>
-            <p className="text-xs font-bold text-slate-400">{lang === "VN" ? "Chưa có crew mặc định." : "No default crew yet."}</p>
+            <p className="text-xs font-bold text-slate-400">{lang === "VN" ? "Chưa có nhân viên mặc định trên tàu." : "No default onboard staff yet."}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -582,23 +645,21 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
                   <button
                     type="button"
                     onClick={() => startReplacement(c)}
-                    className="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-300 text-[11px] font-bold uppercase tracking-wide hover:bg-amber-100 transition-all inline-flex items-center gap-1.5"
+                    className="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-300 text-[11px] font-bold uppercase tracking-wide hover:bg-amber-100 transition-all"
                   >
-                    <span className="material-symbols-outlined text-sm">swap_horiz</span>
                     {lang === "VN" ? "Thay thế" : "Replace"}
                   </button>
                   <button
                     type="button"
                     disabled={removingCrewId === c.assignmentId}
                     onClick={() => handleRemoveCrew(c)}
-                    className="px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[11px] font-bold uppercase tracking-wide hover:bg-red-100 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
+                    className="px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[11px] font-bold uppercase tracking-wide hover:bg-red-100 transition-all disabled:opacity-50"
                   >
                     {removingCrewId === c.assignmentId ? (
                       <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                     ) : (
-                      <span className="material-symbols-outlined text-sm">person_remove</span>
+                      lang === "VN" ? "Gỡ" : "Remove"
                     )}
-                    {lang === "VN" ? "Gỡ" : "Remove"}
                   </button>
                 </div>
               </div>
@@ -610,7 +671,7 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
       {/* Thêm crew mặc định */}
       <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
         <h4 className="font-headline font-black text-xs text-slate-700 dark:text-slate-200 uppercase tracking-wide">
-          {lang === "VN" ? "Thêm crew mặc định" : "Add default crew"}
+          {lang === "VN" ? "Thêm nhân viên mặc định" : "Add default onboard staff"}
         </h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -623,23 +684,38 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
           </div>
         </div>
         <div>
-          <label className={labelStyle}>{lang === "VN" ? "Chọn nhân viên OnBoard (*)" : "Select OnBoard staff (*)"}</label>
+          <label className={labelStyle}>{lang === "VN" ? "Chọn nhân viên trên tàu (*)" : "Select onboard staff (*)"}</label>
           <StaffSelect
             options={crewSelectOptions}
             value={crewStaffId}
             onChange={setCrewStaffId}
-            placeholder={lang === "VN" ? "Chưa chọn nhân viên" : "No staff selected"}
+            placeholder={
+              onboardStaff.length === 0
+                ? (lang === "VN" ? "Chưa có nhân viên trên tàu" : "No onboard staff yet")
+                : (lang === "VN" ? "Chưa chọn nhân viên" : "No staff selected")
+            }
             lang={lang}
           />
+          {onboardStaff.length === 0 && (
+            <p className="mt-2 text-[11px] font-bold text-amber-600 dark:text-amber-300">
+              {lang === "VN"
+                ? "Chưa có nhân viên trên tàu đang Active. Vào Quản lý người dùng → tạo/sửa Staff loại Trên tàu rồi quay lại."
+                : "No active onboard staff. Create/edit a Staff user as Onboard, then return here."}
+              {" "}
+              <Link to="/admin/users-management/create" className="underline hover:opacity-80">
+                {lang === "VN" ? "Tạo nhân viên" : "Create staff"}
+              </Link>
+            </p>
+          )}
         </div>
         <button
           type="button"
           onClick={handleAddCrew}
-          disabled={!crewStaffId || !crewFromDate || isSavingCrew}
+          disabled={!crewStaffId || !crewFromDate || isSavingCrew || onboardStaff.length === 0}
           className="w-full py-3 rounded-xl bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 text-[11px] font-headline font-black uppercase tracking-wider hover:brightness-110 transition-all inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSavingCrew && <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
-          {lang === "VN" ? "Thêm crew" : "Add crew"}
+          {lang === "VN" ? "Thêm nhân viên" : "Add staff"}
         </button>
       </div>
 
@@ -648,10 +724,10 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h4 className="font-headline font-black text-xs text-slate-700 dark:text-slate-200 uppercase tracking-wide">
-              {lang === "VN" ? "Crew thay thế tạm thời" : "Temporary replacements"}
+              {lang === "VN" ? "Nhân viên thay thế tạm thời" : "Temporary replacements"}
             </h4>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              {lang === "VN" ? "Dùng khi crew nghỉ phép, không sửa lịch gốc." : "Use when a crew is off; original roster stays intact."}
+              {lang === "VN" ? "Dùng khi nhân viên nghỉ phép, không sửa lịch gốc." : "Use when onboard staff is off; original roster stays intact."}
             </p>
           </div>
           <button
@@ -710,7 +786,7 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
                   options={replacedOptions}
                   value={repReplacedId}
                   onChange={setRepReplacedId}
-                  placeholder={lang === "VN" ? "Chọn từ crew" : "Choose from crew"}
+                  placeholder={lang === "VN" ? "Chọn từ danh sách trên tàu" : "Choose from onboard roster"}
                   lang={lang}
                 />
               </div>
@@ -757,10 +833,65 @@ export function BoatStaffAssignmentPanel({ boatId, boatCode }) {
   );
 }
 
-function CrewCalendarView({ lang, monthValue, setMonthValue, calendarMap, isLoading, selectedDate, setSelectedDate }) {
+function shortStaffName(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "--";
+  if (parts.length === 1) return parts[0];
+  // Giữ 2 phần cuối cho tên VN (VD: An Toan)
+  return parts.slice(-2).join(" ");
+}
+
+const escapeHtml = (value) =>
+  String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+
+function openDayStaffPopup(lang, date, entries) {
+  const title = new Date(`${date}T00:00:00`).toLocaleDateString(
+    lang === "VN" ? "vi-VN" : "en-GB",
+    { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" }
+  );
+
+  if (!entries.length) {
+    Swal.fire({
+      icon: "info",
+      title,
+      text: lang === "VN" ? "Không có nhân viên ngày này." : "No staff on this day.",
+      confirmButtonColor: "#124757",
+    });
+    return;
+  }
+
+  const rows = entries.map((e) => {
+    const badge = e.isReplacement
+      ? `<span style="display:inline-block;margin-left:6px;padding:2px 6px;border-radius:6px;background:#fff7ed;color:#c2410c;font-size:10px;font-weight:800;text-transform:uppercase">${lang === "VN" ? "Thay thế" : "Replacement"}</span>`
+      : `<span style="display:inline-block;margin-left:6px;padding:2px 6px;border-radius:6px;background:#ecfdf5;color:#0f766e;font-size:10px;font-weight:800;text-transform:uppercase">${lang === "VN" ? "Mặc định" : "Default"}</span>`;
+    const replaced = e.isReplacement && e.replacedStaffName
+      ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px">${lang === "VN" ? "Thay cho" : "Replacing"}: <b>${escapeHtml(e.replacedStaffName)}</b></div>`
+      : "";
+    const role = e.crewRole
+      ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px">${lang === "VN" ? "Vai trò" : "Role"}: ${escapeHtml(e.crewRole)}</div>`
+      : "";
+    return `<div style="text-align:left;padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:8px;background:#f8fafc">
+      <div style="font-weight:800;color:#0f172a;font-size:13px">${escapeHtml(e.staffName)}${badge}</div>
+      ${replaced}${role}
+    </div>`;
+  }).join("");
+
+  Swal.fire({
+    title,
+    html: `<div style="max-height:320px;overflow:auto">${rows}</div>`,
+    confirmButtonColor: "#124757",
+    confirmButtonText: lang === "VN" ? "Đóng" : "Close",
+    width: 420,
+  });
+}
+
+function CrewCalendarView({ lang, monthValue, setMonthValue, calendarMap, isLoading }) {
   const cells = buildMonthCells(monthValue);
   const weekdays = lang === "VN" ? WEEKDAY_LABELS.vn : WEEKDAY_LABELS.en;
-  const selectedEntries = selectedDate ? (calendarMap.get(selectedDate) || []) : [];
 
   const shiftMonth = (delta) => {
     const [year, month] = monthValue.split("-").map(Number);
@@ -794,8 +925,21 @@ function CrewCalendarView({ lang, monthValue, setMonthValue, calendarMap, isLoad
       </div>
 
       <div className="flex flex-wrap items-center gap-4 text-[10px] font-bold text-slate-400">
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#124757] dark:bg-yellow-400" />{lang === "VN" ? "Có crew" : "Has crew"}</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" />{lang === "VN" ? "Có người thay" : "Replacement"}</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#124757] dark:bg-yellow-400" />
+          {lang === "VN" ? "Nhân viên mặc định" : "Default staff"}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+          {lang === "VN" ? "Người thay thế" : "Replacement"}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
+          {lang === "VN" ? "Cuối tuần (T7 / CN)" : "Weekend (Sat / Sun)"}
+        </span>
+        <span className="text-slate-400 font-medium normal-case tracking-normal">
+          {lang === "VN" ? "Nhấn tên để xem chi tiết" : "Click a name for details"}
+        </span>
       </div>
 
       {isLoading ? (
@@ -803,65 +947,71 @@ function CrewCalendarView({ lang, monthValue, setMonthValue, calendarMap, isLoad
           <div className="w-8 h-8 border-4 border-[#124757] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-7 gap-1.5">
-            {weekdays.map((w) => (
-              <div key={w} className="text-center text-[10px] font-black uppercase text-slate-400 py-1">{w}</div>
-            ))}
-            {cells.map((date, idx) => {
-              if (!date) return <div key={`blank-${idx}`} />;
-              const entries = calendarMap.get(date) || [];
-              const hasReplacement = entries.some((e) => e.isReplacement);
-              const dayNum = Number(date.slice(8, 10));
-              const isSelected = selectedDate === date;
-              return (
-                <button
-                  key={date}
-                  type="button"
-                  onClick={() => setSelectedDate(isSelected ? "" : date)}
-                  className={`aspect-square rounded-xl border p-1.5 flex flex-col items-center justify-start transition-all ${
-                    isSelected
-                      ? "border-[#124757] dark:border-yellow-400 ring-2 ring-[#124757]/15 dark:ring-yellow-400/20"
-                      : "border-slate-100 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
-                  } ${entries.length > 0 ? "bg-slate-50 dark:bg-slate-900" : ""}`}
-                >
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{dayNum}</span>
-                  {entries.length > 0 && (
-                    <span className="mt-auto flex items-center gap-0.5">
-                      <span className={`w-1.5 h-1.5 rounded-full ${hasReplacement ? "bg-amber-500" : "bg-[#124757] dark:bg-yellow-400"}`} />
-                      <span className="text-[9px] font-bold text-slate-400">{entries.length}</span>
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {weekdays.map((w, i) => (
+            <div
+              key={w}
+              className={`text-center text-[10px] font-black uppercase py-1 ${
+                i >= 5 ? "text-rose-500 dark:text-rose-300" : "text-slate-400"
+              }`}
+            >
+              {w}
+            </div>
+          ))}
+          {cells.map((date, idx) => {
+            if (!date) return <div key={`blank-${idx}`} />;
+            const entries = calendarMap.get(date) || [];
+            const dayNum = Number(date.slice(8, 10));
+            const weekday = new Date(`${date}T00:00:00`).getDay(); // 0=CN, 6=T7
+            const isSunday = weekday === 0;
+            const isSaturday = weekday === 6;
 
-          {selectedDate && (
-            <div className="rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-4 space-y-2">
-              <p className="text-[11px] font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
-                {new Date(selectedDate).toLocaleDateString(lang === "VN" ? "vi-VN" : "en-GB", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
-              </p>
-              {selectedEntries.length === 0 ? (
-                <p className="text-xs font-bold text-slate-400">{lang === "VN" ? "Không có crew ngày này." : "No crew on this day."}</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {selectedEntries.map((e, i) => (
-                    <div key={`${e.staffName}-${i}`} className="flex items-center gap-2 text-xs">
-                      <span className={`w-2 h-2 rounded-full ${e.isReplacement ? "bg-amber-500" : "bg-[#124757] dark:bg-yellow-400"}`} />
-                      <span className="font-bold text-slate-700 dark:text-slate-200">{e.staffName}</span>
-                      {e.isReplacement && (
-                        <span className="text-amber-600 dark:text-amber-300 font-bold">
-                          ({lang === "VN" ? "thay" : "replacing"}{e.replacedStaffName ? ` ${e.replacedStaffName}` : ""})
-                        </span>
-                      )}
-                    </div>
+            let cellBg = "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700";
+            if (isSunday) {
+              cellBg = "bg-rose-50 dark:bg-rose-500/15 border-rose-200 dark:border-rose-500/30";
+            } else if (isSaturday) {
+              cellBg = "bg-orange-50/80 dark:bg-orange-500/10 border-orange-100 dark:border-orange-500/20";
+            } else if (entries.length > 0) {
+              cellBg = "bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-700";
+            }
+
+            return (
+              <div
+                key={date}
+                className={`min-h-24 rounded-xl border p-1.5 flex flex-col gap-1 ${cellBg}`}
+              >
+                <span
+                  className={`text-[11px] font-bold px-0.5 ${
+                    isSunday
+                      ? "text-rose-600 dark:text-rose-300"
+                      : isSaturday
+                        ? "text-orange-600 dark:text-orange-300"
+                        : "text-slate-600 dark:text-slate-300"
+                  }`}
+                >
+                  {dayNum}
+                </span>
+                <div className="flex flex-col gap-0.5 min-h-0">
+                  {entries.map((e, i) => (
+                    <button
+                      key={`${date}-${e.staffName}-${i}`}
+                      type="button"
+                      title={e.staffName}
+                      onClick={() => openDayStaffPopup(lang, date, entries)}
+                      className={`w-full truncate rounded-md px-1 py-0.5 text-left text-[9px] font-bold leading-tight transition-colors ${
+                        e.isReplacement
+                          ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-200"
+                          : "bg-[#124757]/10 text-[#124757] hover:bg-[#124757]/20 dark:bg-yellow-400/15 dark:text-yellow-300"
+                      }`}
+                    >
+                      {shortStaffName(e.staffName)}
+                    </button>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
-        </>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
