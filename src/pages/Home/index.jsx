@@ -6,7 +6,8 @@ import { fetchAllStations } from "../../services/stationService";
 import { WaterwayMap } from "../../components/WaterwayMap";
 import { fetchPublishedBlogPosts } from "../../services/blogService";
 import { ContactForm } from "../../components/ContactForm";
-import heroVideo from "../../assets/hero-video.mp4";
+
+const heroVideo = "https://res.cloudinary.com/dygipvoal/video/upload/v1783865624/q7gde8dluohboeqjzdtx.mp4";
 
 import {
   promoPosters,
@@ -185,8 +186,8 @@ export const Home = () => {
         {/* Khối Nội Dung Chính */}
         <div className="relative z-10 max-w-7xl w-full mx-auto px-6 md:px-12 pt-32 pb-20 flex flex-col items-center justify-center space-y-12">
           {/* Tiêu Đề */}
-          <div className="text-center space-y-4 max-w-3xl gsap-reveal">
-            <h1 className="text-4xl md:text-6xl font-headline font-black text-white leading-tight drop-shadow-md">
+          <div className="text-center space-y-4 max-w-4xl gsap-reveal">
+            <h1 className="text-6xl md:text-8xl font-headline font-black text-white leading-tight drop-shadow-md">
               {lang === "VN" ? "Welcome to" : "Chào mừng đến"}{" "}
               <br />
               <span className="text-transparent bg-clip-text bg-linear-to-r from-yellow-400 to-amber-300">

@@ -23,7 +23,7 @@ import { EditCharter } from "./pages/Profile/MyCharterBooking/EditCharter";
 import { CharterList } from "./pages/Profile/MyCharterBooking";
 import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefundRequest";
 import { WaterbusBooking } from "./pages/WaterbusBooking";
-// import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
+import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
 import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
 //Admin
@@ -124,14 +124,14 @@ function App() {
         />
 
         {/* Watersightseeing Booking Page */}
-        {/* <Route
+        <Route
           path="/watersightseeing-booking"
           element={
             <MainLayout>
               <WatersightseeingBooking />
             </MainLayout>
           }
-        /> */}
+        />
 
         {/* Charter Booking Page */}
         <Route
