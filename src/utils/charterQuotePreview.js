@@ -92,26 +92,28 @@ const getRoutePricingBreakdown = (routeEstimate, lang = "VN") => {
   if (!routeEstimate || typeof routeEstimate !== "object") return [];
 
   const distance = Number(routeEstimate.totalDistanceKm);
+  const travelMinutes = Number(
+    Number.isFinite(Number(routeEstimate.estimatedTravelMinutes)) && Number(routeEstimate.estimatedTravelMinutes) > 0
+      ? routeEstimate.estimatedTravelMinutes
+      : routeEstimate.estimatedDurationMinutes,
+  );
+  const estimatedStayMinutes = Number(routeEstimate.estimatedStayMinutes);
+  const freeStayMinutes = Number(routeEstimate.freeStayMinutes);
+  const freeStayLabel = Number.isFinite(freeStayMinutes) && freeStayMinutes > 0
+    ? freeStayMinutes
+    : QUOTE_FREE_STOP_MINUTES;
+  const chargeableStayMinutes = Number(routeEstimate.chargeableStayMinutes);
+  const bufferMinutes = Number(routeEstimate.estimatedBufferMinutes);
   const estimatedDurationMinutes = Number(routeEstimate.estimatedDurationMinutes);
-  const travelMinutes = Number.isFinite(estimatedDurationMinutes) && estimatedDurationMinutes > 0
-    ? estimatedDurationMinutes
-    : Number(routeEstimate.estimatedTravelMinutes);
-  const bufferMinutes = Number.isFinite(travelMinutes) && travelMinutes > 0
-    ? Math.ceil(travelMinutes * QUOTE_BUFFER_RATE)
-    : Number(pick(routeEstimate, ["bufferMinutes", "bufferDurationMinutes"], 0)) || 0;
-  const freeStopMinutes = Number(pick(routeEstimate, ["freeWaitingMinutesPerStop", "freeStopMinutes"], QUOTE_FREE_STOP_MINUTES)) || QUOTE_FREE_STOP_MINUTES;
+  const chargeableDurationMinutes = Number(routeEstimate.chargeableDurationMinutes);
+
+  // Legacy amount-only stop fee (BE confirmed fee is usually baked into chargeableDurationMinutes).
   const stopChargeAmount = Number(pick(routeEstimate, [
     "stopWaitingChargeAmount",
     "stopChargeAmount",
     "totalStopChargeAmount",
     "waitingChargeAmount",
     "stopFeeAmount",
-  ], 0)) || 0;
-  const stopChargeMinutes = Number(pick(routeEstimate, [
-    "chargeableStopMinutes",
-    "totalStopWaitingMinutes",
-    "stopWaitingMinutes",
-    "billableStopMinutes",
   ], 0)) || 0;
 
   const lines = [];
@@ -130,23 +132,49 @@ const getRoutePricingBreakdown = (routeEstimate, lang = "VN") => {
       detail: `${travelMinutes} ${lang === "VN" ? "phút" : "min"}`,
     });
   }
-  if (stopChargeAmount > 0 || stopChargeMinutes > 0) {
+  if (Number.isFinite(estimatedStayMinutes) && estimatedStayMinutes > 0) {
+    lines.push({
+      key: "stay",
+      label: lang === "VN" ? "Thời gian dừng nghỉ" : "Stay time",
+      detail: `${estimatedStayMinutes} ${lang === "VN" ? "phút" : "min"} · ${lang === "VN" ? "miễn" : "free"} ${freeStayLabel} ${lang === "VN" ? "phút/booking" : "min/booking"}`,
+    });
+  }
+  if (Number.isFinite(chargeableStayMinutes) && chargeableStayMinutes > 0) {
+    lines.push({
+      key: "chargeableStay",
+      label: lang === "VN" ? "Dừng nghỉ tính phí" : "Billable stay",
+      detail: `${chargeableStayMinutes} ${lang === "VN" ? "phút" : "min"}`,
+      amount: stopChargeAmount > 0 ? stopChargeAmount : null,
+    });
+  } else if (stopChargeAmount > 0) {
     lines.push({
       key: "stop",
       label: lang === "VN"
-        ? `Phí dừng tại điểm (>${freeStopMinutes} phút miễn phí)`
-        : `Stop fee (>${freeStopMinutes} min free)`,
-      detail: stopChargeMinutes > 0
-        ? `${stopChargeMinutes} ${lang === "VN" ? "phút tính phí" : "billable min"}`
-        : "",
-      amount: stopChargeAmount > 0 ? stopChargeAmount : null,
+        ? `Phí dừng tại điểm (>${freeStayLabel} phút miễn phí)`
+        : `Stop fee (>${freeStayLabel} min free)`,
+      detail: "",
+      amount: stopChargeAmount,
     });
   }
-  if (bufferMinutes > 0) {
+  if (Number.isFinite(bufferMinutes) && bufferMinutes > 0) {
     lines.push({
       key: "buffer",
       label: lang === "VN" ? "Phụ phí buffer 10%" : "10% buffer surcharge",
       detail: `+${bufferMinutes} ${lang === "VN" ? "phút" : "min"}`,
+    });
+  }
+  if (Number.isFinite(estimatedDurationMinutes) && estimatedDurationMinutes > 0) {
+    lines.push({
+      key: "estimatedDuration",
+      label: lang === "VN" ? "Tổng thời lượng ước tính" : "Estimated total duration",
+      detail: `${estimatedDurationMinutes} ${lang === "VN" ? "phút" : "min"}`,
+    });
+  }
+  if (Number.isFinite(chargeableDurationMinutes) && chargeableDurationMinutes > 0) {
+    lines.push({
+      key: "chargeableDuration",
+      label: lang === "VN" ? "Thời lượng tính tiền" : "Chargeable duration",
+      detail: `${chargeableDurationMinutes} ${lang === "VN" ? "phút" : "min"} (${formatQuoteHumanDuration(chargeableDurationMinutes, lang)})`,
     });
   }
 
@@ -306,3 +334,71 @@ export const formatQuoteRouteEstimate = (routeEstimate, lang = "VN", defaultRent
 };
 
 export const formatQuoteRentalDuration = formatQuoteChargeableDuration;
+
+export const buildBookingQuotePreview = (booking) => {
+  if (!booking) return null;
+
+  const raw = booking.raw && typeof booking.raw === "object" ? booking.raw : {};
+  const quoteBoatSource = (
+    Array.isArray(booking.quoteBoats) && booking.quoteBoats.length > 0
+      ? booking.quoteBoats
+      : (() => {
+        const fromRaw = pick(raw, ["quoteBoats", "quoteBreakdown.boats", "pricing.boats"], null);
+        if (Array.isArray(fromRaw) && fromRaw.length > 0) return fromRaw;
+        return Array.isArray(booking.selectedBoats) ? booking.selectedBoats : [];
+      })()
+  );
+
+  const boats = quoteBoatSource.map((boat, index) => {
+    const boatOrder = Number(pick(boat, ["boatOrder", "order"], index + 1)) || index + 1;
+    return {
+      boatOrder,
+      boatName: pick(boat, ["boatName", "name", "boat.name", "code"], ""),
+      unitPrice: Number(pick(boat, ["unitPrice", "price", "boat.unitPrice"], 0)) || 0,
+      rentalUnit: pick(boat, ["rentalUnit"], booking.rentalUnit) || booking.rentalUnit,
+      chargeableDurationValue: pick(boat, ["chargeableDurationValue", "chargeableDuration", "durationValue"], ""),
+      subtotalAmount: Number(pick(boat, ["subtotalAmount", "totalAmount", "amount", "lineTotal"], 0)) || 0,
+    };
+  });
+
+  const boatsRentalTotal = boats.reduce((sum, boat) => sum + (Number(boat.subtotalAmount) || 0), 0);
+  const insurance = booking.insurance || normalizeInsuranceFromBooking(booking);
+  const insuranceAmount = booking.insuranceSelected !== false
+    && Number(insurance?.quantity) > 0
+    && Number(insurance?.totalAmount) > 0
+    ? Number(insurance.totalAmount)
+    : 0;
+  const discountAmount = Number(
+    booking.discountAmount
+    ?? pick(raw, ["discountAmount"], 0),
+  ) || 0;
+  const quoteSubtotal = Number(
+    booking.subtotalAmount
+    ?? pick(raw, ["subtotalAmount", "subtotalBeforeDiscount"], 0),
+  ) || boatsRentalTotal;
+  const quoteTotal = Number(
+    booking.totalAmount
+    ?? booking.estimatedPrice
+    ?? pick(raw, ["finalAmount", "totalAmount"], 0),
+  ) || 0;
+  const displayQuoteTotal = quoteTotal > 0
+    ? quoteTotal
+    : Math.max(boatsRentalTotal + insuranceAmount - discountAmount, 0);
+
+  if (boats.length === 0 && displayQuoteTotal <= 0) return null;
+
+  return {
+    rentalUnit: booking.rentalUnit || pick(raw, ["rentalUnit"], ""),
+    routeEstimate: booking.routeEstimate || pick(raw, ["routeEstimate"], null),
+    boats,
+    subtotalAmount: boatsRentalTotal > 0 ? boatsRentalTotal : quoteSubtotal,
+    discountAmount,
+    totalAmount: displayQuoteTotal,
+    depositAmount: Number(booking.depositAmount) > 0 ? booking.depositAmount : undefined,
+    promotionCode: booking.promotionCode || pick(raw, ["promotionCode"], ""),
+    insuranceSelected: booking.insuranceSelected,
+    insurancePackageId: booking.insurancePackageId,
+    insurance,
+  };
+};
+

@@ -325,6 +325,16 @@ export function CharterRequestForm({
       : "Pickup and drop-off are the same. Please choose again, or add at least 1 stop.";
   }, [formData.fromStationId, formData.toStationId, formData.itineraryStops, lang]);
 
+  const roundTripHintMessage = useMemo(() => {
+    if (!formData.fromStationId || !formData.toStationId) return "";
+    if (String(formData.fromStationId) !== String(formData.toStationId)) return "";
+    const hasStopStation = formData.itineraryStops.some((stop) => Boolean(stop.stationId));
+    if (!hasStopStation) return "";
+    return lang === "VN"
+      ? "Lộ trình khứ hồi: bến đón và bến trả trùng nhau là hợp lệ vì đã có điểm dừng."
+      : "Round-trip: same pickup and drop-off is valid because stops were added.";
+  }, [formData.fromStationId, formData.toStationId, formData.itineraryStops, lang]);
+
   const validateCustomerStep = () => {
     const errors = getContactFieldErrors();
     const firstErrorField = Object.keys(errors)[0];
@@ -358,7 +368,7 @@ export function CharterRequestForm({
     if (!formData.fromStationId || !formData.toStationId) {
       return lang === "VN" ? "Bạn cần chọn cả bến đón khách và bến trả khách trước khi tiếp tục." : "Select both pickup and drop-off stations before continuing.";
     }
-    if (formData.fromStationId === formData.toStationId) {
+    if (String(formData.fromStationId) === String(formData.toStationId)) {
       const hasStopStation = formData.itineraryStops.some((stop) => Boolean(stop.stationId));
       if (!hasStopStation) {
         return lang === "VN"
@@ -652,7 +662,7 @@ export function CharterRequestForm({
       return;
     }
 
-    if (formData.fromStationId === formData.toStationId) {
+    if (String(formData.fromStationId) === String(formData.toStationId)) {
       const hasStopStation = formData.itineraryStops.some((stop) => Boolean(stop.stationId));
       if (!hasStopStation) {
         Swal.fire({
@@ -959,6 +969,11 @@ export function CharterRequestForm({
                 {sameStationWithoutStopMessage}
               </p>
             ) : null}
+            {roundTripHintMessage ? (
+              <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 -mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                {roundTripHintMessage}
+              </p>
+            ) : null}
 
             <div className="space-y-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1192,19 +1207,19 @@ export function CharterRequestForm({
                       className="flex min-w-0 flex-1 items-center gap-3 text-left"
                       aria-expanded={isInsuranceDetailsOpen}
                     >
-                      <span className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 overflow-hidden ${
+                      <span className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${
                         providerLogoUrl
-                          ? "bg-white border border-slate-200 p-1.5"
-                          : "bg-[#124757]/10 dark:bg-yellow-400/10"
+                          ? "bg-white p-2 ring-1 ring-slate-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.08)] dark:ring-slate-200"
+                          : "bg-gradient-to-br from-[#124757] to-[#0d3541] text-white shadow-[0_4px_14px_rgba(18,71,87,0.28)] dark:from-yellow-400 dark:to-yellow-300 dark:text-slate-900"
                       }`}>
                         {providerLogoUrl ? (
                           <img
                             src={providerLogoUrl}
                             alt={providerName || (lang === "VN" ? "Logo bảo hiểm" : "Insurance logo")}
-                            className="w-full h-full object-contain"
+                            className="h-full w-full object-contain"
                           />
                         ) : (
-                          <span className="material-symbols-outlined text-lg text-[#124757] dark:text-yellow-400">shield</span>
+                          <span className="material-symbols-outlined text-xl">verified_user</span>
                         )}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -1283,13 +1298,13 @@ export function CharterRequestForm({
                                     <span className="w-2 h-2 rounded-full bg-[#124757] dark:bg-yellow-400" />
                                   )}
                                 </span>
-                                <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 overflow-hidden ${
+                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl ${
                                   pkg.providerLogoUrl
-                                    ? "bg-white border border-slate-200 p-0.5"
+                                    ? "bg-white p-1 ring-1 ring-slate-200/80 shadow-[0_1px_6px_rgba(15,23,42,0.08)] dark:ring-slate-200"
                                     : "bg-[#124757]/10 dark:bg-yellow-400/10"
                                 }`}>
                                   {pkg.providerLogoUrl ? (
-                                    <img src={pkg.providerLogoUrl} alt="" className="w-full h-full object-contain" />
+                                    <img src={pkg.providerLogoUrl} alt="" className="h-full w-full object-contain" />
                                   ) : (
                                     <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">shield</span>
                                   )}

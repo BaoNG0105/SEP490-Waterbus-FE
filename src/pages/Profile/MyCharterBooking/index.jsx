@@ -34,8 +34,8 @@ const normalizeBooking = (item) => {
     route: pick(item, ["routeName", "route", "itineraryName"], fromName || toName ? `${fromName || "--"} - ${toName || "--"}` : "--"),
     departureDate: pick(item, ["departureDate", "startDate"]),
     startTime: pick(item, ["startTime"], "--"),
-    rentalUnit: pick(item, ["rentalUnit"], "Day"),
-    durationValue: Number(pick(item, ["durationValue", "durationHours"], 1)),
+    rentalUnit: pick(item, ["rentalUnit"], ""),
+    durationValue: Number(pick(item, ["durationValue", "durationHours"], 0)) || 0,
     adultCount,
     childCount,
     passengerCount,
@@ -327,7 +327,10 @@ export function CharterList() {
                       <div className="grid gap-1 sm:grid-cols-2">
                         <p className="truncate text-sm font-bold text-slate-700 dark:text-slate-200">{booking.route}</p>
                         <p className="text-[11px] font-bold text-slate-400 sm:col-span-2">
-                          {formatDate(booking.departureDate)} · {String(booking.startTime).slice(0, 5)} · {booking.passengerCount} {lang === "VN" ? "khách" : "guests"} · {booking.durationValue} {booking.rentalUnit}
+                          {formatDate(booking.departureDate)} · {String(booking.startTime).slice(0, 5)} · {booking.passengerCount} {lang === "VN" ? "khách" : "guests"}
+                          {Number(booking.durationValue) > 0
+                            ? ` · ${booking.durationValue} ${booking.rentalUnit === "Hour" ? (lang === "VN" ? "giờ" : "hr") : (lang === "VN" ? "ngày" : "day(s)")}`
+                            : ""}
                         </p>
                       </div>
 

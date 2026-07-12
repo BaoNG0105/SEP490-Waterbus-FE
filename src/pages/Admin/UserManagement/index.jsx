@@ -26,6 +26,7 @@ export function UserManagement() {
 
     const [searchTerm, setSearchTerm] = useState("");
     const [roleFilter, setRoleFilter] = useState("All");
+    const [staffTypeFilter, setStaffTypeFilter] = useState("All");
     const [statusFilter, setStatusFilter] = useState("All");
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 8;
@@ -58,7 +59,14 @@ export function UserManagement() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, roleFilter, statusFilter]);
+    }, [searchTerm, roleFilter, staffTypeFilter, statusFilter]);
+
+    const normalizeStaffType = (value) => {
+        const raw = String(value || "").toLowerCase().replace(/[_\s-]/g, "");
+        if (raw === "onboard" || raw === "2") return "OnBoard";
+        if (raw === "ground" || raw === "1") return "Ground";
+        return "";
+    };
 
     const primaryRoleOf = (item) => {
         const roles = item?.roles || [];
@@ -89,9 +97,16 @@ export function UserManagement() {
         const matchesRole =
             roleFilter === "All" || (item.roles || []).some((r) => getRoleSystemName(r) === roleFilter);
 
+        const itemStaffType = normalizeStaffType(item.staffType);
+        const matchesStaffType =
+            staffTypeFilter === "All" ||
+            (roleFilter === "STAFF" || roleFilter === "All"
+                ? itemStaffType === staffTypeFilter
+                : true);
+
         const matchesStatus = statusFilter === "All" || item.status === statusFilter;
 
-        return matchesSearch && matchesRole && matchesStatus;
+        return matchesSearch && matchesRole && matchesStaffType && matchesStatus;
     });
 
     const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
@@ -115,16 +130,18 @@ export function UserManagement() {
 
     const handleDelete = async (item) => {
         const confirmResult = await Swal.fire({
-            title: lang === "VN" ? "Xóa người dùng?" : "Delete User?",
+            icon: "question",
+            title: lang === "VN" ? "Xóa người dùng?" : "Delete user?",
             html: lang === "VN"
-                ? `Bạn chắc chắn muốn xóa vĩnh viễn tài khoản <b>${item.fullName}</b> (${item.code}) khỏi hệ thống? Hành động này không thể hoàn tác.`
-                : `Are you sure you want to permanently delete <b>${item.fullName}</b> (${item.code})? This action cannot be undone.`,
-            icon: "warning",
+                ? `Bạn chắc chắn muốn xóa vĩnh viễn tài khoản <b>${item.fullName}</b> (${item.code})?<br/><span style="color:#94a3b8;font-size:12px">Hành động này không thể hoàn tác.</span>`
+                : `Permanently delete <b>${item.fullName}</b> (${item.code})?<br/><span style="color:#94a3b8;font-size:12px">This action cannot be undone.</span>`,
             showCancelButton: true,
-            confirmButtonColor: "#d33",
+            focusCancel: true,
+            reverseButtons: true,
+            confirmButtonColor: "#dc2626",
             cancelButtonColor: "#124757",
-            confirmButtonText: lang === "VN" ? "Xác nhận xóa" : "Confirm Delete",
-            cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
+            confirmButtonText: lang === "VN" ? "Xác nhận xóa" : "Yes, delete",
+            cancelButtonText: lang === "VN" ? "Không" : "No",
         });
 
         if (!confirmResult.isConfirmed) return;
@@ -255,7 +272,11 @@ export function UserManagement() {
                 <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto overflow-x-auto shrink-0">
                     <select
                         value={roleFilter}
-                        onChange={(e) => setRoleFilter(e.target.value)}
+                        onChange={(e) => {
+                            const nextRole = e.target.value;
+                            setRoleFilter(nextRole);
+                            if (nextRole !== "All" && nextRole !== "STAFF") setStaffTypeFilter("All");
+                        }}
                         className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 outline-none cursor-pointer shadow-inner shrink-0"
                     >
                         <option value="All">{lang === "VN" ? "Tất cả vai trò" : "All Roles"}</option>
@@ -264,6 +285,18 @@ export function UserManagement() {
                         <option value="CUSTOMER">{lang === "VN" ? "Khách hàng" : "Customer"}</option>
                         {isAdminUser(currentUser) && <option value="ADMIN">Admin</option>}
                     </select>
+
+                    {(roleFilter === "All" || roleFilter === "STAFF") && (
+                        <select
+                            value={staffTypeFilter}
+                            onChange={(e) => setStaffTypeFilter(e.target.value)}
+                            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 outline-none cursor-pointer shadow-inner shrink-0"
+                        >
+                            <option value="All">{lang === "VN" ? "Tất cả loại NV" : "All staff types"}</option>
+                            <option value="OnBoard">{lang === "VN" ? "Trên tàu" : "Onboard"}</option>
+                            <option value="Ground">{lang === "VN" ? "Mặt đất" : "Ground"}</option>
+                        </select>
+                    )}
 
                     <div className="flex gap-2">
                         {[
@@ -342,9 +375,22 @@ export function UserManagement() {
                                                 </div>
                                             </td>
                                             <td className="py-4 px-4 text-center">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${ROLE_BADGE_STYLES[roleCode] || ROLE_BADGE_STYLES.CUSTOMER}`}>
-                                                    {role?.displayName || roleCode || "--"}
-                                                </span>
+                                                <div className="inline-flex flex-col items-center gap-1">
+                                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${ROLE_BADGE_STYLES[roleCode] || ROLE_BADGE_STYLES.CUSTOMER}`}>
+                                                        {role?.displayName || roleCode || "--"}
+                                                    </span>
+                                                    {roleCode === "STAFF" && item.staffType && (
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-bold uppercase tracking-wide border ${
+                                                            String(item.staffType).toLowerCase() === "onboard"
+                                                                ? "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20"
+                                                                : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600"
+                                                        }`}>
+                                                            {String(item.staffType).toLowerCase() === "onboard"
+                                                                ? (lang === "VN" ? "Trên tàu" : "Onboard")
+                                                                : (lang === "VN" ? "Mặt đất" : "Ground")}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="py-4 px-4 text-center">
                                                 <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${item.status === "Active"

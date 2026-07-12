@@ -98,7 +98,13 @@ export const clearUsersCache = () => {
   cachedUsersPromise = null;
 };
 
-export const fetchAllUsers = async ({ force = false } = {}) => {
+export const fetchAllUsers = async ({ force = false, params } = {}) => {
+  // Filtered queries skip the unfiltered cache (e.g. crew OnBoard dropdown).
+  if (params && Object.keys(params).length > 0) {
+    const data = await getAllUsers(params);
+    return extractUserRows(data).map(normalizeUserOption).filter((item) => item.id);
+  }
+
   if (!force && cachedUsers) return cachedUsers;
   if (!force && cachedUsersPromise) return cachedUsersPromise;
 
@@ -124,6 +130,30 @@ export const fetchUsersByRole = async (role, options = {}) => {
 export const fetchManagerUsers = (options = {}) => fetchUsersByRole(USER_ROLE.MANAGER, options);
 
 export const fetchStaffUsers = (options = {}) => fetchUsersByRole(USER_ROLE.STAFF, options);
+
+/** Nhân viên trên tàu đang Active — dropdown phân công tàu (BE: GET /users?staffType=OnBoard&status=Active) */
+export const fetchOnBoardStaffUsers = async ({ force = false } = {}) => {
+  const users = await fetchAllUsers({
+    force,
+    params: { staffType: "OnBoard", status: "Active" },
+  });
+  // Siết client: chỉ OnBoard + Active (+ role Staff nếu có). Không nhận user thiếu staffType
+  // (tránh hiện Ground khi BE chưa hỗ trợ query staffType).
+  return users.filter((item) => {
+    const type = String(pick(item?.raw || item, ["staffType", "staff_type"], ""))
+      .toLowerCase()
+      .replace(/[_\s-]/g, "");
+    if (type !== "onboard" && type !== "2") return false;
+
+    const status = String(pick(item?.raw || item, ["status", "accountStatus"], "")).toLowerCase();
+    if (status && status !== "active") return false;
+
+    const roles = Array.isArray(item?.roles) ? item.roles : [];
+    if (roles.length > 0 && !userMatchesRole(item, USER_ROLE.STAFF)) return false;
+
+    return true;
+  });
+};
 
 let cachedUserRows = null;
 let cachedRoles = null;

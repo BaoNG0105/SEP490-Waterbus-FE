@@ -45,13 +45,13 @@ export function BoatCrewSchedule() {
         </button>
         <div className="min-w-0">
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide truncate">
-            {lang === "VN" ? "Phân lịch crew" : "Crew Schedule"}
+            {lang === "VN" ? "Phân công nhân viên trên tàu" : "Onboard staff assignment"}
             {boatCode ? `: ${boatCode}` : ""}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5 truncate">
             {isLoading
               ? (lang === "VN" ? "Đang tải thông tin tàu..." : "Loading boat...")
-              : boatName || (lang === "VN" ? "Phân công nhân viên trên tàu" : "Assign onboard crew")}
+              : boatName || (lang === "VN" ? "Gán nhân viên làm việc trên tàu theo khoảng ngày" : "Assign staff who work on this boat")}
           </p>
         </div>
       </div>

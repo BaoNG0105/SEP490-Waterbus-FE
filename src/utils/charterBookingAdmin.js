@@ -355,10 +355,15 @@ export const formatRouteEstimate = (routeEstimate, lang) => {
 
   const parts = [];
   const distance = Number(routeEstimate.totalDistanceKm);
-  const estimatedDurationMinutes = Number(routeEstimate.estimatedDurationMinutes);
-  const travelMinutes = Number.isFinite(estimatedDurationMinutes) && estimatedDurationMinutes > 0
-    ? estimatedDurationMinutes
-    : Number(routeEstimate.estimatedTravelMinutes);
+  const travelMinutes = Number(
+    Number.isFinite(Number(routeEstimate.estimatedTravelMinutes)) && Number(routeEstimate.estimatedTravelMinutes) > 0
+      ? routeEstimate.estimatedTravelMinutes
+      : routeEstimate.estimatedDurationMinutes,
+  );
+  const estimatedStayMinutes = Number(routeEstimate.estimatedStayMinutes);
+  const chargeableStayMinutes = Number(routeEstimate.chargeableStayMinutes);
+  const freeStayMinutes = Number(routeEstimate.freeStayMinutes);
+  const bufferMinutes = Number(routeEstimate.estimatedBufferMinutes);
   const chargeableDurationMinutes = Number(routeEstimate.chargeableDurationMinutes);
   const chargeableIsMinutes = Number.isFinite(chargeableDurationMinutes) && chargeableDurationMinutes > 0;
   const chargeableDurationValue = chargeableIsMinutes
@@ -370,13 +375,23 @@ export const formatRouteEstimate = (routeEstimate, lang) => {
     parts.push(`${lang === "VN" ? "Quãng đường" : "Distance"}: ${distance.toFixed(1)} km`);
   }
   if (Number.isFinite(travelMinutes) && travelMinutes > 0) {
-    parts.push(`${lang === "VN" ? "Thời gian di chuyển" : "Travel time"}: ${travelMinutes} ${lang === "VN" ? "phút" : "min"}`);
+    parts.push(`${lang === "VN" ? "Di chuyển" : "Travel"}: ${travelMinutes} ${lang === "VN" ? "phút" : "min"}`);
+  }
+  if (Number.isFinite(estimatedStayMinutes) && estimatedStayMinutes > 0) {
+    const freeLabel = Number.isFinite(freeStayMinutes) && freeStayMinutes > 0 ? freeStayMinutes : 30;
+    parts.push(`${lang === "VN" ? "Dừng nghỉ" : "Stay"}: ${estimatedStayMinutes} ${lang === "VN" ? "phút" : "min"} (${lang === "VN" ? "miễn" : "free"} ${freeLabel})`);
+  }
+  if (Number.isFinite(chargeableStayMinutes) && chargeableStayMinutes > 0) {
+    parts.push(`${lang === "VN" ? "Dừng tính phí" : "Billable stay"}: ${chargeableStayMinutes} ${lang === "VN" ? "phút" : "min"}`);
+  }
+  if (Number.isFinite(bufferMinutes) && bufferMinutes > 0) {
+    parts.push(`${lang === "VN" ? "Buffer" : "Buffer"}: +${bufferMinutes} ${lang === "VN" ? "phút" : "min"}`);
   }
   if (Number.isFinite(chargeableDurationValue) && chargeableDurationValue > 0) {
     parts.push(
       chargeableIsMinutes
-        ? `${lang === "VN" ? "Thời lượng tính tiền" : "Chargeable duration"}: ${chargeableDurationValue} ${lang === "VN" ? "phút" : "min"}`
-        : `${lang === "VN" ? "Thời lượng tính tiền" : "Chargeable duration"}: ${formatDuration(chargeableDurationValue, rentalUnit, lang)}`,
+        ? `${lang === "VN" ? "Tính tiền" : "Chargeable"}: ${chargeableDurationValue} ${lang === "VN" ? "phút" : "min"}`
+        : `${lang === "VN" ? "Tính tiền" : "Chargeable"}: ${formatDuration(chargeableDurationValue, rentalUnit, lang)}`,
     );
   }
 
@@ -717,8 +732,8 @@ export const normalizeBooking = (item) => {
     startTime: pick(item, ["startTime"], "--"),
     itineraryStops: normalizeItineraryStops(item),
     routeEstimate,
-    rentalUnit: pick(item, ["rentalUnit"], "Day"),
-    durationValue: Number(pick(item, ["durationValue", "durationHours"], 1)),
+    rentalUnit: pick(item, ["rentalUnit"], ""),
+    durationValue: Number(pick(item, ["durationValue", "durationHours"], 0)) || 0,
     adultCount,
     childCount,
     passengerCount,
@@ -727,8 +742,12 @@ export const normalizeBooking = (item) => {
     holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
     bookingHoldExpiresAt: pick(item, ["bookingHoldExpiresAt"], ""),
     estimatedPrice: Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0)),
+    totalAmount: Number(pick(item, ["finalAmount", "totalAmount"], 0)) || 0,
+    subtotalAmount: Number(pick(item, ["subtotalAmount", "subtotalBeforeDiscount"], 0)) || 0,
+    discountAmount: Number(pick(item, ["discountAmount"], 0)) || 0,
     depositAmount: Number(pick(item, ["depositAmount"], 0)),
     promotionCode: pick(item, ["promotionCode"], ""),
+    quoteBoats: pick(item, ["quoteBoats", "quoteBreakdown.boats", "pricing.boats", "pricePreview.boats"], []),
     specialRequests: pick(item, ["specialRequests"], ""),
     note: pick(item, ["specialRequests"], "--"),
     insuranceSelected: resolveInsuranceSelected(item),
