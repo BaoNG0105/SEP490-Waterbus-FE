@@ -8,3 +8,14 @@ export const getWaterways = (params) =>
 // Lấy chi tiết tuyến sông (kèm tọa độ vẽ bản đồ)
 export const getWaterwayById = (id) =>
     api.get(`/waterways/${id}`).then(r => r.data);
+
+// Xóa một tuyến sông/kênh (xóa TẤT CẢ segment cùng OsmId + tên + loại)
+// Trả về { osmId, waterwayName, waterwayType, deletedSegments }. Route đã tạo không bị ảnh hưởng.
+export const deleteWaterway = (id) =>
+    api.delete(`/waterways/${id}`).then(r => r.data);
+
+// Xóa TOÀN BỘ mạng đường sông (xóa sạch bảng waterway_segments)
+// Dùng trước khi re-import GeoJSON để tránh dữ liệu cũ trộn với map mới.
+// Bắt buộc confirm=true để tránh xóa nhầm. Trả về { deletedSegments }. Route đã tạo không bị ảnh hưởng.
+export const deleteAllWaterways = () =>
+    api.delete('/waterways', { params: { confirm: true } }).then(r => r.data);
