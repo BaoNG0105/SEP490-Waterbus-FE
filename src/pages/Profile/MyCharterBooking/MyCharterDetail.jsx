@@ -24,9 +24,11 @@ import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
 import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "../../../utils/insurancePreview";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { shouldShowCharterQuotePaymentCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount } from "../../../utils/charterBookingActions";
-import { formatQuoteChargeableDuration, formatQuoteUnitPriceLabel } from "../../../utils/charterQuotePreview";
+import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
 import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
 import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
+import { CharterQuotePreviewTable } from "../../../components/CharterQuotePreviewTable";
+import { BoatSeatLayoutPreviewButton } from "../../../components/BoatSeatLayoutPreview";
 import { MyCharterPaymentPanel, MyCharterPaymentStickyBar } from "./MyCharterPaymentPanel";
 import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
 
@@ -177,8 +179,8 @@ const normalizeBooking = (item) => {
     toStationName: toName || "",
     departureDate: pick(item, ["departureDate", "startDate"]),
     startTime: pick(item, ["startTime"], "--"),
-    rentalUnit: pick(item, ["rentalUnit"], "Day"),
-    durationValue: Number(pick(item, ["durationValue", "durationHours"], 1)),
+    rentalUnit: pick(item, ["rentalUnit"], ""),
+    durationValue: Number(pick(item, ["durationValue", "durationHours"], 0)) || 0,
     adultCount,
     childCount,
     passengerCount,
@@ -1345,6 +1347,11 @@ export function CharterDetail() {
 
     return {
       boatOrder,
+      boatId: String(pick(
+        boat,
+        ["boatId", "id", "boat.id"],
+        pick(selectedBoat, ["boatId", "id", "boat.id"], ""),
+      ) || ""),
       name: getBoatDisplayName(boat, getBoatDisplayName(selectedBoat, `${lang === "VN" ? "Tàu" : "Boat"} ${boatOrder}`)),
       numberOfDecks: getRequestedDeckCount(boat) || getRequestedDeckCount(selectedBoat),
       seatSetupType: pick(boat, ["seatSetupType", "requiredSeatSetupType", "boat.seatSetupType"], pick(selectedBoat, ["seatSetupType", "requiredSeatSetupType"], "--")),
@@ -1360,8 +1367,21 @@ export function CharterDetail() {
       subtotalAmount: Number(pick(boat, ["subtotalAmount", "totalAmount", "amount"], 0)) || 0,
     };
   });
-  const quoteSubtotal = booking.subtotalAmount || booking.estimatedPrice;
   const quoteTotal = booking.totalAmount || booking.estimatedPrice;
+  const boatsRentalTotal = quoteBoatRows.reduce((sum, boat) => sum + (Number(boat.subtotalAmount) || 0), 0);
+  const insuranceQuoteAmount = booking.insuranceSelected !== false
+    && Number(booking.insurance?.quantity) > 0
+    && Number(booking.insurance?.totalAmount) > 0
+    ? Number(booking.insurance.totalAmount)
+    : 0;
+  const quoteDiscountAmount = Number(booking.discountAmount) || 0;
+  const displayQuoteTotal = quoteTotal > 0
+    ? quoteTotal
+    : Math.max(boatsRentalTotal + insuranceQuoteAmount - quoteDiscountAmount, 0);
+  const customerQuotePreview = buildBookingQuotePreview(booking) || {
+    boats: [],
+    totalAmount: displayQuoteTotal,
+  };
   const hasQuote = booking.status !== "PendingQuote" && (quoteBoatRows.length > 0 || booking.estimatedPrice > 0);
   const storedPaymentOrderCode = sessionStorage.getItem(`charterPaymentOrderCode:${booking.id}`);
   const storedPaymentId = sessionStorage.getItem(`charterPayment:${booking.id}`);
@@ -1459,10 +1479,16 @@ export function CharterDetail() {
       label: lang === "VN" ? "Hình thức thuê" : "Rental type",
       value: booking.rentalUnit === "Hour"
         ? (lang === "VN" ? "Theo giờ" : "Hourly")
-        : (lang === "VN" ? "Theo ngày" : "Daily"),
-      description: lang === "VN"
-        ? "Thời lượng tính tiền do hệ thống ước tính từ lộ trình"
-        : "Chargeable duration is estimated from the route",
+        : booking.rentalUnit === "Day"
+          ? (lang === "VN" ? "Theo ngày" : "Daily")
+          : (lang === "VN" ? "Chờ báo giá" : "Pending quote"),
+      description: booking.rentalUnit
+        ? (lang === "VN"
+          ? "Thời lượng tính tiền do hệ thống ước tính từ lộ trình"
+          : "Chargeable duration is estimated from the route")
+        : (lang === "VN"
+          ? "Hình thức và thời lượng tính tiền sẽ có khi admin chốt giá"
+          : "Rental type and chargeable duration appear once quoted"),
     },
     {
       icon: "timer",
@@ -1470,19 +1496,28 @@ export function CharterDetail() {
       value: (() => {
         const estimatedMinutes = Number(pick(booking.routeEstimate, ["estimatedDurationMinutes", "estimatedTravelMinutes"], 0));
         const chargeableMinutes = Number(pick(booking.routeEstimate, ["chargeableDurationMinutes"], 0));
+        const chargeableValue = Number(pick(booking.routeEstimate, ["chargeableDurationValue"], 0));
+        const hasChargeable = (Number.isFinite(chargeableMinutes) && chargeableMinutes > 0)
+          || (Number.isFinite(chargeableValue) && chargeableValue > 0);
+
+        // Pending quote: don't show partial travel-only minutes (waiting/stops/buffer still missing).
+        if (booking.status === "PendingQuote" && !hasChargeable) {
+          return lang === "VN" ? "Có trong báo giá" : "Shown in quote";
+        }
+
         if (booking.rentalUnit === "Hour" && Number.isFinite(chargeableMinutes) && chargeableMinutes > 0) {
           const hours = Math.max(1, Math.ceil(chargeableMinutes / 60));
-          return lang === "VN" ? `${hours} giờ (tính tiền)` : `${hours} hr (billable)`;
+          return lang === "VN" ? `${hours} giờ` : `${hours} hr`;
         }
         if (Number.isFinite(estimatedMinutes) && estimatedMinutes > 0) {
           return lang === "VN" ? `${estimatedMinutes} phút di chuyển` : `${estimatedMinutes} min travel`;
         }
-        if (booking.durationValue) {
+        if (Number(booking.durationValue) > 0) {
           return booking.rentalUnit === "Hour"
             ? (lang === "VN" ? `${booking.durationValue} giờ` : `${booking.durationValue} hr`)
             : (lang === "VN" ? `${booking.durationValue} ngày` : `${booking.durationValue} day(s)`);
         }
-        return lang === "VN" ? "Hệ thống sẽ ước tính" : "System will estimate";
+        return lang === "VN" ? "Có trong báo giá" : "Shown in quote";
       })(),
     },
     {
@@ -1814,52 +1849,32 @@ export function CharterDetail() {
               {quoteBoatRows.length > 0 ? (
                 <div className="divide-y divide-[#D8E7EA] dark:divide-slate-700">
                   {quoteBoatRows.map((boat) => (
-                    <div key={`${boat.boatOrder}-${boat.name}`} className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1.5fr)_0.7fr_0.7fr_0.7fr] lg:items-center">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-4">
-                          <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-2xl bg-slate-200 dark:bg-slate-800">
-                            <img src={boat.imageUrl || DEFAULT_BOAT_IMAGE} alt={boat.name} className="h-full w-full object-cover" />
-                            <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg bg-[#124757] text-[10px] font-headline font-black text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900">
-                              {boat.boatOrder}
-                            </span>
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-headline font-black text-slate-900 dark:text-white truncate">{boat.name}</p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <span className="rounded-full border border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-headline font-black text-[#124757] dark:text-yellow-400">
-                                {formatDeckCount(boat.numberOfDecks, lang) || boat.seatSetupType}
-                              </span>
-                              {boat.seatCount !== "" && (
-                                <span className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300">
-                                  {boat.seatCount} {lang === "VN" ? "ghế" : "seats"}
-                                </span>
-                              )}
-                              {boat.status && (
-                                <span className="rounded-full border border-emerald-100 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                                  {boat.status}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                    <div key={`${boat.boatOrder}-${boat.name}`} className="flex items-center gap-4 px-5 py-4">
+                      <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-2xl bg-slate-200 dark:bg-slate-800">
+                        <img src={boat.imageUrl || DEFAULT_BOAT_IMAGE} alt={boat.name} className="h-full w-full object-cover" />
+                        <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg bg-[#124757] text-[10px] font-headline font-black text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900">
+                          {boat.boatOrder}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="min-w-0 truncate font-headline font-black text-slate-900 dark:text-white">{boat.name}</p>
+                          <BoatSeatLayoutPreviewButton
+                            boatId={boat.boatId}
+                            boatName={boat.name}
+                            lang={lang}
+                          />
                         </div>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Đơn giá" : "Unit Price"}</p>
-                        <p className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">
-                          {boat.unitPrice > 0 ? formatQuoteUnitPriceLabel(boat.unitPrice, booking.rentalUnit, currencyFormatter, lang) : "--"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Tính tiền" : "Chargeable"}</p>
-                        <p className="mt-1 text-sm font-bold leading-5 text-slate-800 dark:text-slate-100">
-                          {boat.chargeableDurationValue !== ""
-                            ? formatQuoteChargeableDuration(boat.chargeableDurationValue, booking.rentalUnit, lang, booking.routeEstimate)
-                            : "--"}
-                        </p>
-                      </div>
-                      <div className="lg:text-right">
-                        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Thành tiền" : "Subtotal"}</p>
-                        <p className="mt-1 text-base font-headline font-black text-[#0E4050] dark:text-yellow-400">{boat.subtotalAmount > 0 ? currencyFormatter.format(boat.subtotalAmount) : "--"}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <span className="rounded-full border border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-headline font-black text-[#124757] dark:text-yellow-400">
+                            {formatDeckCount(boat.numberOfDecks, lang) || boat.seatSetupType}
+                          </span>
+                          {boat.seatCount !== "" && (
+                            <span className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300">
+                              {boat.seatCount} {lang === "VN" ? "ghế" : "seats"}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1877,36 +1892,35 @@ export function CharterDetail() {
               )}
 
               <div className="border-t border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
-                <div className="ml-auto max-w-md space-y-3">
-                  <div className="flex items-center justify-between gap-4 text-sm font-bold text-slate-600 dark:text-slate-300">
-                    <span>{lang === "VN" ? "Tổng trước giảm" : "Subtotal"}</span>
-                    <span>{quoteSubtotal > 0 ? currencyFormatter.format(quoteSubtotal) : "--"}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm font-bold text-slate-600 dark:text-slate-300">
-                    <span>{lang === "VN" ? "Giảm giá" : "Discount"}</span>
-                    <span>{booking.discountAmount > 0 ? `-${currencyFormatter.format(booking.discountAmount)}` : "--"}</span>
-                  </div>
-                  {booking.insuranceSelected !== false && booking.insurance?.totalAmount > 0 ? (
-                    <div className="flex items-center justify-between gap-4 text-sm font-bold text-slate-600 dark:text-slate-300">
-                      <span>
-                        {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
-                        {booking.insurance.quantity > 0
-                          ? ` · ${booking.insurance.quantity} ${lang === "VN" ? "ghế" : "seats"}`
-                          : ""}
-                      </span>
-                      <span>{currencyFormatter.format(booking.insurance.totalAmount)}</span>
+                {customerQuotePreview?.boats?.length > 0 ? (
+                  <CharterQuotePreviewTable
+                    preview={customerQuotePreview}
+                    booking={booking}
+                    lang={lang}
+                    currencyFormatter={currencyFormatter}
+                  />
+                ) : displayQuoteTotal > 0 ? (
+                  <div className="overflow-hidden rounded-2xl bg-[#124757] text-white shadow-[0_12px_30px_rgba(18,71,87,0.25)] dark:bg-yellow-400 dark:text-slate-900">
+                    <div className="flex items-end justify-between gap-3 px-4 py-4">
+                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
+                        {lang === "VN" ? "Tổng chốt giá" : "Quote total"}
+                      </p>
+                      <p className="font-headline text-2xl font-black tabular-nums tracking-tight">
+                        {currencyFormatter.format(displayQuoteTotal)}
+                      </p>
                     </div>
-                  ) : booking.insuranceSelected === true ? (
-                    <div className="flex items-center justify-between gap-4 text-sm font-bold text-slate-600 dark:text-slate-300">
-                      <span>{lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}</span>
-                      <span>{lang === "VN" ? "Đã chọn" : "Selected"}</span>
-                    </div>
-                  ) : null}
-                  <div className="flex items-center justify-between gap-4 border-t border-slate-200 dark:border-slate-700 pt-3">
-                    <span className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Tổng cuối" : "Total"}</span>
-                    <span className="text-xl font-headline font-black text-[#0E4050] dark:text-yellow-400">{quoteTotal > 0 ? currencyFormatter.format(quoteTotal) : "--"}</span>
+                    {depositPaymentAmount > 0 ? (
+                      <div className="flex items-center justify-between gap-3 border-t border-white/15 px-4 py-3 dark:border-slate-900/15">
+                        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
+                          {lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
+                        </p>
+                        <p className="text-sm font-headline font-black tabular-nums text-emerald-200 dark:text-emerald-800">
+                          {currencyFormatter.format(depositPaymentAmount)}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
+                ) : null}
 
                 <MyCharterPaymentPanel
                   lang={lang}

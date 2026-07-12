@@ -328,7 +328,7 @@ function App() {
           {/* Boat Crew Schedule Page */}
           <Route path="/admin/boats-management/crew/:id"
             element={
-              <AdminLayout title="Crew Schedule">
+              <AdminLayout title="Onboard Staff">
                 <BoatCrewSchedule />
               </AdminLayout>
             }

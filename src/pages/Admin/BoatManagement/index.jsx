@@ -525,7 +525,7 @@ export function BoatManagement() {
                                                         type="button"
                                                         onClick={() => handleCrewSchedule(boat.id)}
                                                         className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 flex items-center justify-center transition-all shadow-inner"
-                                                        title={lang === "VN" ? "Phân lịch crew" : "Crew Schedule"}
+                                                        title={lang === "VN" ? "Phân công nhân viên trên tàu" : "Assign onboard staff"}
                                                     >
                                                         <span className="material-symbols-outlined text-base">groups</span>
                                                     </button>

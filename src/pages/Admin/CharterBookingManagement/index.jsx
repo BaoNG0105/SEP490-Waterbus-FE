@@ -340,7 +340,14 @@ export function CharterBookingManagement() {
                     >
                       <td className="py-4 px-6">
                         <p className="font-headline font-black text-[#124757] dark:text-white">{booking.bookingCode}</p>
-                        <p className="text-[10px] text-slate-400 mt-1">{booking.passengerCount} {lang === "VN" ? "khách" : "guests"} / {formatDuration(booking.durationValue, booking.rentalUnit, lang)}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {booking.passengerCount} {lang === "VN" ? "khách" : "guests"}
+                          {Number(booking.durationValue) > 0
+                            ? ` / ${formatDuration(booking.durationValue, booking.rentalUnit, lang)}`
+                            : (booking.rentalUnit
+                              ? ` / ${booking.rentalUnit === "Hour" ? (lang === "VN" ? "Theo giờ" : "Hourly") : (lang === "VN" ? "Theo ngày" : "Daily")}`
+                              : "")}
+                        </p>
                       </td>
                       <td className="py-4 px-4">
                         <p className="font-bold text-slate-800 dark:text-white">{booking.customerName}</p>
