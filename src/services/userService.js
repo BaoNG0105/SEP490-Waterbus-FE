@@ -5,6 +5,8 @@ import {
   createManagedUser,
   updateManagedUser,
   deleteManagedUser,
+  getUserStations,
+  updateUserStations,
 } from "../api/userApi";
 import { getRoleSystemName } from "../utils/roleHelpers";
 
@@ -197,4 +199,30 @@ export const deleteUser = async (userId) => {
   const data = await deleteManagedUser(userId);
   invalidateUserCaches();
   return data;
+};
+
+const extractStationIdList = (data) => {
+  if (Array.isArray(data)) {
+    return data
+      .map((item) => {
+        if (item == null) return "";
+        if (typeof item === "string" || typeof item === "number") return String(item);
+        return String(pick(item, ["stationId", "id", "station.id"], ""));
+      })
+      .filter(Boolean);
+  }
+  if (Array.isArray(data?.stationIds)) return data.stationIds.map(String).filter(Boolean);
+  if (Array.isArray(data?.stations)) return extractStationIdList(data.stations);
+  if (Array.isArray(data?.data)) return extractStationIdList(data.data);
+  return [];
+};
+
+export const fetchUserStations = async (userId) => {
+  const data = await getUserStations(userId);
+  return extractStationIdList(data);
+};
+
+export const assignUserStations = async (userId, stationIds) => {
+  const ids = (Array.isArray(stationIds) ? stationIds : []).map(String).filter(Boolean);
+  return updateUserStations(userId, { stationIds: ids });
 };

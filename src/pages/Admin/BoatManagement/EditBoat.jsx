@@ -4,6 +4,9 @@ import { useApp } from "../../../context/AppContext";
 import { fetchBoatDetail, modifyBoat } from "../../../services/boatService";
 import { fetchSeatLayout, deleteSeats, changeSeatStatus } from "../../../services/seatService";
 import { BoatDocumentsPanel } from "../../../components/BoatDocumentsPanel";
+import { FormSelect } from "../../../components/FormSelect";
+import { SeatMapIcon, seatToneFromCode, resolveSeatTypeCode } from "../../../components/SeatMapIcon";
+import { BoatBowLabel } from "../../../components/ShipWheelIcon";
 import Swal from "sweetalert2";
 
 export function EditBoat() {
@@ -210,12 +213,17 @@ export function EditBoat() {
 
       await modifyBoat(id, payload);
 
-      Swal.fire({
+      await Swal.fire({
+        toast: true,
+        position: "top-end",
         icon: "success",
         title: lang === "VN" ? "Cập nhật thành công!" : "Successfully Saved!",
         text: lang === "VN" ? "Thông số hồ sơ phương tiện đã được lưu trữ." : "Boat blueprint updated successfully.",
-        confirmButtonColor: "#124757",
-      }).then(() => navigate("/admin/boats-management"));
+        showConfirmButton: false,
+        timer: 2200,
+        timerProgressBar: true,
+      });
+      navigate("/admin/boats-management");
 
     } catch (error) {
       console.error("Lỗi cập nhật tàu:", error);
@@ -301,6 +309,15 @@ export function EditBoat() {
 
   const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
   const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+  const selectStyle = `${inputStyle} cursor-pointer`;
+  const deckOptions = [
+    { value: 1, label: lang === "VN" ? "1 Tầng" : "1 Deck" },
+    { value: 2, label: lang === "VN" ? "2 Tầng" : "2 Decks" },
+  ];
+  const seatSetupOptions = [
+    { value: "FullStandard", label: "Full Standard" },
+    { value: "StandardAndVip", label: "Standard & VIP" },
+  ];
   const disabledStyle = "opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-900/40"; 
 
   if (isLoading || !formData) {
@@ -337,7 +354,7 @@ export function EditBoat() {
                   : "bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
             >
-              {lang === "VN" ? "Thông số & ghế" : "Specs & seats"}
+              {lang === "VN" ? "Thông số và ghế" : "Specs and seats"}
             </button>
             <button
               type="button"
@@ -400,7 +417,7 @@ export function EditBoat() {
             </div>
           </div>
 
-          <div className="p-4 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-700/30 rounded-2xl space-y-3 mt-2">
+          <div className="p-4 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-700/30 rounded-2xl space-y-3 mt-2 overflow-visible">
             <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">info</span>
               {isSeatConfigured 
@@ -408,32 +425,38 @@ export function EditBoat() {
                   : (lang === "VN" ? "Có thể tùy chỉnh cấu trúc ghế trước khi sinh ma trận lưới." : "Seat grid parameters are editable.")
               }
             </span>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
+            <div className="grid grid-cols-3 gap-2 overflow-visible">
+              <div className="min-w-0 w-full">
                 <label className={labelStyle}>{lang === "VN" ? "Sức chứa" : "Capacity"}</label>
                 {/* Sức chứa luôn bị KHÓA CỨNG không cho sửa */}
                 <input type="number" required disabled value={formData.seatCount} className={`${inputStyle} ${disabledStyle}`} title={lang === "VN" ? "Được tự động tính toán từ Lưới ghế" : "Read-only"} />
               </div>
-              <div>
+              <div className="relative z-20 min-w-0 w-full">
                 <label className={labelStyle}>{lang === "VN" ? "Số tầng" : "Decks"}</label>
-                <select disabled={isSeatConfigured} value={formData.numberOfDecks} onChange={(e) => handleFieldChange("numberOfDecks", Number(e.target.value))} className={`${inputStyle} px-2 cursor-pointer ${isSeatConfigured ? disabledStyle : ""}`}>
-                  <option value={1}>{lang === "VN" ? "1 Tầng" : "1 Deck"}</option>
-                  <option value={2}>{lang === "VN" ? "2 Tầng" : "2 Decks"}</option>
-                </select>
+                <FormSelect
+                  disabled={isSeatConfigured}
+                  value={formData.numberOfDecks}
+                  onChange={(v) => handleFieldChange("numberOfDecks", Number(v))}
+                  options={deckOptions}
+                  className={`${selectStyle} ${isSeatConfigured ? disabledStyle : ""}`}
+                />
               </div>
-              <div>
+              <div className="relative z-30 min-w-0 w-full">
                 <label className={labelStyle}>{lang === "VN" ? "Cấu hình ghế" : "Seat Setup"}</label>
-                <select disabled={isSeatConfigured} value={formData.seatSetupType} onChange={(e) => handleFieldChange("seatSetupType", e.target.value)} className={`${inputStyle} px-2 cursor-pointer ${isSeatConfigured ? disabledStyle : "font-bold text-[#124757]"}`}>
-                  <option value="FullStandard">Full Standard</option>
-                  <option value="StandardAndVip">Standard & VIP</option>
-                </select>
+                <FormSelect
+                  disabled={isSeatConfigured}
+                  value={formData.seatSetupType}
+                  onChange={(v) => handleFieldChange("seatSetupType", v)}
+                  options={seatSetupOptions}
+                  className={`${selectStyle} ${isSeatConfigured ? disabledStyle : "font-bold text-[#124757]"}`}
+                />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Vận tốc (Kmh)" : "Max Speed"}</label>
+              <label className={labelStyle}>{lang === "VN" ? "Vận tốc tối đa (Kmh)" : "Max Speed (Kmh)"}</label>
               <input type="number" min={0} required value={formData.maxSpeedKmh} onChange={(e) => handleFieldChange("maxSpeedKmh", e.target.value)} className={inputStyle} />
             </div>
           </div>
@@ -536,7 +559,7 @@ export function EditBoat() {
             )}
           </div>
 
-          <div className="overflow-x-auto bg-slate-50 dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 flex flex-col items-center">
+          <div className="overflow-x-auto overflow-y-visible bg-slate-50 dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 md:p-8 flex flex-col items-center">
             {isSeatConfigured && seatMatrix?.decks?.length > 0 ? (
               <div className="w-full space-y-6">
                 
@@ -559,61 +582,63 @@ export function EditBoat() {
                   const cells = deck.cells || [];
                   const rowCount = deck.rowCount || cells.reduce((max, c) => Math.max(max, c.row), 0);
                   const columnCount = deck.columnCount || cells.reduce((max, c) => Math.max(max, c.column), 0);
+                  const showBow = Number(deck.deckNumber) === 1;
 
                   return (
                     <div key={deck.deckNumber} className="flex flex-col items-center min-w-max mx-auto">
-                      <div className="relative bg-slate-100 dark:bg-slate-900/80 border-8 border-slate-300 dark:border-slate-600 rounded-t-[12rem] rounded-b-[3rem] px-6 md:px-10 pt-16 pb-12 shadow-2xl min-w-max flex flex-col items-center">
+                      <div className={`relative overflow-visible bg-slate-100 dark:bg-slate-900/80 border-8 border-slate-300 dark:border-slate-600 rounded-t-[12rem] rounded-b-[3rem] px-8 md:px-14 pb-12 shadow-2xl min-w-max flex flex-col items-center ${showBow ? "pt-14" : "pt-8"}`}>
 
-                        {/* Mũi Tàu */}
-                        <div className="absolute top-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-60">
-                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#124757] dark:text-yellow-400">
-                            {lang === "VN" ? "Mũi Tàu" : "Bow"}
-                          </span>
-                        </div>
+                        {showBow ? (
+                          <div className="absolute top-3 left-1/2 -translate-x-1/2">
+                            <BoatBowLabel lang={lang} />
+                          </div>
+                        ) : null}
 
                         <div
-                          className="grid gap-1.5 md:gap-2 relative z-10 mx-auto"
+                          className="grid gap-2 md:gap-2.5 relative z-10 mx-auto overflow-visible p-2"
                           style={{
-                            gridTemplateColumns: `repeat(${columnCount}, minmax(36px, 44px))`,
-                            gridTemplateRows: `repeat(${rowCount}, minmax(36px, 44px))`
+                            gridTemplateColumns: `repeat(${columnCount}, minmax(40px, 48px))`,
+                            gridTemplateRows: `repeat(${rowCount}, minmax(44px, 52px))`
                           }}
                         >
                         {cells.map((cell) => {
                           const seat = cell.seat;
-                          const seatTypeCode = seat?.seatType?.seatTypeCode;
+                          const seatTypeCode = resolveSeatTypeCode(seat) || resolveSeatTypeCode(cell);
                           const seatId = seat?.seatId;
                           const isSeat = cell.type === "Seat";
                           const isSeatActive = seat?.isActive ?? true;
                           const isToggling = isSeat && togglingSeatId === seatId;
-                          let bgColor = "bg-white border-dashed border-slate-200 dark:border-slate-700";
-                          let icon = "";
+                          const seatLabel = seat?.seatCode || `${cell.row}-${cell.column}`;
 
+                          let cellClass = "bg-white border-dashed border-slate-200 dark:border-slate-700";
                           if (cell.type === "Aisle") {
-                            bgColor = "bg-slate-100 border-slate-200 dark:bg-slate-700/50 dark:border-slate-600";
+                            cellClass = "bg-slate-100 border-transparent dark:bg-slate-700/40";
                           } else if (isSeat) {
-                            icon = "chair";
-                            if (seatTypeCode === "STANDARD") { bgColor = "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10"; }
-                            else if (seatTypeCode === "CABIN") { bgColor = "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10"; icon = "chair_alt"; }
-                            else if (seatTypeCode === "RIVER") { bgColor = "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10"; icon = "deck"; }
-                            else if (seatTypeCode === "SKY") { bgColor = "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10"; icon = "airline_seat_recline_extra"; }
+                            cellClass = "bg-transparent border-transparent";
                           }
 
                           return (
                             <div
                               key={`${cell.row}-${cell.column}`}
-                              className={`relative flex flex-col items-center justify-center rounded-lg border text-[9px] font-bold select-none transition-all ${bgColor} ${isSeat && !isSeatActive ? "opacity-40 grayscale" : ""}`}
+                              className={`relative z-[1] flex flex-col items-center justify-center rounded-lg border text-[9px] font-bold select-none transition-all ${cellClass}`}
                               style={{ gridRow: cell.row, gridColumn: cell.column }}
-                              title={isSeat ? `${seat?.seatCode || seatTypeCode || ""} (${cell.row}-${cell.column})` : cell.type}
+                              title={isSeat ? `${seatLabel} (${cell.row}-${cell.column})` : cell.type}
                             >
-                              {icon && <span className="material-symbols-outlined text-[16px] leading-none mb-0.5">{icon}</span>}
-                              {isSeat && <span className="opacity-50 text-[7px] tracking-tighter">{cell.row}-{cell.column}</span>}
+                              {isSeat ? (
+                                <SeatMapIcon
+                                  label={seatLabel}
+                                  tone={seatToneFromCode(seatTypeCode)}
+                                  disabled={!isSeatActive}
+                                  className="w-[92%] h-[92%]"
+                                />
+                              ) : null}
                               {isSeat && seatId && (
                                 <button
                                   type="button"
                                   disabled={isToggling}
                                   onClick={(e) => { e.stopPropagation(); handleToggleSeatStatus(seat); }}
                                   title={isSeatActive ? (lang === "VN" ? "Bấm để tắt ghế" : "Click to disable seat") : (lang === "VN" ? "Bấm để bật ghế" : "Click to enable seat")}
-                                  className={`absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center shadow-md transition-all disabled:opacity-50 text-white ${isSeatActive ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"}`}
+                                  className={`absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center shadow-md transition-all disabled:opacity-50 text-white z-10 ${isSeatActive ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"}`}
                                 >
                                   {isToggling ? (
                                     <div className="w-2 h-2 border border-white border-t-transparent rounded-full animate-spin"></div>

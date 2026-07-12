@@ -295,90 +295,127 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
                 )}
               </div>
 
-              {doc.isUploaded && (
-                <div className="rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-4 space-y-3">
-                  <button
-                    type="button"
-                    onClick={() => openFile(doc.fileUrl)}
-                    disabled={!doc.fileUrl}
-                    className="flex items-center gap-2 min-w-0 w-full text-left group disabled:cursor-default"
-                  >
-                    <span className="material-symbols-outlined text-base text-slate-400 group-hover:text-[#124757] dark:group-hover:text-yellow-400">description</span>
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate group-hover:underline">
-                      {doc.fileName || (lang === "VN" ? "Tệp đính kèm" : "Attached file")}
-                    </span>
-                  </button>
-
-                  {doc.updatedAt && (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {lang === "VN" ? "Cập nhật lần cuối:" : "Last updated:"}{" "}
-                      <span className="font-bold text-slate-700 dark:text-slate-200">
-                        {formatDateTime(doc.updatedAt, lang)}
-                      </span>
-                    </p>
-                  )}
-
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {doc.fileUrl && (
+              {doc.isUploaded ? (
+                <div className="rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3.5 space-y-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-0 flex-1 space-y-0.5">
                       <button
                         type="button"
                         onClick={() => openFile(doc.fileUrl)}
-                        className="px-3 py-2 rounded-xl bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 text-[11px] font-bold uppercase tracking-wide hover:brightness-110 transition-all inline-flex items-center gap-1.5"
+                        disabled={!doc.fileUrl}
+                        className="flex items-center gap-1.5 min-w-0 max-w-full text-left group disabled:cursor-default"
                       >
-                        <span className="material-symbols-outlined text-sm">open_in_new</span>
-                        {lang === "VN" ? "Xem file" : "View file"}
+                        <span className="material-symbols-outlined text-[15px] text-slate-400 group-hover:text-[#124757] dark:group-hover:text-yellow-400 shrink-0">description</span>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate group-hover:underline">
+                          {doc.fileName || (lang === "VN" ? "Tệp đính kèm" : "Attached file")}
+                        </span>
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      disabled={isDeleting}
-                      onClick={() => handleDelete(doc.type, label)}
-                      className="px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[11px] font-bold uppercase tracking-wide hover:bg-red-100 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      {isDeleting ? (
-                        <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <span className="material-symbols-outlined text-sm">delete</span>
+                      {doc.updatedAt && (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 pl-[22px]">
+                          {lang === "VN" ? "Cập nhật lần cuối:" : "Last updated:"}{" "}
+                          <span className="font-bold text-slate-700 dark:text-slate-200">
+                            {formatDateTime(doc.updatedAt, lang)}
+                          </span>
+                        </p>
                       )}
-                      {lang === "VN" ? "Xóa" : "Delete"}
-                    </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {doc.fileUrl && (
+                        <button
+                          type="button"
+                          onClick={() => openFile(doc.fileUrl)}
+                          title={lang === "VN" ? "Xem file" : "View file"}
+                          className="h-8 px-2.5 rounded-lg bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 text-[10px] font-bold uppercase tracking-wide hover:brightness-110 transition-all inline-flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">open_in_new</span>
+                          {lang === "VN" ? "Xem" : "View"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={isDeleting}
+                        onClick={() => handleDelete(doc.type, label)}
+                        title={lang === "VN" ? "Xóa" : "Delete"}
+                        className="h-8 px-2.5 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[10px] font-bold uppercase tracking-wide hover:bg-red-100 transition-all inline-flex items-center gap-1 disabled:opacity-50"
+                      >
+                        {isDeleting ? (
+                          <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <span className="material-symbols-outlined text-[15px]">delete</span>
+                        )}
+                        {lang === "VN" ? "Xóa" : "Del"}
+                      </button>
+                      <label
+                        title={lang === "VN" ? "Thay file" : "Replace"}
+                        className="h-8 px-2.5 rounded-lg border border-[#124757]/30 dark:border-yellow-400/40 bg-white dark:bg-slate-800 text-[#124757] dark:text-yellow-300 text-[10px] font-bold uppercase tracking-wide hover:bg-[#124757]/5 dark:hover:bg-yellow-400/10 transition-all inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">upload_file</span>
+                        {lang === "VN" ? "Thay" : "Replace"}
+                        <input
+                          type="file"
+                          accept={BOAT_DOCUMENT_ACCEPT}
+                          onChange={(e) => setPendingFile(doc.type, e.target.files?.[0] || null)}
+                          className="sr-only"
+                        />
+                      </label>
+                    </div>
                   </div>
+
+                  {pendingFile ? (
+                    <div className="flex items-center justify-between gap-2 rounded-lg bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-2">
+                      <span className="text-[11px] font-bold text-[#124757] dark:text-yellow-300 truncate inline-flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[14px]">schedule</span>
+                        {pendingFile.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => clearPendingFile(doc.type)}
+                        className="text-slate-400 hover:text-red-500 transition-colors shrink-0"
+                        title={lang === "VN" ? "Bỏ chọn" : "Clear"}
+                      >
+                        <span className="material-symbols-outlined text-base">close</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400">
+                      {lang === "VN" ? "PDF, JPG, PNG, WEBP · tối đa 10MB" : "PDF, JPG, PNG, WEBP · max 10MB"}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60 p-4 space-y-2">
+                  <label className={labelStyle}>
+                    {lang === "VN" ? "Chọn tệp hồ sơ" : "Choose document file"}
+                  </label>
+                  <input
+                    type="file"
+                    accept={BOAT_DOCUMENT_ACCEPT}
+                    onChange={(e) => setPendingFile(doc.type, e.target.files?.[0] || null)}
+                    className="block w-full text-[11px] font-bold text-slate-600 dark:text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-[#124757] file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900 file:font-bold file:cursor-pointer"
+                  />
+                  {pendingFile ? (
+                    <div className="flex items-center justify-between gap-2 rounded-lg bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-2">
+                      <span className="text-[11px] font-bold text-[#124757] dark:text-yellow-300 truncate inline-flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[14px]">schedule</span>
+                        {pendingFile.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => clearPendingFile(doc.type)}
+                        className="text-slate-400 hover:text-red-500 transition-colors shrink-0"
+                        title={lang === "VN" ? "Bỏ chọn" : "Clear"}
+                      >
+                        <span className="material-symbols-outlined text-base">close</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400">
+                      {lang === "VN" ? "PDF, JPG, PNG, WEBP · tối đa 10MB" : "PDF, JPG, PNG, WEBP · max 10MB"}
+                    </p>
+                  )}
                 </div>
               )}
-
-              <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60 p-4 space-y-2">
-                <label className={labelStyle}>
-                  {doc.isUploaded
-                    ? (lang === "VN" ? "Chọn file mới để thay" : "Choose a new file to replace")
-                    : (lang === "VN" ? "Chọn tệp hồ sơ" : "Choose document file")}
-                </label>
-                <input
-                  type="file"
-                  accept={BOAT_DOCUMENT_ACCEPT}
-                  onChange={(e) => setPendingFile(doc.type, e.target.files?.[0] || null)}
-                  className="block w-full text-[11px] font-bold text-slate-600 dark:text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-[#124757] file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900 file:font-bold file:cursor-pointer"
-                />
-                {pendingFile ? (
-                  <div className="flex items-center justify-between gap-2 rounded-lg bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-2">
-                    <span className="text-[11px] font-bold text-[#124757] dark:text-yellow-300 truncate inline-flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[14px]">schedule</span>
-                      {pendingFile.name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => clearPendingFile(doc.type)}
-                      className="text-slate-400 hover:text-red-500 transition-colors shrink-0"
-                      title={lang === "VN" ? "Bỏ chọn" : "Clear"}
-                    >
-                      <span className="material-symbols-outlined text-base">close</span>
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-[10px] text-slate-400">
-                    {lang === "VN" ? "PDF, JPG, PNG, WEBP · tối đa 10MB" : "PDF, JPG, PNG, WEBP · max 10MB"}
-                  </p>
-                )}
-              </div>
             </div>
           );
         })}

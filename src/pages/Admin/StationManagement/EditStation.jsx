@@ -409,7 +409,7 @@ export function EditStation() {
                         </div>
                     </div>
                     
-                    {/* DANH SÁCH ĐỘI NGŨ NHÂN SỰ TẠI GA */}
+                    {/* DANH SÁCH ĐỘI NGŨ NHÂN SỰ TẠI GA (chỉ xem — gắn bến ở Quản lý người dùng) */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
                         <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">
                             {lang === "VN" ? "Nhân sự trực thuộc tại ga" : "Station Personnel"}
@@ -421,9 +421,12 @@ export function EditStation() {
                                     <p className="text-xs text-slate-400 italic font-medium">{lang === "VN" ? "Chưa chỉ định quản lý bến." : "No manager assigned."}</p>
                                 ) : (
                                     <div className="flex flex-wrap gap-2">
-                                        {managers.map((m, i) => (
-                                            <span key={i} className="px-2.5 py-1 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 text-[10px] font-bold rounded-lg border border-amber-100 dark:border-amber-500/20">{m}</span>
-                                        ))}
+                                        {managers.map((m, i) => {
+                                            const label = typeof m === "string" ? m : (m?.fullName || m?.name || m?.email || "--");
+                                            return (
+                                                <span key={m?.userId || m?.id || i} className="px-2.5 py-1 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 text-[10px] font-bold rounded-lg border border-amber-100 dark:border-amber-500/20">{label}</span>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -433,9 +436,12 @@ export function EditStation() {
                                     <p className="text-xs text-slate-400 italic font-medium">{lang === "VN" ? "Chưa phân phối nhân viên trực." : "No shift staff logs."}</p>
                                 ) : (
                                     <div className="flex flex-wrap gap-2">
-                                        {staff.map((s, i) => (
-                                            <span key={i} className="px-2.5 py-1 bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-600">{s}</span>
-                                        ))}
+                                        {staff.map((s, i) => {
+                                            const label = typeof s === "string" ? s : (s?.fullName || s?.name || s?.email || "--");
+                                            return (
+                                                <span key={s?.userId || s?.id || i} className="px-2.5 py-1 bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-600">{label}</span>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
