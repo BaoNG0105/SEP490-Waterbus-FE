@@ -13,6 +13,13 @@ import { fetchAllStations } from "../../../services/stationService";
 import { fetchWaterwayDetail } from "../../../services/waterwayService";
 import { WaterwayMap } from "../../../components/WaterwayMap";
 import Swal from "sweetalert2";
+import { FormSelect } from "../../../components/FormSelect";
+import {
+    getRouteTypeLabel,
+    getRouteTypeOptions,
+    isSightseeingLoopRoute,
+    resolveRouteIsBookable,
+} from "../../../utils/routeTypes";
 
 // routeGeometry trả về dạng GeoJSON [lng, lat] -> quy đổi sang {latitude, longitude} cho WaterwayMap
 const geometryToCoordinates = (geometry) => {
@@ -22,55 +29,10 @@ const geometryToCoordinates = (geometry) => {
         .map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
 };
 
-// "Khoét" tọa độ từng bến vào đúng vị trí của nó trên đường tuyến sông (routeGeometry), để đường vẽ
-// bẻ một góc chữ V ra bến rồi tiếp tục đúng điểm kế tiếp trên luồng lạch. Bến phải được truyền vào
-// đúng thứ tự stopOrder để giữ tuyến đi đúng chiều. routeGeometry do backend sinh thường dài hơn thực
-// tế (phủ luôn đoạn waterway trước bến đầu/sau bến cuối), nên cắt bỏ hẳn phần dư ở cả hai đầu - tuyến
-// chỉ vẽ từ đúng bến đầu tiên đến đúng bến cuối cùng.
-const spliceStationsIntoRouteLine = (linePositions, orderedStations) => {
-    if (!linePositions || linePositions.length === 0) return [];
-    if (!orderedStations || orderedStations.length === 0) return linePositions;
-
-    const result = [];
-    let cursor = 0;
-
-    orderedStations.forEach((station, index) => {
-        const stationPos = [station.latitude, station.longitude];
-
-        // Chỉ tìm về phía trước kể từ cursor hiện tại để không đảo ngược chiều tuyến
-        let nearestIndex = cursor;
-        let minDistSq = Infinity;
-        for (let i = cursor; i < linePositions.length; i++) {
-            const dLat = linePositions[i][0] - stationPos[0];
-            const dLng = linePositions[i][1] - stationPos[1];
-            const distSq = dLat * dLat + dLng * dLng;
-            if (distSq < minDistSq) {
-                minDistSq = distSq;
-                nearestIndex = i;
-            }
-        }
-
-        if (index === 0) {
-            // Bến đầu tiên: bỏ hẳn phần luồng lạch dư phía trước, tuyến bắt đầu ngay tại bến
-            result.push(stationPos);
-        } else {
-            // Nối đoạn tuyến sông đến ngay trước điểm rẽ, bẻ góc ra bến (không lặp lại điểm vừa đi qua)
-            result.push(...linePositions.slice(cursor, nearestIndex));
-            result.push(stationPos);
-        }
-
-        cursor = nearestIndex;
-    });
-
-    // Bến cuối cùng: không nối thêm phần luồng lạch dư phía sau, tuyến kết thúc ngay tại bến
-    return result;
-};
-
 const emptyNewStopForm = {
     stationCode: "",
     stopOrder: 1,
     standardTravelMin: "",
-    standardDwellMin: 2,
     isPickupAllowed: true,
     isDropoffAllowed: true
 };
@@ -116,17 +78,20 @@ export function RouteDetail() {
                 description: detail.description || "",
                 baseDistanceKm: detail.baseDistanceKm ?? "",
                 estimatedDurationMin: detail.estimatedDurationMin ?? "",
-                status: detail.status || "Active"
+                status: detail.status || "Active",
+                routeType: detail.routeType || "Regular",
+                isBookable: detail.isBookable ?? resolveRouteIsBookable(detail.routeType || "Regular"),
             });
 
-            const stationCoordsById = new Map((allStations || []).map(s => [s.stationId, s]));
+            const stationCoordsById = new Map(
+                (allStations || []).map((s) => [String(s.stationId ?? s.id ?? ""), s])
+            );
             const stops = (detail.stops || []).slice().sort((a, b) => a.stopOrder - b.stopOrder);
 
             const stopEditsMap = {};
             stops.forEach(stop => {
                 stopEditsMap[stop.routeStopId] = {
                     standardTravelMin: stop.standardTravelMin ?? "",
-                    standardDwellMin: stop.standardDwellMin ?? "",
                     isPickupAllowed: !!stop.isPickupAllowed,
                     isDropoffAllowed: !!stop.isDropoffAllowed
                 };
@@ -137,27 +102,29 @@ export function RouteDetail() {
                 stopOrder: stops.length > 0 ? Math.max(...stops.map(s => s.stopOrder)) + 1 : 1
             }));
 
-            // Ghép tọa độ (lat/lng) từ danh sách nhà ga đầy đủ vào từng bến dừng của tuyến để vẽ bản đồ
+            // Marker bến lấy từ stops[] theo stopOrder (không giới hạn 2 điểm)
             const stopsWithCoords = stops
                 .map(stop => {
-                    const stationInfo = stationCoordsById.get(stop.stationId);
-                    if (!stationInfo) return null;
+                    const stationInfo = stationCoordsById.get(String(stop.stationId ?? ""));
+                    const latitude = stop.latitude ?? stop.station?.latitude ?? stationInfo?.latitude;
+                    const longitude = stop.longitude ?? stop.station?.longitude ?? stationInfo?.longitude;
+                    if (latitude == null || longitude == null) return null;
                     return {
-                        stationId: stop.stationId,
-                        stationName: stop.stationName,
-                        address: stationInfo.address,
-                        latitude: stationInfo.latitude,
-                        longitude: stationInfo.longitude,
+                        stationId: String(stop.stationId ?? stationInfo?.stationId ?? ""),
+                        stationName: stop.stationName || stop.station?.stationName || stationInfo?.stationName,
+                        address: stationInfo?.address || stop.station?.address,
+                        latitude: Number(latitude),
+                        longitude: Number(longitude),
                         status: "Active"
                     };
                 })
                 .filter(Boolean);
             setMapStations(stopsWithCoords);
 
-            // Ưu tiên vẽ đường sông thực tế từ routeGeometry đã được backend tự sinh sẵn
+            // Ưu tiên vẽ đúng routeGeometry từ BE (không nối thẳng start-end)
             let coordinates = geometryToCoordinates(detail.routeGeometry);
 
-            // Fallback: nếu chưa có routeGeometry, dựng lại đường đi bằng cách tra cứu từng waterway đã import qua waterwayApi
+            // Fallback: dựng từ segments/waterway nếu chưa có geometry
             if (coordinates.length === 0 && Array.isArray(detail.segments) && detail.segments.length > 0) {
                 try {
                     const sortedSegments = detail.segments.slice().sort((a, b) => (a.segmentOrder || 0) - (b.segmentOrder || 0));
@@ -176,11 +143,12 @@ export function RouteDetail() {
                 }
             }
 
-            // Rẽ đường tuyến vào đúng vị trí từng bến theo thứ tự stopOrder rồi quay lại luồng lạch
-            if (coordinates.length > 0 && stopsWithCoords.length > 0) {
-                const linePositions = coordinates.map(c => [c.latitude, c.longitude]);
-                const splicedPositions = spliceStationsIntoRouteLine(linePositions, stopsWithCoords);
-                coordinates = splicedPositions.map(([lat, lng]) => ({ latitude: lat, longitude: lng }));
+            // Fallback cuối: nối theo thứ tự toàn bộ stops[] (không chỉ 2 điểm đầu/cuối)
+            if (coordinates.length === 0 && stopsWithCoords.length >= 2) {
+                coordinates = stopsWithCoords.map((s) => ({
+                    latitude: s.latitude,
+                    longitude: s.longitude,
+                }));
             }
 
             setRouteLine(coordinates);
@@ -208,7 +176,13 @@ export function RouteDetail() {
     }, [loadRouteDetail]);
 
     const handleRouteFormChange = (field, value) => {
-        setRouteForm(prev => ({ ...prev, [field]: value }));
+        setRouteForm(prev => {
+            const next = { ...prev, [field]: value };
+            if (field === "routeType") {
+                next.isBookable = resolveRouteIsBookable(value);
+            }
+            return next;
+        });
     };
 
     const handleSaveRouteInfo = async (e) => {
@@ -216,13 +190,39 @@ export function RouteDetail() {
         try {
             setIsSavingRouteInfo(true);
             setErrorMsg("");
+
+            const stopsOrdered = (route.stops || []).slice().sort((a, b) => a.stopOrder - b.stopOrder);
+            if (stopsOrdered.length >= 2) {
+                const firstId = String(stopsOrdered[0].stationId || "");
+                const lastId = String(stopsOrdered[stopsOrdered.length - 1].stationId || "");
+                if (isSightseeingLoopRoute(routeForm.routeType) && firstId && lastId && firstId !== lastId) {
+                    setErrorMsg(
+                        lang === "VN"
+                            ? "Tuyến vòng tham quan: bến đầu và bến cuối phải cùng stationId."
+                            : "Sightseeing loop: first and last stops must share the same stationId."
+                    );
+                    return;
+                }
+                if (!isSightseeingLoopRoute(routeForm.routeType) && firstId && lastId && firstId === lastId) {
+                    setErrorMsg(
+                        lang === "VN"
+                            ? "Tuyến thường: bến đầu và bến cuối phải khác nhau."
+                            : "Regular route: first and last stops must differ."
+                    );
+                    return;
+                }
+            }
+
             await modifyRoute(id, {
                 routeName: routeForm.routeName.trim(),
                 description: routeForm.description.trim() || null,
                 baseDistanceKm: routeForm.baseDistanceKm === "" ? null : Number(routeForm.baseDistanceKm),
                 estimatedDurationMin: routeForm.estimatedDurationMin === "" ? null : Number(routeForm.estimatedDurationMin),
-                status: routeForm.status
+                status: routeForm.status,
+                routeType: routeForm.routeType,
+                isBookable: routeForm.isBookable,
             });
+            // Luôn GET lại /routes/{id} — không dùng dữ liệu cũ trên UI
             await loadRouteDetail();
             Swal.fire({
                 icon: "success",
@@ -287,9 +287,13 @@ export function RouteDetail() {
         try {
             setSavingStopId(stopId);
             setErrorMsg("");
+            const stopsOrdered = (route.stops || []).slice().sort((a, b) => a.stopOrder - b.stopOrder);
+            const isFirstStop = stopsOrdered[0]?.routeStopId === stopId;
             await modifyRouteStop(id, stopId, {
-                standardTravelMin: editValues.standardTravelMin === "" ? null : Number(editValues.standardTravelMin),
-                standardDwellMin: editValues.standardDwellMin === "" ? null : Number(editValues.standardDwellMin),
+                // Bến 1: phút chạy luôn null (thời gian từ bến trước → bến hiện tại)
+                standardTravelMin: isFirstStop
+                    ? null
+                    : (editValues.standardTravelMin === "" ? null : Number(editValues.standardTravelMin)),
                 isPickupAllowed: editValues.isPickupAllowed,
                 isDropoffAllowed: editValues.isDropoffAllowed
             });
@@ -348,7 +352,6 @@ export function RouteDetail() {
                 stationCode: newStopForm.stationCode,
                 stopOrder: Number(newStopForm.stopOrder),
                 standardTravelMin: newStopForm.standardTravelMin === "" ? null : Number(newStopForm.standardTravelMin),
-                standardDwellMin: newStopForm.standardDwellMin === "" ? null : Number(newStopForm.standardDwellMin),
                 isPickupAllowed: newStopForm.isPickupAllowed,
                 isDropoffAllowed: newStopForm.isDropoffAllowed
             });
@@ -386,6 +389,8 @@ export function RouteDetail() {
 
     const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+    const selectStyle = `${inputStyle} cursor-pointer`;
+    const routeTypeOptions = getRouteTypeOptions(lang);
 
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
@@ -413,6 +418,14 @@ export function RouteDetail() {
                     }`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${route.status === "Active" ? "bg-emerald-500" : "bg-rose-500"}`}></span>
                     {route.status || "Inactive"}
+                </span>
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border shrink-0 bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20">
+                    {getRouteTypeLabel(route.routeType || "Regular", lang)}
+                </span>
+                <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border shrink-0 ${route.isBookable !== false ? "bg-teal-50 text-teal-700 border-teal-100 dark:bg-teal-500/10 dark:text-teal-300" : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400"}`}>
+                    {route.isBookable !== false
+                        ? (lang === "VN" ? "Có thể đặt vé" : "Bookable")
+                        : (lang === "VN" ? "Không đặt vé" : "Not bookable")}
                 </span>
                 <button
                     type="button"
@@ -515,6 +528,30 @@ export function RouteDetail() {
                     </div>
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label className={labelStyle}>{lang === "VN" ? "Loại tuyến" : "Route type"}</label>
+                        <FormSelect
+                            value={routeForm.routeType}
+                            onChange={(v) => handleRouteFormChange("routeType", v)}
+                            options={routeTypeOptions}
+                            className={selectStyle}
+                        />
+                    </div>
+                    <div>
+                        <label className={labelStyle}>{lang === "VN" ? "Đặt vé online" : "Bookable online"}</label>
+                        <FormSelect
+                            value={routeForm.isBookable ? "true" : "false"}
+                            onChange={(v) => handleRouteFormChange("isBookable", v === "true")}
+                            options={[
+                                { value: "true", label: lang === "VN" ? "Có" : "Yes" },
+                                { value: "false", label: lang === "VN" ? "Không" : "No" },
+                            ]}
+                            className={selectStyle}
+                        />
+                    </div>
+                </div>
+
                 <div className="flex items-center gap-3 pt-1">
                     <span className={labelStyle + " mb-0"}>{lang === "VN" ? "Trạng thái" : "Status"}</span>
                     <button
@@ -553,6 +590,7 @@ export function RouteDetail() {
                         <div className="space-y-3">
                             {sortedStops.map((stop, index) => {
                                 const edits = stopEdits[stop.routeStopId] || {};
+                                const isFirstStop = index === 0;
                                 return (
                                     <div key={stop.routeStopId || index} className="flex items-start gap-3 relative">
                                         {/* Đường nối dọc thể hiện lộ trình */}
@@ -583,23 +621,28 @@ export function RouteDetail() {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <label className="text-[8px] font-bold text-slate-400 uppercase block mb-0.5">{lang === "VN" ? "Phút chạy" : "Travel min"}</label>
-                                                    <input
-                                                        type="number" min={0} value={edits.standardTravelMin}
-                                                        onChange={(e) => handleStopFieldChange(stop.routeStopId, "standardTravelMin", e.target.value)}
-                                                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-[#124757]"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[8px] font-bold text-slate-400 uppercase block mb-0.5">{lang === "VN" ? "Phút dừng" : "Dwell min"}</label>
-                                                    <input
-                                                        type="number" min={0} value={edits.standardDwellMin}
-                                                        onChange={(e) => handleStopFieldChange(stop.routeStopId, "standardDwellMin", e.target.value)}
-                                                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-[#124757]"
-                                                    />
-                                                </div>
+                                            <div>
+                                                <label className="text-[8px] font-bold text-slate-400 uppercase block mb-0.5">
+                                                    {lang === "VN" ? "Phút chạy (từ bến trước)" : "Travel min (from previous)"}
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    disabled={isFirstStop}
+                                                    placeholder={isFirstStop ? "—" : ""}
+                                                    value={isFirstStop ? "" : (edits.standardTravelMin ?? "")}
+                                                    onChange={(e) => handleStopFieldChange(stop.routeStopId, "standardTravelMin", e.target.value)}
+                                                    className={`w-full border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none focus:ring-1 focus:ring-[#124757] ${
+                                                        isFirstStop
+                                                            ? "bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+                                                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                                                    }`}
+                                                />
+                                                {isFirstStop && (
+                                                    <p className="text-[9px] text-slate-400 mt-0.5">
+                                                        {lang === "VN" ? "Bến đầu: không có phút chạy." : "First stop: travel time is null."}
+                                                    </p>
+                                                )}
                                             </div>
 
                                             <div className="flex flex-wrap items-center gap-1.5">
@@ -651,7 +694,7 @@ export function RouteDetail() {
                                 <option key={s.stationId} value={s.stationCode}>{s.stationCode} - {s.stationName}</option>
                             ))}
                         </select>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-2 gap-2">
                             <div>
                                 <label className="text-[8px] font-bold text-slate-400 uppercase block mb-0.5">{lang === "VN" ? "Thứ tự" : "Order"}</label>
                                 <input
@@ -665,14 +708,6 @@ export function RouteDetail() {
                                 <input
                                     type="number" min={0} value={newStopForm.standardTravelMin}
                                     onChange={(e) => handleNewStopFieldChange("standardTravelMin", e.target.value)}
-                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-[#124757]"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[8px] font-bold text-slate-400 uppercase block mb-0.5">{lang === "VN" ? "Phút dừng" : "Dwell"}</label>
-                                <input
-                                    type="number" min={0} value={newStopForm.standardDwellMin}
-                                    onChange={(e) => handleNewStopFieldChange("standardDwellMin", e.target.value)}
                                     className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-[#124757]"
                                 />
                             </div>
