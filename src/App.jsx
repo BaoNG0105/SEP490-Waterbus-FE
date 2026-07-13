@@ -43,6 +43,7 @@ import { AdminCharterBookingDetail, AdminCharterBookingRefund, CharterBookingMan
 import { PromotionManagement } from "./pages/Admin/PromotionManagement";
 import { CreatePromotion } from "./pages/Admin/PromotionManagement/CreatePromotion";
 import { EditPromotion } from "./pages/Admin/PromotionManagement/EditPromotion";
+import { ViewPromotion } from "./pages/Admin/PromotionManagement/ViewPromotion";
 import { BlogManagement } from "./pages/Admin/BlogManagement";
 import { CreateBlog } from "./pages/Admin/BlogManagement/CreateBlog";
 import { EditBlog } from "./pages/Admin/BlogManagement/EditBlog";
@@ -448,6 +449,16 @@ function App() {
             element={
               <AdminLayout title="Create Promotion">
                 <CreatePromotion />
+              </AdminLayout>
+            }
+          />
+
+          {/* Promotion Management: View Page */}
+          <Route
+            path="/admin/promotions/view/:id"
+            element={
+              <AdminLayout title="View Promotion">
+                <ViewPromotion />
               </AdminLayout>
             }
           />
