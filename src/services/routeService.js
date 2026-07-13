@@ -1,13 +1,9 @@
 import {
     getRoutes as apiGetRoutes,
     getRouteById as apiGetRouteById,
-    createRoute as apiCreateRoute,
     updateRoute as apiUpdateRoute,
     deleteRoute as apiDeleteRoute,
-    addRouteStop as apiAddRouteStop,
-    updateRouteStop as apiUpdateRouteStop,
-    deleteRouteStop as apiDeleteRouteStop,
-    importRoutesGeoJson as apiImportRoutesGeoJson
+    mergeRoutes as apiMergeRoutes,
 } from '../api/routeApi';
 
 // Service: Tải danh sách tuyến đường sông
@@ -26,16 +22,6 @@ export const fetchRouteDetail = async (routeId) => {
         return await apiGetRouteById(routeId);
     } catch (error) {
         console.error(`Lỗi khi lấy chi tiết tuyến đường ${routeId}:`, error);
-        throw error;
-    }
-};
-
-// Service: Tạo mới tuyến đường sông
-export const createNewRoute = async (routePayload) => {
-    try {
-        return await apiCreateRoute(routePayload);
-    } catch (error) {
-        console.error('Lỗi khi tạo tuyến đường mới:', error);
         throw error;
     }
 };
@@ -60,42 +46,12 @@ export const removeRoute = async (routeId) => {
     }
 };
 
-// Service: Thêm bến dừng vào tuyến
-export const addStopToRoute = async (routeId, stopPayload) => {
+// Service: Ghép nhiều tuyến GPS
+export const mergeGpsRoutes = async (payload) => {
     try {
-        return await apiAddRouteStop(routeId, stopPayload);
+        return await apiMergeRoutes(payload);
     } catch (error) {
-        console.error(`Lỗi khi thêm bến dừng vào tuyến ${routeId}:`, error);
-        throw error;
-    }
-};
-
-// Service: Cập nhật bến dừng
-export const modifyRouteStop = async (routeId, stopId, stopPayload) => {
-    try {
-        return await apiUpdateRouteStop(routeId, stopId, stopPayload);
-    } catch (error) {
-        console.error(`Lỗi khi cập nhật bến dừng ${stopId}:`, error);
-        throw error;
-    }
-};
-
-// Service: Xóa bến dừng khỏi tuyến
-export const removeRouteStop = async (routeId, stopId) => {
-    try {
-        return await apiDeleteRouteStop(routeId, stopId);
-    } catch (error) {
-        console.error(`Lỗi khi xóa bến dừng ${stopId}:`, error);
-        throw error;
-    }
-};
-
-// Service: Import mạng lưới sông rạch và bến từ file GeoJSON
-export const importGeoJsonNetwork = async (file, filename) => {
-    try {
-        return await apiImportRoutesGeoJson(file, filename);
-    } catch (error) {
-        console.error('Lỗi khi import mạng lưới sông rạch từ GeoJSON:', error);
+        console.error('Lỗi khi ghép tuyến GPS:', error);
         throw error;
     }
 };

@@ -37,9 +37,8 @@ import { CreateUser } from "./pages/Admin/UserManagement/CreateUser";
 import { EditUser } from "./pages/Admin/UserManagement/EditUser";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 import { RouteManagement } from "./pages/Admin/RouteManagement";
-import { CreateRoute } from "./pages/Admin/RouteManagement/CreateRoute";
 import { RouteDetail } from "./pages/Admin/RouteManagement/RouteDetail";
-import { DrawWaterway } from "./pages/Admin/RouteManagement/DrawWaterway";
+import { MergeGpsRoutes } from "./pages/Admin/RouteManagement/MergeGpsRoutes";
 import { AdminCharterBookingDetail, AdminCharterBookingRefund, CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
 import { PromotionManagement } from "./pages/Admin/PromotionManagement";
 import { CreatePromotion } from "./pages/Admin/PromotionManagement/CreatePromotion";
@@ -414,22 +413,11 @@ function App() {
             }
           />
 
-          {/* Route Management: Create Page */}
           <Route
-            path="/admin/routes-management/create"
+            path="/admin/routes-management/merge-gps"
             element={
-              <AdminLayout title="Create Route">
-                <CreateRoute />
-              </AdminLayout>
-            }
-          />
-
-          {/* Route Management: Draw Waterway Manually */}
-          <Route
-            path="/admin/routes-management/draw-waterway"
-            element={
-              <AdminLayout title="Draw Waterway">
-                <DrawWaterway />
+              <AdminLayout title="Merge GPS Routes">
+                <MergeGpsRoutes />
               </AdminLayout>
             }
           />
