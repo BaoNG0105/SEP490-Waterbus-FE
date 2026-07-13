@@ -404,21 +404,13 @@ export function BoatSeatLayoutPreviewModal({
                 </div>
               ) : (
                 <>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
                   <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
                     {lang === "VN" ? "Tổng số ghế" : "Total seats"}
                   </p>
                   <p className="mt-0.5 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
                     {summary.totalSeats}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                    {lang === "VN" ? "Số kiểu ghế" : "Seat types"}
-                  </p>
-                  <p className="mt-0.5 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                    {summary.typeCount}
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
