@@ -6,6 +6,12 @@ import { fetchAllStations } from "../../../services/stationService";
 import { fetchWaterways } from "../../../services/waterwayService";
 import { WaterwayMap } from "../../../components/WaterwayMap";
 import Swal from "sweetalert2";
+import { FormSelect } from "../../../components/FormSelect";
+import {
+    getRouteTypeOptions,
+    isSightseeingLoopRoute,
+    resolveRouteIsBookable,
+} from "../../../utils/routeTypes";
 
 let waypointUid = 0;
 const nextWaypointUid = () => `wp-${++waypointUid}`;
@@ -30,7 +36,8 @@ export function CreateRoute() {
         description: "",
         estimatedDurationMin: 60,
         autoRouteGeometry: true,
-        preferWaterwayType: ""
+        preferWaterwayType: "",
+        routeType: "Regular",
     });
 
     // Danh sách waypoint theo thứ tự (stopOrder = vị trí index + 1)
@@ -155,6 +162,35 @@ export function CreateRoute() {
                 return;
             }
 
+            const firstStationCode = stationWaypoints[0]?.stationCode;
+            const lastStationCode = stationWaypoints[stationWaypoints.length - 1]?.stationCode;
+            if (
+                !isSightseeingLoopRoute(formData.routeType) &&
+                firstStationCode &&
+                lastStationCode &&
+                firstStationCode === lastStationCode
+            ) {
+                setErrorMsg(
+                    lang === "VN"
+                        ? "Bến đầu và bến cuối phải khác nhau (trừ tuyến vòng tham quan)."
+                        : "Start and end stations must differ (except sightseeing loop routes)."
+                );
+                return;
+            }
+            if (
+                isSightseeingLoopRoute(formData.routeType) &&
+                firstStationCode &&
+                lastStationCode &&
+                firstStationCode !== lastStationCode
+            ) {
+                setErrorMsg(
+                    lang === "VN"
+                        ? "Tuyến vòng tham quan: bến đầu và bến cuối phải trùng nhau."
+                        : "Sightseeing loop: first and last stations must be the same."
+                );
+                return;
+            }
+
             setIsSubmitting(true);
 
             const payload = {
@@ -162,6 +198,8 @@ export function CreateRoute() {
                 routeName: formData.routeName.trim(),
                 description: formData.description.trim() || null,
                 estimatedDurationMin: Number(formData.estimatedDurationMin) || 0,
+                routeType: formData.routeType,
+                isBookable: resolveRouteIsBookable(formData.routeType),
                 waypoints: waypoints.map((wp, index) => (
                     wp.type === "station"
                         ? { type: "station", stationCode: wp.stationCode, stopOrder: index + 1 }
@@ -194,6 +232,8 @@ export function CreateRoute() {
 
     const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+    const selectStyle = `${inputStyle} cursor-pointer`;
+    const routeTypeOptions = getRouteTypeOptions(lang);
 
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
@@ -300,6 +340,24 @@ export function CreateRoute() {
                                 placeholder={lang === "VN" ? "Tuyến 01: Bạch Đằng - Linh Đông" : "Route 01: Bach Dang - Linh Dong"}
                                 className={inputStyle}
                             />
+                        </div>
+
+                        <div>
+                            <label className={labelStyle}>{lang === "VN" ? "Loại tuyến (*)" : "Route type (*)"}</label>
+                            <FormSelect
+                                required
+                                value={formData.routeType}
+                                onChange={(v) => handleFieldChange("routeType", v)}
+                                options={routeTypeOptions}
+                                className={selectStyle}
+                            />
+                            {isSightseeingLoopRoute(formData.routeType) && (
+                                <p className="text-[10px] text-slate-400 mt-1.5">
+                                    {lang === "VN"
+                                        ? "Tuyến vòng tham quan: bến đầu và bến cuối có thể trùng nhau."
+                                        : "Sightseeing loop: start and end station may be the same."}
+                                </p>
+                            )}
                         </div>
 
                         <div>

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, removeRoute } from "../../../services/routeService";
 import Swal from "sweetalert2";
+import { getRouteTypeLabel } from "../../../utils/routeTypes";
 
 export function RouteManagement() {
     const { lang } = useApp();
@@ -252,6 +253,16 @@ export function RouteManagement() {
                                                     <span className="text-[10px] text-slate-400 dark:text-slate-500 block max-w-sm truncate">
                                                         {route.description || (lang === "VN" ? "Chưa có mô tả" : "No description")}
                                                     </span>
+                                                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                                        <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                                                            {getRouteTypeLabel(route.routeType || "Regular", lang)}
+                                                        </span>
+                                                        {route.isBookable === false && (
+                                                            <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+                                                                {lang === "VN" ? "Không đặt vé" : "Not bookable"}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
