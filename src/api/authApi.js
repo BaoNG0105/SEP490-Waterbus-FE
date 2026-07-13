@@ -39,3 +39,11 @@ export const verifyPhoneChangeOtp = (data) =>
 // Api đổi mật khẩu
 export const changePasswordApi = (data) =>
     api.post('/auth/change-password', data).then(r => r.data);
+
+// Api yêu cầu OTP quên mật khẩu
+export const forgotPasswordApi = (emailOrPhone) =>
+    api.post('/auth/forgot-password', { emailOrPhone }).then(r => r.data);
+
+// Api đặt lại mật khẩu bằng OTP
+export const resetPasswordApi = (data) =>
+    api.post('/auth/reset-password', data).then(r => r.data);

@@ -9,6 +9,7 @@ import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { ForgotPassword } from "./pages/ForgotPassword";
 import { BlogList } from "./pages/Blog";
 import { BlogDetail } from "./pages/Blog/BlogDetail";
 // import { Station } from "./pages/Station";
@@ -242,6 +243,9 @@ function App() {
 
         {/* Register Page */}
         <Route path="/register" element={<Register />} />
+
+        {/* Forgot Password Page */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
 
         {/*============= Admin Page ============= */}

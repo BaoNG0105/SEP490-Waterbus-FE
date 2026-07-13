@@ -78,6 +78,10 @@
   animation: marquee 30s linear infinite;
 }
 
+@utility animate-scroll-wheel {
+  animation: scrollWheel 2s ease-in-out infinite;
+}
+
 @utility liquid-gradient {
   background: linear-gradient(135deg,
       var(--color-primary) 0%,
@@ -91,6 +95,23 @@
 
   100% {
     transform: translateX(-50%);
+  }
+}
+
+@keyframes scrollWheel {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  50% {
+    transform: translateY(10px);
+    opacity: 0.3;
+  }
+
+  100% {
+    transform: translateY(0);
+    opacity: 1;
   }
 }
 

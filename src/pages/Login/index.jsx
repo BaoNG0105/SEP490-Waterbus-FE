@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useApp } from "../../context/AppContext";
 import { Link, useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
@@ -25,7 +25,7 @@ export const Login = () => {
   const { isAuthenticated, user } = useSelector((state) => state.auth);
 
   // HÀM HELPER ĐIỀU HƯỚNG THÔNG MINH DỰA TRÊN ROLE
-  const handleRoleRedirect = (userData) => {
+  const handleRoleRedirect = useCallback((userData) => {
     const allowedRoles = ["ADMIN", "STAFF", "MANAGER"];
     const isManagerOrAdmin = userData?.roles?.some(
       (role) => allowedRoles.includes(role.code) || allowedRoles.includes(role.systemName)
@@ -35,14 +35,14 @@ export const Login = () => {
     } else {
       navigate("/", { replace: true }); // Khách hàng -> Về trang chủ công cộng
     }
-  };
+  }, [navigate]);
 
   // KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ TỰ ĐỘNG ĐIỀU HƯỚNG THEO ROLE
   useEffect(() => {
     if (isAuthenticated && user) {
       handleRoleRedirect(user);
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, handleRoleRedirect]);
 
   // 4. HÀM XỬ LÝ ĐĂNG NHẬP BẰNG TÀI KHOẢN/MẬT KHẨU
   const handleLogin = async (e) => {

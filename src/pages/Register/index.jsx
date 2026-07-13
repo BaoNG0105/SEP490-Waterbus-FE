@@ -55,8 +55,32 @@ export const Register = () => {
 
   const [selectedFlag, setSelectedFlag] = useState("vn");
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false); 
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  // KIỂM TRA ĐỘ MẠNH MẬT KHẨU: tối thiểu 8 ký tự, 1 chữ hoa, 1 số, 1 ký tự đặc biệt
+  const passwordCriteria = useMemo(() => ({
+    length: formData.password.length >= 8,
+    uppercase: /[A-Z]/.test(formData.password),
+    number: /[0-9]/.test(formData.password),
+    special: /[^A-Za-z0-9]/.test(formData.password),
+  }), [formData.password]);
+
+  const passwordScore = Object.values(passwordCriteria).filter(Boolean).length;
+  const isPasswordStrong = passwordScore === 4;
+
+  const strengthBarColors = ["bg-rose-500", "bg-orange-500", "bg-yellow-500", "bg-emerald-500"];
+  const strengthLabels = lang === "VN"
+    ? ["Rất yếu", "Yếu", "Trung bình", "Khá", "Mạnh"]
+    : ["Very weak", "Weak", "Medium", "Good", "Strong"];
+  const strengthTextColors = ["text-rose-500", "text-rose-500", "text-orange-500", "text-yellow-500", "text-emerald-500"];
+
+  const passwordRules = [
+    { key: "length", met: passwordCriteria.length, label: lang === "VN" ? "Tối thiểu 8 ký tự" : "At least 8 characters" },
+    { key: "uppercase", met: passwordCriteria.uppercase, label: lang === "VN" ? "1 chữ hoa" : "1 uppercase letter" },
+    { key: "number", met: passwordCriteria.number, label: lang === "VN" ? "1 chữ số" : "1 number" },
+    { key: "special", met: passwordCriteria.special, label: lang === "VN" ? "1 ký tự đặc biệt" : "1 special character" },
+  ];
 
   const showOtpSelection = formData.phone.trim() !== "" && formData.email.trim() !== "";
 
@@ -123,6 +147,13 @@ export const Register = () => {
     // 💡 NGHIỆP VỤ: Kiểm tra Phone & Email bắt buộc ít nhất một kênh
     if (!formData.phone.trim() && !formData.email.trim()) {
       setErrorMsg(lang === "VN" ? "Vui lòng nhập Số điện thoại hoặc Email." : "Please provide either a Phone number or an Email.");
+      return;
+    }
+
+    if (!isPasswordStrong) {
+      setErrorMsg(lang === "VN"
+        ? "Mật khẩu phải có ít nhất 8 ký tự, gồm 1 chữ hoa, 1 chữ số và 1 ký tự đặc biệt."
+        : "Password must be at least 8 characters and include an uppercase letter, a number, and a special character.");
       return;
     }
 
@@ -448,6 +479,42 @@ export const Register = () => {
                       </span>
                     </button>
                   </div>
+
+                  {/* THANH TIẾN TRÌNH ĐỘ MẠNH MẬT KHẨU */}
+                  {formData.password.length > 0 && (
+                    <div className="space-y-1.5 pt-1 animate-fade-in">
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1 flex-1">
+                          {[0, 1, 2, 3].map((i) => (
+                            <div
+                              key={i}
+                              className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                                i < passwordScore ? strengthBarColors[passwordScore - 1] : "bg-slate-200 dark:bg-slate-700"
+                              }`}
+                            ></div>
+                          ))}
+                        </div>
+                        <span className={`text-[10px] font-bold whitespace-nowrap ${strengthTextColors[passwordScore]}`}>
+                          {strengthLabels[passwordScore]}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        {passwordRules.map((rule) => (
+                          <span
+                            key={rule.key}
+                            className={`flex items-center gap-1 text-[10px] font-semibold transition-colors ${
+                              rule.met ? "text-emerald-500 dark:text-emerald-400" : "text-slate-400 dark:text-slate-500"
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[13px]">
+                              {rule.met ? "check_circle" : "radio_button_unchecked"}
+                            </span>
+                            {rule.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
