@@ -10,11 +10,11 @@ export function BoatCrewSchedule() {
   const { id } = useParams();
 
   const [boat, setBoat] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loadedId, setLoadedId] = useState(null);
+  const isLoading = loadedId !== id;
 
   useEffect(() => {
     let active = true;
-    setIsLoading(true);
     fetchBoatDetail(id)
       .then((data) => {
         if (active) setBoat(data);
@@ -23,7 +23,7 @@ export function BoatCrewSchedule() {
         console.error("Lỗi tải thông tin tàu:", error);
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        if (active) setLoadedId(id);
       });
     return () => {
       active = false;
@@ -46,12 +46,12 @@ export function BoatCrewSchedule() {
         <div className="min-w-0">
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide truncate">
             {lang === "VN" ? "Phân công nhân viên trên tàu" : "Onboard staff assignment"}
-            {boatCode ? `: ${boatCode}` : ""}
+            {boatName ? `: ${boatName}` : ""}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5 truncate">
             {isLoading
               ? (lang === "VN" ? "Đang tải thông tin tàu..." : "Loading boat...")
-              : boatName || (lang === "VN" ? "Gán nhân viên làm việc trên tàu theo khoảng ngày" : "Assign staff who work on this boat")}
+              : (lang === "VN" ? "Gán nhân viên làm việc trên tàu theo khoảng ngày" : "Assign staff who work on this boat")}
           </p>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchSeatLayout } from "../services/seatService";
 import { fetchBoatDetail } from "../services/boatService";
 import { getApiErrorMessage } from "../utils/apiError";
@@ -86,9 +86,9 @@ function summarizeSeatLayout(layout, fallback = {}) {
 
   const seatTypes = [...typeMap.values()].sort((a, b) => a.code.localeCompare(b.code));
   const setupLabel = fallback.seatSetupType === "StandardAndVip"
-    ? "Standard & VIP"
+    ? "Water Sightseeing"
     : fallback.seatSetupType === "FullStandard"
-      ? "Full Standard"
+      ? "Waterbus"
       : fallback.seatSetupType || "";
 
   return {
@@ -136,7 +136,7 @@ function SeatDeckGrid({ deck, lang, showBow = true }) {
             return (
               <div
                 key={`${cell.row}-${cell.column}`}
-                className={`relative z-[1] flex select-none flex-col items-center justify-center rounded-lg border text-[9px] font-bold ${style.cellClass}`}
+                className={`relative z-1 flex select-none flex-col items-center justify-center rounded-lg border text-[9px] font-bold ${style.cellClass}`}
                 style={{ gridRow: cell.row, gridColumn: cell.column }}
                 title={style.isSeat ? seatLabel : cell.type}
               >
@@ -223,6 +223,11 @@ export function BoatSeatLayoutPreviewModal({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
+  const boatMetaRef = useRef(boatMeta);
+  useEffect(() => {
+    boatMetaRef.current = boatMeta;
+  }, [boatMeta]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -248,7 +253,7 @@ export function BoatSeatLayoutPreviewModal({
           : 1;
         setActiveDeck(firstDeck);
 
-        const images = collectBoatImages(boatDetail || boatMeta, boatImageUrl);
+        const images = collectBoatImages(boatDetail || boatMetaRef.current, boatImageUrl);
         setBoatImages(images.length ? images : [DEFAULT_BOAT_IMAGE]);
         setActiveImageIndex(0);
       } catch (err) {
@@ -318,10 +323,6 @@ export function BoatSeatLayoutPreviewModal({
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-700">
           <div className="min-w-0">
-            <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-              {lang === "VN" ? "Sơ đồ ghế" : "Seat layout"}
-              {boatCode ? ` · ${boatCode}` : ""}
-            </p>
             <h3 className="mt-1 truncate font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
               {boatName || (lang === "VN" ? "Tàu" : "Boat")}
             </h3>
@@ -415,14 +416,6 @@ export function BoatSeatLayoutPreviewModal({
                 </div>
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
                   <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                    {lang === "VN" ? "Số kiểu ghế" : "Seat types"}
-                  </p>
-                  <p className="mt-0.5 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                    {summary.typeCount}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
                     {lang === "VN" ? "Số tầng" : "Decks"}
                   </p>
                   <p className="mt-0.5 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
@@ -431,7 +424,7 @@ export function BoatSeatLayoutPreviewModal({
                 </div>
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
                   <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                    {lang === "VN" ? "Cấu hình" : "Setup"}
+                    {lang === "VN" ? "Cấu hình ghế" : "Setup type"}
                   </p>
                   <p className="mt-0.5 truncate text-xs font-black text-[#124757] dark:text-yellow-400">
                     {summary.setupLabel || "—"}
@@ -508,7 +501,7 @@ export function BoatSeatLayoutPreviewModal({
 
       {isLightboxOpen ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 p-4"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/90 p-4"
           onClick={() => setIsLightboxOpen(false)}
         >
           <button

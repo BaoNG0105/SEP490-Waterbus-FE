@@ -21,6 +21,11 @@ const ALL_TOOLS = [
   { id: "Empty", label: "Khoảng trống", icon: "close", color: "bg-transparent border-dashed border-slate-300 dark:border-slate-600 text-slate-300 dark:text-slate-600" },
 ];
 
+const SEAT_SETUP_TYPE_LABELS = {
+  FullStandard: "Waterbus",
+  StandardAndVip: "Water Sightseeing",
+};
+
 export function SeatLayoutEditor() {
   const { lang } = useApp();
   const params = useParams(); 
@@ -231,7 +236,7 @@ export function SeatLayoutEditor() {
             {lang === "VN" ? `Thiết kế sơ đồ: Tàu ${boatData?.name || boatData?.boatName}` : `Layout Editor: ${boatData?.name || boatData?.boatName}`}
           </h2>
           <p className="text-xs text-slate-400 font-bold mt-1">
-            Loại: <span className="text-blue-500">{boatData?.seatSetupType}</span> | Sức chứa hiện tại: <span className="text-emerald-500">{boatData?.seatCount} ghế</span>
+            Loại: <span className="text-blue-500">{SEAT_SETUP_TYPE_LABELS[boatData?.seatSetupType] || boatData?.seatSetupType}</span> | Sức chứa hiện tại: <span className="text-emerald-500">{boatData?.seatCount} ghế</span>
           </p>
         </div>
       </div>
@@ -355,7 +360,7 @@ export function SeatLayoutEditor() {
                         key={`${cell.row}-${cell.column}`}
                         onMouseDown={() => handleCellMouseDown(currentDeckData.id, cell.row, cell.column)}
                         onMouseEnter={() => handleCellMouseEnter(currentDeckData.id, cell.row, cell.column)}
-                        className={`relative z-[1] flex flex-col items-center justify-center rounded-xl border-2 w-full h-full text-[9px] font-bold cursor-crosshair select-none transition-all duration-300 ${ui.color} ${activeTool !== 'NONE' ? 'hover:scale-90 hover:ring-4 ring-slate-400/20 z-20' : ''}`}
+                        className={`relative z-1 flex flex-col items-center justify-center rounded-xl border-2 w-full h-full text-[9px] font-bold cursor-crosshair select-none transition-all duration-300 ${ui.color} ${activeTool !== 'NONE' ? 'hover:scale-90 hover:ring-4 ring-slate-400/20 z-20' : ''}`}
                         style={{ gridRow: cell.row, gridColumn: cell.column }}
                       >
                         {isSeatCell ? (
