@@ -7,22 +7,18 @@ export const BOAT_DOCUMENT_TYPES = [
 
 export const BOAT_DOCUMENT_META = {
   Inspection: {
-    icon: "fact_check",
     labelVn: "Đăng kiểm / Kiểm định",
     labelEn: "Inspection Certificate",
   },
   Registration: {
-    icon: "description",
     labelVn: "Đăng ký tàu",
     labelEn: "Boat Registration",
   },
   Insurance: {
-    icon: "shield",
     labelVn: "Bảo hiểm",
     labelEn: "Insurance",
   },
   OperationLicense: {
-    icon: "verified",
     labelVn: "Giấy phép hoạt động",
     labelEn: "Operating License",
   },

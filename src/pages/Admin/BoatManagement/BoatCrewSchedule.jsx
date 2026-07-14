@@ -10,11 +10,11 @@ export function BoatCrewSchedule() {
   const { id } = useParams();
 
   const [boat, setBoat] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loadedId, setLoadedId] = useState(null);
+  const isLoading = loadedId !== id;
 
   useEffect(() => {
     let active = true;
-    setIsLoading(true);
     fetchBoatDetail(id)
       .then((data) => {
         if (active) setBoat(data);
@@ -23,7 +23,7 @@ export function BoatCrewSchedule() {
         console.error("Lỗi tải thông tin tàu:", error);
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        if (active) setLoadedId(id);
       });
     return () => {
       active = false;

@@ -9,6 +9,8 @@ import {
     changePasswordApi as apiChangePassword,
     verifyEmailChangeOtp as apiVerifyEmailChangeOtp,
     verifyPhoneChangeOtp as apiVerifyPhoneChangeOtp,
+    forgotPasswordApi as apiForgotPassword,
+    resetPasswordApi as apiResetPassword,
 } from '../api/authApi';
 
 // Service login thường
@@ -107,6 +109,26 @@ export const changePasswordService = async (passwordPayload) => {
         return await apiChangePassword(passwordPayload);
     } catch (error) {
         console.error('Lỗi trong service changePassword:', error);
+        throw error;
+    }
+};
+
+// Service yêu cầu OTP quên mật khẩu
+export const forgotPassword = async (emailOrPhone) => {
+    try {
+        return await apiForgotPassword(emailOrPhone);
+    } catch (error) {
+        console.error('Error requesting forgot-password OTP:', error);
+        throw error;
+    }
+};
+
+// Service đặt lại mật khẩu bằng OTP
+export const resetPassword = async (data) => {
+    try {
+        return await apiResetPassword(data);
+    } catch (error) {
+        console.error('Error resetting password:', error);
         throw error;
     }
 };

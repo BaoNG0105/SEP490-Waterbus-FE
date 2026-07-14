@@ -1,8 +1,11 @@
+//react common
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
+//api
 import { fetchBoatDetail, modifyBoat } from "../../../services/boatService";
 import { fetchSeatLayout, deleteSeats, changeSeatStatus } from "../../../services/seatService";
+//component
 import { BoatDocumentsPanel } from "../../../components/BoatDocumentsPanel";
 import { BoatDutyRosterPanel } from "../../../components/BoatDutyRosterPanel";
 import { FormSelect } from "../../../components/FormSelect";
@@ -316,8 +319,8 @@ export function EditBoat() {
     { value: 2, label: lang === "VN" ? "2 Tầng" : "2 Decks" },
   ];
   const seatSetupOptions = [
-    { value: "FullStandard", label: "Full Standard" },
-    { value: "StandardAndVip", label: "Standard & VIP" },
+    { value: "FullStandard", label: "Waterbus" },
+    { value: "StandardAndVip", label: "Water Sightseeing" },
   ];
   const disabledStyle = "opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-900/40"; 
 
@@ -340,7 +343,7 @@ export function EditBoat() {
         </button>
         <div>
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-            {lang === "VN" ? `Hồ sơ tàu: ${formData.code}` : `Boat File: ${formData.code}`}
+            {lang === "VN" ? `Hồ sơ tàu: ${formData.name}` : `Boat File: ${formData.name}`}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN" ? "Thay đổi thông số cơ bản, cập nhật bộ sưu tập ảnh đại diện và theo dõi sơ đồ phân bổ ghế." : "Modify hardware blueprints, attach media collections and monitor seating grids."}
@@ -634,7 +637,7 @@ export function EditBoat() {
                           return (
                             <div
                               key={`${cell.row}-${cell.column}`}
-                              className={`relative z-[1] flex flex-col items-center justify-center rounded-lg border text-[9px] font-bold select-none transition-all ${cellClass}`}
+                              className={`relative z-1 flex flex-col items-center justify-center rounded-lg border text-[9px] font-bold select-none transition-all ${cellClass}`}
                               style={{ gridRow: cell.row, gridColumn: cell.column }}
                               title={isSeat ? `${seatLabel} (${cell.row}-${cell.column})` : cell.type}
                             >

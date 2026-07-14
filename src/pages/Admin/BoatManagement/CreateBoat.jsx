@@ -150,8 +150,8 @@ export function CreateBoat() {
     { value: 2, label: lang === "VN" ? "2 Tầng" : "2 Decks" },
   ];
   const seatSetupOptions = [
-    { value: "FullStandard", label: "Full Standard" },
-    { value: "StandardAndVip", label: "Standard & VIP" },
+    { value: "FullStandard", label: "Waterbus" },
+    { value: "StandardAndVip", label: "Water Sightseeing" },
   ];
 
   return (

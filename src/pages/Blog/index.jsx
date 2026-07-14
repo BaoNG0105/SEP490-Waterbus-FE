@@ -92,10 +92,6 @@ export function BlogList() {
 
                                     {/* Footer card */}
                                     <div className="pt-4 flex items-center justify-between mt-auto">
-                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                                            <span className="material-symbols-outlined text-sm">edit_document</span>
-                                            {blog.authorName || "Admin"}
-                                        </span>
                                         <span className="text-xs font-headline font-black text-[#124757] dark:text-yellow-400 group-hover:translate-x-1.5 transition-transform uppercase flex items-center gap-1">
                                             {lang === "VN" ? "Đọc tiếp" : "Read Post"}
                                             <span className="material-symbols-outlined text-[16px] font-bold">arrow_right_alt</span>

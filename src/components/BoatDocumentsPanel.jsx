@@ -272,9 +272,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-[#124757]/10 dark:bg-yellow-400/10 text-[#124757] dark:text-yellow-400 flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-xl">{meta.icon}</span>
-                  </div>
+
                   <div className="min-w-0">
                     <h4 className="font-headline font-black text-xs text-slate-800 dark:text-white uppercase tracking-wide">
                       {label}
@@ -311,7 +309,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
                         </span>
                       </button>
                       {doc.updatedAt && (
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 pl-[22px]">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 pl-5.5">
                           {lang === "VN" ? "Cập nhật lần cuối:" : "Last updated:"}{" "}
                           <span className="font-bold text-slate-700 dark:text-slate-200">
                             {formatDateTime(doc.updatedAt, lang)}

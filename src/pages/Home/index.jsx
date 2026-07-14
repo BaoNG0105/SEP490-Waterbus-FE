@@ -6,7 +6,8 @@ import { fetchAllStations } from "../../services/stationService";
 import { WaterwayMap } from "../../components/WaterwayMap";
 import { fetchPublishedBlogPosts } from "../../services/blogService";
 import { ContactForm } from "../../components/ContactForm";
-import heroVideo from "../../assets/hero-video.mp4";
+
+const heroVideo = "https://res.cloudinary.com/dygipvoal/video/upload/v1783865624/q7gde8dluohboeqjzdtx.mp4";
 
 import {
   promoPosters,
@@ -185,8 +186,8 @@ export const Home = () => {
         {/* Khối Nội Dung Chính */}
         <div className="relative z-10 max-w-7xl w-full mx-auto px-6 md:px-12 pt-32 pb-20 flex flex-col items-center justify-center space-y-12">
           {/* Tiêu Đề */}
-          <div className="text-center space-y-4 max-w-3xl gsap-reveal">
-            <h1 className="text-4xl md:text-6xl font-headline font-black text-white leading-tight drop-shadow-md">
+          <div className="text-center space-y-4 max-w-4xl gsap-reveal">
+            <h1 className="text-6xl md:text-8xl font-headline font-black text-white leading-tight drop-shadow-md">
               {lang === "VN" ? "Welcome to" : "Chào mừng đến"}{" "}
               <br />
               <span className="text-transparent bg-clip-text bg-linear-to-r from-yellow-400 to-amber-300">
@@ -194,15 +195,19 @@ export const Home = () => {
               </span>
             </h1>
           </div>
-          {/* Nút Khám phá dịch vụ, scroll xuống Section Các loại dịch vụ */}
-          <div className="gsap-reveal">
-            <a
-              href="/#services-section"
-              className="inline-flex items-center gap-3 bg-yellow-400 text-[#124757] px-10 py-4 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-105 hover:shadow-xl transition-all duration-300"
-            >
-              {lang === "VN" ? "Khám phá dịch vụ" : "Explore Services"}
-            </a>
-          </div>
+          {/* Mũi tên chuột cuộn xuống Section Các loại dịch vụ */}
+          <a
+            href="/#services-section"
+            aria-label={lang === "VN" ? "Khám phá dịch vụ" : "Explore Services"}
+            className="gsap-reveal group flex flex-col items-center gap-2 text-white/80 hover:text-yellow-400 transition-colors duration-300"
+          >
+            <span className="w-7 h-11 rounded-full border-2 border-current flex justify-center pt-2">
+              <span className="w-1 h-2 rounded-full bg-current animate-scroll-wheel"></span>
+            </span>
+            <span className="material-symbols-outlined text-xl group-hover:translate-y-1 transition-transform duration-300">
+              keyboard_arrow_down
+            </span>
+          </a>
         </div>
       </section>
 

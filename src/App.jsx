@@ -9,6 +9,7 @@ import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { ForgotPassword } from "./pages/ForgotPassword";
 import { BlogList } from "./pages/Blog";
 import { BlogDetail } from "./pages/Blog/BlogDetail";
 // import { Station } from "./pages/Station";
@@ -23,7 +24,7 @@ import { EditCharter } from "./pages/Profile/MyCharterBooking/EditCharter";
 import { CharterList } from "./pages/Profile/MyCharterBooking";
 import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefundRequest";
 import { WaterbusBooking } from "./pages/WaterbusBooking";
-// import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
+import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
 import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
 //Admin
@@ -128,14 +129,14 @@ function App() {
         />
 
         {/* Watersightseeing Booking Page */}
-        {/* <Route
+        <Route
           path="/watersightseeing-booking"
           element={
             <MainLayout>
               <WatersightseeingBooking />
             </MainLayout>
           }
-        /> */}
+        />
 
         {/* Charter Booking Page */}
         <Route
@@ -246,6 +247,9 @@ function App() {
 
         {/* Register Page */}
         <Route path="/register" element={<Register />} />
+
+        {/* Forgot Password Page */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
 
         {/*============= Admin Page ============= */}

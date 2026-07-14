@@ -31,7 +31,7 @@ export function BlogDetail() {
 
     if (isLoading) {
         return (
-            <div className="flex justify-center items-center h-96 w-full bg-white dark:bg-slate-900">
+            <div className="flex justify-center items-center h-96 w-full bg-white dark:bg-slate-900 pt-28 md:pt-32">
                 <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
             </div>
         );
@@ -39,7 +39,7 @@ export function BlogDetail() {
 
     if (error || !blog) {
         return (
-            <div className="max-w-xl mx-auto text-center py-24 px-6 font-body">
+            <div className="max-w-xl mx-auto text-center pt-28 md:pt-32 pb-24 px-6 font-body">
                 <span className="material-symbols-outlined text-5xl text-rose-500 mb-2">article_off</span>
                 <h3 className="text-xl font-headline font-black text-[#124757] dark:text-white uppercase">{lang === "VN" ? "Bài viết không tồn tại" : "Article Not Found"}</h3>
                 <p className="text-xs text-slate-400 mt-2">{lang === "VN" ? "Nội dung bài viết này đã bị gỡ bỏ hoặc đường dẫn slug của bạn không chính xác." : "The post you are searching for is unlisted or removed."}</p>
@@ -49,8 +49,8 @@ export function BlogDetail() {
     }
 
     return (
-        <div className="w-full bg-white dark:bg-slate-900 transition-colors duration-300 min-h-screen pb-20">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 pt-8 space-y-8 animate-fade-in">
+        <div className="w-full bg-white dark:bg-slate-900 transition-colors duration-300 min-h-screen pt-28 md:pt-32 pb-24">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 space-y-8 animate-fade-in">
                 
                 {/* THANH ĐIỀU HƯỚNG QUAY LẠI DANH MỤC BLOG */}
                 <div className="flex items-center justify-between">
@@ -59,15 +59,12 @@ export function BlogDetail() {
                         className="flex items-center gap-1.5 text-xs font-headline font-black text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors uppercase tracking-wider"
                     >
                         <span className="material-symbols-outlined text-base">arrow_back</span>
-                        {lang === "VN" ? "Quay lại tin tức" : "Back to Board"}
+                        {lang === "VN" ? "Quay lại" : "Back"}
                     </Link>
                 </div>
 
                 {/* KHỐI HEADER: TIÊU ĐỀ CHỮ LỚN & THÔNG TIN TÁC GIẢ */}
                 <div className="space-y-4">
-                    <span className="inline-block px-3 py-1 bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 text-[10px] font-headline font-black uppercase rounded-lg tracking-widest">
-                        {blog.category || (lang === "VN" ? "Khác" : "Others")}
-                    </span>
                     <h1 className="text-2xl sm:text-3xl md:text-4xl font-headline font-black text-[#124757] dark:text-white leading-tight tracking-tight">
                         {blog.title}
                     </h1>

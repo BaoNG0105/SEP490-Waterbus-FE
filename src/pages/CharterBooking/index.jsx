@@ -126,7 +126,7 @@ export function CharterBooking() {
       {/* ===== SECTION 1: HERO ===== */}
       <section
         className="relative bg-[#124757] dark:bg-slate-950 overflow-hidden pt-32 pb-20 bg-cover bg-center"
-        style={{ backgroundImage: "url('https://res.cloudinary.com/dygipvoal/image/upload/v1776187354/mudyubyd1sqcihkzhkbo.jpg')" }}
+        style={{ backgroundImage: "url('https://res.cloudinary.com/dygipvoal/image/upload/v1783792723/leebii37uxivwywdzuic.jpg')" }}
       >
         <div className="absolute inset-0 bg-[#124757]/70 dark:bg-slate-950/70 pointer-events-none"></div>
         <div className="absolute inset-0 opacity-10 pointer-events-none">
