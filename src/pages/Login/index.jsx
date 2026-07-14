@@ -307,7 +307,7 @@ export const Login = () => {
           </div>
 
           {/* Cổng đăng nhập mở rộng Google OAuth */}
-          <div ref={googleBtnRef} className="flex w-full flex-col items-center gap-2 overflow-hidden">
+          <div ref={googleBtnRef} className="flex w-full flex-col items-center overflow-hidden">
             {GOOGLE_CLIENT_ID ? (
               <GoogleLogin
                 onSuccess={handleGoogleSuccess}
@@ -326,13 +326,6 @@ export const Login = () => {
                   : "VITE_GOOGLE_CLIENT_ID is missing — Google button unavailable."}
               </p>
             )}
-            {import.meta.env.DEV ? (
-              <p className="w-full text-center text-[10px] font-medium leading-relaxed text-slate-400">
-                {lang === "VN"
-                  ? `Nếu console báo "origin is not allowed": thêm ${window.location.origin} vào Authorized JavaScript origins (Google Cloud → OAuth Client ID). Dev hiện chạy port 5174.`
-                  : `If console says "origin is not allowed": add ${window.location.origin} to Authorized JavaScript origins (Google Cloud → OAuth Client ID). Dev uses port 5174.`}
-              </p>
-            ) : null}
           </div>
 
           {/* Chuyển hướng sang trang đăng ký tài khoản tự do */}
