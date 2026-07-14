@@ -76,48 +76,30 @@ export function MyCharterPaymentPanel({
         {booking.status === "Quoted" && !isPaid ? (
           <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
             <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
-              <div className="flex items-start gap-4">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#124757] text-white shadow-lg shadow-[#124757]/20 dark:bg-yellow-400 dark:text-slate-900">
-                  <span className="material-symbols-outlined text-2xl">request_quote</span>
-                </span>
-                <div>
-                  <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
-                    {lang === "VN" ? "Phản hồi báo giá" : "Respond to quote"}
-                  </h4>
-                  <p className="mt-1 max-w-xl text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
-                    {lang === "VN"
-                      ? "Chấp nhận để thanh toán, yêu cầu chỉnh sửa, hoặc từ chối báo giá này."
-                      : "Accept to proceed to payment, request changes, or reject this quote."}
-                  </p>
-                </div>
-              </div>
+              <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
+                {lang === "VN" ? "Phản hồi báo giá" : "Respond to quote"}
+              </h4>
+              <p className="mt-1 max-w-xl text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
+                {lang === "VN"
+                  ? "Chấp nhận để thanh toán, hoặc từ chối báo giá này."
+                  : "Accept to proceed to payment, or reject this quote."}
+              </p>
             </div>
             <div className="flex flex-col gap-3 px-5 py-5 sm:flex-row sm:flex-wrap md:px-6">
               <button
                 type="button"
                 onClick={() => handleRespondToQuote("Accept")}
                 disabled={isSubmitting || isQuoteHoldExpired}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#124757] px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
+                className="inline-flex flex-1 items-center justify-center rounded-xl bg-[#124757] px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
               >
-                <span className="material-symbols-outlined text-base">check_circle</span>
                 {lang === "VN" ? "Chấp nhận" : "Accept"}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRespondToQuote("RequestChanges")}
-                disabled={isSubmitting || isQuoteHoldExpired}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-[#124757] transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
-              >
-                <span className="material-symbols-outlined text-base">edit_note</span>
-                {lang === "VN" ? "Yêu cầu chỉnh sửa" : "Request changes"}
               </button>
               <button
                 type="button"
                 onClick={() => handleRespondToQuote("Reject")}
                 disabled={isSubmitting || isQuoteHoldExpired}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+                className="inline-flex flex-1 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-5 py-3.5 text-xs font-headline font-black uppercase tracking-wider text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
               >
-                <span className="material-symbols-outlined text-base">cancel</span>
                 {lang === "VN" ? "Từ chối" : "Reject"}
               </button>
             </div>
@@ -132,30 +114,23 @@ export function MyCharterPaymentPanel({
         ) : null}
 
         {isTerminalBooking ? (
-          <div className="mt-5 flex flex-col gap-4 rounded-[1.75rem] border border-slate-200 bg-slate-50 px-5 py-5 dark:border-slate-700 dark:bg-slate-900 md:px-6 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-3xl text-slate-400">
-                {booking.status === "Cancelled" ? "cancel" : booking.status === "Expired" ? "timer_off" : "currency_exchange"}
-              </span>
-              <div>
-                <h4 className="font-headline text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
-                  {booking.status === "Cancelled"
-                    ? (lang === "VN" ? "Yêu cầu đã hủy" : "Request cancelled")
-                    : booking.status === "Expired"
-                      ? (lang === "VN" ? "Yêu cầu đã hết hạn" : "Request expired")
-                      : (lang === "VN" ? "Đã hoàn tiền" : "Refunded")}
-                </h4>
-                <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {booking.status === "Cancelled" && ["depositpaid", "paid", "partiallyrefunded"].includes(String(booking.paymentStatus || "").toLowerCase())
-                    ? (lang === "VN"
-                      ? "Booking đã hủy. Nếu chưa hoàn xong, hãy nhập thông tin ngân hàng để nhận hoàn tiền."
-                      : "Booking cancelled. If refund is not finished, enter bank details to receive the refund.")
-                    : (lang === "VN"
-                      ? "Không còn thao tác thanh toán cho yêu cầu này."
-                      : "Payment actions are no longer available for this request.")}
-                </p>
-              </div>
-            </div>
+          <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-slate-50 px-5 py-5 dark:border-slate-700 dark:bg-slate-900 md:px-6">
+            <h4 className="font-headline text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
+              {booking.status === "Cancelled"
+                ? (lang === "VN" ? "Yêu cầu đã hủy" : "Request cancelled")
+                : booking.status === "Expired"
+                  ? (lang === "VN" ? "Yêu cầu đã hết hạn" : "Request expired")
+                  : (lang === "VN" ? "Đã hoàn tiền" : "Refunded")}
+            </h4>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+              {booking.status === "Cancelled" && ["depositpaid", "paid", "partiallyrefunded"].includes(String(booking.paymentStatus || "").toLowerCase())
+                ? (lang === "VN"
+                  ? "Booking đã hủy. Nếu chưa hoàn xong, hãy nhập thông tin ngân hàng để nhận hoàn tiền."
+                  : "Booking cancelled. If refund is not finished, enter bank details to receive the refund.")
+                : (lang === "VN"
+                  ? "Không còn thao tác thanh toán cho yêu cầu này."
+                  : "Payment actions are no longer available for this request.")}
+            </p>
           </div>
         ) : null}
 
@@ -163,20 +138,15 @@ export function MyCharterPaymentPanel({
           <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
             <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-start gap-4">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#00a85e] text-white shadow-lg shadow-[#00a85e]/20">
-                    <span className="material-symbols-outlined text-2xl">account_balance_wallet</span>
-                  </span>
-                  <div>
-                    <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
-                      {lang === "VN" ? "Thanh toán qua PayOS" : "Pay via PayOS"}
-                    </h4>
-                    <p className="mt-1 max-w-xl text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
-                      {lang === "VN"
-                        ? "Chọn hình thức thanh toán rồi mở cổng PayOS để hoàn tất giao dịch."
-                        : "Choose a payment option, then open PayOS to complete your transaction."}
-                    </p>
-                  </div>
+                <div>
+                  <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
+                    {lang === "VN" ? "Thanh toán qua PayOS" : "Pay via PayOS"}
+                  </h4>
+                  <p className="mt-1 max-w-xl text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
+                    {lang === "VN"
+                      ? "Chọn hình thức thanh toán rồi mở cổng PayOS để hoàn tất giao dịch."
+                      : "Choose a payment option, then open PayOS to complete your transaction."}
+                  </p>
                 </div>
                 {showQuotePaymentCountdown && (
                   <div className={`min-w-[9.5rem] rounded-2xl border px-4 py-3 text-center ${
@@ -208,12 +178,9 @@ export function MyCharterPaymentPanel({
                 </div>
               ) : (expiredPendingPayment || (Boolean(expiredPaymentCheckoutUrl || paymentCheckoutUrl) && isPaymentLinkExpired)) ? (
                 <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
-                  <div className="flex items-start gap-3 text-slate-600 dark:text-slate-300">
-                    <span className="material-symbols-outlined text-3xl text-slate-400">timer_off</span>
-                    <p className="text-sm font-bold">
-                      {lang === "VN" ? "Link thanh toán cũ đã hết hạn. Vui lòng tạo giao dịch thanh toán mới." : "The previous payment link has expired. Create a new payment transaction."}
-                    </p>
-                  </div>
+                  <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                    {lang === "VN" ? "Link thanh toán cũ đã hết hạn. Vui lòng tạo giao dịch thanh toán mới." : "The previous payment link has expired. Create a new payment transaction."}
+                  </p>
                   <button type="button" onClick={handleCreatePayment} disabled={isSubmitting} className={`w-max ${payosButtonClassName}`}>
                     {!isSubmitting && <PayOSLogo variant="white" className="h-5 w-auto" />}
                     {isSubmitting ? (lang === "VN" ? "Đang tạo..." : "Creating...") : (lang === "VN" ? "Tạo lại thanh toán" : "Create new payment")}
@@ -254,7 +221,6 @@ export function MyCharterPaymentPanel({
                     >
                       <PayOSLogo variant="white" className="h-6 w-auto" />
                       <span>{lang === "VN" ? "Tiếp tục thanh toán trên PayOS" : "Continue to PayOS checkout"}</span>
-                      <span className="material-symbols-outlined text-xl">arrow_forward</span>
                     </button>
                   ) : (
                     <button
@@ -263,7 +229,6 @@ export function MyCharterPaymentPanel({
                       disabled={isSubmitting || (!pendingPaymentOrderCode && !pendingPaymentId)}
                       className={payosButtonLgClassName}
                     >
-                      <span className="material-symbols-outlined text-xl">sync</span>
                       <span>{lang === "VN" ? "Đồng bộ trạng thái thanh toán" : "Sync payment status"}</span>
                     </button>
                   )}
@@ -315,9 +280,7 @@ export function MyCharterPaymentPanel({
                                     </p>
                                   )}
                                 </div>
-                                <span className={`flex h-6 w-6 items-center justify-center rounded-full border ${active ? "border-[#124757] bg-[#124757] text-white dark:border-yellow-400 dark:bg-yellow-400 dark:text-slate-900" : "border-slate-300 text-transparent"}`}>
-                                  <span className="material-symbols-outlined text-base">check</span>
-                                </span>
+                                <span className={`mt-1 h-4 w-4 shrink-0 rounded-full border-2 ${active ? "border-[#124757] bg-[#124757] dark:border-yellow-400 dark:bg-yellow-400" : "border-slate-300"}`} />
                               </div>
                             </button>
                           );
@@ -413,7 +376,6 @@ export function MyCharterPaymentPanel({
                           ? (lang === "VN" ? "Đang tạo giao dịch..." : "Creating payment...")
                           : `${lang === "VN" ? "Thanh toán" : "Pay"} ${selectedPaymentAmount > 0 ? currencyFormatter.format(selectedPaymentAmount) : ""}`}
                       </span>
-                      {!isSubmitting && <span className="material-symbols-outlined text-xl">arrow_forward</span>}
                     </button>
                     <p className="mt-3 text-center text-[11px] font-medium text-slate-400">
                       {lang === "VN" ? "Bạn sẽ được chuyển sang cổng thanh toán PayOS an toàn." : "You will be redirected to the secure PayOS payment gateway."}
@@ -422,7 +384,7 @@ export function MyCharterPaymentPanel({
                 </div>
               ) : (
                 <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm font-bold text-slate-400 dark:border-slate-700">
-                  {lang === "VN" ? "Booking hiện chưa ở trạng thái cho phép thanh toán." : "This booking isn't eligible for payment right now."}
+                  {lang === "VN" ? "Booking hiện chưa ở trạng thái cho phép thanh toán." : "Booking isn't eligible for payment right now."}
                 </p>
               )}
             </div>

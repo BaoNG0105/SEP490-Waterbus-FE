@@ -25,6 +25,7 @@ export function MyCharterTicketsPanel({
   setSelectedTicketIds,
   passengerRows,
   canUseContactAsSinglePassenger,
+  bookerAsFirstPassenger = false,
   importInputRef,
   isUsableText,
   handleTicketFileAction,
@@ -36,6 +37,16 @@ export function MyCharterTicketsPanel({
   const [addRows, setAddRows] = useState([{ fullName: "", birthYear: "" }]);
   const summary = getCharterPassengerAddSummary(booking);
   const canAdd = canCustomerRequestAddPassengers(booking);
+
+  const isPassengerRowLocked = (row) => {
+    if (!isPaid) return true;
+    const rawApproval = String(row.approvalStatus || "").trim();
+    const approval = normalizePassengerApprovalStatus(row.approvalStatus);
+    const isDraftSlot = !row.id && !row.requestBatchId && !rawApproval;
+    return Boolean(row.requestBatchId) || (!isDraftSlot && approval === "Approved");
+  };
+
+  const canEditManifest = passengerRows.some((row) => !isPassengerRowLocked(row));
 
   const updateAddRow = (index, field, value) => {
     setAddRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
@@ -84,8 +95,7 @@ export function MyCharterTicketsPanel({
               <img src={qrImageUrl} alt={lang === "VN" ? "QR tổng booking" : "Booking group QR"} className="w-full h-full object-contain p-2" />
             ) : (
               <div className="text-center text-slate-400 px-3">
-                <span className="material-symbols-outlined text-3xl">qr_code_2</span>
-                <p className="text-[9px] font-bold mt-1">{lang === "VN" ? "QR có sau khi booking hợp lệ" : "QR available when eligible"}</p>
+                <p className="text-[9px] font-bold">{lang === "VN" ? "QR có sau khi booking hợp lệ" : "QR available when eligible"}</p>
               </div>
             )}
           </div>
@@ -101,18 +111,23 @@ export function MyCharterTicketsPanel({
                 ? (lang === "VN"
                   ? "Chuyến 1 khách: họ tên lấy từ người đặt. Chỉ cần nhập năm sinh rồi bấm Lưu."
                   : "Single passenger: name is taken from the booker. Just enter the birth year and save.")
-                : (lang === "VN" ? "Nhập file hoặc chỉnh trực tiếp từng hành khách." : "Import a file or edit passengers directly.")}
+                : bookerAsFirstPassenger
+                  ? (lang === "VN"
+                    ? "Hành khách số 1 là người đặt. Khách trong số đã đăng ký: Lưu là xong (không cần duyệt). Chỉ phần Thêm hành khách mới chờ duyệt."
+                    : "Passenger #1 is the booker. Guests within booked count: save directly (no approval). Only Add passengers needs review.")
+                  : (lang === "VN"
+                    ? "Khách trong số đã đăng ký lưu trực tiếp. Thêm ngoài số đăng ký thì cần duyệt."
+                    : "Guests within the booked count save directly. Extra add-ons need approval.")}
             </p>
           </div>
-          <button type="button" onClick={() => importInputRef.current?.click()} disabled={isSubmitting || !isPaid} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400 sm:w-auto">
+          <button type="button" onClick={() => importInputRef.current?.click()} disabled={isSubmitting || !isPaid || !canEditManifest} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400 sm:w-auto">
             {lang === "VN" ? "Nhập file khách" : "Import Passengers"}
           </button>
           <input ref={importInputRef} type="file" accept=".xlsx,.csv,.tsv,.txt" onChange={handleImportPassengers} className="hidden" />
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {[
-            { label: lang === "VN" ? "Sức chứa tàu" : "Boat capacity", value: summary.boatCapacity || "—" },
             { label: lang === "VN" ? "Đã duyệt / có tên" : "Approved", value: summary.approvedCount },
             { label: lang === "VN" ? "Chờ duyệt" : "Pending", value: summary.pendingCount },
             {
@@ -143,14 +158,11 @@ export function MyCharterTicketsPanel({
           ) : null}
 
           {passengerRows.map((row, index) => {
-            const rawApproval = String(row.approvalStatus || "").trim();
             const approval = normalizePassengerApprovalStatus(row.approvalStatus);
-            // Ô trống chưa lưu (chưa có id/batch) phải nhập được — không coi "Approved" mặc định khi thiếu status.
-            const isDraftSlot = !row.id && !row.requestBatchId && !rawApproval;
-            const isLocked = !isPaid
-              || Boolean(row.requestBatchId)
-              || (!isDraftSlot && approval === "Approved");
+            const isLocked = isPassengerRowLocked(row);
+            const isBookerRow = (canUseContactAsSinglePassenger || bookerAsFirstPassenger || row.isContactPassenger) && index === 0;
             const isBookerOnly = canUseContactAsSinglePassenger && index === 0;
+            const nameLocked = isLocked || isBookerRow;
             return (
               <div key={row.id || `passenger-${index}`} className="space-y-2">
                 <div className={`grid gap-2 items-center ${
@@ -175,10 +187,15 @@ export function MyCharterTicketsPanel({
                       <input
                         value={row.fullName}
                         onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)}
-                        disabled={isLocked}
+                        disabled={nameLocked}
                         placeholder={lang === "VN" ? "Họ tên" : "Full name"}
-                        className="w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60"
+                        className={`w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60 ${isBookerRow ? "pr-20" : ""}`}
                       />
+                      {isBookerRow ? (
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-headline font-black uppercase tracking-wider text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+                          {lang === "VN" ? "Người đặt" : "Booker"}
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
                   <input
@@ -192,7 +209,8 @@ export function MyCharterTicketsPanel({
                     className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60"
                   />
                 </div>
-                {row.approvalStatus || row.requestBatchId ? (
+                {/* Chỉ hiện khi chờ duyệt / từ chối. Đã duyệt = đã gộp vào danh sách, không cần badge. */}
+                {row.requestBatchId && approval !== "Approved" ? (
                   <p className={`ml-12 inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(approval)}`}>
                     {formatPassengerApprovalStatus(approval, lang, row.reviewNote)}
                   </p>
@@ -202,13 +220,15 @@ export function MyCharterTicketsPanel({
           })}
         </div>
 
-        <div className="flex justify-end mt-6">
-          <button onClick={handleSavePassengers} disabled={isSubmitting || !isPaid} className="w-full sm:w-auto min-w-56 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 py-3 px-6 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60">
-            {isSubmitting
-              ? (lang === "VN" ? "Đang lưu..." : "Saving...")
-              : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}
-          </button>
-        </div>
+        {canEditManifest ? (
+          <div className="flex justify-end mt-6">
+            <button onClick={handleSavePassengers} disabled={isSubmitting || !isPaid} className="w-full sm:w-auto min-w-56 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 py-3 px-6 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60">
+              {isSubmitting
+                ? (lang === "VN" ? "Đang lưu..." : "Saving...")
+                : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {isPaid && booking?.status === "Confirmed" ? (
@@ -218,8 +238,8 @@ export function MyCharterTicketsPanel({
           </h2>
           <p className="mt-1 text-xs font-bold text-slate-400">
             {lang === "VN"
-              ? "Gửi thêm tên hành khách để đội vận hành duyệt. Có thể thêm khi còn hơn 24 giờ trước giờ khởi hành."
-              : "Submit additional passenger names for review. Available when more than 24 hours remain before departure."}
+              ? "Thêm ngoài số khách đã đăng ký — gửi để đội vận hành duyệt. Mỗi booking chỉ 1 lần gửi; chỉ khi còn hơn 24 giờ trước giờ khởi hành."
+              : "Add beyond the booked passenger count — needs operations review. One request per booking; only when more than 24 hours remain before departure."}
           </p>
 
           {!canAdd ? (

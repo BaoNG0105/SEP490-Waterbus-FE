@@ -140,10 +140,23 @@ export const CHARTER_BOAT_HOLDING_STATUSES = new Set([
 
 export const normalizeCharterScheduleDate = (value) => {
   if (value === undefined || value === null || value === "") return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
   const raw = String(value).trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+
+  const vnMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (vnMatch) {
+    return `${vnMatch[3]}-${String(vnMatch[2]).padStart(2, "0")}-${String(vnMatch[1]).padStart(2, "0")}`;
+  }
+
   const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return raw.slice(0, 10);
+  if (Number.isNaN(date.getTime())) return "";
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -151,9 +164,20 @@ export const normalizeCharterScheduleDate = (value) => {
 };
 
 export const normalizeCharterScheduleTime = (value) => {
-  const match = String(value || "").trim().match(/(\d{1,2}):(\d{2})/);
-  if (!match) return "";
-  return `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`;
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value === "object") {
+    const hours = Number(value.hours ?? value.Hours ?? value.hour);
+    const minutes = Number(value.minutes ?? value.Minutes ?? value.minute);
+    if (Number.isFinite(hours) && Number.isFinite(minutes)) {
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    }
+  }
+  const text = String(value).trim();
+  if (!text || text === "--") return "";
+  // .NET TimeSpan may be "1.09:30:00" (days.hours:minutes:seconds) or "09:30:00".
+  const withDays = text.match(/(?:(\d+)\.)?(\d{1,2}):(\d{2})(?::\d{2})?/);
+  if (!withDays) return "";
+  return `${String(Number(withDays[2])).padStart(2, "0")}:${withDays[3]}`;
 };
 
 export const getAssignedBoatIdsFromBooking = (booking) => {
@@ -367,47 +391,6 @@ export const formatPassengerSummary = (booking, lang) => {
   return `${passengerCount} guests (${adultCount} adult${adultCount === 1 ? "" : "s"} / ${childCount} child${childCount === 1 ? "" : "ren"})`;
 };
 
-/** Ưu tiên Cancelled/Refunded nếu BE trả lệch giữa bookingStatus và status. */
-export const resolveCharterBookingStatus = (item) => {
-  const candidates = [
-    pick(item, ["bookingStatus"], ""),
-    pick(item, ["status"], ""),
-  ]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-
-  const lowered = candidates.map((value) => value.toLowerCase().replace(/[_-\s]/g, ""));
-  if (lowered.some((value) => ["cancelled", "canceled", "cancel"].includes(value))) return "Cancelled";
-  if (lowered.some((value) => value === "refunded")) return "Refunded";
-  if (lowered.some((value) => value === "expired")) return "Expired";
-  if (lowered.some((value) => value === "completed")) return "Completed";
-  return pick(item, ["bookingStatus", "status"], "PendingQuote") || "PendingQuote";
-};
-
-/** Ưu tiên trạng thái hoàn tiền từ payments[] nếu top-level còn Paid. */
-export const resolveCharterPaymentStatus = (item) => {
-  const top = String(pick(item, ["paymentStatus"], "") || "").trim();
-  const payments = Array.isArray(item?.payments) ? item.payments : [];
-  const paymentStatuses = payments
-    .map((payment) => String(pick(payment, ["paymentStatus"], "") || "").trim().toLowerCase())
-    .filter(Boolean);
-
-  const has = (...keys) => {
-    const set = new Set(paymentStatuses);
-    return keys.some((key) => set.has(key) || String(top || "").toLowerCase() === key);
-  };
-
-  if (has("refunded", "manualrefunded", "manual_refunded")) return "Refunded";
-  if (has("partiallyrefunded", "partially_refunded")) return "PartiallyRefunded";
-  if (has("refundpending", "refund_pending", "refundprocessing", "refund_processing")) return "RefundPending";
-  if (has("refundfailed", "refund_failed")) return "RefundFailed";
-  if (top) return top;
-  if (paymentStatuses.includes("paid")) return "Paid";
-  if (paymentStatuses.includes("depositpaid")) return "DepositPaid";
-  if (paymentStatuses.includes("pending")) return "Pending";
-  return top || "--";
-};
-
 export const getPaymentStatusInfo = (status, lang) => {
   switch (String(status || "").toLowerCase()) {
     case "unpaid":
@@ -435,7 +418,7 @@ export const getPaymentStatusInfo = (status, lang) => {
     case "failed":
       return { label: lang === "VN" ? "Thanh toán thất bại" : "Failed", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20" };
     case "cancelled":
-      return { label: lang === "VN" ? "Đã hủy thanh toán" : "Cancelled", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20" };
+      return { label: lang === "VN" ? "Đã hủy" : "Cancelled", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20" };
     default:
       return { label: status || "--", classes: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700" };
   }
@@ -443,17 +426,34 @@ export const getPaymentStatusInfo = (status, lang) => {
 export const getPaymentAmount = (payment) =>
   Number(pick(payment, ["amount", "paymentAmount", "paidAmount", "totalAmount"], 0)) || 0;
 export const getRefundAmount = (payment) =>
-  Number(pick(payment, ["refundAmount", "refundedAmount", "refund.amount", "refundAmountVnd"], 0)) || 0;
+  Number(pick(payment, [
+    "refundAmount",
+    "refundedAmount",
+    "refund.amount",
+    "refundAmountVnd",
+    "RefundAmount",
+    "RefundedAmount",
+  ], 0)) || 0;
 export const getRefundRequestedAmount = (payment) =>
   Number(pick(payment, ["refundRequestedAmount", "refund.requestedAmount", "refund.refundRequestedAmount"], 0)) || 0;
 export const getRefundStatus = (payment) =>
-  pick(payment, ["refundStatus", "refund.status", "refundPaymentStatus", "refundState", "payoutStatus"], "");
+  pick(payment, [
+    "refundStatus",
+    "RefundStatus",
+    "refund.status",
+    "refund.Status",
+    "refundPaymentStatus",
+    "refundState",
+    "refundResult",
+    "payoutStatus",
+    "payosRefundStatus",
+  ], "");
 export const getRefundMethod = (payment) =>
-  pick(payment, ["refundMethod", "refund.method"], "");
+  pick(payment, ["refundMethod", "refund.method", "RefundMethod"], "");
 export const getRefundReferenceId = (payment) =>
-  pick(payment, ["refundReferenceId", "refund.referenceId", "refund.refundReferenceId", "payoutId"], "");
+  pick(payment, ["refundReferenceId", "refund.referenceId", "refund.refundReferenceId", "payoutId", "RefundReferenceId"], "");
 export const getRefundMessage = (payment) =>
-  pick(payment, ["refundMessage", "refund.message", "refundError", "refund.error", "refundFailureReason", "refund.reason"], "");
+  pick(payment, ["refundMessage", "refund.message", "refundError", "refund.error", "refundFailureReason", "refund.reason", "RefundMessage"], "");
 export const getRefundBankValue = (payment, booking, keys) =>
   pick(payment, keys, pick(booking?.raw, keys, pick(booking, keys, "")));
 
@@ -462,6 +462,120 @@ const PAYMENT_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0
 /** Internal payment UUID only — never PayOS paymentLinkId / orderCode. */
 export const isPaymentUuid = (value) => PAYMENT_UUID_PATTERN.test(String(value || "").trim());
 
+/** Lấy danh sách payment từ nhiều hình dạng DTO list/detail. */
+export const collectCharterPayments = (item) => {
+  if (!item || typeof item !== "object") return [];
+  const candidates = [
+    item.payments,
+    item.Payments,
+    item.paymentList,
+    item.paymentHistory,
+    item.latestPayments,
+  ];
+  for (const list of candidates) {
+    if (Array.isArray(list)) return list;
+  }
+  const single = item.payment || item.latestPayment || item.Payment || item.LatestPayment;
+  return single && typeof single === "object" ? [single] : [];
+};
+
+const COMPLETED_REFUND_STATUSES = new Set([
+  "success",
+  "succeeded",
+  "completed",
+  "refunded",
+  "manualrefunded",
+  "manual_refunded",
+]);
+
+/** Booking/payment đã hoàn xong (kể cả BE vẫn để PaymentStatus = Paid). */
+export const isRefundDone = (payment) => {
+  if (!payment || typeof payment !== "object") return false;
+  const paymentStatus = String(pick(payment, ["paymentStatus", "PaymentStatus", "status"], "")).toLowerCase().replace(/[_-\s]/g, "");
+  const refundStatus = String(getRefundStatus(payment) || "").toLowerCase().replace(/[_-\s]/g, "");
+  if (paymentStatus === "refunded" || paymentStatus === "manualrefunded") return true;
+  if (COMPLETED_REFUND_STATUSES.has(refundStatus)) return true;
+  // Một số list DTO chỉ có số tiền đã hoàn, không có refundStatus.
+  const refunded = getRefundAmount(payment);
+  if (refunded > 0 && !["pending", "processing", "requested", "created", "failed", "error", "cancelled", "rejected"].includes(refundStatus)) {
+    return true;
+  }
+  return false;
+};
+
+export const hasCompletedCharterRefund = (item) => {
+  if (!item || typeof item !== "object") return false;
+  const topPayment = String(pick(item, ["paymentStatus", "PaymentStatus"], "") || "").toLowerCase().replace(/[_-\s]/g, "");
+  if (["refunded", "manualrefunded", "partiallyrefunded"].includes(topPayment)) return true;
+
+  const topRefund = String(pick(item, [
+    "refundStatus",
+    "RefundStatus",
+    "latestRefundStatus",
+    "paymentRefundStatus",
+  ], "") || "").toLowerCase().replace(/[_-\s]/g, "");
+  if (COMPLETED_REFUND_STATUSES.has(topRefund)) return true;
+
+  const topRefundedAmount = Number(pick(item, [
+    "refundedAmount",
+    "totalRefundedAmount",
+    "refundAmount",
+    "RefundedAmount",
+    "TotalRefundedAmount",
+  ], 0)) || 0;
+  if (topRefundedAmount > 0) return true;
+
+  if (pick(item, ["isRefunded", "hasRefunded", "refunded"], false) === true) return true;
+
+  return collectCharterPayments(item).some((payment) => isRefundDone(payment));
+};
+
+/** Ưu tiên Cancelled/Refunded nếu BE trả lệch giữa bookingStatus và status. */
+export const resolveCharterBookingStatus = (item) => {
+  const candidates = [
+    pick(item, ["bookingStatus", "BookingStatus"], ""),
+    pick(item, ["status", "Status"], ""),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  const lowered = candidates.map((value) => value.toLowerCase().replace(/[_-\s]/g, ""));
+  if (lowered.some((value) => ["cancelled", "canceled", "cancel"].includes(value))) return "Cancelled";
+  if (lowered.some((value) => value === "refunded")) return "Cancelled";
+  if (lowered.some((value) => value === "expired")) return "Expired";
+  if (lowered.some((value) => value === "completed")) return "Completed";
+
+  // BE đôi khi giữ Confirmed/Paid dù đã hoàn tiền → FE map sang Đã hủy.
+  if (hasCompletedCharterRefund(item)) return "Cancelled";
+
+  return pick(item, ["bookingStatus", "BookingStatus", "status", "Status"], "PendingQuote") || "PendingQuote";
+};
+
+/** Ưu tiên trạng thái hoàn tiền từ payments[] nếu top-level còn Paid. */
+export const resolveCharterPaymentStatus = (item) => {
+  const top = String(pick(item, ["paymentStatus", "PaymentStatus"], "") || "").trim();
+  const payments = collectCharterPayments(item);
+  const paymentStatuses = payments
+    .map((payment) => String(pick(payment, ["paymentStatus", "PaymentStatus"], "") || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  const has = (...keys) => {
+    const set = new Set(paymentStatuses);
+    return keys.some((key) => set.has(key) || String(top || "").toLowerCase() === key);
+  };
+
+  if (hasCompletedCharterRefund(item) || has("refunded", "manualrefunded", "manual_refunded")) {
+    return "Refunded";
+  }
+  if (has("partiallyrefunded", "partially_refunded")) return "PartiallyRefunded";
+  if (has("refundpending", "refund_pending", "refundprocessing", "refund_processing")) return "RefundPending";
+  if (has("refundfailed", "refund_failed")) return "RefundFailed";
+  if (top) return top;
+  if (paymentStatuses.includes("paid")) return "Paid";
+  if (paymentStatuses.includes("depositpaid")) return "DepositPaid";
+  if (paymentStatuses.includes("pending")) return "Pending";
+  return top || "--";
+};
 /**
  * Resolve id for POST /payments/{id}/refund|sync|manual-refund.
  * Prefer payment entity `id`, then `paymentId` — only if UUID.
@@ -556,12 +670,7 @@ export const getRefundStatusInfo = (payment, lang) => {
   return { label: "--", classes: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700" };
 };
 export const isPaidPayment = (payment) =>
-  ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(pick(payment, ["paymentStatus"], "")).toLowerCase());
-export const isRefundDone = (payment) => {
-  const paymentStatus = String(pick(payment, ["paymentStatus"], "")).toLowerCase();
-  const refundStatus = String(getRefundStatus(payment)).toLowerCase();
-  return paymentStatus === "refunded" || ["success", "succeeded", "completed", "refunded", "paid", "manualrefunded", "manual_refunded"].includes(refundStatus);
-};
+  ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(pick(payment, ["paymentStatus", "PaymentStatus"], "")).toLowerCase());
 export const isRefundProcessing = (payment) =>
   ["pending", "processing", "requested", "created"].includes(String(getRefundStatus(payment)).toLowerCase());
 export const isRefundFailed = (payment) => {
@@ -585,7 +694,7 @@ export const canAdminHandleRefund = (payment, bookingStatus) =>
   && !isRefundDone(payment)
   && ["cancelled", "refunded"].includes(String(bookingStatus || "").toLowerCase());
 export const hasRefundablePayment = (booking) =>
-  Array.isArray(booking?.payments) && booking.payments.some((payment) => (isPaidPayment(payment) || hasRefundableAmount(payment)) && !isRefundDone(payment));
+  collectCharterPayments(booking).some((payment) => (isPaidPayment(payment) || hasRefundableAmount(payment)) && !isRefundDone(payment));
 export const paymentWaitsCustomerRefundInfo = (payment, bookingStatus) =>
   String(bookingStatus || "").toLowerCase() === "cancelled"
   && (isPaidPayment(payment) || hasRefundableAmount(payment))
@@ -1332,7 +1441,7 @@ export const normalizeBooking = (item) => {
       passengerCount,
       contactName: pick(item, ["contactName", "customerName", "fullName"], ""),
     }),
-    payments: pick(item, ["payments"], []),
+    payments: collectCharterPayments(item),
     createdAt: pick(item, ["createdAt", "createdDate"]),
     assignedManagerId: String(pick(item, ["assignedManagerId", "managerUserId", "assignedManager.id", "assignedManager.userId"], "")),
     assignedManagerName: pick(item, ["assignedManagerName", "assignedManager.fullName", "assignedManager.name"], ""),

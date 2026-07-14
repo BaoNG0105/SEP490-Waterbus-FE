@@ -1813,9 +1813,7 @@ export function AdminBookingTicketsTab({
 
     try {
       setReviewingBatchId(batch.requestBatchId);
-      await approveCharterPassengerAddRequest(booking.id, batch.requestBatchId, {
-        assigned: useAssignedApi,
-      });
+      await approveCharterPassengerAddRequest(booking.id, batch.requestBatchId);
       await onRefresh?.();
       showToast({
         icon: "success",
@@ -1867,7 +1865,6 @@ export function AdminBookingTicketsTab({
         booking.id,
         batch.requestBatchId,
         String(result.value || "").trim(),
-        { assigned: useAssignedApi },
       );
       await onRefresh?.();
       showToast({

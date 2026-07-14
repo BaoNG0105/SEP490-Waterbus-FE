@@ -1,10 +1,72 @@
-import { getBoatSeatCount, pick } from "./charterBookingAdmin";
+import { getBoatSeatCount, normalizeCharterScheduleDate, normalizeCharterScheduleTime, pick } from "./charterBookingAdmin";
 import { getPassengerBirthYear, hasCharterPassengerName, isCharterFullyPaid } from "./charterBookingTickets";
 
-/** Spec nghiệp vụ: tối đa 2 lần gửi yêu cầu thêm (FE heuristic khi BE chưa trả remainingAddAttempts). */
-export const CHARTER_MAX_PASSENGER_ADD_ATTEMPTS = 2;
+/** BE: mỗi charter booking chỉ được gửi yêu cầu thêm hành khách 1 lần. */
+export const CHARTER_MAX_PASSENGER_ADD_ATTEMPTS = 1;
 
 const TERMINAL_STATUSES = new Set(["Cancelled", "Completed", "Refunded", "Expired"]);
+
+/** Ngày + giờ khởi hành local — đọc nhiều field / format (ISO, dd/MM/yyyy, TimeSpan). */
+export const getCharterDepartureDateTime = (booking) => {
+  if (!booking || typeof booking !== "object") return null;
+
+  const raw = booking.raw && typeof booking.raw === "object" ? booking.raw : {};
+  const dateCandidates = [
+    booking.departureDate,
+    booking.startDate,
+    booking.departureAt,
+    booking.scheduledDepartureAt,
+    raw.departureDate,
+    raw.DepartureDate,
+    raw.startDate,
+    raw.StartDate,
+    raw.departureAt,
+  ];
+  const timeCandidates = [
+    booking.startTime,
+    booking.departureTime,
+    raw.startTime,
+    raw.StartTime,
+    raw.departureTime,
+    raw.DepartureTime,
+  ];
+
+  let dateKey = "";
+  for (const candidate of dateCandidates) {
+    dateKey = normalizeCharterScheduleDate(candidate);
+    if (dateKey) break;
+  }
+  if (!dateKey) return null;
+
+  let timeKey = "";
+  for (const candidate of timeCandidates) {
+    timeKey = normalizeCharterScheduleTime(candidate);
+    if (timeKey) break;
+  }
+
+  // Thiếu startTime riêng → lấy giờ từ ISO departureDate nếu có.
+  if (!timeKey) {
+    for (const candidate of dateCandidates) {
+      const text = String(candidate || "");
+      const match = text.match(/T(\d{1,2}):(\d{2})/);
+      if (match) {
+        timeKey = `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`;
+        break;
+      }
+      // .NET TimeSpan sometimes "09:30:00" stored only in date field wrongly — skip
+    }
+  }
+  if (!timeKey) timeKey = "00:00";
+
+  // Build local datetime parts to avoid Invalid Date from odd strings.
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const [hour, minute] = timeKey.split(":").map(Number);
+  if (![year, month, day, hour, minute].every((n) => Number.isFinite(n))) return null;
+
+  const departure = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if (Number.isNaN(departure.getTime())) return null;
+  return departure;
+};
 
 export const normalizePassengerApprovalStatus = (value) => {
   const raw = String(value || "").trim().toLowerCase();
@@ -121,8 +183,20 @@ export const getPassengerAddRequestBatches = (passengers = []) => {
   });
 };
 
-export const getPassengerAddAttemptCount = (passengers = []) =>
-  getPassengerAddRequestBatches(passengers).length;
+export const getPassengerAddAttemptCount = (passengers = [], booking = null) => {
+  const fromBatches = getPassengerAddRequestBatches(passengers).length;
+  if (fromBatches > 0) return fromBatches;
+
+  // Sau duyệt BE có thể xóa requestBatchId — suy ra đã dùng lượt nếu số tên > số khách đăng ký ban đầu.
+  const booked =
+    Number(booking?.passengerCount || 0)
+    || (Number(booking?.adultCount || 0) + Number(booking?.childCount || 0))
+    || 0;
+  if (booked <= 0) return 0;
+
+  const namedCount = countApprovedOrDefaultPassengers(passengers);
+  return namedCount > booked ? 1 : 0;
+};
 
 export const hasCharterAttendanceStarted = (booking) => {
   const rows = listBookingPassengers(booking);
@@ -144,12 +218,8 @@ export const hasCharterAttendanceStarted = (booking) => {
 };
 
 export const isWithinPassengerAddWindow = (booking, now = Date.now()) => {
-  const date = pick(booking, ["departureDate", "startDate"], "");
-  const time = String(pick(booking, ["startTime"], "00:00") || "00:00").slice(0, 5);
-  if (!date) return false;
-  const dateKey = String(date).slice(0, 10);
-  const departure = new Date(`${dateKey}T${time}:00`);
-  if (Number.isNaN(departure.getTime())) return false;
+  const departure = getCharterDepartureDateTime(booking);
+  if (!departure) return false;
   const msLeft = departure.getTime() - now;
   // Được thêm khi còn hơn 24 giờ trước giờ đi — khóa trong 24h cuối / sau giờ đi.
   return msLeft > 24 * 60 * 60 * 1000;
@@ -160,7 +230,10 @@ export const getCharterPassengerAddSummary = (booking) => {
   const boatCapacity = getCharterBoatCapacity(booking);
   const approvedCount = countApprovedOrDefaultPassengers(passengers);
   const pendingCount = countPendingAddPassengers(passengers);
-  const usedAttempts = getPassengerAddAttemptCount(passengers);
+  const usedAttempts = Math.min(
+    CHARTER_MAX_PASSENGER_ADD_ATTEMPTS,
+    getPassengerAddAttemptCount(passengers, booking),
+  );
   const remainingAddAttempts = Math.max(0, CHARTER_MAX_PASSENGER_ADD_ATTEMPTS - usedAttempts);
   const occupied = approvedCount; // pending giữ chỗ tạm
   const pendingHeld = pendingCount;
@@ -203,11 +276,13 @@ export const getPassengerAddBlockedReason = (booking, lang = "VN") => {
       : "Check-in has started — passengers can’t be added.";
   }
   if (!isWithinPassengerAddWindow(booking)) {
-    const date = pick(booking, ["departureDate", "startDate"], "");
-    const time = String(pick(booking, ["startTime"], "00:00") || "00:00").slice(0, 5);
-    const dateKey = String(date).slice(0, 10);
-    const departure = new Date(`${dateKey}T${time}:00`);
-    const msLeft = Number.isNaN(departure.getTime()) ? 0 : departure.getTime() - Date.now();
+    const departure = getCharterDepartureDateTime(booking);
+    if (!departure) {
+      return lang === "VN"
+        ? "Không xác định được ngày giờ khởi hành — vui lòng tải lại booking."
+        : "Departure time is missing — please reload the booking.";
+    }
+    const msLeft = departure.getTime() - Date.now();
     if (msLeft <= 0) {
       return lang === "VN"
         ? "Đã qua giờ khởi hành — không thể thêm hành khách."
@@ -221,8 +296,8 @@ export const getPassengerAddBlockedReason = (booking, lang = "VN") => {
   const summary = getCharterPassengerAddSummary(booking);
   if (summary.remainingAddAttempts <= 0) {
     return lang === "VN"
-      ? "Bạn đã dùng hết số lượt thêm hành khách."
-      : "You’ve used all passenger-add attempts.";
+      ? "Mỗi booking chỉ được gửi yêu cầu thêm hành khách 1 lần — bạn đã dùng lượt này."
+      : "Each booking allows only one add-passenger request — you’ve already used it.";
   }
   if (summary.boatCapacity > 0 && summary.canAddMore <= 0) {
     return lang === "VN"
