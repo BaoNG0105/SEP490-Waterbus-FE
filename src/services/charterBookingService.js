@@ -216,26 +216,19 @@ export const addMyCharterBookingPassengers = async (id, passengersPayload) => {
     }
 };
 
-export const approveCharterPassengerAddRequest = async (id, requestBatchId, { assigned = true } = {}) => {
+export const approveCharterPassengerAddRequest = async (id, requestBatchId, { note = null } = {}) => {
     try {
-        return await apiApprovePassengerAddRequest(id, requestBatchId, { assigned });
+        return await apiApprovePassengerAddRequest(id, requestBatchId, { note });
     } catch (error) {
-        // Admin có thể không qua assigned API — thử admin nếu assigned fail.
-        if (assigned && error?.response?.status === 404) {
-            return apiApprovePassengerAddRequest(id, requestBatchId, { assigned: false });
-        }
         console.error(`Lỗi duyệt thêm HK ${requestBatchId}:`, error);
         throw error;
     }
 };
 
-export const rejectCharterPassengerAddRequest = async (id, requestBatchId, note, { assigned = true } = {}) => {
+export const rejectCharterPassengerAddRequest = async (id, requestBatchId, note, _options = {}) => {
     try {
-        return await apiRejectPassengerAddRequest(id, requestBatchId, { note }, { assigned });
+        return await apiRejectPassengerAddRequest(id, requestBatchId, { note });
     } catch (error) {
-        if (assigned && error?.response?.status === 404) {
-            return apiRejectPassengerAddRequest(id, requestBatchId, { note }, { assigned: false });
-        }
         console.error(`Lỗi từ chối thêm HK ${requestBatchId}:`, error);
         throw error;
     }

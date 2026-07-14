@@ -66,8 +66,9 @@ export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang) 
   if (status === "expired") {
     return { label: isVn ? "Hết hạn" : "Expired", ...baseClasses.expired };
   }
+  // Đã hoàn tiền = đã hủy booking (không giữ badge Đã thanh toán / Đã hoàn tiền đơn lẻ).
   if (status === "refunded" || isRefundedPayment) {
-    return { label: isVn ? "Đã hoàn tiền" : "Refunded", ...baseClasses.refunded };
+    return { label: isVn ? "Đã hủy · hoàn tiền" : "Cancelled · refunded", ...baseClasses.refunded };
   }
   if (isRefundProcessing) {
     return { label: isVn ? "Đang hoàn tiền" : "Refund processing", ...baseClasses.refunded };

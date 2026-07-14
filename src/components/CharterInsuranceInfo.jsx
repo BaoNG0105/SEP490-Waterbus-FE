@@ -99,12 +99,9 @@ export function CharterInsuranceInfo({
   return (
     <div className={`rounded-3xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900 ${className}`}>
       <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2 text-slate-400">
-          <span className="material-symbols-outlined text-lg">health_and_safety</span>
-          <p className="text-[10px] font-headline font-black uppercase tracking-widest">
-            {isVn ? "Bảo hiểm hành khách" : "Passenger insurance"}
-          </p>
-        </div>
+        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+          {isVn ? "Bảo hiểm hành khách" : "Passenger insurance"}
+        </p>
         <div className="flex shrink-0 items-center gap-2">
           <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ring-1 ${statusTone}`}>
             {statusLabel}
@@ -113,11 +110,9 @@ export function CharterInsuranceInfo({
             <button
               type="button"
               onClick={openTerms}
-              title={isVn ? "Xem điều kiện" : "View terms"}
-              aria-label={isVn ? "Xem điều kiện bảo hiểm" : "View insurance terms"}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 transition-colors hover:border-[#124757]/40 hover:text-[#124757] dark:border-slate-600 dark:bg-slate-800 dark:hover:border-yellow-400/40 dark:hover:text-yellow-400"
+              className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 transition-colors hover:border-[#124757]/40 hover:text-[#124757] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-yellow-400/40 dark:hover:text-yellow-400"
             >
-              <span className="material-symbols-outlined text-[15px]">info</span>
+              {isVn ? "Điều kiện" : "Terms"}
             </button>
           ) : null}
         </div>
@@ -126,21 +121,15 @@ export function CharterInsuranceInfo({
       {selected === true ? (
         <div className="mt-3 space-y-3">
           <div className="flex items-start gap-3">
-            <span className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${
-              resolvedLogoUrl
-                ? "bg-white p-2 ring-1 ring-slate-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.08)] dark:ring-slate-200"
-                : "bg-gradient-to-br from-[#124757] to-[#0d3541] text-white dark:from-yellow-400 dark:to-yellow-300 dark:text-slate-900"
-            }`}>
-              {resolvedLogoUrl ? (
+            {resolvedLogoUrl ? (
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-2 ring-1 ring-slate-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.08)] dark:ring-slate-200">
                 <img
                   src={resolvedLogoUrl}
                   alt={providerLine || (isVn ? "Logo bảo hiểm" : "Insurance logo")}
                   className="h-full w-full object-contain"
                 />
-              ) : (
-                <span className="material-symbols-outlined text-xl">verified_user</span>
-              )}
-            </span>
+              </span>
+            ) : null}
 
             <div className="min-w-0 flex-1 pt-0.5">
               <p className="truncate text-sm font-headline font-black text-[#0E4050] dark:text-white">

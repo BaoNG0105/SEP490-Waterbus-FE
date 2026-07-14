@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { fetchAdminCharterBookings, fetchAssignedCharterBookings } from "../../../services/charterBookingService";
+import { fetchAdminCharterBookings, fetchAdminCharterBookingDetail, fetchAssignedCharterBookings, fetchAssignedCharterBookingDetail } from "../../../services/charterBookingService";
 import {
   getPaginationWindow,
   matchesSmartFilter,
@@ -12,6 +12,8 @@ import {
   formatDate,
   formatDuration,
   getPaymentStatusInfo,
+  hasCompletedCharterRefund,
+  extractCharterBookingList,
   itemsPerPage,
   normalizeBooking,
   statusOptions,
@@ -19,6 +21,39 @@ import {
 import { shouldUseAssignedCharterApi, getCharterCapabilities, getDefaultCharterTab } from "../../../utils/charterBookingAccess";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { useCharterBookingListHub } from "../../../hooks/useCharterBookingListHub";
+
+/** List DTO thường thiếu payments/refund — enrich vài booking Confirmed+Paid từ detail. */
+const enrichListRefundStatuses = async (bookings, useAssignedApi) => {
+  const fetchDetail = useAssignedApi ? fetchAssignedCharterBookingDetail : fetchAdminCharterBookingDetail;
+  const targets = bookings.filter((booking) => {
+    if (!booking?.id) return false;
+    if (hasCompletedCharterRefund(booking)) return false;
+    const status = String(booking.status || "");
+    const payment = String(booking.paymentStatus || "").toLowerCase();
+    return status === "Confirmed" && ["paid", "depositpaid"].includes(payment);
+  });
+  if (targets.length === 0) return bookings;
+
+  const enrichedById = new Map();
+  const batchSize = 4;
+  for (let index = 0; index < targets.length; index += batchSize) {
+    const batch = targets.slice(index, index + batchSize);
+    const rows = await Promise.all(batch.map(async (booking) => {
+      try {
+        const detail = await fetchDetail(booking.id);
+        return normalizeBooking(detail);
+      } catch {
+        return null;
+      }
+    }));
+    rows.forEach((row) => {
+      if (row?.id) enrichedById.set(String(row.id), row);
+    });
+  }
+
+  if (enrichedById.size === 0) return bookings;
+  return bookings.map((booking) => enrichedById.get(String(booking.id)) || booking);
+};
 
 export function CharterBookingManagement() {
   const { lang } = useApp();
@@ -42,7 +77,11 @@ export function CharterBookingManagement() {
       const bookingData = useAssignedApi
         ? await fetchAssignedCharterBookings()
         : await fetchAdminCharterBookings();
-      setBookings(Array.isArray(bookingData) ? bookingData.map(normalizeBooking) : []);
+      const normalized = extractCharterBookingList(bookingData).map(normalizeBooking);
+      setBookings(normalized);
+      // List ít field hơn detail → bổ sung refund để hết hiện nhầm "Đã thanh toán".
+      const enriched = await enrichListRefundStatuses(normalized, useAssignedApi);
+      setBookings(enriched);
     } catch (error) {
       console.error("Lỗi tải charter booking:", error);
       if (!silent) {
@@ -362,7 +401,16 @@ export function CharterBookingManagement() {
                           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusInfo.dot}`} />
                           {statusInfo.label}
                         </span>
-                        <p className="mt-1 text-[9px] text-slate-400">{getPaymentStatusInfo(booking.paymentStatus, lang).label}</p>
+                        {String(booking.status) === "Cancelled" || String(booking.paymentStatus).toLowerCase() === "refunded" ? (
+                          <p className="mt-1 text-[9px] text-slate-400">
+                            {getPaymentStatusInfo(
+                              String(booking.paymentStatus).toLowerCase() === "paid" ? "Refunded" : booking.paymentStatus,
+                              lang,
+                            ).label}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-[9px] text-slate-400">{getPaymentStatusInfo(booking.paymentStatus, lang).label}</p>
+                        )}
                       </td>
                       {showManagerColumn ? (
                         <td className="py-4 px-4">

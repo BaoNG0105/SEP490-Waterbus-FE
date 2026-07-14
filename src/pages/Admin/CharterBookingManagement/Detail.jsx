@@ -74,6 +74,8 @@ import {
   hasRefundablePayment,
   isActiveBoat,
   isPaidPayment,
+  isRefundDone,
+  isRefundFailed,
   manualStatusOptions,
   normalizeBooking,
   normalizeRequestedBoats,
@@ -1186,12 +1188,24 @@ export function AdminCharterBookingDetail() {
                 const remainingMs = getRemainingMs(expiresAt, nowTick);
                 const refundInfo = getRefundStatusInfo(payment, lang);
                 const refundAmount = getRefundAmount(payment);
-                const refundMessage = getRefundMessage(payment);
+                const rawRefundMessage = String(getRefundMessage(payment) || "").trim();
+                // Chỉ hiện message lỗi — ẩn "success"/token trạng thái thô dưới badge hoàn tiền.
+                const refundMessage = isRefundFailed(payment) && rawRefundMessage
+                  && !["success", "succeeded", "completed", "ok"].includes(rawRefundMessage.toLowerCase())
+                  ? rawRefundMessage
+                  : "";
                 const canHandleRefund = canAdminHandleRefund(payment, booking.status);
                 const waitsCustomerRefund = paymentWaitsCustomerRefundInfo(payment, booking.status);
                 const paymentId = String(pick(payment, ["paymentId", "id"], "--") || "--");
                 const checkoutUrl = String(pick(payment, ["checkoutUrl", "paymentUrl"], "") || "");
-                const paymentStatusInfo = getPaymentStatusInfo(pick(payment, ["paymentStatus"], "--"), lang);
+                const rawPaymentStatus = pick(payment, ["paymentStatus"], "--");
+                // Đã hoàn tiền → không còn “Đã thanh toán”; hiện Đã hủy.
+                const paymentStatusForDisplay = isRefundDone(payment) ? "Cancelled" : rawPaymentStatus;
+                const paymentStatusInfo = getPaymentStatusInfo(paymentStatusForDisplay, lang);
+                const paymentStatusLower = String(rawPaymentStatus || "").toLowerCase();
+                const showPaymentLinkDeadline = ["pending", "pendingpayment", "unpaid"].includes(paymentStatusLower)
+                  && !isRefundDone(payment)
+                  && !isPaidPayment(payment);
                 return (
                   <tr key={`${paymentId}-${index}`} className="align-middle">
                     <td className="py-3 pr-3 align-middle text-left">
@@ -1231,7 +1245,7 @@ export function AdminCharterBookingDetail() {
                       </div>
                     </td>
                     <td className="py-3 pr-3 align-middle text-right">
-                      {expiresAt ? (
+                      {expiresAt && showPaymentLinkDeadline ? (
                         <div className="min-w-0">
                           <p className="truncate font-bold text-slate-600 dark:text-slate-300">
                             {formatDateTime(expiresAt)}

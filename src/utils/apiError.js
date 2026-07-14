@@ -69,6 +69,10 @@ export const rewriteCharterValidationMessage = (message) => {
     return "Pickup and drop-off are the same. Round-trips with intermediate stops are not accepted by the server yet — choose a different drop-off, or ask backend to allow this when itineraryStops exist.";
   }
 
+  if (/chỉ\s*(được\s*)?(gửi\s*)?yêu\s*cầu\s*thêm\s*hành\s*khách\s*1\s*lần|chỉ\s*được\s*thêm\s*hành\s*khách\s*1\s*lần|only\s*(one|1)\s*(passenger\s*)?add|already\s*(submitted|used).*(add|passenger)/i.test(text)) {
+    return "Mỗi booking chỉ được gửi yêu cầu thêm hành khách 1 lần. Bạn đã gửi rồi nên không gửi thêm được.";
+  }
+
   // Soft rename leftover "bến đi/đến" → UI labels when they appear alone in short validation texts.
   if (/\bbến đi\b/i.test(text) || /\bbến đến\b/i.test(text)) {
     return text

@@ -126,23 +126,20 @@ export const respondToCharterBookingQuote = (id, data) =>
 export const addCharterBookingPassengers = (id, data) =>
     api.post(`/charter-bookings/${encodeURIComponent(id)}/passengers`, data).then((response) => response.data);
 
-/** Admin/Manager: duyệt yêu cầu thêm HK (theo requestBatchId). */
-export const approvePassengerAddRequest = (id, requestBatchId, { assigned = true } = {}) => {
-    const base = assigned ? "assigned" : "admin";
-    return api
+/** Admin/Manager: duyệt yêu cầu thêm HK — BE chỉ expose nhánh assigned. */
+export const approvePassengerAddRequest = (id, requestBatchId, data = {}) =>
+    api
         .post(
-            `/charter-bookings/${base}/${encodeURIComponent(id)}/passenger-add-requests/${encodeURIComponent(requestBatchId)}/approve`,
+            `/charter-bookings/assigned/${encodeURIComponent(id)}/passenger-add-requests/${encodeURIComponent(requestBatchId)}/approve`,
+            { note: data.note ?? null },
         )
         .then((response) => response.data);
-};
 
 /** Admin/Manager: từ chối yêu cầu thêm HK (note bắt buộc). */
-export const rejectPassengerAddRequest = (id, requestBatchId, data = {}, { assigned = true } = {}) => {
-    const base = assigned ? "assigned" : "admin";
-    return api
+export const rejectPassengerAddRequest = (id, requestBatchId, data = {}) =>
+    api
         .post(
-            `/charter-bookings/${base}/${encodeURIComponent(id)}/passenger-add-requests/${encodeURIComponent(requestBatchId)}/reject`,
-            data,
+            `/charter-bookings/assigned/${encodeURIComponent(id)}/passenger-add-requests/${encodeURIComponent(requestBatchId)}/reject`,
+            { note: data.note ?? null },
         )
         .then((response) => response.data);
-};
