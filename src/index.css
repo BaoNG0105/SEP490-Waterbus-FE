@@ -6,6 +6,14 @@
 /* Import Tailwind v4 */
 @import "tailwindcss";
 
+/* Google custom button: stretch GSI iframe to full click area */
+.login-google-hitbox > div,
+.login-google-hitbox iframe {
+  width: 100% !important;
+  height: 48px !important;
+  max-width: none !important;
+}
+
 /* CHẾ ĐỘ DARK MODE BẰNG CLASS CHO TAILWIND V4 */
 @custom-variant dark (&:where(.dark, .dark *));
 

@@ -194,11 +194,11 @@ export function CharterRefund() {
       setSuccessMessage(
         shouldCancelBooking || didCancelBooking
           ? (lang === "VN"
-            ? "Đã hủy booking và gửi yêu cầu hoàn tiền cho giao dịch thanh toán."
-            : "The booking was cancelled and the refund request was submitted for the paid transaction.")
+            ? "Yêu cầu thuê tàu đã được hủy và yêu cầu hoàn tiền đã gửi. Chúng tôi sẽ xử lý theo chính sách hoàn tiền."
+            : "Your charter request was cancelled and the refund request was submitted. We will process it under our refund policy.")
           : (lang === "VN"
-            ? "Đã gửi yêu cầu hoàn tiền. Hệ thống sẽ xử lý theo chính sách (FE không nhập số tiền hoàn)."
-            : "Refund request submitted. The system will process it by policy (FE does not send refund amount).")
+            ? "Đã gửi yêu cầu hoàn tiền. Chúng tôi sẽ xử lý theo chính sách hoàn tiền của Waterbus."
+            : "Refund request submitted. We will process it according to Waterbus refund policy.")
       );
     } catch (error) {
       if (didCancelBooking) setCancelAlreadySubmitted(true);
@@ -207,13 +207,13 @@ export function CharterRefund() {
       setSubmitError(
         isPaymentMissing
           ? (lang === "VN"
-            ? "Không tìm thấy giao dịch payment trên hệ thống (sai mã UUID nội bộ, hoặc payment đã bị xoá). Quay lại chi tiết booking, kiểm tra tab thanh toán / đồng bộ bằng orderCode rồi thử lại."
-            : "Payment was not found (wrong internal UUID, or payment was removed). Return to booking detail, check payments / sync by orderCode, then try again.")
+            ? "Không tìm thấy giao dịch thanh toán. Vui lòng quay lại chi tiết yêu cầu, kiểm tra mục Thanh toán rồi thử lại."
+            : "We could not find the payment. Please go back to your booking, check Payments, then try again.")
           : getApiErrorMessage(
             error,
             didCancelBooking || !shouldCancelBooking
-              ? (lang === "VN" ? "Booking đã hủy nhưng yêu cầu hoàn tiền chưa gửi thành công. Vui lòng thử lại." : "The booking was cancelled, but the refund request was not submitted successfully. Please try again.")
-              : (lang === "VN" ? "Không thể hủy booking hoặc gửi yêu cầu hoàn tiền. Vui lòng thử lại." : "Unable to cancel the booking or submit the refund request. Please try again.")
+              ? (lang === "VN" ? "Yêu cầu đã hủy nhưng hoàn tiền chưa gửi được. Vui lòng thử lại." : "Your request was cancelled, but the refund could not be submitted. Please try again.")
+              : (lang === "VN" ? "Không thể hủy yêu cầu hoặc gửi hoàn tiền. Vui lòng thử lại." : "Unable to cancel the request or submit the refund. Please try again.")
           )
       );
     } finally {
@@ -264,10 +264,10 @@ export function CharterRefund() {
           <section className="rounded-3xl border border-slate-100 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-800">
             <span className="material-symbols-outlined text-4xl text-slate-400">payments</span>
             <h1 className="mt-3 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
-              {lang === "VN" ? "Booking chưa có giao dịch cần hoàn" : "No refundable payment found"}
+              {lang === "VN" ? "Chưa có khoản thanh toán cần hoàn" : "No refundable payment found"}
             </h1>
             <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">
-              {lang === "VN" ? "Chỉ booking đã thanh toán mới cần nhập tài khoản nhận hoàn tiền." : "Only paid bookings require a refund receiving account."}
+              {lang === "VN" ? "Chỉ các yêu cầu đã thanh toán mới cần nhập tài khoản nhận hoàn tiền." : "Only paid requests need a refund receiving account."}
             </p>
           </section>
         </main>
@@ -312,7 +312,7 @@ export function CharterRefund() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                  {lang === "VN" ? "Hoàn tiền charter booking" : "Charter booking refund"}
+                  {lang === "VN" ? "Hoàn tiền thuê tàu" : "Charter refund"}
                 </p>
                 <h1 className="mt-2 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400 md:text-3xl">
                   {lang === "VN" ? "Tài khoản nhận hoàn tiền" : "Refund receiving account"}
@@ -320,11 +320,11 @@ export function CharterRefund() {
                 <p className="mt-2 max-w-2xl text-sm font-bold text-slate-500 dark:text-slate-300">
                   {["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())
                     ? (lang === "VN"
-                      ? "Booking đã hủy. Nhập ngân hàng, số tài khoản và tên chủ tài khoản để gửi yêu cầu hoàn tiền. FE không nhập số tiền hoàn."
-                      : "Booking is already cancelled. Enter bank, account number, and account holder to submit the refund. FE does not enter refund amount.")
+                      ? "Yêu cầu đã hủy. Vui lòng nhập ngân hàng, số tài khoản và tên chủ tài khoản để nhận hoàn tiền."
+                      : "This request is cancelled. Please enter your bank, account number, and account holder name to receive the refund.")
                     : (lang === "VN"
-                      ? "Nhập chính xác ngân hàng, số tài khoản và tên chủ tài khoản. Sau khi gửi, hệ thống sẽ hủy booking và tạo yêu cầu hoàn tiền."
-                      : "Enter the receiving bank, account number, and account name. The system will cancel the booking and submit the refund request.")}
+                      ? "Vui lòng nhập chính xác ngân hàng, số tài khoản và tên chủ tài khoản. Sau khi gửi, hệ thống sẽ hủy yêu cầu và tạo yêu cầu hoàn tiền."
+                      : "Please enter your bank, account number, and account name carefully. After submitting, we will cancel the request and start the refund.")}
                 </p>
               </div>
               {statusInfo && (
@@ -353,17 +353,6 @@ export function CharterRefund() {
                       <span className="max-w-56 wrap-break-word text-right text-xs font-black text-slate-700 dark:text-slate-100">{item.value || "--"}</span>
                     </div>
                   ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-xs font-bold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
-                <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-lg">info</span>
-                  <p>
-                    {lang === "VN"
-                      ? "Số tiền hoàn do backend tính theo payment và chính sách hiện hành. FE không gửi amount."
-                      : "The backend calculates the refund amount from payment data and policy. The frontend does not send amount."}
-                  </p>
                 </div>
               </div>
             </aside>

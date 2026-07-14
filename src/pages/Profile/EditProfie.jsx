@@ -413,14 +413,22 @@ export const EditProfile = () => {
 
                         <div className="space-y-1">
                             <label className={labelClasses}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
-                            <div className="relative flex items-center">
-                                <span className={`fi fi-${selectedFlag} absolute! left-4 top-1/2 -translate-y-1/2 text-sm rounded-sm shadow-sm pointer-events-none`}></span>
-                                <select value={selectedFlag} onChange={handleNationalityChange} className={`${inputClasses} pl-11 appearance-none font-semibold`}>
+                            <div className="relative w-full">
+                                <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 leading-none">
+                                    <span className={`fi fi-${selectedFlag} !block rounded-sm shadow-sm`} aria-hidden="true" />
+                                </span>
+                                <select
+                                    value={selectedFlag}
+                                    onChange={handleNationalityChange}
+                                    className={`${inputClasses} appearance-none pl-11 pr-10 font-semibold`}
+                                >
                                     {countryList.map((country) => (
                                         <option key={country.code} value={country.code}>{country.name}</option>
                                     ))}
                                 </select>
-                                <span className="material-symbols-outlined text-slate-400 absolute right-3 pointer-events-none">arrow_drop_down</span>
+                                <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                                    arrow_drop_down
+                                </span>
                             </div>
                         </div>
                     </div>
