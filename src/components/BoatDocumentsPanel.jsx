@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
 import {
   fetchBoatDocuments,
@@ -14,6 +13,7 @@ import {
   areDocumentsFreshAfterMaintenance,
   normalizeBoatDocuments,
 } from "../utils/boatDocuments";
+import { notify } from "../utils/swalToast";
 
 const formatDateTime = (value, lang) => {
   if (!value) return "—";
@@ -66,7 +66,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
 
   const setPendingFile = (type, file) => {
     if (file && !isValidFile(file)) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "File không hợp lệ" : "Invalid file",
         text: lang === "VN"
@@ -125,14 +125,14 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
       await loadDocuments();
 
       if (failures.length > 0) {
-        Swal.fire({
+        notify({
           icon: "warning",
           title: lang === "VN" ? "Một số hồ sơ chưa lưu được" : "Some documents failed",
           text: (lang === "VN" ? "Không lưu được: " : "Failed: ") + failures.join(", "),
           confirmButtonColor: "#124757",
         });
       } else {
-        Swal.fire({
+        notify({
           toast: true,
           position: "top-end",
           icon: "success",
@@ -147,7 +147,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
   };
 
   const handleDelete = async (type, label) => {
-    const confirmResult = await Swal.fire({
+    const confirmResult = await notify({
       icon: "warning",
       title: lang === "VN" ? "Xóa hồ sơ?" : "Delete document?",
       text:
@@ -169,7 +169,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
       clearPendingFile(type);
       await loadDocuments();
 
-      Swal.fire({
+      notify({
         toast: true,
         position: "top-end",
         icon: "success",
@@ -178,7 +178,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
         timer: 1800,
       });
     } catch (error) {
-      Swal.fire({
+      notify({
         icon: "error",
         title: lang === "VN" ? "Xóa thất bại" : "Delete failed",
         text:

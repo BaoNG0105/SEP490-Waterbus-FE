@@ -1,14 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, removeRoute } from "../../../services/routeService";
-import Swal from "sweetalert2";
+import { FormSelect } from "../../../components/FormSelect";
 import { getRouteKindLabel } from "../../../utils/routeTypes";
+import { notify } from "../../../utils/swalToast";
 
 const routeKindBadgeClass = (routeType) => {
     switch (routeType) {
         case "CharterReference":
             return "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300";
+        case "Charter":
+            return "bg-[#EAF3F5] text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400";
         case "SightseeingLoop":
             return "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300";
         case "Regular":
@@ -16,6 +19,12 @@ const routeKindBadgeClass = (routeType) => {
         default:
             return "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400";
     }
+};
+
+const getRouteTime = (route) => {
+    const raw = route?.updatedAt || route?.modifiedAt || route?.createdAt || route?.createdDate || "";
+    const time = new Date(raw).getTime();
+    return Number.isNaN(time) ? 0 : time;
 };
 
 export function RouteManagement() {
@@ -28,6 +37,9 @@ export function RouteManagement() {
     const [deletingRouteId, setDeletingRouteId] = useState(null);
 
     const [searchTerm, setSearchTerm] = useState("");
+    const [sortBy, setSortBy] = useState("newest");
+    const [typeFilter, setTypeFilter] = useState("All");
+    const [statusFilter, setStatusFilter] = useState("All");
 
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 6;
@@ -55,7 +67,7 @@ export function RouteManagement() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm]);
+    }, [searchTerm, sortBy, typeFilter, statusFilter]);
 
     const stats = {
         total: routes.length,
@@ -65,13 +77,33 @@ export function RouteManagement() {
             : 0
     };
 
-    const filteredRoutes = routes.filter((route) => {
-        const term = searchTerm.toLowerCase();
-        return (
-            (route.routeName?.toLowerCase() || "").includes(term) ||
-            (route.routeCode?.toLowerCase() || "").includes(term)
-        );
-    });
+    const filteredRoutes = useMemo(() => {
+        const term = searchTerm.toLowerCase().trim();
+        const list = routes.filter((route) => {
+            const matchesSearch = !term
+                || (route.routeName?.toLowerCase() || "").includes(term)
+                || (route.routeCode?.toLowerCase() || "").includes(term);
+            const matchesType = typeFilter === "All" || String(route.routeType || "") === typeFilter;
+            const matchesStatus = statusFilter === "All" || String(route.status || "") === statusFilter;
+            return matchesSearch && matchesType && matchesStatus;
+        });
+
+        const sorted = [...list];
+        sorted.sort((a, b) => {
+            if (sortBy === "oldest") return getRouteTime(a) - getRouteTime(b);
+            if (sortBy === "nameAsc") {
+                return String(a.routeName || "").localeCompare(String(b.routeName || ""), "vi");
+            }
+            if (sortBy === "nameDesc") {
+                return String(b.routeName || "").localeCompare(String(a.routeName || ""), "vi");
+            }
+            // newest (default)
+            const timeDiff = getRouteTime(b) - getRouteTime(a);
+            if (timeDiff !== 0) return timeDiff;
+            return String(b.routeId || "").localeCompare(String(a.routeId || ""));
+        });
+        return sorted;
+    }, [routes, searchTerm, sortBy, typeFilter, statusFilter]);
 
     const totalPages = Math.ceil(filteredRoutes.length / ITEMS_PER_PAGE);
     const currentRoutes = filteredRoutes.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -79,7 +111,7 @@ export function RouteManagement() {
     const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, filteredRoutes.length);
 
     const handleDeleteRoute = async (route) => {
-        const result = await Swal.fire({
+        const result = await notify({
             icon: "warning",
             title: lang === "VN" ? `Xóa tuyến "${route.routeCode}"?` : `Delete route "${route.routeCode}"?`,
             text: lang === "VN"
@@ -97,7 +129,7 @@ export function RouteManagement() {
             setDeletingRouteId(route.routeId);
             await removeRoute(route.routeId);
             setRoutes(prev => prev.filter(r => r.routeId !== route.routeId));
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Đã xóa tuyến đường!" : "Route Deleted!",
                 confirmButtonColor: "#124757",
@@ -106,7 +138,7 @@ export function RouteManagement() {
             });
         } catch (error) {
             console.error(`Lỗi khi xóa tuyến đường ${route.routeId}:`, error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Không thể xóa tuyến!" : "Cannot Delete Route!",
                 text: error.response?.data?.message || (lang === "VN"
@@ -206,9 +238,9 @@ export function RouteManagement() {
                 </div>
             </div>
 
-            {/* THANH TÌM KIẾM */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-center">
-                <div className="w-full relative flex items-center">
+            {/* THANH TÌM KIẾM + BỘ LỌC */}
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-stretch xl:items-center overflow-visible relative z-20">
+                <div className="w-full relative flex items-center flex-1">
                     <span className="material-symbols-outlined absolute left-4 text-slate-400 text-lg pointer-events-none">search</span>
                     <input
                         type="text"
@@ -217,6 +249,60 @@ export function RouteManagement() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-11 pr-4 py-3.5 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
                     />
+                </div>
+
+                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 w-full xl:w-auto justify-end overflow-visible">
+                    <div className="relative z-30 flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap hidden sm:inline">
+                            {lang === "VN" ? "Sắp xếp" : "Sort"}
+                        </span>
+                        <FormSelect
+                            value={sortBy}
+                            onChange={setSortBy}
+                            options={[
+                                { value: "newest", label: lang === "VN" ? "Mới nhất" : "Newest" },
+                                { value: "oldest", label: lang === "VN" ? "Cũ nhất" : "Oldest" },
+                                { value: "nameAsc", label: lang === "VN" ? "Tên A → Z" : "Name A → Z" },
+                                { value: "nameDesc", label: lang === "VN" ? "Tên Z → A" : "Name Z → A" },
+                            ]}
+                            className="min-w-[150px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
+                    </div>
+
+                    <div className="relative z-20 flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap hidden sm:inline">
+                            {lang === "VN" ? "Loại" : "Type"}
+                        </span>
+                        <FormSelect
+                            value={typeFilter}
+                            onChange={setTypeFilter}
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả loại" : "All types" },
+                                { value: "CharterReference", label: getRouteKindLabel("CharterReference", lang) },
+                                { value: "Charter", label: getRouteKindLabel("Charter", lang) },
+                                { value: "Regular", label: getRouteKindLabel("Regular", lang) },
+                                { value: "SightseeingLoop", label: getRouteKindLabel("SightseeingLoop", lang) },
+                            ]}
+                            className="min-w-[160px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
+                    </div>
+
+                    <div className="relative z-10 flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap hidden sm:inline">
+                            {lang === "VN" ? "Trạng thái" : "Status"}
+                        </span>
+                        <FormSelect
+                            value={statusFilter}
+                            onChange={setStatusFilter}
+                            menuAlign="right"
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All status" },
+                                { value: "Active", label: "Active" },
+                                { value: "Inactive", label: "Inactive" },
+                            ]}
+                            className="min-w-[150px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -267,8 +353,11 @@ export function RouteManagement() {
                                         </td>
 
                                         {/* Cột 2: Mã tuyến */}
-                                        <td className="py-4 px-4">
-                                            <span className="font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg border">
+                                        <td className="py-4 px-4 max-w-[11rem]">
+                                            <span
+                                                title={route.routeCode || ""}
+                                                className="inline-block max-w-full truncate align-middle font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700"
+                                            >
                                                 {route.routeCode}
                                             </span>
                                         </td>

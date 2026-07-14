@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import {
     fetchBlogPostsManagement,
@@ -10,7 +9,8 @@ import {
     BLOG_STATUS,
     BLOG_CATEGORY,
 } from "../../../services/blogService";
-import { isOperationsUser } from "../../../utils/roleHelpers";
+import { isOperationsUser, isAdminUser } from "../../../utils/roleHelpers";
+import { notify } from "../../../utils/swalToast";
 
 const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
 
@@ -54,6 +54,8 @@ export function BlogManagement() {
     const ITEMS_PER_PAGE = 8;
 
     const canManage = isOperationsUser(currentUser);
+    /** Chỉ Admin duyệt / xuất bản / lưu trữ */
+    const canPublish = isAdminUser(currentUser);
 
     const loadBlogs = async () => {
         try {
@@ -123,7 +125,7 @@ export function BlogManagement() {
 
     const handlePublish = async (blog) => {
         if (!blog.imageUrl) {
-            Swal.fire({
+            notify({
                 icon: "warning",
                 title: lang === "VN" ? "Thiếu ảnh bìa" : "Missing cover image",
                 text: lang === "VN"
@@ -134,7 +136,7 @@ export function BlogManagement() {
             return;
         }
 
-        const confirmResult = await Swal.fire({
+        const confirmResult = await notify({
             title: lang === "VN" ? "Xuất bản bài viết?" : "Publish this post?",
             html: lang === "VN"
                 ? `Bài viết <b>${blog.title}</b> sẽ hiển thị công khai trên trang Blog.`
@@ -151,7 +153,7 @@ export function BlogManagement() {
         try {
             setProcessingId(blog.id);
             await publishBlogPostById(blog.id);
-            Swal.fire({
+            notify({
                 toast: true,
                 position: "top-end",
                 icon: "success",
@@ -162,7 +164,7 @@ export function BlogManagement() {
             await loadBlogs();
         } catch (error) {
             console.error("Lỗi khi xuất bản blog:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Thất bại" : "Failed",
                 text: error.response?.data?.message || (lang === "VN" ? "Không thể xuất bản bài viết này." : "Failed to publish this post."),
@@ -174,7 +176,7 @@ export function BlogManagement() {
     };
 
     const handleArchive = async (blog) => {
-        const confirmResult = await Swal.fire({
+        const confirmResult = await notify({
             title: lang === "VN" ? "Lưu trữ bài viết?" : "Archive this post?",
             html: lang === "VN"
                 ? `Bài viết <b>${blog.title}</b> sẽ bị gỡ khỏi trang Blog công khai.`
@@ -191,7 +193,7 @@ export function BlogManagement() {
         try {
             setProcessingId(blog.id);
             await removeBlogPost(blog.id);
-            Swal.fire({
+            notify({
                 toast: true,
                 position: "top-end",
                 icon: "success",
@@ -202,7 +204,7 @@ export function BlogManagement() {
             await loadBlogs();
         } catch (error) {
             console.error("Lỗi khi lưu trữ blog:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Thất bại" : "Failed",
                 text: error.response?.data?.message || (lang === "VN" ? "Không thể lưu trữ bài viết này." : "Failed to archive this post."),
@@ -231,7 +233,13 @@ export function BlogManagement() {
                         {lang === "VN" ? "Quản lý Blog" : "Blog Management"}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN" ? "Danh sách bài viết, trạng thái xuất bản và nội dung tin tức." : "Manage blog posts, publish status and article content."}
+                        {lang === "VN"
+                            ? canPublish
+                                ? "Danh sách bài viết, duyệt xuất bản và nội dung tin tức."
+                                : "Viết bài nháp — Admin sẽ duyệt và xuất bản."
+                            : canPublish
+                                ? "Manage blog posts, publish status and article content."
+                                : "Write draft posts — Admin will review and publish."}
                     </p>
                 </div>
                 {canManage && (
@@ -428,7 +436,7 @@ export function BlogManagement() {
                                                         >
                                                             <span className="material-symbols-outlined text-[18px]">edit</span>
                                                         </button>
-                                                        {blog.status !== BLOG_STATUS.PUBLISHED && (
+                                                        {canPublish && blog.status !== BLOG_STATUS.PUBLISHED && (
                                                             <button
                                                                 onClick={() => handlePublish(blog)}
                                                                 disabled={processingId === blog.id}
@@ -442,7 +450,7 @@ export function BlogManagement() {
                                                                 )}
                                                             </button>
                                                         )}
-                                                        {blog.status !== BLOG_STATUS.ARCHIVED && (
+                                                        {canPublish && blog.status !== BLOG_STATUS.ARCHIVED && (
                                                             <button
                                                                 onClick={() => handleArchive(blog)}
                                                                 disabled={processingId === blog.id}
@@ -455,6 +463,14 @@ export function BlogManagement() {
                                                                     <span className="material-symbols-outlined text-[18px]">archive</span>
                                                                 )}
                                                             </button>
+                                                        )}
+                                                        {!canPublish && blog.status === BLOG_STATUS.DRAFT && (
+                                                            <span
+                                                                className="text-[9px] font-headline font-black uppercase tracking-wide text-amber-600/80 dark:text-amber-400/80 px-1"
+                                                                title={lang === "VN" ? "Chờ Admin duyệt" : "Awaiting Admin approval"}
+                                                            >
+                                                                {lang === "VN" ? "Chờ duyệt" : "Pending"}
+                                                            </span>
                                                         )}
                                                     </div>
                                                 ) : (

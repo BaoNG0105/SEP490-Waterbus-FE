@@ -1,5 +1,5 @@
 import axios from "axios";
-import Swal from 'sweetalert2';
+import { notify } from "../utils/swalToast";
 
 // 1. Khởi tạo instance của Axios với baseURL
 const api = axios.create({
@@ -54,12 +54,14 @@ api.interceptors.response.use(
                 localStorage.removeItem("accessToken");
 
                 // Hiển thị thông báo
-                Swal.fire({
+                notify({
+                    dialog: true,
                     title: 'Phiên đăng nhập hết hạn',
                     text: 'Vui lòng đăng nhập lại để tiếp tục.',
                     icon: 'warning',
                     confirmButtonText: 'Đồng ý',
-                    confirmButtonColor: '#124757',
+                    allowOutsideClick: false,
+                    showCancelButton: false,
                 }).then(() => {
                     // Chuyển hướng cứng về trang login
                     window.location.href = '/login'; 

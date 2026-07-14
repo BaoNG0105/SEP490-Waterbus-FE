@@ -9,13 +9,15 @@ import {
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchWaterwayDetail } from "../../../services/waterwayService";
 import { WaterwayMap } from "../../../components/WaterwayMap";
-import Swal from "sweetalert2";
 import { getRouteKindLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
+import { notify } from "../../../utils/swalToast";
 
 const routeKindBadgeClass = (routeType) => {
     switch (routeType) {
         case "CharterReference":
             return "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20";
+        case "Charter":
+            return "bg-[#EAF3F5] text-[#124757] border-[#124757]/20 dark:bg-yellow-400/10 dark:text-yellow-400 dark:border-yellow-400/20";
         case "SightseeingLoop":
             return "bg-violet-50 text-violet-700 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20";
         case "Regular":
@@ -110,7 +112,7 @@ export function RouteDetail() {
         } catch (error) {
             console.error("Lỗi khi tải chi tiết tuyến đường:", error);
             if (error.response?.status === 404) {
-                Swal.fire({
+                notify({
                     icon: "error",
                     title: lang === "VN" ? "Không tìm thấy tuyến đường!" : "Route Not Found!",
                     text: lang === "VN" ? "Mã định danh tuyến đường không tồn tại. Quay về danh sách." : "The requested route logs do not exist.",
@@ -147,7 +149,7 @@ export function RouteDetail() {
                 status: routeForm.status,
             });
             await loadRouteDetail();
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Đã cập nhật tuyến đường!" : "Route Updated!",
                 confirmButtonColor: "#124757",
@@ -163,7 +165,7 @@ export function RouteDetail() {
     };
 
     const handleDeleteRoute = async () => {
-        const result = await Swal.fire({
+        const result = await notify({
             icon: "warning",
             title: lang === "VN" ? "Xóa tuyến đường?" : "Delete Route?",
             text: lang === "VN"
@@ -180,14 +182,14 @@ export function RouteDetail() {
         try {
             setIsDeletingRoute(true);
             await removeRoute(id);
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Đã xóa tuyến đường!" : "Route Deleted!",
                 confirmButtonColor: "#124757"
             }).then(() => navigate("/admin/routes-management"));
         } catch (error) {
             console.error("Lỗi khi xóa tuyến đường:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Không thể xóa tuyến!" : "Cannot Delete Route!",
                 text: error.response?.data?.message || (lang === "VN"

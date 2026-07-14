@@ -8,6 +8,10 @@ import {
     getAdminCharterBookingById as apiGetAdminCharterBookingById,
     updateAdminCharterBookingStatus as apiUpdateAdminCharterBookingStatus,
     updateCharterBookingPassengers as apiUpdateCharterBookingPassengers,
+    addCharterBookingPassengers as apiAddCharterBookingPassengers,
+    approvePassengerAddRequest as apiApprovePassengerAddRequest,
+    rejectPassengerAddRequest as apiRejectPassengerAddRequest,
+    getAdminCharterBookingRouteCandidates as apiGetAdminCharterBookingRouteCandidates,
     previewAdminCharterBookingQuote as apiPreviewAdminCharterBookingQuote,
     quoteAdminCharterBooking as apiQuoteAdminCharterBooking,
     assignAdminCharterBookingManager as apiAssignAdminCharterBookingManager,
@@ -117,9 +121,17 @@ export const fetchAdminCharterBookingDetail = async (id) => {
     }
 };
 
-export const modifyAdminCharterBookingStatus = async (id, bookingStatus) => {
+export const modifyAdminCharterBookingStatus = async (id, bookingStatusOrPayload) => {
+    const body = typeof bookingStatusOrPayload === "string"
+        ? { bookingStatus: bookingStatusOrPayload }
+        : {
+            bookingStatus: bookingStatusOrPayload?.bookingStatus,
+            ...(bookingStatusOrPayload?.note != null && String(bookingStatusOrPayload.note).trim()
+                ? { note: String(bookingStatusOrPayload.note).trim() }
+                : {}),
+        };
     try {
-        return await apiUpdateAdminCharterBookingStatus(id, { bookingStatus });
+        return await apiUpdateAdminCharterBookingStatus(id, body);
     } catch (error) {
         console.error(`Lỗi khi cập nhật trạng thái charter booking ${id}:`, error);
         throw error;
@@ -131,6 +143,15 @@ export const submitAdminCharterBookingQuote = async (id, quotePayload) => {
         return await apiQuoteAdminCharterBooking(id, quotePayload);
     } catch (error) {
         console.error(`Lỗi khi chốt giá charter booking ${id}:`, error);
+        throw error;
+    }
+};
+
+export const fetchAdminCharterBookingRouteCandidates = async (id) => {
+    try {
+        return await apiGetAdminCharterBookingRouteCandidates(id);
+    } catch (error) {
+        console.error(`Lỗi khi lấy route candidates charter booking ${id}:`, error);
         throw error;
     }
 };
@@ -181,6 +202,41 @@ export const respondToCharterBookingQuote = async (id, payload) => {
         return await apiRespondToCharterBookingQuote(id, body);
     } catch (error) {
         console.error(`Lỗi khi phản hồi báo giá charter booking ${id}:`, error);
+        throw error;
+    }
+};
+
+/** Customer: POST append danh sách hành khách mới. */
+export const addMyCharterBookingPassengers = async (id, passengersPayload) => {
+    try {
+        return await apiAddCharterBookingPassengers(id, passengersPayload);
+    } catch (error) {
+        console.error(`Lỗi khi thêm hành khách charter booking ${id}:`, error);
+        throw error;
+    }
+};
+
+export const approveCharterPassengerAddRequest = async (id, requestBatchId, { assigned = true } = {}) => {
+    try {
+        return await apiApprovePassengerAddRequest(id, requestBatchId, { assigned });
+    } catch (error) {
+        // Admin có thể không qua assigned API — thử admin nếu assigned fail.
+        if (assigned && error?.response?.status === 404) {
+            return apiApprovePassengerAddRequest(id, requestBatchId, { assigned: false });
+        }
+        console.error(`Lỗi duyệt thêm HK ${requestBatchId}:`, error);
+        throw error;
+    }
+};
+
+export const rejectCharterPassengerAddRequest = async (id, requestBatchId, note, { assigned = true } = {}) => {
+    try {
+        return await apiRejectPassengerAddRequest(id, requestBatchId, { note }, { assigned });
+    } catch (error) {
+        if (assigned && error?.response?.status === 404) {
+            return apiRejectPassengerAddRequest(id, requestBatchId, { note }, { assigned: false });
+        }
+        console.error(`Lỗi từ chối thêm HK ${requestBatchId}:`, error);
         throw error;
     }
 };

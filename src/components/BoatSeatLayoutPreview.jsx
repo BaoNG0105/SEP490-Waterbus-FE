@@ -311,9 +311,12 @@ export function BoatSeatLayoutPreviewModal({
       : "View only — whole-boat charter, no individual seat selection.");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-0 sm:items-center sm:p-6" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-3 pb-6 pt-20 sm:items-center sm:px-6 sm:pb-8 sm:pt-28"
+      onClick={onClose}
+    >
       <div
-        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-800 sm:rounded-3xl"
+        className="flex max-h-[calc(100dvh-6.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-800 sm:max-h-[calc(100dvh-8rem)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-700">
@@ -500,7 +503,7 @@ export function BoatSeatLayoutPreviewModal({
 
       {isLightboxOpen ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 p-4"
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/90 p-4 pt-20 sm:pt-24"
           onClick={() => setIsLightboxOpen(false)}
         >
           <button

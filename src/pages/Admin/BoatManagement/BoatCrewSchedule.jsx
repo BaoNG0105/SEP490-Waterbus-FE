@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchBoatDetail } from "../../../services/boatService";
-import { BoatStaffAssignmentPanel } from "../../../components/BoatStaffAssignmentPanel";
+import { BoatDutyRosterPanel } from "../../../components/BoatDutyRosterPanel";
 
 export function BoatCrewSchedule() {
   const { lang } = useApp();
@@ -45,18 +45,23 @@ export function BoatCrewSchedule() {
         </button>
         <div className="min-w-0">
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide truncate">
-            {lang === "VN" ? "Phân công nhân viên trên tàu" : "Onboard staff assignment"}
+            {lang === "VN" ? "Lịch ca trên tàu" : "Boat duty schedule"}
             {boatCode ? `: ${boatCode}` : ""}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5 truncate">
             {isLoading
-              ? (lang === "VN" ? "Đang tải thông tin tàu..." : "Loading boat...")
-              : boatName || (lang === "VN" ? "Gán nhân viên làm việc trên tàu theo khoảng ngày" : "Assign staff who work on this boat")}
+              ? lang === "VN"
+                ? "Đang tải thông tin tàu..."
+                : "Loading boat..."
+              : boatName ||
+                (lang === "VN"
+                  ? "Chỉ xem ai đang được phân công trên tàu này"
+                  : "View who is assigned to this boat")}
           </p>
         </div>
       </div>
 
-      <BoatStaffAssignmentPanel boatId={id} boatCode={boatCode} />
+      <BoatDutyRosterPanel boatId={id} boatCode={boatCode} />
     </div>
   );
 }

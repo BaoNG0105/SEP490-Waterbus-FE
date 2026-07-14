@@ -3,44 +3,96 @@ import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip, useMap, useM
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
 
-// Tự động căn chỉnh góc nhìn zoom mượt mà
+const isValidLatLng = (lat, lng) => (
+  Number.isFinite(Number(lat))
+  && Number.isFinite(Number(lng))
+  && Math.abs(Number(lat)) <= 90
+  && Math.abs(Number(lng)) <= 180
+);
+
+const safeMapAction = (map, action) => {
+  try {
+    if (!map || !map._loaded || typeof map.getContainer !== "function") return;
+    const container = map.getContainer();
+    if (!container || !container.isConnected) return;
+    action(map);
+  } catch (error) {
+    // Leaflet crash khi map bị unmount giữa lúc zoom/pan — bỏ qua an toàn.
+    console.warn("WaterwayMap: skipped map action", error);
+  }
+};
+
+// Tự động căn chỉnh góc nhìn — không animate để tránh _leaflet_pos khi remount.
 const MapController = ({ positions, centerPoint, multiMarkers }) => {
   const map = useMap();
   const isInitialized = useRef(false);
 
-  // Tách mảng centerPoint [lat, lng] ra thành số thực tế để đưa vào dependency
   const lat = centerPoint ? centerPoint[0] : undefined;
   const lng = centerPoint ? centerPoint[1] : undefined;
 
   useEffect(() => {
-    // Chỉ auto-zoom bao quát vào lần đầu tiên load trang
     if (isInitialized.current) return;
 
-    if (positions && positions.length > 0) {
-      const bounds = L.latLngBounds(positions);
-      map.fitBounds(bounds, { padding: [40, 40] });
-      isInitialized.current = true;
-    } else if (multiMarkers && multiMarkers.length > 0) {
-      const bounds = L.latLngBounds(multiMarkers.map(m => [m.latitude, m.longitude]));
-      map.fitBounds(bounds, { padding: [50, 50] });
-      isInitialized.current = true;
-    } else if (lat !== undefined && lng !== undefined) {
-      map.setView([lat, lng], 16, { animate: true });
-      isInitialized.current = true;
-    }
+    safeMapAction(map, (activeMap) => {
+      if (positions && positions.length > 0) {
+        const bounds = L.latLngBounds(positions);
+        if (bounds.isValid()) {
+          activeMap.fitBounds(bounds, { padding: [40, 40], animate: false });
+          isInitialized.current = true;
+          return;
+        }
+      }
+      if (multiMarkers && multiMarkers.length > 0) {
+        const points = multiMarkers
+          .filter((m) => isValidLatLng(m.latitude, m.longitude))
+          .map((m) => [m.latitude, m.longitude]);
+        if (points.length > 0) {
+          const bounds = L.latLngBounds(points);
+          if (bounds.isValid()) {
+            activeMap.fitBounds(bounds, { padding: [50, 50], animate: false });
+            isInitialized.current = true;
+            return;
+          }
+        }
+      }
+      if (lat !== undefined && lng !== undefined && isValidLatLng(lat, lng)) {
+        activeMap.setView([lat, lng], 16, { animate: false });
+        isInitialized.current = true;
+      }
+    });
   }, [positions, multiMarkers, lat, lng, map]);
 
-  // Lắng nghe thao tác Click/Gõ tay tọa độ của Admin để lướt Map theo 
   useEffect(() => {
-    if (lat !== undefined && lng !== undefined && isInitialized.current) {
-      map.setView([lat, lng], 16, { animate: true });
-    }
+    if (!isInitialized.current) return;
+    if (lat === undefined || lng === undefined || !isValidLatLng(lat, lng)) return;
+    safeMapAction(map, (activeMap) => {
+      activeMap.setView([lat, lng], activeMap.getZoom() || 16, { animate: false });
+    });
   }, [lat, lng, map]);
+
+  useEffect(() => {
+    const onResize = () => {
+      safeMapAction(map, (activeMap) => {
+        activeMap.invalidateSize({ animate: false });
+      });
+    };
+    window.addEventListener("resize", onResize);
+    const timer = window.setTimeout(onResize, 120);
+    const container = typeof map.getContainer === "function" ? map.getContainer() : null;
+    const observer = container && typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(onResize)
+      : null;
+    if (observer && container) observer.observe(container);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+      observer?.disconnect();
+    };
+  }, [map]);
 
   return null;
 };
 
-// Component lắng nghe sự kiện Click lên bản đồ
 const MapClickHandler = ({ onLocationSelect }) => {
   useMapEvents({
     click(e) {
@@ -52,7 +104,6 @@ const MapClickHandler = ({ onLocationSelect }) => {
   return null;
 };
 
-// Khắc phục lỗi icon Leaflet với Vite
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
@@ -60,7 +111,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
-// Thêm prop stationsList phục vụ trang chủ khách hàng công cộng
 export const WaterwayMap = ({
   coordinates = [],
   waterwayName = "",
@@ -73,18 +123,23 @@ export const WaterwayMap = ({
   lineOpacity = 0.85,
 }) => {
   const navigate = useNavigate();
-  const polylinePositions = coordinates.map((point) => [point.latitude, point.longitude]);
-  const centerPoint = stationPoint ? [stationPoint.latitude, stationPoint.longitude] : [10.7719, 106.7067];
+  const polylinePositions = (coordinates || [])
+    .filter((point) => isValidLatLng(point?.latitude, point?.longitude))
+    .map((point) => [point.latitude, point.longitude]);
+  const centerPoint = stationPoint && isValidLatLng(stationPoint.latitude, stationPoint.longitude)
+    ? [stationPoint.latitude, stationPoint.longitude]
+    : [10.7719, 106.7067];
   const visibleStations = (stationsList || []).filter((station) => {
     const status = String(station?.status || "Active").toLowerCase();
-    return status === "active" || status === "";
+    const active = status === "active" || status === "";
+    return active && isValidLatLng(station?.latitude, station?.longitude);
   });
 
   return (
-    <div className="w-full h-full min-h-112.5 overflow-hidden border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative z-10">
+    <div className="relative z-10 h-full min-h-112.5 w-full overflow-hidden border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
 
       {waterwayName && (
-        <div className="absolute top-4 left-4 z-1000 bg-white/90 dark:bg-slate-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm pointer-events-none">
+        <div className="absolute top-4 right-4 z-1000 max-w-[min(100%-2rem,20rem)] bg-white/90 dark:bg-slate-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm pointer-events-none">
           <span className="text-[10px] font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider block">
             {overlayEyebrow}
           </span>
@@ -112,8 +167,7 @@ export const WaterwayMap = ({
           />
         )}
 
-        {/* TRƯỜNG HỢP 1: HIỂN THỊ 1 ĐIỂM MARKER ĐƠN LẺ (DÀNH CHO ADMIN CONFIG) */}
-        {stationPoint && (
+        {stationPoint && isValidLatLng(stationPoint.latitude, stationPoint.longitude) && (
           <Marker position={centerPoint}>
             <Popup>
               <div className="text-center font-body p-1">
@@ -124,11 +178,10 @@ export const WaterwayMap = ({
           </Marker>
         )}
 
-        {/* TRƯỜNG HỢP 2: HIỂN THỊ DANH SÁCH HÀNG LOẠT NHÀ GA (DÀNH CHO TRANG CHỦ HOME TƯƠNG TÁC) */}
         {visibleStations.length > 0 && (
-          visibleStations.map((station) => (
+          visibleStations.map((station, index) => (
             <Marker
-              key={station.stationId}
+              key={`${station.stationId || "st"}-${index}`}
               position={[station.latitude, station.longitude]}
             >
               <Tooltip permanent direction="top" offset={[0, -38]} className="station-name-tooltip">
@@ -139,7 +192,6 @@ export const WaterwayMap = ({
                   <p className="font-black text-[#124757] text-xs uppercase leading-tight m-0">{station.stationName}</p>
                   <p className="text-[10px] text-slate-400 line-clamp-2 m-0">{station.address || "Bến tàu Saigon Waterbus"}</p>
 
-                  {/* Nút bấm điều hướng sang trang chi tiết nhà ga */}
                   {!hideStationLink && (
                     <button
                       type="button"
@@ -157,7 +209,7 @@ export const WaterwayMap = ({
 
         <MapController
           positions={polylinePositions}
-          centerPoint={stationPoint ? centerPoint : null}
+          centerPoint={stationPoint && isValidLatLng(stationPoint.latitude, stationPoint.longitude) ? centerPoint : null}
           multiMarkers={visibleStations}
         />
         <MapClickHandler onLocationSelect={onLocationSelect} />

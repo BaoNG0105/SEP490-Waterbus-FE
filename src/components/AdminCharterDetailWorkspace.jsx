@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import Swal from "sweetalert2";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormSelect } from "./FormSelect";
 import {
   downloadAllCharterBookingTickets,
   downloadCharterBookingTicketsPdf,
@@ -7,6 +7,8 @@ import {
   downloadSelectedCharterBookingTickets,
   fetchCharterBookingQrImage,
   printSelectedCharterBookingTickets,
+  approveCharterPassengerAddRequest,
+  rejectCharterPassengerAddRequest,
 } from "../services/charterBookingService";
 import {
   canShowCharterTickets,
@@ -16,23 +18,27 @@ import {
   hasCharterPassengerManifest,
   isCharterFullyPaid,
 } from "../utils/charterBookingTickets";
+import {
+  formatPassengerApprovalStatus,
+  getPassengerAddRequestBatches,
+  getPassengerApprovalTone,
+} from "../utils/charterPassengerAdd";
 import { getApiErrorMessage } from "../utils/apiError";
+import { buildConfirmBodyHtml, showConfirmDialog, showToast } from "../utils/swalToast";
 import {
   DEFAULT_BOAT_IMAGE,
-  formatMatchedRouteLabel,
-  formatRouteEstimate,
   getBoatCode,
   getBoatImageUrl,
   getBoatNameOnly,
   getBoatStatusLabel,
   getCharterRoutePricingWarning,
-  getMatchedRouteSummary,
-  getRouteEstimateCompleteness,
-  hasCharterRouteForPricing,
-  hasMatchedRouteOnLeg,
+  getRouteCandidateLegKey,
+  hasEmptyRouteCandidateLegs,
   isCharterRoutePricingBlocked,
   normalizeRouteEstimateLegs,
+  buildCharterRoutePlan,
 } from "../utils/charterBookingAdmin";
+import { getRouteKindLabel } from "../utils/routeTypes";
 import { CharterRouteMapPanel } from "./CharterRouteMapPanel";
 import { CharterInsuranceInfo } from "./CharterInsuranceInfo";
 import { CharterQuotePreviewPanel, CharterQuotePreviewTable } from "./CharterQuotePreviewTable";
@@ -43,84 +49,103 @@ import {
 } from "../utils/charterQuotePreview";
 import { getCharterDepositAmount } from "../utils/charterBookingActions";
 
-function AdminCharterRouteInfoPanel({ lang, booking, formatDate, compact = false }) {
+function resolveItineraryStructureLegs(booking) {
+  if (Array.isArray(booking?.routeLegs) && booking.routeLegs.length > 0) {
+    return booking.routeLegs;
+  }
+  return normalizeRouteEstimateLegs(booking?.routeEstimate);
+}
+
+function buildDraftSelectedLegs(routeCandidateLegs = [], selections = {}) {
+  if (!Array.isArray(routeCandidateLegs) || routeCandidateLegs.length === 0) return [];
+  return routeCandidateLegs.map((leg) => {
+    const legKey = getRouteCandidateLegKey(leg);
+    const selectedId = String(selections[legKey] || "").trim();
+    const candidate = (Array.isArray(leg.candidates) ? leg.candidates : [])
+      .find((item) => String(item.routeId) === selectedId) || null;
+    return {
+      legOrder: leg.legOrder,
+      fromStationName: leg.fromStationName || "--",
+      toStationName: leg.toStationName || "--",
+      selected: Boolean(candidate),
+      routeId: candidate?.routeId || "",
+      routeCode: candidate?.routeCode || "",
+      routeName: candidate?.routeName || "",
+      routeType: candidate?.routeType || "",
+      distanceKm: candidate?.distanceKm ?? null,
+      travelMinutes: candidate?.estimatedDurationMin ?? null,
+    };
+  });
+}
+
+/**
+ * Hiện chặng ước tính để admin xem là OK.
+ * Sai chỉ khi FE tự lấy matchedRouteId / cho chốt giá mà không chọn candidates.
+ */
+function AdminCharterRouteInfoPanel({
+  lang,
+  booking,
+  formatDate,
+  compact = false,
+  draftRouteCandidateLegs = null,
+  draftRoutePlanSelections = null,
+}) {
   const fromName = booking?.fromStationName || "--";
   const toName = booking?.toStationName || "--";
   const stops = Array.isArray(booking?.itineraryStops) ? booking.itineraryStops : [];
-  const completeness = getRouteEstimateCompleteness(booking?.routeEstimate);
-  const hasValidEstimate = completeness.isComplete;
-  const estimateText = hasValidEstimate
-    ? (formatRouteEstimate(booking?.routeEstimate, lang) || (lang === "VN" ? "Chưa có ước tính" : "No estimate yet"))
-    : (lang === "VN" ? "Chưa có ước tính" : "No estimate yet");
-  const routeWarning = getCharterRoutePricingWarning(booking, lang);
-  const pricingBlocked = isCharterRoutePricingBlocked(booking);
-  const routeLegs = Array.isArray(booking?.routeLegs) && booking.routeLegs.length > 0
-    ? booking.routeLegs
-    : normalizeRouteEstimateLegs(booking?.routeEstimate);
-  const matchedSummary = getMatchedRouteSummary(booking?.routeEstimate, routeLegs);
-  const summaryLabel = formatMatchedRouteLabel({
-    matchedRouteId: booking?.matchedRouteId || matchedSummary.matchedRouteId,
-    matchedRouteCode: booking?.matchedRouteCode || matchedSummary.matchedRouteCode,
-    matchedRouteName: booking?.matchedRouteName || matchedSummary.matchedRouteName,
-  });
-  const showSummary = Boolean(summaryLabel);
-  const panelTone = pricingBlocked || routeWarning
-    ? "border-amber-200 bg-amber-50/60 dark:border-amber-500/20 dark:bg-amber-500/10"
+  const finalizedRoute = booking?.selectedRoute?.routeId ? booking.selectedRoute : null;
+  const draftLegs = Array.isArray(draftRouteCandidateLegs) && draftRouteCandidateLegs.length > 0
+    ? buildDraftSelectedLegs(draftRouteCandidateLegs, draftRoutePlanSelections || {})
+    : [];
+  const estimateLegs = resolveItineraryStructureLegs(booking);
+  const showDraftSelection = draftLegs.length > 0;
+  const allDraftSelected = showDraftSelection && draftLegs.every((leg) => leg.selected);
+  const draftRoutePlan = Array.isArray(draftRouteCandidateLegs)
+    ? buildCharterRoutePlan(draftRouteCandidateLegs, draftRoutePlanSelections || {})
+      .filter((row) => row.routeId)
+    : [];
+
+  const finalizedRouteLabel = (() => {
+    if (!finalizedRoute) return "";
+    const code = String(finalizedRoute.routeCode || "").trim();
+    const typeLabel = finalizedRoute.routeType
+      ? getRouteKindLabel(finalizedRoute.routeType, lang)
+      : "";
+    // Chỉ mã + loại — không lặp tên chứa lại bến / mã booking.
+    return [code || null, typeLabel || null].filter(Boolean).join(" · ")
+      || String(finalizedRoute.routeId || "").trim();
+  })();
+
+  const panelTone = finalizedRoute
+    ? "border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/10"
     : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900";
-  const warningTone = "border-amber-300 bg-amber-100/80 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200";
 
   return (
-    <div className={`rounded-3xl border ${panelTone} ${compact ? "p-4" : "p-5"}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
+    <div className={`flex h-full min-h-0 flex-col rounded-3xl border ${panelTone} ${compact ? "p-4" : "p-5"}`}>
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
           <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
             {lang === "VN" ? "Thông tin lộ trình" : "Route information"}
           </p>
           <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">
             {fromName} → {toName}
           </p>
-          {showSummary ? (
-            <p className="mt-1 text-xs font-bold text-[#124757] dark:text-yellow-400">
-              {lang === "VN" ? "Tuyến hệ thống" : "System route"}
-              {": "}
-              {summaryLabel}
+          {finalizedRoute ? (
+            <p className="mt-1 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+              {lang === "VN" ? "Tuyến đã chốt" : "Finalized"}
+              {finalizedRouteLabel ? `: ${finalizedRouteLabel}` : ""}
             </p>
-          ) : null}
-          {!showSummary && routeLegs.length === 0 ? (
-            <p className="mt-1 text-xs font-bold text-amber-700 dark:text-amber-300">
+          ) : !showDraftSelection ? (
+            <p className="mt-1 text-xs font-medium text-slate-400">
               {lang === "VN"
-                ? "Chưa match Route Master (matchedRoute* = null)."
-                : "No Route Master match (matchedRoute* = null)."}
+                ? "Chưa chọn tuyến — km/thời gian hiện sau khi chọn ở form chốt giá."
+                : "No route yet — km/duration appear after selection in the quote form."}
             </p>
           ) : null}
-          <p className="mt-1 text-[11px] font-medium text-slate-400">
-            {lang === "VN"
-              ? "Chỉ xem — không chỉnh lộ trình khi chốt giá. Thiếu route/GeoJSON thì cập nhật Route Master hoặc nhờ khách đổi bến."
-              : "View only — do not edit the route while quoting. If route/GeoJSON is missing, update Route Master or ask the customer to change stations."}
-          </p>
         </div>
         <span className="rounded-lg bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
           {formatDate(booking?.departureDate)} · {String(booking?.startTime || "--").slice(0, 5)}
         </span>
-      </div>
-
-      <div className={`mt-4 grid gap-3 ${compact ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-4"}`}>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến đón" : "From"}</p>
-          <p className="mt-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">{fromName}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến trả" : "To"}</p>
-          <p className="mt-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">{toName}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Giờ khởi hành" : "Start time"}</p>
-          <p className="mt-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">{String(booking?.startTime || "--").slice(0, 5)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ngày đi" : "Departure date"}</p>
-          <p className="mt-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">{formatDate(booking?.departureDate)}</p>
-        </div>
       </div>
 
       {stops.length > 0 ? (
@@ -147,75 +172,338 @@ function AdminCharterRouteInfoPanel({ lang, booking, formatDate, compact = false
             </div>
           ))}
         </div>
-      ) : (
-        <p className="mt-4 text-xs font-medium text-slate-400">
-          {lang === "VN" ? "Không có điểm dừng trung gian." : "No intermediate stops."}
-        </p>
-      )}
+      ) : null}
 
-      {routeLegs.length > 0 ? (
+      {/* Overview: skeleton chặng — chỉ khi chưa chọn / chưa chốt, và có nhiều chặng hơn cặp từ→đến */}
+      {!finalizedRoute && !showDraftSelection && estimateLegs.length > 1 ? (
         <div className="mt-4 space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            {lang === "VN" ? "Chặng tính giá (Route Master)" : "Pricing legs (Route Master)"}
+            {lang === "VN" ? "Chặng lộ trình" : "Itinerary legs"}
           </p>
-          {routeLegs.map((leg) => {
-            const matched = hasMatchedRouteOnLeg(leg);
-            const label = formatMatchedRouteLabel(leg);
+          {estimateLegs.map((leg) => (
+            <div
+              key={`estimate-leg-${leg.legOrder}`}
+              className="rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                  {lang === "VN" ? `Chặng ${leg.legOrder}` : `Leg ${leg.legOrder}`}
+                  {": "}
+                  {leg.fromStationName || "--"} → {leg.toStationName || "--"}
+                </p>
+                <p className="text-[11px] font-medium text-slate-400">
+                  {lang === "VN" ? "Chưa chọn" : "Not selected"}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Trong form quote: hiện trạng thái đã chọn từ candidates */}
+      {showDraftSelection ? (
+        <div className="mt-4 space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            {lang === "VN" ? "Tuyến đã chọn theo chặng" : "Selected route per leg"}
+          </p>
+          {draftLegs.map((leg) => {
+            const hasMetrics = leg.selected && leg.distanceKm != null && leg.travelMinutes != null;
+            const routeCode = String(leg.routeCode || "").trim();
+            const typeLabel = leg.routeType ? getRouteKindLabel(leg.routeType, lang) : "";
+            const routeMeta = [routeCode || null, typeLabel || null].filter(Boolean).join(" · ");
             return (
               <div
-                key={`leg-${leg.legOrder}`}
-                className={`rounded-xl border px-3 py-2.5 ${matched ? "border-slate-200/80 bg-white dark:border-slate-700 dark:bg-slate-800" : "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10"}`}
+                key={`draft-leg-${leg.legOrder}`}
+                className={`rounded-xl border px-3 py-2.5 ${leg.selected
+                  ? "border-emerald-200/80 bg-white dark:border-emerald-500/20 dark:bg-slate-800"
+                  : "border-slate-200/80 bg-white dark:border-slate-700 dark:bg-slate-800"}`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
                     {lang === "VN" ? `Chặng ${leg.legOrder}` : `Leg ${leg.legOrder}`}
-                    {": "}
-                    {leg.fromStationName || "--"} → {leg.toStationName || "--"}
+                    {draftLegs.length > 1 || leg.fromStationName !== fromName || leg.toStationName !== toName
+                      ? `: ${leg.fromStationName} → ${leg.toStationName}`
+                      : ""}
                   </p>
-                  <p className="text-[11px] font-medium text-slate-400">
-                    {matched && leg.distanceKm != null && leg.travelMinutes != null
+                  <p className={`text-[11px] font-medium ${leg.selected ? "text-emerald-700 dark:text-emerald-300" : "text-slate-400"}`}>
+                    {hasMetrics
                       ? `${leg.distanceKm} km · ${leg.travelMinutes} ${lang === "VN" ? "phút" : "min"}`
-                      : (lang === "VN" ? "Chưa có ước tính" : "No estimate")}
+                      : leg.selected
+                        ? (lang === "VN" ? "Đã chọn" : "Selected")
+                        : (lang === "VN" ? "Chưa chọn" : "Not selected")}
                   </p>
                 </div>
-                <p className={`mt-1 text-xs font-bold ${matched ? "text-[#124757] dark:text-yellow-400" : "text-amber-700 dark:text-amber-300"}`}>
-                  {matched
-                    ? `${lang === "VN" ? "Tuyến hệ thống" : "System route"}: ${label}`
-                    : (lang === "VN"
-                      ? "Chưa match Route Master — chưa có ước tính hợp lệ"
-                      : "No Route Master match — no valid estimate")}
-                </p>
+                {leg.selected && routeMeta ? (
+                  <p className="mt-1 text-[11px] font-bold text-slate-500 dark:text-slate-300">
+                    {routeMeta}
+                  </p>
+                ) : null}
               </div>
             );
           })}
         </div>
       ) : null}
 
-      <div className="mt-4 rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          {lang === "VN" ? "Ước tính lộ trình" : "Route estimate"}
-        </p>
-        <p className="mt-1 text-sm font-bold leading-snug text-slate-700 dark:text-slate-200">{estimateText}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider ${hasValidEstimate ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"}`}>
-            {lang === "VN" ? "Quãng đường" : "Distance"}: {hasValidEstimate ? (lang === "VN" ? "Đủ" : "OK") : (lang === "VN" ? "Chưa có" : "None")}
-          </span>
-          <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider ${hasValidEstimate ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"}`}>
-            {lang === "VN" ? "Thời gian" : "Travel time"}: {hasValidEstimate ? (lang === "VN" ? "Đủ" : "OK") : (lang === "VN" ? "Chưa có" : "None")}
-          </span>
-        </div>
-      </div>
-
-      {routeWarning ? (
-        <div className={`mt-4 flex items-start gap-2 rounded-xl px-3 py-2.5 ${warningTone}`}>
-          <span className="material-symbols-outlined mt-0.5 text-base">warning</span>
-          <p className="text-xs font-bold leading-relaxed">{routeWarning}</p>
+      {/* Tổng km/phút sau khi chọn đủ — ẩn nếu chỉ trùng với từng chặng đơn */}
+      {allDraftSelected && draftLegs.length > 1 ? (
+        <div className="mt-4 rounded-xl border border-emerald-200/80 bg-white px-3 py-2.5 dark:border-emerald-500/20 dark:bg-slate-800">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            {lang === "VN" ? "Tổng tuyến đã chọn" : "Selected routes total"}
+          </p>
+          <p className="mt-1 text-sm font-bold leading-snug text-slate-700 dark:text-slate-200">
+            {(() => {
+              const totalKm = draftLegs.reduce((sum, leg) => sum + (Number(leg.distanceKm) || 0), 0);
+              const totalMin = draftLegs.reduce((sum, leg) => sum + (Number(leg.travelMinutes) || 0), 0);
+              const hasAny = draftLegs.some((leg) => leg.distanceKm != null || leg.travelMinutes != null);
+              return hasAny
+                ? `${Number(totalKm.toFixed(2))} km · ${totalMin} ${lang === "VN" ? "phút" : "min"}`
+                : (lang === "VN" ? "Đã chọn đủ tuyến theo chặng." : "All leg routes selected.");
+            })()}
+          </p>
         </div>
       ) : null}
 
-      <div className="mt-4">
-        <CharterRouteMapPanel lang={lang} booking={booking} />
+      {finalizedRoute && (finalizedRoute.distanceKm != null || finalizedRoute.estimatedDurationMin != null) ? (
+        <div className="mt-4 rounded-xl border border-emerald-200/80 bg-white px-3 py-2.5 dark:border-emerald-500/20 dark:bg-slate-800">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            {lang === "VN" ? "Ước tính" : "Estimate"}
+          </p>
+          <p className="mt-1 text-sm font-bold leading-snug text-slate-700 dark:text-slate-200">
+            {[
+              finalizedRoute.distanceKm != null ? `${finalizedRoute.distanceKm} km` : "",
+              finalizedRoute.estimatedDurationMin != null
+                ? `${finalizedRoute.estimatedDurationMin} ${lang === "VN" ? "phút" : "min"}`
+                : "",
+            ].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex min-h-0 flex-1 flex-col">
+        <CharterRouteMapPanel
+          lang={lang}
+          booking={booking}
+          draftRoutePlan={draftRoutePlan}
+          className="flex h-full min-h-72 flex-1 flex-col"
+          heightClassName="min-h-72 flex-1"
+        />
       </div>
+    </div>
+  );
+}
+
+function formatRouteCandidateOptionLabel(candidate, lang) {
+  if (!candidate) return "";
+  const code = candidate.routeCode || "";
+  const name = candidate.routeName || "";
+  const title = code && name ? `${code} — ${name}` : (code || name || candidate.routeId);
+  const typeLabel = candidate.routeType ? getRouteKindLabel(candidate.routeType, lang) : "";
+  const meta = [
+    typeLabel,
+    candidate.distanceKm != null ? `${candidate.distanceKm} km` : "",
+    candidate.estimatedDurationMin != null
+      ? `${candidate.estimatedDurationMin} ${lang === "VN" ? "phút" : "min"}`
+      : "",
+  ].filter(Boolean).join(" · ");
+  return meta ? `${title} (${meta})` : title;
+}
+
+function AdminCharterRoutePlanPicker({
+  lang,
+  legs = [],
+  selections = {},
+  isLoading = false,
+  loaded = false,
+  error = "",
+  disabled = false,
+  onChange,
+  onLoad,
+}) {
+  if (!loaded && !isLoading) {
+    return (
+      <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
+        <span className="material-symbols-outlined text-xl text-slate-400">route</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+            {lang === "VN"
+              ? "Đang chuẩn bị tải tuyến theo chặng..."
+              : "Preparing to load routes per leg..."}
+          </p>
+        </div>
+        {onLoad ? (
+          <button
+            type="button"
+            onClick={() => onLoad?.()}
+            disabled={disabled}
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400"
+          >
+            <span className="material-symbols-outlined text-base">refresh</span>
+            {lang === "VN" ? "Tải lại" : "Reload"}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-3 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
+        <span className="material-symbols-outlined animate-spin text-xl text-slate-400">progress_activity</span>
+        <p className="text-sm font-medium text-slate-500 dark:text-slate-300">
+          {lang === "VN" ? "Đang tải tuyến theo chặng..." : "Loading routes per leg..."}
+        </p>
+      </div>
+    );
+  }
+
+  if (!Array.isArray(legs) || legs.length === 0) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-400 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
+            <span className="material-symbols-outlined">alt_route</span>
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+              {lang === "VN" ? "Chưa có chặng để chọn tuyến" : "No legs to select routes for"}
+            </p>
+            <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+              {error || (lang === "VN"
+                ? "Kiểm tra bến đón / trả trên booking, rồi tải lại."
+                : "Check pickup / drop-off on the booking, then reload.")}
+            </p>
+            {onLoad ? (
+              <button
+                type="button"
+                onClick={() => onLoad()}
+                disabled={disabled}
+                className="mt-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400"
+              >
+                <span className="material-symbols-outlined text-base">refresh</span>
+                {lang === "VN" ? "Tải lại" : "Reload"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+            {lang === "VN" ? "Chọn tuyến theo chặng" : "Select route per leg"}
+          </p>
+          <p className="mt-1 text-[11px] font-medium text-slate-400">
+            {lang === "VN"
+              ? "Mỗi chặng chọn một tuyến GPS chứa đúng cặp bến (đúng chiều)."
+              : "Pick one GPS route per leg that contains both stations in order."}
+          </p>
+        </div>
+        {onLoad ? (
+          <button
+            type="button"
+            onClick={() => onLoad()}
+            disabled={disabled || isLoading}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+          >
+            <span className="material-symbols-outlined text-sm">refresh</span>
+            {lang === "VN" ? "Tải lại" : "Reload"}
+          </button>
+        ) : null}
+      </div>
+
+      {error ? (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+          {error}
+        </div>
+      ) : null}
+
+      {legs.map((leg) => {
+        const legKey = getRouteCandidateLegKey(leg);
+        const candidates = Array.isArray(leg.candidates) ? leg.candidates : [];
+        const selectedId = selections[legKey] || "";
+        const emptyCandidates = candidates.length === 0;
+        const selectedCandidate = candidates.find((c) => String(c.routeId) === String(selectedId)) || null;
+        const fromLabel = leg.fromStationName || "--";
+        const toLabel = leg.toStationName || "--";
+
+        return (
+          <div
+            key={legKey}
+            className="rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EAF3F5] font-headline text-xs font-black text-[#124757] dark:bg-slate-800 dark:text-yellow-400">
+                  {leg.legOrder}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                    {lang === "VN" ? `Chặng ${leg.legOrder}` : `Leg ${leg.legOrder}`}
+                  </p>
+                  <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
+                    {fromLabel}
+                    <span className="mx-1.5 font-medium text-slate-300 dark:text-slate-600">→</span>
+                    {toLabel}
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`rounded-lg px-2.5 py-1 text-[9px] font-headline font-black uppercase tracking-wider ring-1 ${
+                  emptyCandidates
+                    ? "bg-slate-100 text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700"
+                    : selectedCandidate
+                      ? "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20"
+                      : "bg-white text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
+                }`}
+              >
+                {emptyCandidates
+                  ? (lang === "VN" ? "Không khớp" : "No match")
+                  : selectedCandidate
+                    ? (lang === "VN" ? "Đã chọn" : "Selected")
+                    : `${candidates.length} ${lang === "VN" ? "lựa chọn" : "options"}`}
+              </span>
+            </div>
+
+            {emptyCandidates ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-700 dark:bg-slate-800/60">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined mt-0.5 text-xl text-slate-400">link_off</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                      {lang === "VN"
+                        ? "Chưa có tuyến GPS khớp cặp bến này"
+                        : "No GPS route matches this station pair"}
+                    </p>
+                    <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                      {lang === "VN"
+                        ? "Cần tạo hoặc chỉnh tuyến GPS / vòng tham quan chứa đúng hai bến theo chiều chặng."
+                        : "Create or edit a GPS / sightseeing route that includes both stations in the correct order."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <FormSelect
+                value={selectedId}
+                onChange={(value) => onChange?.(legKey, value)}
+                disabled={disabled}
+                searchable
+                placeholder={lang === "VN" ? "Chọn tuyến..." : "Select route..."}
+                searchPlaceholder={lang === "VN" ? "Tìm theo mã / tên..." : "Search code / name..."}
+                emptyLabel={lang === "VN" ? "Không có kết quả" : "No results"}
+                options={candidates.map((candidate) => ({
+                  value: candidate.routeId,
+                  label: formatRouteCandidateOptionLabel(candidate, lang),
+                }))}
+              />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -406,6 +694,16 @@ const pick = (source, keys, fallback = "") => {
 };
 
 function ManualStatusPanel({ lang, isSubmitting, manualStatusOptions, getStatusInfo, onStatusChange }) {
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const statusOptions = useMemo(
+    () =>
+      (manualStatusOptions || []).map((status) => ({
+        value: status,
+        label: getStatusInfo?.(status)?.label || status,
+      })),
+    [manualStatusOptions, getStatusInfo]
+  );
+
   return (
     <details className="group rounded-4xl border border-slate-100 bg-white shadow-sm open:shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
       <summary className="cursor-pointer list-none px-6 py-5 marker:content-none">
@@ -417,21 +715,22 @@ function ManualStatusPanel({ lang, isSubmitting, manualStatusOptions, getStatusI
         </div>
       </summary>
       <div className="border-t border-slate-100 px-6 pb-6 pt-4 dark:border-slate-700">
-        <label className="block">
+        <label className="block min-w-0">
           <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
             {lang === "VN" ? "Trạng thái mới" : "New status"}
           </span>
-          <select
-            defaultValue=""
-            onChange={(event) => onStatusChange(event.target.value)}
+          <FormSelect
+            value={selectedStatus}
             disabled={isSubmitting}
-            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-          >
-            <option value="" disabled>{lang === "VN" ? "Chọn trạng thái" : "Select status"}</option>
-            {manualStatusOptions.map((status) => (
-              <option key={status} value={status}>{getStatusInfo(status).label}</option>
-            ))}
-          </select>
+            placeholder={lang === "VN" ? "Chọn trạng thái" : "Select status"}
+            options={statusOptions}
+            onChange={(next) => {
+              if (!next) return;
+              setSelectedStatus("");
+              onStatusChange(next);
+            }}
+            className="mt-1 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          />
         </label>
         <p className="mt-3 text-[11px] font-medium leading-relaxed text-slate-400">
           {lang === "VN"
@@ -587,15 +886,15 @@ export function AdminBookingOverviewTab({
             />
           ) : null}
 
-          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)]">
-            <div className="space-y-3">
-              <p className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">
+          <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)]">
+            <div className="flex min-h-0 flex-col gap-3">
+              <p className="shrink-0 text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">
                 {lang === "VN" ? "Chuyến đi" : "Trip"}
               </p>
               <AdminCharterRouteInfoPanel lang={lang} booking={booking} formatDate={formatDate} />
             </div>
 
-            <div className="space-y-3 lg:sticky lg:top-24">
+            <div className="space-y-3">
               <p className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">
                 {lang === "VN" ? "Khách & điều kiện thuê" : "Customer & rental terms"}
               </p>
@@ -650,12 +949,12 @@ export function AdminBookingOverviewTab({
                 label={lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}
                 value={booking.specialRequests || (lang === "VN" ? "Không có" : "None")}
               />
-              {(booking.assignedManagerId || capabilities?.canAssignManager) ? (
+              {(booking.assignedManagerId || (capabilities?.canAssignManager && !["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || "")))) ? (
                 <OverviewField
                   icon="supervisor_account"
                   label={lang === "VN" ? "Quản lý phụ trách" : "Assigned manager"}
                   value={booking.assignedManagerName || (lang === "VN" ? "Chưa gán" : "Not assigned")}
-                  hint={capabilities?.canAssignManager
+                  hint={capabilities?.canAssignManager && !["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || ""))
                     ? (lang === "VN" ? "Gán ở tab Gán quản lý" : "Assign from Assign manager tab")
                     : undefined}
                 />
@@ -665,7 +964,9 @@ export function AdminBookingOverviewTab({
                 lang={lang}
                 currencyFormatter={currencyFormatter}
               />
-              {capabilities?.canAssignManager && onNavigateTab ? (
+              {capabilities?.canAssignManager
+                && onNavigateTab
+                && !["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || "")) ? (
                 <button
                   type="button"
                   onClick={() => onNavigateTab("assignment")}
@@ -743,9 +1044,16 @@ export function AdminBookingOverviewTab({
                           : "bg-white/95 text-[#124757] dark:bg-slate-900/95 dark:text-yellow-400"
                       }`}
                       >
-                        {isReleasedAssignment
-                          ? (lang === "VN" ? "Đã giải phóng" : "Released")
-                          : (lang === "VN" ? "Đã gán" : "Assigned")}
+                        {(() => {
+                          if (!isReleasedAssignment) {
+                            return lang === "VN" ? "Đã gán" : "Assigned";
+                          }
+                          const status = String(booking.status || "");
+                          if (status === "Cancelled") return lang === "VN" ? "Đã hủy" : "Cancelled";
+                          if (status === "Expired") return lang === "VN" ? "Hết hạn" : "Expired";
+                          if (status === "Refunded") return lang === "VN" ? "Đã hoàn tiền" : "Refunded";
+                          return lang === "VN" ? "Đã hủy" : "Cancelled";
+                        })()}
                       </span>
                     </div>
 
@@ -845,12 +1153,19 @@ export function AdminBookingActionsTab({
   booking,
   statusInfo,
   boats,
+  occupiedBoatIds = [],
   quoteForm,
   setQuoteForm,
   canManageQuote,
   hasBlockingPayment,
   isSubmitting,
   isQuoteBoatSelectionComplete,
+  isRoutePlanComplete = false,
+  routeCandidateLegs = [],
+  routePlanSelections = {},
+  routeCandidatesLoaded = false,
+  isRouteCandidatesLoading = false,
+  routeCandidatesError = "",
   isPreviewLoading,
   quotePreviewError,
   quotePreview,
@@ -878,28 +1193,49 @@ export function AdminBookingActionsTab({
   getStatusInfo,
   onSubmitQuote,
   onQuoteBoatChange,
+  onRoutePlanChange,
+  onLoadRouteCandidates,
+  onPreviewQuote,
   onQuoteRentalUnitChange,
   onStatusChange,
   onNavigateTab,
 }) {
-  const routePricingWarning = getCharterRoutePricingWarning(booking, lang);
+  const routeQuoteOptions = {
+    routeCandidateLegs: routeCandidatesLoaded ? routeCandidateLegs : undefined,
+    routePlanComplete: routeCandidatesLoaded && isRoutePlanComplete,
+    routeCandidatesLoaded,
+  };
+  const routePricingWarning = getCharterRoutePricingWarning(booking, lang, routeQuoteOptions);
   const quoteRentalUnit = quoteForm?.rentalUnit === "Day" ? "Day" : "Hour";
-  const canSubmitQuote = canManageQuote
+  const canPreviewQuote = canManageQuote
     && isQuoteBoatSelectionComplete
-    && hasCharterRouteForPricing(booking)
+    && routeCandidatesLoaded
+    && isRoutePlanComplete
+    && !hasEmptyRouteCandidateLegs(routeCandidateLegs)
+    && !isCharterRoutePricingBlocked(booking, routeQuoteOptions)
+    && !isPreviewLoading
+    && !isSubmitting;
+  const canSubmitQuote = canPreviewQuote
+    && Boolean(quotePreview)
     && !isSubmitting;
 
   if (phase === "quote") {
     return (
       <section className="space-y-6">
-        <AdminCharterRouteInfoPanel lang={lang} booking={booking} formatDate={formatDate} />
+        <AdminCharterRouteInfoPanel
+          lang={lang}
+          booking={booking}
+          formatDate={formatDate}
+          draftRouteCandidateLegs={routeCandidatesLoaded ? routeCandidateLegs : null}
+          draftRoutePlanSelections={routePlanSelections}
+        />
 
         <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
           <form onSubmit={onSubmitQuote} className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
-                  {lang === "VN" ? "Gán tàu & chốt giá" : "Assign Boats & Quote"}
+                  {lang === "VN" ? "Gán tàu và chốt giá" : "Assign Boats & Quote"}
                 </h3>
               </div>
               <span className={`w-max rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider ${statusInfo.classes}`}>
@@ -917,19 +1253,7 @@ export function AdminBookingActionsTab({
                     ? (lang === "VN" ? "Theo giờ" : "Hourly")
                     : (lang === "VN" ? "Theo ngày" : "Daily")}
                 </span>
-                <span className="text-[11px] font-medium text-slate-400">
-                  {lang === "VN" ? "Admin không đổi — thời lượng do hệ thống tính từ lộ trình." : "Locked for admin — duration comes from the route estimate."}
-                </span>
               </div>
-              <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-400">
-                {lang === "VN"
-                  ? quoteRentalUnit === "Hour"
-                    ? "Theo giờ: thời lượng tính tiền lấy từ ước tính lộ trình (thường làm tròn tối thiểu 1 giờ)."
-                    : "Theo ngày: dùng đơn giá ngày của tàu; số ngày do hệ thống ước tính."
-                  : quoteRentalUnit === "Hour"
-                    ? "Hourly: chargeable duration comes from the route estimate (usually at least 1 hour)."
-                    : "Daily: uses the boat daily rate; day count comes from the system estimate."}
-              </p>
             </div>
 
             {booking.specialRequests ? (
@@ -951,27 +1275,52 @@ export function AdminBookingActionsTab({
               </div>
             )}
 
-            {routePricingWarning ? (
-              <div className="mt-4 flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                <span className="material-symbols-outlined text-base">warning</span>
-                <p className="text-xs font-bold leading-relaxed">{routePricingWarning}</p>
+            {routePricingWarning
+              && !(routeCandidatesLoaded && hasEmptyRouteCandidateLegs(routeCandidateLegs)) ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+                  {routePricingWarning}
+                </p>
               </div>
             ) : null}
 
             <fieldset disabled={!canManageQuote || isSubmitting} className="mt-5 space-y-5 disabled:opacity-60">
+              <AdminCharterRoutePlanPicker
+                lang={lang}
+                legs={routeCandidateLegs}
+                selections={routePlanSelections}
+                loaded={routeCandidatesLoaded}
+                isLoading={isRouteCandidatesLoading}
+                error={routeCandidatesError}
+                disabled={!canManageQuote || isSubmitting}
+                onChange={onRoutePlanChange}
+                onLoad={onLoadRouteCandidates}
+              />
+
               <div className="grid gap-4 xl:grid-cols-2">
                 {quoteForm.boats.map((quoteBoat) => {
                   const selectedBoatIds = quoteForm.boats
                     .filter((boat) => boat.boatOrder !== quoteBoat.boatOrder && boat.boatId)
                     .map((boat) => boat.boatId);
                   const availableBoats = boats.filter((boat) => {
-                    const boatId = getBoatId(boat);
+                    const boatId = String(getBoatId(boat) || "").trim();
                     const requiredDecks = Number(quoteBoat.requiredNumberOfDecks) || 0;
                     const matchesDeck = !requiredDecks || getBoatDeckCount(boat) === requiredDecks;
                     const matchesSeatSetup = requiredDecks
                       ? true
                       : (!quoteBoat.requiredSeatSetupType || getBoatSeatSetupType(boat) === quoteBoat.requiredSeatSetupType);
-                    return isActiveBoat(boat) && matchesDeck && matchesSeatSetup && (!selectedBoatIds.includes(boatId) || boatId === quoteBoat.boatId);
+                    const occupiedSet = new Set(
+                      (Array.isArray(occupiedBoatIds) ? occupiedBoatIds : [])
+                        .map((id) => String(id || "").trim())
+                        .filter(Boolean),
+                    );
+                    const isOccupiedElsewhere =
+                      occupiedSet.has(boatId) && boatId !== String(quoteBoat.boatId || "").trim();
+                    return isActiveBoat(boat)
+                      && matchesDeck
+                      && matchesSeatSetup
+                      && !isOccupiedElsewhere
+                      && (!selectedBoatIds.includes(boatId) || boatId === quoteBoat.boatId);
                   });
 
                   return (
@@ -1003,15 +1352,27 @@ export function AdminBookingActionsTab({
                 })}
               </div>
 
-              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-bold leading-5 text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              <p className="text-[11px] font-medium leading-relaxed text-slate-400">
                 {lang === "VN"
-                  ? `Đang báo giá ${quoteRentalUnit === "Hour" ? "theo giờ" : "theo ngày"} — giá tương ứng được tô đậm trong danh sách tàu. Chọn đủ tàu rồi xem trước / chốt giá.`
-                  : `Quoting ${quoteRentalUnit === "Hour" ? "hourly" : "daily"} — matching rates are highlighted in the boat list. Select boats, then preview / submit.`}
+                  ? `Báo giá ${quoteRentalUnit === "Hour" ? "theo giờ" : "theo ngày"}: chọn route + tàu, xem trước rồi chốt giá.`
+                  : `Quoting ${quoteRentalUnit === "Hour" ? "hourly" : "daily"}: select routes and boats, preview, then submit.`}
               </p>
 
-              <button type="submit" disabled={!canSubmitQuote} className="w-full rounded-xl bg-[#124757] px-6 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900">
-                {isSubmitting ? (lang === "VN" ? "Đang xử lý..." : "Submitting...") : (lang === "VN" ? "Chốt giá" : "Submit Quote")}
-              </button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => onPreviewQuote?.()}
+                  disabled={!canPreviewQuote}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-6 py-3 text-xs font-headline font-black uppercase tracking-widest text-[#124757] disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+                >
+                  {isPreviewLoading
+                    ? (lang === "VN" ? "Đang tính..." : "Calculating...")
+                    : (lang === "VN" ? "Xem trước giá" : "Preview quote")}
+                </button>
+                <button type="submit" disabled={!canSubmitQuote} className="w-full rounded-xl bg-[#124757] px-6 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900">
+                  {isSubmitting ? (lang === "VN" ? "Đang xử lý..." : "Submitting...") : (lang === "VN" ? "Chốt giá" : "Submit Quote")}
+                </button>
+              </div>
             </fieldset>
           </form>
 
@@ -1027,6 +1388,8 @@ export function AdminBookingActionsTab({
             getBoatId={getBoatId}
             getBoatPrice={getBoatPrice}
             isQuoteBoatSelectionComplete={isQuoteBoatSelectionComplete}
+            onPreviewQuote={onPreviewQuote}
+            canPreviewQuote={canPreviewQuote}
           />
         </div>
 
@@ -1270,9 +1633,13 @@ export function AdminBookingTicketsTab({
   booking,
   tickets,
   formatDate,
+  canReviewPassengerAdds = false,
+  useAssignedApi = false,
+  onRefresh,
 }) {
   const [selectedTicketIds, setSelectedTicketIds] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reviewingBatchId, setReviewingBatchId] = useState("");
   const [qrImageUrl, setQrImageUrl] = useState("");
 
   const ticketRows = tickets.map((ticket, index) => {
@@ -1282,6 +1649,8 @@ export function AdminBookingTicketsTab({
     const passengerType = pick(ticket, ["passengerType", "type"], "");
     const birthYear = getPassengerBirthYear(ticket);
     const status = pick(ticket, ["attendanceStatus", "ticketStatus", "status"], "Active");
+    const approvalStatus = pick(ticket, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], "");
+    const reviewNote = pick(ticket, ["reviewNote", "rejectNote", "note"], "");
 
     return {
       ticket,
@@ -1292,9 +1661,17 @@ export function AdminBookingTicketsTab({
       passengerType: formatCharterPassengerType(passengerType, lang),
       birthYear,
       status,
+      approvalStatus,
+      reviewNote,
       hasTicketId: Boolean(ticketId),
     };
   });
+
+  const addRequestBatches = getPassengerAddRequestBatches(
+    Array.isArray(booking?.passengers) && booking.passengers.length > 0
+      ? booking.passengers
+      : tickets,
+  );
 
   const selectableTicketIds = ticketRows.filter((row) => row.hasTicketId).map((row) => row.ticketId);
   const canViewTickets = canShowCharterTickets(booking);
@@ -1387,7 +1764,7 @@ export function AdminBookingTicketsTab({
       }
     } catch (error) {
       if (popup) popup.close();
-      Swal.fire({
+      showToast({
         icon: "error",
         title: lang === "VN" ? "Không thể xuất vé" : "Unable to export tickets",
         text: getApiErrorMessage(
@@ -1396,7 +1773,7 @@ export function AdminBookingTicketsTab({
             ? "Không thể mở hoặc in vé. Vui lòng thử lại sau khi khách đã lưu danh sách hành khách."
             : "Unable to open or print tickets. Please try again after the passenger list is saved.",
         ),
-        confirmButtonColor: "#124757",
+        timer: 4500,
       });
     } finally {
       setIsSubmitting(false);
@@ -1414,6 +1791,100 @@ export function AdminBookingTicketsTab({
     setSelectedTicketIds((prev) => (
       prev.length === selectableTicketIds.length ? [] : [...selectableTicketIds]
     ));
+  };
+
+  const handleApproveBatch = async (batch) => {
+    if (!booking?.id || !batch?.requestBatchId) return;
+    const result = await showConfirmDialog({
+      tone: "brand",
+      icon: "question",
+      title: lang === "VN" ? "Duyệt yêu cầu thêm?" : "Approve add request?",
+      html: buildConfirmBodyHtml({
+        code: booking.bookingCode,
+        text: lang === "VN"
+          ? `Duyệt ${batch.passengers.length} hành khách trong yêu cầu này.`
+          : `Approve ${batch.passengers.length} passenger(s) in this request.`,
+      }),
+      showCancelButton: true,
+      confirmButtonText: lang === "VN" ? "Duyệt" : "Approve",
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      setReviewingBatchId(batch.requestBatchId);
+      await approveCharterPassengerAddRequest(booking.id, batch.requestBatchId, {
+        assigned: useAssignedApi,
+      });
+      await onRefresh?.();
+      showToast({
+        icon: "success",
+        title: lang === "VN" ? "Đã duyệt" : "Approved",
+        timer: 1800,
+      });
+    } catch (error) {
+      showToast({
+        icon: "error",
+        title: lang === "VN" ? "Không duyệt được" : "Unable to approve",
+        text: getApiErrorMessage(error),
+        timer: 4000,
+      });
+    } finally {
+      setReviewingBatchId("");
+    }
+  };
+
+  const handleRejectBatch = async (batch) => {
+    if (!booking?.id || !batch?.requestBatchId) return;
+    const result = await showConfirmDialog({
+      tone: "danger",
+      icon: "warning",
+      title: lang === "VN" ? "Từ chối yêu cầu?" : "Reject request?",
+      html: buildConfirmBodyHtml({
+        code: booking.bookingCode,
+        text: lang === "VN"
+          ? "Hành khách trong yêu cầu này sẽ không được thêm vào booking."
+          : "Passengers in this request will not be added to the booking.",
+      }),
+      input: "textarea",
+      inputLabel: lang === "VN" ? "Lý do từ chối (bắt buộc)" : "Rejection note (required)",
+      inputPlaceholder: lang === "VN" ? "Nhập lý do..." : "Enter reason...",
+      showCancelButton: true,
+      confirmButtonText: lang === "VN" ? "Từ chối" : "Reject",
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
+      inputValidator: (value) => {
+        if (!String(value || "").trim()) {
+          return lang === "VN" ? "Bắt buộc nhập lý do." : "A note is required.";
+        }
+        return undefined;
+      },
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      setReviewingBatchId(batch.requestBatchId);
+      await rejectCharterPassengerAddRequest(
+        booking.id,
+        batch.requestBatchId,
+        String(result.value || "").trim(),
+        { assigned: useAssignedApi },
+      );
+      await onRefresh?.();
+      showToast({
+        icon: "success",
+        title: lang === "VN" ? "Đã từ chối" : "Rejected",
+        timer: 1800,
+      });
+    } catch (error) {
+      showToast({
+        icon: "error",
+        title: lang === "VN" ? "Không từ chối được" : "Unable to reject",
+        text: getApiErrorMessage(error),
+        timer: 4000,
+      });
+    } finally {
+      setReviewingBatchId("");
+    }
   };
 
   return (
@@ -1511,6 +1982,76 @@ export function AdminBookingTicketsTab({
         </div>
       </section>
 
+      {canReviewPassengerAdds && addRequestBatches.length > 0 ? (
+        <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+          <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
+            <h3 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
+              {lang === "VN" ? "Yêu cầu thêm hành khách" : "Passenger add requests"}
+            </h3>
+            <p className="mt-1 text-xs font-medium text-slate-400">
+              {lang === "VN"
+                ? "Duyệt hoặc từ chối (từ chối bắt buộc ghi chú)."
+                : "Approve or reject (rejection note is required)."}
+            </p>
+          </div>
+          <div className="space-y-4 px-6 py-6 md:px-8">
+            {addRequestBatches.map((batch) => {
+              const busy = reviewingBatchId === batch.requestBatchId;
+              return (
+                <div
+                  key={batch.requestBatchId}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">
+                        {lang === "VN" ? "Người gửi" : "Sender"}: {batch.senderName || booking.customerName || "—"}
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-slate-400">
+                        {lang === "VN" ? "Thời gian gửi" : "Submitted"}: {batch.requestedAt ? formatDate(batch.requestedAt) : "—"}
+                        {" · "}
+                        {lang === "VN" ? "Số lượng" : "Qty"}: {batch.passengers.length}
+                      </p>
+                      <span className={`mt-2 inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(batch.status)}`}>
+                        {formatPassengerApprovalStatus(batch.status, lang, batch.reviewNote)}
+                      </span>
+                    </div>
+                    {batch.status === "Pending" ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleApproveBatch(batch)}
+                          className="rounded-xl bg-emerald-600 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
+                        >
+                          {busy ? "…" : (lang === "VN" ? "Duyệt" : "Approve")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleRejectBatch(batch)}
+                          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                        >
+                          {lang === "VN" ? "Từ chối" : "Reject"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <ul className="mt-3 space-y-1.5">
+                    {batch.passengers.map((passenger, index) => (
+                      <li key={`${batch.requestBatchId}-${index}`} className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                        {passenger.fullName || "—"}
+                        {passenger.birthYear ? ` · ${passenger.birthYear}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
       <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
           <h3 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
@@ -1562,6 +2103,11 @@ export function AdminBookingTicketsTab({
                         {row.birthYear && (
                           <span>{lang === "VN" ? "Năm sinh" : "Birth year"}: {row.birthYear}</span>
                         )}
+                        {row.approvalStatus ? (
+                          <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-black uppercase ${getPassengerApprovalTone(row.approvalStatus)}`}>
+                            {formatPassengerApprovalStatus(row.approvalStatus, lang, row.reviewNote)}
+                          </span>
+                        ) : null}
                         {row.hasTicketId && (
                           <span className="font-mono text-[10px]">ID: {row.ticketId}</span>
                         )}

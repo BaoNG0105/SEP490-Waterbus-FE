@@ -162,6 +162,10 @@ export const getPromotionRouteKindLabel = (routeType, lang = 'VN') => {
             return lang === 'VN'
                 ? 'Route nguồn GPS (không chọn)'
                 : 'GPS source (not selectable)';
+        case 'Charter':
+            return lang === 'VN'
+                ? 'Tuyến thuê riêng (không chọn)'
+                : 'Charter route (not selectable)';
         default:
             return routeType || '—';
     }
@@ -414,4 +418,48 @@ export const checkPromotionCode = async (code, subtotalAmount) => {
         console.error(`Lỗi khi kiểm tra mã khuyến mãi ${code}:`, error);
         throw error;
     }
+};
+
+/** Chuẩn hoá GET /promotions/validate để FE preview giảm giá trước PayOS. */
+export const normalizePromotionValidateResult = (payload, subtotalAmount = 0) => {
+    const raw = payload?.data && typeof payload.data === "object" && !Array.isArray(payload.data)
+        ? payload.data
+        : payload;
+    const subtotal = Math.max(0, Number(subtotalAmount) || 0);
+    const explicitInvalid =
+        raw?.isValid === false ||
+        raw?.valid === false ||
+        raw?.success === false ||
+        payload?.success === false;
+    const discountAmount = Math.max(
+        0,
+        Number(raw?.discountAmount ?? raw?.discount ?? raw?.amountOff ?? raw?.promotionDiscount ?? 0) || 0,
+    );
+    let finalAmount = Number(
+        raw?.finalAmount ?? raw?.totalAfterDiscount ?? raw?.amountAfterDiscount ?? raw?.payableAmount,
+    );
+    if (!Number.isFinite(finalAmount)) {
+        finalAmount = Math.max(0, subtotal - discountAmount);
+    } else {
+        finalAmount = Math.max(0, finalAmount);
+    }
+    const resolvedDiscount =
+        discountAmount > 0 ? discountAmount : Math.max(0, Math.round(subtotal - finalAmount));
+    const explicitValid =
+        raw?.isValid === true ||
+        raw?.valid === true ||
+        raw?.success === true ||
+        payload?.success === true;
+    const ok = !explicitInvalid && (explicitValid || resolvedDiscount > 0 || finalAmount < subtotal);
+
+    return {
+        ok,
+        discountAmount: resolvedDiscount,
+        finalAmount: ok ? finalAmount : subtotal,
+        baseAmount: subtotal,
+        message:
+            String(raw?.message || raw?.error || payload?.message || "").trim() ||
+            (ok ? "Áp dụng mã thành công" : "Mã khuyến mãi không hợp lệ"),
+        code: String(raw?.code || raw?.promotionCode || "").trim(),
+    };
 };

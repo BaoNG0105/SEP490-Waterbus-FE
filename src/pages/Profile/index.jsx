@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { logout } from "../../redux/authSlice";
 import { fetchCurrentUserProfile } from "../../services/authService";
-import Swal from "sweetalert2";
+import { notify } from "../../utils/swalToast";
 
 const mockUserStats = { points: 12840 };
 
@@ -50,7 +50,7 @@ export const Profile = () => {
   }, []);
 
   const handleLogout = () => {
-    Swal.fire({
+    notify({
       title: lang === "VN" ? "Bạn có chắc chắn muốn đăng xuất?" : "Are you sure you want to log out?",
       icon: "warning",
       showCancelButton: true,

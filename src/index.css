@@ -142,3 +142,333 @@
 .station-name-tooltip::before {
   border-top-color: #124757 !important;
 }
+
+/* Admin SweetAlert toast — góc phải, bo 2 góc trái */
+.admin-swal-toast {
+  width: min(360px, calc(100vw - 1.25rem)) !important;
+  padding: 0.95rem 1rem !important;
+  margin: 0.75rem 0.75rem 0 0 !important;
+  border-radius: 1rem 0 0 1rem !important;
+  border: 1px solid rgba(18, 71, 87, 0.1) !important;
+  border-right: none !important;
+  background: #fff !important;
+  box-shadow:
+    -8px 12px 32px rgba(15, 23, 42, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.7) inset !important;
+  font-family: "Space Grotesk", sans-serif !important;
+}
+
+.dark .admin-swal-toast {
+  background: #0f172a !important;
+  border-color: rgba(148, 163, 184, 0.2) !important;
+}
+
+.admin-swal-toast-enter {
+  animation: admin-swal-toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes admin-swal-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.admin-swal-toast-icon {
+  margin: 0 0.65rem 0 0 !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  border-width: 2px !important;
+  box-shadow: none !important;
+}
+
+.admin-swal-toast-icon .swal2-icon-content {
+  font-size: 1rem !important;
+}
+
+.admin-swal-toast-title {
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 0.875rem !important;
+  font-weight: 800 !important;
+  line-height: 1.35 !important;
+  color: #0f172a !important;
+  text-align: left !important;
+}
+
+.dark .admin-swal-toast-title {
+  color: #f8fafc !important;
+}
+
+.admin-swal-toast-html {
+  margin: 0.2rem 0 0 !important;
+  padding: 0 !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  line-height: 1.45 !important;
+  color: #64748b !important;
+  text-align: left !important;
+}
+
+.dark .admin-swal-toast-html {
+  color: #94a3b8 !important;
+}
+
+.admin-swal-toast-timer {
+  background: #124757 !important;
+}
+
+/* Charter / admin SweetAlert confirm — brand UI */
+.admin-swal-popup {
+  position: relative !important;
+  width: min(440px, calc(100vw - 2rem)) !important;
+  padding: 1.75rem 1.5rem 1.35rem !important;
+  border-radius: 1.75rem !important;
+  border: 1px solid rgba(18, 71, 87, 0.08) !important;
+  background:
+    linear-gradient(180deg, #f4fafb 0%, #ffffff 42%) !important;
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.14),
+    0 0 0 1px rgba(255, 255, 255, 0.6) inset !important;
+  font-family: "Space Grotesk", sans-serif !important;
+  overflow: hidden !important;
+}
+
+.admin-swal-enter {
+  animation: admin-swal-pop 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes admin-swal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.admin-swal-icon {
+  margin: 0.15rem auto 1rem !important;
+  width: 3.5rem !important;
+  height: 3.5rem !important;
+  border-width: 3px !important;
+  box-shadow: 0 10px 24px rgba(18, 71, 87, 0.12) !important;
+}
+
+.admin-swal-icon.swal2-question {
+  border-color: #124757 !important;
+  color: #124757 !important;
+}
+
+.admin-swal-icon.swal2-info {
+  border-color: #124757 !important;
+  color: #124757 !important;
+}
+
+.admin-swal-icon.swal2-success {
+  border-color: #059669 !important;
+  color: #059669 !important;
+}
+
+.admin-swal-icon.swal2-warning {
+  border-color: #d97706 !important;
+  color: #d97706 !important;
+}
+
+.admin-swal-icon.swal2-error {
+  border-color: #e11d48 !important;
+  color: #e11d48 !important;
+}
+
+.admin-swal-icon .swal2-icon-content {
+  font-size: 1.75rem !important;
+  font-weight: 700 !important;
+}
+
+.admin-swal-title {
+  margin: 0 0 0.85rem !important;
+  padding: 0 0.25rem !important;
+  font-size: 1.125rem !important;
+  font-weight: 800 !important;
+  line-height: 1.35 !important;
+  letter-spacing: -0.01em !important;
+  color: #0f172a !important;
+}
+
+.admin-swal-html {
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: center !important;
+  color: #64748b !important;
+  font-size: 0.875rem !important;
+  line-height: 1.55 !important;
+}
+
+.admin-swal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.admin-swal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: #eaf3f5;
+  color: #124757;
+  box-shadow: inset 0 0 0 1px rgba(18, 71, 87, 0.1);
+}
+
+.admin-swal-chip-value {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.admin-swal-body-text {
+  margin: 0;
+  max-width: 22rem;
+  color: #475569;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.admin-swal-body-note {
+  margin: 0;
+  max-width: 22rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.85rem;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.45;
+  box-shadow: inset 0 0 0 1px rgba(234, 88, 12, 0.16);
+}
+
+.admin-swal-input-label {
+  display: block !important;
+  margin: 1.1rem 0 0.45rem !important;
+  text-align: left !important;
+  font-size: 0.625rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  color: #94a3b8 !important;
+}
+
+.admin-swal-input {
+  margin: 0 !important;
+  width: 100% !important;
+  min-height: 5.5rem !important;
+  max-height: 8rem !important;
+  padding: 0.85rem 0.95rem !important;
+  border-radius: 1rem !important;
+  border: 1px solid #e2e8f0 !important;
+  background: #f8fafc !important;
+  box-shadow: none !important;
+  font-size: 0.875rem !important;
+  line-height: 1.45 !important;
+  color: #0f172a !important;
+  resize: vertical !important;
+}
+
+.admin-swal-input:focus {
+  border-color: #124757 !important;
+  box-shadow: 0 0 0 3px rgba(18, 71, 87, 0.12) !important;
+  background: #fff !important;
+}
+
+.admin-swal-actions {
+  margin: 1.35rem 0 0 !important;
+  width: 100% !important;
+  gap: 0.6rem !important;
+}
+
+.admin-swal-actions--single {
+  justify-content: center !important;
+}
+
+.admin-swal-actions--single .admin-swal-confirm {
+  flex: 0 1 auto !important;
+  min-width: 7.5rem !important;
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+}
+
+.admin-swal-confirm,
+.admin-swal-cancel {
+  flex: 1 1 0 !important;
+  margin: 0 !important;
+  padding: 0.85rem 0.95rem !important;
+  border-radius: 0.95rem !important;
+  border: none !important;
+  font-size: 0.6875rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.admin-swal-confirm:active,
+.admin-swal-cancel:active {
+  transform: scale(0.98) !important;
+}
+
+.admin-swal-confirm--brand {
+  background: #124757 !important;
+  color: #fff !important;
+  box-shadow: 0 10px 22px rgba(18, 71, 87, 0.28) !important;
+}
+
+.admin-swal-confirm--brand:hover {
+  background: #0d3540 !important;
+}
+
+.admin-swal-confirm--danger {
+  background: #e11d48 !important;
+  color: #fff !important;
+  box-shadow: 0 10px 22px rgba(225, 29, 72, 0.24) !important;
+}
+
+.admin-swal-confirm--danger:hover {
+  background: #be123c !important;
+}
+
+.admin-swal-confirm--warning {
+  background: #d97706 !important;
+  color: #fff !important;
+  box-shadow: 0 10px 22px rgba(217, 119, 6, 0.24) !important;
+}
+
+.admin-swal-confirm--warning:hover {
+  background: #b45309 !important;
+}
+
+.admin-swal-cancel {
+  background: #fff !important;
+  color: #124757 !important;
+  box-shadow: inset 0 0 0 1.5px rgba(18, 71, 87, 0.18) !important;
+}
+
+.admin-swal-cancel:hover {
+  background: #eaf3f5 !important;
+}
+
+.admin-swal-validation {
+  margin-top: 0.75rem !important;
+  border-radius: 0.85rem !important;
+  font-size: 0.75rem !important;
+}

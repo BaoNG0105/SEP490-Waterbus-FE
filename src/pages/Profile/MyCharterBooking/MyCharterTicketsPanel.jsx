@@ -1,3 +1,13 @@
+import { useState } from "react";
+import {
+  canCustomerRequestAddPassengers,
+  formatPassengerApprovalStatus,
+  getCharterPassengerAddSummary,
+  getPassengerAddBlockedReason,
+  getPassengerApprovalTone,
+  normalizePassengerApprovalStatus,
+} from "../../../utils/charterPassengerAdd";
+
 const CURRENT_YEAR = new Date().getFullYear();
 const MIN_BIRTH_YEAR = 1900;
 
@@ -21,7 +31,30 @@ export function MyCharterTicketsPanel({
   handleImportPassengers,
   handlePassengerChange,
   handleSavePassengers,
+  handleAddPassengers,
 }) {
+  const [addRows, setAddRows] = useState([{ fullName: "", birthYear: "" }]);
+  const summary = getCharterPassengerAddSummary(booking);
+  const canAdd = canCustomerRequestAddPassengers(booking);
+
+  const updateAddRow = (index, field, value) => {
+    setAddRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+  };
+
+  const addEmptyRow = () => {
+    if (summary.boatCapacity > 0 && addRows.length >= summary.canAddMore) return;
+    setAddRows((prev) => [...prev, { fullName: "", birthYear: "" }]);
+  };
+
+  const removeAddRow = (index) => {
+    setAddRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  };
+
+  const submitAdd = async () => {
+    const ok = await handleAddPassengers?.(addRows);
+    if (ok) setAddRows([{ fullName: "", birthYear: "" }]);
+  };
+
   return (
     <>
       <section className="bg-white dark:bg-slate-800 rounded-4xl p-6 md:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
@@ -65,16 +98,11 @@ export function MyCharterTicketsPanel({
             <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"}</h2>
             <p className="mt-1 text-xs font-bold text-slate-400">
               {canUseContactAsSinglePassenger
-                ? (lang === "VN" ? "Booking 1 khách sẽ dùng thông tin liên hệ làm hành khách." : "Single-passenger bookings use the contact information.")
-                : (lang === "VN" ? "Nhập file hoặc chỉnh trực tiếp từng hành khách. File mẫu: fullName,birthYear" : "Import a file or edit passengers directly. Template: fullName,birthYear")}
+                ? (lang === "VN"
+                  ? "Chuyến 1 khách: họ tên lấy từ người đặt. Chỉ cần nhập năm sinh rồi bấm Lưu."
+                  : "Single passenger: name is taken from the booker. Just enter the birth year and save.")
+                : (lang === "VN" ? "Nhập file hoặc chỉnh trực tiếp từng hành khách." : "Import a file or edit passengers directly.")}
             </p>
-            {!canUseContactAsSinglePassenger ? (
-              <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-mono text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                fullName,birthYear<br />
-                Nguyen Van A,2003<br />
-                Tran Thi B,2016
-              </p>
-            ) : null}
           </div>
           <button type="button" onClick={() => importInputRef.current?.click()} disabled={isSubmitting || !isPaid} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400 sm:w-auto">
             {lang === "VN" ? "Nhập file khách" : "Import Passengers"}
@@ -82,59 +110,170 @@ export function MyCharterTicketsPanel({
           <input ref={importInputRef} type="file" accept=".xlsx,.csv,.tsv,.txt" onChange={handleImportPassengers} className="hidden" />
         </div>
 
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: lang === "VN" ? "Sức chứa tàu" : "Boat capacity", value: summary.boatCapacity || "—" },
+            { label: lang === "VN" ? "Đã duyệt / có tên" : "Approved", value: summary.approvedCount },
+            { label: lang === "VN" ? "Chờ duyệt" : "Pending", value: summary.pendingCount },
+            {
+              label: lang === "VN" ? "Lượt thêm còn" : "Add attempts left",
+              value: `${summary.remainingAddAttempts}/${summary.maxAttempts}`,
+            },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{item.label}</p>
+              <p className="mt-1 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">{item.value}</p>
+            </div>
+          ))}
+        </div>
+
         <div className="space-y-3 mt-6">
           {canUseContactAsSinglePassenger ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/10">
               <p className="text-[10px] font-headline font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                {lang === "VN" ? "Tự dùng thông tin liên hệ" : "Using contact info"}
+                {lang === "VN" ? "Người đặt / hành khách" : "Booker / passenger"}
               </p>
-              <p className="mt-2 font-headline text-lg font-black text-[#0E4050] dark:text-yellow-400">{booking.contactName}</p>
+              <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">
+                {passengerRows[0]?.fullName || "--"}
+              </p>
               <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">
                 {[booking.contactPhone, booking.contactEmail].filter(isUsableText).join(" · ") || "--"}
               </p>
             </div>
-          ) : passengerRows.map((row, index) => (
-            <div key={row.id || `passenger-${index}`} className="grid grid-cols-[42px_1fr] md:grid-cols-[42px_1fr_170px] gap-2 items-center">
-              <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400" title={row.ticketCode || undefined}>
-                {row.id ? (
+          ) : null}
+
+          {passengerRows.map((row, index) => {
+            const approval = normalizePassengerApprovalStatus(row.approvalStatus);
+            const isLocked = !isPaid || Boolean(row.requestBatchId) || approval === "Approved";
+            const isBookerOnly = canUseContactAsSinglePassenger && index === 0;
+            return (
+              <div key={row.id || `passenger-${index}`} className="space-y-2">
+                <div className={`grid gap-2 items-center ${
+                  isBookerOnly
+                    ? "grid-cols-1 md:grid-cols-[1fr]"
+                    : "grid-cols-[42px_1fr] md:grid-cols-[42px_1fr_170px]"
+                }`}>
+                  {!isBookerOnly ? (
+                    <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400" title={row.ticketCode || undefined}>
+                      {row.id ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedTicketIds.includes(row.id)}
+                          onChange={(event) => setSelectedTicketIds((prev) => event.target.checked ? [...prev, row.id] : prev.filter((ticketId) => ticketId !== row.id))}
+                          className="accent-[#124757]"
+                        />
+                      ) : index + 1}
+                    </label>
+                  ) : null}
+                  {!isBookerOnly ? (
+                    <div className="relative">
+                      <input
+                        value={row.fullName}
+                        onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)}
+                        disabled={isLocked}
+                        placeholder={lang === "VN" ? "Họ tên" : "Full name"}
+                        className="w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60"
+                      />
+                    </div>
+                  ) : null}
                   <input
-                    type="checkbox"
-                    checked={selectedTicketIds.includes(row.id)}
-                    onChange={(event) => setSelectedTicketIds((prev) => event.target.checked ? [...prev, row.id] : prev.filter((ticketId) => ticketId !== row.id))}
-                    className="accent-[#124757]"
+                    type="number"
+                    min={MIN_BIRTH_YEAR}
+                    max={CURRENT_YEAR}
+                    value={row.birthYear}
+                    onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
+                    disabled={isLocked}
+                    placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
+                    className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60"
                   />
-                ) : index + 1}
-              </label>
-              <div className="relative">
-                <input value={row.fullName} onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)} disabled={!isPaid} placeholder={lang === "VN" ? "Họ tên" : "Full name"} className="w-full px-3 py-3 pr-20 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60" />
-                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-white px-2 py-1 text-[9px] font-headline font-black uppercase tracking-wider text-slate-400 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">
-                  {row.passengerType === "Child" ? (lang === "VN" ? "Trẻ em" : "Child") : (lang === "VN" ? "Người lớn" : "Adult")}
-                </span>
+                </div>
+                {row.approvalStatus || row.requestBatchId ? (
+                  <p className={`ml-12 inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(approval)}`}>
+                    {formatPassengerApprovalStatus(approval, lang, row.reviewNote)}
+                  </p>
+                ) : null}
               </div>
-              <input
-                type="number"
-                min={MIN_BIRTH_YEAR}
-                max={CURRENT_YEAR}
-                value={row.birthYear}
-                onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
-                disabled={!isPaid}
-                placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
-                className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] col-start-2 md:col-start-auto disabled:opacity-60"
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="flex justify-end mt-6">
           <button onClick={handleSavePassengers} disabled={isSubmitting || !isPaid} className="w-full sm:w-auto min-w-56 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 py-3 px-6 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60">
             {isSubmitting
               ? (lang === "VN" ? "Đang lưu..." : "Saving...")
-              : canUseContactAsSinglePassenger
-                ? (lang === "VN" ? "Lưu thông tin liên hệ" : "Save Contact Info")
-                : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}
+              : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}
           </button>
         </div>
       </section>
+
+      {isPaid && booking?.status === "Confirmed" ? (
+        <section className="bg-white dark:bg-slate-800 rounded-4xl p-6 md:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
+          <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">
+            {lang === "VN" ? "Thêm hành khách" : "Add passengers"}
+          </h2>
+          <p className="mt-1 text-xs font-bold text-slate-400">
+            {lang === "VN"
+              ? "Gửi thêm tên hành khách để đội vận hành duyệt. Có thể thêm khi còn hơn 24 giờ trước giờ khởi hành."
+              : "Submit additional passenger names for review. Available when more than 24 hours remain before departure."}
+          </p>
+
+          {!canAdd ? (
+            <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              {getPassengerAddBlockedReason(booking, lang)}
+            </p>
+          ) : (
+            <div className="mt-5 space-y-3">
+              {addRows.map((row, index) => (
+                <div key={`add-${index}`} className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
+                  <input
+                    value={row.fullName}
+                    onChange={(e) => updateAddRow(index, "fullName", e.target.value)}
+                    placeholder={lang === "VN" ? "Họ tên" : "Full name"}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  />
+                  <input
+                    type="number"
+                    min={MIN_BIRTH_YEAR}
+                    max={CURRENT_YEAR}
+                    value={row.birthYear}
+                    onChange={(e) => updateAddRow(index, "birthYear", e.target.value)}
+                    placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeAddRow(index)}
+                    disabled={addRows.length <= 1}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-[10px] font-black uppercase text-slate-500 disabled:opacity-40 dark:border-slate-700"
+                  >
+                    {lang === "VN" ? "Xóa" : "Remove"}
+                  </button>
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={addEmptyRow}
+                  disabled={summary.boatCapacity > 0 && addRows.length >= summary.canAddMore}
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+                >
+                  {lang === "VN" ? "Thêm dòng" : "Add row"}
+                </button>
+                <button
+                  type="button"
+                  onClick={submitAdd}
+                  disabled={isSubmitting}
+                  className="rounded-xl bg-[#124757] px-5 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900"
+                >
+                  {isSubmitting
+                    ? (lang === "VN" ? "Đang gửi..." : "Submitting...")
+                    : (lang === "VN" ? "Gửi yêu cầu thêm" : "Submit add request")}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      ) : null}
     </>
   );
 }

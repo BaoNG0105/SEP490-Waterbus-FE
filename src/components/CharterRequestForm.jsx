@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Swal from "sweetalert2";
 import { useDispatch } from "react-redux";
 import { fetchAllStations } from "../services/stationService";
 import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId } from "../services/insuranceService";
@@ -13,6 +12,7 @@ import {
   normalizeDeckCount,
 } from "../utils/charterRequestForm";
 import { getCharterInsuranceNote, getInsurancePendingMessage } from "../utils/insurancePreview";
+import { notify } from "../utils/swalToast";
 
 const deckOptionImages = {
   1: "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/15/5b/30/ea/saigon-waterbus-lu-t.jpg?w=1200&h=-1&s=1",
@@ -417,7 +417,7 @@ export function CharterRequestForm({
     if (errorText) {
       if (validationResult?.field) focusContactField(validationResult.field);
       if (currentStep === 0) return;
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Vui lòng kiểm tra lại thông tin" : "Please check your information",
         text: errorText,
@@ -513,7 +513,7 @@ export function CharterRequestForm({
       console.error("Lỗi lấy thông tin tài khoản:", error);
       setUseAccountInfo(false);
       setAccountInfoApplied(false);
-      Swal.fire({
+      notify({
         icon: "error",
         title: lang === "VN" ? "Không lấy được thông tin" : "Unable to load account info",
         text: lang === "VN" ? "Vui lòng nhập thông tin liên hệ thủ công." : "Please enter contact information manually.",
@@ -613,7 +613,7 @@ export function CharterRequestForm({
     }
 
     if (!formData.departureDate) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Ngày khởi hành chưa hợp lệ" : "Invalid departure date",
         text: lang === "VN" ? "Vui lòng chọn ngày khởi hành." : "Please choose a departure date.",
@@ -623,7 +623,7 @@ export function CharterRequestForm({
     }
 
     if (formData.departureDate < minDepartureDate) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Ngày khởi hành chưa hợp lệ" : "Invalid departure date",
         text: lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today.",
@@ -633,7 +633,7 @@ export function CharterRequestForm({
     }
 
     if (!formData.startTime) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Giờ đi chưa hợp lệ" : "Invalid start time",
         text: lang === "VN" ? "Vui lòng chọn giờ đi." : "Please choose a start time.",
@@ -643,7 +643,7 @@ export function CharterRequestForm({
     }
 
     if (!Number.isInteger(adultCount) || !Number.isInteger(childCount) || adultCount < 0 || childCount < 0 || adultCount > 1000 || childCount > 1000 || totalPassengerCount <= 0 || totalPassengerCount > 1000) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Số lượng hành khách chưa hợp lệ" : "Invalid passenger count",
         text: lang === "VN" ? "Người lớn và trẻ em từ 0 đến 1000, tổng hành khách phải lớn hơn 0 và không quá 1000." : "Adults and children must be 0-1000, and total passengers must be greater than 0 and no more than 1000.",
@@ -653,7 +653,7 @@ export function CharterRequestForm({
     }
 
     if (!formData.fromStationId || !formData.toStationId) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Vui lòng chọn bến" : "Stations are required",
         text: lang === "VN" ? "Bạn cần chọn cả bến đón khách và bến trả khách trước khi tiếp tục." : "Select both pickup and drop-off stations before continuing.",
@@ -665,7 +665,7 @@ export function CharterRequestForm({
     if (String(formData.fromStationId) === String(formData.toStationId)) {
       const hasStopStation = formData.itineraryStops.some((stop) => Boolean(stop.stationId));
       if (!hasStopStation) {
-        Swal.fire({
+        notify({
           icon: "warning",
           title: lang === "VN" ? "Lộ trình chưa hợp lệ" : "Invalid route",
           text: lang === "VN"
@@ -687,7 +687,7 @@ export function CharterRequestForm({
     ));
 
     if (formData.itineraryStops.length > 50 || invalidStop) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Bến dừng chưa hợp lệ" : "Invalid stop stations",
         text: lang === "VN" ? "Tối đa 50 bến dừng; mỗi điểm cần có bến dừng, thứ tự và thời gian dừng không âm." : "Maximum 50 stops; each stop needs a station, non-negative order, and non-negative stay minutes.",
@@ -697,7 +697,7 @@ export function CharterRequestForm({
     }
 
     if (formData.requestedBoats.length < 1 || formData.requestedBoats.length > 20 || formData.requestedBoats.some((boat) => !deckOptions.includes(Number(boat.numberOfDecks)))) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Danh sách tàu chưa hợp lệ" : "Invalid requested boats",
         text: lang === "VN" ? "Cần ít nhất 1 tàu, tối đa 20 tàu, mỗi tàu chọn 1 tầng hoặc 2 tầng." : "Please request 1-20 boats, each with 1 or 2 decks.",
@@ -707,7 +707,7 @@ export function CharterRequestForm({
     }
 
     if (formData.specialRequests.length > 1000) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Nội dung nhập quá dài" : "Input is too long",
         text: lang === "VN" ? "Ghi chú tối đa 1000 ký tự." : "Notes are limited to 1000 characters.",
@@ -1179,7 +1179,8 @@ export function CharterRequestForm({
                   ? `<a href="${safeTermsUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 14px;border-radius:12px;background:#124757;color:#fff;font-weight:800;font-size:12px;text-decoration:none;">${lang === "VN" ? "Mở điều khoản đầy đủ" : "Open full terms"}</a>`
                   : `<p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có link điều khoản." : "No terms link available."}</p>`;
 
-                Swal.fire({
+                notify({
+                  dialog: true,
                   title: lang === "VN" ? "Điều khoản bảo hiểm" : "Insurance terms",
                   html: `
                     ${logoHtml}
@@ -1190,7 +1191,7 @@ export function CharterRequestForm({
                     ${termsHtml}
                   `,
                   confirmButtonText: lang === "VN" ? "Đóng" : "Close",
-                  confirmButtonColor: "#124757",
+                  showCancelButton: false,
                 });
               };
 

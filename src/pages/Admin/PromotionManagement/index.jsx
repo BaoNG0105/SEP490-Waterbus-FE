@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import {
     fetchPromotions,
@@ -13,6 +12,7 @@ import {
     PROMOTION_STATUS,
 } from "../../../services/promotionService";
 import { isAdminUser } from "../../../utils/roleHelpers";
+import { notify } from "../../../utils/swalToast";
 
 const formatCurrency = (value) => `${(Number(value) || 0).toLocaleString("vi-VN")}đ`;
 
@@ -126,7 +126,7 @@ export function PromotionManagement() {
     };
 
     const handleDeactivate = async (promo) => {
-        const confirmResult = await Swal.fire({
+        const confirmResult = await notify({
             title: lang === "VN" ? "Xóa khuyến mãi?" : "Delete promotion?",
             html: lang === "VN"
                 ? `Mã <b>${promo.promotionCode}</b> sẽ soft-delete (status = Archived).`
@@ -143,7 +143,7 @@ export function PromotionManagement() {
         try {
             setProcessingId(promo.id);
             await removePromotion(promo.id);
-            Swal.fire({
+            notify({
                 toast: true,
                 position: "top-end",
                 icon: "success",
@@ -154,7 +154,7 @@ export function PromotionManagement() {
             await loadPromotions();
         } catch (error) {
             console.error("Lỗi khi xóa khuyến mãi:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Thất bại" : "Failed",
                 text: error.response?.data?.message || (lang === "VN" ? "Không thể xóa khuyến mãi này." : "Failed to delete this promotion."),
@@ -173,7 +173,7 @@ export function PromotionManagement() {
             payload.validFrom = promo.validFrom;
             payload.validTo = promo.validTo;
             await modifyPromotion(promo.id, payload);
-            Swal.fire({
+            notify({
                 toast: true,
                 position: "top-end",
                 icon: "success",
@@ -184,7 +184,7 @@ export function PromotionManagement() {
             await loadPromotions();
         } catch (error) {
             console.error("Lỗi khi tạm dừng khuyến mãi:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Thất bại" : "Failed",
                 text: error.response?.data?.message || (lang === "VN" ? "Không thể tạm dừng khuyến mãi này." : "Failed to pause this promotion."),
@@ -204,7 +204,7 @@ export function PromotionManagement() {
             payload.validFrom = promo.validFrom;
             payload.validTo = promo.validTo;
             await modifyPromotion(promo.id, payload);
-            Swal.fire({
+            notify({
                 toast: true,
                 position: "top-end",
                 icon: "success",
@@ -215,7 +215,7 @@ export function PromotionManagement() {
             await loadPromotions();
         } catch (error) {
             console.error("Lỗi khi kích hoạt khuyến mãi:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Thất bại" : "Failed",
                 text: error.response?.data?.message || (lang === "VN" ? "Không thể kích hoạt khuyến mãi này." : "Failed to activate this promotion."),

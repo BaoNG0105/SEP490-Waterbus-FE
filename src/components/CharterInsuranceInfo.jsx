@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import Swal from "sweetalert2";
 import { fetchActiveInsurancePackages, findInsurancePackageById } from "../services/insuranceService";
 import { normalizeInsuranceFromBooking, resolveInsuranceSelected } from "../utils/insurancePreview";
+import { notify } from "../utils/swalToast";
 
 const escapeHtml = (value) => String(value ?? "")
   .replaceAll("&", "&amp;")
@@ -64,11 +64,12 @@ export function CharterInsuranceInfo({
     const logoHtml = resolvedLogoUrl
       ? `<img src="${escapeHtml(resolvedLogoUrl)}" alt="" style="height:40px;width:auto;object-fit:contain;margin:0 auto 12px;" />`
       : "";
-    Swal.fire({
+    notify({
+      dialog: true,
       title: isVn ? "Điều kiện bảo hiểm" : "Insurance terms",
       html: `${logoHtml}<p style="margin:0;text-align:left;font-size:14px;line-height:1.65;color:#334155;white-space:pre-wrap;">${escapeHtml(insurance.terms)}</p>`,
       confirmButtonText: isVn ? "Đóng" : "Close",
-      confirmButtonColor: "#124757",
+      showCancelButton: false,
       width: 560,
     });
   };

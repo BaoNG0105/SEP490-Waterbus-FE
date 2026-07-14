@@ -44,6 +44,10 @@ import { PromotionManagement } from "./pages/Admin/PromotionManagement";
 import { CreatePromotion } from "./pages/Admin/PromotionManagement/CreatePromotion";
 import { EditPromotion } from "./pages/Admin/PromotionManagement/EditPromotion";
 import { ViewPromotion } from "./pages/Admin/PromotionManagement/ViewPromotion";
+import { StaffAssignmentManagement } from "./pages/Admin/StaffAssignmentManagement";
+import { StaffTicketScanPage } from "./pages/Admin/StaffTicketScan";
+import { StaffMyTripsPage } from "./pages/Admin/StaffMyTrips";
+import { StaffScanHistoryPage } from "./pages/Admin/StaffScanHistory";
 import { BlogManagement } from "./pages/Admin/BlogManagement";
 import { CreateBlog } from "./pages/Admin/BlogManagement/CreateBlog";
 import { EditBlog } from "./pages/Admin/BlogManagement/EditBlog";
@@ -469,6 +473,43 @@ function App() {
             element={
               <AdminLayout title="Edit Promotion">
                 <EditPromotion />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Staff Assignment Management ******* */}
+          <Route
+            path="/admin/staff-assignments"
+            element={
+              <AdminLayout title="Staff Assignments">
+                <StaffAssignmentManagement />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/staff/ticket-scan"
+            element={
+              <AdminLayout title="Ticket Scan">
+                <StaffTicketScanPage />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/staff/my-trips"
+            element={
+              <AdminLayout title="My Trips">
+                <StaffMyTripsPage />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/staff/scan-history"
+            element={
+              <AdminLayout title="Scan History">
+                <StaffScanHistoryPage />
               </AdminLayout>
             }
           />

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import {
   fetchPromotions,
@@ -12,6 +11,7 @@ import {
   validatePromotionForm,
 } from "../../../services/promotionService";
 import { PromotionFormFields } from "./PromotionFormFields";
+import { notify } from "../../../utils/swalToast";
 
 export function EditPromotion() {
   const { lang } = useApp();
@@ -39,7 +39,7 @@ export function EditPromotion() {
         const list = await fetchPromotions();
         const found = list.find((p) => String(p.id) === String(id));
         if (!found) {
-          Swal.fire({
+          notify({
             icon: "error",
             title: lang === "VN" ? "Không tìm thấy khuyến mãi!" : "Promotion Not Found!",
             text:
@@ -91,7 +91,7 @@ export function EditPromotion() {
         await uploadPromotionImageFile(id, formData.imageFile);
       }
 
-      Swal.fire({
+      notify({
         icon: "success",
         title: lang === "VN" ? "Cập nhật thành công!" : "Successfully Saved!",
         confirmButtonColor: "#124757",

@@ -7,8 +7,9 @@ import {
     verifyEmailChangeOtp,
     verifyPhoneChangeOtp
 } from "../../services/authService";
-import Swal from "sweetalert2";
 import "flag-icons/css/flag-icons.min.css";
+import { notify, showValidationMessage } from "../../utils/swalToast";
+import Swal from "sweetalert2";
 
 import countries from "i18n-iso-countries";
 import viLocale from "i18n-iso-countries/langs/vi.json";
@@ -120,11 +121,11 @@ export const EditProfile = () => {
         if (file) {
             const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
             if (!validTypes.includes(file.type)) {
-                Swal.fire({ icon: 'error', title: 'Định dạng không hợp lệ', text: 'Chỉ hỗ trợ JPEG, PNG, WebP.' });
+                notify({ icon: 'error', title: 'Định dạng không hợp lệ', text: 'Chỉ hỗ trợ JPEG, PNG, WebP.' });
                 return;
             }
             if (file.size > 5 * 1024 * 1024) {
-                Swal.fire({ icon: 'error', title: 'File quá lớn', text: 'Dung lượng ảnh tối đa 5MB.' });
+                notify({ icon: 'error', title: 'File quá lớn', text: 'Dung lượng ảnh tối đa 5MB.' });
                 return;
             }
             setSelectedAvatarFile(file);
@@ -143,7 +144,7 @@ export const EditProfile = () => {
 
         // 1. BẪY LỖI FRONTEND: Kiểm tra xem user có đổi cả 2 trường cùng lúc không
         if (isEmailChanged && isPhoneChanged) {
-            Swal.fire({
+            notify({
                 icon: "warning",
                 title: lang === "VN" ? "Không hợp lệ" : "Invalid Request",
                 text: lang === "VN"
@@ -196,7 +197,7 @@ export const EditProfile = () => {
                 const maskedDest = response?.emailVerification?.maskedDestination || response?.phoneVerification?.maskedDestination;
                 const targetTypeLabel = isEmailChanged ? (lang === "VN" ? "Email" : "Email") : (lang === "VN" ? "Số điện thoại" : "Phone number");
 
-                const { value: otpCode } = await Swal.fire({
+                const { value: otpCode } = await notify({
                     title: lang === "VN" ? "Xác thực thay đổi" : "Verify Changes",
                     // Nhúng HTML 6 ô input
                     html: `
@@ -257,7 +258,7 @@ export const EditProfile = () => {
                         const inputs = Swal.getHtmlContainer().querySelectorAll('.otp-input');
                         const code = Array.from(inputs).map(i => i.value).join('');
                         if (code.length < 6) {
-                            Swal.showValidationMessage(lang === "VN" ? "Vui lòng nhập đầy đủ 6 số OTP!" : "Please enter the full 6-digit OTP!");
+                            showValidationMessage(lang === "VN" ? "Vui lòng nhập đầy đủ 6 số OTP!" : "Please enter the full 6-digit OTP!");
                             return false;
                         }
                         return code;
@@ -272,7 +273,7 @@ export const EditProfile = () => {
                             await verifyPhoneChangeOtp({ challengeId, code: otpCode });
                         }
 
-                        Swal.fire({
+                        notify({
                             icon: "success",
                             title: lang === "VN" ? "Thành công!" : "Success!",
                             text: lang === "VN" ? "Cập nhật và xác thực thông tin thành công." : "Profile updated and verified successfully.",
@@ -281,7 +282,7 @@ export const EditProfile = () => {
 
                     } catch (verifyError) {
                         console.error("Lỗi xác thực OTP:", verifyError);
-                        Swal.fire({
+                        notify({
                             icon: "error",
                             title: lang === "VN" ? "Xác thực thất bại" : "Verification Failed",
                             text: verifyError.response?.data?.message || (lang === "VN" ? "Mã OTP không hợp lệ hoặc đã hết hạn." : "Invalid or expired OTP code."),
@@ -292,7 +293,7 @@ export const EditProfile = () => {
             }
             // 3. LUỒNG KHÔNG CÓ OTP: Chỉ đổi avatar, tên, ngày sinh...
             else {
-                Swal.fire({
+                notify({
                     icon: "success",
                     title: lang === "VN" ? "Cập nhật thành công!" : "Profile Updated!",
                     confirmButtonColor: "#124757"
@@ -306,7 +307,7 @@ export const EditProfile = () => {
                 validationMsg = Object.values(error.response.data.errors).flat().join(" | ");
             }
 
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Cập nhật thất bại" : "Update Failed",
                 text: validationMsg || error.response?.data?.message || (lang === "VN" ? "Vui lòng kiểm tra lại thông tin cung cấp." : "Please check your input details."),

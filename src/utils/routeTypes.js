@@ -1,8 +1,11 @@
-/** Nhãn hiển thị (read-only) — không dùng chữ "Charter" trên UI. */
+/** Nhãn hiển thị theo routeType BE. */
 export const getRouteKindLabel = (routeType, lang = "VN") => {
   switch (routeType) {
     case "CharterReference":
       return lang === "VN" ? "Route nguồn GPS" : "GPS source route";
+    case "Charter":
+      // BE ghép từ các chặng GPS cho 1 booking charter (không phải nguồn GPS).
+      return lang === "VN" ? "Tuyến thuê riêng" : "Charter route";
     case "SightseeingLoop":
       return lang === "VN" ? "Vòng tham quan" : "Sightseeing loop";
     case "Regular":
@@ -14,6 +17,11 @@ export const getRouteKindLabel = (routeType, lang = "VN") => {
 
 export const isCharterSourceRoute = (route) =>
   String(route?.routeType || "") === "CharterReference";
+
+export const isCharterComposedRoute = (routeOrType) => {
+  const type = typeof routeOrType === "string" ? routeOrType : routeOrType?.routeType;
+  return String(type || "") === "Charter";
+};
 
 export const isSightseeingLoopRoute = (routeOrType) => {
   const type = typeof routeOrType === "string" ? routeOrType : routeOrType?.routeType;
@@ -35,8 +43,8 @@ export const validateMergeRouteChain = (orderedRoutes, lang = "VN") => {
   for (const route of orderedRoutes) {
     if (!isCharterSourceRoute(route)) {
       return lang === "VN"
-        ? "Chỉ được ghép Route nguồn GPS (không ghép Vòng tham quan / Tuyến booking)."
-        : "Only GPS source routes can be merged (not sightseeing / booking routes).";
+        ? "Chỉ được ghép Route nguồn GPS (không ghép Vòng tham quan / Tuyến booking / Tuyến thuê riêng)."
+        : "Only GPS source routes can be merged (not sightseeing / booking / charter routes).";
     }
   }
 
@@ -67,12 +75,13 @@ export const validateMergeRouteChain = (orderedRoutes, lang = "VN") => {
   return null;
 };
 
-/** Tuyến từ GPS / đã ghép — hiện cảnh báo không chỉnh bến. */
+/** Tuyến từ GPS / đã ghép / tuyến thuê riêng — cảnh báo không chỉnh bến. */
 export const isGpsOrMergedRoute = (route) => {
   if (!route) return false;
   if (route.fromGps === true || route.isFromGps === true || route.createdFromGps === true) return true;
   if (String(route.source || route.createdVia || "").toLowerCase().includes("gps")) return true;
   if (Array.isArray(route.sourceRouteIds) && route.sourceRouteIds.length > 0) return true;
   if (isCharterSourceRoute(route)) return true;
+  if (isCharterComposedRoute(route)) return true;
   return false;
 };

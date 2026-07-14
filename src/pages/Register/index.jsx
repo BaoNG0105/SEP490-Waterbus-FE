@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import Swal from "sweetalert2";
 import { useApp } from "../../context/AppContext";
 import { registerCustomer, verifyRegisterOtp, resendRegisterOtp } from "../../services/authService";
 import "flag-icons/css/flag-icons.min.css";
+import { notify } from "../../utils/swalToast";
 
 // THƯ VIỆN QUỐC GIA
 import countries from "i18n-iso-countries";
@@ -207,7 +207,7 @@ export const Register = () => {
 
       await verifyRegisterOtp(payload);
 
-      Swal.fire({
+      notify({
         icon: "success",
         title: lang === "VN" ? "Thành công!" : "Success!",
         text: lang === "VN" ? "Tài khoản của bạn đã được tạo thành công." : "Your account has been successfully created.",
@@ -238,7 +238,7 @@ export const Register = () => {
       setExpireTime(expireDiff > 0 ? expireDiff : 300);
       setResendCooldown(resendDiff > 0 ? resendDiff : 60);
 
-      Swal.fire({
+      notify({
         icon: "success",
         title: lang === "VN" ? "Đã gửi lại OTP!" : "OTP Resent!",
         toast: true,

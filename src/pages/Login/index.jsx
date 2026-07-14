@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useApp } from "../../context/AppContext";
 import { Link, useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
@@ -6,9 +6,13 @@ import { loginWithGoogle, loginWithPhoneEmail } from "../../services/authService
 import { useDispatch, useSelector } from "react-redux";
 import { loginSuccess } from "../../redux/authSlice";
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
 export const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { lang } = useApp();
+  const googleBtnRef = useRef(null);
+  const [googleBtnWidth, setGoogleBtnWidth] = useState(360);
 
   // 1. QUẢN LÝ FIELD ĐĂNG NHẬP
   const [emailOrPhone, setEmailOrPhone] = useState("");
@@ -43,6 +47,20 @@ export const Login = () => {
       handleRoleRedirect(user);
     }
   }, [isAuthenticated, user, navigate]);
+
+  // GSI chỉ nhận width theo px — không nhận "100%"
+  useEffect(() => {
+    const el = googleBtnRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const update = () => {
+      const next = Math.max(240, Math.min(400, Math.floor(el.getBoundingClientRect().width)));
+      setGoogleBtnWidth(next);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // 4. HÀM XỬ LÝ ĐĂNG NHẬP BẰNG TÀI KHOẢN/MẬT KHẨU
   const handleLogin = async (e) => {
@@ -289,16 +307,32 @@ export const Login = () => {
           </div>
 
           {/* Cổng đăng nhập mở rộng Google OAuth */}
-          <div className="flex justify-center w-full overflow-hidden">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={handleGoogleError}
-              shape="rectangular"
-              size="large"
-              theme="outline"
-              text="signin_with"
-              width="100%"
-            />
+          <div ref={googleBtnRef} className="flex w-full flex-col items-center gap-2 overflow-hidden">
+            {GOOGLE_CLIENT_ID ? (
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                shape="rectangular"
+                size="large"
+                theme="outline"
+                text="signin_with"
+                width={String(googleBtnWidth)}
+                useOneTap={false}
+              />
+            ) : (
+              <p className="w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[11px] font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                {lang === "VN"
+                  ? "Chưa cấu hình VITE_GOOGLE_CLIENT_ID — không thể hiện nút Google."
+                  : "VITE_GOOGLE_CLIENT_ID is missing — Google button unavailable."}
+              </p>
+            )}
+            {import.meta.env.DEV ? (
+              <p className="w-full text-center text-[10px] font-medium leading-relaxed text-slate-400">
+                {lang === "VN"
+                  ? `Nếu console báo "origin is not allowed": thêm ${window.location.origin} vào Authorized JavaScript origins (Google Cloud → OAuth Client ID). Dev hiện chạy port 5174.`
+                  : `If console says "origin is not allowed": add ${window.location.origin} to Authorized JavaScript origins (Google Cloud → OAuth Client ID). Dev uses port 5174.`}
+              </p>
+            ) : null}
           </div>
 
           {/* Chuyển hướng sang trang đăng ký tài khoản tự do */}

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../redux/authSlice";
-import Swal from "sweetalert2";
+import { notify } from "../utils/swalToast";
 
 // Import file ảnh logo từ thư mục assets
 import logo from "../assets/logo-1.png";
@@ -49,17 +49,16 @@ export const Header = ({ isNoticeVisible }) => {
 
     const handleForceLogout = () => {
       dispatch(logout());
-      Swal.fire({
+      notify({
+        dialog: true,
         icon: 'info',
         title: lang === "VN" ? 'Hết phiên đăng nhập' : 'Session Expired',
         text: lang === "VN"
           ? 'Tài khoản của bạn đã hết hạn truy cập. Vui lòng đăng nhập lại để tiếp tục sử dụng dịch vụ.'
           : 'You have been logged out due to inactivity. Please sign in again to continue using the service.',
-        confirmButtonColor: "#3085d6",
         confirmButtonText: lang === "VN" ? 'Đăng nhập lại' : 'Sign in again',
-        background: isDarkMode ? '#1e293b' : '#ffffff',
-        color: isDarkMode ? '#ffffff' : '#0f172a',
-        allowOutsideClick: false
+        allowOutsideClick: false,
+        showCancelButton: false,
       }).then(() => {
         navigate('/login');
       });

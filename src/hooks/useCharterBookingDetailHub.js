@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import { charterBookingHub } from "../services/charterBookingHubClient";
 
+const REFRESH_DEBOUNCE_MS = 100;
+
 export function useCharterBookingDetailHub({ enabled, bookingId, onRefresh }) {
   const refreshRef = useRef(onRefresh);
   const debounceRef = useRef(null);
@@ -18,7 +20,7 @@ export function useCharterBookingDetailHub({ enabled, bookingId, onRefresh }) {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       refreshRef.current?.();
-    }, 300);
+    }, REFRESH_DEBOUNCE_MS);
   }, []);
 
   useEffect(() => {

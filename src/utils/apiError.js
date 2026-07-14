@@ -1,8 +1,26 @@
 export const getApiErrorMessage = (error, fallback) => {
+  const status = error?.response?.status;
   const data = error?.response?.data;
 
+  if (status === 403) {
+    const detail =
+      (typeof data === "string" && data) ||
+      data?.detail ||
+      data?.message ||
+      data?.title;
+    if (detail && !/^forbidden$/i.test(String(detail).trim())) {
+      return rewriteCharterValidationMessage(String(detail)) || String(detail);
+    }
+    return "Bạn không có quyền thực hiện thao tác này.";
+  }
+
   if (!data) return fallback;
-  if (typeof data === "string") return rewriteCharterValidationMessage(data) || data;
+  if (typeof data === "string") {
+    if (/^forbidden$/i.test(data.trim())) {
+      return "Bạn không có quyền thực hiện thao tác này.";
+    }
+    return rewriteCharterValidationMessage(data) || data;
+  }
 
   // Prefer field-level ValidationProblemDetails over generic ASP.NET title.
   if (data.errors && typeof data.errors === "object") {
@@ -29,6 +47,9 @@ export const getApiErrorMessage = (error, fallback) => {
     return rewriteCharterValidationMessage(data.detail) || data.detail;
   }
   if (typeof data.title === "string" && data.title) {
+    if (/^forbidden$/i.test(data.title.trim())) {
+      return "Bạn không có quyền thực hiện thao tác này.";
+    }
     return rewriteCharterValidationMessage(data.title) || data.title;
   }
 

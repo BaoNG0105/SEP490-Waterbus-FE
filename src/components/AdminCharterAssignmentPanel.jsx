@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import Swal from "sweetalert2";
 import { assignAdminCharterBookingManager } from "../services/charterBookingService";
 import { fetchManagerUsers } from "../services/userService";
 import { fetchStationManagers } from "../services/stationService";
 import { getApiErrorMessage } from "../utils/apiError";
 import { pick } from "../utils/charterBookingAdmin";
+import { showToast } from "../utils/swalToast";
 
 function getUserInitials(name) {
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
@@ -225,11 +225,11 @@ export function AdminCharterAssignmentPanel({
         || "";
       setSelectedManagerId(preferredManagerId);
     } catch (error) {
-      Swal.fire({
+      showToast({
         icon: "error",
         title: lang === "VN" ? "Không tải được phân công" : "Unable to load assignments",
         text: getApiErrorMessage(error, lang === "VN" ? "Vui lòng thử lại." : "Please try again."),
-        confirmButtonColor: "#124757",
+        timer: 4000,
       });
     } finally {
       setIsLoading(false);
@@ -254,18 +254,17 @@ export function AdminCharterAssignmentPanel({
       await assignAdminCharterBookingManager(booking.id, { managerUserId: selectedManagerId });
       await onReload?.();
       await loadManagers();
-      Swal.fire({
+      showToast({
         icon: "success",
         title: lang === "VN" ? "Đã gán quản lý" : "Manager assigned",
-        timer: 1400,
-        showConfirmButton: false,
+        timer: 1800,
       });
     } catch (error) {
-      Swal.fire({
+      showToast({
         icon: "error",
         title: lang === "VN" ? "Gán quản lý thất bại" : "Manager assignment failed",
         text: getApiErrorMessage(error),
-        confirmButtonColor: "#124757",
+        timer: 4000,
       });
     } finally {
       setIsSaving(false);

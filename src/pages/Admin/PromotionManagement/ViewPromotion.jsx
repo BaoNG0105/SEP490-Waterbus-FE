@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import {
   fetchPromotions,
@@ -8,6 +7,7 @@ import {
   PROMOTION_TYPE,
 } from "../../../services/promotionService";
 import { fetchAllRoutes } from "../../../services/routeService";
+import { notify } from "../../../utils/swalToast";
 
 const formatMoney = (value) =>
   value == null ? "—" : `${Number(value).toLocaleString("vi-VN")}đ`;
@@ -96,7 +96,7 @@ export function ViewPromotion() {
         }
         const found = list.find((p) => String(p.id) === String(id));
         if (!found) {
-          Swal.fire({
+          notify({
             icon: "error",
             title: lang === "VN" ? "Không tìm thấy khuyến mãi!" : "Promotion not found!",
             confirmButtonColor: "#124757",
@@ -106,7 +106,7 @@ export function ViewPromotion() {
         setPromo(found);
       } catch (error) {
         console.error(error);
-        Swal.fire({
+        notify({
           icon: "error",
           title: lang === "VN" ? "Lỗi tải dữ liệu" : "Failed to load",
           confirmButtonColor: "#124757",

@@ -4,10 +4,11 @@ import { useApp } from "../../../context/AppContext";
 import { fetchBoatDetail, modifyBoat } from "../../../services/boatService";
 import { fetchSeatLayout, deleteSeats, changeSeatStatus } from "../../../services/seatService";
 import { BoatDocumentsPanel } from "../../../components/BoatDocumentsPanel";
+import { BoatDutyRosterPanel } from "../../../components/BoatDutyRosterPanel";
 import { FormSelect } from "../../../components/FormSelect";
 import { SeatMapIcon, seatToneFromCode, resolveSeatTypeCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
-import Swal from "sweetalert2";
+import { notify } from "../../../utils/swalToast";
 
 export function EditBoat() {
   const { lang } = useApp();
@@ -80,7 +81,7 @@ export function EditBoat() {
     } catch (error) {
       console.error("Lỗi tải thông tin phương tiện tàu thủy:", error);
       if (error.response?.status === 404) {
-        Swal.fire({
+        notify({
           icon: "error",
           title: lang === "VN" ? "Không tìm thấy tàu!" : "Boat Not Found!",
           text: lang === "VN" ? "Mã định danh phương tiện không tồn tại." : "Requested boat records do not exist.",
@@ -128,7 +129,7 @@ export function EditBoat() {
     
     // Thuật toán kiểm tra giới hạn 3 ảnh (đã sửa lỗi đếm đúp)
     if (imagePreviews.length + files.length > 3) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Quá số lượng" : "Limit Exceeded",
         text: lang === "VN" ? "Hệ thống chỉ cho phép lưu trữ tối đa 3 hình ảnh cho mỗi phương tiện." : "Maximum 3 images allowed per boat.",
@@ -213,7 +214,7 @@ export function EditBoat() {
 
       await modifyBoat(id, payload);
 
-      await Swal.fire({
+      await notify({
         toast: true,
         position: "top-end",
         icon: "success",
@@ -238,7 +239,7 @@ export function EditBoat() {
   };
 
   const handleDeleteLayout = async () => {
-    const confirmResult = await Swal.fire({
+    const confirmResult = await notify({
       title: lang === "VN" ? "Xóa cấu hình ghế?" : "Reset Layout Matrix?",
       text: lang === "VN" ? "Hành động này sẽ xóa sạch toàn bộ sơ đồ ghế hiện tại, sau đó bạn có thể sửa Số tầng và Loại ghế!" : "This will wipe all existing seat configurations.",
       icon: "warning",
@@ -255,7 +256,7 @@ export function EditBoat() {
       setIsDeletingLayout(true);
       await deleteSeats(id);
       
-      Swal.fire({
+      notify({
         icon: "success",
         title: lang === "VN" ? "Đã gỡ bỏ!" : "Wiped out!",
         text: lang === "VN" ? "Sơ đồ lưới ghế đã bị xóa sạch thành công." : "Matrix database flushed.",
@@ -265,7 +266,7 @@ export function EditBoat() {
       loadBoatAndSeatsData();
     } catch (error) {
       console.error(error);
-      Swal.fire("Thất bại", lang === "VN" ? "Không thể xóa sơ đồ lưới ghế." : "Failed to reset structure.", "error");
+      notify("Thất bại", lang === "VN" ? "Không thể xóa sơ đồ lưới ghế." : "Failed to reset structure.", "error");
     } finally {
       setIsDeletingLayout(false);
     }
@@ -289,7 +290,7 @@ export function EditBoat() {
         }))
       }));
 
-      Swal.fire({
+      notify({
         toast: true,
         position: "top-end",
         icon: "success",
@@ -301,7 +302,7 @@ export function EditBoat() {
       });
     } catch (error) {
       console.error(error);
-      Swal.fire("Thất bại", lang === "VN" ? "Không thể cập nhật trạng thái ghế." : "Failed to update seat status.", "error");
+      notify("Thất bại", lang === "VN" ? "Không thể cập nhật trạng thái ghế." : "Failed to update seat status.", "error");
     } finally {
       setTogglingSeatId(null);
     }
@@ -367,6 +368,17 @@ export function EditBoat() {
             >
               {lang === "VN" ? "Hồ sơ pháp lý" : "Legal documents"}
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("crew")}
+              className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all ${
+                activeTab === "crew"
+                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md"
+                  : "bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              {lang === "VN" ? "Lịch ca trên tàu" : "Boat duty schedule"}
+            </button>
           </div>
         </div>
       </div>
@@ -384,6 +396,8 @@ export function EditBoat() {
           boatStatus={boatStatus}
           maintenanceStartedAt={maintenanceStartedAt}
         />
+      ) : activeTab === "crew" ? (
+        <BoatDutyRosterPanel boatId={id} boatCode={formData.code} />
       ) : (
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import {
   fetchInsurancePackages,
@@ -8,6 +7,7 @@ import {
   changeInsurancePackageStatus,
   INSURANCE_BOOKING_TYPES,
 } from "../../../services/insuranceService";
+import { notify } from "../../../utils/swalToast";
 
 const BOOKING_TYPE_OPTIONS = [
   { value: INSURANCE_BOOKING_TYPES.CHARTER, labelVn: "Thuê tàu", labelEn: "Charter" },
@@ -178,7 +178,7 @@ export function InsuranceManagement() {
   const handleSave = async () => {
     const validationError = validateForm();
     if (validationError) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Thiếu thông tin" : "Missing information",
         text: validationError,
@@ -199,7 +199,7 @@ export function InsuranceManagement() {
       setEditingId(null);
       await loadPackages();
 
-      Swal.fire({
+      notify({
         toast: true,
         position: "top-end",
         icon: "success",
@@ -210,7 +210,7 @@ export function InsuranceManagement() {
         timer: 1800,
       });
     } catch (error) {
-      Swal.fire({
+      notify({
         icon: "error",
         title: lang === "VN" ? "Lưu thất bại" : "Save failed",
         text: error.response?.data?.message || (lang === "VN" ? "Không thể lưu gói bảo hiểm." : "Could not save the package."),
@@ -232,7 +232,7 @@ export function InsuranceManagement() {
 
     try {
       await changeInsurancePackageStatus(pkg.id, nextStatus);
-      Swal.fire({
+      notify({
         toast: true,
         position: "top-end",
         icon: "success",
@@ -248,7 +248,7 @@ export function InsuranceManagement() {
           ? { ...p, status: currentlyActive ? "Active" : "Inactive", isActive: currentlyActive }
           : p
       )));
-      Swal.fire({
+      notify({
         icon: "error",
         title: lang === "VN" ? "Cập nhật thất bại" : "Update failed",
         text: error.response?.data?.message || (lang === "VN" ? "Không thể đổi trạng thái gói." : "Could not update package status."),

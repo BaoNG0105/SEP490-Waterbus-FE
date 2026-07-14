@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserRoles, createUser } from "../../../services/userService";
 import { getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
@@ -9,6 +8,7 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
 import { NationalitySelect } from "../../../components/NationalitySelect";
 import { StationAssignField, canAssignStations } from "../../../components/StationAssignField";
+import { notify } from "../../../utils/swalToast";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
 
@@ -136,7 +136,7 @@ export function CreateUser() {
 
             const generatedPassword = result?.generatedPassword;
 
-            await Swal.fire({
+            await notify({
                 icon: "success",
                 title: lang === "VN" ? "Tạo người dùng thành công!" : "User Created Successfully!",
                 html: generatedPassword
@@ -284,13 +284,20 @@ export function CreateUser() {
                     {isStaffRole && (
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
-                            <FormSelect
-                                required
-                                value={formData.staffType || "Ground"}
-                                onChange={(v) => handleInputChange("staffType", v)}
-                                options={staffTypeOptions}
-                                className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
-                            />
+                            {staffTypeOptions.length <= 1 ? (
+                                <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
+                                    {staffTypeOptions[0]?.label ||
+                                        (lang === "VN" ? "Mặt đất (bến)" : "Ground (station)")}
+                                </div>
+                            ) : (
+                                <FormSelect
+                                    required
+                                    value={formData.staffType || "Ground"}
+                                    onChange={(v) => handleInputChange("staffType", v)}
+                                    options={staffTypeOptions}
+                                    className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
+                                />
+                            )}
                         </div>
                     )}
 

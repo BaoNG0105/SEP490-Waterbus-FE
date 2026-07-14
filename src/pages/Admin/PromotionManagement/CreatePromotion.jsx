@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import {
   addPromotion,
@@ -11,6 +10,7 @@ import {
   validatePromotionForm,
 } from "../../../services/promotionService";
 import { PromotionFormFields } from "./PromotionFormFields";
+import { notify } from "../../../utils/swalToast";
 
 export function CreatePromotion() {
   const { lang } = useApp();
@@ -46,7 +46,7 @@ export function CreatePromotion() {
           await uploadPromotionImageFile(promotionId, formData.imageFile);
         } catch (uploadError) {
           console.error(uploadError);
-          await Swal.fire({
+          await notify({
             icon: "warning",
             title: lang === "VN" ? "Đã tạo KM, upload ảnh thất bại" : "Created, but image upload failed",
             text:
@@ -61,7 +61,7 @@ export function CreatePromotion() {
         }
       }
 
-      Swal.fire({
+      notify({
         icon: "success",
         title: lang === "VN" ? "Tạo khuyến mãi thành công!" : "Promotion Created Successfully!",
         confirmButtonColor: "#124757",

@@ -47,6 +47,10 @@ export function MyCharterPaymentPanel({
   remainingAmount,
   paymentPromotionCode,
   setPaymentPromotionCode,
+  promoPreview,
+  promoChecking,
+  onApplyPromotionCode,
+  onClearPromotionCode,
   effectiveCheckoutUrl,
   pendingPaymentOrderCode,
   pendingPaymentId,
@@ -128,23 +132,29 @@ export function MyCharterPaymentPanel({
         ) : null}
 
         {isTerminalBooking ? (
-          <div className="mt-5 flex items-start gap-3 rounded-[1.75rem] border border-slate-200 bg-slate-50 px-5 py-5 dark:border-slate-700 dark:bg-slate-900 md:px-6">
-            <span className="material-symbols-outlined text-3xl text-slate-400">
-              {booking.status === "Cancelled" ? "cancel" : booking.status === "Expired" ? "timer_off" : "currency_exchange"}
-            </span>
-            <div>
-              <h4 className="font-headline text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
-                {booking.status === "Cancelled"
-                  ? (lang === "VN" ? "Yêu cầu đã hủy" : "Request cancelled")
-                  : booking.status === "Expired"
-                    ? (lang === "VN" ? "Yêu cầu đã hết hạn" : "Request expired")
-                    : (lang === "VN" ? "Đã hoàn tiền" : "Refunded")}
-              </h4>
-              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                {lang === "VN"
-                  ? "Không còn thao tác thanh toán cho yêu cầu này."
-                  : "Payment actions are no longer available for this request."}
-              </p>
+          <div className="mt-5 flex flex-col gap-4 rounded-[1.75rem] border border-slate-200 bg-slate-50 px-5 py-5 dark:border-slate-700 dark:bg-slate-900 md:px-6 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-3xl text-slate-400">
+                {booking.status === "Cancelled" ? "cancel" : booking.status === "Expired" ? "timer_off" : "currency_exchange"}
+              </span>
+              <div>
+                <h4 className="font-headline text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
+                  {booking.status === "Cancelled"
+                    ? (lang === "VN" ? "Yêu cầu đã hủy" : "Request cancelled")
+                    : booking.status === "Expired"
+                      ? (lang === "VN" ? "Yêu cầu đã hết hạn" : "Request expired")
+                      : (lang === "VN" ? "Đã hoàn tiền" : "Refunded")}
+                </h4>
+                <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {booking.status === "Cancelled" && ["depositpaid", "paid", "partiallyrefunded"].includes(String(booking.paymentStatus || "").toLowerCase())
+                    ? (lang === "VN"
+                      ? "Booking đã hủy. Nếu chưa hoàn xong, hãy nhập thông tin ngân hàng để nhận hoàn tiền."
+                      : "Booking cancelled. If refund is not finished, enter bank details to receive the refund.")
+                    : (lang === "VN"
+                      ? "Không còn thao tác thanh toán cho yêu cầu này."
+                      : "Payment actions are no longer available for this request.")}
+                </p>
+              </div>
             </div>
           </div>
         ) : null}
@@ -292,9 +302,16 @@ export function MyCharterPaymentPanel({
                                   <p className="mt-1 text-lg font-headline font-black text-[#124757] dark:text-yellow-400">
                                     {currencyFormatter.format(choice.amount)}
                                   </p>
+                                  {Number(choice.originalAmount) > Number(choice.amount) ? (
+                                    <p className="text-[11px] font-bold text-slate-400 line-through">
+                                      {currencyFormatter.format(choice.originalAmount)}
+                                    </p>
+                                  ) : null}
                                   {choice.id === "Deposit" && usesDefaultDeposit && canPayDeposit && (
                                     <p className="mt-1 text-[10px] font-bold text-slate-400">
-                                      {lang === "VN" ? "Mặc định 50% tổng giá" : "Default 50% of total"}
+                                      {promoPreview?.ok
+                                        ? (lang === "VN" ? "50% sau khuyến mãi" : "50% after promo")
+                                        : (lang === "VN" ? "Mặc định 50% tổng giá" : "Default 50% of total")}
                                     </p>
                                   )}
                                 </div>
@@ -338,14 +355,52 @@ export function MyCharterPaymentPanel({
                       <span className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
                         {lang === "VN" ? "Mã khuyến mãi" : "Promo code"}
                       </span>
-                      <input
-                        value={paymentPromotionCode}
-                        onChange={(event) => setPaymentPromotionCode(event.target.value)}
-                        maxLength={80}
-                        placeholder={lang === "VN" ? "Nhập mã nếu có" : "Optional"}
-                        className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold uppercase text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                      />
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          value={paymentPromotionCode}
+                          onChange={(event) => setPaymentPromotionCode(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              onApplyPromotionCode?.();
+                            }
+                          }}
+                          maxLength={80}
+                          placeholder={lang === "VN" ? "Nhập mã nếu có" : "Optional"}
+                          className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold uppercase text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => onApplyPromotionCode?.()}
+                          disabled={promoChecking || !String(paymentPromotionCode || "").trim()}
+                          className="shrink-0 rounded-xl border border-[#124757]/20 bg-[#124757]/5 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition hover:bg-[#124757]/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
+                        >
+                          {promoChecking
+                            ? (lang === "VN" ? "…" : "…")
+                            : (lang === "VN" ? "Áp dụng" : "Apply")}
+                        </button>
+                        {(promoPreview?.ok || promoPreview?.error) ? (
+                          <button
+                            type="button"
+                            onClick={() => onClearPromotionCode?.()}
+                            className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          >
+                            {lang === "VN" ? "Xóa" : "Clear"}
+                          </button>
+                        ) : null}
+                      </div>
                     </label>
+                    {promoPreview?.ok ? (
+                      <p className="mt-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                        {lang === "VN"
+                          ? `Đã giảm ${currencyFormatter.format(promoPreview.discountAmount || 0)}`
+                          : `Saved ${currencyFormatter.format(promoPreview.discountAmount || 0)}`}
+                        {promoPreview.message ? ` · ${promoPreview.message}` : ""}
+                      </p>
+                    ) : null}
+                    {promoPreview?.error ? (
+                      <p className="mt-2 text-xs font-bold text-rose-600 dark:text-rose-300">{promoPreview.error}</p>
+                    ) : null}
                     <button
                       type="button"
                       onClick={handleCreatePayment}

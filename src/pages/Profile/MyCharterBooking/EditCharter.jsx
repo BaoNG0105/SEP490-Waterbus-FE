@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import { fetchMyCharterBookingDetail, updateMyCharterBooking } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { handleDuplicateCharterBookingError } from "../../../utils/charterDuplicateBooking";
 import { createEmptyBoatRequest, getMinDepartureDate } from "../../../utils/charterRequestForm";
 import { CharterRequestForm } from "../../../components/CharterRequestForm";
+import { notify } from "../../../utils/swalToast";
 
 const editableStatuses = ["PendingQuote"];
 
@@ -125,7 +125,7 @@ export function EditCharter() {
     try {
       await updateMyCharterBooking(id, payload);
 
-      await Swal.fire({
+      await notify({
         icon: "success",
         title: lang === "VN" ? "Đã cập nhật yêu cầu" : "Charter request updated",
         text: bookingCode !== "--"
@@ -148,7 +148,7 @@ export function EditCharter() {
       if (handledDuplicate) return;
 
       const isConflict = error.response?.status === 409;
-      const result = await Swal.fire({
+      const result = await notify({
         icon: "error",
         title: lang === "VN" ? "Không thể cập nhật" : "Unable to update request",
         text: isConflict

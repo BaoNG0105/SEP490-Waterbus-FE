@@ -16,30 +16,85 @@ class CharterBookingHubClient {
     return localStorage.getItem("accessToken") || "";
   }
 
+  attachLifecycleHandlers(connection) {
+    connection.on("AssignedCharterBookingsChanged", () => {
+      this.assignedListeners.forEach((listener) => listener());
+    });
+
+    connection.on("CharterBookingChanged", (event) => {
+      this.bookingChangedListeners.forEach((listener) => listener(event));
+    });
+
+    connection.onreconnected(async () => {
+      try {
+        await this.rejoinActiveGroups();
+      } catch (error) {
+        console.warn("Charter hub rejoin after reconnect failed:", error);
+      }
+    });
+  }
+
+  async rejoinActiveGroups() {
+    if (!this.connection || this.connection.state !== HubConnectionState.Connected) return;
+
+    if (this.listMode) {
+      const method = this.listMode === "admin"
+        ? "JoinAdminCharterBookings"
+        : "JoinAssignedCharterBookings";
+      await this.connection.invoke(method);
+    }
+
+    const bookingIds = [...this.detailJoins.keys()];
+    await Promise.all(
+      bookingIds.map((bookingId) => (
+        this.connection.invoke("JoinCharterBooking", bookingId).catch((error) => {
+          console.warn(`Charter hub rejoin booking ${bookingId} failed:`, error);
+        })
+      )),
+    );
+  }
+
   async ensureConnection() {
     if (this.connection?.state === HubConnectionState.Connected) {
       return this.connection;
     }
 
+    if (
+      this.connection
+      && (this.connection.state === HubConnectionState.Connecting
+        || this.connection.state === HubConnectionState.Reconnecting)
+      && this.startPromise
+    ) {
+      await this.startPromise;
+      if (this.connection?.state === HubConnectionState.Connected) {
+        return this.connection;
+      }
+    }
+
     if (this.startPromise) {
       await this.startPromise;
-      return this.connection;
+      if (this.connection?.state === HubConnectionState.Connected) {
+        return this.connection;
+      }
+    }
+
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // ignore dispose errors
+      }
+      this.connection = null;
     }
 
     this.connection = new HubConnectionBuilder()
       .withUrl(getCharterBookingHubUrl(), {
         accessTokenFactory: () => this.getAccessToken(),
       })
-      .withAutomaticReconnect()
+      .withAutomaticReconnect([0, 1000, 2000, 5000, 10000])
       .build();
 
-    this.connection.on("AssignedCharterBookingsChanged", () => {
-      this.assignedListeners.forEach((listener) => listener());
-    });
-
-    this.connection.on("CharterBookingChanged", (event) => {
-      this.bookingChangedListeners.forEach((listener) => listener(event));
-    });
+    this.attachLifecycleHandlers(this.connection);
 
     this.startPromise = this.connection.start().catch((error) => {
       this.startPromise = null;

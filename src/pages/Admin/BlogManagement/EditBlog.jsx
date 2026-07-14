@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import Swal from "sweetalert2";
+import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import {
     fetchBlogPostManagementDetail,
@@ -8,6 +8,8 @@ import {
     BLOG_CATEGORY,
     BLOG_STATUS,
 } from "../../../services/blogService";
+import { isAdminUser } from "../../../utils/roleHelpers";
+import { notify } from "../../../utils/swalToast";
 
 const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
 
@@ -16,6 +18,8 @@ export function EditBlog() {
     const navigate = useNavigate();
     const location = useLocation();
     const { id } = useParams();
+    const { user: currentUser } = useSelector((state) => state.auth);
+    const canPublish = isAdminUser(currentUser);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,7 +64,7 @@ export function EditBlog() {
 
                 const found = await fetchBlogPostManagementDetail(id);
                 if (!found) {
-                    Swal.fire({
+                    notify({
                         icon: "error",
                         title: lang === "VN" ? "Không tìm thấy bài viết!" : "Post Not Found!",
                         text: lang === "VN" ? "Bài viết không tồn tại. Quay về danh sách." : "The requested post does not exist.",
@@ -91,7 +95,11 @@ export function EditBlog() {
             setIsSubmitting(true);
             setErrorMsg("");
 
-            if (formData.status === BLOG_STATUS.PUBLISHED && !formData.imageUrl.trim()) {
+            const nextStatus = canPublish ? formData.status : formData.status === BLOG_STATUS.PUBLISHED || formData.status === BLOG_STATUS.ARCHIVED
+                ? formData.status
+                : BLOG_STATUS.DRAFT;
+
+            if (nextStatus === BLOG_STATUS.PUBLISHED && !formData.imageUrl.trim()) {
                 setErrorMsg(lang === "VN" ? "Bài viết Published bắt buộc phải có ảnh bìa (Image URL)." : "Published posts must have a cover image (Image URL).");
                 setIsSubmitting(false);
                 return;
@@ -105,12 +113,12 @@ export function EditBlog() {
                 imageUrl: formData.imageUrl.trim(),
                 imageAltText: formData.imageAltText.trim(),
                 content: formData.content,
-                status: formData.status,
+                status: nextStatus,
             };
 
             await modifyBlogPost(id, payload);
 
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Cập nhật thành công!" : "Successfully Saved!",
                 text: lang === "VN" ? "Thông tin bài viết đã được lưu." : "Post details updated successfully.",
@@ -289,32 +297,51 @@ export function EditBlog() {
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
                         {lang === "VN" ? "Trạng thái" : "Status"}
                     </h3>
-                    <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                        {[
-                            { value: BLOG_STATUS.DRAFT, vn: "Nháp", en: "Draft" },
-                            { value: BLOG_STATUS.PUBLISHED, vn: "Xuất bản", en: "Published" },
-                            { value: BLOG_STATUS.ARCHIVED, vn: "Lưu trữ", en: "Archived" },
-                        ].map((option) => {
-                            const selected = formData.status === option.value;
-                            return (
-                                <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => handleFieldChange("status", option.value)}
-                                    className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
-                                            ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                                            : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                                        }`}
-                                >
-                                    {lang === "VN" ? option.vn : option.en}
-                                </button>
-                            );
-                        })}
-                    </div>
-                    {formData.status === BLOG_STATUS.PUBLISHED && (
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                            {lang === "VN" ? "Bài viết Published bắt buộc phải có ảnh bìa." : "Published posts must have a cover image."}
-                        </p>
+                    {canPublish ? (
+                        <>
+                            <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                                {[
+                                    { value: BLOG_STATUS.DRAFT, vn: "Nháp", en: "Draft" },
+                                    { value: BLOG_STATUS.PUBLISHED, vn: "Xuất bản", en: "Published" },
+                                    { value: BLOG_STATUS.ARCHIVED, vn: "Lưu trữ", en: "Archived" },
+                                ].map((option) => {
+                                    const selected = formData.status === option.value;
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => handleFieldChange("status", option.value)}
+                                            className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
+                                                    ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
+                                                    : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
+                                                }`}
+                                        >
+                                            {lang === "VN" ? option.vn : option.en}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {formData.status === BLOG_STATUS.PUBLISHED && (
+                                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                                    {lang === "VN" ? "Bài viết Published bắt buộc phải có ảnh bìa." : "Published posts must have a cover image."}
+                                </p>
+                            )}
+                        </>
+                    ) : (
+                        <div className={`${inputStyle} flex flex-col justify-center gap-1`}>
+                            <span className="font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                                {formData.status === BLOG_STATUS.DRAFT
+                                    ? lang === "VN"
+                                        ? "Nháp"
+                                        : "Draft"
+                                    : formData.status}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold">
+                                {lang === "VN"
+                                    ? "Không đổi được trạng thái — chỉ Admin xuất bản / lưu trữ."
+                                    : "Status is locked — only Admin can publish / archive."}
+                            </span>
+                        </div>
                     )}
                 </div>
 

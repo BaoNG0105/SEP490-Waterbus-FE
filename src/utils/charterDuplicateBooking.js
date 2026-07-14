@@ -1,5 +1,5 @@
-import Swal from "sweetalert2";
 import { getApiErrorMessage, getDuplicateCharterBookingError } from "./apiError";
+import { showConfirmDialog } from "./swalToast";
 
 /**
  * Shows BE duplicate-booking validation (HTTP 400) and offers navigation to the existing request.
@@ -12,11 +12,11 @@ export const handleDuplicateCharterBookingError = async (error, { lang, navigate
   const message = duplicate.message || getApiErrorMessage(error, fallbackMessage);
   const hasCode = Boolean(duplicate.bookingCode);
 
-  const result = await Swal.fire({
+  const result = await showConfirmDialog({
+    tone: "warning",
     icon: "warning",
     title: lang === "VN" ? "Yêu cầu trùng" : "Duplicate request",
     text: message,
-    confirmButtonColor: "#124757",
     confirmButtonText: hasCode
       ? (lang === "VN" ? "Xem yêu cầu hiện có" : "View existing request")
       : (lang === "VN" ? "Đến danh sách yêu cầu" : "Go to my charter requests"),
