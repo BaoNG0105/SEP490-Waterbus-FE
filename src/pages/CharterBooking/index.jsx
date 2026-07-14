@@ -144,7 +144,21 @@ export function CharterBooking() {
         </div>
       </section>
 
-      {/* ===== SECTION 2: SERVICE INTRODUCTION ===== */}
+      {/* ===== SECTION 2: REQUEST FORM ===== */}
+      <main className="relative max-w-5xl mx-auto px-4 md:px-8 py-20">
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-72 h-72 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none"></div>
+        <CharterRequestForm
+          mode="create"
+          idPrefix="charter"
+          lang={lang}
+          isAuthenticated={isAuthenticated}
+          onUnauthenticated={handleUnauthenticated}
+          initialFormData={initialFormData}
+          onSubmit={handleSubmit}
+        />
+      </main>
+
+      {/* ===== SECTION 3: SERVICE INTRODUCTION ===== */}
       <section className="py-20 bg-white dark:bg-slate-900 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
           <div className="flex flex-col items-center text-center mb-14 space-y-4">
@@ -178,7 +192,7 @@ export function CharterBooking() {
         </div>
       </section>
 
-      {/* ===== SECTION 3: STEPS GUIDE ===== */}
+      {/* ===== SECTION 4: STEPS GUIDE ===== */}
       <section className="py-20 bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
           <div className="flex flex-col items-center text-center mb-14 space-y-4">
@@ -211,20 +225,6 @@ export function CharterBooking() {
           </div>
         </div>
       </section>
-
-      {/* ===== SECTION 4: REQUEST FORM ===== */}
-      <main className="relative max-w-5xl mx-auto px-4 md:px-8 py-20">
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-72 h-72 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none"></div>
-        <CharterRequestForm
-          mode="create"
-          idPrefix="charter"
-          lang={lang}
-          isAuthenticated={isAuthenticated}
-          onUnauthenticated={handleUnauthenticated}
-          initialFormData={initialFormData}
-          onSubmit={handleSubmit}
-        />
-      </main>
     </div>
   );
 }

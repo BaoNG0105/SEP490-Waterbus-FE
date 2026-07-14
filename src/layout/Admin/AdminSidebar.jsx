@@ -58,7 +58,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
     { path: "/admin/staff/ticket-scan", icon: "qr_code_scanner", labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
     { path: "/admin/staff/scan-history", icon: "history", labelVn: "Lịch sử quét", labelEn: "Scan history", roles: ["STAFF"] },
     { path: "/admin/insurance-management", icon: "shield", labelVn: "Quản lý bảo hiểm", labelEn: "Insurance Packages", roles: ["ADMIN"] },
-    { path: "/admin/schedules", icon: "calendar_month", labelVn: "Quản lý lịch trình", labelEn: "Trip Schedules", roles: ["ADMIN"] },
+    { path: "/admin/trips-management", icon: "sailing", labelVn: "Quản lý chuyến tàu", labelEn: "Trip Management", roles: ["ADMIN", "MANAGER"] },
     { path: "/admin/routes-management", icon: "alt_route", labelVn: "Quản lý tuyến", labelEn: "Route Networks", roles: ["ADMIN"] },
     { path: "/admin/promotions", icon: "local_offer", labelVn: "Quản lý khuyến mãi", labelEn: "Promotions & Deals", roles: ["ADMIN"] },
     {
