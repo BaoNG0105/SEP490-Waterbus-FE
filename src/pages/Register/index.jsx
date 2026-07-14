@@ -397,11 +397,14 @@ export const Register = () => {
                   <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                     {lang === "VN" ? "Quốc tịch" : "Nationality"}
                   </label>
-                  <div className="relative flex items-center">
-                    <span className={`fi fi-${selectedFlag} absolute left-8 text-sm rounded-sm pointer-events-none shadow-sm`}></span>
+                  <div className="relative w-full">
+                    <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 leading-none">
+                      <span className={`fi fi-${selectedFlag} !block rounded-sm shadow-sm`} aria-hidden="true" />
+                    </span>
                     <select
-                      value={selectedFlag} onChange={handleNationalityChange}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-11 pr-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all appearance-none shadow-inner"
+                      value={selectedFlag}
+                      onChange={handleNationalityChange}
+                      className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-10 text-sm font-semibold text-slate-800 shadow-inner outline-none transition-all focus:ring-2 focus:ring-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:ring-yellow-400"
                     >
                       {countryList.map((country) => (
                         <option key={country.code} value={country.code}>
@@ -409,14 +412,16 @@ export const Register = () => {
                         </option>
                       ))}
                     </select>
-                    <span className="material-symbols-outlined text-slate-400 absolute right-3 pointer-events-none text-base">arrow_drop_down</span>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base text-slate-400 material-symbols-outlined">
+                      arrow_drop_down
+                    </span>
                   </div>
                 </div>
               </div>
               {/* EMAIL & PHONE */}
               <div className="space-y-1">
                 <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                  {lang === "VN" ? "Thông tin liên hệ (Cần điền SĐT hoặc Email)" : "Contact (Fill Phone or Email)"}
+                  {lang === "VN" ? "Thông tin liên hệ" : "Contact information"}
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <input
@@ -430,6 +435,9 @@ export const Register = () => {
                     placeholder="Email..."
                   />
                 </div>
+                <p className="pt-0.5 text-[11px] font-medium text-slate-400">
+                  {lang === "VN" ? "Cần điền SĐT hoặc Email." : "Please fill in phone or email."}
+                </p>
               </div>
 
               {showOtpSelection && (
