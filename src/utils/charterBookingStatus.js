@@ -47,18 +47,30 @@ const baseClasses = {
 };
 
 export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang) => {
-  const status = String(bookingStatus || "").toLowerCase();
-  const payment = String(paymentStatus || "").toLowerCase();
+  const status = String(bookingStatus || "").toLowerCase().replace(/[_-\s]/g, "");
+  const payment = String(paymentStatus || "").toLowerCase().replace(/[_-\s]/g, "");
   const isVn = lang === "VN";
+  const isCancelled = ["cancelled", "canceled", "cancel"].includes(status);
+  const isRefundedPayment = ["refunded", "partiallyrefunded", "manualrefunded"].includes(payment);
+  const isRefundProcessing = ["refundpending", "refundprocessing"].includes(payment);
 
-  if (status === "cancelled") {
+  if (isCancelled) {
+    if (isRefundedPayment) {
+      return { label: isVn ? "Đã hủy · hoàn tiền" : "Cancelled · refunded", ...baseClasses.refunded };
+    }
+    if (isRefundProcessing) {
+      return { label: isVn ? "Đã hủy · đang hoàn" : "Cancelled · refunding", ...baseClasses.refunded };
+    }
     return { label: isVn ? "Đã hủy" : "Cancelled", ...baseClasses.cancelled };
   }
   if (status === "expired") {
     return { label: isVn ? "Hết hạn" : "Expired", ...baseClasses.expired };
   }
-  if (status === "refunded") {
+  if (status === "refunded" || isRefundedPayment) {
     return { label: isVn ? "Đã hoàn tiền" : "Refunded", ...baseClasses.refunded };
+  }
+  if (isRefundProcessing) {
+    return { label: isVn ? "Đang hoàn tiền" : "Refund processing", ...baseClasses.refunded };
   }
   if (status === "completed") {
     return { label: isVn ? "Hoàn tất" : "Completed", ...baseClasses.completed };
@@ -73,6 +85,7 @@ export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang) 
   if (status === "confirmed" && payment === "depositpaid") {
     return { label: isVn ? "Đã xác nhận" : "Confirmed", ...baseClasses.pendingPayment };
   }
+  // Chỉ hiện "Đã thanh toán" khi còn Confirmed và payment vẫn Paid (chưa hủy/hoàn).
   if (status === "confirmed" && payment === "paid") {
     return { label: isVn ? "Đã thanh toán" : "Paid", ...baseClasses.completed };
   }

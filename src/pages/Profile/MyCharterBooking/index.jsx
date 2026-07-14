@@ -9,6 +9,7 @@ import {
   matchesSmartFilter,
 } from "../../../utils/charterBookingActions";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
+import { resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
 
 const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Refunded"];
 
@@ -39,8 +40,8 @@ const normalizeBooking = (item) => {
     adultCount,
     childCount,
     passengerCount,
-    status: pick(item, ["bookingStatus", "status"], "PendingQuote"),
-    paymentStatus: pick(item, ["paymentStatus"], "--"),
+    status: resolveCharterBookingStatus(item),
+    paymentStatus: resolveCharterPaymentStatus(item),
     estimatedPrice: Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0)),
     holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
   };
