@@ -102,6 +102,11 @@ const normalizeTicketRow = (passenger, ticket, index, adultCount) => {
     birthYear: getPassengerBirthYear(merged),
     status: pick(merged, ["attendanceStatus", "ticketStatus", "status"], "Active"),
     qrToken: pick(merged, ["qrToken", "ticketQrToken", "charterTicketQrToken"], ""),
+    approvalStatus: pick(merged, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], ""),
+    requestBatchId: pick(merged, ["requestBatchId", "passengerAddRequestId", "addRequestId", "batchId"], ""),
+    requestedAt: pick(merged, ["requestedAt", "createdAt", "submittedAt"], ""),
+    reviewedAt: pick(merged, ["reviewedAt", "approvedAt", "rejectedAt"], ""),
+    reviewNote: pick(merged, ["reviewNote", "rejectNote", "note"], ""),
   };
 };
 

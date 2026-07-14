@@ -19,7 +19,9 @@ export const getWorkflowStepIndex = (status) => {
 };
 
 const isPaidLike = (paymentStatus) =>
-  ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(paymentStatus || "").toLowerCase());
+  ["paid", "depositpaid", "success", "succeeded", "completed", "partiallyrefunded", "partially_refunded"].includes(
+    String(paymentStatus || "").toLowerCase(),
+  );
 
 const isRefundFailedPayment = (payment) => {
   const paymentStatus = String(payment?.paymentStatus || "").toLowerCase();
@@ -27,16 +29,67 @@ const isRefundFailedPayment = (payment) => {
   return paymentStatus === "refundfailed" || paymentStatus === "refund_failed" || ["failed", "error", "rejected"].includes(refundStatus);
 };
 
-export const bookingNeedsRefundAttention = (booking) => {
-  const status = String(booking?.status || "").toLowerCase();
-  const payments = Array.isArray(booking?.payments) ? booking.payments : [];
-  if (payments.some(isRefundFailedPayment)) return true;
-  return ["cancelled", "refunded"].includes(status) && isPaidLike(booking?.paymentStatus);
+const isRefundSettledPayment = (payment) => {
+  const paymentStatus = String(payment?.paymentStatus || "").toLowerCase();
+  const refundStatus = String(payment?.refundStatus || payment?.refund?.status || "").toLowerCase();
+  return paymentStatus === "refunded"
+    || ["success", "succeeded", "completed", "refunded", "paid", "manualrefunded", "manual_refunded"].includes(refundStatus);
 };
+
+const isRefundInFlightPayment = (payment) =>
+  ["pending", "processing", "requested", "created"].includes(
+    String(payment?.refundStatus || payment?.refund?.status || "").toLowerCase(),
+  );
+
+/** Admin chỉ cần vào khi PayOS refund fail (manual-refund). */
+export const bookingNeedsAdminRefundAttention = (booking) => {
+  const payments = Array.isArray(booking?.payments) ? booking.payments : [];
+  return payments.some(isRefundFailedPayment);
+};
+
+/**
+ * Cancelled + đã thu tiền + chưa hoàn xong → chờ khách nhập STK.
+ * (Không còn bắt admin nhập bank trên flow hủy.)
+ */
+export const bookingWaitsCustomerRefundInfo = (booking) => {
+  const status = String(booking?.status || "").toLowerCase();
+  if (status !== "cancelled") return false;
+  if (bookingNeedsAdminRefundAttention(booking)) return false;
+
+  const paymentStatus = String(booking?.paymentStatus || "").toLowerCase();
+  const payments = Array.isArray(booking?.payments) ? booking.payments : [];
+  const hasCollectedMoney = isPaidLike(paymentStatus)
+    || Number(booking?.paidAmount || 0) > 0
+    || payments.some((payment) => {
+      const ps = String(payment?.paymentStatus || "").toLowerCase();
+      return ["paid", "depositpaid", "success", "succeeded", "completed"].includes(ps)
+        || Number(payment?.amount || payment?.paymentAmount || 0) > 0;
+    });
+  if (!hasCollectedMoney) return false;
+
+  if (payments.length === 0) return true;
+  return payments.some((payment) => !isRefundSettledPayment(payment) && !isRefundInFlightPayment(payment));
+};
+
+/** @deprecated Prefer bookingNeedsAdminRefundAttention / bookingWaitsCustomerRefundInfo */
+export const bookingNeedsRefundAttention = (booking) =>
+  bookingNeedsAdminRefundAttention(booking) || bookingWaitsCustomerRefundInfo(booking);
 
 export const getCustomerActionInfo = (booking, lang) => {
   const paymentStatus = String(booking?.paymentStatus || "").toLowerCase();
   const status = booking?.status;
+
+  if (bookingWaitsCustomerRefundInfo(booking)) {
+    return {
+      icon: "account_balance",
+      label: lang === "VN" ? "Booking đã hủy — nhập thông tin hoàn tiền" : "Cancelled — enter refund details",
+      cta: lang === "VN" ? "Nhập thông tin hoàn" : "Enter refund info",
+      tone: "refund",
+      urgent: true,
+      classes: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
+      buttonClasses: "bg-amber-600 text-white hover:bg-amber-700 shadow-amber-500/20",
+    };
+  }
 
   if (status === "PendingQuote") {
     return {
@@ -117,15 +170,27 @@ export const getAdminActionInfo = (booking, lang) => {
   const status = booking?.status;
   const paymentStatus = String(booking?.paymentStatus || "").toLowerCase();
 
-  if (bookingNeedsRefundAttention(booking)) {
+  if (bookingNeedsAdminRefundAttention(booking)) {
     return {
       icon: "currency_exchange",
-      label: lang === "VN" ? "Cần xử lý hoàn tiền" : "Refund required",
+      label: lang === "VN" ? "PayOS hoàn lỗi — cần ghi nhận thủ công" : "PayOS refund failed — manual record needed",
       cta: lang === "VN" ? "Xử lý hoàn" : "Process refund",
       tab: "payments",
       urgent: true,
       classes: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
       buttonClasses: "bg-rose-600 text-white hover:bg-rose-700",
+    };
+  }
+
+  if (bookingWaitsCustomerRefundInfo(booking)) {
+    return {
+      icon: "hourglass_top",
+      label: lang === "VN" ? "Chờ khách nhập thông tin hoàn tiền" : "Waiting for customer refund info",
+      cta: lang === "VN" ? "Theo dõi" : "Monitor",
+      tab: "payments",
+      urgent: false,
+      classes: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
+      buttonClasses: "border border-amber-200 bg-white text-amber-800 hover:bg-amber-50 dark:border-amber-500/30 dark:bg-slate-900 dark:text-amber-300",
     };
   }
 

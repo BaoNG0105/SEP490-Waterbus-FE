@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { addNewBoat } from "../../../services/boatService";
 import { FormSelect } from "../../../components/FormSelect";
-import Swal from "sweetalert2";
+import { notify } from "../../../utils/swalToast";
 
 export function CreateBoat() {
   const { lang } = useApp();
@@ -58,7 +58,7 @@ export function CreateBoat() {
     
     // Ràng buộc giới hạn 3 hình ảnh
     if (imagePreviews.length + files.length > 3) {
-      Swal.fire({
+      notify({
         icon: "warning",
         title: lang === "VN" ? "Quá số lượng" : "Limit Exceeded",
         text: lang === "VN" ? "Hệ thống chỉ cho phép lưu trữ tối đa 3 hình ảnh cho mỗi phương tiện." : "Maximum 3 images allowed per vessel.",
@@ -123,7 +123,7 @@ export function CreateBoat() {
 
       await addNewBoat(payload);
 
-      Swal.fire({
+      notify({
         icon: "success",
         title: lang === "VN" ? "Tạo tàu thành công!" : "Successfully Created!",
         text: lang === "VN" ? "Phương tiện mới đã được thêm vào hệ thống." : "A new vessel has been registered successfully.",

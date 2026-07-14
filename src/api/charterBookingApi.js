@@ -101,6 +101,9 @@ export const getAdminCharterBookingById = (id) =>
 export const updateAdminCharterBookingStatus = (id, data) =>
     api.patch(`/charter-bookings/admin/${id}/status`, data).then(response => response.data);
 
+export const getAdminCharterBookingRouteCandidates = (id) =>
+    api.get(`/charter-bookings/admin/${encodeURIComponent(id)}/route-candidates`).then((response) => response.data);
+
 export const previewAdminCharterBookingQuote = (id, data) =>
     api.post(`/charter-bookings/admin/${id}/quote-preview`, data).then(response => response.data);
 
@@ -118,3 +121,28 @@ export const getAssignedCharterBookingById = (id) =>
 
 export const respondToCharterBookingQuote = (id, data) =>
     api.post(`/charter-bookings/${encodeURIComponent(id)}/quote-response`, data).then(response => response.data);
+
+/** Customer: thêm hành khách mới (append — không replace). */
+export const addCharterBookingPassengers = (id, data) =>
+    api.post(`/charter-bookings/${encodeURIComponent(id)}/passengers`, data).then((response) => response.data);
+
+/** Admin/Manager: duyệt yêu cầu thêm HK (theo requestBatchId). */
+export const approvePassengerAddRequest = (id, requestBatchId, { assigned = true } = {}) => {
+    const base = assigned ? "assigned" : "admin";
+    return api
+        .post(
+            `/charter-bookings/${base}/${encodeURIComponent(id)}/passenger-add-requests/${encodeURIComponent(requestBatchId)}/approve`,
+        )
+        .then((response) => response.data);
+};
+
+/** Admin/Manager: từ chối yêu cầu thêm HK (note bắt buộc). */
+export const rejectPassengerAddRequest = (id, requestBatchId, data = {}, { assigned = true } = {}) => {
+    const base = assigned ? "assigned" : "admin";
+    return api
+        .post(
+            `/charter-bookings/${base}/${encodeURIComponent(id)}/passenger-add-requests/${encodeURIComponent(requestBatchId)}/reject`,
+            data,
+        )
+        .then((response) => response.data);
+};

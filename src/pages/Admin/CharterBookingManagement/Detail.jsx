@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { AdminCharterAssignmentPanel } from "../../../components/AdminCharterAssignmentPanel";
 import {
   AdminBookingActionsTab,
@@ -14,14 +13,20 @@ import { fetchAllBoats } from "../../../services/boatService";
 import {
   fetchAdminCharterBookingDetail,
   fetchAssignedCharterBookingDetail,
+  fetchAdminCharterBookings,
+  fetchAssignedCharterBookings,
+  fetchAdminCharterBookingRouteCandidates,
   modifyAdminCharterBookingStatus,
   previewAdminCharterBookingQuote,
   submitAdminCharterBookingQuote,
 } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { buildConfirmBodyHtml, showConfirmDialog, showToast, showValidationMessage } from "../../../utils/swalToast";
 import { canShowCharterTickets } from "../../../utils/charterBookingTickets";
 import {
+  bookingNeedsAdminRefundAttention,
   bookingNeedsRefundAttention,
+  bookingWaitsCustomerRefundInfo,
   getCharterQuotePaymentDeadline,
   isBookingPaymentClosed,
   shouldShowBookingHoldCountdown,
@@ -30,22 +35,33 @@ import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus
 import { getCharterCapabilities, shouldUseAssignedCharterApi, getDefaultCharterTab } from "../../../utils/charterBookingAccess";
 import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
 import {
+  buildCharterRoutePlan,
+  buildInitialRoutePlanSelections,
   buildQuoteFormFromBooking,
   canAdminHandleRefund,
   enrichAssignedBoat,
+  extractCharterBookingList,
+  findCharterBoatScheduleConflicts,
   formatCountdown,
   formatDate,
   formatDateTime,
   formatDeckCount,
   formatDuration,
   formatPassengerSummary,
+  getAssignedBoatIdsFromBooking,
   getBoatDeckCount,
   getBoatId,
   getBoatPrice,
   getBoatSeatCount,
   getBoatSeatSetupType,
   getCharterRoutePricingWarning,
+  hasEmptyRouteCandidateLegs,
+  isCharterBoatScheduleConflictError,
+  isCharterRoutePlanComplete,
   isCharterRoutePricingBlocked,
+  CHARTER_BOAT_HOLDING_STATUSES,
+  collectOccupiedBoatIdsForSchedule,
+  normalizeCharterScheduleDate,
   getPaymentAmount,
   getPaymentStatusInfo,
   getRefundAmount,
@@ -54,12 +70,16 @@ import {
   getRefundStatusInfo,
   getRemainingMs,
   getRequestedDeckCount,
+  getRouteCandidateLegKey,
   hasRefundablePayment,
   isActiveBoat,
   isPaidPayment,
   manualStatusOptions,
   normalizeBooking,
   normalizeRequestedBoats,
+  normalizeRouteCandidateLegs,
+  enrichCandidateLegsWithManualGpsRoutes,
+  paymentWaitsCustomerRefundInfo,
   pick,
   resolveQuoteDepositAmount,
   resolveQuoteDurationValue,
@@ -67,6 +87,7 @@ import {
   acknowledgeTabBadge,
   shouldShowTabBadge,
 } from "../../../utils/charterBookingAdmin";
+import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
 
 export function AdminCharterBookingDetail() {
   const { lang } = useApp();
@@ -82,9 +103,16 @@ export function AdminCharterBookingDetail() {
     rentalUnit: "Hour",
     boats: [],
   });
+  const [routeCandidateLegs, setRouteCandidateLegs] = useState([]);
+  const [routePlanSelections, setRoutePlanSelections] = useState({});
+  const [routeCandidatesLoaded, setRouteCandidatesLoaded] = useState(false);
+  const [gpsCatalogRoutes, setGpsCatalogRoutes] = useState([]);
+  const [isRouteCandidatesLoading, setIsRouteCandidatesLoading] = useState(false);
+  const [routeCandidatesError, setRouteCandidatesError] = useState("");
   const [quotePreview, setQuotePreview] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [quotePreviewError, setQuotePreviewError] = useState("");
+  const [occupiedBoatIds, setOccupiedBoatIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -144,10 +172,17 @@ export function AdminCharterBookingDetail() {
     loadDetail({ silent: true });
   }, [loadDetail]);
 
+  const loadCandidatesFromHubRef = useRef(() => {});
+
+  const refreshFromHub = useCallback(() => {
+    refreshDetailSilently();
+    loadCandidatesFromHubRef.current?.();
+  }, [refreshDetailSilently]);
+
   useCharterBookingDetailHub({
     enabled: isAuthenticated && Boolean(id),
     bookingId: id,
-    onRefresh: refreshDetailSilently,
+    onRefresh: refreshFromHub,
   });
 
   useEffect(() => {
@@ -155,6 +190,15 @@ export function AdminCharterBookingDetail() {
       setActiveTab(location.state.tab);
     }
   }, [location.state?.tab]);
+
+  useEffect(() => {
+    if (
+      activeTab === "assignment"
+      && ["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || ""))
+    ) {
+      setActiveTab("overview");
+    }
+  }, [activeTab, booking?.status]);
 
   useEffect(() => {
     setAcknowledgedBadges(readAcknowledgedTabBadges(id));
@@ -169,20 +213,34 @@ export function AdminCharterBookingDetail() {
     return () => window.clearInterval(interval);
   }, []);
 
+  const routePlan = useMemo(
+    () => buildCharterRoutePlan(routeCandidateLegs, routePlanSelections),
+    [routeCandidateLegs, routePlanSelections],
+  );
+  const isRoutePlanComplete = isCharterRoutePlanComplete(routePlan, routeCandidateLegs);
+  const routeQuoteOptions = useMemo(() => ({
+    routeCandidateLegs: routeCandidatesLoaded ? routeCandidateLegs : undefined,
+    routePlanComplete: routeCandidatesLoaded && isRoutePlanComplete,
+    routeCandidatesLoaded,
+  }), [routeCandidateLegs, routeCandidatesLoaded, isRoutePlanComplete]);
+
   const buildDetailQuotePayload = useCallback(() => {
     const rentalUnit = booking?.rentalUnit === "Day" || booking?.rentalUnit === "Hour"
       ? booking.rentalUnit
       : (quoteForm.rentalUnit === "Day" ? "Day" : "Hour");
     return {
       rentalUnit,
-      durationValue: resolveQuoteDurationValue(booking, rentalUnit),
+      durationValue: resolveQuoteDurationValue(booking, rentalUnit, {
+        routeCandidateLegs,
+        routePlanSelections,
+      }),
       boats: quoteForm.boats.map((boat) => ({
         boatOrder: Number(boat.boatOrder),
         boatId: String(boat.boatId || "").trim(),
-        rentalUnit,
       })),
+      routePlan,
     };
-  }, [booking, quoteForm]);
+  }, [booking, quoteForm, routeCandidateLegs, routePlan, routePlanSelections]);
 
   const requiredQuoteBoatCount = booking ? normalizeRequestedBoats(booking, booking.selectedBoats).length : 0;
   const isQuoteBoatSelectionComplete = requiredQuoteBoatCount > 0
@@ -193,8 +251,109 @@ export function AdminCharterBookingDetail() {
   const capabilities = useMemo(() => getCharterCapabilities(user, booking), [user, booking]);
   const canManageQuote = Boolean(booking)
     && capabilities.canQuote
-    && ["PendingQuote", "Quoted"].includes(booking.status)
+    && booking.status === "PendingQuote"
     && !hasBlockingPayment;
+
+  useEffect(() => {
+    // Đổi booking / hết quyền quote → reset candidates (auto-load effect sẽ tải lại).
+    setRouteCandidateLegs([]);
+    setRoutePlanSelections({});
+    setRouteCandidatesLoaded(false);
+    setGpsCatalogRoutes([]);
+    setRouteCandidatesError("");
+    setIsRouteCandidatesLoading(Boolean(canManageQuote));
+    setQuotePreview(null);
+    setQuotePreviewError("");
+    setIsPreviewLoading(false);
+  }, [booking?.id, canManageQuote]);
+
+  useEffect(() => {
+    if (!booking?.id || !canManageQuote) {
+      setOccupiedBoatIds([]);
+      return undefined;
+    }
+
+    let isActive = true;
+    const loadOccupiedBoats = async () => {
+      try {
+        const listPayload = useAssignedApi
+          ? await fetchAssignedCharterBookings()
+          : await fetchAdminCharterBookings();
+        if (!isActive) return;
+
+        const otherBookings = extractCharterBookingList(listPayload).map(normalizeBooking);
+        const dateKey = normalizeCharterScheduleDate(booking.departureDate);
+        const sameDayHoldings = otherBookings.filter((other) => (
+          String(other.id) !== String(booking.id)
+          && CHARTER_BOAT_HOLDING_STATUSES.has(String(other.status || ""))
+          && normalizeCharterScheduleDate(other.departureDate) === dateKey
+        ));
+
+        // List API thường thiếu selectedBoats → hydrate detail cho booking cùng ngày đang giữ tàu.
+        const needsDetail = sameDayHoldings.filter(
+          (other) => getAssignedBoatIdsFromBooking(other).length === 0,
+        );
+        const hydratedById = new Map();
+        if (needsDetail.length > 0) {
+          const fetchDetail = useAssignedApi
+            ? fetchAssignedCharterBookingDetail
+            : fetchAdminCharterBookingDetail;
+          const details = await Promise.all(
+            needsDetail.map(async (other) => {
+              try {
+                return normalizeBooking(await fetchDetail(other.id));
+              } catch (error) {
+                console.error(`Không tải detail để ẩn tàu trùng lịch ${other.id}:`, error);
+                return null;
+              }
+            }),
+          );
+          details.filter(Boolean).forEach((detail) => {
+            hydratedById.set(String(detail.id), detail);
+          });
+        }
+
+        const bookingsForConflict = otherBookings.map((other) => (
+          hydratedById.get(String(other.id)) || other
+        ));
+
+        const occupied = collectOccupiedBoatIdsForSchedule({
+          currentBookingId: booking.id,
+          departureDate: booking.departureDate,
+          otherBookings: bookingsForConflict,
+          matchMode: "day",
+        });
+
+        if (!isActive) return;
+        setOccupiedBoatIds(occupied);
+        if (occupied.length > 0) {
+          const occupiedSet = new Set(occupied);
+          setQuoteForm((prev) => ({
+            ...prev,
+            boats: prev.boats.map((boat) => (
+              occupiedSet.has(String(boat.boatId || "").trim())
+                ? { ...boat, boatId: "" }
+                : boat
+            )),
+          }));
+        }
+      } catch (error) {
+        console.error("Không tải được lịch tàu để kiểm tra trùng:", error);
+        if (isActive) setOccupiedBoatIds([]);
+      }
+    };
+
+    loadOccupiedBoats();
+    return () => {
+      isActive = false;
+    };
+  }, [
+    booking?.id,
+    booking?.departureDate,
+    booking?.startTime,
+    canManageQuote,
+    useAssignedApi,
+  ]);
 
   const bookingPaidAmount = useMemo(() => {
     if (!Array.isArray(booking?.payments)) return 0;
@@ -214,56 +373,200 @@ export function AdminCharterBookingDetail() {
     const status = booking.status;
     if (["Cancelled", "Expired", "Refunded", "Completed"].includes(status)) return "closed";
     if (isBookingPaymentClosed(booking) && status !== "PendingQuote") return "closed";
-    if (status === "PendingQuote" || (status === "Quoted" && canManageQuote)) return "quote";
+    // Đã chốt giá → tab Actions sang theo dõi thanh toán, không còn form Chốt giá.
+    if (status === "PendingQuote") return "quote";
     if (["Quoted", "PendingPayment"].includes(status)) return "payment";
     if (status === "Confirmed") return "operate";
     return "closed";
-  }, [booking, canManageQuote]);
+  }, [booking]);
 
-  useEffect(() => {
-    if (!booking?.id || !isQuoteBoatSelectionComplete || !canManageQuote || isCharterRoutePricingBlocked(booking)) {
+  const handleLoadRouteCandidates = useCallback(async () => {
+    if (!booking?.id || !canManageQuote) return;
+    try {
+      setIsRouteCandidatesLoading(true);
+      setRouteCandidatesError("");
+
+      let bePayload = null;
+      let beErrorMessage = "";
+      try {
+        bePayload = await fetchAdminCharterBookingRouteCandidates(booking.id);
+      } catch (error) {
+        console.error("BE route-candidates lỗi — fallback catalog GPS:", error);
+        beErrorMessage = getApiErrorMessage(
+          error,
+          lang === "VN" ? "BE chưa trả candidates — đang lấy Route nguồn GPS theo 2 station." : "BE candidates unavailable — loading GPS routes by 2 stations.",
+        );
+      }
+
+      let legs = normalizeRouteCandidateLegs(bePayload, booking);
+
+      // Fallback / bổ sung: lọc Route nguồn GPS theo đúng 2 mã station của mỗi chặng.
+      try {
+        const catalog = await fetchAllRoutes();
+        const list = Array.isArray(catalog) ? catalog : [];
+        // Lấy Active GPS / vòng tham quan; nếu list thiếu stops thì GET detail để đọc stationId.
+        const gpsLike = list.filter((route) => {
+          const status = String(route?.status || "Active").toLowerCase();
+          if (status && status !== "active") return false;
+          const type = String(route?.routeType || "");
+          return type === "CharterReference"
+            || type === "SightseeingLoop"
+            || route?.fromGps === true
+            || route?.isFromGps === true
+            || route?.createdFromGps === true;
+        });
+        const needDetail = gpsLike.filter((route) => {
+          const stops = Array.isArray(route?.stops) ? route.stops : Array.isArray(route?.routeStops) ? route.routeStops : [];
+          return stops.length === 0;
+        });
+        const details = await Promise.all(
+          needDetail.map(async (route) => {
+            const id = String(route.routeId || route.id || "");
+            if (!id) return null;
+            try {
+              return await fetchRouteDetail(id);
+            } catch (error) {
+              console.error(`Không tải detail route ${id}:`, error);
+              return null;
+            }
+          }),
+        );
+        const detailById = new Map(
+          details.filter(Boolean).map((detail) => [String(detail.routeId || detail.id || ""), detail]),
+        );
+        const catalogWithStops = gpsLike.map((route) => {
+          const id = String(route.routeId || route.id || "");
+          return detailById.get(id) || route;
+        });
+        setGpsCatalogRoutes(catalogWithStops);
+        legs = enrichCandidateLegsWithManualGpsRoutes(legs, catalogWithStops);
+      } catch (error) {
+        console.error("Không tải được catalog route GPS để chọn thủ công:", error);
+        if (!beErrorMessage) {
+          beErrorMessage = getApiErrorMessage(
+            error,
+            lang === "VN" ? "Không tải được danh sách Route nguồn GPS." : "Unable to load GPS source routes.",
+          );
+        }
+      }
+
+      setRouteCandidateLegs(legs);
+      setRouteCandidatesLoaded(true);
+      setRoutePlanSelections((prev) => {
+        const defaults = buildInitialRoutePlanSelections(legs, booking);
+        const merged = { ...defaults };
+        Object.entries(prev).forEach(([key, routeId]) => {
+          if (!routeId) return;
+          const leg = legs.find((item) => getRouteCandidateLegKey(item) === key);
+          if (leg?.candidates?.some((candidate) => candidate.routeId === routeId)) {
+            merged[key] = routeId;
+          }
+        });
+        return merged;
+      });
       setQuotePreview(null);
-      setQuotePreviewError(
-        booking && isCharterRoutePricingBlocked(booking)
-          ? (lang === "VN" ? "Chưa có ước tính lộ trình hợp lệ — không thể preview giá." : "No valid route estimate — unable to preview quote.")
+      setQuotePreviewError("");
+      setRouteCandidatesError(
+        hasEmptyRouteCandidateLegs(legs)
+          ? (beErrorMessage || (lang === "VN"
+            ? "Không có Route GPS nào chứa đủ 2 stationId đúng chiều cho mọi chặng. Kiểm tra stops của HN/HCM…"
+            : "No GPS route contains both stationIds (correct order) for every leg. Check route stops."))
           : ""
       );
+    } catch (error) {
+      console.error("Không tải được route để chọn:", error);
+      const fallbackLegs = normalizeRouteCandidateLegs(null, booking);
+      setRouteCandidateLegs(fallbackLegs);
+      setRouteCandidatesLoaded(true);
+      setRoutePlanSelections((prev) => {
+        const defaults = buildInitialRoutePlanSelections(fallbackLegs, booking);
+        return { ...defaults, ...prev };
+      });
+      setRouteCandidatesError(getApiErrorMessage(
+        error,
+        lang === "VN" ? "Không thể tải danh sách route để chọn." : "Unable to load routes for selection.",
+      ));
+    } finally {
+      setIsRouteCandidatesLoading(false);
+    }
+  }, [booking, canManageQuote, lang]);
+
+  useEffect(() => {
+    loadCandidatesFromHubRef.current = () => {
+      if (canManageQuote) handleLoadRouteCandidates();
+    };
+  }, [canManageQuote, handleLoadRouteCandidates]);
+
+  useEffect(() => {
+    if (!booking?.id || !canManageQuote) return undefined;
+    handleLoadRouteCandidates();
+    return undefined;
+    // Chỉ auto-load khi vào form chốt giá / đổi booking — không phụ thuộc mọi refresh booking object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [booking?.id, canManageQuote]);
+
+  const handlePreviewQuote = useCallback(async () => {
+    if (
+      !booking?.id
+      || !isQuoteBoatSelectionComplete
+      || !canManageQuote
+      || !routeCandidatesLoaded
+      || !isRoutePlanComplete
+      || isCharterRoutePricingBlocked(booking, routeQuoteOptions)
+    ) {
+      setQuotePreview(null);
+      setQuotePreviewError(getCharterRoutePricingWarning(booking, lang, routeQuoteOptions) || (
+        lang === "VN" ? "Chọn đủ route và tàu trước khi xem trước giá." : "Select all routes and boats before previewing."
+      ));
       return;
     }
 
-    let isActive = true;
-    const timer = setTimeout(async () => {
-      const payload = buildDetailQuotePayload();
-      try {
-        setIsPreviewLoading(true);
-        setQuotePreviewError("");
-        const preview = await previewAdminCharterBookingQuote(booking.id, payload);
-        if (isActive) setQuotePreview(preview);
-      } catch (error) {
-        if (!isActive) return;
-        setQuotePreview(null);
-        setQuotePreviewError(getApiErrorMessage(
-          error,
-          lang === "VN" ? "Không thể preview giá." : "Unable to preview quote.",
-        ));
-      } finally {
-        if (isActive) setIsPreviewLoading(false);
-      }
-    }, 350);
-
-    return () => {
-      isActive = false;
-      clearTimeout(timer);
-    };
-  }, [booking, buildDetailQuotePayload, canManageQuote, isQuoteBoatSelectionComplete, lang]);
+    const payload = buildDetailQuotePayload();
+    try {
+      setIsPreviewLoading(true);
+      setQuotePreviewError("");
+      const preview = await previewAdminCharterBookingQuote(booking.id, payload);
+      setQuotePreview(preview);
+    } catch (error) {
+      setQuotePreview(null);
+      setQuotePreviewError(getApiErrorMessage(
+        error,
+        lang === "VN" ? "Không thể preview giá." : "Unable to preview quote.",
+      ));
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }, [
+    booking,
+    buildDetailQuotePayload,
+    canManageQuote,
+    isQuoteBoatSelectionComplete,
+    isRoutePlanComplete,
+    lang,
+    routeCandidatesLoaded,
+    routeQuoteOptions,
+  ]);
 
   const handleDetailQuoteBoatChange = (boatOrder, boatId) => {
+    const nextBoatId = String(boatId || "").trim();
+    // Tàu trùng lịch đã bị ẩn khỏi dropdown — không cho gán lại.
+    if (nextBoatId && occupiedBoatIds.includes(nextBoatId)) return;
+
     setQuoteForm((prev) => ({
       ...prev,
       boats: prev.boats.map((boat) => (
-        boat.boatOrder === boatOrder ? { ...boat, boatId } : boat
+        boat.boatOrder === boatOrder ? { ...boat, boatId: nextBoatId } : boat
       )),
     }));
+  };
+
+  const handleDetailRoutePlanChange = (legKey, routeId) => {
+    setRoutePlanSelections((prev) => ({
+      ...prev,
+      [legKey]: String(routeId || "").trim(),
+    }));
+    setQuotePreview(null);
+    setQuotePreviewError("");
   };
 
   const handleDetailQuoteRentalUnitChange = (rentalUnit) => {
@@ -279,47 +582,173 @@ export function AdminCharterBookingDetail() {
     event.preventDefault();
     if (!booking?.id || !isQuoteBoatSelectionComplete || !canManageQuote) return;
 
-    const routeWarning = getCharterRoutePricingWarning(booking, lang);
-    if (isCharterRoutePricingBlocked(booking)) {
-      Swal.fire({
-        icon: "warning",
-        title: lang === "VN" ? "Lộ trình chưa đủ để chốt giá" : "Route incomplete for quoting",
-        text: routeWarning,
-        confirmButtonColor: "#124757",
+    if (!routeCandidatesLoaded) {
+      showToast({
+        icon: "info",
+        title: lang === "VN" ? "Đang tải tuyến" : "Loading routes",
+        text: lang === "VN"
+          ? "Đợi hệ thống tải tuyến theo chặng xong rồi chốt giá."
+          : "Wait for routes to finish loading before submitting the quote.",
       });
       return;
     }
 
-    const depositAmount = resolveQuoteDepositAmount(quotePreview);
-    const payload = {
-      ...buildDetailQuotePayload(),
-      ...(depositAmount != null ? { depositAmount } : {}),
-    };
+    if (hasEmptyRouteCandidateLegs(routeCandidateLegs)) {
+      showToast({
+        icon: "warning",
+        title: lang === "VN" ? "Thiếu Route nguồn GPS" : "GPS source route missing",
+        text: lang === "VN"
+          ? "Có chặng chưa có Route GPS chứa đủ 2 stationId đúng chiều. Kiểm tra stops trên route hoặc tạo Route nguồn GPS."
+          : "Some legs have no GPS route with both stationIds in the correct order. Check route stops or create a GPS source route.",
+        timer: 4500,
+      });
+      return;
+    }
+
+    if (!isRoutePlanComplete) {
+      showToast({
+        icon: "warning",
+        title: lang === "VN" ? "Chưa chọn đủ route" : "Route selection incomplete",
+        text: lang === "VN"
+          ? "Chọn một route cho mỗi chặng trước khi chốt giá."
+          : "Select one route for every leg before finalizing the quote.",
+      });
+      return;
+    }
+
+    if (!quotePreview) {
+      showToast({
+        icon: "info",
+        title: lang === "VN" ? "Chưa xem trước giá" : "Preview required",
+        text: lang === "VN"
+          ? "Nhấn «Xem trước giá» thành công trước khi chốt giá."
+          : "Run a successful price preview before finalizing the quote.",
+      });
+      return;
+    }
+
+    const routeWarning = getCharterRoutePricingWarning(booking, lang, routeQuoteOptions);
+    if (isCharterRoutePricingBlocked(booking, routeQuoteOptions)) {
+      showToast({
+        icon: "warning",
+        title: lang === "VN" ? "Lộ trình chưa đủ để chốt giá" : "Route incomplete for quoting",
+        text: routeWarning,
+        timer: 4500,
+      });
+      return;
+    }
+
+    const selectedBoatIds = quoteForm.boats.map((boat) => String(boat.boatId || "").trim()).filter(Boolean);
 
     try {
       setIsSubmitting(true);
+
+      // Chặn sớm bằng danh sách tàu đã ẩn (cùng ngày), không để chọn rồi mới lỗi BE.
+      const occupiedSet = new Set(
+        (Array.isArray(occupiedBoatIds) ? occupiedBoatIds : []).map((id) => String(id || "").trim()),
+      );
+      const alreadyHeld = selectedBoatIds.filter((id) => occupiedSet.has(id));
+      if (alreadyHeld.length > 0) {
+        setQuoteForm((prev) => ({
+          ...prev,
+          boats: prev.boats.map((boat) => (
+            occupiedSet.has(String(boat.boatId || "").trim())
+              ? { ...boat, boatId: "" }
+              : boat
+          )),
+        }));
+        showToast({
+          icon: "warning",
+          title: lang === "VN" ? "Tàu đã được giữ" : "Boat already held",
+          text: lang === "VN"
+            ? "Tàu đã được giữ trong ngày này nên không còn trong danh sách. Hãy chọn tàu khác."
+            : "That boat is already held on this day and was removed from the list. Pick another boat.",
+          timer: 4000,
+        });
+        return;
+      }
+
+      const listPayload = useAssignedApi
+        ? await fetchAssignedCharterBookings()
+        : await fetchAdminCharterBookings();
+      const otherBookings = extractCharterBookingList(listPayload).map(normalizeBooking);
+      const conflicts = findCharterBoatScheduleConflicts({
+        currentBookingId: booking.id,
+        departureDate: booking.departureDate,
+        startTime: booking.startTime,
+        boatIds: selectedBoatIds,
+        otherBookings,
+        matchMode: "day",
+      });
+
+      if (conflicts.length > 0) {
+        const occupied = new Set(conflicts.map((item) => item.boatId));
+        setOccupiedBoatIds((prev) => [...new Set([...prev, ...occupied])]);
+        // Không báo lỗi — bỏ chọn tàu trùng để admin chọn lại từ danh sách còn trống.
+        setQuoteForm((prev) => ({
+          ...prev,
+          boats: prev.boats.map((boat) => (
+            occupied.has(String(boat.boatId || "").trim())
+              ? { ...boat, boatId: "" }
+              : boat
+          )),
+        }));
+        showToast({
+          icon: "warning",
+          title: lang === "VN" ? "Tàu đã được giữ" : "Boat already held",
+          text: lang === "VN"
+            ? "Một tàu đã được giữ cho booking khác trong ngày này. Đã bỏ chọn — hãy chọn tàu khác."
+            : "A boat is held by another booking on this day. Selection cleared — pick another boat.",
+          timer: 4000,
+        });
+        return;
+      }
+
+      const depositAmount = resolveQuoteDepositAmount(quotePreview);
+      const payload = {
+        ...buildDetailQuotePayload(),
+        ...(depositAmount != null && depositAmount > 0 ? { depositAmount } : {}),
+      };
+
+      console.info("Chốt giá payload:", payload);
       await submitAdminCharterBookingQuote(booking.id, payload);
       await loadDetail();
-      Swal.fire({
+      showToast({
         icon: "success",
         title: lang === "VN" ? "Đã chốt giá thuê tàu" : "Quote submitted",
-        confirmButtonColor: "#124757",
+        timer: 2200,
       });
     } catch (error) {
       console.error("Lỗi chốt giá charter booking:", error?.response?.data || error);
-      const message = getApiErrorMessage(
-        error,
-        lang === "VN" ? "Vui lòng kiểm tra tàu, số khách, thời lượng và giá chốt." : "Please check boat, passenger count, duration, and subtotal.",
-      );
-      Swal.fire({
+      const fallback = lang === "VN"
+        ? "Vui lòng kiểm tra tàu, số khách, thời lượng và giá chốt."
+        : "Please check boat, passenger count, duration, and subtotal.";
+      const rawMessage = getApiErrorMessage(error, fallback);
+
+      // Conflict từ BE: ẩn tàu / bỏ chọn, không hiện popup lỗi trùng lịch.
+      if (isCharterBoatScheduleConflictError(error) || isCharterBoatScheduleConflictError(rawMessage)) {
+        const selectedIds = quoteForm.boats
+          .map((boat) => String(boat.boatId || "").trim())
+          .filter(Boolean);
+        setOccupiedBoatIds((prev) => [...new Set([...prev, ...selectedIds])]);
+        setQuoteForm((prev) => ({
+          ...prev,
+          boats: prev.boats.map((boat) => ({ ...boat, boatId: "" })),
+        }));
+        showToast({
+          icon: "warning",
+          title: lang === "VN" ? "Tàu đã được giữ" : "Boat already held",
+          text: rawMessage,
+          timer: 4000,
+        });
+        return;
+      }
+
+      showToast({
         icon: "error",
         title: lang === "VN" ? "Không thể chốt giá" : "Unable to submit quote",
-        html: `<p style="text-align:left;white-space:pre-wrap;margin:0;font-size:14px;line-height:1.5;">${String(message)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")}</p>`,
-        confirmButtonColor: "#124757",
+        text: rawMessage,
+        timer: 5000,
       });
     } finally {
       setIsSubmitting(false);
@@ -329,63 +758,79 @@ export function AdminCharterBookingDetail() {
   const handleDetailStatusChange = async (nextStatus) => {
     if (!booking?.id || !manualStatusOptions.includes(nextStatus)) return;
 
+    let cancelNote = "";
     if (nextStatus === "Cancelled") {
-      const hasPaid = hasRefundablePayment(booking);
-      const result = await Swal.fire({
+      const hasPaid = hasRefundablePayment(booking) || ["depositpaid", "paid", "partiallyrefunded"].includes(
+        String(booking.paymentStatus || "").toLowerCase(),
+      );
+      const bookingCode = String(booking.bookingCode || "--");
+      const result = await showConfirmDialog({
+        tone: "danger",
         icon: "warning",
-        title: lang === "VN" ? "Bạn chắc chắn muốn hủy booking?" : "Are you sure you want to cancel?",
-        html: hasPaid
-          ? (lang === "VN"
-            ? `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
-                Booking <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> đã có thanh toán.<br/><br/>
-                Sau khi hủy, vào tab Thanh toán để gửi yêu cầu hoàn tiền. Thao tác này cần xác nhận rõ ràng.
-              </p>`
-            : `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
-                Booking <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> has paid payments.<br/><br/>
-                After cancellation, open the Payments tab to submit a refund. Please confirm carefully.
-              </p>`)
-          : (lang === "VN"
-            ? `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
-                Booking <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> sẽ chuyển sang <strong>Đã hủy</strong>.<br/><br/>
-                Thao tác này không hoàn tác được.
-              </p>`
-            : `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
-                Booking <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> will be marked as <strong>Cancelled</strong>.<br/><br/>
-                This action cannot be undone.
-              </p>`),
+        title: lang === "VN" ? "Hủy booking này?" : "Cancel this booking?",
+        html: buildConfirmBodyHtml({
+          code: bookingCode,
+          text: hasPaid
+            ? (lang === "VN"
+              ? "Booking đã có thanh toán và sẽ chuyển sang trạng thái Đã hủy."
+              : "This booking has payments and will be marked as Cancelled.")
+            : (lang === "VN"
+              ? "Booking sẽ chuyển sang trạng thái Đã hủy."
+              : "This booking will be marked as Cancelled."),
+        }),
+        input: "textarea",
+        inputLabel: lang === "VN" ? "Lý do hủy" : "Cancellation reason",
+        inputPlaceholder: lang === "VN" ? "Nhập lý do hủy (bắt buộc)…" : "Enter cancellation reason (required)…",
+        inputAttributes: {
+          "aria-label": lang === "VN" ? "Lý do hủy" : "Cancellation reason",
+          rows: 3,
+        },
         showCancelButton: true,
-        reverseButtons: true,
-        focusCancel: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#124757",
-        confirmButtonText: lang === "VN" ? "Tôi chắc chắn, hủy booking" : "Yes, cancel booking",
-        cancelButtonText: lang === "VN" ? "Không, giữ lại" : "No, keep it",
+        confirmButtonText: lang === "VN" ? "Hủy booking" : "Cancel booking",
+        cancelButtonText: lang === "VN" ? "Giữ lại" : "Keep booking",
+        preConfirm: (value) => {
+          const note = String(value || "").trim();
+          if (note.length < 3) {
+            showValidationMessage(
+              lang === "VN" ? "Nhập lý do hủy (ít nhất 3 ký tự)." : "Enter a reason (at least 3 characters).",
+            );
+            return false;
+          }
+          return note;
+        },
       });
       if (!result.isConfirmed) return;
+      cancelNote = String(result.value || "").trim();
     }
 
     try {
       setIsSubmitting(true);
-      await modifyAdminCharterBookingStatus(booking.id, nextStatus);
+      if (nextStatus === "Cancelled") {
+        await modifyAdminCharterBookingStatus(booking.id, {
+          bookingStatus: "Cancelled",
+          note: cancelNote,
+        });
+      } else {
+        await modifyAdminCharterBookingStatus(booking.id, nextStatus);
+      }
       await loadDetail();
-      Swal.fire({
+      const waitsCustomer = nextStatus === "Cancelled" && (
+        hasRefundablePayment(booking)
+        || ["depositpaid", "paid", "partiallyrefunded"].includes(String(booking.paymentStatus || "").toLowerCase())
+      );
+      showToast({
         icon: "success",
-        title: nextStatus === "Cancelled" && hasRefundablePayment(booking)
-          ? (lang === "VN" ? "Đã hủy, đang theo dõi refund" : "Cancelled, refund is being tracked")
+        title: waitsCustomer
+          ? (lang === "VN" ? "Đã hủy booking" : "Booking cancelled")
           : (lang === "VN" ? "Đã cập nhật trạng thái" : "Status updated"),
-        text: nextStatus === "Cancelled" && hasRefundablePayment(booking)
-          ? (lang === "VN" ? "Booking có giao dịch đã thu tiền. Vào tab Thanh toán để gửi yêu cầu hoàn tiền." : "This booking has collected payments. Open the Payments tab to submit the refund request.")
-          : undefined,
-        confirmButtonColor: "#124757",
-        timer: nextStatus === "Cancelled" && hasRefundablePayment(booking) ? undefined : 1400,
-        showConfirmButton: nextStatus === "Cancelled" && hasRefundablePayment(booking),
+        timer: 2200,
       });
     } catch (error) {
-      Swal.fire({
+      showToast({
         icon: "error",
         title: lang === "VN" ? "Cập nhật thất bại" : "Update failed",
         text: error.response?.data?.message || (lang === "VN" ? "Trạng thái này có thể chưa hợp lệ theo điều kiện thanh toán." : "This status may not be valid for the current payment state."),
-        confirmButtonColor: "#124757",
+        timer: 4500,
       });
     } finally {
       setIsSubmitting(false);
@@ -400,11 +845,12 @@ export function AdminCharterBookingDetail() {
 
   const workspaceTabs = useMemo(() => {
     const tabs = [];
+    const closedBooking = ["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || ""));
     if (capabilities.canQuote) {
       tabs.push({ id: "actions", icon: "edit_square", label: lang === "VN" ? "Thao tác" : "Actions" });
     }
     tabs.push({ id: "overview", icon: "dashboard", label: lang === "VN" ? "Tổng quan" : "Overview" });
-    if (capabilities.canAssignManager) {
+    if (capabilities.canAssignManager && !closedBooking) {
       tabs.push({
         id: "assignment",
         icon: "group",
@@ -480,12 +926,24 @@ export function AdminCharterBookingDetail() {
               {statusInfo.label}
             </span>
           </div>
-          <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">{booking.customerName} · {booking.route}</p>
+          <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">
+            {[
+              booking.customerName,
+              booking.fromStationName && booking.toStationName
+                ? `${booking.fromStationName} → ${booking.toStationName}`
+                : null,
+            ].filter(Boolean).join(" · ") || "--"}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={loadDetail} className="inline-flex w-max items-center gap-2 rounded-2xl bg-[#FFD100] px-5 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] shadow-sm">
-            <span className="material-symbols-outlined text-base">refresh</span>
-            {lang === "VN" ? "Tải lại" : "Refresh"}
+          <button
+            type="button"
+            onClick={loadDetail}
+            title={lang === "VN" ? "Tải lại" : "Refresh"}
+            aria-label={lang === "VN" ? "Tải lại" : "Refresh"}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FFD100] text-[#124757] shadow-sm"
+          >
+            <span className="material-symbols-outlined text-xl">refresh</span>
           </button>
         </div>
       </div>
@@ -537,22 +995,47 @@ export function AdminCharterBookingDetail() {
         <CharterWorkflowStepper status={booking.status} lang={lang} />
       </div>
 
-      {bookingNeedsRefundAttention(booking) && capabilities.canViewPayments && (
+      {bookingNeedsAdminRefundAttention(booking) && capabilities.canViewPayments && (
         <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/20 dark:bg-rose-500/10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-2xl text-rose-600 dark:text-rose-300">currency_exchange</span>
               <div>
                 <p className="font-headline text-sm font-black uppercase tracking-wide text-rose-700 dark:text-rose-300">
-                  {lang === "VN" ? "Cần xử lý hoàn tiền" : "Refund attention required"}
+                  {lang === "VN" ? "PayOS hoàn lỗi — cần ghi nhận thủ công" : "PayOS refund failed — manual record needed"}
                 </p>
                 <p className="mt-1 text-xs font-bold text-rose-600/80 dark:text-rose-200">
-                  {lang === "VN" ? "Booking đã hủy hoặc hoàn lỗi — mở tab Thanh toán để xử lý." : "Booking cancelled or refund failed — open the Payments tab to process."}
+                  {lang === "VN"
+                    ? "Chỉ dùng manual-refund khi PayOS payout fail. Không nhập STK thay khách ở bước hủy."
+                    : "Use manual-refund only when PayOS payout failed. Do not enter bank details during cancel."}
                 </p>
               </div>
             </div>
-            <button type="button" onClick={() => goToTab("payments", payments.length || (bookingNeedsRefundAttention(booking) ? "!" : ""))} className="rounded-xl bg-rose-600 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white">
+            <button type="button" onClick={() => goToTab("payments", payments.length || "!")} className="rounded-xl bg-rose-600 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white">
               {lang === "VN" ? "Đến thanh toán" : "Go to payments"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {bookingWaitsCustomerRefundInfo(booking) && capabilities.canViewPayments && (
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-2xl text-amber-700 dark:text-amber-300">hourglass_top</span>
+              <div>
+                <p className="font-headline text-sm font-black uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                  {lang === "VN" ? "Chờ khách nhập thông tin hoàn tiền" : "Waiting for customer refund info"}
+                </p>
+                <p className="mt-1 text-xs font-bold text-amber-700/80 dark:text-amber-200">
+                  {lang === "VN"
+                    ? "Booking đã hủy và đã thu tiền. Khách nhập ngân hàng / STK / tên chủ TK trên app của họ."
+                    : "Booking is cancelled with collected payment. Customer enters bank / account / holder name in their app."}
+                </p>
+              </div>
+            </div>
+            <button type="button" onClick={() => goToTab("payments", payments.length || "!")} className="rounded-xl bg-amber-600 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white">
+              {lang === "VN" ? "Xem thanh toán" : "View payments"}
             </button>
           </div>
         </div>
@@ -565,12 +1048,19 @@ export function AdminCharterBookingDetail() {
           booking={booking}
           statusInfo={statusInfo}
           boats={boats}
+          occupiedBoatIds={occupiedBoatIds}
           quoteForm={quoteForm}
           setQuoteForm={setQuoteForm}
           canManageQuote={canManageQuote}
           hasBlockingPayment={hasBlockingPayment}
           isSubmitting={isSubmitting}
           isQuoteBoatSelectionComplete={isQuoteBoatSelectionComplete}
+          isRoutePlanComplete={isRoutePlanComplete}
+          routeCandidateLegs={routeCandidateLegs}
+          routePlanSelections={routePlanSelections}
+          routeCandidatesLoaded={routeCandidatesLoaded}
+          isRouteCandidatesLoading={isRouteCandidatesLoading}
+          routeCandidatesError={routeCandidatesError}
           isPreviewLoading={isPreviewLoading}
           quotePreviewError={quotePreviewError}
           quotePreview={quotePreview}
@@ -599,6 +1089,9 @@ export function AdminCharterBookingDetail() {
           getStatusInfo={getStatusInfo}
           onSubmitQuote={handleDetailSubmitQuote}
           onQuoteBoatChange={handleDetailQuoteBoatChange}
+          onRoutePlanChange={handleDetailRoutePlanChange}
+          onLoadRouteCandidates={handleLoadRouteCandidates}
+          onPreviewQuote={handlePreviewQuote}
           onQuoteRentalUnitChange={handleDetailQuoteRentalUnitChange}
           onStatusChange={handleDetailStatusChange}
           onNavigateTab={(tabId) => {
@@ -638,7 +1131,9 @@ export function AdminCharterBookingDetail() {
         />
       )}
 
-      {activeTab === "assignment" && capabilities.canAssignManager && (
+      {activeTab === "assignment"
+        && capabilities.canAssignManager
+        && !["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || "")) && (
         <AdminCharterAssignmentPanel
           lang={lang}
           booking={booking}
@@ -664,16 +1159,25 @@ export function AdminCharterBookingDetail() {
           </span>
         </div>
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-250 text-left text-xs">
+          <table className="w-full min-w-[920px] table-fixed text-xs">
+            <colgroup>
+              <col className="w-[18%]" />
+              <col className="w-[18%]" />
+              <col className="w-[9%]" />
+              <col className="w-[10%]" />
+              <col className="w-[13%]" />
+              <col className="w-[22%]" />
+              <col className="w-[10%]" />
+            </colgroup>
             <thead className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
               <tr className="border-b border-slate-100 dark:border-slate-700">
-                <th className="py-3 pr-4">ID</th>
-                <th className="py-3 pr-4">Status</th>
-                <th className="py-3 pr-4">{lang === "VN" ? "Số tiền" : "Amount"}</th>
-                <th className="py-3 pr-4">Refund</th>
-                <th className="py-3 pr-4">expiresAt</th>
-                <th className="py-3 pr-4">checkoutUrl</th>
-                <th className="py-3 pr-4 text-right">{lang === "VN" ? "Xử lý" : "Action"}</th>
+                <th className="py-3 pr-3 text-left">ID</th>
+                <th className="py-3 pr-3 text-right">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                <th className="py-3 pr-3 text-right">{lang === "VN" ? "Số tiền" : "Amount"}</th>
+                <th className="py-3 pr-3 text-right">Refund</th>
+                <th className="py-3 pr-3 text-right">{lang === "VN" ? "Hết hạn" : "Expires"}</th>
+                <th className="py-3 pr-3 text-left">PayOS</th>
+                <th className="py-3 pl-2 text-right">{lang === "VN" ? "Xử lý" : "Action"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -684,43 +1188,96 @@ export function AdminCharterBookingDetail() {
                 const refundAmount = getRefundAmount(payment);
                 const refundMessage = getRefundMessage(payment);
                 const canHandleRefund = canAdminHandleRefund(payment, booking.status);
+                const waitsCustomerRefund = paymentWaitsCustomerRefundInfo(payment, booking.status);
+                const paymentId = String(pick(payment, ["paymentId", "id"], "--") || "--");
+                const checkoutUrl = String(pick(payment, ["checkoutUrl", "paymentUrl"], "") || "");
+                const paymentStatusInfo = getPaymentStatusInfo(pick(payment, ["paymentStatus"], "--"), lang);
                 return (
-                  <tr key={`${pick(payment, ["id", "paymentId"], index)}-${index}`}>
-                    <td className="py-3 pr-4 font-bold text-slate-800 dark:text-white">{pick(payment, ["paymentId", "id"], "--")}</td>
-                    <td className="py-3 pr-4">
-                      <span className={`inline-flex rounded-lg border px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPaymentStatusInfo(pick(payment, ["paymentStatus"], "--"), lang).classes}`}>
-                        {getPaymentStatusInfo(pick(payment, ["paymentStatus"], "--"), lang).label}
+                  <tr key={`${paymentId}-${index}`} className="align-middle">
+                    <td className="py-3 pr-3 align-middle text-left">
+                      <p title={paymentId} className="truncate font-mono text-[11px] font-bold text-slate-800 dark:text-white">
+                        {paymentId}
+                      </p>
+                    </td>
+                    <td className="py-3 pr-3 align-middle text-right">
+                      <span
+                        title={paymentStatusInfo.label}
+                        className={`inline-flex max-w-full whitespace-nowrap rounded-lg border px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${paymentStatusInfo.classes}`}
+                      >
+                        {paymentStatusInfo.label}
                       </span>
                     </td>
-                    <td className="py-3 pr-4 font-bold text-slate-600 dark:text-slate-300">
+                    <td className="py-3 pr-3 align-middle text-right whitespace-nowrap font-bold text-slate-600 dark:text-slate-300">
                       {getPaymentAmount(payment) > 0 ? currencyFormatter.format(getPaymentAmount(payment)) : "--"}
                     </td>
-                    <td className="py-3 pr-4">
-                      <span className={`inline-flex rounded-lg border px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${refundInfo.classes}`}>
-                        {refundInfo.label}
-                      </span>
-                      <p className="mt-1 text-[10px] font-bold text-slate-400">
-                        {refundAmount > 0 ? currencyFormatter.format(refundAmount) : "--"}
-                      </p>
-                      {refundMessage && <p className="mt-1 max-w-60 wrap-break-word text-[10px] font-bold text-rose-500">{refundMessage}</p>}
-                    </td>
-                    <td className="py-3 pr-4 font-bold text-slate-600 dark:text-slate-300">
-                      {expiresAt ? `${formatDateTime(expiresAt)} · ${remainingMs > 0 ? formatCountdown(remainingMs) : (lang === "VN" ? "Hết hạn" : "Expired")}` : "--"}
-                    </td>
-                    <td className="max-w-100 truncate py-3 pr-4 text-slate-400">{pick(payment, ["checkoutUrl", "paymentUrl"], "--")}</td>
-                    <td className="py-3 pr-4 text-right">
-                      {canHandleRefund ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDetailRefundPayment(payment)}
-                          disabled={isSubmitting}
-                          className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
+                    <td className="py-3 pr-3 align-middle text-right">
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          title={refundInfo.label}
+                          className={`inline-flex max-w-full whitespace-nowrap rounded-lg border px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${refundInfo.classes}`}
                         >
-                          {lang === "VN" ? "Xử lý hoàn tiền" : "Process refund"}
-                        </button>
+                          {refundInfo.label}
+                        </span>
+                        {refundAmount > 0 ? (
+                          <p className="truncate text-[10px] font-bold text-slate-400">
+                            {currencyFormatter.format(refundAmount)}
+                          </p>
+                        ) : null}
+                        {refundMessage ? (
+                          <p title={refundMessage} className="max-w-full truncate text-[10px] font-bold text-rose-500">
+                            {refundMessage}
+                          </p>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="py-3 pr-3 align-middle text-right">
+                      {expiresAt ? (
+                        <div className="min-w-0">
+                          <p className="truncate font-bold text-slate-600 dark:text-slate-300">
+                            {formatDateTime(expiresAt)}
+                          </p>
+                          <p className={`mt-0.5 text-[10px] font-bold ${remainingMs > 0 ? "text-slate-400" : "text-rose-500"}`}>
+                            {remainingMs > 0 ? formatCountdown(remainingMs) : (lang === "VN" ? "Hết hạn" : "Expired")}
+                          </p>
+                        </div>
                       ) : (
-                        <span className="text-[10px] font-bold text-slate-400">--</span>
+                        <span className="font-bold text-slate-400">--</span>
                       )}
+                    </td>
+                    <td className="py-3 pr-3 align-middle text-left">
+                      {checkoutUrl ? (
+                        <a
+                          href={checkoutUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={checkoutUrl}
+                          className="block truncate text-slate-400 underline-offset-2 hover:text-[#124757] hover:underline dark:hover:text-yellow-400"
+                        >
+                          {checkoutUrl}
+                        </a>
+                      ) : (
+                        <span className="text-slate-400">--</span>
+                      )}
+                    </td>
+                    <td className="py-3 pl-2 align-middle text-right">
+                      <div className="inline-flex justify-end">
+                        {canHandleRefund ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDetailRefundPayment(payment)}
+                            disabled={isSubmitting}
+                            className="inline-flex whitespace-nowrap rounded-lg bg-rose-600 px-2.5 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
+                          >
+                            {lang === "VN" ? "Thủ công" : "Manual"}
+                          </button>
+                        ) : waitsCustomerRefund ? (
+                          <span className="inline-flex whitespace-nowrap rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                            {lang === "VN" ? "Chờ khách" : "Awaiting"}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-slate-400">--</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -741,6 +1298,9 @@ export function AdminCharterBookingDetail() {
           booking={booking}
           tickets={tickets}
           formatDate={formatDate}
+          canReviewPassengerAdds={Boolean(capabilities.canViewAllCharters || capabilities.isAssignedManager)}
+          useAssignedApi={useAssignedApi}
+          onRefresh={loadDetail}
         />
       )}
     </div>

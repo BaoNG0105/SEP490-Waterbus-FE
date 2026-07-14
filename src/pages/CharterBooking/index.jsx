@@ -1,13 +1,13 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../context/AppContext";
 import { createMyCharterBooking } from "../../services/charterBookingService";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { handleDuplicateCharterBookingError } from "../../utils/charterDuplicateBooking";
 import { createEmptyBoatRequest, getMinDepartureDate } from "../../utils/charterRequestForm";
 import { CharterRequestForm } from "../../components/CharterRequestForm";
+import { notify } from "../../utils/swalToast";
 
 export function CharterBooking() {
   const { lang } = useApp();
@@ -35,7 +35,7 @@ export function CharterBooking() {
   };
 
   const handleUnauthenticated = () => {
-      Swal.fire({
+      notify({
         icon: "info",
         title: lang === "VN" ? "Bạn cần đăng nhập" : "Sign in required",
         text: lang === "VN" ? "Vui lòng đăng nhập để gửi yêu cầu thuê tàu." : "Please sign in before creating a charter request.",
@@ -68,7 +68,7 @@ export function CharterBooking() {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;");
 
-      await Swal.fire({
+      await notify({
         icon: "success",
         title: lang === "VN" ? "Đã gửi yêu cầu thuê tàu" : "Charter request submitted",
         html: lang === "VN"
@@ -112,7 +112,7 @@ export function CharterBooking() {
       });
       if (handledDuplicate) return;
 
-      Swal.fire({
+      notify({
         icon: "error",
         title: lang === "VN" ? "Không thể gửi yêu cầu" : "Unable to submit request",
         text: getApiErrorMessage(error, fallback),

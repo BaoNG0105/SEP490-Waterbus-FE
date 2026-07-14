@@ -10,13 +10,14 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 createRoot(document.getElementById("root")).render(
-  <StrictMode>
-    <Provider store={store}>
-      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+  <Provider store={store}>
+    {/* Provider ngoài StrictMode để tránh GSI initialize() bị gọi 2 lần ở React 18. */}
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || ""}>
+      <StrictMode>
         <AppProvider>
           <App />
         </AppProvider>
-      </GoogleOAuthProvider>
-    </Provider>
-  </StrictMode>,
+      </StrictMode>
+    </GoogleOAuthProvider>
+  </Provider>,
 );

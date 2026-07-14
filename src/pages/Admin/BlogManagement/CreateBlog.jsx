@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Swal from "sweetalert2";
+import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { addBlogPost, BLOG_CATEGORY, BLOG_STATUS } from "../../../services/blogService";
+import { isAdminUser } from "../../../utils/roleHelpers";
+import { notify } from "../../../utils/swalToast";
 
 const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
 
@@ -21,6 +23,8 @@ const slugify = (value) =>
 export function CreateBlog() {
     const { lang } = useApp();
     const navigate = useNavigate();
+    const { user: currentUser } = useSelector((state) => state.auth);
+    const canPublish = isAdminUser(currentUser);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
@@ -46,7 +50,9 @@ export function CreateBlog() {
             setIsSubmitting(true);
             setErrorMsg("");
 
-            if (formData.status === BLOG_STATUS.PUBLISHED && !formData.imageUrl.trim()) {
+            const nextStatus = canPublish ? formData.status : BLOG_STATUS.DRAFT;
+
+            if (nextStatus === BLOG_STATUS.PUBLISHED && !formData.imageUrl.trim()) {
                 setErrorMsg(lang === "VN" ? "Bài viết Published bắt buộc phải có ảnh bìa (Image URL)." : "Published posts must have a cover image (Image URL).");
                 setIsSubmitting(false);
                 return;
@@ -60,15 +66,21 @@ export function CreateBlog() {
                 imageUrl: formData.imageUrl.trim(),
                 imageAltText: formData.imageAltText.trim(),
                 content: formData.content,
-                status: formData.status,
+                status: nextStatus,
             };
 
             await addBlogPost(payload);
 
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Tạo bài viết thành công!" : "Post Created Successfully!",
-                text: lang === "VN" ? "Bài viết mới đã được thêm vào hệ thống." : "New blog post has been added to the system.",
+                text: canPublish
+                    ? lang === "VN"
+                        ? "Bài viết mới đã được thêm vào hệ thống."
+                        : "New blog post has been added to the system."
+                    : lang === "VN"
+                        ? "Bài đã lưu ở trạng thái Nháp. Admin sẽ duyệt và xuất bản."
+                        : "Saved as Draft. An Admin will review and publish.",
                 confirmButtonColor: "#124757",
             }).then(() => navigate("/admin/news"));
         } catch (error) {
@@ -103,7 +115,13 @@ export function CreateBlog() {
                         {lang === "VN" ? "Viết bài mới" : "New Blog Post"}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN" ? "Nhập nội dung bài viết, chuyên mục và trạng thái xuất bản." : "Enter the post content, category and publish status."}
+                        {lang === "VN"
+                            ? canPublish
+                                ? "Nhập nội dung bài viết, chuyên mục và trạng thái xuất bản."
+                                : "Nhập nội dung — bài sẽ lưu Nháp, Admin duyệt xuất bản."
+                            : canPublish
+                                ? "Enter the post content, category and publish status."
+                                : "Enter content — saved as Draft; Admin reviews and publishes."}
                     </p>
                 </div>
             </div>
@@ -241,31 +259,46 @@ export function CreateBlog() {
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
                         {lang === "VN" ? "Trạng thái" : "Status"}
                     </h3>
-                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                        {[
-                            { value: BLOG_STATUS.DRAFT, vn: "Lưu nháp", en: "Save as Draft" },
-                            { value: BLOG_STATUS.PUBLISHED, vn: "Xuất bản ngay", en: "Publish Now" },
-                        ].map((option) => {
-                            const selected = formData.status === option.value;
-                            return (
-                                <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => handleFieldChange("status", option.value)}
-                                    className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
-                                            ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                                            : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                                        }`}
-                                >
-                                    {lang === "VN" ? option.vn : option.en}
-                                </button>
-                            );
-                        })}
-                    </div>
-                    {formData.status === BLOG_STATUS.PUBLISHED && (
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                            {lang === "VN" ? "Bài viết xuất bản ngay bắt buộc phải có ảnh bìa." : "Posts published immediately must have a cover image."}
-                        </p>
+                    {canPublish ? (
+                        <>
+                            <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                                {[
+                                    { value: BLOG_STATUS.DRAFT, vn: "Lưu nháp", en: "Save as Draft" },
+                                    { value: BLOG_STATUS.PUBLISHED, vn: "Xuất bản ngay", en: "Publish Now" },
+                                ].map((option) => {
+                                    const selected = formData.status === option.value;
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => handleFieldChange("status", option.value)}
+                                            className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
+                                                    ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
+                                                    : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
+                                                }`}
+                                        >
+                                            {lang === "VN" ? option.vn : option.en}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {formData.status === BLOG_STATUS.PUBLISHED && (
+                                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                                    {lang === "VN" ? "Bài viết xuất bản ngay bắt buộc phải có ảnh bìa." : "Posts published immediately must have a cover image."}
+                                </p>
+                            )}
+                        </>
+                    ) : (
+                        <div className={`${inputStyle} flex flex-col justify-center gap-1`}>
+                            <span className="font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                                {lang === "VN" ? "Nháp" : "Draft"}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold">
+                                {lang === "VN"
+                                    ? "Staff không được xuất bản — chờ Admin duyệt."
+                                    : "Staff cannot publish — Admin must approve."}
+                            </span>
+                        </div>
                     )}
                 </div>
 

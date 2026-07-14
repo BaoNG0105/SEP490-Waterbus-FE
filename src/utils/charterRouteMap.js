@@ -1,7 +1,6 @@
 import { fetchAllRoutes, fetchRouteDetail } from "../services/routeService";
 import { fetchAllStations } from "../services/stationService";
 import { fetchWaterwayDetail } from "../services/waterwayService";
-import { getMatchedRouteSummary, normalizeRouteEstimateLegs } from "./charterBookingAdmin";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -75,55 +74,6 @@ export const spliceStationsIntoRouteLine = (linePositions, orderedStations) => {
 
 const getBookingRouteSource = (booking) => booking?.raw || booking;
 
-export const resolveCharterMatchedRouteIds = (booking) => {
-  const source = getBookingRouteSource(booking);
-  const legs = Array.isArray(booking?.routeLegs) && booking.routeLegs.length > 0
-    ? booking.routeLegs
-    : normalizeRouteEstimateLegs(source?.routeEstimate || booking?.routeEstimate);
-  const summary = getMatchedRouteSummary(source?.routeEstimate || booking?.routeEstimate, legs);
-  const ids = [];
-
-  const pushId = (value) => {
-    const id = String(value || "").trim();
-    if (id && !ids.includes(id)) ids.push(id);
-  };
-
-  pushId(booking?.matchedRouteId);
-  pushId(source?.matchedRouteId);
-  pushId(pick(source, ["matchedRoute.routeId", "matchedRoute.id"], ""));
-  pushId(summary.matchedRouteId);
-  legs.forEach((leg) => {
-    pushId(leg.matchedRouteId);
-    pushId(pick(leg, ["matchedRoute.routeId", "matchedRoute.id", "routeId"], ""));
-  });
-
-  return ids;
-};
-
-export const resolveCharterMatchedRouteCodes = (booking) => {
-  const source = getBookingRouteSource(booking);
-  const legs = Array.isArray(booking?.routeLegs) && booking.routeLegs.length > 0
-    ? booking.routeLegs
-    : normalizeRouteEstimateLegs(source?.routeEstimate || booking?.routeEstimate);
-  const summary = getMatchedRouteSummary(source?.routeEstimate || booking?.routeEstimate, legs);
-  const codes = [];
-
-  const pushCode = (value) => {
-    const code = String(value || "").trim();
-    if (code && !codes.includes(code)) codes.push(code);
-  };
-
-  pushCode(booking?.matchedRouteCode);
-  pushCode(source?.matchedRouteCode);
-  pushCode(summary.matchedRouteCode);
-  legs.forEach((leg) => {
-    pushCode(leg.matchedRouteCode);
-    pushCode(pick(leg, ["matchedRoute.routeCode", "routeCode"], ""));
-  });
-
-  return codes;
-};
-
 const toMapStation = (station, fallbackName = "") => {
   const latitude = Number(pick(station, ["latitude", "lat", "station.latitude"], NaN));
   const longitude = Number(pick(station, ["longitude", "lng", "lon", "station.longitude"], NaN));
@@ -141,53 +91,117 @@ const toMapStation = (station, fallbackName = "") => {
 
 const buildFallbackStations = (booking, stationById) => {
   const points = [];
-  const pushStation = (stationId, fallbackName) => {
+  const pushStation = (stationId, fallbackName, roleKey) => {
     const id = String(stationId || "");
     const fromCatalog = id ? stationById.get(id) : null;
     const mapped = toMapStation(fromCatalog || { stationId: id }, fallbackName);
-    if (mapped) points.push(mapped);
+    if (!mapped) return;
+    // Key marker unique kể cả round-trip (from = to cùng bến).
+    mapped.stationId = `${mapped.stationId}__${roleKey}`;
+    points.push(mapped);
   };
 
-  pushStation(booking?.fromStationId, booking?.fromStationName || "Bến đón");
+  const fromId = String(booking?.fromStationId || "");
+  const toId = String(booking?.toStationId || "");
+
+  pushStation(fromId, booking?.fromStationName || "Bến đón", "from");
   (Array.isArray(booking?.itineraryStops) ? booking.itineraryStops : []).forEach((stop, index) => {
-    pushStation(stop.stationId, stop.stationName || `Dừng ${index + 1}`);
+    pushStation(stop.stationId, stop.stationName || `Dừng ${index + 1}`, `stop-${index + 1}`);
   });
-  pushStation(booking?.toStationId, booking?.toStationName || "Bến trả");
+  // Round-trip: bỏ marker "to" trùng from — vẫn còn stop giữa.
+  if (toId && toId !== fromId) {
+    pushStation(toId, booking?.toStationName || "Bến trả", "to");
+  }
 
   return points;
 };
 
-const buildStationsFallbackModel = (booking, stationById) => {
+/** Nhãn overlay map: chỉ bến → bến, không kèm mã CB- / routeCode. */
+const buildBookingStationsLabel = (booking) => {
+  const from = String(booking?.fromStationName || "").trim();
+  const to = String(booking?.toStationName || "").trim();
+  if (from && to) return `${from} → ${to}`;
+  if (from) return from;
+  if (to) return to;
+  return "";
+};
+
+const buildStationsOnlyModel = (booking, stationById) => {
   const fallbackStations = buildFallbackStations(booking, stationById);
   return {
-    routeName: booking?.fromStationName && booking?.toStationName
-      ? `${booking.fromStationName} → ${booking.toStationName}`
-      : "",
-    coordinates: fallbackStations.length >= 2
-      ? fallbackStations.map((station) => ({
-        latitude: station.latitude,
-        longitude: station.longitude,
-      }))
-      : [],
+    routeName: buildBookingStationsLabel(booking),
+    // Chỉ marker bến — chưa vẽ polyline route khi admin chưa chọn / chốt routeId.
+    coordinates: [],
     stations: fallbackStations,
-    source: "stations-fallback",
+    source: "stations-only",
   };
+};
+
+/** Route IDs được phép vẽ official trên map: selectedRoute / routePlan đã chọn — không lấy matchedRoute* auto. */
+export const resolveCharterDisplayRouteIds = (booking) => {
+  const ids = [];
+  const pushId = (value) => {
+    const id = String(value || "").trim();
+    if (id && !ids.includes(id)) ids.push(id);
+  };
+
+  pushId(booking?.selectedRoute?.routeId);
+  pushId(booking?.selectedRouteId);
+  pushId(pick(booking?.raw || {}, ["selectedRoute.routeId", "selectedRoute.id", "selectedRouteId"], ""));
+
+  const plan = Array.isArray(booking?.routePlan) ? booking.routePlan : [];
+  plan.forEach((row) => pushId(row?.routeId));
+
+  // Customer detail đôi khi chỉ có matchedRoute sau khi admin đã chốt giá.
+  const status = String(booking?.status || "");
+  const alreadyQuoted = Boolean(status) && status !== "PendingQuote";
+  if (ids.length === 0 && alreadyQuoted) {
+    pushId(booking?.matchedRouteId);
+    pushId(pick(booking?.raw || {}, ["matchedRouteId", "routeId", "matchedRoute.routeId"], ""));
+    (Array.isArray(booking?.routeLegs) ? booking.routeLegs : []).forEach((leg) => {
+      pushId(leg?.matchedRouteId);
+    });
+    const estimateLegs = Array.isArray(booking?.routeEstimate?.legs) ? booking.routeEstimate.legs : [];
+    estimateLegs.forEach((leg) => {
+      pushId(pick(leg, ["matchedRouteId", "routeId", "matchedRoute.routeId", "matchedRoute.id"], ""));
+    });
+  }
+
+  return ids;
+};
+
+export const resolveCharterDisplayRouteCodes = (booking) => {
+  const codes = [];
+  const pushCode = (value) => {
+    const code = String(value || "").trim();
+    if (code && !codes.includes(code)) codes.push(code);
+  };
+
+  pushCode(booking?.selectedRoute?.routeCode);
+  pushCode(pick(booking?.raw || {}, ["selectedRoute.routeCode", "selectedRouteCode"], ""));
+
+  const status = String(booking?.status || "");
+  const alreadyQuoted = Boolean(status) && status !== "PendingQuote";
+  if (codes.length === 0 && alreadyQuoted) {
+    pushCode(booking?.matchedRouteCode);
+    pushCode(pick(booking?.raw || {}, ["matchedRouteCode", "routeCode"], ""));
+    (Array.isArray(booking?.routeLegs) ? booking.routeLegs : []).forEach((leg) => {
+      pushCode(leg?.matchedRouteCode);
+    });
+  }
+
+  return codes;
 };
 
 const extractEmbeddedRouteGeometry = (booking) => {
   const source = getBookingRouteSource(booking);
-  const estimate = source?.routeEstimate || booking?.routeEstimate;
+  // Chỉ lấy geometry từ selectedRoute đã chốt — không lấy matched estimate.
+  const selected = booking?.selectedRoute || source?.selectedRoute;
   const candidates = [
-    source?.routeGeometry,
-    estimate?.routeGeometry,
-    estimate?.geometry,
-    estimate?.matchedRoute?.routeGeometry,
+    selected?.routeGeometry,
+    selected?.geometry,
+    source?.selectedRouteGeometry,
   ];
-
-  const legs = normalizeRouteEstimateLegs(estimate);
-  legs.forEach((leg) => {
-    candidates.push(leg.routeGeometry, leg.geometry, leg.matchedRoute?.routeGeometry);
-  });
 
   for (const candidate of candidates) {
     const coordinates = geometryToCoordinates(candidate);
@@ -273,7 +287,8 @@ const resolveRoutesFromCatalog = async (routeIds, routeCodes) => {
 };
 
 /**
- * Load map polyline + station markers for a charter booking from matched Route Master.
+ * Load map polyline + station markers.
+ * Official route line chỉ khi đã có selectedRoute / routePlan — không auto vẽ matchedRoute* (TEST123).
  */
 export const loadCharterRouteMapModel = async (booking) => {
   const stationList = await fetchAllStations().catch(() => []);
@@ -285,33 +300,23 @@ export const loadCharterRouteMapModel = async (booking) => {
   );
 
   const bookingStations = buildFallbackStations(booking, stationById);
-  const embeddedCoordinates = extractEmbeddedRouteGeometry(booking);
-  const routeIds = resolveCharterMatchedRouteIds(booking);
-  const routeCodes = resolveCharterMatchedRouteCodes(booking);
-  const summary = getMatchedRouteSummary(
-    getBookingRouteSource(booking)?.routeEstimate || booking?.routeEstimate,
-  );
-  const officialRouteName = [
-    summary.matchedRouteName,
-    summary.matchedRouteCode,
-    booking?.matchedRouteName,
-    booking?.matchedRouteCode,
-  ].find(Boolean) || "";
+  const routeIds = resolveCharterDisplayRouteIds(booking);
+  const routeCodes = resolveCharterDisplayRouteCodes(booking);
+  const stationsLabel = buildBookingStationsLabel(booking);
 
-  if (embeddedCoordinates.length >= 3) {
-    return {
-      routeName: officialRouteName
-        || (booking?.fromStationName && booking?.toStationName
-          ? `${booking.fromStationName} → ${booking.toStationName}`
-          : ""),
-      coordinates: embeddedCoordinates,
-      stations: bookingStations.length > 0 ? bookingStations : [],
-      source: "route-master",
-    };
+  // Chưa chọn / chốt route → chỉ hiện marker bến, không vẽ polyline "đã khớp".
+  if (routeIds.length === 0 && routeCodes.length === 0) {
+    return buildStationsOnlyModel(booking, stationById);
   }
 
-  if (routeIds.length === 0 && routeCodes.length === 0) {
-    return buildStationsFallbackModel(booking, stationById);
+  const embeddedCoordinates = extractEmbeddedRouteGeometry(booking);
+  if (embeddedCoordinates.length >= 3) {
+    return {
+      routeName: stationsLabel,
+      coordinates: embeddedCoordinates,
+      stations: bookingStations.length > 0 ? bookingStations : [],
+      source: "selected-route",
+    };
   }
 
   const routeMaps = [];
@@ -328,7 +333,6 @@ export const loadCharterRouteMapModel = async (booking) => {
     for (const route of catalogRoutes) {
       try {
         const routeId = String(route.routeId || route.id);
-        // List payload may already include geometry; otherwise fetch detail.
         if (geometryToCoordinates(route.routeGeometry).length >= 2 || Array.isArray(route.stops)) {
           routeMaps.push(await loadRouteMapData(routeId, stationById, route));
         } else {
@@ -344,15 +348,7 @@ export const loadCharterRouteMapModel = async (booking) => {
   const usableRouteMaps = richRouteMaps.length > 0 ? richRouteMaps : routeMaps.filter((item) => item.coordinates.length >= 2);
 
   if (usableRouteMaps.length === 0) {
-    if (embeddedCoordinates.length >= 2) {
-      return {
-        routeName: officialRouteName || "",
-        coordinates: embeddedCoordinates,
-        stations: bookingStations,
-        source: "route-master",
-      };
-    }
-    return buildStationsFallbackModel(booking, stationById);
+    return buildStationsOnlyModel(booking, stationById);
   }
 
   const routeStations = [];
@@ -365,13 +361,20 @@ export const loadCharterRouteMapModel = async (booking) => {
     });
   });
 
+  const hasFinalized = Boolean(
+    booking?.selectedRoute?.routeId
+    || booking?.selectedRouteId
+    || pick(booking?.raw || {}, ["selectedRoute.routeId", "selectedRouteId"], "")
+    || (String(booking?.status || "") !== "PendingQuote" && (
+      booking?.matchedRouteId
+      || (Array.isArray(booking?.routePlan) && booking.routePlan.some((row) => row?.routeId))
+    )),
+  );
+
   return {
-    routeName: usableRouteMaps.map((item) => item.routeName).filter(Boolean).join(" · ")
-      || officialRouteName
-      || "",
+    routeName: stationsLabel,
     coordinates: usableRouteMaps.flatMap((item) => item.coordinates),
-    // Marker theo lộ trình charter (đón / dừng / trả), đường vẽ theo Route Master.
     stations: bookingStations.length >= 2 ? bookingStations : routeStations,
-    source: "route-master",
+    source: hasFinalized ? "selected-route" : "draft-route",
   };
 };

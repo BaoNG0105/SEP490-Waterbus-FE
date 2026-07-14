@@ -5,7 +5,7 @@ import { fetchAllBoats, modifyBoatStatus, deleteBoat, fetchBoatDetail, fetchBoat
 import { getActivateBoatBlockReason } from "../../../utils/boatDocuments";
 import { BoatSeatLayoutPreviewModal } from "../../../components/BoatSeatLayoutPreview";
 import { FormSelect } from "../../../components/FormSelect";
-import Swal from "sweetalert2";
+import { notify } from "../../../utils/swalToast";
 
 const BOAT_STATUS_OPTIONS = [
     { value: "Active", labelVn: "Hoạt động", labelEn: "Active", hintVn: "Sẵn sàng vận hành", hintEn: "Ready for operation", icon: "check_circle", tone: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", ring: "border-emerald-200 dark:border-emerald-500/30" },
@@ -70,7 +70,7 @@ export function BoatManagement() {
     const handleUpdateStatus = (boat) => {
         // Tàu chưa cấu hình sơ đồ ghế thì BE đã tự set Inactive, không cho đổi sang trạng thái khác
         if (!boat.seatsConfigured) {
-            Swal.fire({
+            notify({
                 icon: "warning",
                 title: lang === "VN" ? "Chưa thể đổi trạng thái" : "Cannot Change Status",
                 text: lang === "VN"
@@ -90,7 +90,7 @@ export function BoatManagement() {
         if (!statusModalBoat || !selectedStatus) return;
 
         if (selectedStatus === "Active" && !statusModalBoat.seatsConfigured) {
-            Swal.fire({
+            notify({
                 icon: "warning",
                 title: lang === "VN" ? "Chưa thể kích hoạt" : "Cannot activate",
                 text: lang === "VN"
@@ -124,7 +124,7 @@ export function BoatManagement() {
                 );
 
                 if (blockReason) {
-                    const confirmEdit = await Swal.fire({
+                    const confirmEdit = await notify({
                         icon: "warning",
                         title: lang === "VN" ? "Chưa đủ điều kiện Active" : "Cannot activate yet",
                         text: blockReason,
@@ -142,7 +142,7 @@ export function BoatManagement() {
                 }
             } catch (error) {
                 console.error("Lỗi kiểm tra hồ sơ tàu:", error);
-                Swal.fire({
+                notify({
                     icon: "error",
                     title: lang === "VN" ? "Không kiểm tra được hồ sơ" : "Document check failed",
                     text: error.response?.data?.message || (lang === "VN"
@@ -162,7 +162,7 @@ export function BoatManagement() {
             setStatusModalBoat(null);
             setSelectedStatus("");
 
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Thành công!" : "Success!",
                 text: lang === "VN" ? "Cập nhật trạng thái tàu thành công." : "Boat status updated successfully.",
@@ -175,7 +175,7 @@ export function BoatManagement() {
             setBoats(data || []);
         } catch (error) {
             console.error("Lỗi đổi trạng thái:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Lỗi hệ thống" : "Error",
                 text: error.response?.data?.message || (lang === "VN" ? "Không thể cập nhật trạng thái lúc này." : "Failed to update status."),
@@ -248,7 +248,7 @@ export function BoatManagement() {
     const handleConfigureSeats = (id) => navigate(`/admin/boats-management/seats/${id}`);
     const handleCrewSchedule = (id) => navigate(`/admin/boats-management/crew/${id}`);
     const handleDeleteBoat = async (boat) => {
-        const confirmResult = await Swal.fire({
+        const confirmResult = await notify({
             title: lang === "VN" ? "Xóa tàu?" : "Delete Boat?",
             html: lang === "VN"
                 ? `Bạn chắc chắn muốn xóa vĩnh viễn tàu <b>${boat.name}</b> (${boat.code}) khỏi hệ thống? Hành động này không thể hoàn tác.`
@@ -267,7 +267,7 @@ export function BoatManagement() {
             setIsLoading(true);
             await deleteBoat(boat.id);
 
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Đã xóa!" : "Deleted!",
                 text: lang === "VN" ? `Tàu ${boat.code} đã được xóa khỏi hệ thống.` : `Boat ${boat.code} has been deleted.`,
@@ -278,7 +278,7 @@ export function BoatManagement() {
             setBoats(data || []);
         } catch (error) {
             console.error("Lỗi xóa tàu:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Không thể xóa" : "Delete Failed",
                 text: error.response?.data?.message || (lang === "VN" ? "Không thể xóa tàu này. Có thể tàu đã có lịch chạy được ghi nhận." : "Failed to delete this boat. It may already be referenced by a schedule."),
@@ -541,7 +541,7 @@ export function BoatManagement() {
                                                         type="button"
                                                         onClick={() => handleCrewSchedule(boat.id)}
                                                         className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 flex items-center justify-center transition-all shadow-inner"
-                                                        title={lang === "VN" ? "Phân công nhân viên trên tàu" : "Assign onboard staff"}
+                                                        title={lang === "VN" ? "Xem lịch ca trên tàu" : "View boat duty schedule"}
                                                     >
                                                         <span className="material-symbols-outlined text-base">groups</span>
                                                     </button>

@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserDetail, fetchUserRoles, updateUser, fetchUserStations, assignUserStations } from "../../../services/userService";
 import { canManageUserRow, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
@@ -9,6 +8,7 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
 import { NationalitySelect } from "../../../components/NationalitySelect";
 import { StationAssignField, canAssignStations } from "../../../components/StationAssignField";
+import { notify } from "../../../utils/swalToast";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
 
@@ -75,7 +75,7 @@ export function EditUser() {
                 ]);
 
                 if (!canManageUserRow(currentUser, detail.roles)) {
-                    Swal.fire({
+                    notify({
                         icon: "warning",
                         title: lang === "VN" ? "Không có quyền" : "Access Denied",
                         text: lang === "VN" ? "Bạn không có quyền chỉnh sửa người dùng này." : "You do not have permission to edit this user.",
@@ -131,7 +131,7 @@ export function EditUser() {
             } catch (error) {
                 console.error("Lỗi khi tải chi tiết người dùng:", error);
                 if (error.response?.status === 404) {
-                    Swal.fire({
+                    notify({
                         icon: "error",
                         title: lang === "VN" ? "Không tìm thấy!" : "Not Found!",
                         text: lang === "VN" ? "Tài khoản người dùng không tồn tại." : "This user account does not exist.",
@@ -139,7 +139,7 @@ export function EditUser() {
                         allowOutsideClick: false,
                     }).then(() => navigate("/admin/users-management"));
                 } else if (error.response?.status === 403) {
-                    Swal.fire({
+                    notify({
                         icon: "warning",
                         title: lang === "VN" ? "Không có quyền" : "Access Denied",
                         text: lang === "VN" ? "Bạn không có quyền xem hoặc chỉnh sửa người dùng này." : "You do not have permission to view or edit this user.",
@@ -243,7 +243,7 @@ export function EditUser() {
                 return;
             }
 
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Cập nhật thành công!" : "Successfully Updated!",
                 text: lang === "VN" ? "Thông tin người dùng đã được lưu." : "User information has been saved.",
@@ -400,13 +400,20 @@ export function EditUser() {
                     {isStaffRole && (
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
-                            <FormSelect
-                                required
-                                value={formData.staffType || "Ground"}
-                                onChange={(v) => handleInputChange("staffType", v)}
-                                options={staffTypeOptions}
-                                className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
-                            />
+                            {staffTypeOptions.length <= 1 ? (
+                                <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
+                                    {staffTypeOptions[0]?.label ||
+                                        (lang === "VN" ? "Mặt đất (bến)" : "Ground (station)")}
+                                </div>
+                            ) : (
+                                <FormSelect
+                                    required
+                                    value={formData.staffType || "Ground"}
+                                    onChange={(v) => handleInputChange("staffType", v)}
+                                    options={staffTypeOptions}
+                                    className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
+                                />
+                            )}
                         </div>
                     )}
 

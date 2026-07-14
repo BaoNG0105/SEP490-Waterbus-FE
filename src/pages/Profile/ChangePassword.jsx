@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { changePasswordService } from "../../services/authService";
-import Swal from "sweetalert2";
 import { useDispatch } from "react-redux";
 import { logout } from "../../redux/authSlice";
+import { notify } from "../../utils/swalToast";
 
 export const ChangePassword = () => {
   const { lang, isDarkMode } = useApp();
@@ -101,7 +101,7 @@ export const ChangePassword = () => {
 
       await changePasswordService(payload);
 
-      Swal.fire({
+      notify({
         icon: "success",
         title: lang === "VN" ? "Đổi mật khẩu thành công!" : "Password Changed!",
         text: lang === "VN" ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại với mật khẩu mới." : "Session expired. Please log in again with your new password.",

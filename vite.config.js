@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     server: {
-      host: "127.0.0.1",
+      host: true,
       port: devPort,
       strictPort: true,
       ...(apiTarget

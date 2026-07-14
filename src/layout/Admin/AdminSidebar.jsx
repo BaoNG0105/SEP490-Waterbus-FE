@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { useApp } from "../../context/AppContext";
 import { fetchCurrentUserProfile } from "../../services/authService";
-import { hasRole } from "../../utils/roleHelpers";
+import { hasRole, isAdminUser, isManagerUser, isStaffUser } from "../../utils/roleHelpers";
 import { logout, updateUserProfile } from "../../redux/authSlice";
 
 export const AdminSidebar = ({ isOpen, onClose }) => {
@@ -43,25 +43,49 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
     loadCurrentUser();
   }, [dispatch, isAuthenticated]);
 
-  // MẢNG DỮ LIỆU ĐỊNH NGHĨA 16 DANH MỤC QUẢN TRỊ NGHIỆP VỤ
+  // Staff: Dashboard · Lịch · Chuyến · Quét vé · Lịch sử · Blog (tạo/sửa).
+  // Không charter / CSKH.
   const menuItems = [
     { path: "/admin", icon: "dashboard", labelVn: "Dashboard", labelEn: "Dashboard", roles: ["ADMIN", "MANAGER", "STAFF"] },
     { path: "/admin/revenue", icon: "payments", labelVn: "Doanh thu", labelEn: "Revenue", roles: ["ADMIN"] },
     { path: "/admin/users-management", icon: "manage_accounts", labelVn: "Quản lý người dùng", labelEn: "User Management", roles: ["ADMIN", "MANAGER"] },
-    // { path: "/admin/ticketing", icon: "local_activity", labelVn: "Bán vé", labelEn: "Ticket Sales", roles: ["ADMIN", "MANAGER", "STAFF"] },
-    { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Quản lý thuê tàu", labelEn: "Charter Booking Management", roles: ["ADMIN", "MANAGER", "STAFF"] },
+    { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Quản lý thuê tàu", labelEn: "Charter Booking Management", roles: ["ADMIN", "MANAGER"] },
     { path: "/admin/bookings", icon: "receipt_long", labelVn: "Quản lý Booking", labelEn: "Booking Management", roles: ["ADMIN"] },
     { path: "/admin/stations-management", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station", roles: ["ADMIN", "MANAGER"] },
     { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Quản lý tàu", labelEn: "Boat Fleet", roles: ["ADMIN", "MANAGER"] },
+    { path: "/admin/staff-assignments", icon: "badge", labelVn: "Phân công Staff", labelEn: "Staff Assignments", labelVnStaff: "Lịch của tôi", labelEnStaff: "My schedule", roles: ["ADMIN", "MANAGER", "STAFF"] },
+    { path: "/admin/staff/my-trips", icon: "directions_boat", labelVn: "Chuyến của tôi", labelEn: "My trips", roles: ["STAFF"] },
+    { path: "/admin/staff/ticket-scan", icon: "qr_code_scanner", labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
+    { path: "/admin/staff/scan-history", icon: "history", labelVn: "Lịch sử quét", labelEn: "Scan history", roles: ["STAFF"] },
     { path: "/admin/insurance-management", icon: "shield", labelVn: "Quản lý bảo hiểm", labelEn: "Insurance Packages", roles: ["ADMIN"] },
     { path: "/admin/schedules", icon: "calendar_month", labelVn: "Quản lý lịch trình", labelEn: "Trip Schedules", roles: ["ADMIN"] },
     { path: "/admin/routes-management", icon: "alt_route", labelVn: "Quản lý tuyến", labelEn: "Route Networks", roles: ["ADMIN"] },
     { path: "/admin/promotions", icon: "local_offer", labelVn: "Quản lý khuyến mãi", labelEn: "Promotions & Deals", roles: ["ADMIN"] },
-    { path: "/admin/news", icon: "feed", labelVn: "Quản lý Blog/News", labelEn: "Blog & Articles", roles: ["ADMIN", "MANAGER", "STAFF"] },
-    { path: "/admin/cskh", icon: "support_agent", labelVn: "CSKH", labelEn: "Customer Support", roles: ["ADMIN", "MANAGER", "STAFF"] },
+    {
+      path: "/admin/news",
+      icon: "feed",
+      labelVn: "Quản lý Blog/News",
+      labelEn: "Blog & Articles",
+      labelVnStaff: "Blog / Tin tức",
+      labelEnStaff: "Blog / News",
+      roles: ["ADMIN", "MANAGER", "STAFF"],
+    },
+    { path: "/admin/cskh", icon: "support_agent", labelVn: "CSKH", labelEn: "Customer Support", roles: ["ADMIN", "MANAGER"] },
     { path: "/admin/ai-data", icon: "database", labelVn: "Quản lý AI data", labelEn: "AI Data Context", roles: ["ADMIN"] },
   ];
-  const visibleMenuItems = menuItems.filter((item) => !item.roles || hasRole(user, ...item.roles));
+
+  const staffOnly = isStaffUser(user) && !isAdminUser(user) && !isManagerUser(user);
+  const staffMenuPaths = new Set([
+    "/admin",
+    "/admin/staff-assignments",
+    "/admin/staff/my-trips",
+    "/admin/staff/ticket-scan",
+    "/admin/staff/scan-history",
+    "/admin/news",
+  ]);
+  const visibleMenuItems = staffOnly
+    ? menuItems.filter((item) => staffMenuPaths.has(item.path))
+    : menuItems.filter((item) => !item.roles || hasRole(user, ...item.roles));
 
   return (
     <>
@@ -122,7 +146,14 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
         <nav className="flex-1 flex flex-col gap-1 p-4 overflow-y-auto no-scrollbar custom-scrollbar">
           {visibleMenuItems.map((item) => {
             const isActive = currentPath === item.path;
-            const label = lang === "VN" ? item.labelVn : item.labelEn;
+            const label =
+              staffOnly && (item.labelVnStaff || item.labelEnStaff)
+                ? lang === "VN"
+                  ? item.labelVnStaff || item.labelVn
+                  : item.labelEnStaff || item.labelEn
+                : lang === "VN"
+                  ? item.labelVn
+                  : item.labelEn;
             
             return (
               <Link

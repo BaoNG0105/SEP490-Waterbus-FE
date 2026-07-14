@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import Swal from "sweetalert2";
 import {
   generateMatrix,
   configureSeats
@@ -9,6 +8,7 @@ import {
 import { fetchBoatDetail } from "../../../services/boatService";
 import { SeatMapIcon, seatToneFromCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
+import { notify } from "../../../utils/swalToast";
 
 // BỘ CÔNG CỤ VẼ Ô
 const ALL_TOOLS = [
@@ -48,7 +48,7 @@ export function SeatLayoutEditor() {
         const detail = await fetchBoatDetail(targetId);
 
         if (detail.seatsConfigured) {
-          await Swal.fire({
+          await notify({
             icon: 'warning',
             title: lang === "VN" ? 'Sơ đồ ghế đã được cấu hình' : 'Seat Layout Already Configured',
             text: lang === "VN"
@@ -73,7 +73,7 @@ export function SeatLayoutEditor() {
         setActiveDeck(1);
       } catch (error) {
         console.error("Lỗi khởi tạo sơ đồ:", error);
-        Swal.fire('Lỗi', 'Không tải được dữ liệu tàu', 'error').then(() => navigate('/admin/boats-management'));
+        notify('Lỗi', 'Không tải được dữ liệu tàu', 'error').then(() => navigate('/admin/boats-management'));
       } finally {
         setIsLoading(false);
       }
@@ -118,11 +118,11 @@ export function SeatLayoutEditor() {
           }))
         }));
         setDecks(mappedDecks);
-        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Đã sinh ma trận lưới thành công', showConfirmButton: false, timer: 2000 });
+        notify({ toast: true, position: 'top-end', icon: 'success', title: 'Đã sinh ma trận lưới thành công', showConfirmButton: false, timer: 2000 });
       }
     } catch (err) {
       console.error(err);
-      Swal.fire('Lỗi', 'Không thể sinh ma trận ghế', 'error');
+      notify('Lỗi', 'Không thể sinh ma trận ghế', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -191,7 +191,7 @@ export function SeatLayoutEditor() {
 
       await configureSeats(targetId, payload);
 
-      Swal.fire({
+      notify({
         icon: 'success',
         title: 'Cấu hình hoàn tất',
         text: 'Sơ đồ ghế đã được lưu và đã cập nhật tổng số lượng ghế cho tàu!',
@@ -200,7 +200,7 @@ export function SeatLayoutEditor() {
 
     } catch (error) {
       console.error(error);
-      Swal.fire('Thất bại', 'Đã xảy ra lỗi khi lưu cấu hình lưới.', 'error');
+      notify('Thất bại', 'Đã xảy ra lỗi khi lưu cấu hình lưới.', 'error');
     } finally {
       setIsSubmitting(false);
     }

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
+import { notify } from "../utils/swalToast";
 
 const INITIAL_FORM_STATE = {
   fullName: "",
@@ -20,7 +20,7 @@ export const ContactForm = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    Swal.fire({
+    notify({
       icon: "success",
       title: lang === "VN" ? "Đã gửi lời nhắn!" : "Message Sent!",
       text: lang === "VN"

@@ -157,6 +157,28 @@ export const fetchOnBoardStaffUsers = async ({ force = false } = {}) => {
   });
 };
 
+/** Nhân viên mặt đất đang Active — dropdown phân công bến */
+export const fetchGroundStaffUsers = async ({ force = false } = {}) => {
+  const users = await fetchAllUsers({
+    force,
+    params: { staffType: "Ground", status: "Active" },
+  });
+  return users.filter((item) => {
+    const type = String(pick(item?.raw || item, ["staffType", "staff_type"], ""))
+      .toLowerCase()
+      .replace(/[_\s-]/g, "");
+    if (type && type !== "ground" && type !== "1") return false;
+
+    const status = String(pick(item?.raw || item, ["status", "accountStatus"], "")).toLowerCase();
+    if (status && status !== "active") return false;
+
+    const roles = Array.isArray(item?.roles) ? item.roles : [];
+    if (roles.length > 0 && !userMatchesRole(item, USER_ROLE.STAFF)) return false;
+
+    return true;
+  });
+};
+
 let cachedUserRows = null;
 let cachedRoles = null;
 

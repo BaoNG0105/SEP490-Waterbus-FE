@@ -1,17 +1,18 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import {
     fetchPromotions,
     modifyPromotion,
     removePromotion,
+    buildPromotionPayload,
+    formFromPromotion,
     PROMOTION_TYPE,
     PROMOTION_STATUS,
-    PROMOTION_USAGE_POLICY,
 } from "../../../services/promotionService";
 import { isAdminUser } from "../../../utils/roleHelpers";
+import { notify } from "../../../utils/swalToast";
 
 const formatCurrency = (value) => `${(Number(value) || 0).toLocaleString("vi-VN")}đ`;
 
@@ -86,7 +87,9 @@ export function PromotionManagement() {
     const stats = useMemo(() => ({
         total: promotions.length,
         active: promotions.filter((p) => p.status === PROMOTION_STATUS.ACTIVE).length,
-        inactive: promotions.filter((p) => p.status === PROMOTION_STATUS.INACTIVE).length,
+        draft: promotions.filter((p) => p.status === PROMOTION_STATUS.DRAFT).length,
+        paused: promotions.filter((p) => p.status === PROMOTION_STATUS.PAUSED).length,
+        archived: promotions.filter((p) => p.status === PROMOTION_STATUS.ARCHIVED).length,
         expired: promotions.filter((p) => getPromotionLifecycle(p) === "expired").length,
     }), [promotions]);
 
@@ -123,16 +126,16 @@ export function PromotionManagement() {
     };
 
     const handleDeactivate = async (promo) => {
-        const confirmResult = await Swal.fire({
-            title: lang === "VN" ? "Vô hiệu hóa khuyến mãi?" : "Deactivate promotion?",
+        const confirmResult = await notify({
+            title: lang === "VN" ? "Xóa khuyến mãi?" : "Delete promotion?",
             html: lang === "VN"
-                ? `Mã <b>${promo.promotionCode}</b> sẽ ngừng áp dụng cho đơn hàng mới.`
-                : `Code <b>${promo.promotionCode}</b> will stop applying to new orders.`,
+                ? `Mã <b>${promo.promotionCode}</b> sẽ soft-delete (status = Archived).`
+                : `Code <b>${promo.promotionCode}</b> will be soft-deleted (status = Archived).`,
             icon: "warning",
             showCancelButton: true,
             confirmButtonColor: "#d33",
             cancelButtonColor: "#124757",
-            confirmButtonText: lang === "VN" ? "Vô hiệu hóa" : "Deactivate",
+            confirmButtonText: lang === "VN" ? "Xóa (Archive)" : "Delete (Archive)",
             cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
         });
         if (!confirmResult.isConfirmed) return;
@@ -140,21 +143,51 @@ export function PromotionManagement() {
         try {
             setProcessingId(promo.id);
             await removePromotion(promo.id);
-            Swal.fire({
+            notify({
                 toast: true,
                 position: "top-end",
                 icon: "success",
-                title: lang === "VN" ? "Đã vô hiệu hóa" : "Deactivated",
+                title: lang === "VN" ? "Đã archive" : "Archived",
                 showConfirmButton: false,
                 timer: 1600,
             });
             await loadPromotions();
         } catch (error) {
-            console.error("Lỗi khi vô hiệu hóa khuyến mãi:", error);
-            Swal.fire({
+            console.error("Lỗi khi xóa khuyến mãi:", error);
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Thất bại" : "Failed",
-                text: error.response?.data?.message || (lang === "VN" ? "Không thể vô hiệu hóa khuyến mãi này." : "Failed to deactivate this promotion."),
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể xóa khuyến mãi này." : "Failed to delete this promotion."),
+                confirmButtonColor: "#124757",
+            });
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handlePause = async (promo) => {
+        try {
+            setProcessingId(promo.id);
+            const payload = buildPromotionPayload(formFromPromotion(promo), { includeCode: true });
+            payload.status = PROMOTION_STATUS.PAUSED;
+            payload.validFrom = promo.validFrom;
+            payload.validTo = promo.validTo;
+            await modifyPromotion(promo.id, payload);
+            notify({
+                toast: true,
+                position: "top-end",
+                icon: "success",
+                title: lang === "VN" ? "Đã tạm dừng" : "Paused",
+                showConfirmButton: false,
+                timer: 1600,
+            });
+            await loadPromotions();
+        } catch (error) {
+            console.error("Lỗi khi tạm dừng khuyến mãi:", error);
+            notify({
+                icon: "error",
+                title: lang === "VN" ? "Thất bại" : "Failed",
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể tạm dừng khuyến mãi này." : "Failed to pause this promotion."),
                 confirmButtonColor: "#124757",
             });
         } finally {
@@ -165,17 +198,13 @@ export function PromotionManagement() {
     const handleActivate = async (promo) => {
         try {
             setProcessingId(promo.id);
-            await modifyPromotion(promo.id, {
-                promotionName: promo.promotionName,
-                discountValue: promo.discountValue,
-                minOrderValue: promo.minOrderValue,
-                validFrom: promo.validFrom,
-                validTo: promo.validTo,
-                usageLimit: promo.usageLimit,
-                accountUsagePolicy: promo.accountUsagePolicy,
-                status: PROMOTION_STATUS.ACTIVE,
-            });
-            Swal.fire({
+            const payload = buildPromotionPayload(formFromPromotion(promo), { includeCode: true });
+            payload.status = PROMOTION_STATUS.ACTIVE;
+            // Giữ nguyên ISO gốc từ BE (tránh lệch timezone khi round-trip datetime-local)
+            payload.validFrom = promo.validFrom;
+            payload.validTo = promo.validTo;
+            await modifyPromotion(promo.id, payload);
+            notify({
                 toast: true,
                 position: "top-end",
                 icon: "success",
@@ -186,7 +215,7 @@ export function PromotionManagement() {
             await loadPromotions();
         } catch (error) {
             console.error("Lỗi khi kích hoạt khuyến mãi:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Thất bại" : "Failed",
                 text: error.response?.data?.message || (lang === "VN" ? "Không thể kích hoạt khuyến mãi này." : "Failed to activate this promotion."),
@@ -257,11 +286,11 @@ export function PromotionManagement() {
                 </div>
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
                     <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 flex items-center justify-center text-rose-500 dark:text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">block</span>
+                        <span className="material-symbols-outlined text-2xl">pause_circle</span>
                     </div>
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Ngưng hoạt động" : "Inactive"}</span>
-                        <h3 className="text-xl font-black font-headline text-rose-500 mt-0.5">{stats.inactive}</h3>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tạm dừng" : "Paused"}</span>
+                        <h3 className="text-xl font-black font-headline text-rose-500 mt-0.5">{stats.paused}</h3>
                     </div>
                 </div>
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
@@ -301,9 +330,11 @@ export function PromotionManagement() {
 
                     <div className="flex gap-2">
                         {[
-                            { key: "All", vn: "Tất cả trạng thái", en: "All Status" },
+                            { key: "All", vn: "Tất cả", en: "All" },
+                            { key: PROMOTION_STATUS.DRAFT, vn: "Draft", en: "Draft" },
                             { key: PROMOTION_STATUS.ACTIVE, vn: "Active", en: "Active" },
-                            { key: PROMOTION_STATUS.INACTIVE, vn: "Inactive", en: "Inactive" },
+                            { key: PROMOTION_STATUS.PAUSED, vn: "Paused", en: "Paused" },
+                            { key: PROMOTION_STATUS.ARCHIVED, vn: "Archived", en: "Archived" },
                         ].map((btn) => (
                             <button
                                 key={btn.key}
@@ -352,7 +383,10 @@ export function PromotionManagement() {
                                             <td className="py-4 px-6">
                                                 <div className="space-y-1">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">
+                                                        <h4
+                                                            className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug cursor-pointer hover:text-[#124757] dark:hover:text-yellow-400"
+                                                            onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
+                                                        >
                                                             {promo.promotionName}
                                                         </h4>
                                                         {lifecycle === "expired" && (
@@ -401,22 +435,37 @@ export function PromotionManagement() {
                                             {/* Cột 4: Lượt sử dụng */}
                                             <td className="py-4 px-4 text-center">
                                                 <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                                                    {promo.usageCount}/{promo.usageLimit ?? (lang === "VN" ? "∞" : "∞")}
+                                                    {promo.usageCount}/{promo.usageLimit ?? "∞"}
                                                 </p>
                                                 <p className="text-[10px] text-slate-400">
-                                                    {promo.accountUsagePolicy === PROMOTION_USAGE_POLICY.ONCE
-                                                        ? (lang === "VN" ? "1 lần/tài khoản" : "Once per account")
-                                                        : (lang === "VN" ? "Không giới hạn/TK" : "Multiple per account")}
+                                                    {promo.maxUsesPerAccount != null
+                                                        ? (lang === "VN"
+                                                            ? `≤${promo.maxUsesPerAccount}/TK`
+                                                            : `≤${promo.maxUsesPerAccount}/acct`)
+                                                        : (lang === "VN" ? "Không giới hạn/TK" : "Unlimited/acct")}
                                                 </p>
                                             </td>
 
                                             {/* Cột 5: Trạng thái */}
                                             <td className="py-4 px-4 text-center">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${promo.status === PROMOTION_STATUS.ACTIVE
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${
+                                                    promo.status === PROMOTION_STATUS.ACTIVE
                                                         ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400"
-                                                        : "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400"
+                                                        : promo.status === PROMOTION_STATUS.DRAFT
+                                                            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400"
+                                                            : promo.status === PROMOTION_STATUS.PAUSED
+                                                                ? "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400"
+                                                                : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400"
                                                     }`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${promo.status === PROMOTION_STATUS.ACTIVE ? "bg-emerald-500" : "bg-rose-500"}`}></span>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${
+                                                        promo.status === PROMOTION_STATUS.ACTIVE
+                                                            ? "bg-emerald-500"
+                                                            : promo.status === PROMOTION_STATUS.DRAFT
+                                                                ? "bg-amber-500"
+                                                                : promo.status === PROMOTION_STATUS.PAUSED
+                                                                    ? "bg-sky-500"
+                                                                    : "bg-slate-400"
+                                                    }`}></span>
                                                     {promo.status}
                                                 </span>
                                             </td>
@@ -426,30 +475,24 @@ export function PromotionManagement() {
                                                 {canManage ? (
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button
+                                                            onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
+                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#124757] hover:bg-slate-50 dark:hover:bg-slate-900 dark:hover:text-yellow-400 transition-all shadow-sm"
+                                                            title={lang === "VN" ? "Xem chi tiết" : "View"}
+                                                        >
+                                                            <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                                        </button>
+                                                        <button
                                                             onClick={() => navigate(`/admin/promotions/edit/${promo.id}`, { state: { promotion: promo } })}
                                                             className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
                                                             title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
                                                         >
                                                             <span className="material-symbols-outlined text-[18px]">edit</span>
                                                         </button>
-                                                        {promo.status === PROMOTION_STATUS.ACTIVE ? (
-                                                            <button
-                                                                onClick={() => handleDeactivate(promo)}
-                                                                disabled={processingId === promo.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
-                                                                title={lang === "VN" ? "Vô hiệu hóa" : "Deactivate"}
-                                                            >
-                                                                {processingId === promo.id ? (
-                                                                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                                                ) : (
-                                                                    <span className="material-symbols-outlined text-[18px]">toggle_off</span>
-                                                                )}
-                                                            </button>
-                                                        ) : (
+                                                        {promo.status !== PROMOTION_STATUS.ACTIVE && promo.status !== PROMOTION_STATUS.ARCHIVED && (
                                                             <button
                                                                 onClick={() => handleActivate(promo)}
                                                                 disabled={processingId === promo.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-500 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-500 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
                                                                 title={lang === "VN" ? "Kích hoạt" : "Activate"}
                                                             >
                                                                 {processingId === promo.id ? (
@@ -459,12 +502,45 @@ export function PromotionManagement() {
                                                                 )}
                                                             </button>
                                                         )}
+                                                        {promo.status === PROMOTION_STATUS.ACTIVE && (
+                                                            <button
+                                                                onClick={() => handlePause(promo)}
+                                                                disabled={processingId === promo.id}
+                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sky-500 hover:bg-sky-500 hover:text-white flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                                title={lang === "VN" ? "Tạm dừng" : "Pause"}
+                                                            >
+                                                                {processingId === promo.id ? (
+                                                                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                                ) : (
+                                                                    <span className="material-symbols-outlined text-[18px]">pause</span>
+                                                                )}
+                                                            </button>
+                                                        )}
+                                                        {promo.status !== PROMOTION_STATUS.ARCHIVED && (
+                                                            <button
+                                                                onClick={() => handleDeactivate(promo)}
+                                                                disabled={processingId === promo.id}
+                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                                title={lang === "VN" ? "Xóa (Archive)" : "Delete (Archive)"}
+                                                            >
+                                                                {processingId === promo.id ? (
+                                                                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                                ) : (
+                                                                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                                                                )}
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 ) : (
-                                                    <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-wider flex items-center justify-center gap-1">
-                                                        <span className="material-symbols-outlined text-sm">visibility</span>
-                                                        {lang === "VN" ? "Chỉ xem" : "View only"}
-                                                    </span>
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <button
+                                                            onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
+                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#124757] transition-all shadow-sm"
+                                                            title={lang === "VN" ? "Xem chi tiết" : "View"}
+                                                        >
+                                                            <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </td>
                                         </tr>

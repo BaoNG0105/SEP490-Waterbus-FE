@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserList, deleteUser } from "../../../services/userService";
 import { canManageUserRow, getRoleSystemName, isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
+import { notify } from "../../../utils/swalToast";
 
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp";
 
@@ -129,7 +129,7 @@ export function UserManagement() {
     };
 
     const handleDelete = async (item) => {
-        const confirmResult = await Swal.fire({
+        const confirmResult = await notify({
             icon: "question",
             title: lang === "VN" ? "Xóa người dùng?" : "Delete user?",
             html: lang === "VN"
@@ -149,7 +149,7 @@ export function UserManagement() {
         try {
             setIsLoading(true);
             await deleteUser(item.id);
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Đã xóa!" : "Deleted!",
                 text: lang === "VN" ? `Người dùng ${item.code} đã được xóa khỏi hệ thống.` : `User ${item.code} has been deleted.`,
@@ -158,7 +158,7 @@ export function UserManagement() {
             await loadUsers();
         } catch (error) {
             console.error("Lỗi xóa người dùng:", error);
-            Swal.fire({
+            notify({
                 icon: "error",
                 title: lang === "VN" ? "Không thể xóa" : "Delete Failed",
                 text: error.response?.data?.message || (lang === "VN" ? "Không thể xóa người dùng này." : "Failed to delete this user."),

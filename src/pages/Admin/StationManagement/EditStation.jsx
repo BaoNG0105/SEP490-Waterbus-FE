@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchStationDetail, modifyStation } from "../../../services/stationService";
 import { WaterwayMap } from "../../../components/WaterwayMap";
-import Swal from "sweetalert2";
+import { notify } from "../../../utils/swalToast";
 
 export function EditStation() {
     const { lang } = useApp();
@@ -79,7 +79,7 @@ export function EditStation() {
             } catch (error) {
                 console.error("Lỗi khi tải chi tiết trạm bến:", error);
                 if (error.response?.status === 404) {
-                    Swal.fire({
+                    notify({
                         icon: "error",
                         title: lang === "VN" ? "Không tìm thấy nhà ga!" : "Station Not Found!",
                         text: lang === "VN" ? "Mã định danh nhà ga không tồn tại. Quay về danh sách." : "The requested station logs do not exist.",
@@ -104,7 +104,7 @@ export function EditStation() {
     const handleImagesChange = (e) => {
         const files = Array.from(e.target.files);
         if (selectedImages.length + imagePreviews.length + files.length > 6) {
-            Swal.fire({ 
+            notify({ 
                 icon: 'warning', 
                 title: lang === "VN" ? 'Quá giới hạn' : 'Limit Exceeded', 
                 text: lang === "VN" ? 'Mỗi bến trạm chỉ được lưu trữ tối đa 6 hình ảnh.' : 'Maximum 6 images allowed per station.', 
@@ -181,7 +181,7 @@ export function EditStation() {
 
             await modifyStation(id, payload);
 
-            Swal.fire({
+            notify({
                 icon: "success",
                 title: lang === "VN" ? "Cập nhật thành công!" : "Successfully Saved!",
                 text: lang === "VN" ? "Hồ sơ hạ tầng nhà ga đã được lưu trữ an toàn." : "Infrastructure details updated successfully.",

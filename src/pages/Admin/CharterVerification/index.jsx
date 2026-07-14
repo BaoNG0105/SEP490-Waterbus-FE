@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import {
   fetchCharterBookingManifestByQrToken,
@@ -8,6 +7,7 @@ import {
 } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { normalizeBooking, pick } from "../../../utils/charterBookingAdmin";
+import { notify } from "../../../utils/swalToast";
 
 const getPassengerRows = (booking) => {
   const passengers = Array.isArray(booking?.passengers) && booking.passengers.length > 0
@@ -41,7 +41,7 @@ export function CharterVerificationPage() {
       setBooking(normalizeBooking(detail));
     } catch (error) {
       setBooking(null);
-      Swal.fire({
+      notify({
         icon: "error",
         title: lang === "VN" ? "Không đọc được QR" : "Unable to read QR",
         text: getApiErrorMessage(
@@ -62,14 +62,14 @@ export function CharterVerificationPage() {
       setCheckingTicketId(row.id);
       await updateCharterAttendance(token, { attendanceStatus: "CheckedIn" });
       await loadManifest(token);
-      Swal.fire({
+      notify({
         icon: "success",
         title: lang === "VN" ? "Check-in thành công" : "Check-in successful",
         timer: 1200,
         showConfirmButton: false,
       });
     } catch (error) {
-      Swal.fire({
+      notify({
         icon: "error",
         title: lang === "VN" ? "Check-in thất bại" : "Check-in failed",
         text: getApiErrorMessage(error),

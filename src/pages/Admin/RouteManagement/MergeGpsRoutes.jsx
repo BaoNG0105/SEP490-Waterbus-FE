@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, fetchRouteDetail, mergeGpsRoutes } from "../../../services/routeService";
 import { getApiErrorMessage } from "../../../utils/apiError";
@@ -9,6 +8,7 @@ import {
   getRouteKindLabel,
   validateMergeRouteChain,
 } from "../../../utils/routeTypes";
+import { notify } from "../../../utils/swalToast";
 
 const getRouteId = (route) => String(route?.routeId || route?.id || "");
 
@@ -171,7 +171,7 @@ export function MergeGpsRoutes() {
         await fetchRouteDetail(routeId);
       }
 
-      await Swal.fire({
+      await notify({
         icon: "success",
         title: lang === "VN" ? "Ghép tuyến thành công!" : "Routes merged!",
         confirmButtonColor: "#124757",

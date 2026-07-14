@@ -6,6 +6,7 @@ import { cancelMyCharterBooking, fetchMyCharterBookingDetail } from "../../../se
 import { refundBookingPayment } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
+import { getRefundPaymentId, isPaymentUuid } from "../../../utils/charterBookingAdmin";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -25,15 +26,7 @@ const formatDate = (value) => {
 const getPaymentAmount = (payment) =>
   Number(pick(payment, ["amount", "paymentAmount", "paidAmount", "totalAmount"], 0)) || 0;
 
-const getPaymentId = (payment) => pick(payment, [
-  "paymentId",
-  "id",
-  "payment.id",
-  "payment.paymentId",
-  "paymentLinkId",
-  "paymentLink.id",
-  "linkPaymentId",
-], "");
+const getPaymentId = (payment) => getRefundPaymentId(payment);
 
 const isPaidPayment = (payment) =>
   ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(payment?.paymentStatus).toLowerCase());
@@ -44,12 +37,12 @@ const getRefundablePayment = (booking) => {
   if (paidPayment) return paidPayment;
 
   const bookingPaymentId = pick(booking, ["paidPaymentId", "latestPaymentId", "paymentId", "payment.id"], "");
-  if (bookingPaymentId) {
+  if (isPaymentUuid(bookingPaymentId)) {
     return { paymentId: bookingPaymentId, paymentStatus: booking.paymentStatus, amount: booking.paidAmount };
   }
 
   const storedPaymentId = booking?.id ? sessionStorage.getItem(`charterPayment:${booking.id}`) : "";
-  if (storedPaymentId) {
+  if (isPaymentUuid(storedPaymentId)) {
     return { paymentId: storedPaymentId, paymentStatus: booking.paymentStatus, amount: booking.paidAmount };
   }
 
@@ -109,7 +102,7 @@ export function CharterRefund() {
   const [successMessage, setSuccessMessage] = useState("");
   const [cancelAlreadySubmitted, setCancelAlreadySubmitted] = useState(false);
   const [form, setForm] = useState({
-    reason: "Customer refund",
+    reason: "Hoàn tiền booking bị hủy",
     bankBin: "",
     accountNumber: "",
     accountName: location.state?.booking?.contactName && location.state.booking.contactName !== "--" ? location.state.booking.contactName : "",
@@ -174,7 +167,7 @@ export function CharterRefund() {
     }
 
     const payload = {
-      reason: form.reason.trim() || "Customer refund",
+      reason: form.reason.trim() || "Hoàn tiền booking bị hủy",
       bankBin: form.bankBin.trim(),
       accountNumber: form.accountNumber.trim(),
       accountName: form.accountName.trim(),
@@ -199,18 +192,30 @@ export function CharterRefund() {
       }
       await refundBookingPayment(paymentId, payload);
       setSuccessMessage(
-        lang === "VN"
-          ? "Đã hủy booking và gửi yêu cầu hoàn tiền cho giao dịch thanh toán."
-          : "The booking was cancelled and the refund request was submitted for the paid transaction."
+        shouldCancelBooking || didCancelBooking
+          ? (lang === "VN"
+            ? "Đã hủy booking và gửi yêu cầu hoàn tiền cho giao dịch thanh toán."
+            : "The booking was cancelled and the refund request was submitted for the paid transaction.")
+          : (lang === "VN"
+            ? "Đã gửi yêu cầu hoàn tiền. Hệ thống sẽ xử lý theo chính sách (FE không nhập số tiền hoàn)."
+            : "Refund request submitted. The system will process it by policy (FE does not send refund amount).")
       );
     } catch (error) {
       if (didCancelBooking) setCancelAlreadySubmitted(true);
-      setSubmitError(getApiErrorMessage(
-        error,
-        didCancelBooking || !shouldCancelBooking
-          ? (lang === "VN" ? "Booking đã hủy nhưng yêu cầu hoàn tiền chưa gửi thành công. Vui lòng thử lại." : "The booking was cancelled, but the refund request was not submitted successfully. Please try again.")
-          : (lang === "VN" ? "Không thể hủy booking hoặc gửi yêu cầu hoàn tiền. Vui lòng thử lại." : "Unable to cancel the booking or submit the refund request. Please try again.")
-      ));
+      const detail = String(error?.response?.data?.detail || "");
+      const isPaymentMissing = error?.response?.status === 404 || /payment not found/i.test(detail);
+      setSubmitError(
+        isPaymentMissing
+          ? (lang === "VN"
+            ? "Không tìm thấy giao dịch payment trên hệ thống (sai mã UUID nội bộ, hoặc payment đã bị xoá). Quay lại chi tiết booking, kiểm tra tab thanh toán / đồng bộ bằng orderCode rồi thử lại."
+            : "Payment was not found (wrong internal UUID, or payment was removed). Return to booking detail, check payments / sync by orderCode, then try again.")
+          : getApiErrorMessage(
+            error,
+            didCancelBooking || !shouldCancelBooking
+              ? (lang === "VN" ? "Booking đã hủy nhưng yêu cầu hoàn tiền chưa gửi thành công. Vui lòng thử lại." : "The booking was cancelled, but the refund request was not submitted successfully. Please try again.")
+              : (lang === "VN" ? "Không thể hủy booking hoặc gửi yêu cầu hoàn tiền. Vui lòng thử lại." : "Unable to cancel the booking or submit the refund request. Please try again.")
+          )
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -313,9 +318,13 @@ export function CharterRefund() {
                   {lang === "VN" ? "Tài khoản nhận hoàn tiền" : "Refund receiving account"}
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm font-bold text-slate-500 dark:text-slate-300">
-                  {lang === "VN"
-                    ? "Nhập chính xác ngân hàng, số tài khoản và tên chủ tài khoản. Sau khi gửi, hệ thống sẽ hủy booking và tạo yêu cầu hoàn tiền."
-                    : "Enter the receiving bank, account number, and account name. The system will cancel the booking and submit the refund request."}
+                  {["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())
+                    ? (lang === "VN"
+                      ? "Booking đã hủy. Nhập ngân hàng, số tài khoản và tên chủ tài khoản để gửi yêu cầu hoàn tiền. FE không nhập số tiền hoàn."
+                      : "Booking is already cancelled. Enter bank, account number, and account holder to submit the refund. FE does not enter refund amount.")
+                    : (lang === "VN"
+                      ? "Nhập chính xác ngân hàng, số tài khoản và tên chủ tài khoản. Sau khi gửi, hệ thống sẽ hủy booking và tạo yêu cầu hoàn tiền."
+                      : "Enter the receiving bank, account number, and account name. The system will cancel the booking and submit the refund request.")}
                 </p>
               </div>
               {statusInfo && (
@@ -420,7 +429,11 @@ export function CharterRefund() {
                 </button>
                 <button type="submit" disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60">
                   <span className={`material-symbols-outlined text-base ${isSubmitting ? "animate-spin" : ""}`}>{isSubmitting ? "progress_activity" : "payments"}</span>
-                  {isSubmitting ? (lang === "VN" ? "Đang gửi" : "Submitting") : (lang === "VN" ? "Hủy và gửi hoàn tiền" : "Cancel and submit refund")}
+                  {isSubmitting
+                    ? (lang === "VN" ? "Đang gửi" : "Submitting")
+                    : (["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())
+                      ? (lang === "VN" ? "Gửi yêu cầu hoàn tiền" : "Submit refund request")
+                      : (lang === "VN" ? "Hủy và gửi hoàn tiền" : "Cancel and submit refund"))}
                 </button>
               </div>
             </form>

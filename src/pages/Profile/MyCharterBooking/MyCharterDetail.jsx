@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import {
   cancelMyCharterBooking,
@@ -16,6 +15,7 @@ import {
   printSelectedCharterBookingTickets,
   respondToCharterBookingQuote,
   updateMyCharterBookingPassengers,
+  addMyCharterBookingPassengers,
 } from "../../../services/charterBookingService";
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
@@ -23,7 +23,7 @@ import { CharterRouteMapPanel } from "../../../components/CharterRouteMapPanel";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
 import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "../../../utils/insurancePreview";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
-import { shouldShowCharterQuotePaymentCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount } from "../../../utils/charterBookingActions";
+import { shouldShowCharterQuotePaymentCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount, bookingWaitsCustomerRefundInfo } from "../../../utils/charterBookingActions";
 import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
 import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
 import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
@@ -31,6 +31,9 @@ import { CharterQuotePreviewTable } from "../../../components/CharterQuotePrevie
 import { BoatSeatLayoutPreviewButton } from "../../../components/BoatSeatLayoutPreview";
 import { MyCharterPaymentPanel, MyCharterPaymentStickyBar } from "./MyCharterPaymentPanel";
 import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
+import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
+import { getRefundPaymentId, isPaymentUuid, normalizeSelectedRoute } from "../../../utils/charterBookingAdmin";
+import { buildConfirmBodyHtml, showAlertDialog, showConfirmDialog, showToast } from "../../../utils/swalToast";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -70,15 +73,7 @@ const getPaymentPurpose = (payment) =>
 const isPaidPayment = (payment) =>
   ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(payment?.paymentStatus).toLowerCase());
 
-const getPaymentId = (payment) => pick(payment, [
-  "paymentId",
-  "id",
-  "payment.id",
-  "payment.paymentId",
-  "paymentLinkId",
-  "paymentLink.id",
-  "linkPaymentId",
-], "");
+const getPaymentId = (payment) => getRefundPaymentId(payment);
 
 const getRefundablePayment = (booking) => {
   const payments = Array.isArray(booking?.payments) ? booking.payments : [];
@@ -86,12 +81,12 @@ const getRefundablePayment = (booking) => {
   if (paidPayment) return paidPayment;
 
   const bookingPaymentId = pick(booking, ["paidPaymentId", "latestPaymentId", "paymentId", "payment.id"], "");
-  if (bookingPaymentId) {
+  if (isPaymentUuid(bookingPaymentId)) {
     return { paymentId: bookingPaymentId, paymentStatus: booking.paymentStatus, amount: booking.paidAmount };
   }
 
   const storedPaymentId = booking?.id ? sessionStorage.getItem(`charterPayment:${booking.id}`) : "";
-  if (storedPaymentId) {
+  if (isPaymentUuid(storedPaymentId)) {
     return { paymentId: storedPaymentId, paymentStatus: booking.paymentStatus, amount: booking.paidAmount };
   }
 
@@ -141,6 +136,15 @@ const normalizeBooking = (item) => {
     || pick(firstLeg, ["matchedRouteId", "routeId", "matchedRoute.routeId", "matchedRoute.id"], "")
     || routeLegs.find((leg) => leg.matchedRouteId)?.matchedRouteId
     || "");
+  const selectedRoute = normalizeSelectedRoute(item);
+  const routePlanRaw = pick(item, ["routePlan", "selectedRoutePlan"], []);
+  const routePlan = Array.isArray(routePlanRaw)
+    ? routePlanRaw.map((row) => ({
+      fromStationId: String(pick(row, ["fromStationId", "fromStation.id"], "") || ""),
+      toStationId: String(pick(row, ["toStationId", "toStation.id"], "") || ""),
+      routeId: String(pick(row, ["routeId", "route.id", "id"], "") || ""),
+    })).filter((row) => row.fromStationId && row.toStationId)
+    : [];
   const itineraryStops = Array.isArray(item?.itineraryStops)
     ? item.itineraryStops.map((stop, index) => ({
       stationId: String(pick(stop, ["stationId", "station.id", "station.stationId"], "")),
@@ -170,6 +174,7 @@ const normalizeBooking = (item) => {
   const paidAmount = paidAmountFromPayments || Number(pick(item, ["paidAmount", "paidPaymentAmount"], 0)) || paidDepositAmount;
 
   return {
+    raw: item,
     id: pick(item, ["id", "charterBookingId", "bookingId"]),
     bookingCode: pick(item, ["bookingCode", "code"], "--"),
     createdAt: pick(item, ["createdAt"], ""),
@@ -197,7 +202,7 @@ const normalizeBooking = (item) => {
     insuranceSelected: resolveInsuranceSelected(item),
     insurancePackageId: getBookingInsurancePackageId(item),
     insurance: normalizeInsuranceFromBooking(item) || pick(item, ["insurance"], null),
-    contactName: pick(item, ["contactName"], "--"),
+    contactName: pick(item, ["contactName", "customerName", "fullName", "user.fullName"], "--"),
     contactPhone: pick(item, ["contactPhone"], "--"),
     contactEmail: pick(item, ["contactEmail"], "--"),
     fromStationId: pick(item, ["fromStationId", "fromStation.id", "fromStation.stationId"], ""),
@@ -212,6 +217,9 @@ const normalizeBooking = (item) => {
       || pick(routeEstimate, ["matchedRouteName", "routeName"], "")
       || routeLegs.find((leg) => leg.matchedRouteName)?.matchedRouteName
       || "",
+    selectedRoute,
+    selectedRouteId: selectedRoute?.routeId || "",
+    routePlan,
     routeLegs,
     preferredSeatSetupType: pick(item, ["preferredSeatSetupType"], "FullStandard"),
     routeEstimate,
@@ -334,6 +342,24 @@ const isUsableText = (value) => {
   return Boolean(text && text !== "--");
 };
 
+const looksLikeEmail = (value) => String(value || "").includes("@");
+
+/** Họ tên người đặt — dùng luôn cho chuyến 1 khách. */
+const getBookerPassengerName = (booking, user = null) => {
+  const candidates = [
+    booking?.contactName,
+    booking?.customerName,
+    pick(booking?.raw || {}, ["contactName", "customerName", "fullName", "user.fullName"], ""),
+    user?.fullName,
+    user?.name,
+  ];
+  for (const value of candidates) {
+    const name = String(value || "").trim();
+    if (isUsableText(name) && !looksLikeEmail(name)) return name;
+  }
+  return "";
+};
+
 const hasPassengerName = (passenger) =>
   isUsableText(pick(passenger, ["fullName", "passengerName", "name"], ""));
 
@@ -347,20 +373,21 @@ const getBookingPassengerCount = (booking) => {
   return Math.max(declaredPassengerCount, summedPassengerCount, 1);
 };
 
-const isSinglePassengerWithContact = (booking) =>
-  getBookingPassengerCount(booking) <= 1 && isUsableText(booking?.contactName);
+const isSinglePassengerWithContact = (booking, user = null) =>
+  getBookingPassengerCount(booking) <= 1 && Boolean(getBookerPassengerName(booking, user));
 
 const CURRENT_YEAR = new Date().getFullYear();
 const MIN_BIRTH_YEAR = 1900;
 
-const buildEmptyPassengerRows = (booking) => {
+const buildEmptyPassengerRows = (booking, user = null) => {
   const adultCount = Number(booking?.adultCount || 0);
   const childCount = Number(booking?.childCount || 0);
   const passengerCount = getBookingPassengerCount(booking);
+  const bookerName = getBookerPassengerName(booking, user);
 
-  if (isSinglePassengerWithContact(booking)) {
+  if (getBookingPassengerCount(booking) <= 1 && bookerName) {
     return [{
-      fullName: booking.contactName.trim(),
+      fullName: bookerName,
       birthYear: "",
       passengerType: "Adult",
       isContactPassenger: true,
@@ -399,15 +426,15 @@ const getPassengerAgeFromBirthYear = (birthYear, referenceDate) => {
   return refYear - year;
 };
 
-const buildPassengerPayload = (booking, rows, lang, { allowSingleContactWithoutBirthYear = false } = {}) => {
+/** BE bắt buộc BirthYear hợp lệ — không cho gửi 0 / bỏ trống. */
+const buildPassengerPayload = (booking, rows, lang) => {
   const passengerCount = getBookingPassengerCount(booking);
   const normalizedRows = rows.map((row, index) => ({
     ...row,
     passengerType: row.passengerType || (index < Number(booking?.adultCount || 0) ? "Adult" : "Child"),
   }));
   const filledRows = normalizedRows.filter((row) => row.fullName?.trim() || String(row.birthYear || "").trim());
-  const canUseSingleContact = allowSingleContactWithoutBirthYear && isSinglePassengerWithContact(booking);
-  const rowsToSubmit = canUseSingleContact
+  const rowsToSubmit = isSinglePassengerWithContact(booking)
     ? (filledRows.length > 0 ? [filledRows[0]] : buildEmptyPassengerRows(booking))
     : filledRows;
 
@@ -425,7 +452,7 @@ const buildPassengerPayload = (booking, rows, lang, { allowSingleContactWithoutB
     };
   }
 
-  if (!canUseSingleContact && passengerCount > 1 && rowsToSubmit.length < passengerCount) {
+  if (!isSinglePassengerWithContact(booking) && passengerCount > 1 && rowsToSubmit.length < passengerCount) {
     return {
       errorTitle: lang === "VN" ? "Chưa đủ hành khách" : "Missing passengers",
       errorText: lang === "VN" ? `Booking có ${passengerCount} khách, vui lòng nhập đủ ${passengerCount} dòng hành khách.` : `This booking has ${passengerCount} passengers. Please enter all ${passengerCount} passenger rows.`,
@@ -435,42 +462,36 @@ const buildPassengerPayload = (booking, rows, lang, { allowSingleContactWithoutB
   for (const row of rowsToSubmit) {
     const fullName = row.fullName?.trim();
     const birthYear = String(row.birthYear || "").trim();
-    const skipBirthYearValidation = canUseSingleContact && !birthYear;
 
-    if (!fullName || (!birthYear && !skipBirthYearValidation)) {
+    if (fullName && !birthYear) {
+      return {
+        errorTitle: lang === "VN" ? "Chưa có năm sinh" : "Birth year needed",
+        errorText: lang === "VN"
+          ? "Họ tên đã sẵn sàng. Vui lòng nhập năm sinh rồi lưu — hệ thống cần năm sinh để hoàn tất."
+          : "The name is ready. Please enter the birth year to finish saving.",
+      };
+    }
+
+    if (!fullName || !birthYear) {
       return {
         errorTitle: lang === "VN" ? "Thiếu thông tin hành khách" : "Missing passenger info",
         errorText: lang === "VN" ? "Vui lòng nhập đủ họ tên và năm sinh cho từng hành khách." : "Please enter full name and birth year for each passenger.",
       };
     }
 
-    if (!skipBirthYearValidation) {
-      const age = getPassengerAgeFromBirthYear(birthYear, booking?.departureDate);
-      if (age === null) {
-        return {
-          errorTitle: lang === "VN" ? "Năm sinh không hợp lệ" : "Invalid birth year",
-          errorText: lang === "VN" ? `Năm sinh phải từ ${MIN_BIRTH_YEAR} đến ${CURRENT_YEAR}.` : `Birth year must be between ${MIN_BIRTH_YEAR} and ${CURRENT_YEAR}.`,
-        };
-      }
-      if (row.passengerType === "Adult" && age < 12) {
-        return {
-          errorTitle: lang === "VN" ? "Tuổi người lớn chưa hợp lệ" : "Invalid adult age",
-          errorText: lang === "VN" ? "Hành khách người lớn phải từ 12 tuổi trở lên." : "Adult passengers must be at least 12 years old.",
-        };
-      }
-      if (row.passengerType === "Child" && age >= 12) {
-        return {
-          errorTitle: lang === "VN" ? "Tuổi trẻ em chưa hợp lệ" : "Invalid child age",
-          errorText: lang === "VN" ? "Hành khách trẻ em phải dưới 12 tuổi." : "Child passengers must be under 12 years old.",
-        };
-      }
+    const age = getPassengerAgeFromBirthYear(birthYear, booking?.departureDate);
+    if (age === null) {
+      return {
+        errorTitle: lang === "VN" ? "Năm sinh không hợp lệ" : "Invalid birth year",
+        errorText: lang === "VN" ? `Năm sinh phải từ ${MIN_BIRTH_YEAR} đến ${CURRENT_YEAR}.` : `Birth year must be between ${MIN_BIRTH_YEAR} and ${CURRENT_YEAR}.`,
+      };
     }
   }
 
   return {
     passengers: rowsToSubmit.map((row) => ({
       fullName: row.fullName.trim(),
-      birthYear: Number(row.birthYear),
+      birthYear: Number(String(row.birthYear).trim()),
     })),
   };
 };
@@ -480,7 +501,7 @@ export function CharterDetail() {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated } = useSelector((state) => state.auth);
+  const { isAuthenticated, user } = useSelector((state) => state.auth);
   const [booking, setBooking] = useState(() => {
     const fallbackBooking = location.state?.booking;
     return fallbackBooking ? normalizeBooking(fallbackBooking) : null;
@@ -493,6 +514,11 @@ export function CharterDetail() {
   const [qrImageUrl, setQrImageUrl] = useState("");
   const [paymentOption, setPaymentOption] = useState("Full");
   const [paymentPromotionCode, setPaymentPromotionCode] = useState("");
+  const [promoPreview, setPromoPreview] = useState(null);
+  const [promoChecking, setPromoChecking] = useState(false);
+  const promoValidateSeqRef = useRef(0);
+  const lastAppliedPromoRef = useRef({ code: "", subtotal: 0 });
+  const promoClearedByUserRef = useRef(false);
   const [paymentCheckoutUrl, setPaymentCheckoutUrl] = useState("");
   const [paymentExpiresAt, setPaymentExpiresAt] = useState("");
   const [paymentQrCode, setPaymentQrCode] = useState("");
@@ -541,16 +567,24 @@ export function CharterDetail() {
       const initialPassengers = passengerSource.length > 0
         ? passengerSource.map((passenger, index) => {
           const matchingTicket = normalized.tickets[index] || {};
+          const yearFromPassenger = getPassengerBirthYear(passenger) || getPassengerBirthYear(matchingTicket);
+          const savedName = pick(passenger, ["fullName", "passengerName", "name"], "");
+          const bookerName = index === 0 ? getBookerPassengerName(normalized, user) : "";
           return {
             id: pick(passenger, ["ticketId", "id"], pick(matchingTicket, ["ticketId", "id"])),
             ticketCode: pick(passenger, ["ticketCode", "code"], pick(matchingTicket, ["ticketCode", "code"], "")),
             qrToken: pick(passenger, ["qrToken"], pick(matchingTicket, ["qrToken"], "")),
-            fullName: pick(passenger, ["fullName", "passengerName", "name"], ""),
-            birthYear: getPassengerBirthYear(passenger),
+            fullName: savedName || bookerName,
+            // Chỉ lấy năm sinh đã lưu — người đặt tự nhập năm sinh.
+            birthYear: yearFromPassenger || "",
             passengerType: index < normalized.adultCount ? "Adult" : "Child",
+            approvalStatus: pick(passenger, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], ""),
+            requestBatchId: pick(passenger, ["requestBatchId", "passengerAddRequestId", "addRequestId", "batchId"], ""),
+            reviewNote: pick(passenger, ["reviewNote", "rejectNote", "note"], ""),
+            isContactPassenger: index === 0 && getBookingPassengerCount(normalized) <= 1 && Boolean(bookerName),
           };
         })
-        : buildEmptyPassengerRows(normalized);
+        : buildEmptyPassengerRows(normalized, user);
       setPassengerRows(initialPassengers);
       setSelectedTicketIds([]);
       return normalized;
@@ -567,7 +601,7 @@ export function CharterDetail() {
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, [booking?.bookingCode, id, isAuthenticated, lang, navigate]);
+  }, [booking?.bookingCode, id, isAuthenticated, lang, navigate, user]);
 
   const refreshDetailSilently = useCallback(() => {
     loadDetail({ silent: true });
@@ -620,6 +654,13 @@ export function CharterDetail() {
   }, [booking?.qrToken]);
 
   useEffect(() => {
+    promoClearedByUserRef.current = false;
+    lastAppliedPromoRef.current = { code: "", subtotal: 0 };
+    setPromoPreview(null);
+    setPaymentPromotionCode("");
+  }, [booking?.id]);
+
+  useEffect(() => {
     if (!booking) return;
     setPaymentOption(booking.hasDepositPaid && booking.paymentStatus !== "Paid" ? "Remaining" : "Full");
     setPaymentCheckoutUrl(booking.latestPaymentCheckoutUrl || "");
@@ -627,9 +668,119 @@ export function CharterDetail() {
     setPaymentQrCode(booking.latestPaymentQrCode || "");
     setPaymentBookingHoldExpiresAt(booking.bookingHoldExpiresAt || "");
     setPaymentAmount(booking.latestPaymentAmount || 0);
-    setPaymentPromotionCode((prev) => prev || booking.promotionCode || "");
+    // Không tự nhét lại booking.promotionCode sau khi user đã xóa mã.
+    if (!promoClearedByUserRef.current) {
+      setPaymentPromotionCode((prev) => prev || booking.promotionCode || "");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-init only when these specific fields change, not on every booking refetch
   }, [booking?.id, booking?.hasDepositPaid, booking?.paymentStatus, booking?.latestPaymentAmount, booking?.latestPaymentCheckoutUrl, booking?.latestPaymentExpiresAt, booking?.latestPaymentQrCode, booking?.bookingHoldExpiresAt, booking?.promotionCode]);
+
+  const getPromoSubtotalAmount = useCallback(() => {
+    if (!booking) return 0;
+    const total = Math.max(0, Number(booking.totalAmount || booking.estimatedPrice) || 0);
+    const paid = Math.max(0, Number(booking.paidAmount) || 0);
+    const depositFallback = booking.hasDepositPaid
+      ? Math.max(0, Number(booking.paidDepositAmount) || Number(booking.depositAmount) || 0)
+      : 0;
+    const effectivePaid = Math.max(paid, depositFallback);
+    if (booking.hasDepositPaid) return Math.max(total - effectivePaid, 0);
+    return total;
+  }, [booking]);
+
+  const handleApplyPromotionCode = useCallback(async (codeOverride) => {
+    const code = String(codeOverride ?? paymentPromotionCode).trim();
+    if (!code) {
+      setPromoPreview(null);
+      return;
+    }
+    const subtotal = getPromoSubtotalAmount();
+    if (subtotal <= 0) {
+      setPromoPreview({
+        ok: false,
+        error: lang === "VN" ? "Chưa có số tiền để áp dụng mã." : "No amount available for this promo.",
+      });
+      return;
+    }
+
+    const normalizedCode = code.toUpperCase();
+    if (
+      lastAppliedPromoRef.current.code === normalizedCode
+      && lastAppliedPromoRef.current.subtotal === subtotal
+    ) {
+      return;
+    }
+
+    const seq = ++promoValidateSeqRef.current;
+    setPromoChecking(true);
+    try {
+      const payload = await checkPromotionCode(code, subtotal);
+      if (seq !== promoValidateSeqRef.current) return;
+      const normalized = normalizePromotionValidateResult(payload, subtotal);
+      if (!normalized.ok) {
+        lastAppliedPromoRef.current = { code: "", subtotal: 0 };
+        setPromoPreview({
+          ok: false,
+          error: normalized.message || (lang === "VN" ? "Mã không hợp lệ" : "Invalid promo code"),
+        });
+        return;
+      }
+      const nextCode = normalized.code || code;
+      lastAppliedPromoRef.current = { code: String(nextCode).trim().toUpperCase(), subtotal };
+      promoClearedByUserRef.current = false;
+      setPaymentPromotionCode((prev) => (String(prev).trim() === nextCode ? prev : nextCode));
+      setPromoPreview({
+        ok: true,
+        discountAmount: normalized.discountAmount,
+        finalAmount: normalized.finalAmount,
+        baseAmount: normalized.baseAmount,
+        message: normalized.message,
+        code: nextCode,
+      });
+    } catch (error) {
+      if (seq !== promoValidateSeqRef.current) return;
+      lastAppliedPromoRef.current = { code: "", subtotal: 0 };
+      setPromoPreview({
+        ok: false,
+        error: getApiErrorMessage(
+          error,
+          lang === "VN" ? "Không kiểm tra được mã khuyến mãi." : "Could not validate promo code.",
+        ),
+      });
+    } finally {
+      if (seq === promoValidateSeqRef.current) setPromoChecking(false);
+    }
+  }, [getPromoSubtotalAmount, lang, paymentPromotionCode]);
+
+  const handleClearPromotionCode = useCallback(() => {
+    promoValidateSeqRef.current += 1;
+    lastAppliedPromoRef.current = { code: "", subtotal: 0 };
+    promoClearedByUserRef.current = true;
+    setPaymentPromotionCode("");
+    setPromoPreview(null);
+    setPromoChecking(false);
+  }, []);
+
+  const handlePaymentPromotionCodeChange = useCallback((value) => {
+    const next = String(value || "");
+    lastAppliedPromoRef.current = { code: "", subtotal: 0 };
+    promoClearedByUserRef.current = !next.trim();
+    setPaymentPromotionCode(next);
+    setPromoPreview(null);
+  }, []);
+
+  useEffect(() => {
+    const code = String(paymentPromotionCode || "").trim();
+    if (!code || code.length < 3) {
+      if (!code) setPromoPreview(null);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      handleApplyPromotionCode(code);
+    }, 600);
+    return () => window.clearTimeout(timer);
+    // Only re-validate when the typed code (or booking) changes — not when preview state updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentPromotionCode, booking?.id]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNowTick(Date.now()), 1000);
@@ -662,25 +813,41 @@ export function CharterDetail() {
 
   const handleSyncPayment = useCallback(async (paymentId, { silent = false } = {}) => {
     if (!paymentId) return;
+    if (!isPaymentUuid(paymentId)) {
+      if (!silent) {
+        showAlertDialog({
+          icon: "warning",
+          title: lang === "VN" ? "Thiếu mã payment nội bộ" : "Internal payment ID missing",
+          text: lang === "VN"
+            ? "Không dùng được paymentLinkId để đồng bộ. Hãy đồng bộ bằng orderCode PayOS."
+            : "paymentLinkId cannot be used for sync. Sync with the PayOS orderCode instead.",
+        });
+      }
+      return;
+    }
 
     try {
       setIsSubmitting(true);
       await syncBookingPayment(paymentId);
       await loadDetail();
       if (!silent) {
-        Swal.fire({
+        showAlertDialog({
           icon: "success",
           title: lang === "VN" ? "Đã đồng bộ thanh toán" : "Payment synchronized",
-          confirmButtonColor: "#124757",
         });
       }
     } catch (error) {
       if (!silent) {
-        Swal.fire({
+        const detail = String(error?.response?.data?.detail || error?.response?.data?.title || "");
+        const isNotFound = error?.response?.status === 404 || /payment not found/i.test(detail);
+        showAlertDialog({
           icon: "error",
           title: lang === "VN" ? "Không thể đồng bộ" : "Unable to synchronize",
-          text: error.response?.data?.message || (lang === "VN" ? "Vui lòng thử lại sau." : "Please try again later."),
-          confirmButtonColor: "#124757",
+          text: isNotFound
+            ? (lang === "VN"
+              ? "Không tìm thấy giao dịch payment trên hệ thống. Thử đồng bộ bằng orderCode PayOS hoặc tải lại trang."
+              : "Payment was not found. Try syncing with the PayOS orderCode or reload the page.")
+            : (error.response?.data?.message || (lang === "VN" ? "Vui lòng thử lại sau." : "Please try again later.")),
         });
       }
     } finally {
@@ -696,19 +863,17 @@ export function CharterDetail() {
       await syncBookingPaymentByOrderCode(orderCode);
       await loadDetail();
       if (!silent) {
-        Swal.fire({
+        showAlertDialog({
           icon: "success",
           title: lang === "VN" ? "Đã đồng bộ thanh toán" : "Payment synchronized",
-          confirmButtonColor: "#124757",
         });
       }
     } catch (error) {
       if (!silent) {
-        Swal.fire({
+        showAlertDialog({
           icon: "error",
           title: lang === "VN" ? "Không thể đồng bộ" : "Unable to synchronize",
           text: error.response?.data?.message || (lang === "VN" ? "Vui lòng thử lại sau." : "Please try again later."),
-          confirmButtonColor: "#124757",
         });
       }
     } finally {
@@ -783,11 +948,10 @@ export function CharterDetail() {
 
     if (quoteHoldExpired) {
       await loadDetail();
-      Swal.fire({
+      showAlertDialog({
         icon: "info",
         title: lang === "VN" ? "Báo giá đã hết hạn" : "Quote expired",
         text: lang === "VN" ? "Hệ thống đã tải lại booking để cập nhật trạng thái mới nhất." : "The booking has been refreshed for the latest status.",
-        confirmButtonColor: "#124757",
       });
       return;
     }
@@ -814,10 +978,16 @@ export function CharterDetail() {
       const paymentPayload = {
         bookingId: booking.id,
         paymentOption: paymentSelectValue,
-        promotionCode: paymentPromotionCode.trim() || null,
+        // Xóa mã = null; không lấy lại booking.promotionCode. Lần tạo PayOS sau dùng đúng mã hiện tại (hoặc không có).
+        promotionCode: promoClearedByUserRef.current
+          ? null
+          : (String(paymentPromotionCode || "").trim() || null),
       };
       const payment = await createBookingPayment(paymentPayload);
-      const paymentId = pick(payment, ["id", "paymentId", "data.id", "data.paymentId", "payment.id", "data.payment.id"]);
+      const paymentId = getRefundPaymentId(payment)
+        || getRefundPaymentId(payment?.data)
+        || getRefundPaymentId(payment?.payment)
+        || getRefundPaymentId(payment?.data?.payment);
       const orderCode = pick(payment, ["orderCode", "paymentOrderCode", "payosOrderCode", "data.orderCode", "data.paymentOrderCode", "data.payosOrderCode", "payment.orderCode", "data.payment.orderCode"]);
       const createdPaymentAmount = Number(pick(payment, ["amount", "paymentAmount", "data.amount", "data.paymentAmount", "payment.amount", "data.payment.amount"], selectedPaymentAmount)) || selectedPaymentAmount;
       const checkoutUrl = pick(payment, [
@@ -881,22 +1051,20 @@ export function CharterDetail() {
 
       setPaymentWatcher((current) => ({ ...current, isActive: false }));
 
-      Swal.fire({
+      showAlertDialog({
         icon: "success",
         title: lang === "VN" ? "Đã tạo giao dịch" : "Payment created",
         text: lang === "VN" ? "Hệ thống sẽ tự động đồng bộ trạng thái thanh toán." : "Payment status will be synchronized automatically.",
-        confirmButtonColor: "#124757",
       });
     } catch (error) {
       setPaymentWatcher((current) => ({ ...current, isActive: false }));
-      Swal.fire({
+      showAlertDialog({
         icon: "error",
         title: lang === "VN" ? "Không thể tạo thanh toán" : "Unable to create payment",
         text: getApiErrorMessage(
           error,
           lang === "VN" ? "Không thể tạo link thanh toán PayOS. Vui lòng kiểm tra trạng thái booking hoặc mã khuyến mãi." : "Unable to create the PayOS payment link. Please check the booking status or promotion code.",
         ),
-        confirmButtonColor: "#124757",
       });
     } finally {
       setIsSubmitting(false);
@@ -908,49 +1076,59 @@ export function CharterDetail() {
 
     let note = null;
     if (action === "RequestChanges") {
-      const result = await Swal.fire({
+      const result = await showConfirmDialog({
+        tone: "brand",
         icon: "question",
         title: lang === "VN" ? "Yêu cầu chỉnh sửa báo giá" : "Request quote changes",
+        html: buildConfirmBodyHtml({
+          code: booking.bookingCode,
+          text: lang === "VN"
+            ? "Mô tả thay đổi bạn muốn đội vận hành cập nhật."
+            : "Describe the changes you want operations to update.",
+        }),
         input: "textarea",
         inputLabel: lang === "VN" ? "Ghi chú (tuỳ chọn)" : "Note (optional)",
         inputPlaceholder: lang === "VN" ? "Mô tả thay đổi bạn muốn..." : "Describe the changes you want...",
         showCancelButton: true,
         confirmButtonText: lang === "VN" ? "Gửi yêu cầu" : "Submit request",
         cancelButtonText: lang === "VN" ? "Đóng" : "Close",
-        confirmButtonColor: "#124757",
       });
       if (!result.isConfirmed) return;
       note = String(result.value || "").trim() || null;
     }
 
     if (action === "Reject") {
-      const result = await Swal.fire({
+      const result = await showConfirmDialog({
+        tone: "danger",
         icon: "warning",
         title: lang === "VN" ? "Từ chối báo giá?" : "Reject this quote?",
-        text: lang === "VN"
-          ? "Booking sẽ bị hủy sau khi từ chối."
-          : "The booking will be cancelled after rejection.",
+        html: buildConfirmBodyHtml({
+          code: booking.bookingCode,
+          text: lang === "VN"
+            ? "Booking sẽ bị hủy sau khi từ chối."
+            : "The booking will be cancelled after rejection.",
+        }),
         showCancelButton: true,
         confirmButtonText: lang === "VN" ? "Từ chối" : "Reject",
         cancelButtonText: lang === "VN" ? "Đóng" : "Close",
-        confirmButtonColor: "#dc2626",
       });
       if (!result.isConfirmed) return;
     }
 
     if (action === "Accept") {
-      const result = await Swal.fire({
+      const result = await showConfirmDialog({
+        tone: "brand",
         icon: "question",
-        title: lang === "VN" ? "Bạn chắc chắn chấp nhận báo giá?" : "Accept this quote?",
-        text: lang === "VN"
-          ? "Sau khi chấp nhận, yêu cầu chuyển sang thanh toán."
-          : "After accepting, you can proceed to payment.",
+        title: lang === "VN" ? "Chấp nhận báo giá?" : "Accept this quote?",
+        html: buildConfirmBodyHtml({
+          code: booking.bookingCode,
+          text: lang === "VN"
+            ? "Sau khi chấp nhận, yêu cầu chuyển sang thanh toán."
+            : "After accepting, you can proceed to payment.",
+        }),
         showCancelButton: true,
-        reverseButtons: true,
-        focusCancel: true,
         confirmButtonText: lang === "VN" ? "Chấp nhận báo giá" : "Accept quote",
         cancelButtonText: lang === "VN" ? "Không, xem lại" : "No, go back",
-        confirmButtonColor: "#124757",
       });
       if (!result.isConfirmed) return;
     }
@@ -979,46 +1157,40 @@ export function CharterDetail() {
 
       if (action === "Accept") {
         if (effectiveStatus === "Quoted") {
-          await Swal.fire({
+          showToast({
             icon: "warning",
             title: lang === "VN" ? "Chưa chuyển sang thanh toán" : "Still waiting for payment status",
             text: lang === "VN"
               ? "Máy chủ chưa đổi trạng thái sang PendingPayment. Vui lòng thử lại hoặc liên hệ hỗ trợ."
               : "The server did not change status to PendingPayment. Please try again or contact support.",
-            confirmButtonColor: "#124757",
+            timer: 4500,
           });
           return;
         }
 
-        await Swal.fire({
+        showToast({
           icon: "success",
           title: lang === "VN" ? "Đã chấp nhận báo giá" : "Quote accepted",
           text: lang === "VN"
-            ? "Yêu cầu đã chuyển sang chờ thanh toán. Bạn có thể thanh toán bên dưới."
-            : "The request is now pending payment. You can pay below.",
-          confirmButtonColor: "#124757",
-          timer: 1800,
-          showConfirmButton: false,
+            ? "Yêu cầu đã chuyển sang chờ thanh toán."
+            : "The request is now pending payment.",
+          timer: 2200,
         });
         window.setTimeout(() => {
           paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 250);
       } else if (action === "RequestChanges") {
-        await Swal.fire({
+        showToast({
           icon: "success",
           title: lang === "VN" ? "Đã gửi yêu cầu chỉnh sửa" : "Change request sent",
           text: lang === "VN" ? "Booking đã chuyển về chờ báo giá lại." : "The booking is pending a new quote.",
-          confirmButtonColor: "#124757",
-          timer: 1600,
-          showConfirmButton: false,
+          timer: 2200,
         });
       } else {
-        await Swal.fire({
+        showToast({
           icon: "success",
           title: lang === "VN" ? "Đã từ chối báo giá" : "Quote rejected",
-          confirmButtonColor: "#124757",
-          timer: 1400,
-          showConfirmButton: false,
+          timer: 1800,
         });
       }
     } catch (error) {
@@ -1027,7 +1199,7 @@ export function CharterDetail() {
         error,
         lang === "VN" ? "Không thể phản hồi báo giá. Vui lòng tải lại trang rồi thử lại." : "Unable to respond to the quote. Please refresh and try again.",
       );
-      await Swal.fire({
+      await showAlertDialog({
         icon: "error",
         title: lang === "VN" ? "Không thể phản hồi báo giá" : "Unable to respond to quote",
         html: `<p style="text-align:left;white-space:pre-wrap;margin:0;font-size:14px;line-height:1.5;">${String(message)
@@ -1035,7 +1207,6 @@ export function CharterDetail() {
           .replace(/</g, "&lt;")
           .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;")}</p>`,
-        confirmButtonColor: "#124757",
       });
       await loadDetail({ silent: true });
     } finally {
@@ -1060,6 +1231,29 @@ export function CharterDetail() {
     loadDetail();
   }, [booking, loadDetail, nowTick, paymentBookingHoldExpiresAt, paymentExpiresAt]);
 
+  const handleOpenRefundForm = () => {
+    if (!booking) return;
+    const refundablePayment = getRefundablePayment(booking);
+    const refundablePaymentId = getPaymentId(refundablePayment || {});
+    if (!refundablePaymentId) {
+      showAlertDialog({
+        icon: "error",
+        title: lang === "VN" ? "Không tìm thấy giao dịch" : "Payment not found",
+        text: lang === "VN"
+          ? "Booking đã có thanh toán nhưng hệ thống chưa xác định được mã giao dịch cần hoàn tiền."
+          : "This booking has a paid amount, but the system cannot identify the transaction to refund.",
+      });
+      return;
+    }
+    navigate(`/profile/my-charter-booking/${booking.id}/refund`, {
+      state: {
+        booking,
+        payment: refundablePayment,
+        paymentId: refundablePaymentId,
+      },
+    });
+  };
+
   const handleCancelBooking = async () => {
     if (!booking) return;
     const hasPaidPayment = ["paid", "depositpaid"].includes(String(booking.paymentStatus).toLowerCase())
@@ -1069,26 +1263,16 @@ export function CharterDetail() {
 
     if (hasPaidPayment) {
       if (!refundablePaymentId) {
-        Swal.fire({
+        showAlertDialog({
           icon: "error",
-          title: lang === "VN" ? "Không tìm thấy paymentId" : "Payment ID not found",
+          title: lang === "VN" ? "Không tìm thấy giao dịch" : "Payment not found",
           text: lang === "VN"
             ? "Booking đã có thanh toán nhưng hệ thống chưa xác định được mã giao dịch cần hoàn tiền."
             : "This booking has a paid amount, but the system cannot identify the transaction to refund.",
-          confirmButtonColor: "#124757",
         });
         return;
       }
 
-      console.log("Resolved refund payment:", {
-        paymentId: refundablePaymentId,
-        payment: refundablePayment,
-        bookingPaymentIds: {
-          paidPaymentId: booking.paidPaymentId,
-          latestPaymentId: booking.latestPaymentId,
-          storedPaymentId: sessionStorage.getItem(`charterPayment:${booking.id}`),
-        },
-      });
       navigate(`/profile/my-charter-booking/${booking.id}/refund`, {
         state: {
           booking,
@@ -1098,24 +1282,18 @@ export function CharterDetail() {
       });
       return;
     } else {
-      const result = await Swal.fire({
+      const result = await showConfirmDialog({
+        tone: "danger",
         icon: "warning",
-        title: lang === "VN" ? "Bạn chắc chắn muốn hủy?" : "Are you sure you want to cancel?",
-        html: lang === "VN"
-          ? `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
-              Mã yêu cầu <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> sẽ bị hủy và không thể thanh toán tiếp.<br/><br/>
-              Thao tác này không hoàn tác được.
-            </p>`
-          : `<p style="margin:0;text-align:left;font-size:14px;line-height:1.55;color:#475569;">
-              Request <strong style="color:#124757;">${String(booking.bookingCode || "--")}</strong> will be cancelled and payment will no longer be available.<br/><br/>
-              This action cannot be undone.
-            </p>`,
+        title: lang === "VN" ? "Hủy yêu cầu thuê tàu?" : "Cancel this charter request?",
+        html: buildConfirmBodyHtml({
+          code: booking.bookingCode,
+          text: lang === "VN"
+            ? "Yêu cầu sẽ bị hủy và không thể thanh toán tiếp."
+            : "The request will be cancelled and payment will no longer be available.",
+        }),
         showCancelButton: true,
-        reverseButtons: true,
-        focusCancel: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#124757",
-        confirmButtonText: lang === "VN" ? "Tôi chắc chắn, hủy yêu cầu" : "Yes, cancel request",
+        confirmButtonText: lang === "VN" ? "Hủy yêu cầu" : "Cancel request",
         cancelButtonText: lang === "VN" ? "Không, giữ lại" : "No, keep it",
       });
       if (!result.isConfirmed) return;
@@ -1125,20 +1303,18 @@ export function CharterDetail() {
       setIsSubmitting(true);
       await cancelMyCharterBooking(booking.id, {});
       await loadDetail();
-      Swal.fire({
+      showAlertDialog({
         icon: "success",
         title: lang === "VN" ? "Đã hủy yêu cầu" : "Request cancelled",
-        confirmButtonColor: "#124757",
       });
     } catch (error) {
-      Swal.fire({
+      showAlertDialog({
         icon: "error",
         title: lang === "VN" ? "Không thể hủy" : "Unable to cancel",
         text: getApiErrorMessage(
           error,
           lang === "VN" ? "Yêu cầu này có thể không còn được phép hủy." : "This request may no longer be cancellable.",
         ),
-        confirmButtonColor: "#124757",
       });
     } finally {
       setIsSubmitting(false);
@@ -1159,17 +1335,15 @@ export function CharterDetail() {
       setIsSubmitting(true);
       await importMyCharterBookingPassengers(booking.id, file);
       await loadDetail();
-      Swal.fire({
+      showAlertDialog({
         icon: "success",
         title: lang === "VN" ? "Đã nhập danh sách hành khách" : "Passenger list imported",
-        confirmButtonColor: "#124757",
       });
     } catch (error) {
-      Swal.fire({
+      showAlertDialog({
         icon: "error",
         title: lang === "VN" ? "Không thể nhập file" : "Unable to import file",
         text: error.response?.data?.message || (lang === "VN" ? "Chỉ hỗ trợ .xlsx, .csv, .tsv, .txt và booking phải được thanh toán đủ." : "Use .xlsx, .csv, .tsv, or .txt after the booking is fully paid."),
-        confirmButtonColor: "#124757",
       });
     } finally {
       setIsSubmitting(false);
@@ -1181,15 +1355,14 @@ export function CharterDetail() {
     if (String(booking.paymentStatus).toLowerCase() !== "paid") return;
 
     const missingManifestPayload = !hasSavedPassengerManifest(booking)
-      ? buildPassengerPayload(booking, passengerRows, lang, { allowSingleContactWithoutBirthYear: true })
+      ? buildPassengerPayload(booking, passengerRows, lang)
       : null;
 
     if (missingManifestPayload?.errorTitle) {
-      Swal.fire({
+      showAlertDialog({
         icon: "info",
         title: missingManifestPayload.errorTitle,
         text: missingManifestPayload.errorText,
-        confirmButtonColor: "#124757",
       });
       return;
     }
@@ -1227,11 +1400,10 @@ export function CharterDetail() {
       }
     } catch (error) {
       if (popup) popup.close();
-      Swal.fire({
+      showAlertDialog({
         icon: "error",
         title: lang === "VN" ? "Không thể xuất vé" : "Unable to export tickets",
         text: getApiErrorMessage(error, lang === "VN" ? "Không thể xuất PDF/vé. Vui lòng lưu danh sách hành khách rồi thử lại." : "Unable to export tickets. Please save the passenger list and try again."),
-        confirmButtonColor: "#124757",
       });
     } finally {
       setIsSubmitting(false);
@@ -1241,21 +1413,19 @@ export function CharterDetail() {
   const handleSavePassengers = async () => {
     if (!booking?.id) return;
     if (String(booking.paymentStatus).toLowerCase() !== "paid") {
-      Swal.fire({
+      showAlertDialog({
         icon: "info",
         title: lang === "VN" ? "Booking chưa thanh toán đủ" : "Booking is not fully paid",
-        text: lang === "VN" ? "Chỉ có thể nhập hành khách khi paymentStatus = Paid." : "Passengers can only be entered when paymentStatus is Paid.",
-        confirmButtonColor: "#124757",
+        text: lang === "VN" ? "Chỉ có thể nhập hành khách sau khi đã thanh toán đủ." : "Passengers can only be entered after the booking is fully paid.",
       });
       return;
     }
-    const passengerPayload = buildPassengerPayload(booking, passengerRows, lang, { allowSingleContactWithoutBirthYear: true });
+    const passengerPayload = buildPassengerPayload(booking, passengerRows, lang);
     if (passengerPayload.errorTitle) {
-      Swal.fire({
+      showAlertDialog({
         icon: "info",
         title: passengerPayload.errorTitle,
         text: passengerPayload.errorText,
-        confirmButtonColor: "#124757",
       });
       return;
     }
@@ -1264,10 +1434,9 @@ export function CharterDetail() {
       setIsSubmitting(true);
       await updateMyCharterBookingPassengers(booking.id, { passengers: passengerPayload.passengers });
       await loadDetail();
-      Swal.fire({
+      showAlertDialog({
         icon: "success",
         title: lang === "VN" ? "Đã lưu danh sách hành khách" : "Passenger list saved",
-        confirmButtonColor: "#124757",
       });
     } catch (error) {
       console.error("Không thể lưu hành khách charter:", {
@@ -1278,7 +1447,7 @@ export function CharterDetail() {
         submittedPassengers: passengerPayload.passengers,
         response: error.response?.data,
       });
-      Swal.fire({
+      showAlertDialog({
         icon: "error",
         title: lang === "VN" ? "Không thể lưu hành khách" : "Unable to save passengers",
         text: getApiErrorMessage(
@@ -1287,8 +1456,59 @@ export function CharterDetail() {
             ? "Hệ thống chưa lưu được danh sách hành khách này. Vui lòng kiểm tra lại tổng số khách, số người lớn và số trẻ em của booking."
             : "The system could not save this passenger list. Please verify the booking passenger totals, adult count, and child count.",
         ),
-        confirmButtonColor: "#124757",
       });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddPassengers = async (rows = []) => {
+    if (!booking?.id) return false;
+    if (String(booking.paymentStatus).toLowerCase() !== "paid") {
+      showAlertDialog({
+        icon: "info",
+        title: lang === "VN" ? "Chưa thanh toán đủ" : "Not fully paid",
+        text: lang === "VN" ? "Chỉ thêm hành khách sau khi đã thanh toán đủ." : "Passengers can only be added after the booking is fully paid.",
+      });
+      return false;
+    }
+
+    const passengers = (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        fullName: String(row.fullName || "").trim(),
+        birthYear: Number(row.birthYear),
+      }))
+      .filter((row) => row.fullName && Number.isInteger(row.birthYear) && row.birthYear >= 1900);
+
+    if (passengers.length === 0) {
+      showAlertDialog({
+        icon: "info",
+        title: lang === "VN" ? "Thiếu thông tin" : "Missing info",
+        text: lang === "VN" ? "Nhập họ tên và năm sinh hợp lệ cho ít nhất 1 hành khách." : "Enter a valid full name and birth year for at least one passenger.",
+      });
+      return false;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await addMyCharterBookingPassengers(booking.id, { passengers });
+      await loadDetail();
+      showAlertDialog({
+        icon: "success",
+        title: lang === "VN" ? "Đã gửi yêu cầu thêm" : "Add request submitted",
+        text: lang === "VN" ? "Yêu cầu đang chờ đội vận hành duyệt." : "Your request is pending operations review.",
+      });
+      return true;
+    } catch (error) {
+      showAlertDialog({
+        icon: "error",
+        title: lang === "VN" ? "Không thể thêm hành khách" : "Unable to add passengers",
+        text: getApiErrorMessage(
+          error,
+          lang === "VN" ? "Không gửi được yêu cầu thêm hành khách." : "Could not submit the add-passenger request.",
+        ),
+      });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -1334,7 +1554,7 @@ export function CharterDetail() {
   const canShowPayOsSection = !isPaid
     && !isTerminalBooking
     && !["Quoted", "PendingQuote", "Completed"].includes(booking.status);
-  const canUseContactAsSinglePassenger = isSinglePassengerWithContact(booking) && !hasSavedPassengerManifest(booking);
+  const canUseContactAsSinglePassenger = isSinglePassengerWithContact(booking, user) && !hasSavedPassengerManifest(booking);
   const paidAmount = Number(booking.paidAmount || 0);
   const quoteBoatRows = (Array.isArray(booking.quoteBoats) && booking.quoteBoats.length > 0
     ? booking.quoteBoats
@@ -1428,20 +1648,49 @@ export function CharterDetail() {
     && !isBookingHoldExpired
     && !["Expired", "Cancelled", "Completed", "Refunded"].includes(booking.status);
   const paidDepositAmount = Number(booking.paidDepositAmount || 0);
-  const depositPaymentAmount = getCharterDepositAmount(quoteTotal, booking.depositAmount);
+  const promoApplied =
+    Boolean(promoPreview?.ok)
+    && String(promoPreview?.code || "").trim().toUpperCase() === String(paymentPromotionCode || "").trim().toUpperCase();
+  const payableQuoteTotal = promoApplied && !booking.hasDepositPaid
+    ? Math.max(0, Number(promoPreview.finalAmount) || 0)
+    : quoteTotal;
+  const quoteDepositAmount = getCharterDepositAmount(quoteTotal, booking.depositAmount);
+  const depositPaymentAmount = getCharterDepositAmount(payableQuoteTotal, booking.depositAmount);
   const canPayDeposit = depositPaymentAmount > 0 && !booking.hasDepositPaid;
   const usesDefaultDeposit = !(Number(booking.depositAmount) > 0);
-  const effectivePaidAmount = Math.max(paidAmount, booking.hasDepositPaid ? paidDepositAmount || depositPaymentAmount : 0);
-  const remainingAmount = Math.max(quoteTotal - effectivePaidAmount, 0);
+  const effectivePaidAmount = Math.max(paidAmount, booking.hasDepositPaid ? paidDepositAmount || quoteDepositAmount : 0);
+  const remainingAmount = promoApplied && booking.hasDepositPaid
+    ? Math.max(0, Number(promoPreview.finalAmount) || 0)
+    : Math.max(payableQuoteTotal - effectivePaidAmount, 0);
   const normalizedPaymentOption = booking.hasDepositPaid
     ? "Remaining"
     : paymentOption === "Remaining"
       ? "Full"
       : paymentOption;
   const paymentChoices = [
-    { id: "Deposit", label: lang === "VN" ? "Đặt cọc" : "Deposit", disabled: booking.hasDepositPaid || depositPaymentAmount <= 0, amount: depositPaymentAmount },
-    { id: "Full", label: lang === "VN" ? "Thanh toán đủ" : "Full", disabled: false, amount: booking.hasDepositPaid ? remainingAmount : quoteTotal },
-    { id: "Remaining", label: lang === "VN" ? "Phần còn lại" : "Remaining", disabled: !booking.hasDepositPaid, amount: remainingAmount },
+    {
+      id: "Deposit",
+      label: lang === "VN" ? "Đặt cọc" : "Deposit",
+      disabled: booking.hasDepositPaid || depositPaymentAmount <= 0,
+      amount: depositPaymentAmount,
+      originalAmount: promoApplied ? quoteDepositAmount : null,
+    },
+    {
+      id: "Full",
+      label: lang === "VN" ? "Thanh toán đủ" : "Full",
+      disabled: false,
+      amount: booking.hasDepositPaid ? remainingAmount : payableQuoteTotal,
+      originalAmount: promoApplied && !booking.hasDepositPaid ? quoteTotal : null,
+    },
+    {
+      id: "Remaining",
+      label: lang === "VN" ? "Phần còn lại" : "Remaining",
+      disabled: !booking.hasDepositPaid,
+      amount: remainingAmount,
+      originalAmount: promoApplied && booking.hasDepositPaid
+        ? Math.max(quoteTotal - effectivePaidAmount, 0)
+        : null,
+    },
   ];
   const selectablePaymentChoices = booking.hasDepositPaid
     ? paymentChoices.filter((choice) => choice.id === "Remaining")
@@ -1455,7 +1704,7 @@ export function CharterDetail() {
       ? remainingAmount
       : booking.hasDepositPaid
         ? remainingAmount
-        : quoteTotal;
+        : payableQuoteTotal;
   const estimatedPendingPaymentDeadline = activePendingPayment ? getEstimatedPaymentDeadline(activePendingPayment) : "";
   const effectivePendingPaymentAmount = activePendingPayment
     ? getPaymentAmount(activePendingPayment) || selectedPaymentAmount
@@ -1610,6 +1859,16 @@ export function CharterDetail() {
                       className="px-5 py-3 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60 shadow-sm"
                     >
                       {lang === "VN" ? "Chỉnh sửa" : "Edit"}
+                    </button>
+                  )}
+                  {bookingWaitsCustomerRefundInfo(booking) && (
+                    <button
+                      type="button"
+                      onClick={handleOpenRefundForm}
+                      disabled={isSubmitting}
+                      className="px-5 py-3 rounded-xl bg-amber-600 text-white font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60 shadow-sm"
+                    >
+                      {lang === "VN" ? "Nhập thông tin hoàn tiền" : "Enter refund info"}
                     </button>
                   )}
                   {!["Cancelled", "Completed", "Refunded"].includes(booking.status) && (
@@ -1835,13 +2094,8 @@ export function CharterDetail() {
                   <CharterRouteMapPanel
                     lang={lang}
                     booking={booking}
-                    preferOfficial
                     heightClassName="h-64 md:h-72"
                     className="border-[#D8E7EA] dark:border-slate-700"
-                    title={lang === "VN" ? "Tuyến đã chốt" : "Confirmed route"}
-                    subtitle={lang === "VN"
-                      ? "Đường đi theo Route Master dùng khi admin chốt giá."
-                      : "Route Master path used when the quote was finalized."}
                   />
                 </div>
               </div>
@@ -1899,35 +2153,64 @@ export function CharterDetail() {
               )}
 
               <div className="border-t border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
-                {customerQuotePreview?.boats?.length > 0 ? (
-                  <CharterQuotePreviewTable
-                    preview={customerQuotePreview}
-                    booking={booking}
-                    lang={lang}
-                    currencyFormatter={currencyFormatter}
-                  />
-                ) : displayQuoteTotal > 0 ? (
-                  <div className="overflow-hidden rounded-2xl bg-[#124757] text-white shadow-[0_12px_30px_rgba(18,71,87,0.25)] dark:bg-yellow-400 dark:text-slate-900">
-                    <div className="flex items-end justify-between gap-3 px-4 py-4">
-                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
-                        {lang === "VN" ? "Tổng chốt giá" : "Quote total"}
-                      </p>
-                      <p className="font-headline text-2xl font-black tabular-nums tracking-tight">
-                        {currencyFormatter.format(displayQuoteTotal)}
+                {(() => {
+                  const previewHasPricedBoats = Array.isArray(customerQuotePreview?.boats)
+                    && customerQuotePreview.boats.some((boat) => (
+                      Number(boat?.subtotalAmount) > 0 || Number(boat?.unitPrice) > 0
+                    ));
+                  const previewHasTotal = Number(customerQuotePreview?.totalAmount) > 0 || displayQuoteTotal > 0;
+
+                  if (previewHasPricedBoats || (customerQuotePreview?.boats?.length > 0 && previewHasTotal)) {
+                    return (
+                      <CharterQuotePreviewTable
+                        preview={{
+                          ...customerQuotePreview,
+                          totalAmount: Number(customerQuotePreview?.totalAmount) > 0
+                            ? customerQuotePreview.totalAmount
+                            : displayQuoteTotal,
+                        }}
+                        booking={booking}
+                        lang={lang}
+                        currencyFormatter={currencyFormatter}
+                      />
+                    );
+                  }
+
+                  if (displayQuoteTotal > 0) {
+                    return (
+                      <div className="overflow-hidden rounded-2xl bg-[#124757] text-white shadow-[0_12px_30px_rgba(18,71,87,0.25)] dark:bg-yellow-400 dark:text-slate-900">
+                        <div className="flex items-end justify-between gap-3 px-4 py-4">
+                          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
+                            {lang === "VN" ? "Tổng chốt giá" : "Quote total"}
+                          </p>
+                          <p className="font-headline text-2xl font-black tabular-nums tracking-tight">
+                            {currencyFormatter.format(displayQuoteTotal)}
+                          </p>
+                        </div>
+                        {quoteDepositAmount > 0 ? (
+                          <div className="flex items-center justify-between gap-3 border-t border-white/15 px-4 py-3 dark:border-slate-900/15">
+                            <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
+                              {lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
+                            </p>
+                            <p className="text-sm font-headline font-black tabular-nums text-emerald-200 dark:text-emerald-800">
+                              {currencyFormatter.format(quoteDepositAmount)}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="rounded-2xl border border-dashed border-[#BFD4D9] bg-[#F7FAFB] px-4 py-5 text-center dark:border-slate-700 dark:bg-slate-900">
+                      <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                        {lang === "VN"
+                          ? "Đã có báo giá nhưng chưa nhận được chi tiết số tiền. Thử tải lại trang."
+                          : "A quote exists but pricing details are missing. Try refreshing the page."}
                       </p>
                     </div>
-                    {depositPaymentAmount > 0 ? (
-                      <div className="flex items-center justify-between gap-3 border-t border-white/15 px-4 py-3 dark:border-slate-900/15">
-                        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
-                          {lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
-                        </p>
-                        <p className="text-sm font-headline font-black tabular-nums text-emerald-200 dark:text-emerald-800">
-                          {currencyFormatter.format(depositPaymentAmount)}
-                        </p>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                  );
+                })()}
 
                 <MyCharterPaymentPanel
                   lang={lang}
@@ -1957,7 +2240,11 @@ export function CharterDetail() {
                   effectivePaidAmount={effectivePaidAmount}
                   remainingAmount={remainingAmount}
                   paymentPromotionCode={paymentPromotionCode}
-                  setPaymentPromotionCode={setPaymentPromotionCode}
+                  setPaymentPromotionCode={handlePaymentPromotionCodeChange}
+                  promoPreview={promoPreview}
+                  promoChecking={promoChecking}
+                  onApplyPromotionCode={handleApplyPromotionCode}
+                  onClearPromotionCode={handleClearPromotionCode}
                   effectiveCheckoutUrl={effectiveCheckoutUrl}
                   pendingPaymentOrderCode={pendingPaymentOrderCode}
                   pendingPaymentId={pendingPaymentId}
@@ -1994,6 +2281,7 @@ export function CharterDetail() {
             handleImportPassengers={handleImportPassengers}
             handlePassengerChange={handlePassengerChange}
             handleSavePassengers={handleSavePassengers}
+            handleAddPassengers={handleAddPassengers}
           />
         )}
       </main>
