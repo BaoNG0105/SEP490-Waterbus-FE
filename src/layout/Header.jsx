@@ -230,7 +230,7 @@ export const Header = ({ isNoticeVisible }) => {
           {/* Book Now button nổi bật góc phải */}
           <a
             className="hidden sm:block bg-white dark:bg-yellow-400 text-[#124757] dark:text-slate-900 px-7 py-2.5 rounded-full font-bold text-xs uppercase tracking-wider hover:bg-yellow-400 hover:text-slate-900 dark:hover:brightness-110 transition-all shadow-md"
-            href="/#booking-section"
+            href="/#services-section"
           >
             {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
           </a>
