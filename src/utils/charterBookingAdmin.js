@@ -366,6 +366,48 @@ export const formatPassengerSummary = (booking, lang) => {
   }
   return `${passengerCount} guests (${adultCount} adult${adultCount === 1 ? "" : "s"} / ${childCount} child${childCount === 1 ? "" : "ren"})`;
 };
+
+/** Ưu tiên Cancelled/Refunded nếu BE trả lệch giữa bookingStatus và status. */
+export const resolveCharterBookingStatus = (item) => {
+  const candidates = [
+    pick(item, ["bookingStatus"], ""),
+    pick(item, ["status"], ""),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  const lowered = candidates.map((value) => value.toLowerCase().replace(/[_-\s]/g, ""));
+  if (lowered.some((value) => ["cancelled", "canceled", "cancel"].includes(value))) return "Cancelled";
+  if (lowered.some((value) => value === "refunded")) return "Refunded";
+  if (lowered.some((value) => value === "expired")) return "Expired";
+  if (lowered.some((value) => value === "completed")) return "Completed";
+  return pick(item, ["bookingStatus", "status"], "PendingQuote") || "PendingQuote";
+};
+
+/** Ưu tiên trạng thái hoàn tiền từ payments[] nếu top-level còn Paid. */
+export const resolveCharterPaymentStatus = (item) => {
+  const top = String(pick(item, ["paymentStatus"], "") || "").trim();
+  const payments = Array.isArray(item?.payments) ? item.payments : [];
+  const paymentStatuses = payments
+    .map((payment) => String(pick(payment, ["paymentStatus"], "") || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  const has = (...keys) => {
+    const set = new Set(paymentStatuses);
+    return keys.some((key) => set.has(key) || String(top || "").toLowerCase() === key);
+  };
+
+  if (has("refunded", "manualrefunded", "manual_refunded")) return "Refunded";
+  if (has("partiallyrefunded", "partially_refunded")) return "PartiallyRefunded";
+  if (has("refundpending", "refund_pending", "refundprocessing", "refund_processing")) return "RefundPending";
+  if (has("refundfailed", "refund_failed")) return "RefundFailed";
+  if (top) return top;
+  if (paymentStatuses.includes("paid")) return "Paid";
+  if (paymentStatuses.includes("depositpaid")) return "DepositPaid";
+  if (paymentStatuses.includes("pending")) return "Pending";
+  return top || "--";
+};
+
 export const getPaymentStatusInfo = (status, lang) => {
   switch (String(status || "").toLowerCase()) {
     case "unpaid":
@@ -379,6 +421,9 @@ export const getPaymentStatusInfo = (status, lang) => {
       return { label: lang === "VN" ? "Đã đặt cọc" : "Deposit Paid", classes: "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20" };
     case "refunded":
       return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
+    case "partiallyrefunded":
+    case "partially_refunded":
+      return { label: lang === "VN" ? "Hoàn tiền một phần" : "Partially refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
     case "refundpending":
     case "refund_pending":
     case "refundprocessing":
@@ -1264,8 +1309,8 @@ export const normalizeBooking = (item) => {
     adultCount,
     childCount,
     passengerCount,
-    status: pick(item, ["bookingStatus", "status"], "PendingQuote"),
-    paymentStatus: pick(item, ["paymentStatus"], "--"),
+    status: resolveCharterBookingStatus(item),
+    paymentStatus: resolveCharterPaymentStatus(item),
     holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
     bookingHoldExpiresAt: pick(item, ["bookingHoldExpiresAt"], ""),
     estimatedPrice: Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0)),

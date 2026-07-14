@@ -32,7 +32,7 @@ import { BoatSeatLayoutPreviewButton } from "../../../components/BoatSeatLayoutP
 import { MyCharterPaymentPanel, MyCharterPaymentStickyBar } from "./MyCharterPaymentPanel";
 import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
 import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
-import { getRefundPaymentId, isPaymentUuid, normalizeSelectedRoute } from "../../../utils/charterBookingAdmin";
+import { getRefundPaymentId, isPaymentUuid, normalizeSelectedRoute, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
 import { buildConfirmBodyHtml, showAlertDialog, showConfirmDialog, showToast } from "../../../utils/swalToast";
 
 const pick = (source, keys, fallback = "") => {
@@ -189,8 +189,11 @@ const normalizeBooking = (item) => {
     adultCount,
     childCount,
     passengerCount,
-    status: pick(item, ["bookingStatus", "status"], "PendingQuote"),
-    paymentStatus,
+    status: resolveCharterBookingStatus(item),
+    paymentStatus: (() => {
+      const resolved = resolveCharterPaymentStatus(item);
+      return resolved !== "--" ? resolved : paymentStatus;
+    })(),
     holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
     bookingHoldExpiresAt: pick(item, ["bookingHoldExpiresAt"], pick(pendingPayment, ["bookingHoldExpiresAt"], "")),
     quotedAt: pick(item, ["quotedAt", "quoteSubmittedAt", "quoteAt", "quotedDate"], ""),

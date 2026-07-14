@@ -143,8 +143,13 @@ export function MyCharterTicketsPanel({
           ) : null}
 
           {passengerRows.map((row, index) => {
+            const rawApproval = String(row.approvalStatus || "").trim();
             const approval = normalizePassengerApprovalStatus(row.approvalStatus);
-            const isLocked = !isPaid || Boolean(row.requestBatchId) || approval === "Approved";
+            // Ô trống chưa lưu (chưa có id/batch) phải nhập được — không coi "Approved" mặc định khi thiếu status.
+            const isDraftSlot = !row.id && !row.requestBatchId && !rawApproval;
+            const isLocked = !isPaid
+              || Boolean(row.requestBatchId)
+              || (!isDraftSlot && approval === "Approved");
             const isBookerOnly = canUseContactAsSinglePassenger && index === 0;
             return (
               <div key={row.id || `passenger-${index}`} className="space-y-2">

@@ -6,7 +6,7 @@ import { cancelMyCharterBooking, fetchMyCharterBookingDetail } from "../../../se
 import { refundBookingPayment } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
-import { getRefundPaymentId, isPaymentUuid } from "../../../utils/charterBookingAdmin";
+import { getRefundPaymentId, isPaymentUuid, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -62,8 +62,8 @@ const normalizeBooking = (item) => {
     departureDate: pick(item, ["departureDate", "startDate"], ""),
     startTime: pick(item, ["startTime"], "--"),
     contactName: pick(item, ["contactName"], ""),
-    status: pick(item, ["bookingStatus", "status"], "PendingQuote"),
-    paymentStatus: pick(item, ["paymentStatus"], "--"),
+    status: resolveCharterBookingStatus(item),
+    paymentStatus: resolveCharterPaymentStatus(item),
     paidAmount: paidAmountFromPayments || Number(pick(item, ["paidAmount", "paidPaymentAmount", "depositAmount"], 0)) || 0,
     payments,
     raw: item,
