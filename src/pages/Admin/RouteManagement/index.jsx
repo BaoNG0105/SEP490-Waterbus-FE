@@ -3,7 +3,20 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, removeRoute } from "../../../services/routeService";
 import Swal from "sweetalert2";
-import { getRouteTypeLabel } from "../../../utils/routeTypes";
+import { getRouteKindLabel } from "../../../utils/routeTypes";
+
+const routeKindBadgeClass = (routeType) => {
+    switch (routeType) {
+        case "CharterReference":
+            return "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300";
+        case "SightseeingLoop":
+            return "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300";
+        case "Regular":
+            return "bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300";
+        default:
+            return "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400";
+    }
+};
 
 export function RouteManagement() {
     const { lang } = useApp();
@@ -143,20 +156,13 @@ export function RouteManagement() {
                         {lang === "VN" ? "Danh sách các tuyến đường sông, lộ trình bến dừng và khoảng cách vận hành." : "Manage waterway routes, stop sequencing and operational distances."}
                     </p>
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className="flex flex-wrap gap-2 shrink-0">
                     <button
-                        onClick={() => navigate("/admin/routes-management/draw-waterway")}
-                        className="px-5 py-3 bg-white dark:bg-slate-800 text-[#124757] dark:text-yellow-400 border border-slate-200 dark:border-slate-700 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2"
-                    >
-                        <span className="material-symbols-outlined text-sm font-bold">draw</span>
-                        {lang === "VN" ? "Vẽ tuyến sông" : "Draw Waterway"}
-                    </button>
-                    <button
-                        onClick={() => navigate("/admin/routes-management/create")}
+                        onClick={() => navigate("/admin/routes-management/merge-gps")}
                         className="px-5 py-3 bg-yellow-400 text-slate-900 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
                     >
-                        <span className="material-symbols-outlined text-sm font-bold">add_circle</span>
-                        {lang === "VN" ? "Thêm tuyến mới" : "Create Route"}
+                        <span className="material-symbols-outlined text-sm font-bold">merge</span>
+                        {lang === "VN" ? "Ghép tuyến GPS" : "Merge GPS routes"}
                     </button>
                 </div>
             </div>
@@ -253,16 +259,9 @@ export function RouteManagement() {
                                                     <span className="text-[10px] text-slate-400 dark:text-slate-500 block max-w-sm truncate">
                                                         {route.description || (lang === "VN" ? "Chưa có mô tả" : "No description")}
                                                     </span>
-                                                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                                        <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
-                                                            {getRouteTypeLabel(route.routeType || "Regular", lang)}
-                                                        </span>
-                                                        {route.isBookable === false && (
-                                                            <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">
-                                                                {lang === "VN" ? "Không đặt vé" : "Not bookable"}
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                    <span className={`inline-flex mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${routeKindBadgeClass(route.routeType)}`}>
+                                                        {getRouteKindLabel(route.routeType, lang)}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </td>
