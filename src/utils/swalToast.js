@@ -163,7 +163,12 @@ export const notify = (options = {}) => {
     || (opts.html && opts.showConfirmButton !== false),
   );
 
-  if (needsDialog) return showConfirmDialog(opts);
+  if (needsDialog) {
+    return showConfirmDialog({
+      showCancelButton: Boolean(opts.showCancelButton || opts.cancelButtonText || opts.input),
+      ...opts,
+    });
+  }
   return showAlertDialog(opts);
 };
 

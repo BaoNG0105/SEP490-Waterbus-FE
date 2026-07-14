@@ -827,7 +827,7 @@ export function CharterDetail() {
     }
 
     try {
-      setIsSubmitting(true);
+      if (!silent) setIsSubmitting(true);
       await syncBookingPayment(paymentId);
       await loadDetail();
       if (!silent) {
@@ -845,13 +845,13 @@ export function CharterDetail() {
           title: lang === "VN" ? "Không thể đồng bộ" : "Unable to synchronize",
           text: isNotFound
             ? (lang === "VN"
-              ? "Không tìm thấy giao dịch payment trên hệ thống. Thử đồng bộ bằng orderCode PayOS hoặc tải lại trang."
-              : "Payment was not found. Try syncing with the PayOS orderCode or reload the page.")
+              ? "Không tìm thấy giao dịch thanh toán. Thử tải lại trang hoặc đồng bộ lại."
+              : "Payment was not found. Try reload or sync again.")
             : (error.response?.data?.message || (lang === "VN" ? "Vui lòng thử lại sau." : "Please try again later.")),
         });
       }
     } finally {
-      setIsSubmitting(false);
+      if (!silent) setIsSubmitting(false);
     }
   }, [lang, loadDetail]);
 
@@ -859,7 +859,7 @@ export function CharterDetail() {
     if (!orderCode) return;
 
     try {
-      setIsSubmitting(true);
+      if (!silent) setIsSubmitting(true);
       await syncBookingPaymentByOrderCode(orderCode);
       await loadDetail();
       if (!silent) {
@@ -877,7 +877,7 @@ export function CharterDetail() {
         });
       }
     } finally {
-      setIsSubmitting(false);
+      if (!silent) setIsSubmitting(false);
     }
   }, [lang, loadDetail]);
 
