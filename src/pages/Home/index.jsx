@@ -5,16 +5,18 @@ import 'leaflet/dist/leaflet.css';
 import { fetchAllStations } from "../../services/stationService";
 import { WaterwayMap } from "../../components/WaterwayMap";
 import { fetchPublishedBlogPosts } from "../../services/blogService";
+import { fetchPublicPromotions } from "../../services/promotionService";
 import { ContactForm } from "../../components/ContactForm";
 
 const heroVideo = "https://res.cloudinary.com/dygipvoal/video/upload/v1783865624/q7gde8dluohboeqjzdtx.mp4";
+const fallbackPromoImg = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
 import {
   promoPosters,
-  promoData,
   testimonialsData,
   appImages
 } from "../../data/homeData";
+
 
 // Khoảng thời gian phát của video Hero
 const HERO_VIDEO_START = 6;
@@ -52,6 +54,10 @@ export const Home = () => {
   // State quản lý danh sách Blog
   const [blogs, setBlogs] = useState([]);
   const [isLoadingBlogs, setIsLoadingBlogs] = useState(true);
+
+  // State quản lý danh sách Khuyến mãi công khai
+  const [promotions, setPromotions] = useState([]);
+  const [isLoadingPromotions, setIsLoadingPromotions] = useState(true);
 
   // Các state hiển thị
   const [heroSlide, setHeroSlide] = useState(0);
@@ -108,6 +114,22 @@ export const Home = () => {
       }
     };
     loadBlogs();
+  }, []);
+
+  // useEffect tự động gọi API lấy Khuyến mãi công khai khi vào trang Home
+  useEffect(() => {
+    const loadPromotions = async () => {
+      try {
+        setIsLoadingPromotions(true);
+        const data = await fetchPublicPromotions();
+        setPromotions(data || []);
+      } catch (error) {
+        console.error("Lỗi khi tải danh sách khuyến mãi:", error);
+      } finally {
+        setIsLoadingPromotions(false);
+      }
+    };
+    loadPromotions();
   }, []);
 
   // Testimonials tự động chạy sau mỗi 6 giây
@@ -516,53 +538,38 @@ export const Home = () => {
               {lang === "VN" ? "Đặc quyền dành riêng cho hành khách" : "Exclusive Privileges For Our Passengers"}
             </h2>
           </div>
-          {/* Grid danh sách các thẻ Khuyến mại thiết kế lại theo ảnh mẫu */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {promoData.map((promo) => (  // <--- Sử dụng promoData ở đây
-              <div
-                key={promo.id}
-                className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50 rounded-4xl overflow-hidden flex flex-col group hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-              >
-                {/* Phần ảnh phía trên tích hợp Badge nổi */}
-                <div className="aspect-16/10 relative overflow-hidden shrink-0">
+          {/* Grid danh sách các thẻ Khuyến mại (dữ liệu thật từ API getPublicPromotions) */}
+          {isLoadingPromotions ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+            </div>
+          ) : promotions.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 font-medium">
+              {lang === "VN" ? "Hiện chưa có khuyến mãi công khai." : "No public promotions right now."}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              {promotions.slice(0, 3).map((promo) => (
+                <Link
+                  key={promo.promotionCode}
+                  to={`/promotions/${promo.promotionCode}`}
+                  className="group relative aspect-3/4 rounded-4xl overflow-hidden shadow-lg block"
+                >
                   <img
-                    src={promo.image}
-                    alt={promo.titleVn}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    src={promo.imageUrl || fallbackPromoImg}
+                    alt={promo.promotionName}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                   />
-                  <div className="absolute inset-0 bg-linear-to-t from-slate-900/40 to-transparent"></div>
-                  {/* Badge tag góc trái ảnh */}
-                  <span className="absolute top-4 left-4 bg-[#124757] text-white font-headline text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm">
-                    {lang === "VN" ? promo.tagVn : promo.tagEn}
-                  </span>
-                </div>
-                {/* Nội dung chi tiết của Card khuyến mại */}
-                <div className="p-6 flex-1 flex flex-col justify-between space-y-5">
-                  <div className="space-y-2">
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      {lang === "VN" ? promo.expiryVn : promo.expiryEn}
-                    </div>
-                    <h3 className="text-xl font-headline font-bold text-slate-800 dark:text-white leading-snug line-clamp-2 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors">
-                      {lang === "VN" ? promo.titleVn : promo.titleEn}
+                  {/* Lớp phủ chỉ hiện tên khuyến mãi khi hover */}
+                  <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/60 transition-colors duration-300 flex items-center justify-center p-8">
+                    <h3 className="text-xl md:text-2xl font-headline font-bold text-white text-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+                      {promo.promotionName}
                     </h3>
                   </div>
-                  {/* Khu vực hiển thị mã Code và nút bấm đặt vé */}
-                  <div className="flex items-center justify-between gap-4 pt-2 border-t border-slate-200/60 dark:border-slate-700/50">
-                    <div className="bg-slate-200/70 dark:bg-slate-700 px-3.5 py-2 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 select-all cursor-pointer" title="Click to copy">
-                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mr-1.5">Code:</span>
-                      <span className="text-sm font-black font-headline text-[#124757] dark:text-yellow-400 tracking-wider">{promo.code}</span>
-                    </div>
-                    <a
-                      href="/#booking-section"
-                      className="bg-yellow-400 text-[#124757] w-10 h-10 rounded-full flex items-center justify-center shadow-sm hover:bg-yellow-300 hover:scale-110 transition-all shrink-0"
-                    >
-                      <span className="material-symbols-outlined text-lg font-bold">arrow_forward</span>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                </Link>
+              ))}
+            </div>
+          )}
           {/* Nút "Xem tất cả" */}
           <div className="mt-16 flex justify-center">
             <Link
@@ -701,13 +708,13 @@ export const Home = () => {
 
       {/* App Download Section */}
       <section className="bg-[#124757] dark:bg-slate-900 py-16 md:py-0 overflow-hidden select-none border-t border-white/10 dark:border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 items-center gap-12 lg:gap-20 min-h-[500px]">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 items-center gap-12 lg:gap-20 min-h-125">
           {/* CỘT TRÁI: Slide Hình Ảnh App (Thiết kế xếp chồng) */}
-          <div className="relative w-full h-[350px] md:h-[500px] flex items-center justify-center lg:justify-end">
+          <div className="relative w-full h-87.5 md:h-125 flex items-center justify-center lg:justify-end">
             {/* Lớp trang trí phát sáng phía sau */}
-            <div className="absolute w-[250px] md:w-[350px] h-[250px] md:h-[350px] bg-yellow-400/20 rounded-full blur-[80px]"></div>
+            <div className="absolute w-62.5 md:w-87.5 h-62.5 md:h-87.5 bg-yellow-400/20 rounded-full blur-[80px]"></div>
             {/* Khung chứa các Slide Ảnh */}
-            <div className="relative w-[220px] md:w-[280px] h-[450px] md:h-[580px] mt-10 md:mt-24 lg:mt-32">
+            <div className="relative w-55 md:w-70 h-112.5 md:h-125 mt-10 md:mt-24 lg:mt-32">
               {appImages.map((img, index) => (
                 <div
                   key={index}
@@ -719,7 +726,7 @@ export const Home = () => {
                   <img
                     src={img}
                     alt={`WaterBus App Screen ${index + 1}`}
-                    className="w-full h-full object-cover rounded-[2rem] border-[6px] border-slate-900 shadow-2xl"
+                    className="w-full h-full object-cover rounded-4xl border-[6px] border-slate-900 shadow-2xl"
                     style={{
                       maskImage: "linear-gradient(to bottom, black 80%, transparent 100%)",
                       WebkitMaskImage: "linear-gradient(to bottom, black 80%, transparent 100%)"
@@ -807,7 +814,7 @@ export const Home = () => {
               format_quote
             </span>
             {/* Nội dung Review chuyển đổi slide mượt mà */}
-            <div className="w-full text-center space-y-6 relative min-h-[160px] flex flex-col justify-center items-center">
+            <div className="w-full text-center space-y-6 relative min-h-40 flex flex-col justify-center items-center">
               {testimonialsData.map((item, index) => (
                 <div
                   key={item.id}

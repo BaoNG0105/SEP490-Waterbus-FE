@@ -15,6 +15,7 @@ import { BlogDetail } from "./pages/Blog/BlogDetail";
 // import { Station } from "./pages/Station";
 import { StationDetail } from "./pages/Station/StationDetail";
 import { Promotions } from "./pages/Promotions";
+import { PromotionDetail } from "./pages/Promotions/PromotionDetail";
 import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
 import { EditProfile } from "./pages/Profile/EditProfie";
@@ -105,6 +106,16 @@ function App() {
           element={
             <MainLayout>
               <Promotions />
+            </MainLayout>
+          }
+        />
+
+        {/* Promotion Detail Page */}
+        <Route
+          path="/promotions/:code"
+          element={
+            <MainLayout>
+              <PromotionDetail />
             </MainLayout>
           }
         />

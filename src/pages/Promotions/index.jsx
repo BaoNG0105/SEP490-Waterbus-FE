@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { fetchPublicPromotions, PROMOTION_TYPE } from "../../services/promotionService";
 
@@ -12,7 +13,7 @@ const formatDiscount = (promo, lang) => {
 };
 
 const fallbackImg =
-  "https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=2000";
+  "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
 export const Promotions = () => {
   const { lang } = useApp();
@@ -20,7 +21,6 @@ export const Promotions = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [selectedPromo, setSelectedPromo] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -59,7 +59,7 @@ export const Promotions = () => {
   return (
     <main className="pt-28 pb-20 bg-surface dark:bg-slate-900 transition-colors duration-300 min-h-screen relative">
       <section className="px-4 md:px-8 max-w-7xl mx-auto mb-20">
-        <div className="relative w-full h-[420px] md:h-[500px] rounded-[2rem] overflow-hidden group shadow-2xl bg-slate-800">
+        <div className="relative w-full h-105 md:h-125 rounded-4xl overflow-hidden group shadow-2xl bg-slate-800">
           {isLoading ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-10 h-10 border-4 border-white/20 border-t-yellow-400 rounded-full animate-spin" />
@@ -79,7 +79,7 @@ export const Promotions = () => {
           ) : (
             heroPromos.map((slide, index) => (
               <div
-                key={slide.id}
+                key={slide.promotionCode}
                 className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
                   index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
                 }`}
@@ -90,7 +90,7 @@ export const Promotions = () => {
                     className="w-full h-full object-cover scale-105 group-hover:scale-100 transition-transform duration-[10s]"
                     src={slide.imageUrl || fallbackImg}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/50 to-transparent" />
+                  <div className="absolute inset-0 bg-linear-to-r from-slate-900/90 via-slate-900/50 to-transparent" />
                 </div>
                 <div className="relative h-full flex flex-col justify-center px-8 md:px-16 max-w-3xl">
                   <p className="text-yellow-400 font-headline font-black text-xs uppercase tracking-widest mb-3">
@@ -144,11 +144,6 @@ export const Promotions = () => {
           <h2 className="text-4xl font-bold font-headline tracking-tighter mb-2 text-slate-900 dark:text-white">
             {lang === "VN" ? "Ưu đãi hiện hành" : "Current Offers"}
           </h2>
-          <p className="text-on-surface-variant dark:text-white/60 font-label">
-            {lang === "VN"
-              ? "Dữ liệu từ GET /promotions/public."
-              : "Loaded from GET /promotions/public."}
-          </p>
         </div>
 
         {isLoading ? (
@@ -162,14 +157,12 @@ export const Promotions = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {promotions.map((promo) => (
-              <div
-                key={promo.id}
-                className="group bg-surface-container-lowest dark:bg-slate-800 rounded-[2.5rem] p-4 transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 border border-surface-variant dark:border-slate-700"
+              <Link
+                key={promo.promotionCode}
+                to={`/promotions/${promo.promotionCode}`}
+                className="group bg-surface-container-lowest dark:bg-slate-800 rounded-[2.5rem] p-4 transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 border border-surface-variant dark:border-slate-700 block"
               >
-                <div
-                  className="relative h-64 rounded-[2rem] overflow-hidden mb-6 cursor-pointer"
-                  onClick={() => setSelectedPromo(promo)}
-                >
+                <div className="relative h-64 rounded-4xl overflow-hidden mb-6">
                   <img
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                     alt={promo.promotionName}
@@ -177,64 +170,24 @@ export const Promotions = () => {
                   />
                 </div>
                 <div className="px-4 pb-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-[#124757] dark:text-yellow-400 mb-2">
+                  {/* <p className="text-[10px] font-black uppercase tracking-widest text-[#124757] dark:text-yellow-400 mb-2">
                     {promo.promotionCode} · {formatDiscount(promo, lang)}
-                  </p>
+                  </p> */}
                   <h3 className="text-2xl font-bold font-headline mb-3 tracking-tight text-slate-900 dark:text-white">
                     {promo.promotionName}
                   </h3>
                   <p className="text-on-surface-variant dark:text-white/70 text-sm mb-6 line-clamp-3 leading-relaxed">
                     {promo.description || formatDiscount(promo, lang)}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPromo(promo)}
-                    className="w-full py-4 rounded-xl border-2 border-outline-variant dark:border-slate-600 font-bold text-sm text-slate-700 dark:text-white hover:bg-primary hover:border-primary hover:text-white dark:hover:bg-yellow-400 dark:hover:border-yellow-400 dark:hover:text-slate-900 transition-colors"
-                  >
+                  <div className="w-full py-4 rounded-xl border-2 border-outline-variant dark:border-slate-600 font-bold text-sm text-center text-slate-700 dark:text-white group-hover:bg-primary group-hover:border-primary group-hover:text-white dark:group-hover:bg-yellow-400 dark:group-hover:border-yellow-400 dark:group-hover:text-slate-900 transition-colors">
                     {lang === "VN" ? "Xem chi tiết" : "View Details"}
-                  </button>
+                  </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
       </section>
-
-      {selectedPromo && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-[2.5rem] overflow-hidden shadow-2xl relative flex flex-col md:flex-row max-h-[90vh]">
-            <button
-              type="button"
-              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/20 text-white hover:bg-black/40"
-              onClick={() => setSelectedPromo(null)}
-            >
-              <span className="material-symbols-outlined">close</span>
-            </button>
-            <div className="md:w-5/12 h-48 md:h-auto shrink-0 relative">
-              <img
-                alt={selectedPromo.promotionName}
-                className="w-full h-full object-cover"
-                src={selectedPromo.imageUrl || fallbackImg}
-              />
-            </div>
-            <div className="p-8 md:p-10 overflow-y-auto flex-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#124757] dark:text-yellow-400 mb-2">
-                {selectedPromo.promotionCode}
-              </p>
-              <h3 className="text-3xl font-bold font-headline text-slate-900 dark:text-white mb-3">
-                {selectedPromo.promotionName}
-              </h3>
-              <p className="text-lg font-black text-[#124757] dark:text-yellow-400 mb-4">
-                {formatDiscount(selectedPromo, lang)}
-              </p>
-              <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
-                {selectedPromo.description ||
-                  (lang === "VN" ? "Không có mô tả chi tiết." : "No detailed description.")}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 };

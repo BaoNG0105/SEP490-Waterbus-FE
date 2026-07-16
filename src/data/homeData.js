@@ -56,43 +56,6 @@ export const guidelines = [
     },
 ];
 
-// DỮ LIỆU KHUYẾN MÃI
-export const promoData = [
-  {
-    id: 1,
-    titleVn: "Giảm 20% cho nhóm từ 4 người trở lên",
-    titleEn: "20% Off for Groups of 4 or More",
-    code: "SWBGROUP20",
-    expiryVn: "Hạn dùng: 30/06/2026",
-    expiryEn: "Exp: Jun 30, 2026",
-    image: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png",
-    tagVn: "Ưu đãi nhóm",
-    tagEn: "Group Deal"
-  },
-  {
-    id: 2,
-    titleVn: "Đồng giá vé 15k cho khung giờ thấp điểm",
-    titleEn: "Flat 15k Ticket for Off-Peak Hours",
-    code: "MIDDAY15K",
-    expiryVn: "Hạn dùng: 15/07/2026",
-    expiryEn: "Exp: Jul 15, 2026",
-    image: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075336/wkzbfwc5xyfby9ueute1.png",
-    tagVn: "Giờ thấp điểm",
-    tagEn: "Off-Peak"
-  },
-  {
-    id: 3,
-    titleVn: "Tặng voucher nước miễn phí khi đặt vé khứ hồi",
-    titleEn: "Free Beverage Voucher for Round-Trips",
-    code: "FREEWATER",
-    expiryVn: "Hạn dùng: 31/08/2026",
-    expiryEn: "Exp: Aug 31, 2026",
-    image: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg",
-    tagVn: "Quà tặng",
-    tagEn: "Free Gift"
-  }
-];
-
 // DỮ LIỆU Ý KIẾN KHÁCH HÀNG
 export const testimonialsData = [
     {
