@@ -42,6 +42,8 @@ import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 import { RouteManagement } from "./pages/Admin/RouteManagement";
 import { RouteDetail } from "./pages/Admin/RouteManagement/RouteDetail";
 import { MergeGpsRoutes } from "./pages/Admin/RouteManagement/MergeGpsRoutes";
+import { LiveTracking } from "./pages/Admin/LiveTracking";
+import { IncidentManagement } from "./pages/Admin/IncidentManagement";
 import { AdminCharterBookingDetail, AdminCharterBookingRefund, CharterBookingManagement } from "./pages/Admin/CharterBookingManagement";
 import { PromotionManagement } from "./pages/Admin/PromotionManagement";
 import { CreatePromotion } from "./pages/Admin/PromotionManagement/CreatePromotion";
@@ -312,6 +314,24 @@ function App() {
             element={
               <AdminLayout title="Boats Management">
                 <BoatManagement />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/live-tracking"
+            element={
+              <AdminLayout title="Live Tracking">
+                <LiveTracking />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/incidents"
+            element={
+              <AdminLayout title="Incidents">
+                <IncidentManagement />
               </AdminLayout>
             }
           />

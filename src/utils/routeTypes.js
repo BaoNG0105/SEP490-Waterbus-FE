@@ -1,34 +1,76 @@
-/** Nhãn hiển thị theo routeType BE. */
-export const getRouteKindLabel = (routeType, lang = "VN") => {
-  switch (routeType) {
-    case "CharterReference":
-      return lang === "VN" ? "Route nguồn GPS" : "GPS source route";
+/**
+ * Nhãn BE `routeLabel` ngắn: Bus | GPS | Sightseeing | Charter
+ * + map từ routeType cũ khi BE chưa trả routeLabel.
+ */
+export const resolveRouteLabelKey = (routeOrTypeOrLabel) => {
+  if (routeOrTypeOrLabel == null) return "";
+  if (typeof routeOrTypeOrLabel === "string") {
+    const raw = routeOrTypeOrLabel.trim();
+    const key = raw.toLowerCase().replace(/[_-\s]/g, "");
+    if (["bus", "regular"].includes(key)) return "Bus";
+    if (["gps", "charterreference"].includes(key)) return "GPS";
+    if (["sightseeing", "sightseeingloop"].includes(key)) return "Sightseeing";
+    if (key === "charter") return "Charter";
+    return raw;
+  }
+
+  const fromLabel = String(routeOrTypeOrLabel.routeLabel || "").trim();
+  if (fromLabel) return resolveRouteLabelKey(fromLabel);
+  return resolveRouteLabelKey(routeOrTypeOrLabel.routeType || "");
+};
+
+/** Nhãn hiển thị đầy đủ theo routeLabel / routeType. */
+export const getRouteKindLabel = (routeTypeOrRoute, lang = "VN") => {
+  const key = resolveRouteLabelKey(routeTypeOrRoute);
+  const isVn = lang === "VN";
+  switch (key) {
+    case "Bus":
+      return isVn ? "Tuyến bán vé thường" : "Regular ticket route";
+    case "GPS":
+      return isVn ? "Route nguồn GPS" : "GPS source route";
+    case "Sightseeing":
+      return isVn ? "Route vòng tham quan" : "Sightseeing route";
     case "Charter":
-      // BE ghép từ các chặng GPS cho 1 booking charter (không phải nguồn GPS).
-      return lang === "VN" ? "Tuyến thuê riêng" : "Charter route";
-    case "SightseeingLoop":
-      return lang === "VN" ? "Vòng tham quan" : "Sightseeing loop";
-    case "Regular":
-      return lang === "VN" ? "Tuyến booking" : "Booking route";
+      return isVn ? "Route charter" : "Charter route";
     default:
-      return routeType || "—";
+      return key || "—";
   }
 };
 
-export const isCharterSourceRoute = (route) =>
-  String(route?.routeType || "") === "CharterReference";
+/** Badge ngắn trên UI (ưu tiên routeLabel BE). */
+export const getRouteShortLabel = (routeOrTypeOrLabel, lang = "VN") => {
+  const key = resolveRouteLabelKey(routeOrTypeOrLabel);
+  if (["Bus", "GPS", "Sightseeing", "Charter"].includes(key)) return key;
+  return getRouteKindLabel(routeOrTypeOrLabel, lang);
+};
+
+export const isCharterSourceRoute = (route) => {
+  const key = resolveRouteLabelKey(route);
+  if (key === "GPS") return true;
+  return String(route?.routeType || "") === "CharterReference";
+};
 
 export const isCharterComposedRoute = (routeOrType) => {
+  const key = resolveRouteLabelKey(routeOrType);
+  if (key === "Charter") return true;
   const type = typeof routeOrType === "string" ? routeOrType : routeOrType?.routeType;
   return String(type || "") === "Charter";
 };
 
 export const isSightseeingLoopRoute = (routeOrType) => {
+  const key = resolveRouteLabelKey(routeOrType);
+  if (key === "Sightseeing") return true;
   const type = typeof routeOrType === "string" ? routeOrType : routeOrType?.routeType;
   return String(type || "") === "SightseeingLoop";
 };
 
-/** Chỉ được ghép route nguồn GPS (CharterReference). */
+export const isGeneratedBookingRoute = (route) => {
+  if (!route || typeof route !== "object") return false;
+  if (route.isGeneratedForBooking === true) return true;
+  return isCharterComposedRoute(route);
+};
+
+/** Chỉ được ghép route nguồn GPS (CharterReference / GPS). */
 export const canSelectForMerge = (route) => isCharterSourceRoute(route);
 
 /**
@@ -43,8 +85,8 @@ export const validateMergeRouteChain = (orderedRoutes, lang = "VN") => {
   for (const route of orderedRoutes) {
     if (!isCharterSourceRoute(route)) {
       return lang === "VN"
-        ? "Chỉ được ghép Route nguồn GPS (không ghép Vòng tham quan / Tuyến booking / Tuyến thuê riêng)."
-        : "Only GPS source routes can be merged (not sightseeing / booking / charter routes).";
+        ? "Chỉ được ghép Route nguồn GPS (không ghép Vòng tham quan / Tuyến bán vé / Route charter)."
+        : "Only GPS source routes can be merged (not sightseeing / bus / charter routes).";
     }
   }
 
@@ -68,8 +110,8 @@ export const validateMergeRouteChain = (orderedRoutes, lang = "VN") => {
   const chainEndId = String(lastStops[lastStops.length - 1]?.stationId || "");
   if (chainStartId && chainEndId && chainStartId === chainEndId) {
     return lang === "VN"
-      ? "Không ghép thành vòng kín (điểm đầu = điểm cuối). Chiều về tạo tuyến booking riêng."
-      : "Cannot merge into a closed loop (start = end). Create a separate return booking route.";
+      ? "Không ghép thành vòng kín (điểm đầu = điểm cuối). Chiều về tạo tuyến bán vé riêng."
+      : "Cannot merge into a closed loop (start = end). Create a separate return bus route.";
   }
 
   return null;

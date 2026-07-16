@@ -8,6 +8,7 @@ import {
   AdminBookingTicketsTab,
 } from "../../../components/AdminCharterDetailWorkspace";
 import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
+import { PageLoading } from "../../../components/PageLoading";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats } from "../../../services/boatService";
 import {
@@ -59,6 +60,7 @@ import {
   isCharterBoatScheduleConflictError,
   isCharterRoutePlanComplete,
   isCharterRoutePricingBlocked,
+  isUsableRouteCandidateForBooking,
   CHARTER_BOAT_HOLDING_STATUSES,
   collectOccupiedBoatIdsForSchedule,
   normalizeCharterScheduleDate,
@@ -89,7 +91,7 @@ import {
   acknowledgeTabBadge,
   shouldShowTabBadge,
 } from "../../../utils/charterBookingAdmin";
-import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
+import { fetchCharterSourceRoutes, fetchRouteDetail } from "../../../services/routeService";
 
 export function AdminCharterBookingDetail() {
   const { lang } = useApp();
@@ -116,6 +118,7 @@ export function AdminCharterBookingDetail() {
   const [quotePreviewError, setQuotePreviewError] = useState("");
   const [occupiedBoatIds, setOccupiedBoatIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -138,7 +141,8 @@ export function AdminCharterBookingDetail() {
   const loadDetail = useCallback(async ({ silent = false } = {}) => {
     if (!id) return;
     try {
-      if (!silent) setIsLoading(true);
+      if (silent) setIsRefreshing(true);
+      else setIsLoading(true);
       setLoadError("");
       const fetchDetail = useAssignedApi ? fetchAssignedCharterBookingDetail : fetchAdminCharterBookingDetail;
       const [detail, boatData] = await Promise.all([
@@ -166,7 +170,8 @@ export function AdminCharterBookingDetail() {
         ));
       }
     } finally {
-      if (!silent) setIsLoading(false);
+      if (silent) setIsRefreshing(false);
+      else setIsLoading(false);
     }
   }, [id, lang, location.state?.tab, useAssignedApi, user]);
 
@@ -402,54 +407,50 @@ export function AdminCharterBookingDetail() {
 
       let legs = normalizeRouteCandidateLegs(bePayload, booking);
 
-      // Fallback / bổ sung: lọc Route nguồn GPS theo đúng 2 mã station của mỗi chặng.
-      try {
-        const catalog = await fetchAllRoutes();
-        const list = Array.isArray(catalog) ? catalog : [];
-        // Lấy Active GPS / vòng tham quan; nếu list thiếu stops thì GET detail để đọc stationId.
-        const gpsLike = list.filter((route) => {
-          const status = String(route?.status || "Active").toLowerCase();
-          if (status && status !== "active") return false;
-          const type = String(route?.routeType || "");
-          return type === "CharterReference"
-            || type === "SightseeingLoop"
-            || route?.fromGps === true
-            || route?.isFromGps === true
-            || route?.createdFromGps === true;
-        });
-        const needDetail = gpsLike.filter((route) => {
-          const stops = Array.isArray(route?.stops) ? route.stops : Array.isArray(route?.routeStops) ? route.routeStops : [];
-          return stops.length === 0;
-        });
-        const details = await Promise.all(
-          needDetail.map(async (route) => {
-            const id = String(route.routeId || route.id || "");
-            if (!id) return null;
-            try {
-              return await fetchRouteDetail(id);
-            } catch (error) {
-              console.error(`Không tải detail route ${id}:`, error);
-              return null;
-            }
-          }),
-        );
-        const detailById = new Map(
-          details.filter(Boolean).map((detail) => [String(detail.routeId || detail.id || ""), detail]),
-        );
-        const catalogWithStops = gpsLike.map((route) => {
-          const id = String(route.routeId || route.id || "");
-          return detailById.get(id) || route;
-        });
-        setGpsCatalogRoutes(catalogWithStops);
-        legs = enrichCandidateLegsWithManualGpsRoutes(legs, catalogWithStops);
-      } catch (error) {
-        console.error("Không tải được catalog route GPS để chọn thủ công:", error);
-        if (!beErrorMessage) {
-          beErrorMessage = getApiErrorMessage(
-            error,
-            lang === "VN" ? "Không tải được danh sách Route nguồn GPS." : "Unable to load GPS source routes.",
+      // Ưu tiên candidates từ BE. Chỉ fallback catalog khi thiếu / BE lỗi.
+      const needCatalogFallback = !bePayload || hasEmptyRouteCandidateLegs(legs);
+      if (needCatalogFallback) {
+        try {
+          const catalog = await fetchCharterSourceRoutes();
+          const list = Array.isArray(catalog) ? catalog : [];
+          const gpsLike = list.filter((route) => isUsableRouteCandidateForBooking(route));
+          const needDetail = gpsLike.filter((route) => {
+            const stops = Array.isArray(route?.stops) ? route.stops : Array.isArray(route?.routeStops) ? route.routeStops : [];
+            return stops.length === 0;
+          });
+          const details = await Promise.all(
+            needDetail.map(async (route) => {
+              const id = String(route.routeId || route.id || "");
+              if (!id) return null;
+              try {
+                return await fetchRouteDetail(id);
+              } catch (error) {
+                console.error(`Không tải detail route ${id}:`, error);
+                return null;
+              }
+            }),
           );
+          const detailById = new Map(
+            details.filter(Boolean).map((detail) => [String(detail.routeId || detail.id || ""), detail]),
+          );
+          const catalogWithStops = gpsLike.map((route) => {
+            const id = String(route.routeId || route.id || "");
+            const detail = detailById.get(id);
+            return detail ? { ...route, ...detail } : route;
+          });
+          setGpsCatalogRoutes(catalogWithStops);
+          legs = enrichCandidateLegsWithManualGpsRoutes(legs, catalogWithStops);
+        } catch (error) {
+          console.error("Không tải được catalog charter-source:", error);
+          if (!beErrorMessage) {
+            beErrorMessage = getApiErrorMessage(
+              error,
+              lang === "VN" ? "Không tải được danh sách Route nguồn GPS / Sightseeing." : "Unable to load GPS / Sightseeing source routes.",
+            );
+          }
         }
+      } else {
+        setGpsCatalogRoutes([]);
       }
 
       setRouteCandidateLegs(legs);
@@ -878,11 +879,7 @@ export function AdminCharterBookingDetail() {
   }, [booking, capabilities, lang]);
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="h-10 w-10 rounded-full border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 animate-spin"></div>
-      </div>
-    );
+    return <PageLoading lang={lang} fullscreen />;
   }
 
   if (!booking) {
@@ -914,8 +911,20 @@ export function AdminCharterBookingDetail() {
     : [];
 
   return (
-    <div className="space-y-6 pb-10 font-body">
-      <div className="flex flex-col gap-4 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 lg:flex-row lg:items-start lg:justify-between">
+    <div className="relative space-y-6 pb-10 font-body">
+      {(isRefreshing || isSubmitting) ? (
+        <PageLoading
+          lang={lang}
+          overlay
+          fixed
+          message={
+            isSubmitting
+              ? (lang === "VN" ? "Đang xử lý..." : "Processing...")
+              : (lang === "VN" ? "Đang cập nhật..." : "Refreshing...")
+          }
+        />
+      ) : null}
+      <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
         <div className="min-w-0">
           <button type="button" onClick={() => navigate("/admin/charter-bookings-management")} className="mb-4 inline-flex items-center gap-2 text-xs font-headline font-black uppercase tracking-wider text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400">
             <span className="material-symbols-outlined text-base">arrow_back</span>
@@ -936,17 +945,6 @@ export function AdminCharterBookingDetail() {
                 : null,
             ].filter(Boolean).join(" · ") || "--"}
           </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={loadDetail}
-            title={lang === "VN" ? "Tải lại" : "Refresh"}
-            aria-label={lang === "VN" ? "Tải lại" : "Refresh"}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FFD100] text-[#124757] shadow-sm"
-          >
-            <span className="material-symbols-outlined text-xl">refresh</span>
-          </button>
         </div>
       </div>
 

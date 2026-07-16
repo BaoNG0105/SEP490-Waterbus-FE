@@ -33,12 +33,13 @@ import {
   getBoatStatusLabel,
   getCharterRoutePricingWarning,
   getRouteCandidateLegKey,
+  hasCompletedCharterRefund,
   hasEmptyRouteCandidateLegs,
   isCharterRoutePricingBlocked,
   normalizeRouteEstimateLegs,
   buildCharterRoutePlan,
 } from "../utils/charterBookingAdmin";
-import { getRouteKindLabel } from "../utils/routeTypes";
+import { getRouteKindLabel, getRouteShortLabel } from "../utils/routeTypes";
 import { CharterRouteMapPanel } from "./CharterRouteMapPanel";
 import { CharterInsuranceInfo } from "./CharterInsuranceInfo";
 import { CharterQuotePreviewPanel, CharterQuotePreviewTable } from "./CharterQuotePreviewTable";
@@ -209,7 +210,9 @@ function AdminCharterRouteInfoPanel({
           {draftLegs.map((leg) => {
             const hasMetrics = leg.selected && leg.distanceKm != null && leg.travelMinutes != null;
             const routeCode = String(leg.routeCode || "").trim();
-            const typeLabel = leg.routeType ? getRouteKindLabel(leg.routeType, lang) : "";
+            const typeLabel = leg.routeType || leg.routeLabel
+              ? getRouteShortLabel(leg, lang)
+              : "";
             const routeMeta = [routeCode || null, typeLabel || null].filter(Boolean).join(" · ");
             return (
               <div
@@ -292,20 +295,31 @@ function AdminCharterRouteInfoPanel({
   );
 }
 
-function formatRouteCandidateOptionLabel(candidate, lang) {
+/** Picker charter: "GPS · Bến A → Bến B" — không hiện CH-CB- / Charter CB-... */
+function formatRouteCandidateOptionLabel(candidate, lang, leg = null) {
   if (!candidate) return "";
-  const code = candidate.routeCode || "";
-  const name = candidate.routeName || "";
-  const title = code && name ? `${code} — ${name}` : (code || name || candidate.routeId);
-  const typeLabel = candidate.routeType ? getRouteKindLabel(candidate.routeType, lang) : "";
+  const short = getRouteShortLabel(candidate, lang);
+  const fromName = String(
+    leg?.fromStationName
+    || candidate.fromStationName
+    || "",
+  ).trim();
+  const toName = String(
+    leg?.toStationName
+    || candidate.toStationName
+    || "",
+  ).trim();
+  if (fromName && toName) {
+    return `${short} · ${fromName} → ${toName}`;
+  }
   const meta = [
-    typeLabel,
+    short !== "—" ? short : "",
     candidate.distanceKm != null ? `${candidate.distanceKm} km` : "",
     candidate.estimatedDurationMin != null
       ? `${candidate.estimatedDurationMin} ${lang === "VN" ? "phút" : "min"}`
       : "",
   ].filter(Boolean).join(" · ");
-  return meta ? `${title} (${meta})` : title;
+  return meta || getRouteKindLabel(candidate, lang);
 }
 
 function AdminCharterRoutePlanPicker({
@@ -398,8 +412,8 @@ function AdminCharterRoutePlanPicker({
           </p>
           <p className="mt-1 text-[11px] font-medium text-slate-400">
             {lang === "VN"
-              ? "Mỗi chặng chọn một tuyến GPS chứa đúng cặp bến (đúng chiều)."
-              : "Pick one GPS route per leg that contains both stations in order."}
+              ? "Mỗi chặng chọn một tuyến GPS hoặc vòng tham quan (đúng chiều cặp bến)."
+              : "Pick one GPS or sightseeing route per leg that contains both stations in order."}
           </p>
         </div>
         {onLoad ? (
@@ -433,7 +447,7 @@ function AdminCharterRoutePlanPicker({
         return (
           <div
             key={legKey}
-            className="rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
+            className="min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
           >
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">
@@ -495,9 +509,20 @@ function AdminCharterRoutePlanPicker({
                 placeholder={lang === "VN" ? "Chọn tuyến..." : "Select route..."}
                 searchPlaceholder={lang === "VN" ? "Tìm theo mã / tên..." : "Search code / name..."}
                 emptyLabel={lang === "VN" ? "Không có kết quả" : "No results"}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 options={candidates.map((candidate) => ({
                   value: candidate.routeId,
-                  label: formatRouteCandidateOptionLabel(candidate, lang),
+                  label: formatRouteCandidateOptionLabel(candidate, lang, leg),
+                  searchText: [
+                    getRouteShortLabel(candidate, lang),
+                    leg.fromStationName,
+                    leg.toStationName,
+                    candidate.routeCode,
+                    candidate.routeName,
+                    candidate.routeId,
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
                 }))}
               />
             )}
@@ -1218,6 +1243,13 @@ export function AdminBookingActionsTab({
   const canSubmitQuote = canPreviewQuote
     && Boolean(quotePreview)
     && !isSubmitting;
+  const bookingStatus = String(booking?.status || "");
+  const paymentStatus = String(booking?.paymentStatus || "").toLowerCase().replace(/[_-\s]/g, "");
+  const hideManualStatusPanel = ["Cancelled", "Refunded"].includes(bookingStatus)
+    && (
+      hasCompletedCharterRefund(booking)
+      || ["refunded", "manualrefunded", "partiallyrefunded"].includes(paymentStatus)
+    );
 
   if (phase === "quote") {
     return (
@@ -1230,8 +1262,8 @@ export function AdminBookingActionsTab({
           draftRoutePlanSelections={routePlanSelections}
         />
 
-        <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-          <form onSubmit={onSubmitQuote} className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+          <form onSubmit={onSubmitQuote} className="min-w-0 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
@@ -1393,13 +1425,15 @@ export function AdminBookingActionsTab({
           />
         </div>
 
-        <ManualStatusPanel
-          lang={lang}
-          isSubmitting={isSubmitting}
-          manualStatusOptions={manualStatusOptions}
-          getStatusInfo={getStatusInfo}
-          onStatusChange={onStatusChange}
-        />
+        {!hideManualStatusPanel && (
+          <ManualStatusPanel
+            lang={lang}
+            isSubmitting={isSubmitting}
+            manualStatusOptions={manualStatusOptions}
+            getStatusInfo={getStatusInfo}
+            onStatusChange={onStatusChange}
+          />
+        )}
       </section>
     );
   }
@@ -1475,7 +1509,9 @@ export function AdminBookingActionsTab({
           </div>
         </div>
 
-        <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
+        {!hideManualStatusPanel && (
+          <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
+        )}
       </section>
     );
   }
@@ -1516,7 +1552,9 @@ export function AdminBookingActionsTab({
           </div>
         </div>
 
-        <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
+        {!hideManualStatusPanel && (
+          <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
+        )}
       </section>
     );
   }
@@ -1554,7 +1592,9 @@ export function AdminBookingActionsTab({
         </div>
       </div>
 
-      <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
+      {!hideManualStatusPanel && (
+        <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
+      )}
     </section>
   );
 }

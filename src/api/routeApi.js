@@ -1,8 +1,9 @@
 import api from './axios';
 
 // API: Lấy danh sách tuyến đường sông (chỉ trả về các tuyến Active, sắp xếp theo RouteCode)
-export const getRoutes = () =>
-    api.get('/routes').then(response => response.data);
+// params.usage = "charter-source" → chỉ GPS + Sightseeing (picker charter)
+export const getRoutes = (params = {}) =>
+    api.get('/routes', { params }).then(response => response.data);
 
 // API: Lấy chi tiết một tuyến đường kèm danh sách bến dừng (stops) đã sắp xếp theo stopOrder
 export const getRouteById = (id) =>
