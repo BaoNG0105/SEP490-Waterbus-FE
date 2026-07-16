@@ -2,18 +2,25 @@ import { useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import { NationalitySelect } from "../../../components/NationalitySelect";
 
+const formatTripTime = (isoString) => {
+  if (!isoString) return "--";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+};
+
 export default function Step3Checkout({ bookingData, onBack }) {
   const { lang } = useApp();
-  const { 
-    isRoundTrip, 
-    fromWharf, 
-    toWharf, 
-    departureDate, 
-    returnDate, 
-    selectedDepartureTrip, 
+  const {
+    isRoundTrip,
+    fromWharfName,
+    toWharfName,
+    departureDate,
+    returnDate,
+    selectedDepartureTrip,
     selectedReturnTrip,
-    selectedSeatsDeparture, 
-    selectedSeatsReturn 
+    selectedSeatsDeparture,
+    selectedSeatsReturn
   } = bookingData;
 
   // 1. STATE: THÔNG TIN LIÊN HỆ (Người đặt vé)
@@ -46,15 +53,17 @@ export default function Step3Checkout({ bookingData, onBack }) {
   const [promoCode, setPromoCode] = useState("");
   const [isApplied, setIsApplied] = useState(false);
 
-  const ticketPrice = 15000;
   // Tổng số lượng ghế = Ghế chiều đi + Ghế chiều về (nếu có)
-  const totalSeatsCount = isRoundTrip 
-    ? (selectedSeatsDeparture.length + selectedSeatsReturn.length) 
+  const totalSeatsCount = isRoundTrip
+    ? (selectedSeatsDeparture.length + selectedSeatsReturn.length)
     : selectedSeatsDeparture.length;
-    
-  const subtotal = totalSeatsCount * ticketPrice;
+
+  // Giá vé lấy theo basePrice thật của từng ghế trả về từ API sơ đồ ghế
+  const sumSeatsPrice = (seats) => seats.reduce((sum, seat) => sum + Number(seat.basePrice || 0), 0);
+  const subtotal = sumSeatsPrice(selectedSeatsDeparture) + (isRoundTrip ? sumSeatsPrice(selectedSeatsReturn) : 0);
   const discount = isApplied ? subtotal * 0.1 : 0; // Giảm 10% nếu có mã
   const totalAmount = subtotal - discount;
+  const averageSeatPrice = totalSeatsCount > 0 ? subtotal / totalSeatsCount : 0;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -119,11 +128,11 @@ export default function Step3Checkout({ bookingData, onBack }) {
                     </span>
                     <div className="flex gap-2">
                       <span className="bg-white dark:bg-slate-800 border dark:border-slate-600 text-xs font-bold px-2 py-1 rounded-md text-slate-600 dark:text-slate-300 shadow-sm">
-                        Đi: {selectedSeatsDeparture[index]}
+                        Đi: {selectedSeatsDeparture[index]?.seatNumber}
                       </span>
                       {isRoundTrip && (
                         <span className="bg-white dark:bg-slate-800 border dark:border-slate-600 text-xs font-bold px-2 py-1 rounded-md text-slate-600 dark:text-slate-300 shadow-sm">
-                          Về: {selectedSeatsReturn[index]}
+                          Về: {selectedSeatsReturn[index]?.seatNumber}
                         </span>
                       )}
                     </div>
@@ -228,15 +237,15 @@ export default function Step3Checkout({ bookingData, onBack }) {
               <span className="text-xs font-bold text-slate-500">{departureDate}</span>
             </div>
             <div className="font-headline font-black text-[#124757] dark:text-white flex items-center gap-2 text-lg">
-              {fromWharf.toUpperCase()} 
-              <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span> 
-              {toWharf.toUpperCase()}
+              {(fromWharfName || "--").toUpperCase()}
+              <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span>
+              {(toWharfName || "--").toUpperCase()}
             </div>
             <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2">
-              {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{selectedDepartureTrip?.time}</span>
+              {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(selectedDepartureTrip?.departureTime)}</span>
             </div>
             <div className="text-xs text-slate-500 font-medium mt-1">
-              Ghế: {selectedSeatsDeparture.join(", ")}
+              Ghế: {selectedSeatsDeparture.map((seat) => seat.seatNumber).join(", ")}
             </div>
           </div>
 
@@ -250,15 +259,15 @@ export default function Step3Checkout({ bookingData, onBack }) {
                 <span className="text-xs font-bold text-slate-500">{returnDate}</span>
               </div>
               <div className="font-headline font-black text-[#124757] dark:text-white flex items-center gap-2 text-lg">
-                {toWharf.toUpperCase()} 
-                <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span> 
-                {fromWharf.toUpperCase()}
+                {(toWharfName || "--").toUpperCase()}
+                <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span>
+                {(fromWharfName || "--").toUpperCase()}
               </div>
               <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2">
-                {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{selectedReturnTrip?.time}</span>
+                {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(selectedReturnTrip?.departureTime)}</span>
               </div>
               <div className="text-xs text-slate-500 font-medium mt-1">
-                Ghế: {selectedSeatsReturn.join(", ")}
+                Ghế: {selectedSeatsReturn.map((seat) => seat.seatNumber).join(", ")}
               </div>
             </div>
           )}
@@ -289,8 +298,8 @@ export default function Step3Checkout({ bookingData, onBack }) {
         {/* Bảng giá chi tiết */}
         <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-700 text-sm font-medium">
           <div className="flex justify-between text-slate-600 dark:text-slate-300">
-            <span>{lang === "VN" ? "Giá vé cơ bản / Ghế" : "Base Fare / Seat"}</span>
-            <span>{ticketPrice.toLocaleString()} VND</span>
+            <span>{lang === "VN" ? "Giá vé trung bình / Ghế" : "Average Fare / Seat"}</span>
+            <span>{Math.round(averageSeatPrice).toLocaleString()} VND</span>
           </div>
           <div className="flex justify-between text-slate-600 dark:text-slate-300">
             <span>{lang === "VN" ? "Tổng số lượng ghế" : "Total Seats Quantity"}</span>

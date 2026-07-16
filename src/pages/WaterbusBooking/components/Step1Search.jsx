@@ -1,8 +1,100 @@
+import { useEffect, useState } from "react";
 import { useApp } from "../../../context/AppContext";
+import { fetchAllStations } from "../../../services/stationService";
+import { fetchTripSearch } from "../../../services/tripService";
+
+const getStationId = (station) => String(station.stationId || station.id || "");
+const getStationName = (station) => station.stationName || station.name || "--";
+const isActiveWaterbusStation = (station) => {
+  const status = String(station?.status || "Active").toLowerCase();
+  return status === "active" && station?.isWaterbusStation === true;
+};
 
 export default function Step1Search({ bookingData, updateData, onNext }) {
   const { lang } = useApp();
   const { isRoundTrip, fromWharf, toWharf, departureDate, returnDate, passengerCount } = bookingData;
+
+  const [stations, setStations] = useState([]);
+  const [isLoadingStations, setIsLoadingStations] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  useEffect(() => {
+    const loadStations = async () => {
+      try {
+        setIsLoadingStations(true);
+        const data = await fetchAllStations();
+        setStations((data || []).filter(isActiveWaterbusStation));
+      } catch (error) {
+        console.error("Lỗi tải danh sách bến Waterbus:", error);
+      } finally {
+        setIsLoadingStations(false);
+      }
+    };
+    loadStations();
+  }, []);
+
+  const handleSearch = async () => {
+    setSearchError("");
+    setIsSearching(true);
+    try {
+      const departureTripOptions = await fetchTripSearch({
+        fromStationId: fromWharf,
+        toStationId: toWharf,
+        departureDate,
+      });
+
+      if (!departureTripOptions.length) {
+        setSearchError(
+          lang === "VN"
+            ? "Không tìm thấy chuyến tàu phù hợp cho chiều đi. Vui lòng thử bến hoặc ngày khác."
+            : "No matching trips found for the departure leg. Please try another station or date."
+        );
+        return;
+      }
+
+      let returnTripOptions = [];
+      if (isRoundTrip) {
+        returnTripOptions = await fetchTripSearch({
+          fromStationId: toWharf,
+          toStationId: fromWharf,
+          departureDate: returnDate,
+        });
+        if (!returnTripOptions.length) {
+          setSearchError(
+            lang === "VN"
+              ? "Không tìm thấy chuyến tàu phù hợp cho chiều về. Vui lòng thử ngày khác."
+              : "No matching trips found for the return leg. Please try another date."
+          );
+          return;
+        }
+      }
+
+      const fromWharfName = stations.find((s) => getStationId(s) === String(fromWharf));
+      const toWharfName = stations.find((s) => getStationId(s) === String(toWharf));
+
+      updateData({
+        departureTripOptions,
+        returnTripOptions,
+        fromWharfName: fromWharfName ? getStationName(fromWharfName) : "",
+        toWharfName: toWharfName ? getStationName(toWharfName) : "",
+        selectedDepartureTrip: null,
+        selectedReturnTrip: null,
+        selectedSeatsDeparture: [],
+        selectedSeatsReturn: [],
+      });
+      onNext();
+    } catch (error) {
+      console.error("Lỗi tìm chuyến tàu:", error);
+      setSearchError(
+        lang === "VN"
+          ? "Đã xảy ra lỗi khi tìm chuyến. Vui lòng thử lại."
+          : "Something went wrong while searching trips. Please try again."
+      );
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   return (
     <div className="max-w-3xl mx-auto bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700/50 space-y-6">
@@ -36,20 +128,38 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Bến đi" : "From"}</label>
-          <select value={fromWharf} onChange={(e) => updateData({ fromWharf: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
-            <option value="">-- {lang === "VN" ? "Chọn bến xuất phát" : "Select Departure Wharf"} --</option>
-            <option value="bach-dang">Bến Bạch Đằng (Q.1)</option>
-            <option value="thu-thiem">Bến Thủ Thiêm</option>
-            <option value="linh-dong">Bến Linh Đông</option>
+          <select
+            value={fromWharf}
+            onChange={(e) => updateData({ fromWharf: e.target.value })}
+            disabled={isLoadingStations}
+            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-50"
+          >
+            <option value="">
+              -- {isLoadingStations ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...") : (lang === "VN" ? "Chọn bến xuất phát" : "Select Departure Wharf")} --
+            </option>
+            {stations.map((station) => (
+              <option key={getStationId(station)} value={getStationId(station)}>
+                {getStationName(station)}
+              </option>
+            ))}
           </select>
         </div>
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Bến đến" : "To"}</label>
-          <select value={toWharf} onChange={(e) => updateData({ toWharf: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]">
-            <option value="">-- {lang === "VN" ? "Chọn bến cập bến" : "Select Destination Wharf"} --</option>
-            <option value="bach-dang">Bến Bạch Đằng (Q.1)</option>
-            <option value="thu-thiem">Bến Thủ Thiêm</option>
-            <option value="linh-dong">Bến Linh Đông</option>
+          <select
+            value={toWharf}
+            onChange={(e) => updateData({ toWharf: e.target.value })}
+            disabled={isLoadingStations}
+            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-50"
+          >
+            <option value="">
+              -- {isLoadingStations ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...") : (lang === "VN" ? "Chọn bến cập bến" : "Select Destination Wharf")} --
+            </option>
+            {stations.filter((station) => getStationId(station) !== String(fromWharf)).map((station) => (
+              <option key={getStationId(station)} value={getStationId(station)}>
+                {getStationName(station)}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -78,14 +188,23 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
         </div>
       </div>
 
+      {searchError && (
+        <p className="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl px-4 py-3">
+          {searchError}
+        </p>
+      )}
+
       <div className="pt-4 flex justify-end">
         <button
           type="button"
-          disabled={!fromWharf || !toWharf || !departureDate || (isRoundTrip && !returnDate)}
-          onClick={onNext}
-          className="bg-[#FFD100] text-[#124757] font-headline font-bold uppercase tracking-wider text-sm px-10 py-4 rounded-xl shadow-md hover:brightness-105 transition-all disabled:opacity-40"
+          disabled={!fromWharf || !toWharf || !departureDate || (isRoundTrip && !returnDate) || isSearching}
+          onClick={handleSearch}
+          className="bg-[#FFD100] text-[#124757] font-headline font-bold uppercase tracking-wider text-sm px-10 py-4 rounded-xl shadow-md hover:brightness-105 transition-all disabled:opacity-40 flex items-center gap-2"
         >
-          {lang === "VN" ? "Tìm vé chuyến tàu" : "Search Routes Now"}
+          {isSearching && <span className="w-4 h-4 border-2 border-[#124757]/30 border-t-[#124757] rounded-full animate-spin"></span>}
+          {isSearching
+            ? (lang === "VN" ? "Đang tìm..." : "Searching...")
+            : (lang === "VN" ? "Tìm vé chuyến tàu" : "Search Routes Now")}
         </button>
       </div>
     </div>

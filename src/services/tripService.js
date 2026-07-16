@@ -1,6 +1,9 @@
 import {
     getTrips as apiGetTrips,
     createTrip as apiCreateTrip,
+    searchTrips as apiSearchTrips,
+    getTripById as apiGetTripById,
+    getTripSeats as apiGetTripSeats,
 } from '../api/tripApi';
 
 export const TRIP_STATUS_OPTIONS = ['Scheduled', 'Boarding', 'Departed', 'Arrived', 'Cancelled'];
@@ -50,6 +53,42 @@ export const addNewTrip = async (payload) => {
         return await apiCreateTrip(payload);
     } catch (error) {
         console.error('Lỗi khi tạo chuyến tàu mới:', error);
+        throw error;
+    }
+};
+
+// Service: Tìm chuyến tàu bán vé (Waterbus) theo bến đi/bến đến/ngày khởi hành cho khách đặt vé
+export const fetchTripSearch = async ({ fromStationId, toStationId, departureDate, routeType = 'Regular' }) => {
+    try {
+        const data = await apiSearchTrips({
+            fromStationId,
+            toStationId,
+            operatingDate: toDdMmYyyy(departureDate),
+            routeType,
+        });
+        return data || [];
+    } catch (error) {
+        console.error('Lỗi khi tìm chuyến tàu:', error);
+        throw error;
+    }
+};
+
+// Service: Lấy chi tiết 1 chuyến tàu (kèm các bến dừng trip_stops)
+export const fetchTripDetail = async (tripId) => {
+    try {
+        return await apiGetTripById(tripId);
+    } catch (error) {
+        console.error(`Lỗi khi lấy chi tiết chuyến tàu ${tripId}:`, error);
+        throw error;
+    }
+};
+
+// Service: Lấy sơ đồ ghế của 1 chuyến tàu
+export const fetchTripSeatMap = async (tripId) => {
+    try {
+        return await apiGetTripSeats(tripId);
+    } catch (error) {
+        console.error(`Lỗi khi lấy sơ đồ ghế chuyến tàu ${tripId}:`, error);
         throw error;
     }
 };

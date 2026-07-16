@@ -357,7 +357,7 @@ export const Home = () => {
             >
               <div className="relative aspect-4/3 overflow-hidden shrink-0">
                 <img
-                  src="https://res.cloudinary.com/dygipvoal/image/upload/v1783792723/leebii37uxivwywdzuic.jpg"
+                  src="https://res.cloudinary.com/dygipvoal/image/upload/v1784048440/vmxcyra8r6ykzkonjbaz.jpg"
                   alt={lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
