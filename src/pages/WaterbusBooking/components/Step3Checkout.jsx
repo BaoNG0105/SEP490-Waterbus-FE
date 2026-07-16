@@ -5,6 +5,7 @@ import { PayOSLogo, payosButtonLgClassName } from "../../../components/PayOSLogo
 import { submitBooking } from "../../../services/bookingService";
 import { createBookingPayment } from "../../../services/paymentService";
 import { releaseSeats } from "../../../services/tripService";
+import { fetchCurrentUserProfile } from "../../../services/authService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 
 const TICKET_TYPE_OPTIONS = [
@@ -19,6 +20,10 @@ const formatTripTime = (isoString) => {
   if (Number.isNaN(date.getTime())) return "--";
   return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 };
+
+// Ưu tiên giờ theo đúng chặng khách đã chọn (fromStopScheduledDeparture) thay vì giờ khởi hành
+// đầu tuyến (departureTime) — hai bến lên tàu khác nhau trên cùng chuyến sẽ có giờ khác nhau.
+const getSegmentDeparture = (trip) => trip?.fromStopScheduledDeparture || trip?.departureTime;
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -109,10 +114,14 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
   });
 
   // 2. STATE: THÔNG TIN TỪNG HÀNH KHÁCH CÓ GHẾ (ADULT/SENIOR/DISABLED)
+  // Phone/Email để trống sẽ dùng thông tin liên hệ chung; nhập riêng nếu muốn hành khách đó
+  // nhận vé điện tử (QR) riêng về số/email của mình.
   const [passengers, setPassengers] = useState(
     Array.from({ length: selectedSeatsDeparture.length }, () => ({
       name: "",
       ticketType: "ADULT",
+      phone: "",
+      email: "",
     }))
   );
 
@@ -120,6 +129,48 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     const updated = [...passengers];
     updated[index] = { ...updated[index], [field]: value };
     setPassengers(updated);
+  };
+
+  // Kéo tên/SĐT/email từ tài khoản đang đăng nhập xuống Thông tin liên hệ hoặc Hành khách 1
+  const [isLoadingAccountInfo, setIsLoadingAccountInfo] = useState(false);
+  const handleUseAccountInfo = async (target) => {
+    setIsLoadingAccountInfo(true);
+    try {
+      const profile = await fetchCurrentUserProfile();
+      const accountName = profile?.fullName || profile?.name || "";
+      const accountPhone = profile?.phoneNumber || profile?.phone || "";
+      const accountEmail = profile?.email || "";
+
+      if (target === "contact") {
+        setContact((prev) => ({
+          ...prev,
+          name: accountName || prev.name,
+          phone: accountPhone || prev.phone,
+          email: accountEmail || prev.email,
+        }));
+      } else {
+        setPassengers((prev) => prev.map((passenger, i) => (
+          i === target
+            ? {
+              ...passenger,
+              name: accountName || passenger.name,
+              phone: accountPhone || passenger.phone,
+              email: accountEmail || passenger.email,
+            }
+            : passenger
+        )));
+      }
+    } catch (error) {
+      console.error("Lỗi khi lấy thông tin tài khoản:", error);
+      Swal.fire({
+        icon: "error",
+        title: lang === "VN" ? "Không lấy được thông tin tài khoản" : "Unable to load account info",
+        text: lang === "VN" ? "Vui lòng nhập thông tin thủ công." : "Please enter the information manually.",
+        confirmButtonColor: "#124757",
+      });
+    } finally {
+      setIsLoadingAccountInfo(false);
+    }
   };
 
   // 3. STATE: HÀNH KHÁCH TRẺ EM DƯỚI 2 TUỔI (INFANT — không chiếm ghế, miễn phí, đi kèm chuyến của người lớn)
@@ -165,8 +216,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       fromStationCode,
       toStationCode,
       passengerName: passengers[i]?.name.trim(),
-      passengerPhone: contact.phone.trim(),
-      passengerEmail: contact.email.trim(),
+      passengerPhone: (passengers[i]?.phone.trim() || contact.phone.trim()),
+      passengerEmail: (passengers[i]?.email.trim() || contact.email.trim()),
     })),
     ...infants.map((infant) => ({
       seatNumber: null,
@@ -286,9 +337,22 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
 
         {/* 1. FORM THÔNG TIN LIÊN HỆ */}
         <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 space-y-5">
-          <h3 className="text-xl font-headline font-bold text-[#124757] dark:text-white border-b border-slate-100 dark:border-slate-700 pb-3 flex items-center gap-2">
-            {lang === "VN" ? "Thông tin liên hệ (Người đặt)" : "Contact Details"}
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700 pb-3">
+            <h3 className="text-xl font-headline font-bold text-[#124757] dark:text-white">
+              {lang === "VN" ? "Thông tin liên hệ (Người đặt)" : "Contact Details"}
+            </h3>
+            <button
+              type="button"
+              onClick={() => handleUseAccountInfo("contact")}
+              disabled={isLoadingAccountInfo}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
+            >
+              <span className={`material-symbols-outlined text-sm ${isLoadingAccountInfo ? "animate-spin" : ""}`}>
+                {isLoadingAccountInfo ? "progress_activity" : "person"}
+              </span>
+              {lang === "VN" ? "Dùng thông tin tài khoản" : "Use account info"}
+            </button>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -332,36 +396,51 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
               <div key={index} className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
 
                 {/* Header của thẻ hành khách hiển thị ghế tương ứng */}
-                <div className="flex items-center gap-3 border-b border-slate-200/60 dark:border-slate-700 pb-3">
-                  <div className="bg-[#124757] text-[#FFD100] w-8 h-8 rounded-full flex items-center justify-center font-headline font-black text-sm shadow-sm">
-                    {index + 1}
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                    <span className="font-headline font-bold text-[#124757] dark:text-white">
-                      {lang === "VN" ? `Hành khách ${index + 1}` : `Passenger ${index + 1}`}
-                    </span>
-                    <div className="flex gap-2">
-                      <span className="bg-white dark:bg-slate-800 border dark:border-slate-600 text-xs font-bold px-2 py-1 rounded-md text-slate-600 dark:text-slate-300 shadow-sm">
-                        Đi: {selectedSeatsDeparture[index]?.seatNumber}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 dark:border-slate-700 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-[#124757] text-[#FFD100] w-8 h-8 rounded-full flex items-center justify-center font-headline font-black text-sm shadow-sm">
+                      {index + 1}
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                      <span className="font-headline font-bold text-[#124757] dark:text-white">
+                        {lang === "VN" ? `Hành khách ${index + 1}` : `Passenger ${index + 1}`}
                       </span>
-                      {isRoundTrip && (
+                      <div className="flex gap-2">
                         <span className="bg-white dark:bg-slate-800 border dark:border-slate-600 text-xs font-bold px-2 py-1 rounded-md text-slate-600 dark:text-slate-300 shadow-sm">
-                          Về: {selectedSeatsReturn[index]?.seatNumber}
+                          Đi: {selectedSeatsDeparture[index]?.seatNumber}
                         </span>
-                      )}
+                        {isRoundTrip && (
+                          <span className="bg-white dark:bg-slate-800 border dark:border-slate-600 text-xs font-bold px-2 py-1 rounded-md text-slate-600 dark:text-slate-300 shadow-sm">
+                            Về: {selectedSeatsReturn[index]?.seatNumber}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  {index === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleUseAccountInfo(0)}
+                      disabled={isLoadingAccountInfo}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
+                    >
+                      <span className={`material-symbols-outlined text-sm ${isLoadingAccountInfo ? "animate-spin" : ""}`}>
+                        {isLoadingAccountInfo ? "progress_activity" : "person"}
+                      </span>
+                      {lang === "VN" ? "Dùng thông tin tài khoản" : "Use account info"}
+                    </button>
+                  )}
                 </div>
 
                 {/* Các trường điền thông tin */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên" : "Full Name"}</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên *" : "Full Name *"}</label>
                     <input
                       type="text"
                       value={passenger.name}
                       onChange={(e) => handlePassengerChange(index, "name", e.target.value)}
-                      placeholder={lang === "VN" ? "Nhập tên in hoa không dấu..." : "Enter full name..."}
+                      placeholder={lang === "VN" ? "Nguyễn Văn A..." : "Enter full name..."}
                       className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
                       required
                     />
@@ -380,6 +459,28 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Số điện thoại (Không bắt buộc)" : "Phone Number (Optional)"}</label>
+                    <input
+                      type="tel"
+                      value={passenger.phone}
+                      onChange={(e) => handlePassengerChange(index, "phone", e.target.value)}
+                      placeholder={lang === "VN" ? "Để trống dùng SĐT liên hệ" : "Leave blank to use contact phone"}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Email (Không bắt buộc)" : "Email (Optional)"}</label>
+                    <input
+                      type="email"
+                      value={passenger.email}
+                      onChange={(e) => handlePassengerChange(index, "email", e.target.value)}
+                      placeholder={lang === "VN" ? "Để trống dùng email liên hệ" : "Leave blank to use contact email"}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                    />
                   </div>
                 </div>
               </div>
@@ -412,7 +513,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
               {infants.map((infant, index) => (
                 <div key={index} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row gap-3 sm:items-end">
                   <div className="flex-1 space-y-1.5">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên em bé" : "Infant Full Name"}</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên em bé *" : "Infant Full Name *"}</label>
                     <input
                       type="text"
                       value={infant.name}
@@ -486,7 +587,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
               {(toWharfName || "--").toUpperCase()}
             </div>
             <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2">
-              {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(selectedDepartureTrip?.departureTime)}</span>
+              {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedDepartureTrip))}</span>
             </div>
             <div className="text-xs text-slate-500 font-medium mt-1">
               Ghế: {selectedSeatsDeparture.map((seat) => seat.seatNumber).join(", ")}
@@ -508,7 +609,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                 {(fromWharfName || "--").toUpperCase()}
               </div>
               <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2">
-                {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(selectedReturnTrip?.departureTime)}</span>
+                {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedReturnTrip))}</span>
               </div>
               <div className="text-xs text-slate-500 font-medium mt-1">
                 Ghế: {selectedSeatsReturn.map((seat) => seat.seatNumber).join(", ")}

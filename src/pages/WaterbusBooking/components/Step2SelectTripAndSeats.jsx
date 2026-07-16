@@ -32,6 +32,12 @@ const getTripHourBucket = (isoString) => {
   return date.getHours() < 12 ? "morning" : "afternoon";
 };
 
+// Trip search trả về giờ theo cả tuyến (departureTime/arrivalTime) lẫn theo đúng chặng khách chọn
+// (fromStopScheduledDeparture/toStopScheduledArrival) — luôn ưu tiên giờ theo chặng để hiển thị đúng
+// khi khách lên/xuống ở các bến trung gian khác nhau (VD: A→C và B→C không cùng giờ khởi hành).
+const getSegmentDeparture = (trip) => trip?.fromStopScheduledDeparture || trip?.departureTime;
+const getSegmentArrival = (trip) => trip?.toStopScheduledArrival || trip?.arrivalTime;
+
 // Chuyển ký tự hàng ghế (A, B, C...) thành số thứ tự hàng cho CSS grid
 const rowLetterToIndex = (row) => {
   const letter = String(row || "A").toUpperCase();
@@ -58,12 +64,14 @@ const buildDeckLayout = (seats) => {
     }));
 };
 
-// Tìm mã bến (stationCode) từ danh sách stops của chuyến, khớp theo stationId đã chọn ở Bước 1
-const findStationCode = (stops, stationId) => {
-  if (!Array.isArray(stops) || !stationId) return "";
-  const stop = stops.find((s) => String(s.stationId) === String(stationId));
-  return stop?.stationCode || "";
+// Tìm bến dừng khớp theo stationId đã chọn ở Bước 1 trong danh sách stops (trả về từ trip detail)
+const findStop = (stops, stationId) => {
+  if (!Array.isArray(stops) || !stationId) return null;
+  return stops.find((s) => String(s.stationId) === String(stationId)) || null;
 };
+
+// Tìm mã bến (stationCode) từ danh sách stops của chuyến, khớp theo stationId đã chọn ở Bước 1
+const findStationCode = (stops, stationId) => findStop(stops, stationId)?.stationCode || "";
 
 export default function Step2SelectTripAndSeats({ bookingData, updateData, onNext, onBack }) {
   const { lang } = useApp();
@@ -146,7 +154,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
 
   const filteredTripOptions = (tripOptions || []).filter((trip) => {
     if (filterTime === "all") return true;
-    return getTripHourBucket(trip.departureTime) === filterTime;
+    return getTripHourBucket(getSegmentDeparture(trip)) === filterTime;
   });
 
   const deckLayout = useMemo(() => buildDeckLayout(currentSeatMap), [currentSeatMap]);
@@ -185,7 +193,22 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
     setIsLoadingSeats(true);
     try {
       const tripDetail = await fetchTripDetail(trip.tripId);
-      const mergedTrip = { ...trip, stops: tripDetail?.stops || [] };
+      const stops = tripDetail?.stops || [];
+
+      // Giờ khởi hành/đến đúng theo chặng khách chọn phải lấy từ scheduledDeparture/scheduledArrival
+      // của chính bến lên/xuống trong stops[] — không dùng field gợi ý fromStopScheduledDeparture của
+      // API search vì field đó không đáng tin cậy (từng trả sai giờ khi đổi bến lên tàu).
+      const boardingStationId = activeLeg === "departure" ? fromWharf : toWharf;
+      const alightingStationId = activeLeg === "departure" ? toWharf : fromWharf;
+      const boardingStop = findStop(stops, boardingStationId);
+      const alightingStop = findStop(stops, alightingStationId);
+
+      const mergedTrip = {
+        ...trip,
+        stops,
+        fromStopScheduledDeparture: boardingStop?.scheduledDeparture || trip.fromStopScheduledDeparture || trip.departureTime,
+        toStopScheduledArrival: alightingStop?.scheduledArrival || trip.toStopScheduledArrival || trip.arrivalTime,
+      };
       const { fromStationCode, toStationCode } = getLegStationCodes(activeLeg, mergedTrip);
 
       if (!fromStationCode || !toStationCode) {
@@ -421,10 +444,10 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                   } ${isSoldOut ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <div className="flex items-center gap-5">
-                    <div className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(trip.departureTime)}</div>
+                    <div className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(getSegmentDeparture(trip))}</div>
                     <div>
                       <div className="font-bold text-sm text-slate-800 dark:text-white">{trip.routeName}</div>
-                      <div className="text-xs text-slate-400">{lang === "VN" ? `Thời gian đi: ${formatTripDuration(trip.departureTime, trip.arrivalTime)}` : `Duration: ${formatTripDuration(trip.departureTime, trip.arrivalTime)}`}</div>
+                      <div className="text-xs text-slate-400">{lang === "VN" ? `Thời gian đi: ${formatTripDuration(getSegmentDeparture(trip), getSegmentArrival(trip))}` : `Duration: ${formatTripDuration(getSegmentDeparture(trip), getSegmentArrival(trip))}`}</div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto">
