@@ -3,18 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, removeRoute } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
-import { getRouteKindLabel } from "../../../utils/routeTypes";
+import { getRouteKindLabel, getRouteShortLabel } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
 
-const routeKindBadgeClass = (routeType) => {
-    switch (routeType) {
-        case "CharterReference":
+const routeKindBadgeClass = (route) => {
+    const key = getRouteShortLabel(route);
+    switch (key) {
+        case "GPS":
             return "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300";
         case "Charter":
             return "bg-[#EAF3F5] text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400";
-        case "SightseeingLoop":
+        case "Sightseeing":
             return "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300";
-        case "Regular":
+        case "Bus":
             return "bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300";
         default:
             return "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400";
@@ -115,8 +116,8 @@ export function RouteManagement() {
             icon: "warning",
             title: lang === "VN" ? `Xóa tuyến "${route.routeCode}"?` : `Delete route "${route.routeCode}"?`,
             text: lang === "VN"
-                ? "Chỉ xóa được tuyến chưa có chuyến đi (trip) nào. Nếu tuyến đã có trip, hãy vào chi tiết và chuyển trạng thái sang Inactive thay vì xóa."
-                : "Only routes without any trips can be deleted. If this route already has trips, open its detail page and set status to Inactive instead.",
+                ? "Chỉ xóa được tuyến chưa từng có chuyến đi. Nếu tuyến đã có chuyến, bạn mở chi tiết và chuyển sang Ngừng hoạt động thay vì xóa."
+                : "You can only delete a route that has never had any trips. If it already has trips, open its details and set it to Inactive instead of deleting.",
             showCancelButton: true,
             confirmButtonText: lang === "VN" ? "Xóa tuyến" : "Delete",
             cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
@@ -142,8 +143,8 @@ export function RouteManagement() {
                 icon: "error",
                 title: lang === "VN" ? "Không thể xóa tuyến!" : "Cannot Delete Route!",
                 text: error.response?.data?.message || (lang === "VN"
-                    ? "Tuyến đường đã có chuyến đi. Hãy chuyển trạng thái sang Inactive thay vì xóa."
-                    : "This route already has trips. Set status to Inactive instead."),
+                    ? "Tuyến này đã có chuyến đi nên không xóa được. Bạn mở chi tiết và chuyển sang Ngừng hoạt động nhé."
+                    : "This route already has trips, so it cannot be deleted. Please open its details and set it to Inactive."),
                 confirmButtonColor: "#124757"
             });
         } finally {
@@ -345,8 +346,8 @@ export function RouteManagement() {
                                                     <span className="text-[10px] text-slate-400 dark:text-slate-500 block max-w-sm truncate">
                                                         {route.description || (lang === "VN" ? "Chưa có mô tả" : "No description")}
                                                     </span>
-                                                    <span className={`inline-flex mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${routeKindBadgeClass(route.routeType)}`}>
-                                                        {getRouteKindLabel(route.routeType, lang)}
+                                                    <span className={`inline-flex mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${routeKindBadgeClass(route)}`}>
+                                                        {getRouteKindLabel(route, lang)}
                                                     </span>
                                                 </div>
                                             </div>

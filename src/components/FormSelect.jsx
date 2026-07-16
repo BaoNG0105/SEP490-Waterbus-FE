@@ -30,7 +30,10 @@ export function FormSelect({
   const filtered = useMemo(() => {
     if (!searchable || !query.trim()) return options;
     const q = query.trim().toLowerCase();
-    return options.filter((o) => String(o.label).toLowerCase().includes(q));
+    return options.filter((o) => {
+      const hay = `${o.label || ""} ${o.searchText || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
   }, [options, query, searchable]);
 
   const updateMenuPos = () => {
@@ -136,14 +139,14 @@ export function FormSelect({
                       <button
                         type="button"
                         onClick={() => pick(opt.value)}
-                        className={`flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-xs font-bold transition-colors ${
+                        className={`flex w-full items-start justify-between gap-2 px-3.5 py-2.5 text-left text-xs font-bold transition-colors ${
                           active
                             ? "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
                             : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
                         }`}
                       >
-                        <span className="truncate">{opt.label}</span>
-                        {active && <span className="material-symbols-outlined text-base">check</span>}
+                        <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{opt.label}</span>
+                        {active && <span className="material-symbols-outlined mt-0.5 shrink-0 text-base">check</span>}
                       </button>
                     </li>
                   );
@@ -156,17 +159,18 @@ export function FormSelect({
       : null;
 
   return (
-    <div ref={rootRef} className={`relative w-full min-w-0 ${isOpen ? "z-[60]" : ""} ${disabled ? "opacity-50" : ""}`}>
+    <div ref={rootRef} className={`relative w-full min-w-0 max-w-full ${isOpen ? "z-[60]" : ""} ${disabled ? "opacity-50" : ""}`}>
       <button
         type="button"
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-required={required || undefined}
+        title={selected ? String(selected.label) : undefined}
         onClick={() => !disabled && setIsOpen((v) => !v)}
-        className={`flex w-full items-center justify-between gap-2 text-left ${className}`}
+        className={`flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden text-left ${className}`}
       >
-        <span className={`min-w-0 flex-1 truncate text-left ${selected ? "" : "text-slate-400"}`}>
+        <span className={`min-w-0 flex-1 text-left break-words line-clamp-2 leading-snug ${selected ? "" : "text-slate-400"}`}>
           {selected ? selected.label : placeholder}
         </span>
         <span className={`material-symbols-outlined shrink-0 text-lg text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}>

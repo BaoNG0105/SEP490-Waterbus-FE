@@ -9,9 +9,9 @@ import {
   matchesSmartFilter,
 } from "../../../utils/charterBookingActions";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
-import { resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
+import { resolveCharterBookingStatus, resolveCharterPaymentStatus, matchesCharterStatusFilter } from "../../../utils/charterBookingAdmin";
 
-const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Refunded"];
+const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired"];
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -140,7 +140,7 @@ export function CharterList() {
       booking.bookingCode.toLowerCase().includes(searchValue)
       || booking.boatName.toLowerCase().includes(searchValue)
       || booking.route.toLowerCase().includes(searchValue);
-    const matchesStatus = statusFilter === "All" || booking.status === statusFilter;
+    const matchesStatus = matchesCharterStatusFilter(booking.status, statusFilter);
     return matchesSearch && matchesStatus;
   }), [bookings, searchTerm, statusFilter]);
 

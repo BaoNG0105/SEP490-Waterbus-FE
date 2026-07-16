@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
+import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../utils/charterBookingAdmin";
+import { isBoatUnderMaintenance, resolveBoatLiveStatus } from "../utils/boatTracking";
 
 const isValidLatLng = (lat, lng) => (
   Number.isFinite(Number(lat))
@@ -23,15 +25,21 @@ const safeMapAction = (map, action) => {
 };
 
 // Tự động căn chỉnh góc nhìn — không animate để tránh _leaflet_pos khi remount.
-const MapController = ({ positions, centerPoint, multiMarkers }) => {
+const MapController = ({ positions, centerPoint, multiMarkers, focusView, fitKey }) => {
   const map = useMap();
   const isInitialized = useRef(false);
+  const lastFitKey = useRef("");
 
   const lat = centerPoint ? centerPoint[0] : undefined;
   const lng = centerPoint ? centerPoint[1] : undefined;
+  const focusLat = focusView?.[0];
+  const focusLng = focusView?.[1];
 
   useEffect(() => {
-    if (isInitialized.current) return;
+    const key = String(fitKey || "");
+    // Chỉ fit lại khi tập marker "sẵn sàng" lần đầu (số lượng đổi từ 0 → N), không phải mỗi GPS tick.
+    if (isInitialized.current && key === lastFitKey.current) return;
+    if (!key || key.endsWith("-s0") && key.startsWith("b0")) return;
 
     safeMapAction(map, (activeMap) => {
       if (positions && positions.length > 0) {
@@ -39,6 +47,7 @@ const MapController = ({ positions, centerPoint, multiMarkers }) => {
         if (bounds.isValid()) {
           activeMap.fitBounds(bounds, { padding: [40, 40], animate: false });
           isInitialized.current = true;
+          lastFitKey.current = key;
           return;
         }
       }
@@ -49,8 +58,9 @@ const MapController = ({ positions, centerPoint, multiMarkers }) => {
         if (points.length > 0) {
           const bounds = L.latLngBounds(points);
           if (bounds.isValid()) {
-            activeMap.fitBounds(bounds, { padding: [50, 50], animate: false });
+            activeMap.fitBounds(bounds, { padding: [80, 80], animate: false });
             isInitialized.current = true;
+            lastFitKey.current = key;
             return;
           }
         }
@@ -58,9 +68,10 @@ const MapController = ({ positions, centerPoint, multiMarkers }) => {
       if (lat !== undefined && lng !== undefined && isValidLatLng(lat, lng)) {
         activeMap.setView([lat, lng], 16, { animate: false });
         isInitialized.current = true;
+        lastFitKey.current = key;
       }
     });
-  }, [positions, multiMarkers, lat, lng, map]);
+  }, [positions, multiMarkers, fitKey, lat, lng, map]);
 
   useEffect(() => {
     if (!isInitialized.current) return;
@@ -69,6 +80,14 @@ const MapController = ({ positions, centerPoint, multiMarkers }) => {
       activeMap.setView([lat, lng], activeMap.getZoom() || 16, { animate: false });
     });
   }, [lat, lng, map]);
+
+  useEffect(() => {
+    if (!isInitialized.current) return;
+    if (focusLat === undefined || focusLng === undefined || !isValidLatLng(focusLat, focusLng)) return;
+    safeMapAction(map, (activeMap) => {
+      activeMap.panTo([focusLat, focusLng], { animate: true, duration: 0.35 });
+    });
+  }, [focusLat, focusLng, map]);
 
   useEffect(() => {
     const onResize = () => {
@@ -111,16 +130,151 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
+/**
+ * Marker tàu kiểu FlightRadar: bóng tàu nhìn-từ-trên (mũi hướng lên khi 0°),
+ * xoay theo heading. Cache theo trạng thái + góc (làm tròn 5°).
+ */
+const boatLeafletIcons = new Map();
+
+// Silhouette tàu nhìn từ trên (mũi hướng lên) trong viewBox 48x48.
+const boatTopSvg = (fill, ring, deck) => `
+  <svg width="100%" height="100%" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+    <path d="M24 4
+      C30 10 33 17 33 27
+      C33 32 32.5 36 31.5 39
+      C31 40.5 30 41.5 28.5 41.5
+      L19.5 41.5
+      C18 41.5 17 40.5 16.5 39
+      C15.5 36 15 32 15 27
+      C15 17 18 10 24 4 Z"
+      fill="${fill}" stroke="${ring}" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M24 13
+      C27 16 28.5 20 28.5 25
+      C28.5 28 28 31 27.5 33
+      L20.5 33
+      C20 31 19.5 28 19.5 25
+      C19.5 20 21 16 24 13 Z"
+      fill="${deck}"/>
+    <circle cx="24" cy="9.5" r="1.8" fill="${ring}"/>
+  </svg>
+`;
+
+const getBoatLeafletIcon = ({
+  selected = false,
+  dimmed = false,
+  maintenance = false,
+  incident = false,
+  heading = null,
+} = {}) => {
+  const state = incident
+    ? "incident"
+    : maintenance
+      ? "maintenance"
+      : selected
+        ? "selected"
+        : dimmed
+          ? "offline"
+          : "online";
+  const rot = Number.isFinite(Number(heading)) ? Math.round(Number(heading) / 5) * 5 : 0;
+  const key = `${state}|${rot}`;
+  if (boatLeafletIcons.has(key)) return boatLeafletIcons.get(key);
+
+  const size = selected || incident ? 50 : 44;
+  const fill = incident ? "#DC2626" : selected ? "#FFD100" : maintenance ? "#64748B" : "#124757";
+  const ring = "#FFFFFF";
+  const deck = incident ? "#FEE2E2" : selected ? "#0E4050" : maintenance ? "#94A3B8" : "#3FB6C9";
+  const online = !dimmed && !maintenance;
+
+  const html = `
+    <div class="wb-boat ${dimmed ? "is-offline" : ""} ${maintenance ? "is-maintenance" : ""} ${incident ? "is-incident" : ""}" style="width:${size}px;height:${size}px;">
+      ${incident ? `<span class="wb-boat__pulse wb-boat__pulse--incident"></span>` : ""}
+      ${online && !incident ? `<span class="wb-boat__pulse" style="border-color:${fill};"></span>` : ""}
+      <span class="wb-boat__rot" style="transform:rotate(${rot}deg);">
+        ${boatTopSvg(fill, ring, deck)}
+      </span>
+    </div>
+  `;
+
+  const icon = L.divIcon({
+    className: "live-boat-marker",
+    html,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -(size / 2)],
+  });
+  boatLeafletIcons.set(key, icon);
+  if (boatLeafletIcons.size > 240) {
+    const first = boatLeafletIcons.keys().next().value;
+    boatLeafletIcons.delete(first);
+  }
+  return icon;
+};
+
+/** Marker bến: ô mã xám + cột + tên bến (kiểu như bản đồ waterbus). */
+const stationIconCache = new Map();
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+/** ST-BD / ST_BD → BD — chỉ hiện phần mã ngắn trên cờ. */
+const shortStationCode = (code) => {
+  const raw = String(code || "").trim().toUpperCase();
+  if (!raw) return "—";
+  return raw.replace(/^ST[-_\s]*/i, "") || raw;
+};
+
+const getStationPinIcon = (code) => {
+  const label = shortStationCode(code);
+  const cached = stationIconCache.get(label);
+  if (cached) return cached;
+
+  const safeCode = escapeHtml(label);
+
+  const html = `
+    <div class="wb-flagcode">
+      <span class="wb-flagcode__badge">${safeCode}</span>
+      <span class="wb-flagcode__pole"></span>
+      <span class="wb-flagcode__tip"></span>
+    </div>
+  `;
+
+  // Neo tại chân cột (giữa tip) — badge nằm phía trên
+  const icon = L.divIcon({
+    className: "live-boat-marker",
+    html,
+    iconSize: [40, 36],
+    iconAnchor: [20, 34],
+    popupAnchor: [0, -36],
+  });
+  stationIconCache.set(label, icon);
+  if (stationIconCache.size > 200) {
+    stationIconCache.delete(stationIconCache.keys().next().value);
+  }
+  return icon;
+};
+
 export const WaterwayMap = ({
   coordinates = [],
   waterwayName = "",
   overlayEyebrow = "Đang hiển thị tuyến",
   stationPoint = null,
   stationsList = [],
+  boatMarkers = [],
+  selectedBoatId = "",
+  focusView = null,
   onLocationSelect,
   hideStationLink = false,
   lineWeight = 5,
   lineOpacity = 0.85,
+  fitBoatMarkers = false,
+  stationAsFlag = false,
+  /** Tuyến nền (chỉ xem): [{ id, positions: [[lat,lng],...], label? }] */
+  routeOverlays = [],
+  className = "",
 }) => {
   const navigate = useNavigate();
   const polylinePositions = (coordinates || [])
@@ -129,14 +283,40 @@ export const WaterwayMap = ({
   const centerPoint = stationPoint && isValidLatLng(stationPoint.latitude, stationPoint.longitude)
     ? [stationPoint.latitude, stationPoint.longitude]
     : [10.7719, 106.7067];
+  const focusPoint = focusView && isValidLatLng(focusView.latitude, focusView.longitude)
+    ? [focusView.latitude, focusView.longitude]
+    : null;
   const visibleStations = (stationsList || []).filter((station) => {
     const status = String(station?.status || "Active").toLowerCase();
     const active = status === "active" || status === "";
     return active && isValidLatLng(station?.latitude, station?.longitude);
   });
+  const visibleBoats = (boatMarkers || []).filter((boat) =>
+    isValidLatLng(boat?.latitude, boat?.longitude),
+  );
+  const visibleRouteOverlays = (routeOverlays || [])
+    .map((route) => {
+      const positions = (route?.positions || [])
+        .filter((point) => Array.isArray(point) && isValidLatLng(point[0], point[1]))
+        .map((point) => [Number(point[0]), Number(point[1])]);
+      if (positions.length < 2) return null;
+      return {
+        id: route.id || route.routeId || route.routeCode || JSON.stringify(positions[0]),
+        label: route.label || route.routeCode || route.routeName || "",
+        positions,
+      };
+    })
+    .filter(Boolean);
+  // Chỉ dùng id list cho fit lần đầu — tránh remount MapController mỗi tick GPS.
+  const fitMarkerKey = fitBoatMarkers
+    ? `b${visibleBoats.length}-s${visibleStations.length}`
+    : `s${visibleStations.length}`;
+  const fitMarkers = fitBoatMarkers
+    ? (visibleBoats.length > 0 ? visibleBoats : visibleStations)
+    : visibleStations;
 
   return (
-    <div className="relative z-10 h-full min-h-112.5 w-full overflow-hidden border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+    <div className={`relative z-10 h-full min-h-0 w-full overflow-hidden border-0 ${className}`}>
 
       {waterwayName && (
         <div className="absolute top-4 right-4 z-1000 max-w-[min(100%-2rem,20rem)] bg-white/90 dark:bg-slate-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm pointer-events-none">
@@ -149,11 +329,27 @@ export const WaterwayMap = ({
         </div>
       )}
 
-      <MapContainer center={centerPoint} zoom={13} className="w-full h-full">
+      <MapContainer center={centerPoint} zoom={13} className="w-full h-full" zoomControl={false}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+
+        {/* Tuyến nền mờ — chỉ xem, không tương tác / không sửa FID */}
+        {visibleRouteOverlays.map((route) => (
+          <Polyline
+            key={`overlay-${route.id}`}
+            positions={route.positions}
+            interactive={false}
+            pathOptions={{
+              color: "#5b8a9a",
+              weight: 3,
+              opacity: 0.28,
+              lineJoin: "round",
+              lineCap: "round",
+            }}
+          />
+        ))}
 
         {polylinePositions.length > 0 && (
           <Polyline
@@ -183,10 +379,10 @@ export const WaterwayMap = ({
             <Marker
               key={`${station.stationId || "st"}-${index}`}
               position={[station.latitude, station.longitude]}
+              {...(stationAsFlag
+                ? { icon: getStationPinIcon(station.stationCode) }
+                : {})}
             >
-              <Tooltip permanent direction="top" offset={[0, -38]} className="station-name-tooltip">
-                {station.stationName}
-              </Tooltip>
               <Popup>
                 <div className="text-center font-body p-2 space-y-2 min-w-37.5">
                   <p className="font-black text-[#124757] text-xs uppercase leading-tight m-0">{station.stationName}</p>
@@ -207,10 +403,89 @@ export const WaterwayMap = ({
           ))
         )}
 
+        {visibleBoats.map((boat) => {
+          const selected = String(selectedBoatId) === String(boat.boatId);
+          const underMaintenance = isBoatUnderMaintenance(boat);
+          const dimmed = boat.isOnline === false;
+          const imageSrc = getBoatImageUrl(boat, DEFAULT_BOAT_IMAGE);
+          const seatCount = Number(boat.seatCount);
+          const passengerCount = Number(boat.passengerCount);
+          const hasSeats = Number.isFinite(seatCount) && seatCount > 0;
+          const hasPassengers = Number.isFinite(passengerCount) && passengerCount >= 0;
+          const occupancyValue = hasSeats
+            ? (hasPassengers ? `${passengerCount}/${seatCount}` : String(seatCount))
+            : null;
+          const liveStatus = resolveBoatLiveStatus(boat);
+          const isIncident = liveStatus.key === "incident";
+
+          const boatCard = (
+            <div className={`wb-boat-card ${underMaintenance ? "wb-boat-card--maintenance" : ""}`}>
+              <img
+                className="wb-boat-card__img"
+                src={imageSrc}
+                alt={boat.boatCode || "boat"}
+                onError={(event) => {
+                  event.currentTarget.src = DEFAULT_BOAT_IMAGE;
+                }}
+              />
+              <div className="wb-boat-card__body">
+                <div className="wb-boat-card__top">
+                  <p className="wb-boat-card__code">{boat.boatCode || boat.boatId}</p>
+                  <span
+                    className={`wb-boat-card__dot wb-boat-card__dot--${liveStatus.tone}`}
+                    title={liveStatus.labelVn}
+                    aria-label={liveStatus.labelVn}
+                  />
+                </div>
+                {boat.boatName ? (
+                  <p className="wb-boat-card__name">{boat.boatName}</p>
+                ) : null}
+                {isIncident ? (
+                  <p className="wb-boat-card__note">Sự cố</p>
+                ) : underMaintenance ? (
+                  <p className="wb-boat-card__note">Đang bảo trì</p>
+                ) : occupancyValue ? (
+                  <p className="wb-boat-card__seats">
+                    <strong>{occupancyValue}</strong>
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          );
+
+          return (
+            <Marker
+              key={`boat-${boat.boatId || boat.boatCode}`}
+              position={[boat.latitude, boat.longitude]}
+              icon={getBoatLeafletIcon({
+                selected,
+                dimmed,
+                maintenance: underMaintenance && !isIncident,
+                incident: isIncident,
+                heading: boat.heading,
+              })}
+              zIndexOffset={selected ? 1000 : isIncident ? 400 : underMaintenance ? 80 : dimmed ? 100 : 200}
+              eventHandlers={{
+                click: (event) => {
+                  // Chỉ 1 card (tooltip) — không mở Popup chồng lên.
+                  L.DomEvent.stopPropagation(event);
+                  event.target.openTooltip();
+                },
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -14]} opacity={1} sticky className="wb-boat-tip">
+                {boatCard}
+              </Tooltip>
+            </Marker>
+          );
+        })}
+
         <MapController
           positions={polylinePositions}
           centerPoint={stationPoint && isValidLatLng(stationPoint.latitude, stationPoint.longitude) ? centerPoint : null}
-          multiMarkers={visibleStations}
+          focusView={focusPoint}
+          multiMarkers={fitMarkers}
+          fitKey={fitMarkerKey}
         />
         <MapClickHandler onLocationSelect={onLocationSelect} />
       </MapContainer>

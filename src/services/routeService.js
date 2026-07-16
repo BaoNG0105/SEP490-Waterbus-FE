@@ -7,14 +7,17 @@ import {
 } from '../api/routeApi';
 
 // Service: Tải danh sách tuyến đường sông
-export const fetchAllRoutes = async () => {
+export const fetchAllRoutes = async (params = {}) => {
     try {
-        return await apiGetRoutes();
+        return await apiGetRoutes(params);
     } catch (error) {
         console.error('Lỗi khi lấy danh sách tuyến đường từ Service:', error);
         throw error;
     }
 };
+
+/** Chỉ route nguồn cho picker charter (GPS + Sightseeing) — không lấy Bus / Charter CH-CB. */
+export const fetchCharterSourceRoutes = async () => fetchAllRoutes({ usage: "charter-source" });
 
 // Service: Lấy thông tin chi tiết tuyến đường (kèm stops)
 export const fetchRouteDetail = async (routeId) => {

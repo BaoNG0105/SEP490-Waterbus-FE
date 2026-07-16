@@ -1528,8 +1528,13 @@ export function CharterDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400" />
+          <p className="text-xs font-headline font-black uppercase tracking-wider text-slate-400">
+            {lang === "VN" ? "Đang tải..." : "Loading..."}
+          </p>
+        </div>
       </div>
     );
   }

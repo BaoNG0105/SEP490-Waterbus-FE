@@ -9,21 +9,22 @@ import {
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchWaterwayDetail } from "../../../services/waterwayService";
 import { WaterwayMap } from "../../../components/WaterwayMap";
-import { getRouteKindLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
+import { getRouteKindLabel, getRouteShortLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
 
-const routeKindBadgeClass = (routeType) => {
-    switch (routeType) {
-        case "CharterReference":
+const routeKindBadgeClass = (route) => {
+    const key = getRouteShortLabel(route);
+    switch (key) {
+        case "GPS":
             return "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20";
         case "Charter":
             return "bg-[#EAF3F5] text-[#124757] border-[#124757]/20 dark:bg-yellow-400/10 dark:text-yellow-400 dark:border-yellow-400/20";
-        case "SightseeingLoop":
+        case "Sightseeing":
             return "bg-violet-50 text-violet-700 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20";
-        case "Regular":
+        case "Bus":
             return "bg-teal-50 text-teal-700 border-teal-100 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20";
         default:
-            return "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400";
+            return "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600";
     }
 };
 
@@ -169,8 +170,8 @@ export function RouteDetail() {
             icon: "warning",
             title: lang === "VN" ? "Xóa tuyến đường?" : "Delete Route?",
             text: lang === "VN"
-                ? "Chỉ xóa được tuyến chưa có chuyến đi (trip) nào. Nếu tuyến đã có trip, hãy chuyển trạng thái sang Inactive thay vì xóa."
-                : "Only routes without any trips can be deleted. If this route already has trips, set status to Inactive instead.",
+                ? "Chỉ xóa được tuyến chưa từng có chuyến đi. Nếu tuyến đã có chuyến, bạn chuyển sang Ngừng hoạt động thay vì xóa."
+                : "You can only delete a route that has never had any trips. If it already has trips, set it to Inactive instead of deleting.",
             showCancelButton: true,
             confirmButtonText: lang === "VN" ? "Xóa tuyến" : "Delete",
             cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
@@ -193,8 +194,8 @@ export function RouteDetail() {
                 icon: "error",
                 title: lang === "VN" ? "Không thể xóa tuyến!" : "Cannot Delete Route!",
                 text: error.response?.data?.message || (lang === "VN"
-                    ? "Tuyến đường đã có chuyến đi. Hãy chuyển trạng thái sang Inactive thay vì xóa."
-                    : "This route already has trips. Set status to Inactive instead."),
+                    ? "Tuyến này đã có chuyến đi nên không xóa được. Bạn chuyển sang Ngừng hoạt động nhé."
+                    : "This route already has trips, so it cannot be deleted. Please set it to Inactive."),
                 confirmButtonColor: "#124757"
             });
         } finally {
@@ -253,8 +254,8 @@ export function RouteDetail() {
                     <span className={`w-1.5 h-1.5 rounded-full ${route.status === "Active" ? "bg-emerald-500" : "bg-rose-500"}`}></span>
                     {route.status || "Inactive"}
                 </span>
-                <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border shrink-0 ${routeKindBadgeClass(route.routeType)}`}>
-                    {getRouteKindLabel(route.routeType, lang)}
+                <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border shrink-0 ${routeKindBadgeClass(route)}`}>
+                    {getRouteKindLabel(route, lang)}
                 </span>
                 <button
                     type="button"

@@ -48,11 +48,16 @@ export function MergeGpsRoutes() {
     load();
   }, [lang]);
 
+  const gpsRoutes = useMemo(
+    () => (routes || []).filter((r) => canSelectForMerge(r)),
+    [routes]
+  );
+
   const routeById = useMemo(() => {
     const map = new Map();
-    (routes || []).forEach((r) => map.set(getRouteId(r), r));
+    gpsRoutes.forEach((r) => map.set(getRouteId(r), r));
     return map;
-  }, [routes]);
+  }, [gpsRoutes]);
 
   const existingCodes = useMemo(
     () => new Set((routes || []).map((r) => String(r.routeCode || "").toUpperCase())),
@@ -261,12 +266,12 @@ export function MergeGpsRoutes() {
 
         <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
           <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">
-            sourceRouteIds ({selectedIds.length})
+            {lang === "VN" ? `Route nguồn GPS (${selectedIds.length} đã chọn)` : `GPS source routes (${selectedIds.length} selected)`}
           </h3>
           <p className="text-[10px] text-slate-400 font-semibold">
             {lang === "VN"
-              ? "Chỉ chọn Route nguồn GPS. Không chọn Vòng tham quan / Tuyến booking."
-              : "Select GPS source routes only. Not sightseeing / booking routes."}
+              ? "Chọn ít nhất 2 tuyến GPS nối đuôi nhau (A→B rồi B→C)."
+              : "Pick at least 2 GPS routes that connect end-to-start (A→B then B→C)."}
           </p>
 
           {selectedIds.length > 0 && (
@@ -306,37 +311,37 @@ export function MergeGpsRoutes() {
           )}
 
           <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700/60 rounded-xl border border-slate-100 dark:border-slate-700">
-            {(routes || []).map((route) => {
-              const id = getRouteId(route);
-              const checked = selectedIds.includes(id);
-              const selectable = canSelectForMerge(route);
-              return (
-                <label
-                  key={id}
-                  className={`flex items-start gap-3 px-3 py-2.5 ${
-                    selectable
-                      ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/40"
-                      : "opacity-50 cursor-not-allowed bg-slate-50/50 dark:bg-slate-900/20"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={!selectable}
-                    onChange={() => selectable && toggleSelect(id)}
-                    className="mt-1 accent-[#124757] dark:accent-yellow-400 disabled:cursor-not-allowed"
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-xs font-bold text-slate-800 dark:text-slate-100">
-                      {route.routeCode} · {route.routeName}
+            {gpsRoutes.length === 0 ? (
+              <p className="px-3 py-4 text-xs text-slate-400 font-semibold">
+                {lang === "VN" ? "Chưa có Route nguồn GPS nào." : "No GPS source routes yet."}
+              </p>
+            ) : (
+              gpsRoutes.map((route) => {
+                const id = getRouteId(route);
+                const checked = selectedIds.includes(id);
+                return (
+                  <label
+                    key={id}
+                    className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSelect(id)}
+                      className="mt-1 accent-[#124757] dark:accent-yellow-400"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-bold text-slate-800 dark:text-slate-100">
+                        {route.routeCode} · {route.routeName}
+                      </span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5">
+                        {getRouteKindLabel(route, lang)}
+                      </span>
                     </span>
-                    <span className="block text-[10px] text-slate-400 mt-0.5">
-                      {getRouteKindLabel(route.routeType, lang)}
-                    </span>
-                  </span>
-                </label>
-              );
-            })}
+                  </label>
+                );
+              })
+            )}
           </div>
         </div>
 
