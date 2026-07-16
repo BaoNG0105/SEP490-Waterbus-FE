@@ -53,6 +53,8 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
     { path: "/admin/bookings", icon: "receipt_long", labelVn: "Quản lý Booking", labelEn: "Booking Management", roles: ["ADMIN"] },
     { path: "/admin/stations-management", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station", roles: ["ADMIN", "MANAGER"] },
     { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Quản lý tàu", labelEn: "Boat Fleet", roles: ["ADMIN", "MANAGER"] },
+    { path: "/admin/live-tracking", icon: "my_location", labelVn: "Theo dõi tàu", labelEn: "Live tracking", roles: ["ADMIN", "MANAGER"] },
+    { path: "/admin/incidents", icon: "emergency", labelVn: "Sự cố / Cứu hộ", labelEn: "Incidents / Rescue", roles: ["ADMIN", "MANAGER", "STAFF"] },
     { path: "/admin/staff-assignments", icon: "badge", labelVn: "Phân công Staff", labelEn: "Staff Assignments", labelVnStaff: "Lịch của tôi", labelEnStaff: "My schedule", roles: ["ADMIN", "MANAGER", "STAFF"] },
     { path: "/admin/staff/my-trips", icon: "directions_boat", labelVn: "Chuyến của tôi", labelEn: "My trips", roles: ["STAFF"] },
     { path: "/admin/staff/ticket-scan", icon: "qr_code_scanner", labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
@@ -77,6 +79,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
   const staffOnly = isStaffUser(user) && !isAdminUser(user) && !isManagerUser(user);
   const staffMenuPaths = new Set([
     "/admin",
+    "/admin/incidents",
     "/admin/staff-assignments",
     "/admin/staff/my-trips",
     "/admin/staff/ticket-scan",

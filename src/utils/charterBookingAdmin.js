@@ -1,9 +1,20 @@
 import { normalizeCharterTicketRows } from "./charterBookingTickets";
 import { getCharterDepositAmount } from "./charterBookingActions";
 import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "./insurancePreview";
+import { resolveRouteLabelKey } from "./routeTypes";
 
-export const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Refunded"];
+export const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired"];
 export const manualStatusOptions = ["Cancelled", "Expired", "Completed"];
+
+/** Filter Cancelled gồm cả booking status Refunded (UI gộp thành Đã hủy). */
+export const matchesCharterStatusFilter = (bookingStatus, statusFilter) => {
+  if (!statusFilter || statusFilter === "All") return true;
+  const status = String(bookingStatus || "");
+  if (statusFilter === "Cancelled") {
+    return status === "Cancelled" || status === "Refunded";
+  }
+  return status === statusFilter;
+};
 export const rentalUnits = ["Day", "Hour"];
 export const itemsPerPage = 8;
 const ADMIN_CHARTER_TAB_BADGES_KEY = "adminCharterAcknowledgedTabBadges";
@@ -392,7 +403,8 @@ export const formatPassengerSummary = (booking, lang) => {
 };
 
 export const getPaymentStatusInfo = (status, lang) => {
-  switch (String(status || "").toLowerCase()) {
+  const normalized = String(status || "").toLowerCase().replace(/[_-\s]/g, "");
+  switch (normalized) {
     case "unpaid":
       return { label: lang === "VN" ? "Chưa thanh toán" : "Unpaid", classes: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700" };
     case "pending":
@@ -403,24 +415,28 @@ export const getPaymentStatusInfo = (status, lang) => {
     case "depositpaid":
       return { label: lang === "VN" ? "Đã đặt cọc" : "Deposit Paid", classes: "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20" };
     case "refunded":
+    case "manualrefunded":
       return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
     case "partiallyrefunded":
-    case "partially_refunded":
       return { label: lang === "VN" ? "Hoàn tiền một phần" : "Partially refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
     case "refundpending":
-    case "refund_pending":
     case "refundprocessing":
-    case "refund_processing":
       return { label: lang === "VN" ? "Đang hoàn tiền" : "Refund Processing", classes: "bg-cyan-50 text-cyan-600 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20" };
     case "refundfailed":
-    case "refund_failed":
       return { label: lang === "VN" ? "Hoàn tiền lỗi" : "Refund Failed", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20" };
     case "failed":
       return { label: lang === "VN" ? "Thanh toán thất bại" : "Failed", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20" };
     case "cancelled":
+    case "canceled":
       return { label: lang === "VN" ? "Đã hủy" : "Cancelled", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20" };
+    case "":
+    case "--":
+    case "null":
+    case "undefined":
+      return { label: lang === "VN" ? "—" : "—", classes: "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700" };
     default:
-      return { label: status || "--", classes: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700" };
+      // Không hiện raw enum (RefundPending…) — tránh chữ khó hiểu khi data chưa ổn.
+      return { label: lang === "VN" ? "—" : "—", classes: "bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700" };
   }
 };
 export const getPaymentAmount = (payment) =>
@@ -951,11 +967,21 @@ export const normalizeRouteCandidateOption = (item) => {
     ? null
     : Number(durationRaw);
 
+  const routeType = pick(item, ["routeType", "type", "route.routeType"], "") || "";
+  const routeLabel = pick(item, ["routeLabel", "route.label"], "") || "";
+  const selectableRaw = pick(item, ["isSelectableForCharterQuote"], undefined);
+  const generatedRaw = pick(item, ["isGeneratedForBooking"], undefined);
+
   return {
     routeId,
     routeCode: pick(item, ["routeCode", "code", "route.routeCode"], "") || "",
     routeName: pick(item, ["routeName", "name", "route.routeName", "route.name"], "") || "",
-    routeType: pick(item, ["routeType", "type", "route.routeType"], "") || "",
+    routeType,
+    routeLabel,
+    isSelectableForCharterQuote: selectableRaw === undefined ? undefined : Boolean(selectableRaw),
+    isGeneratedForBooking: generatedRaw === undefined ? undefined : Boolean(generatedRaw),
+    fromStationName: pick(item, ["fromStationName", "fromStation.stationName"], "") || "",
+    toStationName: pick(item, ["toStationName", "toStation.stationName"], "") || "",
     distanceKm: Number.isFinite(distanceKm) ? distanceKm : null,
     estimatedDurationMin: Number.isFinite(estimatedDurationMin) ? estimatedDurationMin : null,
   };
@@ -993,7 +1019,10 @@ export const normalizeRouteCandidateLegs = (payload, booking = null) => {
         fromStationName: pick(leg, ["fromStationName", "fromStation.stationName", "fromStation.name"], "") || "",
         toStationId: String(pick(leg, ["toStationId", "toStation.id"], "") || ""),
         toStationName: pick(leg, ["toStationName", "toStation.stationName", "toStation.name"], "") || "",
-        candidates: candidatesRaw.map(normalizeRouteCandidateOption).filter(Boolean),
+        candidates: candidatesRaw
+          .map(normalizeRouteCandidateOption)
+          .filter(Boolean)
+          .filter((candidate) => isUsableRouteCandidateForBooking(candidate)),
       };
     })
     : fromBooking.map((leg) => ({
@@ -1105,10 +1134,46 @@ export const routeMatchesLegStations = (route, fromStationId, toStationId) => {
 const isSelectableGpsCatalogRoute = (route) => {
   const status = String(route?.status || "Active").toLowerCase();
   if (status && status !== "active") return false;
+
+  // Prefer BE flags when present.
+  if (route?.isSelectableForCharterQuote === false) return false;
+  if (route?.isGeneratedForBooking === true) return false;
+  if (String(route?.routeType || "") === "Charter") return false;
+  if (route?.isSelectableForCharterQuote === true) return true;
+
   const type = String(route?.routeType || "");
+  const label = String(route?.routeLabel || "").toLowerCase();
   if (type === "CharterReference" || type === "SightseeingLoop") return true;
+  if (label === "gps" || label === "sightseeing") return true;
   if (route?.fromGps === true || route?.isFromGps === true || route?.createdFromGps === true) return true;
   if (String(route?.source || route?.createdVia || "").toLowerCase().includes("gps")) return true;
+  return false;
+};
+
+/** Route do booking charter tạo (CH-CB-... / Charter CB-...) — không đẩy vào picker. */
+export const isCharterBookingGeneratedRoute = (routeOrCandidate) => {
+  if (!routeOrCandidate) return false;
+  if (routeOrCandidate.isGeneratedForBooking === true) return true;
+  if (String(routeOrCandidate.routeType || "") === "Charter") return true;
+  if (String(routeOrCandidate.routeLabel || "").toLowerCase() === "charter") return true;
+  const code = String(routeOrCandidate?.routeCode || "").trim();
+  const name = String(routeOrCandidate?.routeName || routeOrCandidate?.name || "").trim();
+  return /^CH[-_]?CB-/i.test(code) || /^Charter\s+CB-/i.test(name);
+};
+
+/** Candidate picker charter: chỉ GPS / Sightseeing — ẩn Charter & Bus. */
+export const isUsableRouteCandidateForBooking = (routeOrCandidate) => {
+  if (!routeOrCandidate) return false;
+  if (routeOrCandidate.isSelectableForCharterQuote === false) return false;
+  if (routeOrCandidate.isGeneratedForBooking === true) return false;
+  if (isCharterBookingGeneratedRoute(routeOrCandidate)) return false;
+
+  const key = resolveRouteLabelKey(routeOrCandidate);
+  if (key === "Charter" || key === "Bus") return false;
+  if (key === "GPS" || key === "Sightseeing") return true;
+
+  // BE đã gắn flag chọn được nhưng chưa có label ngắn.
+  if (routeOrCandidate.isSelectableForCharterQuote === true) return true;
   return false;
 };
 
@@ -1117,6 +1182,9 @@ export const normalizeCatalogRouteAsCandidate = (route) => normalizeRouteCandida
   routeCode: route?.routeCode,
   routeName: route?.routeName || route?.name,
   routeType: route?.routeType,
+  routeLabel: route?.routeLabel,
+  isSelectableForCharterQuote: route?.isSelectableForCharterQuote,
+  isGeneratedForBooking: route?.isGeneratedForBooking,
   distanceKm: route?.distanceKm ?? route?.baseDistanceKm ?? route?.totalDistanceKm,
   estimatedDurationMin: route?.estimatedDurationMin
     ?? route?.estimatedDurationMinutes
@@ -1124,12 +1192,13 @@ export const normalizeCatalogRouteAsCandidate = (route) => normalizeRouteCandida
 });
 
 /**
- * Khi BE route-candidates trống: FE lọc Route nguồn GPS theo đúng 2 mã station của chặng
- * để admin tự chọn — không ghép / không ước đoán tuyến.
+ * Khi BE route-candidates trống: FE lọc Route nguồn GPS/Sightseeing theo đúng 2 station
+ * — dùng catalog `usage=charter-source`, không ghép / không ước đoán tuyến.
  */
 export const buildManualGpsCandidatesForLeg = (catalogRoutes, fromStationId, toStationId) => (
   (Array.isArray(catalogRoutes) ? catalogRoutes : [])
     .filter((route) => isSelectableGpsCatalogRoute(route))
+    .filter((route) => isUsableRouteCandidateForBooking(route))
     .filter((route) => routeMatchesLegStations(route, fromStationId, toStationId))
     .map(normalizeCatalogRouteAsCandidate)
     .filter(Boolean)
@@ -1137,8 +1206,13 @@ export const buildManualGpsCandidatesForLeg = (catalogRoutes, fromStationId, toS
 
 export const enrichCandidateLegsWithManualGpsRoutes = (legs, catalogRoutes) => (
   (Array.isArray(legs) ? legs : []).map((leg) => {
-    const beCandidates = Array.isArray(leg.candidates) ? leg.candidates : [];
-    const manual = buildManualGpsCandidatesForLeg(catalogRoutes, leg.fromStationId, leg.toStationId);
+    const beCandidates = (Array.isArray(leg.candidates) ? leg.candidates : [])
+      .filter((candidate) => isUsableRouteCandidateForBooking(candidate));
+    const manual = buildManualGpsCandidatesForLeg(
+      catalogRoutes,
+      leg.fromStationId,
+      leg.toStationId,
+    );
     const byId = new Map();
     [...beCandidates, ...manual].forEach((candidate) => {
       if (!candidate?.routeId || byId.has(candidate.routeId)) return;

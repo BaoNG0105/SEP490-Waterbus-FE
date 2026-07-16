@@ -15,9 +15,10 @@ export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
         <button
           onClick={onMenuClick}
           className="lg:hidden p-2 hover:bg-white/10 dark:hover:bg-slate-800 rounded-xl text-white transition-colors"
-          title="Open Menu"
+          title={lang === "VN" ? "Mở menu" : "Open menu"}
+          aria-label={lang === "VN" ? "Mở menu" : "Open menu"}
         >
-          <span className="material-symbols-outlined text-[24px]">menu</span>
+          <span className="material-symbols-outlined text-[24px]" aria-hidden="true">menu</span>
         </button>
 
         {/* Tiêu đề trang: Sẽ đứng ngay cạnh mép phải của Sidebar trên Desktop */}
@@ -40,7 +41,7 @@ export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
               : lang === "VN" ? "Chế độ Tối" : "Dark Mode"
           }
         >
-          <span className="material-symbols-outlined text-[20px]">
+          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
             {isDarkMode ? "light_mode" : "dark_mode"}
           </span>
         </button>
@@ -62,8 +63,9 @@ export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
           to="/"
           className="p-2 text-white/80 hover:text-red-400 hover:bg-white/10 dark:hover:bg-red-500/20 dark:hover:text-red-400 rounded-full transition-all flex items-center justify-center"
           title={lang === "VN" ? "Đăng xuất" : "Logout"}
+          aria-label={lang === "VN" ? "Đăng xuất" : "Logout"}
         >
-          <span className="material-symbols-outlined text-[20px]">power_settings_new</span>
+          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">power_settings_new</span>
         </Link>
       </div>
     </header>

@@ -15,12 +15,14 @@ import {
   hasCompletedCharterRefund,
   extractCharterBookingList,
   itemsPerPage,
+  matchesCharterStatusFilter,
   normalizeBooking,
   statusOptions,
 } from "../../../utils/charterBookingAdmin";
 import { shouldUseAssignedCharterApi, getCharterCapabilities, getDefaultCharterTab } from "../../../utils/charterBookingAccess";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { useCharterBookingListHub } from "../../../hooks/useCharterBookingListHub";
+import { PageLoading } from "../../../components/PageLoading";
 
 /** List DTO thường thiếu payments/refund — enrich vài booking Confirmed+Paid từ detail. */
 const enrichListRefundStatuses = async (bookings, useAssignedApi) => {
@@ -68,29 +70,31 @@ export function CharterBookingManagement() {
   const [sortDirection, setSortDirection] = useState("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
   const loadData = useCallback(async ({ silent = false } = {}) => {
     try {
-      if (!silent) setIsLoading(true);
+      if (silent) setIsRefreshing(true);
+      else setIsLoading(true);
       setErrorMsg("");
       const bookingData = useAssignedApi
         ? await fetchAssignedCharterBookings()
         : await fetchAdminCharterBookings();
       const normalized = extractCharterBookingList(bookingData).map(normalizeBooking);
-      setBookings(normalized);
-      // List ít field hơn detail → bổ sung refund để hết hiện nhầm "Đã thanh toán".
+      // Chỉ set sau khi enrich xong — tránh hiện trạng thái nửa mùa khi load chậm.
       const enriched = await enrichListRefundStatuses(normalized, useAssignedApi);
       setBookings(enriched);
     } catch (error) {
       console.error("Lỗi tải charter booking:", error);
       if (!silent) {
-      setErrorMsg(error.response?.data?.message || (lang === "VN"
-        ? "Không thể tải danh sách yêu cầu thuê tàu."
-        : "Unable to load charter booking requests."));
+        setErrorMsg(error.response?.data?.message || (lang === "VN"
+          ? "Không thể tải danh sách yêu cầu thuê tàu."
+          : "Unable to load charter booking requests."));
       }
     } finally {
-      if (!silent) setIsLoading(false);
+      if (silent) setIsRefreshing(false);
+      else setIsLoading(false);
     }
   }, [lang, useAssignedApi]);
 
@@ -117,7 +121,7 @@ export function CharterBookingManagement() {
       booking.boatName.toLowerCase().includes(searchValue) ||
       booking.route.toLowerCase().includes(searchValue);
 
-    const matchesStatus = statusFilter === "All" || booking.status === statusFilter;
+    const matchesStatus = matchesCharterStatusFilter(booking.status, statusFilter);
     return matchesSearch && matchesStatus;
   });
 
@@ -194,7 +198,7 @@ export function CharterBookingManagement() {
 
   return (
     <div className="space-y-8 font-body pb-10">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
         <div className="space-y-1">
           <h2 className="text-2xl md:text-3xl font-headline font-black text-[#124757] dark:text-yellow-400">
             {lang === "VN" ? "Quản Lý Thuê Tàu" : "Charter Booking Management"}
@@ -209,14 +213,6 @@ export function CharterBookingManagement() {
                 : "Only shows charter bookings assigned to you.")}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={loadData}
-          className="bg-[#FFD100] text-[#124757] font-headline font-black uppercase text-xs tracking-wider px-6 py-3.5 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-95 transition-all flex items-center gap-2 w-max shrink-0"
-        >
-          <span className={`material-symbols-outlined text-base font-black ${isLoading ? "animate-spin" : ""}`}>refresh</span>
-          {lang === "VN" ? "Tải lại" : "Refresh"}
-        </button>
       </div>
 
       {errorMsg && (
@@ -239,9 +235,9 @@ export function CharterBookingManagement() {
           >
             <div className="flex items-center gap-3.5">
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.bg} ${item.color}`}>
-              <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
-            </div>
-            <div className="min-w-0">
+                <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
+              </div>
+              <div className="min-w-0">
                 <p className="truncate text-[11px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? item.labelVn : item.labelEn}</p>
                 <h3 className={`mt-0.5 truncate font-headline text-lg font-black ${item.color}`}>{item.value}</h3>
               </div>
@@ -265,23 +261,23 @@ export function CharterBookingManagement() {
           />
         </div>
 
-        <div className="relative w-full lg:w-68">
+        <div className="relative w-full lg:w-52">
           <button
             type="button"
             onClick={() => setIsStatusDropdownOpen((prev) => !prev)}
-            className="w-full h-12 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 text-left flex items-center justify-between gap-3 text-[#124757] dark:text-yellow-400 outline-none focus:ring-2 focus:ring-[#FFD100] transition-all shadow-sm hover:bg-white dark:hover:bg-slate-800"
+            className="w-full h-12 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 text-left flex items-center justify-between gap-2 text-[#124757] dark:text-yellow-400 outline-none focus:ring-2 focus:ring-[#FFD100] transition-all shadow-sm hover:bg-white dark:hover:bg-slate-800"
           >
-            <span className="flex items-center gap-2 min-w-0">
-              <span className="material-symbols-outlined text-xl text-slate-400">filter_list</span>
-              <span className="truncate text-xs font-headline font-black uppercase tracking-wider">
-                {statusFilter === "All" ? (lang === "VN" ? "Tất cả trạng thái" : "All statuses") : getStatusInfo(statusFilter).label}
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="material-symbols-outlined text-lg text-slate-400 shrink-0">filter_list</span>
+              <span className="truncate text-[11px] font-headline font-black uppercase tracking-wider">
+                {statusFilter === "All" ? (lang === "VN" ? "Tất cả" : "All") : getStatusInfo(statusFilter).label}
               </span>
             </span>
-            <span className={`material-symbols-outlined text-xl text-slate-400 transition-transform ${isStatusDropdownOpen ? "rotate-180" : ""}`}>expand_more</span>
+            <span className={`material-symbols-outlined text-lg text-slate-400 shrink-0 transition-transform ${isStatusDropdownOpen ? "rotate-180" : ""}`}>expand_more</span>
           </button>
 
           {isStatusDropdownOpen && (
-            <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-full min-w-64 rounded-3xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xl p-2">
+            <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-full min-w-56 rounded-3xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xl p-2">
               {statusOptions.map((status) => {
                 const active = statusFilter === status;
                 const info = getStatusInfo(status);
@@ -315,7 +311,14 @@ export function CharterBookingManagement() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
+      <div className="relative bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
+        {isRefreshing ? (
+          <PageLoading
+            lang={lang}
+            overlay
+            message={lang === "VN" ? "Đang cập nhật..." : "Refreshing..."}
+          />
+        ) : null}
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-250">
             <thead>
@@ -357,8 +360,8 @@ export function CharterBookingManagement() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
               {isLoading ? (
                 <tr>
-                  <td colSpan={tableColSpan} className="text-center py-14">
-                    <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin mx-auto"></div>
+                  <td colSpan={tableColSpan} className="py-16">
+                    <PageLoading lang={lang} />
                   </td>
                 </tr>
               ) : currentBookings.length === 0 ? (
@@ -401,16 +404,9 @@ export function CharterBookingManagement() {
                           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusInfo.dot}`} />
                           {statusInfo.label}
                         </span>
-                        {String(booking.status) === "Cancelled" || String(booking.paymentStatus).toLowerCase() === "refunded" ? (
-                          <p className="mt-1 text-[9px] text-slate-400">
-                            {getPaymentStatusInfo(
-                              String(booking.paymentStatus).toLowerCase() === "paid" ? "Refunded" : booking.paymentStatus,
-                              lang,
-                            ).label}
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-[9px] text-slate-400">{getPaymentStatusInfo(booking.paymentStatus, lang).label}</p>
-                        )}
+                        <p className="mt-1 text-[9px] text-slate-400">
+                          {statusInfo.subLabel || getPaymentStatusInfo(booking.paymentStatus, lang).label}
+                        </p>
                       </td>
                       {showManagerColumn ? (
                         <td className="py-4 px-4">

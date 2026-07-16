@@ -1,5 +1,6 @@
 import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import { getCharterBookingHubUrl } from "../utils/hubBaseUrl";
+import { buildHubConnectionOptions } from "../utils/hubConnectionOptions";
 
 class CharterBookingHubClient {
   constructor() {
@@ -88,9 +89,7 @@ class CharterBookingHubClient {
     }
 
     this.connection = new HubConnectionBuilder()
-      .withUrl(getCharterBookingHubUrl(), {
-        accessTokenFactory: () => this.getAccessToken(),
-      })
+      .withUrl(getCharterBookingHubUrl(), buildHubConnectionOptions(() => this.getAccessToken()))
       .withAutomaticReconnect([0, 1000, 2000, 5000, 10000])
       .build();
 

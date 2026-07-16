@@ -9,6 +9,16 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.VITE_API_BASE_URL?.replace(/\/api\/?$/, "")
   const devPort = Number(env.VITE_DEV_PORT || 5174)
 
+  const proxyCommon = {
+    target: apiTarget,
+    changeOrigin: true,
+    secure: true,
+    // Azure Set-Cookie Domain=*.azurewebsites.net → browser từ localhost/IP sẽ bỏ cookie.
+    // Xóa Domain để ARRAffinity gắn đúng host Vite → sticky session SignalR không 404.
+    cookieDomainRewrite: "",
+    cookiePathRewrite: "/",
+  }
+
   return {
     plugins: [react(), tailwindcss()],
     server: {
@@ -19,15 +29,19 @@ export default defineConfig(({ mode }) => {
         ? {
             proxy: {
               "/api": {
-                target: apiTarget,
-                changeOrigin: true,
-                secure: true,
+                ...proxyCommon,
               },
               "/hubs": {
-                target: apiTarget,
-                changeOrigin: true,
-                secure: true,
+                ...proxyCommon,
                 ws: true,
+                rewriteWsOrigin: true,
+                timeout: 0,
+                proxyTimeout: 0,
+                configure: (proxy) => {
+                  proxy.on("error", (err) => {
+                    console.warn("[vite /hubs proxy]", err?.message || err)
+                  })
+                },
               },
             },
           }

@@ -199,22 +199,21 @@ export const Header = ({ isNoticeVisible }) => {
                 to="/admin"
                 className="hidden sm:flex items-center justify-center w-8 h-8 rounded-full bg-white/10 dark:bg-slate-800 border border-white/10 dark:border-slate-700 hover:border-yellow-400 dark:hover:border-yellow-400 transition-colors text-white hover:text-yellow-400 shrink-0"
                 title={lang === "VN" ? "Trang quản trị" : "Admin Dashboard"}
+                aria-label={lang === "VN" ? "Trang quản trị" : "Admin Dashboard"}
               >
-                <span className="material-symbols-outlined text-lg">admin_panel_settings</span>
+                <span className="material-symbols-outlined text-lg" aria-hidden="true">admin_panel_settings</span>
               </Link>
             )}
             {isAuthenticated ? (
               <Link
                 to="/profile"
-                className="flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full bg-white/10 dark:bg-slate-800 border border-white/10 dark:border-slate-700 hover:border-yellow-400 dark:hover:border-yellow-400 transition-colors cursor-pointer shadow-sm"
-                title={lang === "VN" ? "Hồ sơ của tôi" : "My Profile"}
+                className="flex items-center justify-center rounded-full bg-white/10 p-0.5 dark:bg-slate-800 border border-white/10 dark:border-slate-700 hover:border-yellow-400 dark:hover:border-yellow-400 transition-colors cursor-pointer shadow-sm shrink-0"
+                title={displayUserName}
+                aria-label={lang === "VN" ? "Hồ sơ của tôi" : "My Profile"}
               >
-                <div className="w-8 h-8 rounded-full bg-white/20 overflow-hidden shrink-0">
-                  <img alt="User Avatar" className="w-full h-full object-cover" src={displayAvatar} />
+                <div className="w-8 h-8 rounded-full bg-white/20 overflow-hidden">
+                  <img alt="" className="w-full h-full object-cover" src={displayAvatar} />
                 </div>
-                <span className="hidden sm:block text-xs font-bold text-white dark:text-white line-clamp-1 max-w-100px">
-                  {displayUserName}
-                </span>
               </Link>
             ) : (
               <Link
