@@ -16,6 +16,16 @@ export const searchTrips = (params) =>
 export const getTripById = (id) =>
     api.get(`/trips/${id}`).then(response => response.data);
 
-// API: Sơ đồ ghế của 1 chuyến tàu (kèm trạng thái theo chuyến)
-export const getTripSeats = (id) =>
-    api.get(`/trips/${id}/seats`).then(response => response.data);
+// API: Sơ đồ ghế của 1 chuyến tàu (kèm trạng thái theo chuyến). fromStationCode/toStationCode optional —
+// truyền vào để xem trạng thái ghế đúng theo chặng khách sẽ đi, bỏ trống để xem trạng thái cả tuyến.
+export const getTripSeats = (id, params = {}) =>
+    api.get(`/trips/${id}/seats`, { params }).then(response => response.data);
+
+// API: Tạm giữ ghế khi khách đang chọn (TTL 3 phút, tự gia hạn khi gọi lại; tối đa 10 ghế)
+// fromStationCode/toStationCode bắt buộc với trip Regular (ghế bán theo chặng).
+export const holdTripSeats = (id, seatNumbers, fromStationCode, toStationCode) =>
+    api.post(`/trips/${id}/seats/hold`, { seatNumbers, fromStationCode, toStationCode }).then(response => response.data);
+
+// API: Nhả ghế đang tạm giữ (chỉ nhả được ghế do chính user đang giữ)
+export const releaseTripSeats = (id, seatNumbers, fromStationCode, toStationCode) =>
+    api.post(`/trips/${id}/seats/release`, { seatNumbers, fromStationCode, toStationCode }).then(response => response.data);

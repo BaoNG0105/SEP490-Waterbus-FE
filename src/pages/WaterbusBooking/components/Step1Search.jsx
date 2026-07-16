@@ -12,7 +12,7 @@ const isActiveWaterbusStation = (station) => {
 
 export default function Step1Search({ bookingData, updateData, onNext }) {
   const { lang } = useApp();
-  const { isRoundTrip, fromWharf, toWharf, departureDate, returnDate, passengerCount } = bookingData;
+  const { isRoundTrip, fromWharf, toWharf, departureDate, returnDate } = bookingData;
 
   const [stations, setStations] = useState([]);
   const [isLoadingStations, setIsLoadingStations] = useState(true);
@@ -97,7 +97,7 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
   };
 
   return (
-    <div className="max-w-3xl mx-auto bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700/50 space-y-6">
+    <div className="max-w-3xl mx-auto bg-white dark:bg-slate-800 p-6 md:p-8 rounded-4xl shadow-xl border border-slate-100 dark:border-slate-700/50 space-y-6">
       <h2 className="text-2xl font-headline font-bold text-[#124757] dark:text-white border-b pb-3">
         {lang === "VN" ? "Tra cứu thông tin hành trình" : "Search Waterbus Journey"}
       </h2>
@@ -176,16 +176,6 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
             <input type="date" value={returnDate} min={departureDate} onChange={(e) => updateData({ returnDate: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
           </div>
         )}
-      </div>
-
-      {/* Số lượng khách */}
-      <div className="space-y-2 max-w-[200px]">
-        <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Số lượng khách" : "Passengers"}</label>
-        <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2 shadow-inner">
-          <button type="button" disabled={passengerCount <= 1} onClick={() => updateData({ passengerCount: passengerCount - 1 })} className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center font-bold border disabled:opacity-40">-</button>
-          <span className="font-headline font-black text-lg text-[#124757] dark:text-white">{passengerCount}</span>
-          <button type="button" onClick={() => updateData({ passengerCount: passengerCount + 1 })} className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center font-bold border">+</button>
-        </div>
       </div>
 
       {searchError && (

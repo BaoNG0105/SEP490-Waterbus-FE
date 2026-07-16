@@ -4,6 +4,8 @@ import {
     searchTrips as apiSearchTrips,
     getTripById as apiGetTripById,
     getTripSeats as apiGetTripSeats,
+    holdTripSeats as apiHoldTripSeats,
+    releaseTripSeats as apiReleaseTripSeats,
 } from '../api/tripApi';
 
 export const TRIP_STATUS_OPTIONS = ['Scheduled', 'Boarding', 'Departed', 'Arrived', 'Cancelled'];
@@ -83,12 +85,34 @@ export const fetchTripDetail = async (tripId) => {
     }
 };
 
-// Service: Lấy sơ đồ ghế của 1 chuyến tàu
-export const fetchTripSeatMap = async (tripId) => {
+// Service: Lấy sơ đồ ghế của 1 chuyến tàu. Truyền fromStationCode/toStationCode để xem đúng trạng thái
+// ghế theo chặng khách sẽ đi (trip Regular bán ghế theo chặng); bỏ trống để xem trạng thái cả tuyến.
+export const fetchTripSeatMap = async (tripId, { fromStationCode, toStationCode } = {}) => {
     try {
-        return await apiGetTripSeats(tripId);
+        return await apiGetTripSeats(tripId, { fromStationCode, toStationCode });
     } catch (error) {
         console.error(`Lỗi khi lấy sơ đồ ghế chuyến tàu ${tripId}:`, error);
+        throw error;
+    }
+};
+
+// Service: Tạm giữ ghế đang chọn cho chuyến (TTL 3 phút, tự gia hạn khi gọi lại)
+// fromStationCode/toStationCode bắt buộc với trip Regular.
+export const holdSeats = async (tripId, seatNumbers, fromStationCode, toStationCode) => {
+    try {
+        return await apiHoldTripSeats(tripId, seatNumbers, fromStationCode, toStationCode);
+    } catch (error) {
+        console.error(`Lỗi khi giữ ghế cho chuyến ${tripId}:`, error);
+        throw error;
+    }
+};
+
+// Service: Nhả ghế đang tạm giữ cho chuyến
+export const releaseSeats = async (tripId, seatNumbers, fromStationCode, toStationCode) => {
+    try {
+        return await apiReleaseTripSeats(tripId, seatNumbers, fromStationCode, toStationCode);
+    } catch (error) {
+        console.error(`Lỗi khi nhả ghế cho chuyến ${tripId}:`, error);
         throw error;
     }
 };

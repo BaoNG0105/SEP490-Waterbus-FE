@@ -84,7 +84,7 @@ export const EditProfile = () => {
                     dob: convertDateForInput(data.dateOfBirth),
                     gender: data.gender || "Male",
                     nationality: userNationality,
-                    avatarUrl: data.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
+                    avatarUrl: data.avatarUrl || "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp",
                 };
 
                 setProfileData(formattedData);
@@ -415,7 +415,7 @@ export const EditProfile = () => {
                             <label className={labelClasses}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
                             <div className="relative w-full">
                                 <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 leading-none">
-                                    <span className={`fi fi-${selectedFlag} !block rounded-sm shadow-sm`} aria-hidden="true" />
+                                    <span className={`fi fi-${selectedFlag} block! rounded-sm shadow-sm`} aria-hidden="true" />
                                 </span>
                                 <select
                                     value={selectedFlag}
