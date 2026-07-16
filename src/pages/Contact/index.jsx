@@ -14,7 +14,7 @@ export const Contact = () => {
             {lang === "VN" ? "Liên hệ với chúng tôi" : "Get In Touch"}
           </p>
           <h1 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-            {lang === "VN" ? "Chúng tôi luôn sẵn sàng hỗ trợ bạn" : "We Are Here To Help You"}
+            {lang === "VN" ? "Luôn lắng nghe, luôn đồng hành cùng bạn" : "Always Here, Always Listening"}
           </h1>
         </div>
 

@@ -221,8 +221,8 @@ export const Home = () => {
             </span>
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white leading-tight">
               {lang === "VN"
-                ? "Nâng tầm di chuyển đô thị bằng giao thông đường thủy"
-                : "Elevating urban mobility through river transit"}
+                ? "Kiến tạo chuẩn mực mới cho di chuyển đô thị"
+                : "Redefining The Standard Of Urban Mobility"}
             </h2>
             <p className="text-slate-600 dark:text-slate-400 font-body text-base leading-relaxed">
               {lang === "VN"
@@ -275,7 +275,7 @@ export const Home = () => {
               {lang === "VN" ? "Đặt vé trực tuyến" : "Online Booking"}
             </p>
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-              {lang === "VN" ? "Các loại dịch vụ" : "Our Services"}
+              {lang === "VN" ? "Hành trình dành riêng cho bạn" : "Journeys Crafted For You"}
             </h2>
           </div>
           {/* Grid 3 thẻ điều hướng dịch vụ đặt vé */}
@@ -398,7 +398,7 @@ export const Home = () => {
               {lang === "VN" ? "Mạng lưới bến tàu" : "Operational Grid"}
             </p>
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-              {lang === "VN" ? "Sơ đồ hệ thống bến tàu Waterbus" : "Saigon Waterbus Station Network"}
+              {lang === "VN" ? "Mạng lưới bến tàu kết nối khắp thành phố" : "A City-Wide Network Of Waterway Stations"}
             </h2>
           </div>
           {/* Bản đồ */}
@@ -425,8 +425,8 @@ export const Home = () => {
             </span>
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white leading-tight">
               {lang === "VN"
-                ? "Lịch trình khởi hành linh hoạt mỗi ngày"
-                : "Flexible Departure Schedules Daily"}
+                ? "Lịch trình linh hoạt, sẵn sàng cho mọi hành trình"
+                : "Flexible Schedules, Ready For Every Journey"}
             </h2>
             <p className="text-slate-600 dark:text-slate-400 font-body text-base leading-relaxed">
               {lang === "VN"
@@ -513,7 +513,7 @@ export const Home = () => {
               {lang === "VN" ? "Chương trình ưu đãi" : "Exclusive Offers"}
             </p>
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-              {lang === "VN" ? "Ưu đãi & Khuyến mãi độc quyền" : "Exclusive Deals & Promotions"}
+              {lang === "VN" ? "Đặc quyền dành riêng cho hành khách" : "Exclusive Privileges For Our Passengers"}
             </h2>
           </div>
           {/* Grid danh sách các thẻ Khuyến mại thiết kế lại theo ảnh mẫu */}
@@ -585,7 +585,7 @@ export const Home = () => {
               {lang === "VN" ? "Tin tức & Sự kiện" : "News & Events"}
             </p>
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-              {lang === "VN" ? "Cập nhật thông tin mới nhất" : "Latest Updates & News"}
+              {lang === "VN" ? "Những câu chuyện đáng đọc" : "Stories Worth Reading"}
             </h2>
           </div>
 
@@ -738,10 +738,10 @@ export const Home = () => {
                 {lang === "VN" ? "Tải ứng dụng WaterBus" : "Download WaterBus App"}
               </span>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-headline font-bold text-white leading-tight">
-                {lang === "VN" ? "Mua vé nhanh chóng," : "Fast Ticketing,"}
+                {lang === "VN" ? "Đặt vé chỉ trong vài chạm," : "Book In Just A Tap,"}
                 <br />
                 <span className="text-yellow-400">
-                  {lang === "VN" ? "thanh toán dễ dàng!" : "Easy Payment!"}
+                  {lang === "VN" ? "thanh toán tức thì!" : "Pay With Effortless Ease!"}
                 </span>
               </h2>
               <p className="text-white/70 font-body text-base md:text-lg max-w-lg leading-relaxed pt-2">
@@ -797,7 +797,7 @@ export const Home = () => {
               {lang === "VN" ? "Đánh giá từ hành khách" : "Passenger Reviews"}
             </p>
             <h2 className="text-4xl md:text-5xl lg:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-              {lang === "VN" ? "Khách hàng nói gì về WaterBus?" : "What Our Passengers Say"}
+              {lang === "VN" ? "Tiếng nói từ những hành khách của chúng tôi" : "Voices Of Our Passengers"}
             </h2>
           </div>
           {/* Khung Slider chính */}
@@ -876,7 +876,7 @@ export const Home = () => {
               {lang === "VN" ? "Liên hệ với chúng tôi" : "Get In Touch"}
             </p>
             <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-              {lang === "VN" ? "Chúng tôi luôn sẵn sàng hỗ trợ bạn" : "We Are Here To Help You"}
+              {lang === "VN" ? "Luôn lắng nghe, luôn đồng hành cùng bạn" : "Always Here, Always Listening"}
             </h2>
           </div>
           {/* Chia layout 2 cột bất đối xứng */}
