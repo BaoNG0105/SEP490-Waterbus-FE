@@ -4,6 +4,7 @@ import { MainLayout } from "./layout/MainLayout";
 import { NotFound } from "./pages/NotFound";
 
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
+import { CustomerOnlyRoute } from "./components/CustomerOnlyRoute";
 
 //Client
 import { Home } from "./pages/Home";
@@ -134,35 +135,38 @@ function App() {
           }
         />
 
-        {/* Waterbus Booking Page */}
-        <Route
-          path="/waterbus-booking"
-          element={
-            <MainLayout>
-              <WaterbusBooking />
-            </MainLayout>
-          }
-        />
+        {/* Các trang đặt vé: chỉ dành cho Khách hàng, chặn Admin/Staff/Manager */}
+        <Route element={<CustomerOnlyRoute />}>
+          {/* Waterbus Booking Page */}
+          <Route
+            path="/waterbus-booking"
+            element={
+              <MainLayout>
+                <WaterbusBooking />
+              </MainLayout>
+            }
+          />
 
-        {/* Watersightseeing Booking Page */}
-        <Route
-          path="/watersightseeing-booking"
-          element={
-            <MainLayout>
-              <WatersightseeingBooking />
-            </MainLayout>
-          }
-        />
+          {/* Watersightseeing Booking Page */}
+          <Route
+            path="/watersightseeing-booking"
+            element={
+              <MainLayout>
+                <WatersightseeingBooking />
+              </MainLayout>
+            }
+          />
 
-        {/* Charter Booking Page */}
-        <Route
-          path="/charter-booking"
-          element={
-            <MainLayout>
-              <CharterBooking />
-            </MainLayout>
-          }
-        />
+          {/* Charter Booking Page */}
+          <Route
+            path="/charter-booking"
+            element={
+              <MainLayout>
+                <CharterBooking />
+              </MainLayout>
+            }
+          />
+        </Route>
 
         {/* Profile Page */}
         <Route
