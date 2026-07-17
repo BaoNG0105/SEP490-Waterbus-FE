@@ -53,6 +53,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     isRoundTrip,
     fromWharf,
     toWharf,
+    routeType,
     fromWharfName,
     toWharfName,
     departureDate,
@@ -63,6 +64,10 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     selectedSeatsReturn,
     seatHoldExpiresAt
   } = bookingData;
+
+  // Tuyến tham quan vòng (SightseeingLoop) không bán ghế theo chặng nên không bắt buộc phải tra
+  // được stationCode theo cặp bến đi/đến như tuyến Regular.
+  const isLoopRoute = routeType === "SightseeingLoop";
 
   // Đếm ngược thời gian giữ ghế (ghế đã được giữ ở Bước 2 khi bấm "Tiếp tục thanh toán")
   const [nowTick, setNowTick] = useState(Date.now());
@@ -260,7 +265,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
 
     const departureFromCode = findStationCode(selectedDepartureTrip?.stops, fromWharf);
     const departureToCode = findStationCode(selectedDepartureTrip?.stops, toWharf);
-    if (!departureFromCode || !departureToCode) {
+    if (!isLoopRoute && (!departureFromCode || !departureToCode)) {
       showError(
         lang === "VN" ? "Thiếu mã bến" : "Missing station code",
         lang === "VN" ? "Không xác định được mã bến của chuyến đi. Vui lòng quay lại chọn chuyến." : "Unable to resolve the departure trip's station codes. Please go back and reselect the trip."
@@ -270,14 +275,14 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
 
     const payload = {
       tripCode: selectedDepartureTrip.tripCode,
-      items: buildLegItems(selectedSeatsDeparture, departureFromCode, departureToCode),
+      items: buildLegItems(selectedSeatsDeparture, departureFromCode || null, departureToCode || null),
       promotionCode: promoCode.trim() || null,
     };
 
     if (isRoundTrip) {
       const returnFromCode = findStationCode(selectedReturnTrip?.stops, toWharf);
       const returnToCode = findStationCode(selectedReturnTrip?.stops, fromWharf);
-      if (!returnFromCode || !returnToCode) {
+      if (!isLoopRoute && (!returnFromCode || !returnToCode)) {
         showError(
           lang === "VN" ? "Thiếu mã bến" : "Missing station code",
           lang === "VN" ? "Không xác định được mã bến của chuyến về. Vui lòng quay lại chọn chuyến." : "Unable to resolve the return trip's station codes. Please go back and reselect the trip."
@@ -588,15 +593,30 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           <div className="bg-slate-50 dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-inner">
             <div className="flex items-center justify-between mb-2">
               <span className="bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300 text-[10px] font-bold uppercase px-2 py-1 rounded">
-                {lang === "VN" ? "Chiều đi" : "Departure"}
+                {isLoopRoute
+                  ? (lang === "VN" ? "Chuyến tham quan" : "Sightseeing Trip")
+                  : (lang === "VN" ? "Chiều đi" : "Departure")}
               </span>
               <span className="text-xs font-bold text-slate-500">{departureDate}</span>
             </div>
-            <div className="font-headline font-black text-[#124757] dark:text-white flex items-center gap-2 text-lg">
-              {(fromWharfName || "--").toUpperCase()}
-              <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span>
-              {(toWharfName || "--").toUpperCase()}
-            </div>
+            {isLoopRoute ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-xs font-bold uppercase text-slate-400 shrink-0">{lang === "VN" ? "Bến đón:" : "Pickup:"}</span>
+                  <span className="font-headline font-black text-[#124757] dark:text-white">{(fromWharfName || "--").toUpperCase()}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-xs font-bold uppercase text-slate-400 shrink-0">{lang === "VN" ? "Bến trả:" : "Drop-off:"}</span>
+                  <span className="font-headline font-black text-[#124757] dark:text-white">{(toWharfName || "--").toUpperCase()}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="font-headline font-black text-[#124757] dark:text-white flex items-center gap-2 text-lg">
+                {(fromWharfName || "--").toUpperCase()}
+                <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span>
+                {(toWharfName || "--").toUpperCase()}
+              </div>
+            )}
             <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2">
               {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedDepartureTrip))}</span>
             </div>

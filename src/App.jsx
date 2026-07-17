@@ -25,6 +25,7 @@ import { EditCharter } from "./pages/Profile/MyCharterBooking/EditCharter";
 import { CharterList } from "./pages/Profile/MyCharterBooking";
 import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefundRequest";
 import { MyWaterbusBookingList } from "./pages/Profile/MyWaterbusBooking";
+import { MyWaterbusBookingDetail } from "./pages/Profile/MyWaterbusBooking/MyWaterbusBookingDetail";
 import { WaterbusBooking } from "./pages/WaterbusBooking";
 import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
 import { CharterBooking } from "./pages/CharterBooking";
@@ -237,6 +238,16 @@ function App() {
           element={
             <MainLayout>
               <MyWaterbusBookingList />
+            </MainLayout>
+          }
+        />
+
+        {/* My Waterbus Booking Detail Page */}
+        <Route
+          path="/profile/my-waterbus-booking/:id"
+          element={
+            <MainLayout>
+              <MyWaterbusBookingDetail />
             </MainLayout>
           }
         />

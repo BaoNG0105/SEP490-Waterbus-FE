@@ -179,7 +179,7 @@ export function PaymentResult() {
 
   return (
     <div className="flex min-h-[72vh] items-center justify-center bg-[#F5F8FA] px-4 py-12 font-body dark:bg-slate-950">
-      <div className="w-full max-w-md rounded-[2rem] border border-slate-100 bg-white p-8 text-center shadow-xl dark:border-slate-700/50 dark:bg-slate-800">
+      <div className="w-full max-w-md rounded-4xl border border-slate-100 bg-white p-8 text-center shadow-xl dark:border-slate-700/50 dark:bg-slate-800">
         {phase === "syncing" ? (
           <span className="material-symbols-outlined animate-spin text-4xl text-[#124757] dark:text-yellow-400">
             progress_activity

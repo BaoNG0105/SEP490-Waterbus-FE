@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { guidelines } from "../../data/homeData";
 
-import Step1Search from "../WaterbusBooking/components/Step1Search";
+import Step1SearchSightseeing from "./components/Step1SearchSightseeing";
 import Step2SelectTripAndSeats from "../WaterbusBooking/components/Step2SelectTripAndSeats";
 import Step3Checkout from "../WaterbusBooking/components/Step3Checkout";
 
@@ -123,7 +123,7 @@ export function WatersightseeingBooking() {
 
                 {/* --- ĐIỀU HƯỚNG BƯỚC --- */}
                 {currentStep === 1 && (
-                    <Step1Search bookingData={bookingData} updateData={updateBookingData} onNext={() => setCurrentStep(2)} />
+                    <Step1SearchSightseeing bookingData={bookingData} updateData={updateBookingData} onNext={() => setCurrentStep(2)} />
                 )}
 
                 {currentStep === 2 && (

@@ -252,7 +252,15 @@ export function MyWaterbusBookingList() {
             filteredBookings.map((booking) => (
               <article
                 key={booking.id || booking.bookingCode}
-                className={`group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all dark:bg-slate-800 ${
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/profile/my-waterbus-booking/${booking.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    navigate(`/profile/my-waterbus-booking/${booking.id}`);
+                  }
+                }}
+                className={`group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-lg dark:bg-slate-800 ${
                   highlightBookingId && String(highlightBookingId) === booking.id
                     ? "border-[#124757] ring-2 ring-[#124757]/20 dark:border-yellow-400 dark:ring-yellow-400/20"
                     : "border-slate-100 dark:border-slate-700/50"
@@ -287,13 +295,16 @@ export function MyWaterbusBookingList() {
                     </p>
                   </div>
 
-                  <div className="text-left sm:text-right">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                      {lang === "VN" ? "Tổng tiền" : "Total"}
-                    </p>
-                    <p className="font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
-                      {currencyFormatter.format(booking.totalAmount)}
-                    </p>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <div className="text-left sm:text-right">
+                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                        {lang === "VN" ? "Tổng tiền" : "Total"}
+                      </p>
+                      <p className="font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
+                        {currencyFormatter.format(booking.totalAmount)}
+                      </p>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-300 transition-transform group-hover:translate-x-0.5 dark:text-slate-600">chevron_right</span>
                   </div>
                 </div>
               </article>
