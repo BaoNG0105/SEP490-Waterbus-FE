@@ -124,18 +124,16 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
         <button
           type="button"
           onClick={() => updateData({ isRoundTrip: false })}
-          className={`px-5 py-2.5 rounded-xl text-xs font-headline font-bold uppercase transition-all ${
-            !isRoundTrip ? "bg-[#124757] text-white shadow-md" : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-          }`}
+          className={`px-5 py-2.5 rounded-xl text-xs font-headline font-bold uppercase transition-all ${!isRoundTrip ? "bg-[#124757] text-white shadow-md" : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+            }`}
         >
           {lang === "VN" ? "Một chiều" : "One-Way"}
         </button>
         <button
           type="button"
           onClick={() => updateData({ isRoundTrip: true })}
-          className={`px-5 py-2.5 rounded-xl text-xs font-headline font-bold uppercase transition-all ${
-            isRoundTrip ? "bg-[#124757] text-white shadow-md" : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-          }`}
+          className={`px-5 py-2.5 rounded-xl text-xs font-headline font-bold uppercase transition-all ${isRoundTrip ? "bg-[#124757] text-white shadow-md" : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+            }`}
         >
           {lang === "VN" ? "Khứ hồi" : "Round-Trip"}
         </button>
@@ -194,10 +192,11 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
           onClick={handleSearch}
           className="bg-[#FFD100] text-[#124757] font-headline font-bold uppercase tracking-wider text-sm px-10 py-4 rounded-xl shadow-md hover:brightness-105 transition-all disabled:opacity-40 flex items-center gap-2"
         >
+          <span className="material-symbols-outlined text-lg">search</span>
           {isSearching && <span className="w-4 h-4 border-2 border-[#124757]/30 border-t-[#124757] rounded-full animate-spin"></span>}
           {isSearching
             ? (lang === "VN" ? "Đang tìm..." : "Searching...")
-            : (lang === "VN" ? "Tìm vé chuyến tàu" : "Search Routes Now")}
+            : (lang === "VN" ? "Tìm chuyến" : "Search Trips")}
         </button>
       </div>
     </div>

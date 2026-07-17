@@ -96,13 +96,13 @@ export default function Step1SearchSightseeing({ bookingData, updateData, onNext
             type="button"
             disabled={!departureDate || isSearching}
             onClick={handleSearch}
-            className="w-full sm:w-auto bg-[#124757] text-white font-headline font-bold uppercase tracking-wider text-sm px-8 py-3.5 rounded-xl shadow-md hover:brightness-110 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto bg-[#FFD100] text-[#124757] font-headline font-bold uppercase tracking-wider text-sm px-8 py-3.5 rounded-xl shadow-md hover:brightness-110 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
           >
             {isSearching && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>}
             <span className="material-symbols-outlined text-lg">search</span>
             {isSearching
               ? (lang === "VN" ? "Đang tìm..." : "Searching...")
-              : (lang === "VN" ? "Tìm vé" : "Search")}
+              : (lang === "VN" ? "Tìm chuyến" : "Search Trips")}
           </button>
         </div>
       </div>
