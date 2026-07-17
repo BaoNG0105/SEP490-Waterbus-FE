@@ -4,13 +4,17 @@
  * POST {LIVE_BASE}/api/incidents/hook
  */
 
-const stripTrailingSlash = (url) => String(url || "").replace(/\/+$/, "");
+const stripTrailingSlash = (url) => {
+  let value = String(url || "");
+  while (value.endsWith("/")) value = value.slice(0, -1);
+  return value;
+};
 
 export const getLiveBaseUrl = () => {
   const fromEnv = stripTrailingSlash(import.meta.env.VITE_LIVE_BASE_URL || "");
+  // Dev: gửi cùng origin qua Vite proxy để tránh CORS từ Live server.
+  if (import.meta.env.DEV && fromEnv) return "/live-hook";
   if (fromEnv) return fromEnv;
-  // Dev: có thể proxy /live → Live server (xem vite.config)
-  if (import.meta.env.DEV) return "";
   return "";
 };
 

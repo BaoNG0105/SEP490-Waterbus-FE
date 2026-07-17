@@ -83,6 +83,7 @@ export function IncidentManagement() {
     incidentId: "",
     incidentBoatId: "",
     incidentBoatCode: "",
+    incidentDescription: "",
     tripId: "",
     replacementBoatId: "",
     delayMinutes: 30,
@@ -139,6 +140,28 @@ export function IncidentManagement() {
     [boats, reportForm.boatId],
   );
 
+  const boatById = useMemo(() => {
+    const map = new Map();
+    boats.forEach((boat) => {
+      const id = String(boat.boatId || boat.id || "");
+      if (id) map.set(id, boat);
+    });
+    return map;
+  }, [boats]);
+
+  const enrichedIncidents = useMemo(
+    () => incidents.map((incident) => {
+      const boat = boatById.get(String(incident.boatId || ""));
+      if (!boat) return incident;
+      return {
+        ...incident,
+        boatCode: incident.boatCode || boat.boatCode || boat.code || "",
+        boatName: incident.boatName || boat.boatName || boat.name || "",
+      };
+    }),
+    [incidents, boatById],
+  );
+
   const tripsForSelectedBoat = useMemo(() => {
     if (!selectedBoat) return [];
     const boatId = String(selectedBoat.boatId || selectedBoat.id || "");
@@ -158,14 +181,14 @@ export function IncidentManagement() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return incidents;
-    return incidents.filter((item) =>
+    if (!q) return enrichedIncidents;
+    return enrichedIncidents.filter((item) =>
       String(item.boatCode || "").toLowerCase().includes(q)
       || String(item.description || "").toLowerCase().includes(q)
       || String(item.incidentType || "").toLowerCase().includes(q)
       || String(item.managerName || "").toLowerCase().includes(q),
     );
-  }, [incidents, query]);
+  }, [enrichedIncidents, query]);
 
   const handleReport = async (event) => {
     event.preventDefault();
@@ -294,13 +317,30 @@ export function IncidentManagement() {
         });
       }
 
-      const liveResult = await notifyLiveRescueDispatched({
+      let liveResult = await notifyLiveRescueDispatched({
         incidentId: rescueForm.incidentId,
         boatCode: rescueForm.incidentBoatCode,
         replacementBoatCode,
       });
 
-      if (liveResult?.ok === false && !rescueForm.tripId) {
+      // Incident cũ có thể được tạo trước khi Live hook hoạt động. Đồng bộ sự cố
+      // sang GPS rồi gửi lại lệnh cứu hộ một lần.
+      if (liveResult?.ok === false && liveResult.error?.status === 400) {
+        const synced = await notifyLiveIncidentCreated({
+          incidentId: rescueForm.incidentId,
+          boatCode: rescueForm.incidentBoatCode,
+          description: rescueForm.incidentDescription,
+        });
+        if (synced?.ok) {
+          liveResult = await notifyLiveRescueDispatched({
+            incidentId: rescueForm.incidentId,
+            boatCode: rescueForm.incidentBoatCode,
+            replacementBoatCode,
+          });
+        }
+      }
+
+      if (liveResult?.ok === false) {
         throw liveResult.error || new Error("Live hook failed");
       }
 
@@ -317,6 +357,7 @@ export function IncidentManagement() {
         incidentId: "",
         incidentBoatId: "",
         incidentBoatCode: "",
+        incidentDescription: "",
         tripId: "",
         replacementBoatId: "",
         delayMinutes: 30,
@@ -516,6 +557,7 @@ export function IncidentManagement() {
                                 incidentId: item.incidentId,
                                 incidentBoatId: item.boatId || "",
                                 incidentBoatCode: item.boatCode || "",
+                                incidentDescription: item.description || "",
                                 tripId: item.tripId || "",
                                 replacementBoatId: "",
                                 delayMinutes: 30,
@@ -791,6 +833,7 @@ export function IncidentManagement() {
                   incidentId: "",
                   incidentBoatId: "",
                   incidentBoatCode: "",
+                  incidentDescription: "",
                   tripId: "",
                   replacementBoatId: "",
                   delayMinutes: 30,
