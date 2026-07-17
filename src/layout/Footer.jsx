@@ -1,61 +1,71 @@
 import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-
-// Import file ảnh logo từ thư mục assets
 import logo from "../assets/logo-1.png";
+
+const FacebookIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+    <path d="M14 9h3V6h-3c-1.9 0-3.5 1.6-3.5 3.5V12H8v3h2.5v7h3v-7H16l.5-3h-3V9.5c0-.3.2-.5.5-.5z" />
+  </svg>
+);
+
+const InstagramIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+    <path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm5 5.2A4.8 4.8 0 1 0 16.8 12 4.8 4.8 0 0 0 12 7.2zm6.1-.9a1.1 1.1 0 1 0 1.1 1.1 1.1 1.1 0 0 0-1.1-1.1zM12 9.5A2.5 2.5 0 1 1 9.5 12 2.5 2.5 0 0 1 12 9.5z" />
+  </svg>
+);
+
+const ContactIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 4.2-8 5.1L4 8.2V6.5l8 5.1 8-5.1z" />
+  </svg>
+);
 
 export const Footer = () => {
   const { lang } = useApp();
 
   return (
-    <footer className="w-full bg-[#124757] dark:bg-slate-900 text-white py-12 md:py-16 px-6 md:px-12 border-t border-white/10 dark:border-slate-800/80 transition-all duration-300 select-none font-body">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 items-center justify-between gap-10 md:gap-12">
+    <footer className="w-full select-none border-t border-white/10 bg-[#0b2f39] px-6 py-5 font-body text-white transition-colors duration-300 dark:border-slate-800 dark:bg-slate-950 md:px-10 md:py-6">
+      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-5 md:grid-cols-3">
+        <p className="text-center text-[11px] font-medium uppercase tracking-[0.18em] text-white/70 md:text-left">
+          © 2026 Waterbus
+        </p>
 
-        {/* Cột trái: Logo & Slogan */}
-        <div className="flex flex-col gap-4 items-center md:items-start text-center md:text-left">
-          <Link to="/" className="inline-block">
+        <div className="flex justify-center">
+          <Link to="/" className="inline-flex">
             <img
               src={logo}
-              alt="WaterBus Logo"
-              className="w-32 md:w-70 h-auto brightness-100 transition-transform hover:scale-105"
+              alt="WaterBus"
+              className="h-14 w-auto brightness-100 transition-transform hover:scale-[1.02] md:h-16"
             />
           </Link>
-          <p className="text-white/70 dark:text-slate-400 text-sm">
-            {lang === "VN"
-              ? "Định nghĩa lại phương thức di chuyển đô thị trên mặt nước."
-              : "Redefining city mobility through the water."}
-          </p>
         </div>
 
-        {/* Cột giữa: Các liên kết chính */}
-        <div className="flex justify-center gap-6 md:gap-10 text-xs font-bold uppercase tracking-widest font-headline">
+        <div className="flex items-center justify-center gap-4 md:justify-end">
           <a
-            className="text-white/70 dark:text-slate-300 hover:text-white dark:hover:text-yellow-400 transition-colors"
             href="https://www.facebook.com/SaigonWaterbus.Official"
             target="_blank"
             rel="noreferrer"
+            title="Facebook"
+            className="text-white/75 transition-colors hover:text-yellow-400"
           >
-            Facebook
+            <FacebookIcon />
           </a>
           <a
-            className="text-white/70 dark:text-slate-300 hover:text-white dark:hover:text-yellow-400 transition-colors"
             href="https://www.instagram.com/saigonwaterbus/"
             target="_blank"
             rel="noreferrer"
+            title="Instagram"
+            className="text-white/75 transition-colors hover:text-yellow-400"
           >
-            Instagram
+            <InstagramIcon />
           </a>
           <Link
-            className="text-white/70 dark:text-slate-300 hover:text-white dark:hover:text-yellow-400 transition-colors"
             to="/contact"
+            title={lang === "VN" ? "Liên hệ" : "Contact"}
+            className="text-white/75 transition-colors hover:text-yellow-400"
           >
-            {lang === "VN" ? "Liên hệ" : "Contact Us"}
+            <ContactIcon />
           </Link>
-        </div>
-
-        {/* Cột phải: Bản quyền thương hiệu */}
-        <div className="text-center md:text-right text-[10px] text-white/50 dark:text-slate-500 uppercase tracking-widest leading-relaxed">
-          © 2026 Waterbus. All rights reserved.
         </div>
       </div>
     </footer>
