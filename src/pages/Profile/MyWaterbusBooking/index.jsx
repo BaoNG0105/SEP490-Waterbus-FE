@@ -68,6 +68,14 @@ export function MyWaterbusBookingList() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const highlightBookingId = location.state?.highlightBookingId || "";
+  const paymentOutcome = location.state?.paymentOutcome
+    || new URLSearchParams(location.search).get("paymentOutcome")
+    || "";
+  const returnedOrderCode = location.state?.orderCode
+    || new URLSearchParams(location.search).get("orderCode")
+    || "";
+  const fromPayOs = new URLSearchParams(location.search).has("fromPayOs")
+    || Boolean(location.state?.paymentOutcome);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),
@@ -182,6 +190,25 @@ export function MyWaterbusBookingList() {
                 ))}
               </select>
             </div>
+
+            {fromPayOs ? (
+              <div className={`rounded-2xl border p-4 text-xs font-bold ${
+                paymentOutcome === "cancel"
+                  ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200"
+              }`}>
+                {paymentOutcome === "cancel"
+                  ? (lang === "VN"
+                    ? "Bạn đã hủy thanh toán trên PayOS. Booking có thể vẫn ở trạng thái chờ thanh toán."
+                    : "You cancelled PayOS checkout. The booking may still be pending payment.")
+                  : (lang === "VN"
+                    ? "Đã nhận phản hồi PayOS và đồng bộ thanh toán. Kiểm tra trạng thái booking bên dưới (Paid/Confirmed)."
+                    : "PayOS response received and payment synced. Check booking status below (Paid/Confirmed).")}
+                {returnedOrderCode ? (
+                  <span className="mt-1 block font-mono text-[10px] opacity-70">orderCode: {returnedOrderCode}</span>
+                ) : null}
+              </div>
+            ) : null}
 
             {errorMsg && (
               <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-xs font-bold text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">

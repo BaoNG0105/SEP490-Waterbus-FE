@@ -7,9 +7,6 @@ import process from 'node:process'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
   const apiTarget = env.VITE_API_BASE_URL?.replace(/\/api\/?$/, "")
-  const liveTarget = env.VITE_LIVE_BASE_URL?.endsWith("/")
-    ? env.VITE_LIVE_BASE_URL.slice(0, -1)
-    : env.VITE_LIVE_BASE_URL
   const devPort = Number(env.VITE_DEV_PORT || 5174)
 
   const proxyCommon = {
@@ -46,16 +43,6 @@ export default defineConfig(({ mode }) => {
                   })
                 },
               },
-              ...(liveTarget
-                ? {
-                    "/live-hook": {
-                      target: liveTarget,
-                      changeOrigin: true,
-                      secure: false,
-                      rewrite: (path) => path.replace(/^\/live-hook/, ""),
-                    },
-                  }
-                : {}),
             },
           }
         : {}),
