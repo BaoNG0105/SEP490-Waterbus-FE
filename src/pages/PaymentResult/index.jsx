@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useApp } from "../../context/AppContext";
 import { syncBookingPaymentByOrderCode } from "../../services/paymentService";
 
@@ -23,6 +24,7 @@ export function PaymentResult() {
   const { lang } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
+  const { isAuthenticated } = useSelector((state) => state.auth);
   const syncedRef = useRef("");
 
   const outcome = useMemo(() => {
@@ -38,10 +40,15 @@ export function PaymentResult() {
     [params],
   );
 
-  const [phase, setPhase] = useState("syncing"); // syncing | done | error
+  const [phase, setPhase] = useState("syncing"); // syncing | done | error | need_login
   const [errorMsg, setErrorMsg] = useState("");
   const [targetPath, setTargetPath] = useState("");
   const [retryTick, setRetryTick] = useState(0);
+
+  const loginRedirect = useMemo(() => {
+    const next = `${location.pathname}${location.search || ""}`;
+    return `/login?redirect=${encodeURIComponent(next)}`;
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +89,12 @@ export function PaymentResult() {
       const target = resolveTarget();
       if (!cancelled) setTargetPath(target.path);
 
+      // Chưa đăng nhập: giữ nguyên /payment/success?... — không đá login mất orderCode.
+      if (!isAuthenticated || !localStorage.getItem("accessToken")) {
+        if (!cancelled) setPhase("need_login");
+        return;
+      }
+
       // Sync orderCode trước khi rời trang — tránh booking mãi Pending khi webhook PayOS không tới local.
       if (orderCode && isNumericOrderCode(orderCode) && syncedRef.current !== orderCode) {
         syncedRef.current = orderCode;
@@ -89,7 +102,12 @@ export function PaymentResult() {
           await syncBookingPaymentByOrderCode(orderCode);
         } catch (error) {
           console.error("PayOS orderCode sync failed:", error);
+          const status = error?.response?.status;
           if (!cancelled) {
+            if (status === 401) {
+              setPhase("need_login");
+              return;
+            }
             setErrorMsg(
               error?.response?.data?.message
               || error?.message
@@ -139,16 +157,22 @@ export function PaymentResult() {
     return () => {
       cancelled = true;
     };
-  }, [lang, location.search, navigate, orderCode, outcome, payosId, retryTick]);
+  }, [isAuthenticated, lang, location.search, navigate, orderCode, outcome, payosId, retryTick]);
 
   const title = outcome === "cancel"
     ? (lang === "VN" ? "Thanh toán đã hủy" : "Payment cancelled")
-    : (lang === "VN" ? "Đang xác nhận thanh toán" : "Confirming payment");
+    : phase === "need_login"
+      ? (lang === "VN" ? "Cần đăng nhập để xác nhận" : "Sign in to confirm payment")
+      : (lang === "VN" ? "Đang xác nhận thanh toán" : "Confirming payment");
 
   const subtitle = phase === "syncing"
     ? (lang === "VN"
       ? "Đang đồng bộ trạng thái PayOS với hệ thống…"
       : "Syncing PayOS status with the system…")
+    : phase === "need_login"
+      ? (lang === "VN"
+        ? "Phiên đăng nhập đã hết hoặc chưa có. Đăng nhập lại — hệ thống sẽ quay về trang này để đồng bộ PayOS."
+        : "Your session expired or is missing. Sign in again — you will return here to sync PayOS.")
     : phase === "error"
       ? errorMsg
       : (lang === "VN" ? "Sắp chuyển về trang booking…" : "Redirecting to your booking…");
@@ -160,8 +184,10 @@ export function PaymentResult() {
           <span className="material-symbols-outlined animate-spin text-4xl text-[#124757] dark:text-yellow-400">
             progress_activity
           </span>
-        ) : phase === "error" ? (
-          <span className="material-symbols-outlined text-4xl text-rose-500">error</span>
+        ) : phase === "error" || phase === "need_login" ? (
+          <span className="material-symbols-outlined text-4xl text-rose-500">
+            {phase === "need_login" ? "login" : "error"}
+          </span>
         ) : (
           <span className="material-symbols-outlined text-4xl text-emerald-500">check_circle</span>
         )}
@@ -180,10 +206,29 @@ export function PaymentResult() {
         ) : (
           <p className="mt-3 text-[11px] font-semibold text-amber-600 dark:text-amber-300">
             {lang === "VN"
-              ? "Không thấy orderCode trên URL — kiểm tra ReturnUrl BE (PayOs.ReturnUrl)."
-              : "No orderCode in URL — check BE PayOs.ReturnUrl."}
+              ? "Không thấy orderCode trên URL — kiểm tra ReturnUrl BE (PayOs.ReturnUrl phải trỏ /payment/success)."
+              : "No orderCode in URL — check BE PayOs.ReturnUrl (must point to /payment/success)."}
           </p>
         )}
+
+        {phase === "need_login" ? (
+          <div className="mt-6 flex flex-col gap-2">
+            <Link
+              to={loginRedirect}
+              className="inline-flex h-11 items-center justify-center rounded-2xl bg-[#124757] px-4 text-xs font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
+            >
+              {lang === "VN" ? "Đăng nhập để đồng bộ" : "Sign in to sync"}
+            </Link>
+            {targetPath ? (
+              <Link
+                to={targetPath}
+                className="inline-flex h-11 items-center justify-center rounded-2xl bg-slate-100 px-4 text-xs font-headline font-black uppercase tracking-wider text-slate-600 dark:bg-slate-700 dark:text-slate-200"
+              >
+                {lang === "VN" ? "Về trang booking" : "Go to bookings"}
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
 
         {phase === "error" ? (
           <div className="mt-6 flex flex-col gap-2">

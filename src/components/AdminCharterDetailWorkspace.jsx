@@ -132,10 +132,11 @@ function AdminCharterRouteInfoPanel({
             {fromName} → {toName}
           </p>
           {finalizedRoute ? (
-            <p className="mt-1 text-xs font-bold text-emerald-700 dark:text-emerald-300">
-              {lang === "VN" ? "Tuyến đã chốt" : "Finalized"}
-              {finalizedRouteLabel ? `: ${finalizedRouteLabel}` : ""}
-            </p>
+            finalizedRouteLabel ? (
+              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-300">
+                {finalizedRouteLabel}
+              </p>
+            ) : null
           ) : !showDraftSelection ? (
             <p className="mt-1 text-xs font-medium text-slate-400">
               {lang === "VN"

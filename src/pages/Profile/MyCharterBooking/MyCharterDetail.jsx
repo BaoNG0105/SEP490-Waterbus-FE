@@ -1915,39 +1915,56 @@ export function CharterDetail() {
 
           <div className="px-6 py-6 md:px-8">
             <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-              <div className="rounded-3xl border border-[#D8E7EA] bg-[#F7FAFB] p-5 dark:border-slate-700 dark:bg-slate-900">
+              <div className="rounded-2xl border border-[#D8E7EA] bg-[#F7FAFB] p-4 dark:border-slate-700 dark:bg-slate-900">
                 <div className="min-w-0">
                   <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
                     {lang === "VN" ? "Lộ trình dự kiến" : "Planned Route"}
                   </p>
-                  <p className="mt-1 truncate text-xl font-headline font-black text-[#0E4050] dark:text-white">
+                  <p className="mt-0.5 truncate text-base font-headline font-black text-[#0E4050] dark:text-white sm:text-lg">
                     {routeFrom} <span className="text-slate-300">/</span> {routeTo}
                   </p>
                 </div>
 
-                <div className="mt-5 space-y-3">
+                <div className="mt-3 space-y-2">
                   {itineraryTimelineItems.map((item, index) => {
                     const isLast = index === itineraryTimelineItems.length - 1;
                     const isEndpoint = item.type !== "stop";
+                    const marker =
+                      item.type === "start"
+                        ? "A"
+                        : item.type === "end"
+                          ? "B"
+                          : String(index);
                     return (
-                      <div key={`${item.type}-${item.name}-${index}`} className="grid grid-cols-[32px_1fr] gap-3">
+                      <div
+                        key={`${item.type}-${item.name}-${index}`}
+                        className="grid grid-cols-[24px_1fr] items-stretch gap-2.5"
+                      >
                         <div className="flex flex-col items-center">
-                          <span className={`flex h-8 w-8 items-center justify-center rounded-full border text-[10px] font-headline font-black ${isEndpoint
-                            ? "border-[#124757] bg-white text-[#124757] dark:border-yellow-400 dark:bg-slate-800 dark:text-yellow-400"
-                            : "border-slate-200 bg-white text-slate-400 dark:border-slate-700 dark:bg-slate-800"
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-headline font-black leading-none ${
+                              isEndpoint
+                                ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                                : "bg-white text-slate-500 ring-2 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600"
                             }`}
                           >
-                            {item.type === "start" ? "A" : item.type === "end" ? "B" : index}
+                            {marker}
                           </span>
-                          {!isLast && <span className="mt-2 h-8 w-px bg-[#C9DADF] dark:bg-slate-700"></span>}
+                          {!isLast ? (
+                            <span className="mt-1 w-0.5 min-h-2 flex-1 bg-slate-200 dark:bg-slate-600" />
+                          ) : null}
                         </div>
-                        <div className="rounded-2xl border border-white bg-white px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-800">
-                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="rounded-xl border border-slate-100 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-                              <p className="mt-0.5 truncate text-sm font-headline font-black text-[#0E4050] dark:text-slate-100">{item.name}</p>
+                              <p className="text-[10px] font-headline font-black uppercase tracking-widest leading-none text-slate-400">{item.label}</p>
+                              <p className="mt-1 truncate text-sm font-headline font-black leading-tight text-[#0E4050] dark:text-slate-100">{item.name}</p>
                             </div>
-                            {item.meta && <span className="w-max rounded-full bg-yellow-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:bg-yellow-400/10 dark:text-yellow-300">{item.meta}</span>}
+                            {item.meta ? (
+                              <span className="w-max rounded-full bg-yellow-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-yellow-400/10 dark:text-yellow-300">
+                                {item.meta}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                       </div>

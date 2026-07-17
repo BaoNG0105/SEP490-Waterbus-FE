@@ -27,6 +27,7 @@ export const Home = () => {
 
   // Ref tham chiếu tới video nền Hero để điều khiển đoạn phát
   const heroVideoRef = useRef(null);
+  const [showScrollHint, setShowScrollHint] = useState(true);
 
   // Đặt video bắt đầu từ giây HERO_VIDEO_START khi vừa tải xong metadata
   const handleHeroVideoLoadedMetadata = () => {
@@ -186,6 +187,16 @@ export const Home = () => {
     return () => clearInterval(slideTimer);
   }, [showPromoModal]);
 
+  // Icon cuộn hero: thấp ở đáy — ẩn khi đã lướt xuống
+  useEffect(() => {
+    const onScroll = () => {
+      setShowScrollHint(window.scrollY < 48);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
     <main className="dark:bg-slate-900 transition-colors duration-300 relative">
       {/* ===== HERO SECTION & BOOKING FORM ===== */}
@@ -206,7 +217,7 @@ export const Home = () => {
           <div className="absolute inset-0 bg-linear-to-b from-slate-950/50 via-slate-900/40 to-[#124757]/30"></div>
         </div>
         {/* Khối Nội Dung Chính */}
-        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 md:px-12 pt-32 pb-20 flex flex-col items-center justify-center space-y-12">
+        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 md:px-12 pt-32 pb-28 flex flex-col items-center justify-center space-y-12">
           {/* Tiêu Đề */}
           <div className="text-center space-y-4 max-w-4xl gsap-reveal">
             <h1 className="text-6xl md:text-8xl font-headline font-black text-white leading-tight drop-shadow-md">
@@ -217,20 +228,27 @@ export const Home = () => {
               </span>
             </h1>
           </div>
-          {/* Mũi tên chuột cuộn xuống Section Các loại dịch vụ */}
-          <a
-            href="/#services-section"
-            aria-label={lang === "VN" ? "Khám phá dịch vụ" : "Explore Services"}
-            className="gsap-reveal group flex flex-col items-center gap-2 text-white/80 hover:text-yellow-400 transition-colors duration-300"
-          >
-            <span className="w-7 h-11 rounded-full border-2 border-current flex justify-center pt-2">
-              <span className="w-1 h-2 rounded-full bg-current animate-scroll-wheel"></span>
-            </span>
-            <span className="material-symbols-outlined text-xl group-hover:translate-y-1 transition-transform duration-300">
-              keyboard_arrow_down
-            </span>
-          </a>
         </div>
+
+        {/* Mũi tên chuột cuộn xuống — neo đáy hero, biến mất khi scroll */}
+        <a
+          href="/#services-section"
+          aria-label={lang === "VN" ? "Khám phá dịch vụ" : "Explore Services"}
+          aria-hidden={!showScrollHint}
+          tabIndex={showScrollHint ? 0 : -1}
+          className={`absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2 text-white/80 transition-all duration-300 hover:text-yellow-400 md:bottom-10 ${
+            showScrollHint
+              ? "pointer-events-auto translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-3 opacity-0"
+          }`}
+        >
+          <span className="flex h-11 w-7 justify-center rounded-full border-2 border-current pt-2">
+            <span className="h-2 w-1 rounded-full bg-current animate-scroll-wheel"></span>
+          </span>
+          <span className="material-symbols-outlined text-xl">
+            keyboard_arrow_down
+          </span>
+        </a>
       </section>
 
       {/* ===== MiSSON SECTION ===== */}
@@ -431,7 +449,12 @@ export const Home = () => {
               </div>
             ) : (
               // Gọi tấm bản đồ số truyền mảng dữ liệu động từ API trạm bến
-              <WaterwayMap stationsList={waterbusStations} />
+              <WaterwayMap
+                stationsList={waterbusStations}
+                stationAsFlag
+                showStationLabels
+                showStationImages
+              />
             )}
           </div>
         </div>

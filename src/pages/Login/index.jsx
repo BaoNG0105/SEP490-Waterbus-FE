@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useApp } from "../../context/AppContext";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 import { loginWithGoogle, loginWithPhoneEmail } from "../../services/authService";
 import { useDispatch, useSelector } from "react-redux";
 import { loginSuccess } from "../../redux/authSlice";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+/** Chỉ cho phép redirect nội bộ (tránh open redirect). */
+const resolveSafeRedirect = (raw) => {
+  const value = String(raw || "").trim();
+  if (!value.startsWith("/") || value.startsWith("//")) return "";
+  return value;
+};
 
 /** Logo Google dạng chữ G màu classic (không nằm trong ô vuông). */
 const GoogleClassicMark = () => (
@@ -35,11 +42,18 @@ export const Login = () => {
 
   //3. QUẢN LÝ AUTH VÀ ĐIỀU HƯỚNG: KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ VỀ TRANG CHỦ
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const dispatch = useDispatch();
   const { isAuthenticated, user } = useSelector((state) => state.auth);
+  const postLoginRedirect = resolveSafeRedirect(searchParams.get("redirect"));
 
   // HÀM HELPER ĐIỀU HƯỚNG THÔNG MINH DỰA TRÊN ROLE
   const handleRoleRedirect = useCallback((userData) => {
+    // PayOS return: sau login quay lại /payment/success?orderCode=... để sync
+    if (postLoginRedirect) {
+      navigate(postLoginRedirect, { replace: true });
+      return;
+    }
     const allowedRoles = ["ADMIN", "STAFF", "MANAGER"];
     const isManagerOrAdmin = userData?.roles?.some(
       (role) => allowedRoles.includes(role.code) || allowedRoles.includes(role.systemName)
@@ -49,7 +63,7 @@ export const Login = () => {
     } else {
       navigate("/", { replace: true }); // Khách hàng -> Về trang chủ công cộng
     }
-  }, [navigate]);
+  }, [navigate, postLoginRedirect]);
 
   // KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ TỰ ĐỘNG ĐIỀU HƯỚNG THEO ROLE
   useEffect(() => {

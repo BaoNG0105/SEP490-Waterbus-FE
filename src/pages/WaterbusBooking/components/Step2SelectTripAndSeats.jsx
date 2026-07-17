@@ -1,14 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
+import { FormSelect } from "../../../components/FormSelect";
 import { SeatMapIcon, seatToneFromCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
 import { fetchTripDetail, fetchTripSeatMap, holdSeats, releaseSeats } from "../../../services/tripService";
+import { notify, showToast } from "../../../utils/swalToast";
 
 const MAX_SEATS_PER_LEG = 10;
 const LOCKED_STATUSES = ["Held", "Booked", "Blocked"];
+
+const TIME_FILTER_OPTIONS_VN = [
+  { value: "all", label: "Tất cả khung giờ" },
+  { value: "morning", label: "Buổi sáng" },
+  { value: "afternoon", label: "Buổi chiều" },
+];
+
+const TIME_FILTER_OPTIONS_EN = [
+  { value: "all", label: "All times" },
+  { value: "morning", label: "Morning" },
+  { value: "afternoon", label: "Afternoon" },
+];
+
+const timeFilterClassName =
+  "bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-lg px-2 py-2 outline-none dark:text-white whitespace-nowrap";
 
 const formatTripTime = (isoString) => {
   if (!isoString) return "--";
@@ -103,6 +119,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   const [isLoadingSeats, setIsLoadingSeats] = useState(false);
   const [seatMapError, setSeatMapError] = useState("");
   const [isConfirmingSeats, setIsConfirmingSeats] = useState(false);
+  const autoSelectKeyRef = useRef("");
 
   // Nếu quay lại Bước 2 từ Bước 3 (chuyến đã chọn sẵn trong bookingData), Step2 mount lại từ đầu nên
   // seatMapByLeg rỗng — tải lại sơ đồ ghế thật cho (các) chặng đã chọn để hiển thị đúng, không bị trống.
@@ -171,21 +188,24 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   }, [currentSeatMap]);
 
   const promptSignIn = () => {
-    Swal.fire({
+    notify({
+      dialog: true,
       icon: "info",
       title: lang === "VN" ? "Bạn cần đăng nhập" : "Sign in required",
       text: lang === "VN" ? "Vui lòng đăng nhập để chọn ghế và đặt vé." : "Please sign in to select seats and book tickets.",
-      confirmButtonColor: "#124757",
+      confirmButtonText: "OK",
+      allowOutsideClick: false,
+      showCancelButton: false,
     }).then(() => navigate("/login"));
   };
 
   // Khi người dùng chọn 1 chuyến: tải chi tiết chuyến (bến dừng) + sơ đồ ghế thực tế của chặng đang xem
-  const handleSelectTrip = async (trip) => {
+  const handleSelectTrip = async (trip, { silent = false } = {}) => {
     if (trip.availableSeats <= 0 || trip.tripStatus !== "Scheduled") return;
     if (currentTrip?.tripId === trip.tripId) return;
 
     if (!isAuthenticated) {
-      promptSignIn();
+      if (!silent) promptSignIn();
       return;
     }
 
@@ -241,6 +261,23 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
     }
   };
 
+  // Mở sẵn sơ đồ ghế: tự chọn chuyến còn chỗ đầu tiên khi vào bước / đổi chiều / chưa chọn chuyến.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (currentTrip?.tripId) return;
+
+    const firstAvailable = filteredTripOptions.find(
+      (trip) => trip.availableSeats > 0 && trip.tripStatus === "Scheduled",
+    );
+    if (!firstAvailable?.tripId) return;
+
+    const key = `${activeLeg}:${firstAvailable.tripId}:${filterTime}`;
+    if (autoSelectKeyRef.current === key) return;
+    autoSelectKeyRef.current = key;
+    handleSelectTrip(firstAvailable, { silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLeg, filterTime, isAuthenticated, filteredTripOptions.length, currentTrip?.tripId]);
+
   // Chọn/bỏ chọn ghế: chỉ cập nhật state cục bộ, KHÔNG gọi API giữ/nhả ghế ở bước này
   const handleSeatClick = (seat) => {
     if (!isAuthenticated) {
@@ -264,11 +301,10 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
     }
 
     if (currentSeats.length >= MAX_SEATS_PER_LEG) {
-      Swal.fire({
+      showToast({
         icon: "warning",
         title: lang === "VN" ? "Đã đạt số ghế tối đa" : "Maximum seats reached",
         text: lang === "VN" ? `Chỉ được chọn tối đa ${MAX_SEATS_PER_LEG} ghế trong 1 lần đặt.` : `You can select up to ${MAX_SEATS_PER_LEG} seats per booking.`,
-        confirmButtonColor: "#124757",
       });
       return;
     }
@@ -411,18 +447,19 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
 
         {/* CỘT TRÁI (Tỷ lệ 5/12): DANH SÁCH CHUYẾN TÀU CHẠY TRONG NGÀY (dữ liệu thật từ API tìm chuyến) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border shadow-sm flex justify-between items-center">
-            <h3 className="text-lg font-headline font-bold text-[#124757] dark:text-white flex items-center gap-2">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border shadow-sm flex justify-between items-center gap-3">
+            <h3 className="shrink-0 text-lg font-headline font-bold text-[#124757] dark:text-white">
               {activeLeg === "departure"
                 ? (lang === "VN" ? "Chuyến đi" : "Departure")
                 : (lang === "VN" ? "Chuyến về" : "Return")}
             </h3>
-            {/* Bộ lọc giờ nhanh */}
-            <select value={filterTime} onChange={(e) => setFilterTime(e.target.value)} className="bg-slate-50 dark:bg-slate-900 border text-xs font-bold rounded-lg p-2 outline-none">
-              <option value="all">{lang === "VN" ? "Tất cả khung giờ" : "All times"}</option>
-              <option value="morning">{lang === "VN" ? "Buổi sáng" : "Morning"}</option>
-              <option value="afternoon">{lang === "VN" ? "Buổi chiều" : "Afternoon"}</option>
-            </select>
+            <FormSelect
+              value={filterTime}
+              onChange={setFilterTime}
+              options={lang === "VN" ? TIME_FILTER_OPTIONS_VN : TIME_FILTER_OPTIONS_EN}
+              className={timeFilterClassName}
+              fullWidth={false}
+            />
           </div>
 
           <div className="space-y-3.5">

@@ -6,7 +6,7 @@ import { useApp } from "../../../context/AppContext";
 import { fetchMyCharterBookings } from "../../../services/charterBookingService";
 import {
   getCustomerActionInfo,
-  matchesSmartFilter,
+  isTerminalBookingStatus,
 } from "../../../utils/charterBookingActions";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { resolveCharterBookingStatus, resolveCharterPaymentStatus, matchesCharterStatusFilter } from "../../../utils/charterBookingAdmin";
@@ -144,28 +144,11 @@ export function CharterList() {
     return matchesSearch && matchesStatus;
   }), [bookings, searchTerm, statusFilter]);
 
-  const stats = useMemo(() => ({
-    total: bookings.length,
-    waitingQuote: bookings.filter((booking) => booking.status === "PendingQuote").length,
-    readyToPay: bookings.filter((booking) => booking.status === "Quoted" && String(booking.paymentStatus).toLowerCase() !== "paid").length,
-    activeTrips: bookings.filter((booking) => ["PendingPayment", "Confirmed"].includes(booking.status)).length,
-    paidTrips: bookings.filter((booking) => String(booking.paymentStatus).toLowerCase() === "paid").length,
-    needsAction: bookings.filter((booking) => matchesSmartFilter(booking, "needsAction")).length,
-  }), [bookings]);
-
   const openBooking = (booking, focusPayment = false) => {
     navigate(`/profile/my-charter-booking/${booking.id}`, {
       state: { booking, focusPayment },
     });
   };
-
-  const statCards = [
-    { key: "all", icon: "folder_open", label: lang === "VN" ? "Tổng yêu cầu" : "Total", value: stats.total, tone: "text-[#124757] dark:text-yellow-400", ring: "ring-[#124757]/10 dark:ring-yellow-400/20", bg: "bg-slate-50 dark:bg-slate-900" },
-    { key: "needsAction", icon: "priority_high", label: lang === "VN" ? "Cần xử lý" : "Action needed", value: stats.needsAction, tone: "text-rose-600 dark:text-rose-300", ring: "ring-rose-500/15", bg: "bg-rose-50 dark:bg-rose-500/10" },
-    { key: "waitingQuote", icon: "request_quote", label: lang === "VN" ? "Chờ báo giá" : "Waiting", value: stats.waitingQuote, tone: "text-amber-600 dark:text-amber-300", ring: "ring-amber-500/15", bg: "bg-amber-50 dark:bg-amber-500/10" },
-    { key: "toPay", icon: "payments", label: lang === "VN" ? "Cần thanh toán" : "To pay", value: stats.readyToPay, tone: "text-indigo-600 dark:text-indigo-300", ring: "ring-indigo-500/15", bg: "bg-indigo-50 dark:bg-indigo-500/10" },
-    { key: "active", icon: "event_available", label: lang === "VN" ? "Đang hiệu lực" : "Active", value: stats.activeTrips, tone: "text-sky-600 dark:text-sky-300", ring: "ring-sky-500/15", bg: "bg-sky-50 dark:bg-sky-500/10" },
-  ];
 
   const hasFilters = searchTerm || statusFilter !== "All";
   const emptyMessage = bookings.length === 0
@@ -192,13 +175,6 @@ export function CharterList() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={loadBookings}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:bg-white/20"
-                >
-                  <span className={`material-symbols-outlined ${isLoading ? "animate-spin" : ""}`}>refresh</span>
-                </button>
                 <button
                   type="button"
                   onClick={() => navigate("/charter-booking")}
@@ -242,21 +218,6 @@ export function CharterList() {
           </div>
         </section>
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          {statCards.map((item) => (
-            <div
-              key={item.key}
-              className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800"
-            >
-              <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${item.bg} ${item.tone}`}>
-                <span className="material-symbols-outlined text-xl">{item.icon}</span>
-              </div>
-              <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{item.label}</p>
-              <p className={`mt-1 font-headline text-2xl font-black ${item.tone}`}>{item.value}</p>
-            </div>
-          ))}
-        </section>
-
         <section className="space-y-3">
           {isLoading ? (
             <ListSkeleton />
@@ -287,6 +248,7 @@ export function CharterList() {
               const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
               const actionInfo = getCustomerActionInfo(booking, lang);
               const focusPayment = ["pay", "manage"].includes(actionInfo.tone) && actionInfo.urgent;
+              const isClosed = isTerminalBookingStatus(booking.status);
 
               return (
                 <article
@@ -303,13 +265,13 @@ export function CharterList() {
                     }`}
                   />
 
-                  <div className="flex flex-col gap-5 p-5 pl-6 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0 flex-1 space-y-4">
+                  <div className="flex flex-col gap-4 p-4 pl-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                    <div className="min-w-0 flex-1 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={() => openBooking(booking)}
-                          className="font-headline text-lg font-black text-[#124757] transition hover:text-[#0d3541] dark:text-white dark:hover:text-yellow-400"
+                          className="font-headline text-base font-black text-[#124757] transition hover:text-[#0d3541] dark:text-white dark:hover:text-yellow-400 sm:text-lg"
                         >
                           {booking.bookingCode}
                         </button>
@@ -317,33 +279,33 @@ export function CharterList() {
                           <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot}`} />
                           {statusInfo.label}
                         </span>
-                        {actionInfo.urgent && (
+                        {actionInfo.urgent ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-[#FFD100]/20 px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
                             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FFD100]" />
                             {lang === "VN" ? "Ưu tiên" : "Priority"}
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
-                      <div className="grid gap-1 sm:grid-cols-2">
-                        <p className="truncate text-sm font-bold text-slate-700 dark:text-slate-200">{booking.route}</p>
-                        <p className="text-[11px] font-bold text-slate-400 sm:col-span-2">
-                          {formatDate(booking.departureDate)} · {String(booking.startTime).slice(0, 5)} · {booking.passengerCount} {lang === "VN" ? "khách" : "guests"}
-                          {Number(booking.durationValue) > 0
-                            ? ` · ${booking.durationValue} ${booking.rentalUnit === "Hour" ? (lang === "VN" ? "giờ" : "hr") : (lang === "VN" ? "ngày" : "day(s)")}`
-                            : ""}
-                        </p>
-                      </div>
+                      <p className="truncate text-sm font-bold text-slate-700 dark:text-slate-200">{booking.route}</p>
+                      <p className="text-[11px] font-bold text-slate-400">
+                        {formatDate(booking.departureDate)} · {String(booking.startTime).slice(0, 5)} · {booking.passengerCount} {lang === "VN" ? "khách" : "guests"}
+                        {Number(booking.durationValue) > 0
+                          ? ` · ${booking.durationValue} ${booking.rentalUnit === "Hour" ? (lang === "VN" ? "giờ" : "hr") : (lang === "VN" ? "ngày" : "day(s)")}`
+                          : ""}
+                      </p>
 
-                      <CharterWorkflowStepper status={booking.status} lang={lang} compact />
+                      {!isClosed ? (
+                        <CharterWorkflowStepper status={booking.status} lang={lang} compact />
+                      ) : null}
                     </div>
 
-                    <div className="flex shrink-0 flex-col items-stretch gap-3 sm:min-w-52 lg:items-end">
-                      <div className="text-left lg:text-right">
+                    <div className="flex shrink-0 items-center justify-between gap-4 sm:min-w-44 sm:flex-col sm:items-end sm:justify-center sm:gap-2.5">
+                      <div className="text-left sm:text-right">
                         <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
                           {lang === "VN" ? "Giá chốt" : "Quote"}
                         </p>
-                        <p className="font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
+                        <p className="font-headline text-xl font-black text-[#124757] dark:text-yellow-400 sm:text-2xl">
                           {booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--"}
                         </p>
                       </div>
@@ -351,7 +313,7 @@ export function CharterList() {
                       <button
                         type="button"
                         onClick={() => openBooking(booking, focusPayment)}
-                        className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider shadow-sm transition hover:scale-[1.02] active:scale-95 ${actionInfo.buttonClasses}`}
+                        className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider shadow-sm transition hover:scale-[1.02] active:scale-95 ${actionInfo.buttonClasses}`}
                       >
                         <span className="material-symbols-outlined text-base">{actionInfo.icon}</span>
                         {actionInfo.cta}

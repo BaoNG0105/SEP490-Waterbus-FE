@@ -12,6 +12,7 @@ export const Header = ({ isNoticeVisible }) => {
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileServicesOpen, setIsMobileServicesOpen] = useState(false);
 
   const location = useLocation();
   const currentPath = location.pathname;
@@ -49,6 +50,12 @@ export const Header = ({ isNoticeVisible }) => {
 
     const handleForceLogout = () => {
       dispatch(logout());
+      // PayOS return: đừng xóa URL success — để user đăng nhập rồi quay lại sync.
+      if (currentPath.startsWith("/payment/")) {
+        const next = `${location.pathname}${location.search || ""}`;
+        navigate(`/login?redirect=${encodeURIComponent(next)}`, { replace: true });
+        return;
+      }
       notify({
         dialog: true,
         icon: 'info',
@@ -72,7 +79,7 @@ export const Header = ({ isNoticeVisible }) => {
       }, timeLeft);
       return () => clearTimeout(timer);
     }
-  }, [isAuthenticated, dispatch, navigate, lang, isDarkMode]);
+  }, [isAuthenticated, dispatch, navigate, lang, isDarkMode, currentPath, location.pathname, location.search]);
 
   // logic cuộn chuột để thay đổi shadow hiệu ứng nổi
   useEffect(() => {
@@ -93,6 +100,10 @@ export const Header = ({ isNoticeVisible }) => {
     };
     window.addEventListener("scroll", handleScrollClose);
     return () => window.removeEventListener("scroll", handleScrollClose);
+  }, [isMobileMenuOpen]);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) setIsMobileServicesOpen(false);
   }, [isMobileMenuOpen]);
 
   // ĐỒNG BỘ MÀU CHỮ VỚI FOOTER: Nền #124757 nên chữ bình thường màu trắng, active/hover màu vàng rực rỡ
@@ -274,40 +285,52 @@ export const Header = ({ isNoticeVisible }) => {
           </Link>
 
           <Link
-            to="/"
+            to="/schedule"
             className="font-bold text-white text-base hover:text-yellow-400"
             onClick={() => setIsMobileMenuOpen(false)}
           >
             {lang === "VN" ? "Lịch khởi hành" : "Schedule"}
           </Link>
 
-          <div className="flex flex-col gap-2">
-            <span className="font-bold text-white text-base">
-              {lang === "VN" ? "Dịch vụ" : "Services"}
-            </span>
-            <div className="flex flex-col gap-3 pl-4 border-l-2 border-white/20 dark:border-slate-700 ml-2 mt-1">
-              <Link
-                to="/"
-                className="text-white/70 dark:text-slate-300 text-sm font-medium hover:text-yellow-400"
-                onClick={() => setIsMobileMenuOpen(false)}
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => setIsMobileServicesOpen((open) => !open)}
+              className="flex w-full items-center justify-between gap-2 font-bold text-white text-base hover:text-yellow-400 transition-colors"
+              aria-expanded={isMobileServicesOpen}
+            >
+              <span>{lang === "VN" ? "Dịch vụ" : "Services"}</span>
+              <span
+                className={`material-symbols-outlined text-xl leading-none transition-transform ${isMobileServicesOpen ? "rotate-180" : ""}`}
               >
-                {lang === "VN" ? "Đặt vé online & hướng dẫn" : "Book Online & Guide"}
-              </Link>
-              <Link
-                to="/"
-                className="text-white/70 dark:text-slate-300 text-sm font-medium hover:text-yellow-400"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                {lang === "VN" ? "Kiểm tra vé" : "Check Ticket"}
-              </Link>
-              <Link
-                to="/charter-booking"
-                className="text-white/70 dark:text-slate-300 text-sm font-medium hover:text-yellow-400"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
-              </Link>
-            </div>
+                expand_more
+              </span>
+            </button>
+            {isMobileServicesOpen ? (
+              <div className="flex flex-col gap-3 pl-3">
+                <Link
+                  to="/waterbus-booking"
+                  className="text-white/80 text-sm font-medium hover:text-yellow-400"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
+                </Link>
+                <Link
+                  to="/watersightseeing-booking"
+                  className="text-white/80 text-sm font-medium hover:text-yellow-400"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
+                </Link>
+                <Link
+                  to="/charter-booking"
+                  className="text-white/80 text-sm font-medium hover:text-yellow-400"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
+                </Link>
+              </div>
+            ) : null}
           </div>
 
           <Link

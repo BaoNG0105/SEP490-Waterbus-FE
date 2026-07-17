@@ -182,17 +182,25 @@
   color: #fff !important;
   border: none !important;
   border-radius: 0.5rem !important;
-  padding: 3px 9px !important;
+  padding: 4px 10px !important;
   font-size: 11px !important;
   font-weight: 700 !important;
   text-transform: uppercase;
   letter-spacing: 0.02em;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15) !important;
   white-space: nowrap;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 .station-name-tooltip::before {
   border-top-color: #124757 !important;
+}
+
+.leaflet-tooltip.station-name-tooltip {
+  margin-top: -4px;
 }
 
 .live-boat-marker {
@@ -332,6 +340,63 @@
   border: 1px solid #fff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.3);
   z-index: 2;
+}
+
+/* ===== Marker bến Home: cờ tên đầy đủ ===== */
+.wb-flagname {
+  position: relative;
+  width: 120px;
+  height: 44px;
+  pointer-events: none;
+}
+
+.wb-flagname__badge {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 3;
+  max-width: 118px;
+  min-height: 20px;
+  padding: 3px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(-50%);
+  border-radius: 6px;
+  background: #124757;
+  color: #fff;
+  font: 700 10px/1.15 "Space Grotesk", system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28);
+}
+
+.wb-flagname__pole {
+  position: absolute;
+  left: 50%;
+  top: 19px;
+  z-index: 1;
+  width: 2px;
+  height: 18px;
+  transform: translateX(-50%);
+  background: #165a6d;
+}
+
+.wb-flagname__tip {
+  position: absolute;
+  left: 50%;
+  top: 36px;
+  z-index: 2;
+  width: 7px;
+  height: 7px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: #124757;
+  border: 1.5px solid #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
 }
 
 .wb-fleet-marker {

@@ -311,9 +311,7 @@ export function BoatSeatLayoutPreviewModal({
     ? (lang === "VN"
       ? "Xem ảnh tàu, sơ đồ, tổng ghế và các kiểu ghế."
       : "View boat photos, seat map, capacity and seat types.")
-    : (lang === "VN"
-      ? "Chỉ xem — thuê tàu nguyên chuyến, không chọn ghế lẻ."
-      : "View only — whole-boat charter, no individual seat selection.");
+    : "";
 
   return (
     <div
@@ -329,7 +327,9 @@ export function BoatSeatLayoutPreviewModal({
             <h3 className="mt-1 truncate font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
               {boatName || (lang === "VN" ? "Tàu" : "Boat")}
             </h3>
-            <p className="mt-1 text-xs font-medium text-slate-400">{subtitle}</p>
+            {subtitle ? (
+              <p className="mt-1 text-xs font-medium text-slate-400">{subtitle}</p>
+            ) : null}
           </div>
           <button
             type="button"

@@ -17,6 +17,7 @@ export function FormSelect({
   searchable = false,
   searchPlaceholder = "Search...",
   emptyLabel = "No results",
+  fullWidth = true,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -159,7 +160,7 @@ export function FormSelect({
       : null;
 
   return (
-    <div ref={rootRef} className={`relative w-full min-w-0 max-w-full ${isOpen ? "z-[60]" : ""} ${disabled ? "opacity-50" : ""}`}>
+    <div ref={rootRef} className={`relative ${fullWidth ? "w-full min-w-0 max-w-full" : "w-auto shrink-0"} ${isOpen ? "z-[60]" : ""} ${disabled ? "opacity-50" : ""}`}>
       <button
         type="button"
         disabled={disabled}
@@ -168,12 +169,15 @@ export function FormSelect({
         aria-required={required || undefined}
         title={selected ? String(selected.label) : undefined}
         onClick={() => !disabled && setIsOpen((v) => !v)}
-        className={`flex w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden text-left ${className}`}
+        className={`flex min-w-0 items-center justify-between gap-1.5 overflow-hidden text-left ${fullWidth ? "w-full max-w-full" : "w-auto"} ${className}`}
       >
         <span className={`min-w-0 flex-1 text-left break-words line-clamp-2 leading-snug ${selected ? "" : "text-slate-400"}`}>
           {selected ? selected.label : placeholder}
         </span>
-        <span className={`material-symbols-outlined shrink-0 text-lg text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}>
+        <span
+          aria-hidden="true"
+          className={`material-symbols-outlined inline-flex h-5 w-5 shrink-0 items-center justify-center self-center text-[20px] leading-none text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        >
           expand_more
         </span>
       </button>
