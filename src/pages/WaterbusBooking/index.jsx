@@ -17,13 +17,17 @@ export function WaterbusBooking() {
             isRoundTrip: false,
             fromWharf: "",
             toWharf: "",
+            fromWharfName: "",
+            toWharfName: "",
             departureDate: "",
             returnDate: "",
-            passengerCount: 1,
+            departureTripOptions: [],
+            returnTripOptions: [],
             selectedDepartureTrip: null,
             selectedReturnTrip: null,
             selectedSeatsDeparture: [],
             selectedSeatsReturn: [],
+            seatHoldExpiresAt: null,
         }
     );
 
@@ -105,7 +109,14 @@ export function WaterbusBooking() {
                 )}
 
                 {currentStep === 3 && (
-                    <Step3Checkout bookingData={bookingData} onBack={() => setCurrentStep(2)} />
+                    <Step3Checkout
+                        bookingData={bookingData}
+                        onBack={() => setCurrentStep(2)}
+                        onExpire={() => {
+                            updateBookingData({ seatHoldExpiresAt: null });
+                            setCurrentStep(1);
+                        }}
+                    />
                 )}
 
             </main>

@@ -8,18 +8,34 @@ export function PaymentResult() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const payosId = params.get("id") || params.get("paymentId") || "";
-    const bookingId = (
-      (payosId ? sessionStorage.getItem(`paymentBooking:${payosId}`) : "")
-      || sessionStorage.getItem("latestCharterPaymentBooking")
-      || ""
-    );
     const query = location.search
       ? `${location.search}&fromPayOs=1`
       : "?fromPayOs=1";
 
+    // Vé Waterbus (booking thường) và yêu cầu thuê tàu (charter) dùng chung trang PayOS trả về —
+    // kiểm tra ánh xạ đã lưu ở bước tạo payment để biết điều hướng về trang nào.
+    const waterbusBookingId = (
+      (payosId ? sessionStorage.getItem(`waterbusPaymentBooking:${payosId}`) : "")
+      || sessionStorage.getItem("latestWaterbusPaymentBooking")
+      || ""
+    );
+    if (waterbusBookingId) {
+      navigate(`/profile/my-waterbus-booking${query}`, {
+        replace: true,
+        state: { highlightBookingId: waterbusBookingId },
+      });
+      return;
+    }
+
+    const charterBookingId = (
+      (payosId ? sessionStorage.getItem(`paymentBooking:${payosId}`) : "")
+      || sessionStorage.getItem("latestCharterPaymentBooking")
+      || ""
+    );
+
     navigate(
-      bookingId
-        ? `/profile/my-charter-booking/${bookingId}${query}`
+      charterBookingId
+        ? `/profile/my-charter-booking/${charterBookingId}${query}`
         : `/profile/my-charter-booking${query}`,
       { replace: true },
     );

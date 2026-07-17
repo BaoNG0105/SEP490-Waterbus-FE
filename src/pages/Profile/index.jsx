@@ -6,7 +6,7 @@ import { logout } from "../../redux/authSlice";
 import { fetchCurrentUserProfile } from "../../services/authService";
 import { notify } from "../../utils/swalToast";
 
-const mockUserStats = { points: 12840 };
+const mockUserStats = { points: 0 };
 
 export const Profile = () => {
   const { lang } = useApp();
@@ -33,11 +33,11 @@ export const Profile = () => {
         setProfileData({
           fullName: data.fullName || "Chưa cập nhật",
           email: data.email || "",
-          phoneNumber: data.phoneNumber || "", 
-          dob: data.dateOfBirth || "", 
+          phoneNumber: data.phoneNumber || "",
+          dob: data.dateOfBirth || "",
           gender: data.gender === "Male" ? "Nam" : (data.gender === "Female" ? "Nữ" : "Khác"),
           nationality: data.nationality || "Vietnam",
-          avatarUrl: data.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
+          avatarUrl: data.avatarUrl || "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp",
           roleName: data.roles?.[0]?.displayName || "Khách hàng"
         });
       } catch (error) {
@@ -77,7 +77,7 @@ export const Profile = () => {
 
       {isLoadingProfile ? (
         <div className="flex justify-center items-center h-64">
-           <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+          <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
         </div>
       ) : (
         <>
@@ -113,8 +113,8 @@ export const Profile = () => {
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto pb-2">
-                  <button 
-                    onClick={() => navigate("/profile/edit")} 
+                  <button
+                    onClick={() => navigate("/profile/edit")}
                     className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-yellow-400 text-slate-900 font-bold text-xs uppercase tracking-widest hover:brightness-110 transition-all shadow-md"
                   >
                     <span className="material-symbols-outlined text-base">edit</span>
@@ -126,17 +126,14 @@ export const Profile = () => {
               {/* Phần Khối Points & Stats giữ nguyên không đổi... */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-10 pt-8 border-t border-slate-100 dark:border-slate-700">
                 <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border shadow-inner">
-                  <span className="material-symbols-outlined text-3xl text-amber-500 mb-2">stars</span>
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">{lang === "VN" ? "Điểm tích lũy" : "Reward Points"}</p>
                   <h3 className="text-2xl font-black text-[#124757] dark:text-yellow-400">{mockUserStats.points.toLocaleString()}</h3>
                 </div>
                 <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border shadow-inner">
-                  <span className="material-symbols-outlined text-3xl text-[#124757] dark:text-yellow-400 mb-2">directions_boat</span>
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">{lang === "VN" ? "Chuyến đi" : "Total Trips"}</p>
                   <h3 className="text-2xl font-black text-[#124757] dark:text-yellow-400">0</h3>
                 </div>
                 <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border shadow-inner">
-                  <span className="material-symbols-outlined text-3xl text-rose-500 mb-2">local_activity</span>
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">{lang === "VN" ? "Voucher hiện có" : "Available Vouchers"}</p>
                   <h3 className="text-2xl font-black text-[#124757] dark:text-yellow-400">0</h3>
                 </div>
@@ -149,7 +146,6 @@ export const Profile = () => {
               <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100">
                 <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Chuyến đi sắp tới" : "Upcoming Trips"}</h2>
                 <div className="text-center py-10 border-2 border-dashed rounded-2xl text-slate-400">
-                  <span className="material-symbols-outlined text-4xl mb-2">sailing</span>
                   <p className="text-sm font-bold">{lang === "VN" ? "Chưa có chuyến đi nào được đặt." : "No upcoming trips found."}</p>
                 </div>
               </div>
@@ -157,17 +153,23 @@ export const Profile = () => {
 
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100">
-                <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Bảo mật & Cài đặt" : "Security & Settings"}</h2>
+                <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Danh mục & Cài đặt" : "Categories & Settings"}</h2>
                 <div className="space-y-3">
+                  <button onClick={() => navigate("/profile/my-waterbus-booking")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Vé Waterbus của tôi" : "My Waterbus Booking"}</span>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-400">chevron_right</span>
+                  </button>
                   <button onClick={() => navigate("/profile/my-charter-booking")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-500 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors">
-                        <span className="material-symbols-outlined">directions_boat</span>
-                      </div>
                       <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Yêu cầu thuê tàu" : "Charter Requests"}</span>
                     </div>
                     <span className="material-symbols-outlined text-slate-400">chevron_right</span>
                   </button>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-700 space-y-3">
                   <button onClick={() => navigate("/profile/change-password")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-500 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors">
@@ -177,9 +179,6 @@ export const Profile = () => {
                     </div>
                     <span className="material-symbols-outlined text-slate-400">chevron_right</span>
                   </button>
-                </div>
-
-                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-700">
                   <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-4 rounded-xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-sm hover:bg-rose-100 transition-all border border-rose-200">
                     <span className="material-symbols-outlined">logout</span>
                     {lang === "VN" ? "Đăng xuất" : "Log out"}
