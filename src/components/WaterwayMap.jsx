@@ -2,8 +2,21 @@ import { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
+import { useApp } from "../context/AppContext";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../utils/charterBookingAdmin";
 import { isBoatUnderMaintenance, resolveBoatLiveStatus } from "../utils/boatTracking";
+
+const DEFAULT_STATION_IMAGE =
+  "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
+
+const getStationImageUrl = (station) => {
+  const primary = String(station?.imageUrl || "").trim();
+  if (primary) return primary;
+  const fromList = Array.isArray(station?.imageUrls)
+    ? station.imageUrls.map((url) => String(url || "").trim()).find(Boolean)
+    : "";
+  return fromList || DEFAULT_STATION_IMAGE;
+};
 
 const isValidLatLng = (lat, lng) => (
   Number.isFinite(Number(lat))
@@ -229,7 +242,8 @@ const shortStationCode = (code) => {
 
 const getStationPinIcon = (code) => {
   const label = shortStationCode(code);
-  const cached = stationIconCache.get(label);
+  const cacheKey = `code:${label}`;
+  const cached = stationIconCache.get(cacheKey);
   if (cached) return cached;
 
   const safeCode = escapeHtml(label);
@@ -250,7 +264,37 @@ const getStationPinIcon = (code) => {
     iconAnchor: [20, 34],
     popupAnchor: [0, -36],
   });
-  stationIconCache.set(label, icon);
+  stationIconCache.set(cacheKey, icon);
+  if (stationIconCache.size > 200) {
+    stationIconCache.delete(stationIconCache.keys().next().value);
+  }
+  return icon;
+};
+
+/** Cờ tên bến (trang Home): lá cờ #124757 + cột + chân. */
+const getStationNameFlagIcon = (name) => {
+  const label = String(name || "—").trim() || "—";
+  const cacheKey = `name:${label}`;
+  const cached = stationIconCache.get(cacheKey);
+  if (cached) return cached;
+
+  const safeName = escapeHtml(label);
+  const html = `
+    <div class="wb-flagname">
+      <span class="wb-flagname__badge">${safeName}</span>
+      <span class="wb-flagname__pole"></span>
+      <span class="wb-flagname__tip"></span>
+    </div>
+  `;
+
+  const icon = L.divIcon({
+    className: "live-boat-marker",
+    html,
+    iconSize: [120, 44],
+    iconAnchor: [60, 42],
+    popupAnchor: [0, -42],
+  });
+  stationIconCache.set(cacheKey, icon);
   if (stationIconCache.size > 200) {
     stationIconCache.delete(stationIconCache.keys().next().value);
   }
@@ -272,11 +316,16 @@ export const WaterwayMap = ({
   lineOpacity = 0.85,
   fitBoatMarkers = false,
   stationAsFlag = false,
+  /** Hiện tên bến cố định trên map (trang Home). */
+  showStationLabels = false,
+  /** Hiện ảnh bến trong popup. */
+  showStationImages = false,
   /** Tuyến nền (chỉ xem): [{ id, positions: [[lat,lng],...], label? }] */
   routeOverlays = [],
   className = "",
 }) => {
   const navigate = useNavigate();
+  const { lang } = useApp();
   const polylinePositions = (coordinates || [])
     .filter((point) => isValidLatLng(point?.latitude, point?.longitude))
     .map((point) => [point.latitude, point.longitude]);
@@ -375,32 +424,64 @@ export const WaterwayMap = ({
         )}
 
         {visibleStations.length > 0 && (
-          visibleStations.map((station, index) => (
-            <Marker
-              key={`${station.stationId || "st"}-${index}`}
-              position={[station.latitude, station.longitude]}
-              {...(stationAsFlag
-                ? { icon: getStationPinIcon(station.stationCode) }
-                : {})}
-            >
-              <Popup>
-                <div className="text-center font-body p-2 space-y-2 min-w-37.5">
-                  <p className="font-black text-[#124757] text-xs uppercase leading-tight m-0">{station.stationName}</p>
-                  <p className="text-[10px] text-slate-400 line-clamp-2 m-0">{station.address || "Bến tàu Saigon Waterbus"}</p>
-
-                  {!hideStationLink && (
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/station/${station.stationId}`)}
-                      className="w-full bg-[#124757] text-white text-[10px] font-bold uppercase py-1.5 px-3 rounded-lg shadow-sm hover:brightness-110 transition-all cursor-pointer block mt-1"
-                    >
-                      Xem chi tiết bến
-                    </button>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          ))
+          visibleStations.map((station, index) => {
+            const stationName = station.stationName || station.name || "—";
+            const stationImage = getStationImageUrl(station);
+            const useNameFlag = stationAsFlag && showStationLabels;
+            const markerIcon = useNameFlag
+              ? getStationNameFlagIcon(stationName)
+              : stationAsFlag
+                ? getStationPinIcon(station.stationCode)
+                : undefined;
+            return (
+              <Marker
+                key={`${station.stationId || "st"}-${index}`}
+                position={[station.latitude, station.longitude]}
+                {...(markerIcon ? { icon: markerIcon } : {})}
+              >
+                {showStationLabels && !stationAsFlag ? (
+                  <Tooltip
+                    permanent
+                    direction="top"
+                    offset={[0, -36]}
+                    opacity={1}
+                    className="station-name-tooltip"
+                  >
+                    {stationName}
+                  </Tooltip>
+                ) : null}
+                <Popup>
+                  <div className="min-w-[11.5rem] max-w-[15rem] space-y-2 p-1 font-body text-center">
+                    {showStationImages ? (
+                      <img
+                        src={stationImage}
+                        alt={stationName}
+                        className="h-24 w-full rounded-lg object-cover"
+                        onError={(event) => {
+                          event.currentTarget.src = DEFAULT_STATION_IMAGE;
+                        }}
+                      />
+                    ) : null}
+                    <p className="m-0 text-xs font-black uppercase leading-tight text-[#124757]">
+                      {stationName}
+                    </p>
+                    <p className="m-0 line-clamp-2 text-[10px] text-slate-400">
+                      {station.address || (lang === "VN" ? "Bến tàu Saigon Waterbus" : "Saigon Waterbus station")}
+                    </p>
+                    {!hideStationLink ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/station/${station.stationId}`)}
+                        className="mt-1 block w-full cursor-pointer rounded-lg bg-[#124757] px-3 py-1.5 text-[10px] font-bold uppercase text-white shadow-sm transition-all hover:brightness-110"
+                      >
+                        {lang === "VN" ? "Xem chi tiết bến" : "View station details"}
+                      </button>
+                    ) : null}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })
         )}
 
         {visibleBoats.map((boat) => {

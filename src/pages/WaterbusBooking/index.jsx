@@ -68,29 +68,60 @@ export function WaterbusBooking() {
 
                 {/* --- STEPPER 3 BƯỚC TINH GỌN --- */}
                 <div className="w-full max-w-3xl mx-auto mb-12 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700/50">
-                    <div className="flex items-center justify-between relative">
-                        <div className="absolute left-4 right-4 top-1/2 h-0.5 bg-slate-200 dark:bg-slate-700 -translate-y-1/2 z-0"></div>
-
+                    <div className="grid grid-cols-3">
                         {[
                             { step: 1, labelVn: "Tìm chuyến", labelEn: "Search" },
                             { step: 2, labelVn: "Chọn chuyến & ghế", labelEn: "Trip & Seats" },
                             { step: 3, labelVn: "Thanh toán", labelEn: "Payment" }
-                        ].map((item) => (
-                            <div key={item.step} className="relative z-10 flex flex-col items-center space-y-2">
-                                <div
-                                    className={`w-9 h-9 rounded-full flex items-center justify-center font-headline font-bold text-sm shadow-sm transition-all duration-300 ${currentStep >= item.step
-                                            ? "bg-[#124757] text-white ring-4 ring-[#FFD100]/20"
-                                            : "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-                                        }`}
-                                >
-                                    {currentStep > item.step ? <span className="material-symbols-outlined text-sm font-bold">check</span> : item.step}
+                        ].map((item, index, list) => {
+                            const isDone = currentStep > item.step;
+                            const isActive = currentStep === item.step;
+                            const isReached = currentStep >= item.step;
+                            const prevReached = index === 0 || currentStep >= list[index - 1].step;
+                            const leftActive = index > 0 && prevReached && isReached;
+                            const rightActive = index < list.length - 1 && isReached && currentStep >= list[index + 1].step;
+
+                            return (
+                                <div key={item.step} className="flex min-w-0 flex-col items-center gap-2">
+                                    <div className="flex w-full items-center">
+                                        <div
+                                            className={`h-0.5 flex-1 ${index === 0
+                                                ? "bg-transparent"
+                                                : leftActive
+                                                    ? "bg-[#124757] dark:bg-[#FFD100]"
+                                                    : "bg-slate-200 dark:bg-slate-700"
+                                                }`}
+                                        />
+                                        <div
+                                            className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-headline text-sm font-bold shadow-sm transition-all duration-300 ${isReached
+                                                ? "bg-[#124757] text-white ring-4 ring-[#FFD100]/20"
+                                                : "bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+                                                }`}
+                                        >
+                                            {isDone
+                                                ? <span className="material-symbols-outlined text-sm font-bold">check</span>
+                                                : item.step}
+                                        </div>
+                                        <div
+                                            className={`h-0.5 flex-1 ${index === list.length - 1
+                                                ? "bg-transparent"
+                                                : rightActive || (isReached && currentStep > item.step)
+                                                    ? "bg-[#124757] dark:bg-[#FFD100]"
+                                                    : "bg-slate-200 dark:bg-slate-700"
+                                                }`}
+                                        />
+                                    </div>
+                                    <span
+                                        className={`max-w-full truncate px-1 text-center text-[11px] font-headline font-bold sm:text-xs ${isActive
+                                            ? "text-[#124757] dark:text-[#FFD100]"
+                                            : "text-slate-400"
+                                            }`}
+                                    >
+                                        {lang === "VN" ? item.labelVn : item.labelEn}
+                                    </span>
                                 </div>
-                                <span className={`text-xs font-headline font-bold hidden sm:block ${currentStep === item.step ? "text-[#124757] dark:text-[#FFD100]" : "text-slate-400"
-                                    }`}>
-                                    {lang === "VN" ? item.labelVn : item.labelEn}
-                                </span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -120,40 +151,6 @@ export function WaterbusBooking() {
                 )}
 
             </main>
-
-            {/* ===== SECTION 3: SERVICE INTRODUCTION ===== */}
-            <section className="py-20 bg-white dark:bg-slate-900 transition-colors duration-300">
-                <div className="max-w-7xl mx-auto px-6 md:px-12">
-                    <div className="flex flex-col items-center text-center mb-14 space-y-4">
-                        <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-                            {lang === "VN" ? "Vì sao chọn đặt vé Waterbus" : "Why Choose Waterbus Booking"}
-                        </p>
-                        <h2 className="text-3xl md:text-4xl font-headline font-bold text-[#124757] dark:text-white max-w-2xl">
-                            {lang === "VN" ? "Đặt vé nhanh chóng, minh bạch và tiện lợi" : "Fast, transparent, and convenient ticketing"}
-                        </h2>
-                    </div>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {[
-                            { icon: "schedule", titleVn: "Lịch trình cố định", titleEn: "Fixed Schedule", descVn: "Các chuyến tàu chạy đúng giờ theo lịch trình cố định giữa các bến.", descEn: "Vessels depart on time along a fixed schedule between wharves." },
-                            { icon: "event_seat", titleVn: "Chọn ghế trực quan", titleEn: "Visual Seat Selection", descVn: "Xem sơ đồ tàu và chọn vị trí ghế ngồi yêu thích chỉ trong vài giây.", descEn: "View the vessel layout and pick your favorite seat in seconds." },
-                            { icon: "qr_code_2", titleVn: "Vé điện tử QR", titleEn: "E-Ticket QR Code", descVn: "Nhận vé điện tử ngay lập tức, không cần in giấy, quét mã khi lên tàu.", descEn: "Get an instant e-ticket, no printing needed — just scan to board." },
-                            { icon: "support_agent", titleVn: "Hỗ trợ tận tâm", titleEn: "Dedicated Support", descVn: "Đội ngũ hỗ trợ luôn sẵn sàng giải đáp mọi thắc mắc trong suốt hành trình.", descEn: "Our support team is ready to help throughout your journey." },
-                        ].map((item) => (
-                            <div key={item.icon} className="bg-slate-50 dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700/50 space-y-4 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
-                                <div className="w-12 h-12 rounded-2xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-2xl">{item.icon}</span>
-                                </div>
-                                <h3 className="font-headline font-black text-slate-800 dark:text-white text-sm uppercase tracking-wide">
-                                    {lang === "VN" ? item.titleVn : item.titleEn}
-                                </h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                                    {lang === "VN" ? item.descVn : item.descEn}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
 
             {/* ===== SECTION 4: STEPS GUIDE ===== */}
             <section className="py-20 bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300 select-none">

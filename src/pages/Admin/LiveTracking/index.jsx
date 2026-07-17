@@ -13,7 +13,6 @@ import {
   INCIDENT_TYPES,
   reportIncident,
 } from "../../../services/incidentService";
-import { notifyLiveIncidentCreated } from "../../../services/liveIncidentHookService";
 import { getBoatImageUrl } from "../../../utils/charterBookingAdmin";
 import { isBoatEligibleForLiveMap, isBoatUnderMaintenance } from "../../../utils/boatTracking";
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
@@ -298,21 +297,13 @@ export function LiveTracking() {
       const description = reportForm.description.trim()
         || (lang === "VN" ? "Test báo sự cố (Manager)" : "Manager test incident");
 
-      const created = await reportIncident({
+      await reportIncident({
         boatId: reportForm.boatId,
         tripId: null,
         incidentType: reportForm.incidentType,
         severity: reportForm.severity,
         description,
         occurredAt: new Date().toISOString(),
-      });
-
-      await notifyLiveIncidentCreated({
-        incidentId: created?.incidentId,
-        boatCode: boat?.boatCode || created?.boatCode,
-        description,
-        lat: boat?.latitude,
-        lng: boat?.longitude,
       });
 
       showToast({

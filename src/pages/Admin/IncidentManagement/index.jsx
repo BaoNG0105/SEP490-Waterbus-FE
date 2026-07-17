@@ -17,12 +17,6 @@ import {
   INCIDENT_TYPES,
   reportIncident,
 } from "../../../services/incidentService";
-import {
-  isLiveHookConfigured,
-  notifyLiveIncidentCreated,
-  notifyLiveIncidentResolved,
-  notifyLiveRescueDispatched,
-} from "../../../services/liveIncidentHookService";
 import { notify, showToast } from "../../../utils/swalToast";
 
 const ACTIVE_TRIP_STATUSES = new Set(["scheduled", "boarding", "departed", "delayed"]);
@@ -83,6 +77,7 @@ export function IncidentManagement() {
     incidentId: "",
     incidentBoatId: "",
     incidentBoatCode: "",
+    incidentDescription: "",
     tripId: "",
     replacementBoatId: "",
     delayMinutes: 30,
@@ -139,6 +134,28 @@ export function IncidentManagement() {
     [boats, reportForm.boatId],
   );
 
+  const boatById = useMemo(() => {
+    const map = new Map();
+    boats.forEach((boat) => {
+      const id = String(boat.boatId || boat.id || "");
+      if (id) map.set(id, boat);
+    });
+    return map;
+  }, [boats]);
+
+  const enrichedIncidents = useMemo(
+    () => incidents.map((incident) => {
+      const boat = boatById.get(String(incident.boatId || ""));
+      if (!boat) return incident;
+      return {
+        ...incident,
+        boatCode: incident.boatCode || boat.boatCode || boat.code || "",
+        boatName: incident.boatName || boat.boatName || boat.name || "",
+      };
+    }),
+    [incidents, boatById],
+  );
+
   const tripsForSelectedBoat = useMemo(() => {
     if (!selectedBoat) return [];
     const boatId = String(selectedBoat.boatId || selectedBoat.id || "");
@@ -158,14 +175,14 @@ export function IncidentManagement() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return incidents;
-    return incidents.filter((item) =>
+    if (!q) return enrichedIncidents;
+    return enrichedIncidents.filter((item) =>
       String(item.boatCode || "").toLowerCase().includes(q)
       || String(item.description || "").toLowerCase().includes(q)
       || String(item.incidentType || "").toLowerCase().includes(q)
       || String(item.managerName || "").toLowerCase().includes(q),
     );
-  }, [incidents, query]);
+  }, [enrichedIncidents, query]);
 
   const handleReport = async (event) => {
     event.preventDefault();
@@ -179,34 +196,18 @@ export function IncidentManagement() {
     }
     setBusyId("report");
     try {
-      const boat = boats.find((item) => String(item.boatId || item.id) === String(reportForm.boatId));
-      const boatCode = boat?.boatCode || boat?.code || "";
-      const description = reportForm.description.trim();
-
-      const created = await reportIncident({
+      await reportIncident({
         boatId: reportForm.boatId,
         tripId: reportForm.tripId || null,
         incidentType: reportForm.incidentType,
         severity: reportForm.severity,
-        description,
+        description: reportForm.description.trim(),
         occurredAt: new Date().toISOString(),
-      });
-
-      // Live GPS: hook secret (không JWT) — marker đỏ trên Live.
-      const liveResult = await notifyLiveIncidentCreated({
-        incidentId: created?.incidentId,
-        boatCode: boatCode || created?.boatCode,
-        description,
       });
 
       showToast({
         icon: "success",
         title: lang === "VN" ? "Đã báo sự cố" : "Incident reported",
-        text: liveResult?.skipped
-          ? (lang === "VN" ? "Chưa cấu hình Live hook (.env)" : "Live hook not configured")
-          : liveResult?.ok === false
-            ? (lang === "VN" ? "Azure OK · Live hook lỗi (xem console)" : "Azure OK · Live hook failed")
-            : undefined,
       });
       setShowReport(false);
       setReportForm({
@@ -255,68 +256,36 @@ export function IncidentManagement() {
     event.preventDefault();
     if (!rescueForm.incidentId || !rescueForm.replacementBoatId) return;
 
-    const replacement = boats.find(
-      (boat) => String(boat.boatId || boat.id) === String(rescueForm.replacementBoatId),
-    );
-    const replacementBoatCode = replacement?.boatCode || replacement?.code || "";
-    if (!replacementBoatCode) {
-      notify({
-        icon: "warning",
-        title: lang === "VN" ? "Thiếu mã tàu cứu" : "Missing rescue boat code",
-        text: lang === "VN"
-          ? "Live cần replacementBoatCode để biết tàu nào kéo."
-          : "Live requires replacementBoatCode.",
-      });
-      return;
-    }
-
-    const liveReady = isLiveHookConfigured();
-    // Azure cần tripId; Live hook thì không — cho phép cứu hộ Live-only khi đã cấu hình hook.
-    if (!rescueForm.tripId && !liveReady) {
+    if (!rescueForm.tripId) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Thiếu chuyến (tripId)" : "Trip required",
         text: lang === "VN"
-          ? "Azure cần tripId, hoặc cấu hình VITE_LIVE_* để gọi Live hook."
-          : "Azure needs tripId, or set VITE_LIVE_* for Live hook.",
+          ? "BE chỉ cho điều tàu cứu khi incident có tripId. Báo sự cố kèm chọn chuyến."
+          : "Backend requires tripId on the incident. Report again with a trip selected.",
       });
       return;
     }
 
     setBusyId(rescueForm.incidentId);
     try {
-      if (rescueForm.tripId) {
-        const delayRaw = Number(rescueForm.delayMinutes);
-        await dispatchReplacementBoat(rescueForm.incidentId, {
-          replacementBoatId: rescueForm.replacementBoatId,
-          delayMinutes: Number.isFinite(delayRaw) ? Math.trunc(delayRaw) : null,
-          note: rescueForm.note.trim() || null,
-        });
-      }
-
-      const liveResult = await notifyLiveRescueDispatched({
-        incidentId: rescueForm.incidentId,
-        boatCode: rescueForm.incidentBoatCode,
-        replacementBoatCode,
+      const delayRaw = Number(rescueForm.delayMinutes);
+      // FE chỉ gọi Azure JWT — BE forward lệnh sang GPS hook.
+      await dispatchReplacementBoat(rescueForm.incidentId, {
+        replacementBoatId: rescueForm.replacementBoatId,
+        delayMinutes: Number.isFinite(delayRaw) ? Math.trunc(delayRaw) : null,
+        note: rescueForm.note.trim() || null,
       });
-
-      if (liveResult?.ok === false && !rescueForm.tripId) {
-        throw liveResult.error || new Error("Live hook failed");
-      }
 
       showToast({
         icon: "success",
         title: lang === "VN" ? "Đã điều tàu cứu hộ" : "Rescue boat assigned",
-        text: !rescueForm.tripId
-          ? (lang === "VN" ? "Đã gửi lệnh Live (không gọi Azure — thiếu tripId)" : "Live hook only (no Azure tripId)")
-          : liveResult?.skipped
-            ? (lang === "VN" ? "Azure OK · Live hook chưa cấu hình" : "Azure OK · Live hook skipped")
-            : undefined,
       });
       setRescueForm({
         incidentId: "",
         incidentBoatId: "",
         incidentBoatCode: "",
+        incidentDescription: "",
         tripId: "",
         replacementBoatId: "",
         delayMinutes: 30,
@@ -352,12 +321,6 @@ export function IncidentManagement() {
         tripStatus: resolveForm.tripStatus || undefined,
       });
 
-      await notifyLiveIncidentResolved({
-        incidentId: resolveForm.incidentId,
-        boatCode: resolveForm.boatCode,
-        boatStatus: resolveForm.boatStatus || "Active",
-      });
-
       showToast({
         icon: "success",
         title: lang === "VN" ? "Đã đóng sự cố" : "Incident resolved",
@@ -390,8 +353,8 @@ export function IncidentManagement() {
           </h1>
           <p className="mt-1 text-sm font-medium text-slate-400">
             {lang === "VN"
-              ? "Azure JWT + Live hook (X-Live-Hook-Secret). FE không giả lập GPS."
-              : "Azure JWT + Live hook (X-Live-Hook-Secret). FE does not simulate GPS."}
+              ? "FE chỉ gọi Azure JWT. BE gửi lệnh GPS — map đọc tracking/hub."
+              : "FE calls Azure JWT only. BE commands GPS — map reads tracking/hub."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -516,6 +479,7 @@ export function IncidentManagement() {
                                 incidentId: item.incidentId,
                                 incidentBoatId: item.boatId || "",
                                 incidentBoatCode: item.boatCode || "",
+                                incidentDescription: item.description || "",
                                 tripId: item.tripId || "",
                                 replacementBoatId: "",
                                 delayMinutes: 30,
@@ -526,7 +490,7 @@ export function IncidentManagement() {
                             }}
                             className="rounded-xl bg-sky-50 px-2.5 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 ring-1 ring-sky-200 transition hover:bg-sky-100 disabled:opacity-50 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/30"
                             title={!item.tripId
-                              ? (lang === "VN" ? "Không tripId → chỉ Live hook (nếu đã cấu hình)" : "No tripId → Live hook only if configured")
+                              ? (lang === "VN" ? "Cần tripId (BE yêu cầu)" : "Requires tripId (BE)")
                               : undefined}
                           >
                             {lang === "VN" ? "Cứu hộ" : "Rescue"}
@@ -737,8 +701,8 @@ export function IncidentManagement() {
             {!rescueForm.tripId ? (
               <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200">
                 {lang === "VN"
-                  ? "Chưa có tripId → chỉ gửi Live hook (cần VITE_LIVE_*). Azure assign-replacement sẽ bỏ qua."
-                  : "No tripId → Live hook only (needs VITE_LIVE_*). Azure assign-replacement skipped."}
+                  ? "Chưa có tripId — BE sẽ từ chối assign-replacement-boat. Báo sự cố kèm chọn chuyến."
+                  : "No tripId — BE will reject assign-replacement-boat. Report again with a trip."}
               </p>
             ) : (
               <p className="text-[11px] font-medium text-slate-400">
@@ -791,6 +755,7 @@ export function IncidentManagement() {
                   incidentId: "",
                   incidentBoatId: "",
                   incidentBoatCode: "",
+                  incidentDescription: "",
                   tripId: "",
                   replacementBoatId: "",
                   delayMinutes: 30,
@@ -802,7 +767,7 @@ export function IncidentManagement() {
               </button>
               <button
                 type="submit"
-                disabled={!rescueForm.replacementBoatId}
+                disabled={!rescueForm.tripId || !rescueForm.replacementBoatId}
                 className="rounded-2xl bg-sky-600 px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-white hover:brightness-110 disabled:opacity-50"
               >
                 {lang === "VN" ? "Điều tàu" : "Dispatch"}

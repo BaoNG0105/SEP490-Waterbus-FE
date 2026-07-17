@@ -97,11 +97,9 @@ export function CharterRouteMapPanel({
   ]);
 
   const panelTitle = title || (
-    isFinalized
-      ? (lang === "VN" ? "Tuyến đã chốt" : "Finalized route")
-      : isDraftSelected
-        ? (lang === "VN" ? "Tuyến đã chọn" : "Selected route")
-        : (lang === "VN" ? "Bản đồ lộ trình" : "Route map")
+    isDraftSelected
+      ? (lang === "VN" ? "Tuyến đã chọn" : "Selected route")
+      : (lang === "VN" ? "Bản đồ lộ trình" : "Route map")
   );
 
   const panelSubtitle = subtitle || (
@@ -120,27 +118,24 @@ export function CharterRouteMapPanel({
             : "No route yet — temporary station markers.")
   );
 
-  const overlayEyebrow = isFinalized
-    ? (lang === "VN" ? "Tuyến đã chốt" : "Finalized route")
-    : isDraftSelected
-      ? (lang === "VN" ? "Tuyến đã chọn" : "Selected route")
-      : isStationsOnly
-        ? (lang === "VN" ? "Chưa chọn tuyến" : "No route yet")
+  const overlayEyebrow = isDraftSelected && !isFinalized
+    ? (lang === "VN" ? "Tuyến đã chọn" : "Selected route")
+    : isStationsOnly
+      ? (lang === "VN" ? "Chưa chọn tuyến" : "No route yet")
+      : isFinalized
+        ? (lang === "VN" ? "Lộ trình" : "Route")
         : (lang === "VN" ? "Lộ trình tạm" : "Draft path");
 
-  const badgeClass = isFinalized
-    ? "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20"
-    : isDraftSelected
-      ? "bg-[#EAF3F5] text-[#124757] ring-[#124757]/20 dark:bg-yellow-400/10 dark:text-yellow-400 dark:ring-yellow-400/20"
-      : "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20";
+  const showStatusBadge = !isFinalized && Boolean(mapModel.source);
+  const badgeClass = isDraftSelected
+    ? "bg-[#EAF3F5] text-[#124757] ring-[#124757]/20 dark:bg-yellow-400/10 dark:text-yellow-400 dark:ring-yellow-400/20"
+    : "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20";
 
-  const badgeLabel = isFinalized
-    ? (lang === "VN" ? "Đã chốt" : "Finalized")
-    : isDraftSelected
-      ? (lang === "VN" ? "Đã chọn" : "Selected")
-      : isStationsOnly
-        ? (lang === "VN" ? "Chưa chọn" : "Pending")
-        : (lang === "VN" ? "Tạm thời" : "Temporary");
+  const badgeLabel = isDraftSelected
+    ? (lang === "VN" ? "Đã chọn" : "Selected")
+    : isStationsOnly
+      ? (lang === "VN" ? "Chưa chọn" : "Pending")
+      : (lang === "VN" ? "Tạm thời" : "Temporary");
 
   return (
     <div className={`flex min-h-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 ${className}`}>
@@ -150,7 +145,7 @@ export function CharterRouteMapPanel({
             <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
               {panelTitle}
             </p>
-            {mapModel.source ? (
+            {showStatusBadge ? (
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wider ring-1 ${badgeClass}`}>
                 {badgeLabel}
               </span>

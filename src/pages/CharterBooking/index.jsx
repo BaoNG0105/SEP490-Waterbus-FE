@@ -158,40 +158,6 @@ export function CharterBooking() {
         />
       </main>
 
-      {/* ===== SECTION 3: SERVICE INTRODUCTION ===== */}
-      <section className="py-20 bg-white dark:bg-slate-900 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-6 md:px-12">
-          <div className="flex flex-col items-center text-center mb-14 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-              {lang === "VN" ? "Vì sao chọn WaterBus Charter" : "Why Choose WaterBus Charter"}
-            </p>
-            <h2 className="text-3xl md:text-4xl font-headline font-bold text-[#124757] dark:text-white max-w-2xl">
-              {lang === "VN" ? "Trải nghiệm thuê tàu riêng trọn vẹn, minh bạch từ đầu đến cuối" : "A complete, transparent private charter experience"}
-            </h2>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { icon: "tune", titleVn: "Tùy chỉnh lộ trình", titleEn: "Custom Route", descVn: "Chọn bến đi, bến đến và các điểm dừng theo nhu cầu của bạn.", descEn: "Pick your origin, destination, and stops to match your plan." },
-              { icon: "directions_boat_filled", titleVn: "Đa dạng loại tàu", titleEn: "Flexible Boat Types", descVn: "Yêu cầu nhiều tàu với cấu hình ghế thường hoặc VIP.", descEn: "Request multiple boats with standard or VIP seating." },
-              { icon: "request_quote", titleVn: "Báo giá minh bạch", titleEn: "Transparent Quotes", descVn: "Nhận báo giá chi tiết ngay trong hồ sơ cá nhân.", descEn: "Receive a detailed quote right in your profile." },
-              { icon: "support_agent", titleVn: "Hỗ trợ tận tâm", titleEn: "Dedicated Support", descVn: "Đội ngũ vận hành đồng hành xuyên suốt quá trình thuê tàu.", descEn: "Our operations team supports you throughout the process." },
-            ].map((item) => (
-              <div key={item.icon} className="bg-slate-50 dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700/50 space-y-4 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
-                <div className="w-12 h-12 rounded-2xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-2xl">{item.icon}</span>
-                </div>
-                <h3 className="font-headline font-black text-slate-800 dark:text-white text-sm uppercase tracking-wide">
-                  {lang === "VN" ? item.titleVn : item.titleEn}
-                </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  {lang === "VN" ? item.descVn : item.descEn}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ===== SECTION 4: STEPS GUIDE ===== */}
       <section className="py-20 bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 md:px-12">

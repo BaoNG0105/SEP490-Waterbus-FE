@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
+import { FormSelect } from "../../../components/FormSelect";
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchTripSearch } from "../../../services/tripService";
 
@@ -10,6 +11,9 @@ const isActiveWaterbusStation = (station) => {
   return status === "active" && station?.isWaterbusStation === true;
 };
 
+const selectClassName =
+  "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-50";
+
 export default function Step1Search({ bookingData, updateData, onNext }) {
   const { lang } = useApp();
   const { isRoundTrip, fromWharf, toWharf, departureDate, returnDate } = bookingData;
@@ -18,6 +22,19 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
   const [isLoadingStations, setIsLoadingStations] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+
+  const fromOptions = useMemo(
+    () => stations.map((station) => ({
+      value: getStationId(station),
+      label: getStationName(station),
+    })),
+    [stations],
+  );
+
+  const toOptions = useMemo(
+    () => fromOptions.filter((opt) => String(opt.value) !== String(fromWharf)),
+    [fromOptions, fromWharf],
+  );
 
   useEffect(() => {
     const loadStations = async () => {
@@ -128,39 +145,25 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Bến đi" : "From"}</label>
-          <select
+          <FormSelect
             value={fromWharf}
-            onChange={(e) => updateData({ fromWharf: e.target.value })}
+            onChange={(next) => updateData({ fromWharf: next, toWharf: next === toWharf ? "" : toWharf })}
             disabled={isLoadingStations}
-            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-50"
-          >
-            <option value="">
-              -- {isLoadingStations ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...") : (lang === "VN" ? "Chọn bến xuất phát" : "Select Departure Wharf")} --
-            </option>
-            {stations.map((station) => (
-              <option key={getStationId(station)} value={getStationId(station)}>
-                {getStationName(station)}
-              </option>
-            ))}
-          </select>
+            className={selectClassName}
+            placeholder={`-- ${isLoadingStations ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...") : (lang === "VN" ? "Chọn bến xuất phát" : "Select Departure Wharf")} --`}
+            options={fromOptions}
+          />
         </div>
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Bến đến" : "To"}</label>
-          <select
+          <FormSelect
             value={toWharf}
-            onChange={(e) => updateData({ toWharf: e.target.value })}
-            disabled={isLoadingStations}
-            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-50"
-          >
-            <option value="">
-              -- {isLoadingStations ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...") : (lang === "VN" ? "Chọn bến cập bến" : "Select Destination Wharf")} --
-            </option>
-            {stations.filter((station) => getStationId(station) !== String(fromWharf)).map((station) => (
-              <option key={getStationId(station)} value={getStationId(station)}>
-                {getStationName(station)}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => updateData({ toWharf: next })}
+            disabled={isLoadingStations || !fromWharf}
+            className={selectClassName}
+            placeholder={`-- ${isLoadingStations ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...") : (lang === "VN" ? "Chọn bến cập bến" : "Select Destination Wharf")} --`}
+            options={toOptions}
+          />
         </div>
       </div>
 

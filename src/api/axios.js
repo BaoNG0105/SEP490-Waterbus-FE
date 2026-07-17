@@ -35,17 +35,33 @@ api.interceptors.request.use(
     }
 );
 
+const isPaymentSyncUrl = (url = "") => {
+    const value = String(url || "").toLowerCase();
+    return value.includes("/payments/") && value.includes("/sync");
+};
+
+const isOnPaymentReturnPage = () => {
+    if (typeof window === "undefined") return false;
+    return window.location.pathname.startsWith("/payment/");
+};
+
 // 3. RESPONSE INTERCEPTOR: Bắt các lỗi từ Backend trả về
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
-        const originalRequest = error.config;
-        
+        const originalRequest = error.config || {};
+        const requestUrl = String(originalRequest.url || "");
+
         // Tránh bắt lỗi 401 của các API như login (sai mật khẩu)
-        const isPublicRoute = publicRoutes.some(route => originalRequest.url.toLowerCase().includes(route));
+        const isPublicRoute = publicRoutes.some(route => requestUrl.toLowerCase().includes(route));
+
+        // PayOS return: sync có thể 401 — KHÔNG đá về /login (mất /payment/success?orderCode=...).
+        // Trang PaymentResult tự xử lý (giữ URL + nút đăng nhập quay lại sync).
+        const skipForcedLogin =
+            isPaymentSyncUrl(requestUrl) || isOnPaymentReturnPage();
 
         // CHỈ VĂNG LOGOUT NẾU LỖI 401 XẢY RA Ở CÁC PRIVATE ROUTE (như '/auth/me')
-        if (error.response && error.response.status === 401 && !isPublicRoute) {
+        if (error.response && error.response.status === 401 && !isPublicRoute && !skipForcedLogin) {
 
             // Tránh vòng lặp vô hạn
             if (!originalRequest._retry) {

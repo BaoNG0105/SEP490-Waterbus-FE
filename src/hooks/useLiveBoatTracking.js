@@ -5,7 +5,7 @@ import { upsertBoatLocationMap } from "../utils/boatTracking";
 
 /** Poll REST khi không có hub. Khi Live chỉ backup nếu SignalR im lâu. */
 const POLL_FALLBACK_MS = 2000;
-const POLL_LIVE_BACKUP_MS = 8000;
+const POLL_LIVE_BACKUP_MS = 2000;
 const HUB_STALE_MS = 6000;
 
 /**
@@ -129,7 +129,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
         startPolling(POLL_LIVE_BACKUP_MS, { liveBackup: true });
       } else if (status === "reconnecting" || status === "offline") {
         hubLiveRef.current = false;
-        setConnectionMode(status === "offline" ? "polling" : "polling");
+        setConnectionMode("polling");
         startPolling(POLL_FALLBACK_MS);
       }
     });

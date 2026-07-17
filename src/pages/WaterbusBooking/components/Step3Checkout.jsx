@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import Swal from "sweetalert2";
 import { useApp } from "../../../context/AppContext";
 import { PayOSLogo, payosButtonLgClassName } from "../../../components/PayOSLogo";
 import { submitBooking } from "../../../services/bookingService";
@@ -7,6 +6,7 @@ import { createBookingPayment } from "../../../services/paymentService";
 import { releaseSeats } from "../../../services/tripService";
 import { fetchCurrentUserProfile } from "../../../services/authService";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { notify, showToast } from "../../../utils/swalToast";
 
 const TICKET_TYPE_OPTIONS = [
   { value: "ADULT", labelVn: "Người lớn", labelEn: "Adult" },
@@ -76,14 +76,17 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
   // Hết thời gian giữ ghế: báo cho khách và đẩy về lại Bước 1 để tìm chuyến từ đầu
   useEffect(() => {
     if (!isHoldExpired) return;
-    Swal.fire({
+    notify({
+      dialog: true,
       icon: "warning",
+      tone: "warning",
       title: lang === "VN" ? "Hết thời gian giữ ghế" : "Seat hold expired",
       text: lang === "VN"
         ? "Đã quá thời gian giữ ghế. Vui lòng tìm chuyến và chọn lại từ đầu."
         : "The seat hold has expired. Please search and select your trip again.",
-      confirmButtonColor: "#124757",
+      confirmButtonText: "OK",
       allowOutsideClick: false,
+      showCancelButton: false,
     }).then(() => {
       onExpire?.();
     });
@@ -162,11 +165,10 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       }
     } catch (error) {
       console.error("Lỗi khi lấy thông tin tài khoản:", error);
-      Swal.fire({
+      showToast({
         icon: "error",
         title: lang === "VN" ? "Không lấy được thông tin tài khoản" : "Unable to load account info",
         text: lang === "VN" ? "Vui lòng nhập thông tin thủ công." : "Please enter the information manually.",
-        confirmButtonColor: "#124757",
       });
     } finally {
       setIsLoadingAccountInfo(false);
@@ -206,7 +208,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
   const subtotal = sumSeatsPrice(selectedSeatsDeparture) + (isRoundTrip ? sumSeatsPrice(selectedSeatsReturn) : 0);
 
   const showError = (title, text) => {
-    Swal.fire({ icon: "warning", title, text, confirmButtonColor: "#124757" });
+    showToast({ icon: "warning", title, text });
   };
 
   const buildLegItems = (seats, fromStationCode, toStationCode) => [
@@ -309,11 +311,20 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
         throw new Error("Payment created but no checkout URL was returned.");
       }
 
-      // Ghi nhớ bookingId theo paymentId để trang /payment/result nhận diện đây là booking Waterbus
-      // (không phải charter) và điều hướng đúng về trang "Vé Waterbus của tôi" sau khi PayOS trả về.
+      // Ghi nhớ bookingId theo paymentId / orderCode để /payment/success nhận diện Waterbus
+      // (không phải charter) và sync PayOS rồi về "Vé Waterbus của tôi".
       const paymentId = pick(payment, ["id", "paymentId", "data.id", "data.paymentId", "payment.id", "payment.paymentId"]);
+      const orderCode = pick(payment, [
+        "orderCode", "paymentOrderCode", "payosOrderCode",
+        "data.orderCode", "data.paymentOrderCode", "data.payosOrderCode",
+        "payment.orderCode", "data.payment.orderCode",
+      ]);
       if (paymentId) {
         sessionStorage.setItem(`waterbusPaymentBooking:${paymentId}`, bookingId);
+      }
+      if (orderCode) {
+        sessionStorage.setItem(`waterbusPaymentBookingOrder:${orderCode}`, bookingId);
+        sessionStorage.setItem("latestWaterbusPaymentOrderCode", String(orderCode));
       }
       sessionStorage.setItem("latestWaterbusPaymentBooking", bookingId);
 

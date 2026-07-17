@@ -99,6 +99,39 @@ const stabilizeGpsAgainstPrev = (prev, next) => {
     ? Math.min(120, (nextTs - prevTs) / 1000)
     : 3;
 
+  const holdAsJumpCandidate = () => {
+    const candidateLat = Number(prev.gpsCandidateLatitude);
+    const candidateLng = Number(prev.gpsCandidateLongitude);
+    const hasCandidate = isValidLatLng(candidateLat, candidateLng);
+    const candidateDistance = hasCandidate
+      ? haversineMeters(
+        candidateLat,
+        candidateLng,
+        Number(next.latitude),
+        Number(next.longitude),
+      )
+      : Number.POSITIVE_INFINITY;
+
+    // Một GPS jump lẻ vẫn bị chặn. Live simulator/thiết bị gửi lại cùng vị trí
+    // ở packet kế tiếp thì chấp nhận, tránh giữ marker vĩnh viễn ở tọa độ cũ.
+    if (candidateDistance <= Math.max(20, accM * 2)) {
+      return {
+        ...next,
+        gpsCandidateLatitude: null,
+        gpsCandidateLongitude: null,
+      };
+    }
+
+    return {
+      ...next,
+      latitude: prev.latitude,
+      longitude: prev.longitude,
+      heading: Number.isFinite(Number(prev.heading)) ? prev.heading : next.heading,
+      gpsCandidateLatitude: next.latitude,
+      gpsCandidateLongitude: next.longitude,
+    };
+  };
+
   if (meters < 0.3) {
     if (speedKmh < 1.2 && Number.isFinite(Number(prev.heading))) {
       return { ...next, heading: prev.heading, latitude: prev.latitude, longitude: prev.longitude };
@@ -119,22 +152,12 @@ const stabilizeGpsAgainstPrev = (prev, next) => {
     }
     const teleportLimit = Math.max(40, accM * 3);
     if (meters > teleportLimit) {
-      return {
-        ...next,
-        latitude: prev.latitude,
-        longitude: prev.longitude,
-        heading: Number.isFinite(Number(prev.heading)) ? prev.heading : next.heading,
-      };
+      return holdAsJumpCandidate();
     }
   } else {
     const maxMeters = (Math.max(speedKmh, 3) / 3.6) * dtSec * 2.8 + Math.max(50, accM * 2);
     if (meters > maxMeters && meters > 100) {
-      return {
-        ...next,
-        latitude: prev.latitude,
-        longitude: prev.longitude,
-        heading: Number.isFinite(Number(prev.heading)) ? prev.heading : next.heading,
-      };
+      return holdAsJumpCandidate();
     }
   }
 

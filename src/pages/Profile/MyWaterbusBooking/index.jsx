@@ -32,6 +32,22 @@ const STATUS_STYLES = {
 const getStatusClasses = (status) => STATUS_STYLES[String(status || "").toLowerCase()]
   || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600";
 
+const STATUS_LABELS = {
+  pendingpayment: { vn: "Chờ thanh toán", en: "Pending payment" },
+  confirmed: { vn: "Đã xác nhận", en: "Confirmed" },
+  completed: { vn: "Hoàn thành", en: "Completed" },
+  cancelled: { vn: "Đã hủy", en: "Cancelled" },
+  expired: { vn: "Hết hạn", en: "Expired" },
+  paid: { vn: "Đã thanh toán", en: "Paid" },
+};
+
+const getStatusLabel = (status, lang = "VN") => {
+  const key = String(status || "").toLowerCase().replace(/[\s_-]/g, "");
+  const entry = STATUS_LABELS[key];
+  if (!entry) return status || "--";
+  return lang === "VN" ? entry.vn : entry.en;
+};
+
 const formatDateTime = (value) => {
   if (!value) return "--";
   const date = new Date(value);
@@ -68,6 +84,14 @@ export function MyWaterbusBookingList() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const highlightBookingId = location.state?.highlightBookingId || "";
+  const paymentOutcome = location.state?.paymentOutcome
+    || new URLSearchParams(location.search).get("paymentOutcome")
+    || "";
+  const returnedOrderCode = location.state?.orderCode
+    || new URLSearchParams(location.search).get("orderCode")
+    || "";
+  const fromPayOs = new URLSearchParams(location.search).has("fromPayOs")
+    || Boolean(location.state?.paymentOutcome);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),
@@ -110,12 +134,6 @@ export function MyWaterbusBookingList() {
     return matchesSearch && matchesStatus;
   }), [bookings, searchTerm, statusFilter]);
 
-  const stats = useMemo(() => ({
-    total: bookings.length,
-    pendingPayment: bookings.filter((b) => String(b.status).toLowerCase() === "pendingpayment").length,
-    confirmed: bookings.filter((b) => String(b.status).toLowerCase() === "confirmed").length,
-  }), [bookings]);
-
   const hasFilters = searchTerm || statusFilter !== "All";
   const emptyMessage = bookings.length === 0
     ? (lang === "VN" ? "Bạn chưa có vé Waterbus nào." : "You have no Waterbus bookings yet.")
@@ -141,13 +159,6 @@ export function MyWaterbusBookingList() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={loadBookings}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white backdrop-blur transition hover:bg-white/20"
-                >
-                  <span className={`material-symbols-outlined ${isLoading ? "animate-spin" : ""}`}>refresh</span>
-                </button>
                 <button
                   type="button"
                   onClick={() => navigate("/waterbus-booking")}
@@ -177,11 +188,32 @@ export function MyWaterbusBookingList() {
               >
                 {statusOptions.map((status) => (
                   <option key={status} value={status}>
-                    {status === "All" ? (lang === "VN" ? "Tất cả trạng thái" : "All statuses") : status}
+                    {status === "All"
+                      ? (lang === "VN" ? "Tất cả trạng thái" : "All statuses")
+                      : getStatusLabel(status, lang)}
                   </option>
                 ))}
               </select>
             </div>
+
+            {fromPayOs ? (
+              <div className={`rounded-2xl border p-4 text-xs font-bold ${
+                paymentOutcome === "cancel"
+                  ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200"
+              }`}>
+                {paymentOutcome === "cancel"
+                  ? (lang === "VN"
+                    ? "Bạn đã hủy thanh toán trên PayOS. Booking có thể vẫn ở trạng thái chờ thanh toán."
+                    : "You cancelled PayOS checkout. The booking may still be pending payment.")
+                  : (lang === "VN"
+                    ? "Đã nhận phản hồi PayOS và đồng bộ thanh toán. Kiểm tra trạng thái booking bên dưới (Paid/Confirmed)."
+                    : "PayOS response received and payment synced. Check booking status below (Paid/Confirmed).")}
+                {returnedOrderCode ? (
+                  <span className="mt-1 block font-mono text-[10px] opacity-70">orderCode: {returnedOrderCode}</span>
+                ) : null}
+              </div>
+            ) : null}
 
             {errorMsg && (
               <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-xs font-bold text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
@@ -189,22 +221,6 @@ export function MyWaterbusBookingList() {
               </div>
             )}
           </div>
-        </section>
-
-        <section className="grid grid-cols-3 gap-3">
-          {[
-            { key: "total", icon: "folder_open", label: lang === "VN" ? "Tổng số vé" : "Total bookings", value: stats.total, tone: "text-[#124757] dark:text-yellow-400", bg: "bg-slate-50 dark:bg-slate-900" },
-            { key: "pending", icon: "hourglass_top", label: lang === "VN" ? "Chờ thanh toán" : "Pending payment", value: stats.pendingPayment, tone: "text-amber-600 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-500/10" },
-            { key: "confirmed", icon: "verified", label: lang === "VN" ? "Đã xác nhận" : "Confirmed", value: stats.confirmed, tone: "text-emerald-600 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
-          ].map((item) => (
-            <div key={item.key} className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-              <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${item.bg} ${item.tone}`}>
-                <span className="material-symbols-outlined text-xl">{item.icon}</span>
-              </div>
-              <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{item.label}</p>
-              <p className={`mt-1 font-headline text-2xl font-black ${item.tone}`}>{item.value}</p>
-            </div>
-          ))}
         </section>
 
         <section className="space-y-3">
@@ -249,11 +265,25 @@ export function MyWaterbusBookingList() {
                         {booking.bookingCode}
                       </span>
                       <span className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.status)}`}>
-                        {booking.status}
+                        {getStatusLabel(booking.status, lang)}
                       </span>
                     </div>
                     <p className="text-[11px] font-bold text-slate-400">
-                      {lang === "VN" ? "Đặt lúc" : "Booked at"}: {formatDateTime(booking.bookedAt)} · {booking.itemCount} {lang === "VN" ? "vé còn hiệu lực" : "active ticket(s)"}
+                      {lang === "VN" ? "Đặt lúc" : "Booked at"}: {formatDateTime(booking.bookedAt)}
+                      {booking.itemCount > 0 ? (
+                        <>
+                          {" · "}
+                          {booking.itemCount}{" "}
+                          {(() => {
+                            const statusKey = String(booking.status || "").toLowerCase().replace(/[\s_-]/g, "");
+                            const isInactive = statusKey === "expired" || statusKey === "cancelled";
+                            if (lang === "VN") {
+                              return isInactive ? "vé" : "vé còn hiệu lực";
+                            }
+                            return isInactive ? "ticket(s)" : "active ticket(s)";
+                          })()}
+                        </>
+                      ) : null}
                     </p>
                   </div>
 
