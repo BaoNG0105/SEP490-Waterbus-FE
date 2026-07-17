@@ -39,8 +39,12 @@ import { StationManagement } from "./pages/Admin/StationManagement";
 import { InsuranceManagement } from "./pages/Admin/InsuranceManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { UserManagement } from "./pages/Admin/UserManagement";
-import { CreateUser } from "./pages/Admin/UserManagement/CreateUser";
-import { EditUser } from "./pages/Admin/UserManagement/EditUser";
+import { ManagerManagement } from "./pages/Admin/ManagerManagement";
+import { CreateManager } from "./pages/Admin/ManagerManagement/CreateManager";
+import { EditManager } from "./pages/Admin/ManagerManagement/EditManager";
+import { StaffManagement } from "./pages/Admin/StaffManagement";
+import { CreateStaff } from "./pages/Admin/StaffManagement/CreateStaff";
+import { EditStaff } from "./pages/Admin/StaffManagement/EditStaff";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 import { RouteManagement } from "./pages/Admin/RouteManagement";
 import { RouteDetail } from "./pages/Admin/RouteManagement/RouteDetail";
@@ -304,32 +308,72 @@ function App() {
             }
           />
 
-          {/* ******* User Management Page ******* */}
+          {/* ******* Customer Management Page ******* */}
           <Route
             path="/admin/users-management"
             element={
-              <AdminLayout title="User Management">
+              <AdminLayout title="Customer Management">
                 <UserManagement />
               </AdminLayout>
             }
           />
 
-          {/* Create User Page */}
+          {/* ******* Manager Management Page ******* */}
           <Route
-            path="/admin/users-management/create"
+            path="/admin/managers-management"
             element={
-              <AdminLayout title="Create User">
-                <CreateUser />
+              <AdminLayout title="Manager Management">
+                <ManagerManagement />
               </AdminLayout>
             }
           />
 
-          {/* Edit User Page */}
+          {/* Create Manager Page */}
           <Route
-            path="/admin/users-management/edit/:id"
+            path="/admin/managers-management/create"
             element={
-              <AdminLayout title="Edit User">
-                <EditUser />
+              <AdminLayout title="Create Manager">
+                <CreateManager />
+              </AdminLayout>
+            }
+          />
+
+          {/* Edit Manager Page */}
+          <Route
+            path="/admin/managers-management/edit/:id"
+            element={
+              <AdminLayout title="Edit Manager">
+                <EditManager />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Staff Management Page ******* */}
+          <Route
+            path="/admin/staffs-management"
+            element={
+              <AdminLayout title="Staff Management">
+                <StaffManagement />
+              </AdminLayout>
+            }
+          />
+
+          {/* Create Staff Page */}
+          <Route
+            path="/admin/staffs-management/create"
+            element={
+              <AdminLayout title="Create Staff">
+                <CreateStaff />
+              </AdminLayout>
+            }
+          />
+
+          {/* Edit Staff Page */}
+          <Route
+            path="/admin/staffs-management/edit/:id"
+            element={
+              <AdminLayout title="Edit Staff">
+                <EditStaff />
               </AdminLayout>
             }
           />

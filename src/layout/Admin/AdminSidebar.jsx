@@ -48,7 +48,9 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
   const menuItems = [
     { path: "/admin", icon: "dashboard", labelVn: "Dashboard", labelEn: "Dashboard", roles: ["ADMIN", "MANAGER", "STAFF"] },
     { path: "/admin/revenue", icon: "payments", labelVn: "Doanh thu", labelEn: "Revenue", roles: ["ADMIN"] },
-    { path: "/admin/users-management", icon: "manage_accounts", labelVn: "Quản lý người dùng", labelEn: "User Management", roles: ["ADMIN", "MANAGER"] },
+    { path: "/admin/users-management", icon: "manage_accounts", labelVn: "Quản lý Khách hàng", labelEn: "Customer Management", roles: ["ADMIN", "MANAGER"] },
+    { path: "/admin/managers-management", icon: "supervisor_account", labelVn: "Quản lý Manager", labelEn: "Manager Management", roles: ["ADMIN"] },
+    { path: "/admin/staffs-management", icon: "badge", labelVn: "Quản lý Nhân viên", labelEn: "Staff Management", roles: ["ADMIN", "MANAGER"] },
     { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Quản lý thuê tàu", labelEn: "Charter Booking Management", roles: ["ADMIN", "MANAGER"] },
     { path: "/admin/bookings", icon: "receipt_long", labelVn: "Quản lý Booking", labelEn: "Booking Management", roles: ["ADMIN"] },
     { path: "/admin/stations-management", icon: "storefront", labelVn: "Quản lý nhà ga", labelEn: "Wharf Station", roles: ["ADMIN", "MANAGER"] },
@@ -72,7 +74,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
       labelEnStaff: "Blog / News",
       roles: ["ADMIN", "MANAGER", "STAFF"],
     },
-    { path: "/admin/cskh", icon: "support_agent", labelVn: "CSKH", labelEn: "Customer Support", roles: ["ADMIN", "MANAGER"] },
+    // { path: "/admin/cskh", icon: "support_agent", labelVn: "CSKH", labelEn: "Customer Support", roles: ["ADMIN", "MANAGER"] },
     { path: "/admin/ai-data", icon: "database", labelVn: "Quản lý AI data", labelEn: "AI Data Context", roles: ["ADMIN"] },
   ];
 

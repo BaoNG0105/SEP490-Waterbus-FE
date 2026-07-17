@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserDetail, fetchUserRoles, updateUser, fetchUserStations, assignUserStations } from "../../../services/userService";
-import { canManageUserRow, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
+import { getRoleSystemName } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
 import { NationalitySelect } from "../../../components/NationalitySelect";
-import { StationAssignField, canAssignStations } from "../../../components/StationAssignField";
+import { StationAssignField } from "../../../components/StationAssignField";
 import { notify } from "../../../utils/swalToast";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
@@ -20,7 +19,7 @@ const isAllowedEmail = (email) => {
     return ALLOWED_EMAIL_DOMAINS.includes(trimmed.slice(at + 1));
 };
 
-const DEFAULT_AVATAR = "https://api.dicebear.com/7.x/avataaars/svg?seed=User";
+const DEFAULT_AVATAR = "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp";
 
 // Chuyển đổi chuỗi ngày sinh trả về từ BE (có thể là ISO hoặc dd/MM/yyyy) sang định dạng yyyy-MM-dd cho input HTML5
 const toInputDate = (value) => {
@@ -31,19 +30,10 @@ const toInputDate = (value) => {
     return "";
 };
 
-const normalizeStaffTypeValue = (value) => {
-    const raw = String(value || "").toLowerCase().replace(/[_\s-]/g, "");
-    if (raw === "onboard" || raw === "2") return "OnBoard";
-    if (raw === "ground" || raw === "1") return "Ground";
-    return "";
-};
-
-export function EditUser() {
+export function EditManager() {
     const { lang } = useApp();
     const navigate = useNavigate();
     const { id } = useParams();
-    const { user: currentUser } = useSelector((state) => state.auth);
-    const canEditOnBoard = isAdminUser(currentUser);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -58,8 +48,6 @@ export function EditUser() {
         nationality: "",
         phoneNumber: "",
         email: "",
-        roleId: "",
-        staffType: "",
         stationIds: [],
     });
 
@@ -74,46 +62,34 @@ export function EditUser() {
                     fetchUserRoles(),
                 ]);
 
-                if (!canManageUserRow(currentUser, detail.roles)) {
+                if (getRoleSystemName(detail.roles?.[0]) !== "MANAGER") {
                     notify({
                         icon: "warning",
                         title: lang === "VN" ? "Không có quyền" : "Access Denied",
-                        text: lang === "VN" ? "Bạn không có quyền chỉnh sửa người dùng này." : "You do not have permission to edit this user.",
+                        text: lang === "VN" ? "Tài khoản này không phải là Quản lý." : "This account is not a Manager.",
                         confirmButtonColor: "#124757",
                         allowOutsideClick: false,
-                    }).then(() => navigate("/admin/users-management"));
+                    }).then(() => navigate("/admin/managers-management"));
                     return;
                 }
 
                 setUserInfo(detail);
                 setRoles(roleList || []);
 
-                const currentRoleCode = getRoleSystemName(detail.roles?.[0]);
-                const matchedRole = (roleList || []).find((r) => r.code === currentRoleCode || r.systemName === currentRoleCode);
-                const staffType =
-                    normalizeStaffTypeValue(detail.staffType) ||
-                    (getRoleSystemName(detail.roles?.[0]) === "STAFF" ? "Ground" : "");
-
                 let stationIds = [];
-                const eligible = canAssignStations({
-                    roleSystemName: currentRoleCode,
-                    staffType,
-                });
-                if (eligible) {
-                    try {
-                        stationIds = await fetchUserStations(id);
-                    } catch (stationError) {
-                        console.warn("Không tải được danh sách bến của user:", stationError);
-                        const fromDetail = detail.stationIds || detail.stations;
-                        if (Array.isArray(fromDetail)) {
-                            stationIds = fromDetail
-                                .map((item) =>
-                                    typeof item === "object"
-                                        ? String(item.stationId || item.id || "")
-                                        : String(item || "")
-                                )
-                                .filter(Boolean);
-                        }
+                try {
+                    stationIds = await fetchUserStations(id);
+                } catch (stationError) {
+                    console.warn("Không tải được danh sách bến của user:", stationError);
+                    const fromDetail = detail.stationIds || detail.stations;
+                    if (Array.isArray(fromDetail)) {
+                        stationIds = fromDetail
+                            .map((item) =>
+                                typeof item === "object"
+                                    ? String(item.stationId || item.id || "")
+                                    : String(item || "")
+                            )
+                            .filter(Boolean);
                     }
                 }
 
@@ -124,30 +100,28 @@ export function EditUser() {
                     nationality: detail.nationality || "",
                     phoneNumber: detail.phoneNumber || "",
                     email: detail.email || "",
-                    roleId: matchedRole?.id || "",
-                    staffType,
                     stationIds,
                 });
             } catch (error) {
-                console.error("Lỗi khi tải chi tiết người dùng:", error);
+                console.error("Lỗi khi tải chi tiết quản lý:", error);
                 if (error.response?.status === 404) {
                     notify({
                         icon: "error",
                         title: lang === "VN" ? "Không tìm thấy!" : "Not Found!",
-                        text: lang === "VN" ? "Tài khoản người dùng không tồn tại." : "This user account does not exist.",
+                        text: lang === "VN" ? "Tài khoản quản lý không tồn tại." : "This manager account does not exist.",
                         confirmButtonColor: "#124757",
                         allowOutsideClick: false,
-                    }).then(() => navigate("/admin/users-management"));
+                    }).then(() => navigate("/admin/managers-management"));
                 } else if (error.response?.status === 403) {
                     notify({
                         icon: "warning",
                         title: lang === "VN" ? "Không có quyền" : "Access Denied",
-                        text: lang === "VN" ? "Bạn không có quyền xem hoặc chỉnh sửa người dùng này." : "You do not have permission to view or edit this user.",
+                        text: lang === "VN" ? "Bạn không có quyền xem hoặc chỉnh sửa quản lý này." : "You do not have permission to view or edit this manager.",
                         confirmButtonColor: "#124757",
                         allowOutsideClick: false,
-                    }).then(() => navigate("/admin/users-management"));
+                    }).then(() => navigate("/admin/managers-management"));
                 } else {
-                    setErrorMsg(lang === "VN" ? "Không thể tải thông tin người dùng do lỗi kết nối." : "Failed to retrieve user details.");
+                    setErrorMsg(lang === "VN" ? "Không thể tải thông tin quản lý do lỗi kết nối." : "Failed to retrieve manager details.");
                 }
             } finally {
                 setIsLoading(false);
@@ -157,38 +131,13 @@ export function EditUser() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
-    const selectedRole = useMemo(
-        () => roles.find((role) => String(role.id) === String(formData.roleId)),
-        [roles, formData.roleId]
+    const managerRole = useMemo(
+        () => roles.find((role) => getRoleSystemName(role) === "MANAGER"),
+        [roles]
     );
-    const isStaffRole = getRoleSystemName(selectedRole) === "STAFF";
-    const showStationAssign = canAssignStations({
-        roleSystemName: getRoleSystemName(selectedRole),
-        staffType: formData.staffType,
-    });
 
     const handleInputChange = (field, value) => {
-        setFormData((prev) => {
-            const next = { ...prev, [field]: value };
-            if (field === "roleId") {
-                const role = roles.find((item) => String(item.id) === String(value));
-                if (getRoleSystemName(role) === "STAFF") {
-                    next.staffType = canEditOnBoard ? (prev.staffType || "Ground") : "Ground";
-                } else {
-                    next.staffType = "";
-                }
-            }
-            if (field === "roleId" || field === "staffType") {
-                const role = field === "roleId"
-                    ? roles.find((item) => String(item.id) === String(value))
-                    : roles.find((item) => String(item.id) === String(next.roleId));
-                const staffType = field === "staffType" ? value : next.staffType;
-                if (!canAssignStations({ roleSystemName: getRoleSystemName(role), staffType })) {
-                    next.stationIds = [];
-                }
-            }
-            return next;
-        });
+        setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
     const handleFormSubmit = async (e) => {
@@ -196,11 +145,6 @@ export function EditUser() {
         try {
             setIsSubmitting(true);
             setErrorMsg("");
-
-            if (isStaffRole && !formData.staffType) {
-                setErrorMsg(lang === "VN" ? "Chọn loại nhân viên (mặt đất / trên tàu)." : "Select staff type (Ground / OnBoard).");
-                return;
-            }
 
             if (!isAllowedEmail(formData.email)) {
                 setErrorMsg(
@@ -216,20 +160,15 @@ export function EditUser() {
                 dateOfBirth: formData.dateOfBirth || null,
                 phoneNumber: formData.phoneNumber.trim(),
                 email: formData.email.trim() || null,
-                roleId: formData.roleId,
+                roleId: managerRole?.id,
                 gender: formData.gender,
                 nationality: formData.nationality.trim() || null,
-                ...(isStaffRole ? { staffType: formData.staffType } : {}),
             };
 
             await updateUser(id, payload);
 
-            // Đồng bộ gắn bến (Manager / Staff Ground). OnBoard → clear [].
             try {
-                await assignUserStations(
-                    id,
-                    showStationAssign ? formData.stationIds : []
-                );
+                await assignUserStations(id, formData.stationIds);
             } catch (stationError) {
                 console.error("Lỗi gắn bến:", stationError);
                 setErrorMsg(
@@ -246,15 +185,15 @@ export function EditUser() {
             notify({
                 icon: "success",
                 title: lang === "VN" ? "Cập nhật thành công!" : "Successfully Updated!",
-                text: lang === "VN" ? "Thông tin người dùng đã được lưu." : "User information has been saved.",
+                text: lang === "VN" ? "Thông tin quản lý đã được lưu." : "Manager information has been saved.",
                 confirmButtonColor: "#124757",
-            }).then(() => navigate("/admin/users-management"));
+            }).then(() => navigate("/admin/managers-management"));
         } catch (error) {
-            console.error("Lỗi cập nhật người dùng:", error);
+            console.error("Lỗi cập nhật quản lý:", error);
             setErrorMsg(
                 getApiErrorMessage(
                     error,
-                    lang === "VN" ? "Cập nhật thất bại." : "Failed to update user."
+                    lang === "VN" ? "Cập nhật thất bại." : "Failed to update manager."
                 )
             );
         } finally {
@@ -270,16 +209,6 @@ export function EditUser() {
         { value: "Male", label: lang === "VN" ? "Nam" : "Male" },
         { value: "Female", label: lang === "VN" ? "Nữ" : "Female" },
         { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
-    ];
-    const roleOptions = roles.map((role) => ({
-        value: role.id,
-        label: role.displayName || role.systemName,
-    }));
-    const staffTypeOptions = [
-        { value: "Ground", label: lang === "VN" ? "Mặt đất (bến)" : "Ground (station)" },
-        ...((canEditOnBoard || formData.staffType === "OnBoard")
-            ? [{ value: "OnBoard", label: lang === "VN" ? "Trên tàu" : "Onboard" }]
-            : []),
     ];
 
     if (isLoading) {
@@ -299,7 +228,7 @@ export function EditUser() {
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
                 <button
                     type="button"
-                    onClick={() => navigate("/admin/users-management")}
+                    onClick={() => navigate("/admin/managers-management")}
                     className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner shrink-0"
                 >
                     <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
@@ -318,7 +247,7 @@ export function EditUser() {
                             {lang === "VN" ? `Chỉnh sửa: ${userInfo.code}` : `Edit: ${userInfo.code}`}
                         </h2>
                         <p className="text-xs text-slate-400 mt-0.5">
-                            {lang === "VN" ? "Cập nhật hồ sơ cá nhân và vai trò của người dùng." : "Update the user's personal profile and assigned role."}
+                            {lang === "VN" ? "Cập nhật hồ sơ cá nhân và bến phụ trách của quản lý." : "Update the manager's personal profile and assigned stations."}
                         </p>
                     </div>
                 </div>
@@ -385,44 +314,16 @@ export function EditUser() {
                     </div>
 
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán (*)" : "Assigned Role (*)"}</label>
-                        <FormSelect
-                            required
-                            disabled={roles.length === 0}
-                            value={formData.roleId}
-                            onChange={(v) => handleInputChange("roleId", v)}
-                            options={roleOptions}
-                            placeholder={lang === "VN" ? "-- Chọn vai trò --" : "-- Select role --"}
-                            className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
-                        />
+                        <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán" : "Assigned Role"}</label>
+                        <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
+                            {managerRole?.displayName || managerRole?.systemName || "Manager"}
+                        </div>
                     </div>
 
-                    {isStaffRole && (
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
-                            {staffTypeOptions.length <= 1 ? (
-                                <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
-                                    {staffTypeOptions[0]?.label ||
-                                        (lang === "VN" ? "Mặt đất (bến)" : "Ground (station)")}
-                                </div>
-                            ) : (
-                                <FormSelect
-                                    required
-                                    value={formData.staffType || "Ground"}
-                                    onChange={(v) => handleInputChange("staffType", v)}
-                                    options={staffTypeOptions}
-                                    className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
-                                />
-                            )}
-                        </div>
-                    )}
-
-                    {showStationAssign && (
-                        <StationAssignField
-                            value={formData.stationIds}
-                            onChange={(ids) => handleInputChange("stationIds", ids)}
-                        />
-                    )}
+                    <StationAssignField
+                        value={formData.stationIds}
+                        onChange={(ids) => handleInputChange("stationIds", ids)}
+                    />
                 </div>
 
                 <button
