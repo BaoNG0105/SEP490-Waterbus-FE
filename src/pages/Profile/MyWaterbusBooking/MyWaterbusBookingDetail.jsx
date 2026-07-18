@@ -3,8 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { QRCodeSVG } from "qrcode.react";
 import { useApp } from "../../../context/AppContext";
-import { fetchMyBookingDetail } from "../../../services/bookingService";
+import { cancelMyBooking, fetchMyBookingDetail } from "../../../services/bookingService";
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
+import { getApiErrorMessage } from "../../../utils/apiError";
+import { notify } from "../../../utils/swalToast";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -206,6 +208,7 @@ export function MyWaterbusBookingDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [notFound, setNotFound] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),
@@ -254,6 +257,53 @@ export function MyWaterbusBookingDetail() {
       items,
     }));
   }, [booking]);
+
+  // Chỉ cho phép hủy khi booking chưa ở trạng thái kết thúc VÀ còn ít nhất 1 chặng chưa khởi hành —
+  // kiểm tra mềm phía FE để ẩn nút cho rõ ràng; điều kiện chính xác (departureTime <= now) do BE quyết định.
+  const canCancel = Boolean(booking)
+    && !["cancelled", "completed", "expired"].includes(getStatusKey(booking.status))
+    && booking.items.some((item) => {
+      const departureMs = new Date(item.scheduledDeparture).getTime();
+      return Number.isNaN(departureMs) || departureMs > Date.now();
+    });
+
+  const handleCancel = () => {
+    if (!booking) return;
+    notify({
+      title: lang === "VN" ? "Hủy booking này?" : "Cancel this booking?",
+      text: lang === "VN"
+        ? "Toàn bộ vé trong booking sẽ bị hủy. Hành động này không thể hoàn tác."
+        : "All tickets in this booking will be cancelled. This action cannot be undone.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#e11d48",
+      cancelButtonColor: "#124757",
+      confirmButtonText: lang === "VN" ? "Hủy booking" : "Cancel booking",
+      cancelButtonText: lang === "VN" ? "Đóng" : "Close",
+    }).then(async (result) => {
+      if (!result.isConfirmed) return;
+      try {
+        setIsCancelling(true);
+        await cancelMyBooking(booking.id);
+        await loadDetail();
+        notify({
+          toast: true,
+          icon: "success",
+          title: lang === "VN" ? "Đã hủy booking" : "Booking cancelled",
+        });
+      } catch (error) {
+        console.error(`Lỗi khi hủy booking ${booking.id}:`, error);
+        notify({
+          toast: true,
+          icon: "error",
+          title: lang === "VN" ? "Không thể hủy booking" : "Unable to cancel booking",
+          text: getApiErrorMessage(error, lang === "VN" ? "Vui lòng thử lại sau." : "Please try again later."),
+        });
+      } finally {
+        setIsCancelling(false);
+      }
+    });
+  };
 
   if (isLoading) {
     return (
@@ -317,14 +367,29 @@ export function MyWaterbusBookingDetail() {
                 {lang === "VN" ? "Đặt lúc" : "Booked at"}: {formatDateTime(booking.bookedAt)}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.status)}`}>
-                {getStatusLabel(booking.status, lang)}
-              </span>
-              {booking.paymentStatus && (
-                <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.paymentStatus)}`}>
-                  {getStatusLabel(booking.paymentStatus, lang)}
+            <div className="flex flex-col items-start gap-3 md:items-end">
+              <div className="flex flex-wrap gap-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.status)}`}>
+                  {getStatusLabel(booking.status, lang)}
                 </span>
+                {booking.paymentStatus && (
+                  <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.paymentStatus)}`}>
+                    {getStatusLabel(booking.paymentStatus, lang)}
+                  </span>
+                )}
+              </div>
+              {canCancel && (
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  disabled={isCancelling}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300/40 bg-rose-500/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide text-rose-100 transition hover:bg-rose-500/20 disabled:opacity-50"
+                >
+                  {isCancelling && <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>}
+                  {isCancelling
+                    ? (lang === "VN" ? "Đang hủy..." : "Cancelling...")
+                    : (lang === "VN" ? "Hủy booking" : "Cancel booking")}
+                </button>
               )}
             </div>
           </div>
