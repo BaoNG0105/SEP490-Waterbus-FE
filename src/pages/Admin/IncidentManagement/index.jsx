@@ -3,7 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import { useSelector } from "react-redux";
 import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
-import { fetchAllBoats } from "../../../services/boatService";
+import { fetchActiveBoatsByServiceType, fetchAllBoats } from "../../../services/boatService";
 import { fetchAllTrips } from "../../../services/tripService";
 import { fetchManagerUsers } from "../../../services/userService";
 import {
@@ -19,7 +19,28 @@ import {
 } from "../../../services/incidentService";
 import { notify, showToast } from "../../../utils/swalToast";
 
-const ACTIVE_TRIP_STATUSES = new Set(["scheduled", "boarding", "departed", "delayed"]);
+const ACTIVE_TRIP_STATUSES = new Set([
+  "scheduled",
+  "boarding",
+  "departed",
+  "inprogress",
+  "delayed",
+]);
+
+const EMPTY_RESCUE_FORM = {
+  incidentId: "",
+  incidentBoatId: "",
+  incidentBoatCode: "",
+  incidentDescription: "",
+  tripId: "",
+  activeTicketCount: 0,
+  rescueBoatId: "",
+  replacementBoatId: "",
+  delayMinutes: 0,
+  note: "",
+};
+
+const boatServiceType = (boat) => String(boat?.serviceType || boat?.ServiceType || "Passenger");
 
 const formatWhen = (value) => {
   if (!value) return "—";
@@ -46,12 +67,21 @@ const unwrapList = (data) => {
   return [];
 };
 
-export function IncidentManagement() {
+export function IncidentManagement({
+  embedded: _embedded = false,
+  hideReport = false,
+  viewTabs = null,
+} = {}) {
   const { lang } = useApp();
   const { user } = useSelector((state) => state.auth);
-  const canManage = isAdminUser(user) || isManagerUser(user);
-  // TEMP: cho Manager/Admin báo sự cố để test (Codex: Staff cũng được).
-  const canReport = canManage || isStaffUser(user);
+  const isAdmin = isAdminUser(user);
+  const isManager = isManagerUser(user);
+  const isStaff = isStaffUser(user);
+  // BE RBAC: Admin/Manager/Staff báo sự cố; chỉ Admin gán QL; Admin/Manager điều tàu + đóng.
+  const canReport = (isAdmin || isManager || isStaff) && !hideReport;
+  const canAssignManager = isAdmin;
+  const canDispatchRescue = isAdmin || isManager;
+  const canResolveIncident = isAdmin || isManager;
   const {
     incidents,
     connectionMode,
@@ -61,6 +91,8 @@ export function IncidentManagement() {
   } = useLiveIncidents({ enabled: true, toast: true });
 
   const [boats, setBoats] = useState([]);
+  const [rescueBoats, setRescueBoats] = useState([]);
+  const [passengerBoats, setPassengerBoats] = useState([]);
   const [trips, setTrips] = useState([]);
   const [managers, setManagers] = useState([]);
   const [query, setQuery] = useState("");
@@ -73,16 +105,7 @@ export function IncidentManagement() {
     severity: "High",
     description: "",
   });
-  const [rescueForm, setRescueForm] = useState({
-    incidentId: "",
-    incidentBoatId: "",
-    incidentBoatCode: "",
-    incidentDescription: "",
-    tripId: "",
-    replacementBoatId: "",
-    delayMinutes: 30,
-    note: "",
-  });
+  const [rescueForm, setRescueForm] = useState(EMPTY_RESCUE_FORM);
   const [managerForm, setManagerForm] = useState({
     incidentId: "",
     managerUserId: "",
@@ -100,34 +123,61 @@ export function IncidentManagement() {
       .then((data) => setBoats(unwrapList(data)))
       .catch((error) => console.error("Failed to load boats for incidents:", error));
 
+    fetchActiveBoatsByServiceType("Rescue")
+      .then((data) => setRescueBoats(Array.isArray(data) ? data : []))
+      .catch((error) => console.error("Failed to load rescue boats:", error));
+
+    fetchActiveBoatsByServiceType("Passenger")
+      .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
+      .catch((error) => console.error("Failed to load passenger boats:", error));
+
     fetchAllTrips()
       .then((data) => setTrips(unwrapList(data)))
       .catch((error) => console.error("Failed to load trips for incidents:", error));
   }, []);
 
   useEffect(() => {
-    if (!canManage) return undefined;
+    if (!canAssignManager) return undefined;
     fetchManagerUsers()
       .then((data) => setManagers(Array.isArray(data) ? data : []))
       .catch((error) => console.error("Failed to load managers:", error));
     return undefined;
-  }, [canManage]);
+  }, [canAssignManager]);
 
-  const activeBoats = useMemo(
-    () => boats.filter((boat) => {
+  const excludeIncidentBoat = (list) => list.filter((boat) => {
+    const id = String(boat.boatId || boat.id || "");
+    return id && id !== String(rescueForm.incidentBoatId || "");
+  });
+
+  const rescueCandidateBoats = useMemo(() => {
+    const fromApi = excludeIncidentBoat(rescueBoats);
+    if (fromApi.length) return fromApi;
+    return excludeIncidentBoat(boats.filter((boat) => {
       const status = String(boat.status || "Active").toLowerCase();
-      return status === "active";
-    }),
-    [boats],
-  );
+      return status === "active" && boatServiceType(boat).toLowerCase() === "rescue";
+    }));
+  }, [rescueBoats, boats, rescueForm.incidentBoatId]);
 
-  const rescueCandidateBoats = useMemo(
-    () => activeBoats.filter((boat) => {
+  const replacementCandidateBoats = useMemo(() => {
+    const blocked = new Set([
+      String(rescueForm.incidentBoatId || ""),
+      String(rescueForm.rescueBoatId || ""),
+    ].filter(Boolean));
+
+    const filterBlocked = (list) => list.filter((boat) => {
       const id = String(boat.boatId || boat.id || "");
-      return id && id !== String(rescueForm.incidentBoatId || "");
-    }),
-    [activeBoats, rescueForm.incidentBoatId],
-  );
+      return id && !blocked.has(id);
+    });
+
+    const fromApi = filterBlocked(passengerBoats);
+    if (fromApi.length) return fromApi;
+    return filterBlocked(boats.filter((boat) => {
+      const status = String(boat.status || "Active").toLowerCase();
+      return status === "active" && boatServiceType(boat).toLowerCase() !== "rescue";
+    }));
+  }, [passengerBoats, boats, rescueForm.incidentBoatId, rescueForm.rescueBoatId]);
+
+  const needsReplacementBoat = Number(rescueForm.activeTicketCount) > 0;
 
   const selectedBoat = useMemo(
     () => boats.find((boat) => String(boat.boatId || boat.id) === String(reportForm.boatId)) || null,
@@ -183,6 +233,19 @@ export function IncidentManagement() {
       || String(item.managerName || "").toLowerCase().includes(q),
     );
   }, [enrichedIncidents, query]);
+
+  const stats = useMemo(() => {
+    const open = enrichedIncidents.length;
+    const high = enrichedIncidents.filter((item) => {
+      const s = String(item.severity || "").toLowerCase();
+      return s === "high" || s === "critical";
+    }).length;
+    const rescued = enrichedIncidents.filter((item) =>
+      item.rescueBoatId || item.rescueBoatCode || item.rescueBoatName,
+    ).length;
+    const unassigned = enrichedIncidents.filter((item) => !item.managerName && !item.managerUserId).length;
+    return { open, high, rescued, unassigned };
+  }, [enrichedIncidents]);
 
   const handleReport = async (event) => {
     event.preventDefault();
@@ -254,15 +317,53 @@ export function IncidentManagement() {
 
   const handleRescue = async (event) => {
     event.preventDefault();
-    if (!rescueForm.incidentId || !rescueForm.replacementBoatId) return;
+    if (!rescueForm.incidentId) return;
 
-    if (!rescueForm.tripId) {
+    if (!rescueForm.rescueBoatId) {
       notify({
         icon: "warning",
-        title: lang === "VN" ? "Thiếu chuyến (tripId)" : "Trip required",
+        title: lang === "VN" ? "Chọn tàu cứu hộ" : "Select rescue boat",
+        text: lang === "VN" ? "rescueBoatId là bắt buộc." : "rescueBoatId is required.",
+      });
+      return;
+    }
+
+    if (needsReplacementBoat && !rescueForm.replacementBoatId) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Chọn tàu thay thế" : "Select replacement boat",
         text: lang === "VN"
-          ? "BE chỉ cho điều tàu cứu khi incident có tripId. Báo sự cố kèm chọn chuyến."
-          : "Backend requires tripId on the incident. Report again with a trip selected.",
+          ? "Có vé active — cần tàu chở khách thay thế."
+          : "Active tickets — a replacement passenger boat is required.",
+      });
+      return;
+    }
+
+    if (
+      rescueForm.rescueBoatId
+      && rescueForm.replacementBoatId
+      && String(rescueForm.rescueBoatId) === String(rescueForm.replacementBoatId)
+    ) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Tàu trùng nhau" : "Duplicate boats",
+        text: lang === "VN"
+          ? "Tàu thay thế không được trùng tàu cứu hộ."
+          : "Replacement boat cannot be the same as the rescue boat.",
+      });
+      return;
+    }
+
+    if (
+      rescueForm.rescueBoatId
+      && String(rescueForm.rescueBoatId) === String(rescueForm.incidentBoatId || "")
+    ) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Tàu không hợp lệ" : "Invalid boat",
+        text: lang === "VN"
+          ? "Tàu cứu hộ không được trùng tàu sự cố."
+          : "Rescue boat cannot be the incident boat.",
       });
       return;
     }
@@ -272,25 +373,21 @@ export function IncidentManagement() {
       const delayRaw = Number(rescueForm.delayMinutes);
       // FE chỉ gọi Azure JWT — BE forward lệnh sang GPS hook.
       await dispatchReplacementBoat(rescueForm.incidentId, {
-        replacementBoatId: rescueForm.replacementBoatId,
-        delayMinutes: Number.isFinite(delayRaw) ? Math.trunc(delayRaw) : null,
-        note: rescueForm.note.trim() || null,
+        rescueBoatId: rescueForm.rescueBoatId,
+        replacementBoatId: needsReplacementBoat ? rescueForm.replacementBoatId : null,
+        delayMinutes: needsReplacementBoat
+          ? (Number.isFinite(delayRaw) ? Math.trunc(delayRaw) : 30)
+          : 0,
+        note: rescueForm.note.trim() || (needsReplacementBoat
+          ? (lang === "VN" ? "Điều tàu cứu hộ và tàu thay thế tiếp tục hành trình" : "Dispatch rescue and replacement")
+          : (lang === "VN" ? "Điều tàu cứu hộ kéo tàu lỗi về" : "Dispatch rescue to tow broken boat")),
       });
 
       showToast({
         icon: "success",
         title: lang === "VN" ? "Đã điều tàu cứu hộ" : "Rescue boat assigned",
       });
-      setRescueForm({
-        incidentId: "",
-        incidentBoatId: "",
-        incidentBoatCode: "",
-        incidentDescription: "",
-        tripId: "",
-        replacementBoatId: "",
-        delayMinutes: 30,
-        note: "",
-      });
+      setRescueForm(EMPTY_RESCUE_FORM);
       await refresh();
     } catch (error) {
       notify({
@@ -315,10 +412,12 @@ export function IncidentManagement() {
     }
     setBusyId(resolveForm.incidentId);
     try {
+      // Backup khi GPS chưa gọi rescue-mission-completed.
+      // BE: boat → UnderMaintenance, tripStatus null (không bắt buộc đổi trip).
       await closeIncident(resolveForm.incidentId, {
         resolutionNote: resolveForm.resolutionNote.trim(),
-        boatStatus: resolveForm.boatStatus || undefined,
-        tripStatus: resolveForm.tripStatus || undefined,
+        boatStatus: resolveForm.boatStatus || "UnderMaintenance",
+        tripStatus: resolveForm.tripStatus ? resolveForm.tripStatus : null,
       });
 
       showToast({
@@ -345,44 +444,64 @@ export function IncidentManagement() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-6 font-body animate-fade-in pb-10 px-2 sm:px-0">
+      <div className="flex flex-col items-start justify-between gap-4 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:flex-row sm:items-center">
         <div>
-          <h1 className="font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
+          <h2 className="font-headline text-xl font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400 md:text-2xl">
             {lang === "VN" ? "Sự cố / Cứu hộ" : "Incidents / Rescue"}
-          </h1>
-          <p className="mt-1 text-sm font-medium text-slate-400">
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-400">
             {lang === "VN"
-              ? "FE chỉ gọi Azure JWT. BE gửi lệnh GPS — map đọc tracking/hub."
-              : "FE calls Azure JWT only. BE commands GPS — map reads tracking/hub."}
+              ? (hideReport
+                ? "Danh sách Open · điều cứu hộ · đóng sự cố. Báo sự cố trên Bản đồ."
+                : "Danh sách Open · điều cứu hộ · đóng sự cố.")
+              : (hideReport
+                ? "Open list · dispatch rescue · resolve. Report on the Live map."
+                : "Open list · dispatch rescue · resolve.")}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-            {connectionMode === "live" ? "Live" : connectionMode === "polling" ? "Sync" : connectionMode}
-          </span>
-          <button
-            type="button"
-            onClick={() => refresh().catch(() => {})}
-            className="inline-flex h-10 items-center gap-1.5 rounded-2xl bg-white px-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] ring-1 ring-slate-200 transition hover:bg-slate-50 dark:bg-slate-800 dark:text-yellow-400 dark:ring-slate-700"
-          >
-            <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span>
-            {lang === "VN" ? "Tải lại" : "Refresh"}
-          </button>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {viewTabs}
           {canReport ? (
             <button
               type="button"
               onClick={() => setShowReport(true)}
-              className="inline-flex h-10 items-center gap-1.5 rounded-2xl bg-[#124757] px-3 text-xs font-headline font-black uppercase tracking-wider text-white transition hover:brightness-110 dark:bg-yellow-400 dark:text-slate-900"
+              className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-900 shadow-md transition hover:scale-[1.02] active:scale-[0.98]"
             >
-              <span className="material-symbols-outlined text-[18px]" aria-hidden>report</span>
+              <span className="material-symbols-outlined text-sm font-bold" aria-hidden>report</span>
               {lang === "VN" ? "Báo sự cố" : "Report"}
             </button>
           ) : null}
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: lang === "VN" ? "Đang mở" : "Open", value: stats.open, icon: "emergency" },
+          { label: lang === "VN" ? "Cao / Nghiêm trọng" : "High / Critical", value: stats.high, icon: "priority_high" },
+          { label: lang === "VN" ? "Đã điều cứu" : "Rescue assigned", value: stats.rescued, icon: "directions_boat" },
+          { label: lang === "VN" ? "Chưa gán QL" : "No manager", value: stats.unassigned, icon: "person_off" },
+        ].map((card) => (
+          <div
+            key={card.label}
+            className="flex items-center gap-4 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400">
+              <span className="material-symbols-outlined text-2xl">{card.icon}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {card.label}
+              </span>
+              <h3 className="mt-0.5 font-headline text-xl font-black text-[#124757] dark:text-white">
+                {card.value}
+              </h3>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3 rounded-3xl border border-slate-100 bg-white p-3.5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-4">
         <label className="flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200 focus-within:ring-[#124757]/35 dark:bg-slate-900 dark:ring-slate-700">
           <span className="material-symbols-outlined text-[18px] text-slate-400" aria-hidden>search</span>
           <input
@@ -393,9 +512,9 @@ export function IncidentManagement() {
           />
         </label>
         {errorMsg ? (
-          <p className="mt-3 rounded-2xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">
+          <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
             {errorMsg}
-          </p>
+          </div>
         ) : null}
       </div>
 
@@ -443,9 +562,18 @@ export function IncidentManagement() {
                     </td>
                     <td className="max-w-xs px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
                       <p className="line-clamp-2">{item.description || "—"}</p>
-                      {item.replacementBoatCode ? (
-                        <p className="mt-1 text-[11px] font-semibold text-sky-600">
-                          Rescue: {item.replacementBoatCode}
+                      <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                        {lang === "VN" ? "Vé active" : "Active tickets"}: {item.activeTicketCount ?? 0}
+                      </p>
+                      {item.rescueBoatName || item.rescueBoatCode || item.rescueBoatId ? (
+                        <p className="mt-0.5 text-[11px] font-semibold text-rose-600 dark:text-rose-300">
+                          {lang === "VN" ? "Cứu hộ" : "Rescue"}: {item.rescueBoatName || item.rescueBoatCode || String(item.rescueBoatId).slice(0, 8)}
+                          {item.rescueDispatchedAt ? ` · ${formatWhen(item.rescueDispatchedAt)}` : ""}
+                        </p>
+                      ) : null}
+                      {item.replacementBoatName || item.replacementBoatCode || item.replacementBoatId ? (
+                        <p className="mt-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-300">
+                          {lang === "VN" ? "Thay thế" : "Replacement"}: {item.replacementBoatName || item.replacementBoatCode || String(item.replacementBoatId).slice(0, 8)}
                         </p>
                       ) : null}
                     </td>
@@ -457,7 +585,7 @@ export function IncidentManagement() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap justify-end gap-1.5">
-                        {canManage ? (
+                        {canAssignManager ? (
                           <button
                             type="button"
                             disabled={busyId === item.incidentId}
@@ -470,42 +598,57 @@ export function IncidentManagement() {
                             {lang === "VN" ? "Gán QL" : "Manager"}
                           </button>
                         ) : null}
-                        {canManage ? (
+                        {canDispatchRescue ? (
                           <button
                             type="button"
                             disabled={busyId === item.incidentId}
                             onClick={() => {
+                              const ticketCount = Number(item.activeTicketCount) || 0;
                               setRescueForm({
                                 incidentId: item.incidentId,
                                 incidentBoatId: item.boatId || "",
                                 incidentBoatCode: item.boatCode || "",
                                 incidentDescription: item.description || "",
                                 tripId: item.tripId || "",
+                                activeTicketCount: ticketCount,
+                                rescueBoatId: "",
                                 replacementBoatId: "",
-                                delayMinutes: 30,
+                                delayMinutes: ticketCount > 0 ? 30 : 0,
                                 note: lang === "VN"
-                                  ? `Điều tàu thay thế cho ${item.boatCode || ""}`
-                                  : `Dispatch replacement for ${item.boatCode || ""}`,
+                                  ? (ticketCount > 0
+                                    ? `Điều tàu cứu hộ và tàu thay thế cho ${item.boatCode || ""}`
+                                    : `Điều tàu cứu hộ cho ${item.boatCode || ""}`)
+                                  : (ticketCount > 0
+                                    ? `Dispatch rescue and replacement for ${item.boatCode || ""}`
+                                    : `Dispatch rescue for ${item.boatCode || ""}`),
                               });
+                              fetchActiveBoatsByServiceType("Rescue")
+                                .then((data) => setRescueBoats(Array.isArray(data) ? data : []))
+                                .catch(() => {});
+                              if (ticketCount > 0) {
+                                fetchActiveBoatsByServiceType("Passenger")
+                                  .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
+                                  .catch(() => {});
+                              }
                             }}
                             className="rounded-xl bg-sky-50 px-2.5 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 ring-1 ring-sky-200 transition hover:bg-sky-100 disabled:opacity-50 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/30"
-                            title={!item.tripId
-                              ? (lang === "VN" ? "Cần tripId (BE yêu cầu)" : "Requires tripId (BE)")
-                              : undefined}
                           >
                             {lang === "VN" ? "Cứu hộ" : "Rescue"}
                           </button>
                         ) : null}
-                        {canManage ? (
+                        {canResolveIncident ? (
                           <button
                             type="button"
                             disabled={busyId === item.incidentId}
-                            onClick={() => setResolveForm((prev) => ({
-                              ...prev,
+                            onClick={() => setResolveForm({
                               incidentId: item.incidentId,
                               boatCode: item.boatCode || "",
-                              resolutionNote: "",
-                            }))}
+                              resolutionNote: lang === "VN"
+                                ? "Tàu đã được kéo về bến và chuyển sang bảo trì."
+                                : "Boat towed to dock and moved to maintenance.",
+                              boatStatus: "UnderMaintenance",
+                              tripStatus: "",
+                            })}
                             className="rounded-xl bg-emerald-50 px-2.5 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100 disabled:opacity-50 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30"
                           >
                             {lang === "VN" ? "Đóng" : "Resolve"}
@@ -543,7 +686,9 @@ export function IncidentManagement() {
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#124757]/30 dark:border-slate-600 dark:bg-slate-900"
               >
                 <option value="">{lang === "VN" ? "Chọn tàu" : "Select boat"}</option>
-                {boats.map((boat) => (
+                {boats
+                  .filter((boat) => boatServiceType(boat).toLowerCase() !== "rescue")
+                  .map((boat) => (
                   <option key={boat.boatId || boat.id} value={boat.boatId || boat.id}>
                     {boat.boatCode || boat.code} · {boat.boatName || boat.name || ""}
                   </option>
@@ -552,7 +697,7 @@ export function IncidentManagement() {
             </label>
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                {lang === "VN" ? "Chuyến (cần có nếu muốn cứu hộ)" : "Trip (required for rescue)"}
+                {lang === "VN" ? "Chuyến (tuỳ chọn)" : "Trip (optional)"}
               </span>
               <select
                 value={reportForm.tripId}
@@ -573,8 +718,8 @@ export function IncidentManagement() {
               {reportForm.boatId && tripsForSelectedBoat.length === 0 ? (
                 <p className="text-[11px] font-medium text-slate-400">
                   {lang === "VN"
-                    ? "Không có chuyến đang chạy của tàu này."
-                    : "No active trips for this boat."}
+                    ? "Không có chuyến đang chạy — vẫn báo và điều cứu hộ được."
+                    : "No active trip — you can still report and dispatch rescue."}
                 </p>
               ) : null}
             </label>
@@ -698,35 +843,82 @@ export function IncidentManagement() {
             <h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
               {lang === "VN" ? "Điều tàu cứu hộ" : "Assign rescue boat"}
             </h2>
+            <p className="text-[11px] font-medium text-slate-500">
+              {rescueForm.incidentBoatCode || "—"}
+              {" · "}
+              {lang === "VN" ? "Vé active" : "Active tickets"}: {rescueForm.activeTicketCount}
+              {" · "}
+              {rescueForm.tripId
+                ? `trip ${String(rescueForm.tripId).slice(0, 8)}…`
+                : (lang === "VN" ? "Không có chuyến" : "No trip")}
+            </p>
             {!rescueForm.tripId ? (
-              <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200">
+              <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-300 dark:ring-slate-700">
                 {lang === "VN"
-                  ? "Chưa có tripId — BE sẽ từ chối assign-replacement-boat. Báo sự cố kèm chọn chuyến."
-                  : "No tripId — BE will reject assign-replacement-boat. Report again with a trip."}
+                  ? "Không có trip — vẫn điều được tàu cứu hộ (kéo về). Không cần tàu thay thế."
+                  : "No trip — rescue boat can still be dispatched (tow). No replacement needed."}
               </p>
-            ) : (
-              <p className="text-[11px] font-medium text-slate-400">
-                tripId: {String(rescueForm.tripId).slice(0, 8)}…
-              </p>
-            )}
+            ) : null}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                {lang === "VN" ? "Tàu thay thế" : "Replacement boat"}
+                {lang === "VN" ? "Tàu cứu hộ (kéo) *" : "Rescue boat *"}
               </span>
               <select
                 required
-                value={rescueForm.replacementBoatId}
-                onChange={(e) => setRescueForm((prev) => ({ ...prev, replacementBoatId: e.target.value }))}
+                value={rescueForm.rescueBoatId}
+                onChange={(e) => {
+                  const nextRescueId = e.target.value;
+                  setRescueForm((prev) => ({
+                    ...prev,
+                    rescueBoatId: nextRescueId,
+                    replacementBoatId: String(prev.replacementBoatId) === String(nextRescueId)
+                      ? ""
+                      : prev.replacementBoatId,
+                  }));
+                }}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
               >
-                <option value="">{lang === "VN" ? "Chọn tàu Active" : "Select Active boat"}</option>
+                <option value="">{lang === "VN" ? "Chọn tàu Rescue" : "Select Rescue boat"}</option>
                 {rescueCandidateBoats.map((boat) => (
                   <option key={boat.boatId || boat.id} value={boat.boatId || boat.id}>
-                    {boat.boatCode || boat.code}
+                    {boat.boatCode || boat.code} · {boat.boatName || boat.name || ""}
                   </option>
                 ))}
               </select>
+              {rescueCandidateBoats.length === 0 ? (
+                <p className="text-[11px] font-medium text-amber-600">
+                  {lang === "VN"
+                    ? "Chưa có tàu Active + serviceType=Rescue."
+                    : "No Active Rescue boats available."}
+                </p>
+              ) : null}
             </label>
+            {needsReplacementBoat ? (
+              <label className="block space-y-1.5">
+                <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Tàu thay thế (chở khách) *" : "Replacement passenger boat *"}
+                </span>
+                <select
+                  required
+                  value={rescueForm.replacementBoatId}
+                  onChange={(e) => setRescueForm((prev) => ({ ...prev, replacementBoatId: e.target.value }))}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
+                >
+                  <option value="">{lang === "VN" ? "Chọn tàu Passenger" : "Select Passenger boat"}</option>
+                  {replacementCandidateBoats.map((boat) => (
+                    <option key={boat.boatId || boat.id} value={boat.boatId || boat.id}>
+                      {boat.boatCode || boat.code} · {boat.boatName || boat.name || ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:ring-slate-700">
+                {lang === "VN"
+                  ? "Không có vé active — chỉ điều tàu cứu hộ (replacementBoatId = null)."
+                  : "No active tickets — rescue only (replacementBoatId = null)."}
+              </p>
+            )}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
                 Delay (min)
@@ -734,9 +926,10 @@ export function IncidentManagement() {
               <input
                 type="number"
                 min={0}
+                disabled={!needsReplacementBoat}
                 value={rescueForm.delayMinutes}
                 onChange={(e) => setRescueForm((prev) => ({ ...prev, delayMinutes: e.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900"
               />
             </label>
             <label className="block space-y-1.5">
@@ -751,23 +944,17 @@ export function IncidentManagement() {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setRescueForm({
-                  incidentId: "",
-                  incidentBoatId: "",
-                  incidentBoatCode: "",
-                  incidentDescription: "",
-                  tripId: "",
-                  replacementBoatId: "",
-                  delayMinutes: 30,
-                  note: "",
-                })}
+                onClick={() => setRescueForm(EMPTY_RESCUE_FORM)}
                 className="rounded-2xl px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-slate-500 hover:bg-slate-100"
               >
                 {lang === "VN" ? "Hủy" : "Cancel"}
               </button>
               <button
                 type="submit"
-                disabled={!rescueForm.tripId || !rescueForm.replacementBoatId}
+                disabled={
+                  !rescueForm.rescueBoatId
+                  || (needsReplacementBoat && !rescueForm.replacementBoatId)
+                }
                 className="rounded-2xl bg-sky-600 px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-white hover:brightness-110 disabled:opacity-50"
               >
                 {lang === "VN" ? "Điều tàu" : "Dispatch"}
@@ -786,6 +973,11 @@ export function IncidentManagement() {
             <h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
               {lang === "VN" ? "Đóng sự cố" : "Resolve incident"}
             </h2>
+            <p className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:ring-slate-700">
+              {lang === "VN"
+                ? "Backup khi GPS chưa gọi rescue-mission-completed. Chuẩn: GPS kéo về bến → BE tự Resolved + UnderMaintenance."
+                : "Backup if GPS did not call rescue-mission-completed. Main flow: GPS completes tow → BE auto Resolved + UnderMaintenance."}
+            </p>
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
                 {lang === "VN" ? "Ghi chú xử lý *" : "Resolution note *"}
@@ -807,6 +999,7 @@ export function IncidentManagement() {
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
                 >
                   <option value="UnderMaintenance">UnderMaintenance</option>
+                  <option value="Incident">Incident</option>
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </select>
@@ -818,7 +1011,7 @@ export function IncidentManagement() {
                   onChange={(e) => setResolveForm((prev) => ({ ...prev, tripStatus: e.target.value }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
                 >
-                  <option value="">{lang === "VN" ? "(Không đổi)" : "(Keep)"}</option>
+                  <option value="">{lang === "VN" ? "null (mặc định BE)" : "null (BE default)"}</option>
                   <option value="Cancelled">Cancelled</option>
                   <option value="Delayed">Delayed</option>
                   <option value="Completed">Completed</option>

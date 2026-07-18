@@ -15,6 +15,7 @@ export function CreateBoat() {
     name: "",
     numberOfDecks: 1, // Mặc định 1 tầng
     seatSetupType: "FullStandard",
+    serviceType: "Passenger",
     registrationNumber: "",
     maxSpeedKmh: 0,
     yearBuilt: new Date().getFullYear(),
@@ -103,6 +104,7 @@ export function CreateBoat() {
       payload.append("name", formData.name.trim());
       payload.append("numberOfDecks", String(formData.numberOfDecks));
       payload.append("seatSetupType", formData.seatSetupType);
+      payload.append("serviceType", formData.serviceType || "Passenger");
       payload.append("maxSpeedKmh", String(formData.maxSpeedKmh));
       payload.append("yearBuilt", String(formData.yearBuilt));
       if (formData.registrationNumber.trim()) payload.append("registrationNumber", formData.registrationNumber.trim());
@@ -153,6 +155,10 @@ export function CreateBoat() {
     { value: "FullStandard", label: "Waterbus" },
     { value: "StandardAndVip", label: "Water Sightseeing" },
   ];
+  const serviceTypeOptions = [
+    { value: "Passenger", label: lang === "VN" ? "Passenger — chở khách" : "Passenger" },
+    { value: "Rescue", label: lang === "VN" ? "Rescue — cứu hộ / kéo tàu" : "Rescue — tow / rescue" },
+  ];
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-4xl mx-auto animate-fade-in">
@@ -200,6 +206,16 @@ export function CreateBoat() {
               <label className={labelStyle}>{lang === "VN" ? "Tên phương tiện (*)" : "Vessel Name (*)"}</label>
               <input type="text" required placeholder="VD: Waterbus 001" value={formData.name} onChange={(e) => handleInputChange("name", e.target.value)} className={inputStyle} />
             </div>
+          </div>
+
+          <div className="relative z-40">
+            <label className={labelStyle}>{lang === "VN" ? "Loại dịch vụ (*)" : "Service type (*)"}</label>
+            <FormSelect
+              value={formData.serviceType}
+              onChange={(v) => handleInputChange("serviceType", v)}
+              options={serviceTypeOptions}
+              className={selectStyle}
+            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -266,11 +282,14 @@ export function CreateBoat() {
             {imagePreviews.map((previewUrl, index) => (
               <div key={index} className="aspect-4/3 relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 group shadow-sm">
                 <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                  <button type="button" onClick={() => handleRemoveImage(index)} className="bg-rose-500 text-white p-2 rounded-full hover:scale-110 transition-all shadow-lg">
-                    <span className="material-symbols-outlined text-[18px]">delete</span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveImage(index)}
+                  aria-label={lang === "VN" ? "Xóa ảnh" : "Remove image"}
+                  className="absolute right-1.5 top-1.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-white/95 text-slate-600 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-rose-50 hover:text-rose-600 dark:bg-slate-900/90 dark:text-slate-300 dark:ring-slate-600"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
               </div>
             ))}
             

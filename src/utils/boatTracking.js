@@ -63,117 +63,9 @@ const toTime = (value) => {
   return Number.isNaN(ms) ? 0 : ms;
 };
 
-const toRad = (deg) => (deg * Math.PI) / 180;
-
-const haversineMeters = (lat1, lng1, lat2, lng2) => {
-  const r = 6371000;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2
-    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * r * Math.asin(Math.min(1, Math.sqrt(a)));
-};
-
 /**
- * Lọc nhiễu / nhảy GPS trước khi vẽ map (phòng thủ phía FE).
- * Gốc vẫn nên sửa ở GPS device + BE; FE chỉ giảm teleport hiển thị.
- */
-const stabilizeGpsAgainstPrev = (prev, next) => {
-  if (!prev || !isValidLatLng(prev.latitude, prev.longitude)) return next;
-
-  const meters = haversineMeters(
-    Number(prev.latitude),
-    Number(prev.longitude),
-    Number(next.latitude),
-    Number(next.longitude),
-  );
-  if (!Number.isFinite(meters)) return next;
-
-  const speedKmh = Number.isFinite(Number(next.speed)) ? Math.max(0, Number(next.speed)) : 0;
-  const accM = Number.isFinite(Number(next.accuracyMeters)) && Number(next.accuracyMeters) > 0
-    ? Number(next.accuracyMeters)
-    : 12;
-  const prevTs = toTime(prev.recordedAt);
-  const nextTs = toTime(next.recordedAt);
-  const dtSec = prevTs > 0 && nextTs > prevTs
-    ? Math.min(120, (nextTs - prevTs) / 1000)
-    : 3;
-
-  const holdAsJumpCandidate = () => {
-    const candidateLat = Number(prev.gpsCandidateLatitude);
-    const candidateLng = Number(prev.gpsCandidateLongitude);
-    const hasCandidate = isValidLatLng(candidateLat, candidateLng);
-    const candidateDistance = hasCandidate
-      ? haversineMeters(
-        candidateLat,
-        candidateLng,
-        Number(next.latitude),
-        Number(next.longitude),
-      )
-      : Number.POSITIVE_INFINITY;
-
-    // Một GPS jump lẻ vẫn bị chặn. Live simulator/thiết bị gửi lại cùng vị trí
-    // ở packet kế tiếp thì chấp nhận, tránh giữ marker vĩnh viễn ở tọa độ cũ.
-    if (candidateDistance <= Math.max(20, accM * 2)) {
-      return {
-        ...next,
-        gpsCandidateLatitude: null,
-        gpsCandidateLongitude: null,
-      };
-    }
-
-    return {
-      ...next,
-      latitude: prev.latitude,
-      longitude: prev.longitude,
-      heading: Number.isFinite(Number(prev.heading)) ? prev.heading : next.heading,
-      gpsCandidateLatitude: next.latitude,
-      gpsCandidateLongitude: next.longitude,
-    };
-  };
-
-  if (meters < 0.3) {
-    if (speedKmh < 1.2 && Number.isFinite(Number(prev.heading))) {
-      return { ...next, heading: prev.heading, latitude: prev.latitude, longitude: prev.longitude };
-    }
-    return next;
-  }
-
-  // Đứng yên: bỏ nhiễu nhỏ + chặn teleport (vd. 350m khi speed=0).
-  if (speedKmh < 1.2) {
-    const noiseFloor = Math.max(10, accM * 0.8);
-    if (meters < noiseFloor) {
-      return {
-        ...next,
-        latitude: prev.latitude,
-        longitude: prev.longitude,
-        heading: Number.isFinite(Number(prev.heading)) ? prev.heading : next.heading,
-      };
-    }
-    const teleportLimit = Math.max(40, accM * 3);
-    if (meters > teleportLimit) {
-      return holdAsJumpCandidate();
-    }
-  } else {
-    const maxMeters = (Math.max(speedKmh, 3) / 3.6) * dtSec * 2.8 + Math.max(50, accM * 2);
-    if (meters > maxMeters && meters > 100) {
-      return holdAsJumpCandidate();
-    }
-  }
-
-  if (speedKmh >= 1.2 && meters < 80) {
-    return {
-      ...next,
-      latitude: Number(prev.latitude) * 0.35 + Number(next.latitude) * 0.65,
-      longitude: Number(prev.longitude) * 0.35 + Number(next.longitude) * 0.65,
-    };
-  }
-
-  return next;
-};
-
-/**
- * Chuẩn hóa payload BE/GPS/SignalR → marker ổn định.
+ * Chuẩn hóa payload BE/GPS/SignalR → marker.
+ * FE hiển thị đúng tọa độ GPS; không lọc/chặn nhảy vị trí phía client.
  */
 export const normalizeBoatLocation = (raw) => {
   if (!raw || typeof raw !== "object") return null;
@@ -225,6 +117,23 @@ export const normalizeBoatLocation = (raw) => {
     ? String(activeIncidentRaw.incidentId || activeIncidentRaw.id || "").trim() || null
     : null;
 
+  const remainingKmRaw = Number(
+    raw.remainingDistanceKmToNextStation
+    ?? raw.RemainingDistanceKmToNextStation
+    ?? raw.remainingDistanceKm
+    ?? NaN,
+  );
+  const remainingMinRaw = Number(
+    raw.remainingMinutesToNextStation
+    ?? raw.RemainingMinutesToNextStation
+    ?? NaN,
+  );
+  const movementStatus = raw.movementStatus ?? raw.MovementStatus ?? null;
+  const nextStationId = raw.nextStationId ?? raw.NextStationId ?? null;
+  const nextStationName = raw.nextStationName ?? raw.NextStationName ?? null;
+  const nextStationCode = raw.nextStationCode ?? raw.NextStationCode ?? null;
+  const currentStationName = raw.currentStationName ?? raw.CurrentStationName ?? null;
+
   return {
     boatId: boatId || boatCode,
     boatCode: boatCode || boatId,
@@ -245,7 +154,58 @@ export const normalizeBoatLocation = (raw) => {
     seatCount: Number.isFinite(seatRaw) && seatRaw >= 0 ? seatRaw : null,
     passengerCount: Number.isFinite(passengerRaw) && passengerRaw >= 0 ? passengerRaw : null,
     imageUrl: raw.imageUrl ?? raw.ImageUrl ?? raw.boat?.imageUrl ?? null,
+    // GPS/BE có thể gửi kèm (tracking hoặc operations schedule merge).
+    movementStatus: movementStatus ? String(movementStatus) : null,
+    nextStationId: nextStationId ? String(nextStationId) : null,
+    nextStationName: nextStationName ? String(nextStationName) : null,
+    nextStationCode: nextStationCode ? String(nextStationCode) : null,
+    currentStationName: currentStationName != null && currentStationName !== ""
+      ? String(currentStationName)
+      : null,
+    remainingDistanceKmToNextStation: Number.isFinite(remainingKmRaw) ? remainingKmRaw : null,
+    remainingMinutesToNextStation: Number.isFinite(remainingMinRaw) ? remainingMinRaw : null,
   };
+};
+
+/**
+ * Số tầng từ boat catalog / detail.
+ * - Đọc numberOfDecks / NumberOfDecks / deckCount
+ * - Nếu thiếu: StandardAndVip (Water Sightseeing) → 2 tầng
+ */
+export const resolveBoatNumberOfDecks = (source, fallback = 1) => {
+  if (!source || typeof source !== "object") return fallback;
+
+  const raw = source.numberOfDecks
+    ?? source.NumberOfDecks
+    ?? source.deckCount
+    ?? source.DeckCount
+    ?? source.decks
+    ?? source.Decks
+    ?? source.boat?.numberOfDecks
+    ?? source.boat?.NumberOfDecks;
+
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 1) return Math.trunc(n);
+
+  const setup = String(source.seatSetupType || source.SeatSetupType || "")
+    .toLowerCase()
+    .replace(/[_\s-]/g, "");
+  // FE: StandardAndVip = Water Sightseeing — thường 2 tầng.
+  if (setup === "standardandvip") return 2;
+
+  return fallback;
+};
+
+export const resolveBoatServiceType = (source, fallback = "Passenger") => {
+  if (!source || typeof source !== "object") return fallback;
+  const raw = source.serviceType
+    ?? source.ServiceType
+    ?? source.boat?.serviceType
+    ?? source.boat?.ServiceType;
+  if (raw) return String(raw);
+  const code = String(source.boatCode || source.code || source.BoatCode || "").toUpperCase();
+  if (code.startsWith("SOS") || code.startsWith("RS_")) return "Rescue";
+  return fallback;
 };
 
 /**
@@ -336,42 +296,50 @@ export const normalizeBoatLocationList = (payload) => {
   return [...byId.values()];
 };
 
-/** Chỉ ghi đè nếu packet mới hơn hoặc vị trí thật sự đổi. */
+/**
+ * Ghi nhận vị trí GPS thô — không snap bến, không giữ tọa độ cũ.
+ * Bỏ packet cũ hơn (recordedAt ưu tiên; sequence chỉ khi thiếu/timestamp bằng nhau).
+ */
 export const upsertBoatLocationMap = (prevMap, location) => {
   const normalized = normalizeBoatLocation(location);
   if (!normalized) return prevMap;
 
   const prev = prevMap.get(normalized.boatId);
   if (prev) {
-    const prevSeq = Number(prev.sequence);
-    const nextSeq = Number(normalized.sequence);
-    if (Number.isFinite(prevSeq) && Number.isFinite(nextSeq) && nextSeq < prevSeq) {
+    const prevTs = toTime(prev.recordedAt);
+    const nextTs = toTime(normalized.recordedAt);
+    // Không cho REST/packet cũ kéo marker về bến cũ.
+    if (prevTs > 0 && nextTs > 0 && nextTs < prevTs) {
       return prevMap;
     }
-    if (
-      (!Number.isFinite(nextSeq) || !Number.isFinite(prevSeq))
-      && toTime(normalized.recordedAt) > 0
-      && toTime(prev.recordedAt) > toTime(normalized.recordedAt)
-    ) {
-      return prevMap;
+
+    const sameTime = !(prevTs > 0 && nextTs > 0) || prevTs === nextTs;
+    if (sameTime) {
+      const prevSeq = Number(prev.sequence);
+      const nextSeq = Number(normalized.sequence);
+      if (Number.isFinite(prevSeq) && Number.isFinite(nextSeq) && nextSeq < prevSeq) {
+        return prevMap;
+      }
     }
-  }
 
-  const stabilized = stabilizeGpsAgainstPrev(prev, normalized);
-
-  if (prev) {
     const samePos =
-      Math.abs(Number(prev.latitude) - Number(stabilized.latitude)) < 1e-7
-      && Math.abs(Number(prev.longitude) - Number(stabilized.longitude)) < 1e-7
-      && String(prev.sequence ?? "") === String(stabilized.sequence ?? "")
-      && String(prev.recordedAt ?? "") === String(stabilized.recordedAt ?? "")
-      && Boolean(prev.isOnline) === Boolean(stabilized.isOnline)
-      && Number(prev.heading ?? NaN) === Number(stabilized.heading ?? NaN);
+      Math.abs(Number(prev.latitude) - Number(normalized.latitude)) < 1e-7
+      && Math.abs(Number(prev.longitude) - Number(normalized.longitude)) < 1e-7
+      && String(prev.sequence ?? "") === String(normalized.sequence ?? "")
+      && String(prev.recordedAt ?? "") === String(normalized.recordedAt ?? "")
+      && Boolean(prev.isOnline) === Boolean(normalized.isOnline)
+      && Number(prev.heading ?? NaN) === Number(normalized.heading ?? NaN);
 
     if (samePos) return prevMap;
   }
 
   const next = new Map(prevMap);
-  next.set(stabilized.boatId, { ...prev, ...stabilized });
+  // Chỉ giữ metadata cũ; lat/lng/heading/... luôn từ packet GPS mới.
+  next.set(normalized.boatId, {
+    ...(prev || {}),
+    ...normalized,
+    latitude: normalized.latitude,
+    longitude: normalized.longitude,
+  });
   return next;
 };

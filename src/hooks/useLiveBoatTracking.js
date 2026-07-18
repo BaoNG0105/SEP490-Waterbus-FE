@@ -43,6 +43,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
     setBoatsById((prev) => {
       let next = prev;
       (locations || []).forEach((loc) => {
+        // REST backup: upsertBoatLocationMap đã bỏ packet cũ hơn recordedAt.
         next = upsertBoatLocationMap(next, loc);
       });
       return next === prev ? prev : next;
@@ -52,6 +53,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
   const applyOneLocation = useCallback((payload) => {
     lastHubEventAtRef.current = Date.now();
     if (!pendingBatchRef.current) pendingBatchRef.current = [];
+    // SignalR = GPS realtime — luôn đưa vào batch, không lọc tọa độ phía FE.
     pendingBatchRef.current.push(payload);
     if (!rafRef.current) {
       rafRef.current = window.requestAnimationFrame(flushPending);

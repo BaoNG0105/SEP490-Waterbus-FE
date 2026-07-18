@@ -16,8 +16,28 @@ export function useLiveIncidents({ enabled = true, toast = true } = {}) {
 
   const loadOpen = useCallback(async ({ silent = false, announceNew = false } = {}) => {
     try {
-      const list = await fetchOpenIncidents();
+      const list = (await fetchOpenIncidents()).filter((item) => {
+        const status = String(item.resolutionStatus || "Open").toLowerCase();
+        return status === "open";
+      });
       if (!activeRef.current) return list;
+
+      if (import.meta.env.DEV) {
+        console.info(
+          "[incidents:open]",
+          list.map((item) => ({
+            incidentId: item.incidentId,
+            boatCode: item.boatCode || null,
+            rescueBoatId: item.rescueBoatId || null,
+            rescueBoatCode: item.rescueBoatCode || null,
+            replacementBoatId: item.replacementBoatId || null,
+            replacementBoatCode: item.replacementBoatCode || null,
+            rawRescueKeys: item.raw
+              ? Object.keys(item.raw).filter((k) => /rescue|replacement/i.test(k))
+              : [],
+          })),
+        );
+      }
 
       if (announceNew && toast) {
         const prev = knownIdsRef.current;
@@ -34,6 +54,7 @@ export function useLiveIncidents({ enabled = true, toast = true } = {}) {
       }
 
       knownIdsRef.current = new Set(list.map((item) => item.incidentId));
+      // BE GET Open = nguồn sự thật. Không giữ rescue* cũ (tránh SOS còn “cứu WB_001” sau khi đã xong).
       setIncidents(list);
       if (!silent) setErrorMsg("");
       return list;
@@ -56,7 +77,18 @@ export function useLiveIncidents({ enabled = true, toast = true } = {}) {
     setIncidents((prev) => {
       const open = String(normalized.resolutionStatus || "Open").toLowerCase() === "open";
       const without = prev.filter((item) => item.incidentId !== normalized.incidentId);
-      if (!open) return without;
+      if (!open) {
+        if (toast && prev.some((item) => item.incidentId === normalized.incidentId)) {
+          showToast({
+            icon: "success",
+            title: "Sự cố đã đóng",
+            text: `${normalized.boatCode || "Tàu"} · Resolved (GPS/BE)`,
+            timer: 4000,
+          });
+        }
+        knownIdsRef.current.delete(normalized.incidentId);
+        return without;
+      }
       const isNew = !prev.some((item) => item.incidentId === normalized.incidentId);
       if (isNew && toast) {
         showToast({
@@ -91,14 +123,16 @@ export function useLiveIncidents({ enabled = true, toast = true } = {}) {
     const unsubRescue = incidentHub.subscribeRescueDispatched((payload) => {
       if (!activeRef.current) return;
       if (toast) {
-        const boat = payload?.replacementBoatCode || payload?.boatCode || "";
+        const rescue = payload?.rescueBoatCode || payload?.RescueBoatCode || "";
+        const boat = payload?.boatCode || payload?.BoatCode || "";
         showToast({
           icon: "info",
           title: "Đã điều tàu cứu hộ",
-          text: boat ? `Tàu ${boat}` : "Rescue dispatched",
+          text: [boat && `SC: ${boat}`, rescue && `Cứu: ${rescue}`].filter(Boolean).join(" · ") || "Rescue dispatched",
           timer: 4000,
         });
       }
+      // Không optimistic ghi Open giả — chờ GET Open (tránh SOS dính nhiệm vụ cũ).
       loadOpen({ silent: true }).catch(() => {});
     });
 

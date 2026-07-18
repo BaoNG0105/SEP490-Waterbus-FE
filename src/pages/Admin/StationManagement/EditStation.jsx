@@ -362,11 +362,14 @@ export function EditStation() {
                             {imagePreviews.map((previewUrl, index) => (
                                 <div key={index} className="aspect-4/3 relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group">
                                     <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                        <button type="button" onClick={() => handleRemoveImage(index)} className="bg-rose-500 text-white p-1.5 rounded-full hover:scale-105 transition-all">
-                                            <span className="material-symbols-outlined text-xs">delete</span>
-                                        </button>
-                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveImage(index)}
+                                        aria-label={lang === "VN" ? "Xóa ảnh" : "Remove image"}
+                                        className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-md bg-white/95 text-slate-600 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-rose-50 hover:text-rose-600 dark:bg-slate-900/90 dark:text-slate-300 dark:ring-slate-600"
+                                    >
+                                        <span className="material-symbols-outlined text-[14px]">close</span>
+                                    </button>
                                 </div>
                             ))}
                             {imagePreviews.length < 6 && (

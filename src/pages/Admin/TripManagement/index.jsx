@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllTrips, toDdMmYyyy, TRIP_STATUS_OPTIONS } from "../../../services/tripService";
+import { fetchAllTrips, toDdMmYyyy, getTripStatusLabel, normalizeTripStatusKey, isTripRunningStatus } from "../../../services/tripService";
 import { fetchAllRoutes } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
 import { getRouteKindLabel } from "../../../utils/routeTypes";
@@ -28,14 +28,16 @@ const routeKindBadgeClass = (routeType) => {
 };
 
 const tripStatusBadgeClass = (status) => {
-    switch (status) {
+    switch (normalizeTripStatusKey(status)) {
         case "Scheduled":
             return "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400";
         case "Boarding":
             return "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400";
-        case "Departed":
+        case "InProgress":
             return "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400";
-        case "Arrived":
+        case "Delayed":
+            return "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400";
+        case "Completed":
             return "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400";
         case "Cancelled":
             return "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400";
@@ -45,11 +47,12 @@ const tripStatusBadgeClass = (status) => {
 };
 
 const tripStatusDotClass = (status) => {
-    switch (status) {
+    switch (normalizeTripStatusKey(status)) {
         case "Scheduled": return "bg-blue-500";
         case "Boarding": return "bg-amber-500";
-        case "Departed": return "bg-indigo-500";
-        case "Arrived": return "bg-emerald-500";
+        case "InProgress": return "bg-indigo-500";
+        case "Delayed": return "bg-orange-500";
+        case "Completed": return "bg-emerald-500";
         case "Cancelled": return "bg-rose-500";
         default: return "bg-slate-400";
     }
@@ -109,9 +112,9 @@ export function TripManagement() {
 
     const stats = {
         total: trips.length,
-        scheduled: trips.filter((t) => t.tripStatus === "Scheduled").length,
-        running: trips.filter((t) => t.tripStatus === "Boarding" || t.tripStatus === "Departed").length,
-        cancelled: trips.filter((t) => t.tripStatus === "Cancelled").length,
+        scheduled: trips.filter((t) => normalizeTripStatusKey(t.tripStatus) === "Scheduled").length,
+        running: trips.filter((t) => isTripRunningStatus(t.tripStatus)).length,
+        cancelled: trips.filter((t) => normalizeTripStatusKey(t.tripStatus) === "Cancelled").length,
     };
 
     const routeOptions = [
@@ -121,7 +124,12 @@ export function TripManagement() {
 
     const statusOptions = [
         { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All status" },
-        ...TRIP_STATUS_OPTIONS.map((s) => ({ value: s, label: s })),
+        { value: "Scheduled", label: getTripStatusLabel("Scheduled", lang) },
+        { value: "Boarding", label: getTripStatusLabel("Boarding", lang) },
+        { value: "InProgress", label: getTripStatusLabel("InProgress", lang) },
+        { value: "Delayed", label: getTripStatusLabel("Delayed", lang) },
+        { value: "Completed", label: getTripStatusLabel("Completed", lang) },
+        { value: "Cancelled", label: getTripStatusLabel("Cancelled", lang) },
     ];
 
     return (
@@ -325,7 +333,7 @@ export function TripManagement() {
                                                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${tripStatusBadgeClass(trip.tripStatus)}`}
                                             >
                                                 <span className={`w-1.5 h-1.5 rounded-full ${tripStatusDotClass(trip.tripStatus)}`}></span>
-                                                {trip.tripStatus || "—"}
+                                                {getTripStatusLabel(trip.tripStatus, lang)}
                                             </span>
                                         </td>
 
