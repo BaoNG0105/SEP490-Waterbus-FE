@@ -2,6 +2,7 @@ import {
     getTrips as apiGetTrips,
     createTrip as apiCreateTrip,
     searchTrips as apiSearchTrips,
+    searchSightseeingTrips as apiSearchSightseeingTrips,
     getTripById as apiGetTripById,
     getTripSeats as apiGetTripSeats,
     holdTripSeats as apiHoldTripSeats,
@@ -71,6 +72,20 @@ export const fetchTripSearch = async ({ fromStationId, toStationId, departureDat
         return data || [];
     } catch (error) {
         console.error('Lỗi khi tìm chuyến tàu:', error);
+        throw error;
+    }
+};
+
+// Service: Tìm chuyến tham quan ngắm cảnh (Water Sightseeing) theo ngày — tuyến vòng lặp (bến bắt đầu =
+// bến kết thúc) nên chỉ cần operatingDate, không cần chọn bến đi/bến đến.
+export const fetchSightseeingTripSearch = async ({ departureDate }) => {
+    try {
+        const data = await apiSearchSightseeingTrips({
+            operatingDate: toDdMmYyyy(departureDate),
+        });
+        return data || [];
+    } catch (error) {
+        console.error('Lỗi khi tìm chuyến tham quan:', error);
         throw error;
     }
 };

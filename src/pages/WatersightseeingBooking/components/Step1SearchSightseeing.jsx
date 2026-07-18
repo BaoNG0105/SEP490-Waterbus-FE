@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../../../context/AppContext";
-import { fetchTripSearch } from "../../../services/tripService";
+import { fetchSightseeingTripSearch } from "../../../services/tripService";
 
-// Bến Bạch Đằng — điểm đi/đến cố định của tuyến tham quan vòng quanh thành phố
-const SIGHTSEEING_STATION_ID = "e9f94591-62a0-491a-8287-fc0de0adea30";
 const SIGHTSEEING_ROUTE_TYPE = "SightseeingLoop";
+
+// routeName BE trả dạng "Bến Bạch Đằng · Vòng sightseeing" — tách phần tên bến trước dấu "·"
+// để hiển thị bến đón/bến trả mà không cần hardcode tên/ID bến ở FE.
+const extractWharfLabel = (routeName) => {
+  if (!routeName) return "";
+  const [station] = String(routeName).split("·");
+  return (station || routeName).trim();
+};
 
 export default function Step1SearchSightseeing({ bookingData, updateData, onNext }) {
   const { lang } = useApp();
@@ -13,13 +19,11 @@ export default function Step1SearchSightseeing({ bookingData, updateData, onNext
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
 
-  // Tuyến tham quan chỉ có 1 hành trình vòng cố định xuất phát/kết thúc tại bến Bạch Đằng
-  // nên tự động gán sẵn điểm đi/đến, người dùng chỉ cần chọn ngày.
+  // Tuyến tham quan là vòng lặp (bến bắt đầu = bến kết thúc) nên người dùng chỉ cần chọn ngày,
+  // không cần chọn bến đi/bến đến.
   useEffect(() => {
     updateData({
       isRoundTrip: false,
-      fromWharf: SIGHTSEEING_STATION_ID,
-      toWharf: SIGHTSEEING_STATION_ID,
       routeType: SIGHTSEEING_ROUTE_TYPE,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -29,12 +33,7 @@ export default function Step1SearchSightseeing({ bookingData, updateData, onNext
     setSearchError("");
     setIsSearching(true);
     try {
-      const departureTripOptions = await fetchTripSearch({
-        fromStationId: SIGHTSEEING_STATION_ID,
-        toStationId: SIGHTSEEING_STATION_ID,
-        departureDate,
-        routeType: SIGHTSEEING_ROUTE_TYPE,
-      });
+      const departureTripOptions = await fetchSightseeingTripSearch({ departureDate });
 
       if (!departureTripOptions.length) {
         setSearchError(
@@ -45,12 +44,14 @@ export default function Step1SearchSightseeing({ bookingData, updateData, onNext
         return;
       }
 
+      const wharfLabel = extractWharfLabel(departureTripOptions[0]?.routeName);
+
       updateData({
         departureTripOptions,
         returnTripOptions: [],
         routeType: SIGHTSEEING_ROUTE_TYPE,
-        fromWharfName: lang === "VN" ? "Bến Bạch Đằng" : "Bach Dang Wharf",
-        toWharfName: lang === "VN" ? "Bến Bạch Đằng" : "Bach Dang Wharf",
+        fromWharfName: wharfLabel,
+        toWharfName: wharfLabel,
         selectedDepartureTrip: null,
         selectedReturnTrip: null,
         selectedSeatsDeparture: [],
