@@ -17,6 +17,8 @@ import {
     getBoatCrewCalendar as apiGetBoatCrewCalendar,
 } from '../api/boatApi';
 
+const unwrapList = (data) => (Array.isArray(data) ? data : (data?.items || data?.data || []));
+
 // Hàm Service lấy danh sách tàu
 export const fetchAllBoats = async (params) => {
     try {
@@ -26,6 +28,12 @@ export const fetchAllBoats = async (params) => {
         console.error('Error fetching boats list:', error);
         throw error;
     }
+};
+
+/** Active boats by serviceType: Passenger | Rescue */
+export const fetchActiveBoatsByServiceType = async (serviceType) => {
+    const data = await fetchAllBoats({ status: "Active", serviceType });
+    return unwrapList(data);
 };
 
 // Hàm Service tạo tàu mới
@@ -105,8 +113,6 @@ export const removeBoatDocument = async (boatId, documentType) => {
         throw error;
     }
 };
-
-const unwrapList = (data) => (Array.isArray(data) ? data : (data?.items || data?.data || []));
 
 export const fetchBoatCrewAssignments = async (boatId, params = { activeOnly: true }) => {
     try {

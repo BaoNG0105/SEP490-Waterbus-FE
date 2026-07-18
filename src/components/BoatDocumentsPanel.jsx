@@ -31,7 +31,13 @@ const formatDateTime = (value, lang) => {
 const isValidFile = (file) =>
   BOAT_DOCUMENT_MIME_TYPES.includes(file.type) && file.size <= BOAT_DOCUMENT_MAX_SIZE;
 
-export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceStartedAt }) {
+export function BoatDocumentsPanel({
+  boatId,
+  boatCode,
+  boatStatus,
+  maintenanceStartedAt,
+  documentsRequireRefresh = false,
+}) {
   const { lang } = useApp();
   const [documents, setDocuments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -196,10 +202,23 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
     [documents]
   );
 
+  const boatDocContext = {
+    status: boatStatus,
+    maintenanceStartedAt,
+    documentsRequireRefresh,
+  };
+
   const documentsReadyForActivation = areDocumentsFreshAfterMaintenance(
-    { status: boatStatus, maintenanceStartedAt },
+    boatDocContext,
     documents
   );
+
+  const docsNeedingRefresh = useMemo(
+    () => documents.filter((doc) => doc.requiresRefresh),
+    [documents]
+  );
+
+  const showMaintenanceBanner = isUnderMaintenance || documentsRequireRefresh || docsNeedingRefresh.length > 0;
 
   if (isLoading) {
     return (
@@ -230,7 +249,7 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
         </div>
       </div>
 
-      {isUnderMaintenance && (
+      {showMaintenanceBanner && (
         <div
           className={`p-4 rounded-xl text-xs font-bold border shadow-sm ${
             documentsReadyForActivation
@@ -240,11 +259,11 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
         >
           {documentsReadyForActivation
             ? (lang === "VN"
-                ? "Hồ sơ đã được cập nhật sau bảo trì. Có thể chuyển tàu sang Hoạt động."
-                : "Documents have been refreshed after maintenance. You can switch the boat to Active.")
+                ? "Hồ sơ đã cập nhật sau bảo trì. Có thể chuyển tàu sang Hoạt động."
+                : "Documents refreshed after maintenance. You can switch the boat to Active.")
             : (lang === "VN"
-                ? "Tàu đang bảo trì. Vui lòng upload lại toàn bộ hồ sơ mới trước khi chuyển sang Hoạt động."
-                : "This boat is under maintenance. Re-upload all documents before switching to Active.")}
+                ? "Tàu cần cập nhật đăng kiểm sau bảo trì trước khi Active. Các hồ sơ khác vẫn giữ nguyên nếu đã nộp."
+                : "Update Inspection after maintenance before Active. Other uploaded documents stay as-is.")}
         </div>
       )}
 
@@ -278,19 +297,26 @@ export function BoatDocumentsPanel({ boatId, boatCode, boatStatus, maintenanceSt
                       {label}
                     </h4>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      {doc.isUploaded
-                        ? (lang === "VN" ? "Đã có hồ sơ" : "Document uploaded")
-                        : (lang === "VN" ? "Chưa có hồ sơ" : "No document yet")}
+                      {doc.requiresRefresh
+                        ? (lang === "VN" ? "File vẫn còn — cần cập nhật sau bảo trì" : "File kept — needs refresh after maintenance")
+                        : doc.isUploaded
+                          ? (lang === "VN" ? "Đã có hồ sơ" : "Document uploaded")
+                          : (lang === "VN" ? "Chưa có hồ sơ" : "No document yet")}
                     </p>
                   </div>
                 </div>
 
-                {doc.isUploaded && (
+                {doc.requiresRefresh ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20 shrink-0">
+                    <span className="material-symbols-outlined text-[13px]">sync_problem</span>
+                    {lang === "VN" ? "Cần cập nhật sau bảo trì" : "Needs update after maintenance"}
+                  </span>
+                ) : doc.isUploaded ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20 shrink-0">
                     <span className="material-symbols-outlined text-[13px]">check_circle</span>
                     {lang === "VN" ? "Đã nộp" : "Uploaded"}
                   </span>
-                )}
+                ) : null}
               </div>
 
               {doc.isUploaded ? (

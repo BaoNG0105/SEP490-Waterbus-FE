@@ -10,6 +10,7 @@ import { notify } from "../../../utils/swalToast";
 const BOAT_STATUS_OPTIONS = [
     { value: "Active", labelVn: "Hoạt động", labelEn: "Active", hintVn: "Sẵn sàng vận hành", hintEn: "Ready for operation", icon: "check_circle", tone: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", ring: "border-emerald-200 dark:border-emerald-500/30" },
     { value: "UnderMaintenance", labelVn: "Bảo trì", labelEn: "Under maintenance", hintVn: "Tạm dừng để bảo dưỡng", hintEn: "Temporarily under maintenance", icon: "build", tone: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-500/10", ring: "border-amber-200 dark:border-amber-500/30" },
+    { value: "Incident", labelVn: "Sự cố", labelEn: "Incident", hintVn: "Đang có sự cố Open", hintEn: "Has an open incident", icon: "emergency", tone: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-500/10", ring: "border-rose-200 dark:border-rose-500/30" },
     { value: "Inactive", labelVn: "Chưa hoạt động", labelEn: "Inactive", hintVn: "Không đưa vào lịch chạy", hintEn: "Not scheduled for trips", icon: "pause_circle", tone: "text-slate-500 dark:text-slate-300", bg: "bg-slate-50 dark:bg-slate-800", ring: "border-slate-200 dark:border-slate-600" },
     { value: "Retired", labelVn: "Dừng hoạt động", labelEn: "Retired", hintVn: "Ngừng sử dụng vĩnh viễn", hintEn: "Permanently out of service", icon: "cancel", tone: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-500/10", ring: "border-rose-200 dark:border-rose-500/30" },
 ];
@@ -406,8 +407,9 @@ export function BoatManagement() {
                                 { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
                                 { value: "Active", label: lang === "VN" ? "Active (Hoạt động)" : "Active" },
                                 { value: "Inactive", label: lang === "VN" ? "Inactive (Chưa hoạt động)" : "Inactive" },
-                                { value: "Retired", label: lang === "VN" ? "Retired (Dừng hoạt động)" : "Retired" },
                                 { value: "UnderMaintenance", label: lang === "VN" ? "UnderMaintenance (Bảo trì)" : "UnderMaintenance" },
+                                { value: "Incident", label: lang === "VN" ? "Incident (Sự cố)" : "Incident" },
+                                { value: "Retired", label: lang === "VN" ? "Retired (Dừng hoạt động)" : "Retired" },
                             ]}
                             className="min-w-50 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                         />
@@ -470,6 +472,9 @@ export function BoatManagement() {
                                             {/* "name": Tên tàu + Cảnh báo chưa cấu hình ghế */}
                                             <td className="py-4 px-6">
                                                 <p className="font-bold text-slate-800 dark:text-white">{boat.name}</p>
+                                                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                                    {String(boat.serviceType || "Passenger")}
+                                                </p>
                                                 {!boat.seatsConfigured && (
                                                     <p className="text-[10px] font-bold text-amber-500 mt-1 flex items-center gap-1">
                                                         <span className="material-symbols-outlined text-[14px]">warning</span>
@@ -710,8 +715,8 @@ export function BoatManagement() {
                             {selectedStatus === "Active" && (
                                 <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] font-bold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
                                     {lang === "VN"
-                                        ? "Active chỉ khi đã setup ghế đủ và có đủ 4 hồ sơ pháp lý. Nếu từng bảo trì, cần upload lại Đăng kiểm (Inspection)."
-                                        : "Active requires full seat setup and all 4 legal documents. After maintenance, re-upload Inspection."}
+                                        ? "Active cần đủ ghế + 4 hồ sơ. Sau bảo trì chỉ cập nhật Đăng kiểm nếu BE đánh dấu requiresRefresh — giữ nguyên các hồ sơ khác."
+                                        : "Active needs seats + 4 documents. After maintenance, refresh Inspection only when requiresRefresh — keep other files."}
                                 </div>
                             )}
                         </div>
