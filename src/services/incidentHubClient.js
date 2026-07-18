@@ -48,10 +48,15 @@ class IncidentHubClient {
   attachLifecycleHandlers(connection) {
     const onUpdated = (payload) => this.emitUpdated(payload);
     const onRescue = (payload) => this.emitRescue(payload);
+    const onResolved = (payload) => this.emitUpdated(payload);
 
     connection.on("IncidentUpdated", onUpdated);
     connection.on("incidentUpdated", onUpdated);
     connection.on("incidentupdated", onUpdated);
+
+    connection.on("IncidentResolved", onResolved);
+    connection.on("incidentResolved", onResolved);
+    connection.on("incidentresolved", onResolved);
 
     connection.on("RescueDispatched", onRescue);
     connection.on("rescueDispatched", onRescue);

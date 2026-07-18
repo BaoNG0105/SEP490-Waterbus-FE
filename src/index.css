@@ -513,6 +513,14 @@
   text-overflow: ellipsis;
 }
 
+.wb-boat-card__kind {
+  margin: 2px 0 0;
+  font: 800 10px/1.2 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #124757;
+}
+
 .wb-boat-card__seats {
   margin: 4px 0 0;
 }

@@ -21,6 +21,7 @@ export function EditBoat() {
   const [formData, setFormData] = useState(null);
   const [boatStatus, setBoatStatus] = useState("");
   const [maintenanceStartedAt, setMaintenanceStartedAt] = useState(null);
+  const [documentsRequireRefresh, setDocumentsRequireRefresh] = useState(false);
   const [seatMatrix, setSeatMatrix] = useState(null);
   const [activeDeck, setActiveDeck] = useState(1);
   
@@ -47,6 +48,7 @@ export function EditBoat() {
         seatCount: Number(boatDetail.seatCount) || 0,
         numberOfDecks: Number(boatDetail.numberOfDecks) || 1,
         seatSetupType: boatDetail.seatSetupType || "FullStandard",
+        serviceType: boatDetail.serviceType || boatDetail.ServiceType || "Passenger",
         registrationNumber: boatDetail.registrationNumber || "",
         maxSpeedKmh: Number(boatDetail.maxSpeedKmh) || 0,
         yearBuilt: Number(boatDetail.yearBuilt) || new Date().getFullYear(),
@@ -54,6 +56,7 @@ export function EditBoat() {
         rentalPrices: boatDetail.rentalPrices || []
       });
       setBoatStatus(boatDetail.status || "");
+      setDocumentsRequireRefresh(Boolean(boatDetail.documentsRequireRefresh));
       setMaintenanceStartedAt(
         boatDetail.maintenanceStartedAt ||
         boatDetail.maintenanceAt ||
@@ -177,6 +180,7 @@ export function EditBoat() {
         numberOfDecks: Number(formData.numberOfDecks),
         seatCount: Number(formData.seatCount), // Luôn gửi lại đúng số ghế cũ
         seatSetupType: formData.seatSetupType,
+        serviceType: formData.serviceType || "Passenger",
         maxSpeedKmh: Number(formData.maxSpeedKmh),
         yearBuilt: Number(formData.yearBuilt),
         registrationNumber: formData.registrationNumber?.trim() || null,
@@ -322,6 +326,10 @@ export function EditBoat() {
     { value: "FullStandard", label: "Waterbus" },
     { value: "StandardAndVip", label: "Water Sightseeing" },
   ];
+  const serviceTypeOptions = [
+    { value: "Passenger", label: lang === "VN" ? "Passenger — chở khách" : "Passenger" },
+    { value: "Rescue", label: lang === "VN" ? "Rescue — cứu hộ / kéo tàu" : "Rescue — tow / rescue" },
+  ];
   const disabledStyle = "opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-900/40"; 
 
   if (isLoading || !formData) {
@@ -398,6 +406,7 @@ export function EditBoat() {
           boatCode={formData.code}
           boatStatus={boatStatus}
           maintenanceStartedAt={maintenanceStartedAt}
+          documentsRequireRefresh={documentsRequireRefresh}
         />
       ) : activeTab === "crew" ? (
         <BoatDutyRosterPanel boatId={id} boatCode={formData.code} />
@@ -420,6 +429,16 @@ export function EditBoat() {
               <label className={labelStyle}>{lang === "VN" ? "Tên phương tiện (*)" : "Boat Name (*)"}</label>
               <input type="text" required value={formData.name} onChange={(e) => handleFieldChange("name", e.target.value)} className={inputStyle} />
             </div>
+          </div>
+
+          <div className="relative z-40">
+            <label className={labelStyle}>{lang === "VN" ? "Loại dịch vụ (*)" : "Service type (*)"}</label>
+            <FormSelect
+              value={formData.serviceType || "Passenger"}
+              onChange={(v) => handleFieldChange("serviceType", v)}
+              options={serviceTypeOptions}
+              className={selectStyle}
+            />
           </div>
 
           {/* Mã đăng ký và Năm đóng tàu đã được MỞ KHÓA */}
@@ -516,11 +535,14 @@ export function EditBoat() {
               {imagePreviews.map((previewUrl, index) => (
                 <div key={index} className="aspect-4/3 relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group">
                   <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <button type="button" onClick={() => handleRemoveImage(index)} className="bg-rose-500 text-white p-1.5 rounded-full hover:scale-105 transition-all">
-                      <span className="material-symbols-outlined text-xs">delete</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(index)}
+                    aria-label={lang === "VN" ? "Xóa ảnh" : "Remove image"}
+                    className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-md bg-white/95 text-slate-600 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-rose-50 hover:text-rose-600 dark:bg-slate-900/90 dark:text-slate-300 dark:ring-slate-600"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
                 </div>
               ))}
               {imagePreviews.length < 3 && (

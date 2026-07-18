@@ -61,8 +61,14 @@ export const normalizeIncident = (raw) => {
     resolutionNote: pick(raw, ["resolutionNote", "ResolutionNote"], ""),
     managerUserId: pick(raw, ["managerUserId", "assignedManagerId", "manager.id"], ""),
     managerName: pick(raw, ["managerName", "assignedManagerName", "manager.fullName"], ""),
-    replacementBoatId: pick(raw, ["replacementBoatId", "rescueBoatId"], ""),
-    replacementBoatCode: pick(raw, ["replacementBoatCode", "rescueBoatCode"], ""),
+    activeTicketCount: Number(pick(raw, ["activeTicketCount", "ActiveTicketCount"], 0)) || 0,
+    rescueBoatId: pick(raw, ["rescueBoatId", "RescueBoatId", "rescueBoat.boatId", "rescueBoat.id", "RescueBoat.BoatId", "RescueBoat.Id"], ""),
+    rescueBoatName: pick(raw, ["rescueBoatName", "RescueBoatName", "rescueBoat.boatName", "rescueBoat.name", "RescueBoat.BoatName", "RescueBoat.Name"], ""),
+    rescueBoatCode: pick(raw, ["rescueBoatCode", "RescueBoatCode", "rescueBoat.boatCode", "rescueBoat.code", "RescueBoat.BoatCode", "RescueBoat.Code"], ""),
+    rescueDispatchedAt: pick(raw, ["rescueDispatchedAt", "RescueDispatchedAt"], null) || null,
+    replacementBoatId: pick(raw, ["replacementBoatId", "ReplacementBoatId", "replacementBoat.boatId", "replacementBoat.id", "ReplacementBoat.BoatId"], ""),
+    replacementBoatName: pick(raw, ["replacementBoatName", "ReplacementBoatName", "replacementBoat.boatName", "replacementBoat.name", "ReplacementBoat.BoatName"], ""),
+    replacementBoatCode: pick(raw, ["replacementBoatCode", "ReplacementBoatCode", "replacementBoat.boatCode", "replacementBoat.code", "ReplacementBoat.BoatCode"], ""),
     raw,
   };
 };

@@ -9,10 +9,53 @@ import {
     releaseTripSeats as apiReleaseTripSeats,
 } from '../api/tripApi';
 
-export const TRIP_STATUS_OPTIONS = ['Scheduled', 'Boarding', 'Departed', 'Arrived', 'Cancelled'];
+export const TRIP_STATUS_OPTIONS = [
+  'Scheduled',
+  'Boarding',
+  'InProgress', // BE mới (legacy DB/API: Departed)
+  'Departed', // legacy alias
+  'Delayed',
+  'Completed', // BE mới (legacy DB/API: Arrived)
+  'Arrived', // legacy alias
+  'Cancelled',
+];
 export const TRIP_TYPE_OPTIONS = ['Regular', 'Charter'];
 export const ROUTE_TYPE_OPTIONS = ['Regular', 'SightseeingLoop', 'CharterReference'];
 export const SEAT_TYPE_OPTIONS = ['STANDARD', 'CABIN', 'SKY', 'RIVER'];
+
+/** Chuẩn hoá status BE mới + legacy về 1 key. */
+export const normalizeTripStatusKey = (status) => {
+  const raw = String(status || '').trim();
+  const key = raw.toLowerCase().replace(/[_\s-]/g, '');
+  if (key === 'inprogress' || key === 'departed') return 'InProgress';
+  if (key === 'completed' || key === 'arrived') return 'Completed';
+  if (key === 'scheduled') return 'Scheduled';
+  if (key === 'boarding') return 'Boarding';
+  if (key === 'delayed') return 'Delayed';
+  if (key === 'cancelled' || key === 'canceled') return 'Cancelled';
+  return raw || '';
+};
+
+/** Label badge FE theo contract BE. */
+export const getTripStatusLabel = (status, lang = 'VN') => {
+  const key = normalizeTripStatusKey(status);
+  const map = {
+    Scheduled: { vn: 'Đã lên lịch', en: 'Scheduled' },
+    Boarding: { vn: 'Đang lên tàu', en: 'Boarding' },
+    InProgress: { vn: 'Đang chạy', en: 'In progress' },
+    Delayed: { vn: 'Trễ', en: 'Delayed' },
+    Completed: { vn: 'Đã tới / Hoàn tất', en: 'Completed' },
+    Cancelled: { vn: 'Đã hủy', en: 'Cancelled' },
+  };
+  const row = map[key];
+  if (!row) return status || '—';
+  return lang === 'VN' ? row.vn : row.en;
+};
+
+export const isTripRunningStatus = (status) => {
+  const key = normalizeTripStatusKey(status);
+  return key === 'Boarding' || key === 'InProgress' || key === 'Delayed';
+};
 
 // input[type=date] "YYYY-MM-DD" -> "dd/MM/yyyy" (định dạng operatingDate BE yêu cầu)
 export const toDdMmYyyy = (yyyyMmDd) => {

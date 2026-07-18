@@ -144,14 +144,39 @@ L.Icon.Default.mergeOptions({
 });
 
 /**
- * Marker tàu kiểu FlightRadar: bóng tàu nhìn-từ-trên (mũi hướng lên khi 0°),
- * xoay theo heading. Cache theo trạng thái + góc (làm tròn 5°).
+ * Marker tàu — cùng icon thân tàu, chỉ khác màu:
+ * - deck1: xanh brand (#124757)
+ * - deck2: xanh dương (#1D4ED8)
+ * - rescue: cam (#EA580C)
+ * Sự cố ưu tiên đỏ.
  */
 const boatLeafletIcons = new Map();
 
-// Silhouette tàu nhìn từ trên (mũi hướng lên) trong viewBox 48x48.
-const boatTopSvg = (fill, ring, deck) => `
-  <svg width="100%" height="100%" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+const BOAT_KIND_COLORS = {
+  deck1: { fill: "#124757", deck: "#5EC8D6" },
+  deck2: { fill: "#1D4ED8", deck: "#93C5FD" },
+  rescue: { fill: "#EA580C", deck: "#FED7AA" },
+};
+
+const resolveBoatMarkerKind = (boat = {}) => {
+  const service = String(boat.serviceType || boat.ServiceType || "").toLowerCase();
+  const code = String(boat.boatCode || boat.code || "").toUpperCase();
+  if (service === "rescue" || code.startsWith("SOS") || code.startsWith("RS_")) return "rescue";
+
+  const decksRaw = boat.numberOfDecks ?? boat.NumberOfDecks ?? boat.deckCount;
+  const decks = Number(decksRaw);
+  if (Number.isFinite(decks) && decks >= 2) return "deck2";
+
+  const setup = String(boat.seatSetupType || boat.SeatSetupType || "")
+    .toLowerCase()
+    .replace(/[_\s-]/g, "");
+  if (setup === "standardandvip") return "deck2";
+
+  return "deck1";
+};
+
+const boatHullSvg = (fill, ring, deck) => `
+  <svg width="100%" height="100%" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M24 4
       C30 10 33 17 33 27
       C33 32 32.5 36 31.5 39
@@ -178,7 +203,10 @@ const getBoatLeafletIcon = ({
   maintenance = false,
   incident = false,
   heading = null,
+  kind = "deck1",
 } = {}) => {
+  const markerKind = ["rescue", "deck2", "deck1"].includes(kind) ? kind : "deck1";
+  const palette = BOAT_KIND_COLORS[markerKind] || BOAT_KIND_COLORS.deck1;
   const state = incident
     ? "incident"
     : maintenance
@@ -189,21 +217,31 @@ const getBoatLeafletIcon = ({
           ? "offline"
           : "online";
   const rot = Number.isFinite(Number(heading)) ? Math.round(Number(heading) / 5) * 5 : 0;
-  const key = `${state}|${rot}`;
+  const key = `${markerKind}|${state}|${rot}`;
   if (boatLeafletIcons.has(key)) return boatLeafletIcons.get(key);
 
   const size = selected || incident ? 50 : 44;
-  const fill = incident ? "#DC2626" : selected ? "#FFD100" : maintenance ? "#64748B" : "#124757";
-  const ring = "#FFFFFF";
-  const deck = incident ? "#FEE2E2" : selected ? "#0E4050" : maintenance ? "#94A3B8" : "#3FB6C9";
-  const online = !dimmed && !maintenance;
+  let fill = palette.fill;
+  let deck = palette.deck;
+  if (incident) {
+    fill = "#DC2626";
+    deck = "#FEE2E2";
+  } else if (selected) {
+    fill = "#FFD100";
+    deck = "#0E4050";
+  } else if (maintenance) {
+    fill = "#64748B";
+    deck = "#CBD5E1";
+  }
 
+  const ring = "#FFFFFF";
+  const online = !dimmed && !maintenance;
   const html = `
-    <div class="wb-boat ${dimmed ? "is-offline" : ""} ${maintenance ? "is-maintenance" : ""} ${incident ? "is-incident" : ""}" style="width:${size}px;height:${size}px;">
+    <div class="wb-boat is-${markerKind} ${dimmed ? "is-offline" : ""} ${maintenance ? "is-maintenance" : ""} ${incident ? "is-incident" : ""}" style="width:${size}px;height:${size}px;">
       ${incident ? `<span class="wb-boat__pulse wb-boat__pulse--incident"></span>` : ""}
       ${online && !incident ? `<span class="wb-boat__pulse" style="border-color:${fill};"></span>` : ""}
       <span class="wb-boat__rot" style="transform:rotate(${rot}deg);">
-        ${boatTopSvg(fill, ring, deck)}
+        ${boatHullSvg(fill, ring, deck)}
       </span>
     </div>
   `;
@@ -216,7 +254,7 @@ const getBoatLeafletIcon = ({
     popupAnchor: [0, -(size / 2)],
   });
   boatLeafletIcons.set(key, icon);
-  if (boatLeafletIcons.size > 240) {
+  if (boatLeafletIcons.size > 320) {
     const first = boatLeafletIcons.keys().next().value;
     boatLeafletIcons.delete(first);
   }
@@ -498,6 +536,17 @@ export const WaterwayMap = ({
             : null;
           const liveStatus = resolveBoatLiveStatus(boat);
           const isIncident = liveStatus.key === "incident";
+          const markerKind = resolveBoatMarkerKind(boat);
+          const kindLabel = markerKind === "rescue"
+            ? "Cứu hộ"
+            : markerKind === "deck2"
+              ? "2 tầng"
+              : "1 tầng";
+          const kindColor = markerKind === "rescue"
+            ? "#EA580C"
+            : markerKind === "deck2"
+              ? "#1D4ED8"
+              : "#124757";
 
           const boatCard = (
             <div className={`wb-boat-card ${underMaintenance ? "wb-boat-card--maintenance" : ""}`}>
@@ -521,7 +570,29 @@ export const WaterwayMap = ({
                 {boat.boatName ? (
                   <p className="wb-boat-card__name">{boat.boatName}</p>
                 ) : null}
-                {isIncident ? (
+                <p className="wb-boat-card__kind" style={{ color: isIncident ? "#DC2626" : kindColor }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 7,
+                      height: 7,
+                      borderRadius: 999,
+                      background: isIncident ? "#DC2626" : kindColor,
+                      marginRight: 5,
+                      verticalAlign: "middle",
+                    }}
+                  />
+                  {kindLabel}
+                </p>
+                {boat.rescuingBoatCode ? (
+                  <p className="wb-boat-card__note" style={{ color: "#EA580C" }}>
+                    Đang cứu {boat.rescuingBoatCode}
+                  </p>
+                ) : boat.rescuedByBoatCode ? (
+                  <p className="wb-boat-card__note" style={{ color: "#DC2626" }}>
+                    {boat.rescuedByBoatCode} đang kéo
+                  </p>
+                ) : isIncident ? (
                   <p className="wb-boat-card__note">Sự cố</p>
                 ) : underMaintenance ? (
                   <p className="wb-boat-card__note">Đang bảo trì</p>
@@ -544,8 +615,9 @@ export const WaterwayMap = ({
                 maintenance: underMaintenance && !isIncident,
                 incident: isIncident,
                 heading: boat.heading,
+                kind: markerKind,
               })}
-              zIndexOffset={selected ? 1000 : isIncident ? 400 : underMaintenance ? 80 : dimmed ? 100 : 200}
+              zIndexOffset={selected ? 1000 : isIncident ? 400 : markerKind === "rescue" ? 350 : underMaintenance ? 80 : dimmed ? 100 : 200}
               eventHandlers={{
                 click: (event) => {
                   // Chỉ 1 card (tooltip) — không mở Popup chồng lên.

@@ -5,6 +5,7 @@ import { useApp } from "../../../context/AppContext";
 import { WaterwayMap } from "../../../components/WaterwayMap";
 import { useLiveBoatTracking } from "../../../hooks/useLiveBoatTracking";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
+import { useOperationsSchedule } from "../../../hooks/useOperationsSchedule";
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchAllBoats } from "../../../services/boatService";
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
@@ -14,10 +15,10 @@ import {
   reportIncident,
 } from "../../../services/incidentService";
 import { getBoatImageUrl } from "../../../utils/charterBookingAdmin";
-import { isBoatEligibleForLiveMap, isBoatUnderMaintenance } from "../../../utils/boatTracking";
+import { isBoatEligibleForLiveMap, isBoatUnderMaintenance, resolveBoatNumberOfDecks, resolveBoatServiceType } from "../../../utils/boatTracking";
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
 import { buildBoatSituations, getBoatStatusTag } from "../../../utils/boatSituation";
-import { isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
+import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { notify, showToast } from "../../../utils/swalToast";
 
 const formatRelative = (value, lang) => {
@@ -67,6 +68,8 @@ const boardTagClass = (tone) => {
   switch (tone) {
     case "incident":
       return "text-rose-500";
+    case "rescue":
+      return "text-amber-600 dark:text-amber-400";
     case "delayed":
       return "text-amber-500";
     case "boarding":
@@ -87,20 +90,24 @@ const formatDistance = (meters, lang) => {
     : `${(meters / 1000).toFixed(1)} km`;
 };
 
-export function LiveTracking() {
+export function LiveTracking({ viewTabs = null } = {}) {
   const { lang } = useApp();
   const { user } = useSelector((state) => state.auth);
-  // TEMP: cho Manager/Admin báo sự cố để test (sau có thể siết lại chỉ Staff).
-  const canReportIncident = isAdminUser(user) || isManagerUser(user);
+  // BE: Admin / Manager / Staff được báo sự cố.
+  const canReportIncident = isAdminUser(user) || isManagerUser(user) || isStaffUser(user);
   const { boats, connectionMode, errorMsg, isInitialLoading, refresh } = useLiveBoatTracking({ enabled: true });
   const { openBoatIds, incidents: openIncidents, refresh: refreshIncidents } = useLiveIncidents({
     enabled: true,
     toast: true,
   });
+  const {
+    byBoatKey: opsByBoatKey,
+    refresh: refreshOpsSchedule,
+  } = useOperationsSchedule({ enabled: true });
   const [selectedBoatId, setSelectedBoatId] = useState("");
   const [query, setQuery] = useState("");
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
-  const [situationCollapsed, setSituationCollapsed] = useState(false);
+  const [fleetCollapsed, setFleetCollapsed] = useState(true);
+  const [situationCollapsed, setSituationCollapsed] = useState(true);
   const [stations, setStations] = useState([]);
   const [boatCatalogByKey, setBoatCatalogByKey] = useState(() => new Map());
   const [routeOverlays, setRouteOverlays] = useState([]);
@@ -139,17 +146,25 @@ export function LiveTracking() {
         const next = new Map();
         list.forEach((item) => {
           if (!item) return;
-          const seatCount = Number(item.seatCount);
+          const seatCount = Number(item.seatCount ?? item.SeatCount);
           const meta = {
             imageUrl: getBoatImageUrl(item),
             seatCount: Number.isFinite(seatCount) && seatCount >= 0 ? seatCount : null,
-            boatName: item.boatName || item.name || "",
-            operationalStatus: item.status || "",
+            boatName: item.boatName || item.name || item.BoatName || "",
+            boatCode: String(item.boatCode || item.code || item.BoatCode || "").trim(),
+            boatId: String(item.boatId || item.id || item.BoatId || "").trim(),
+            operationalStatus: item.status || item.Status || "",
+            numberOfDecks: resolveBoatNumberOfDecks(item, 1),
+            seatSetupType: item.seatSetupType || item.SeatSetupType || "",
+            serviceType: resolveBoatServiceType(item, "Passenger"),
           };
-          const id = String(item.boatId || item.id || "").trim();
-          const code = String(item.boatCode || item.code || "").trim();
+          const id = meta.boatId;
+          const code = meta.boatCode;
           if (id) next.set(id, meta);
-          if (code) next.set(code, meta);
+          if (code) {
+            next.set(code, meta);
+            next.set(code.toUpperCase(), meta);
+          }
         });
         setBoatCatalogByKey(next);
       })
@@ -204,33 +219,171 @@ export function LiveTracking() {
     };
   }, []);
 
+  const rescueMissionByKey = useMemo(() => {
+    const resolveCode = (id, code) => {
+      const rawCode = String(code || "").trim();
+      if (rawCode) return rawCode;
+      const rawId = String(id || "").trim();
+      if (!rawId) return "";
+      const meta = boatCatalogByKey.get(rawId) || boatCatalogByKey.get(rawId.toUpperCase());
+      if (meta?.boatCode) return String(meta.boatCode).trim();
+      return rawId;
+    };
+
+    const map = new Map();
+    openIncidents.forEach((incident) => {
+      const targetId = String(incident.boatId || "").trim();
+      const rescueId = String(incident.rescueBoatId || "").trim();
+      const replacementId = String(incident.replacementBoatId || "").trim();
+      const targetCode = resolveCode(targetId, incident.boatCode);
+      const rescueCode = resolveCode(rescueId, incident.rescueBoatCode);
+      const replacementCode = resolveCode(replacementId, incident.replacementBoatCode);
+      if (!rescueId && !rescueCode) return;
+
+      const put = (key, value) => {
+        if (!key) return;
+        map.set(key, value);
+        map.set(String(key).toUpperCase(), value);
+      };
+
+      const rescueInfo = {
+        role: "rescue",
+        targetCode,
+        targetId,
+        rescueCode,
+        incidentId: incident.incidentId,
+      };
+      put(rescueId, rescueInfo);
+      put(rescueCode, rescueInfo);
+
+      const targetInfo = {
+        role: "incident",
+        rescueCode,
+        rescueId,
+        targetCode,
+        incidentId: incident.incidentId,
+      };
+      put(targetId, targetInfo);
+      put(targetCode, targetInfo);
+
+      if (replacementId || replacementCode) {
+        const replacementInfo = {
+          role: "replacement",
+          targetCode,
+          rescueCode,
+          incidentId: incident.incidentId,
+        };
+        put(replacementId, replacementInfo);
+        put(replacementCode, replacementInfo);
+      }
+    });
+    return map;
+  }, [openIncidents, boatCatalogByKey]);
+
   const enrichedBoats = useMemo(
     () => boats
       .map((boat) => {
-        const meta = boatCatalogByKey.get(String(boat.boatId))
-          || boatCatalogByKey.get(String(boat.boatCode))
+        const codeKey = String(boat.boatCode || "").trim();
+        const idKey = String(boat.boatId || "").trim();
+        const meta = boatCatalogByKey.get(idKey)
+          || boatCatalogByKey.get(codeKey)
+          || boatCatalogByKey.get(codeKey.toUpperCase())
           || null;
-        const hasOpenIncident = boat.activeIncident === true
-          || openBoatIds.has(String(boat.boatId))
-          || openBoatIds.has(String(boat.boatCode));
+        const schedule = opsByBoatKey.get(idKey)
+          || opsByBoatKey.get(codeKey)
+          || opsByBoatKey.get(codeKey.toUpperCase())
+          || null;
+        const hasOpenIncident = openBoatIds.has(idKey)
+          || openBoatIds.has(codeKey)
+          || openBoatIds.has(codeKey.toUpperCase())
+          // GPS flag chỉ bổ sung khi tàu chưa bảo trì (tránh SỰ CỐ giả sau khi đã Resolved).
+          || (boat.activeIncident === true && !isBoatUnderMaintenance({
+            operationalStatus: boat.boatStatus || boat.operationalStatus || meta?.operationalStatus || "",
+          }));
         const opsFromTracking = boat.boatStatus || boat.operationalStatus || "";
+        const numberOfDecks = resolveBoatNumberOfDecks(meta || boat, 1);
+        const serviceType = resolveBoatServiceType(meta || boat, "Passenger");
+        let mission = rescueMissionByKey.get(idKey)
+          || rescueMissionByKey.get(codeKey)
+          || rescueMissionByKey.get(codeKey.toUpperCase())
+          || null;
+        // Nhiệm vụ cứu chỉ hiện khi tàu đích vẫn còn trong Open incidents.
+        if (mission?.role === "rescue") {
+          const targetOk = (mission.targetId && openBoatIds.has(String(mission.targetId)))
+            || (mission.targetCode && (
+              openBoatIds.has(String(mission.targetCode))
+              || openBoatIds.has(String(mission.targetCode).toUpperCase())
+            ));
+          if (!targetOk) mission = null;
+        }
+        if (mission?.role === "incident" && !hasOpenIncident) {
+          mission = null;
+        }
+
+        // Marker luôn theo GPS tracking; chỉ bổ sung lat/lng từ schedule khi tracking thiếu.
+        const trackingLat = Number(boat.latitude);
+        const trackingLng = Number(boat.longitude);
+        const hasTrackingPos = Number.isFinite(trackingLat) && Number.isFinite(trackingLng);
+        const scheduleLat = Number(schedule?.latestLatitude);
+        const scheduleLng = Number(schedule?.latestLongitude);
+        const hasSchedulePos = Number.isFinite(scheduleLat) && Number.isFinite(scheduleLng);
+
         const base = meta
           ? {
             ...boat,
             imageUrl: boat.imageUrl || meta.imageUrl,
             seatCount: boat.seatCount ?? meta.seatCount,
-            boatName: boat.boatName || meta.boatName,
-            // Ưu tiên boatStatus từ tracking (sau báo sự cố BE set UnderMaintenance).
+            boatName: boat.boatName || meta.boatName || schedule?.boatName,
+            numberOfDecks,
+            seatSetupType: meta.seatSetupType || boat.seatSetupType,
+            serviceType,
             operationalStatus: opsFromTracking || meta.operationalStatus || "",
           }
           : {
             ...boat,
+            boatName: boat.boatName || schedule?.boatName,
+            numberOfDecks,
+            serviceType,
             operationalStatus: opsFromTracking || boat.operationalStatus || "",
           };
-        return { ...base, hasOpenIncident, activeIncident: hasOpenIncident || boat.activeIncident === true };
+
+        return {
+          ...base,
+          latitude: hasTrackingPos ? trackingLat : (hasSchedulePos ? scheduleLat : boat.latitude),
+          longitude: hasTrackingPos ? trackingLng : (hasSchedulePos ? scheduleLng : boat.longitude),
+          speed: Number.isFinite(Number(boat.speed))
+            ? boat.speed
+            : (schedule?.latestSpeedKmh ?? boat.speed),
+          isOnline: boat.isOnline === true
+            || schedule?.isGpsOnline === true
+            || base.isOnline === true,
+          // Ops schedule = nguồn movement / ETA / khoảng cách tới bến (không tự snap marker).
+          movementStatus: schedule?.movementStatus || boat.movementStatus || null,
+          tripId: schedule?.tripId || boat.tripId || null,
+          tripCode: schedule?.tripCode || boat.tripCode || null,
+          routeName: schedule?.routeName || boat.routeName || null,
+          currentStationName: schedule?.currentStationName ?? boat.currentStationName ?? null,
+          currentStationCode: schedule?.currentStationCode || boat.currentStationCode || null,
+          nextStationId: schedule?.nextStationId || boat.nextStationId || null,
+          nextStationName: schedule?.nextStationName || boat.nextStationName || null,
+          nextStationCode: schedule?.nextStationCode || boat.nextStationCode || null,
+          remainingDistanceKmToNextStation:
+            schedule?.remainingDistanceKmToNextStation
+            ?? boat.remainingDistanceKmToNextStation
+            ?? null,
+          remainingMinutesToNextStation:
+            schedule?.remainingMinutesToNextStation
+            ?? boat.remainingMinutesToNextStation
+            ?? null,
+          hasOpenIncident,
+          activeIncident: hasOpenIncident || boat.activeIncident === true,
+          rescueMission: mission,
+          rescuingBoatCode: mission?.role === "rescue" ? (mission.targetCode || "") : "",
+          rescuedByBoatCode: mission?.role === "incident" ? (mission.rescueCode || "") : "",
+        };
       })
       .filter(isBoatEligibleForLiveMap),
-    [boats, boatCatalogByKey, openBoatIds],
+    [boats, boatCatalogByKey, openBoatIds, opsByBoatKey, rescueMissionByKey],
   );
 
   const filteredBoats = useMemo(() => {
@@ -314,6 +467,7 @@ export function LiveTracking() {
       await Promise.all([
         refreshIncidents().catch(() => {}),
         refresh().catch(() => {}),
+        refreshOpsSchedule().catch(() => {}),
       ]);
     } catch (error) {
       notify({
@@ -340,27 +494,51 @@ export function LiveTracking() {
         className="h-full min-h-0"
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-24 bg-gradient-to-b from-[#0E4050]/45 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-20 bg-gradient-to-b from-[#0E4050]/40 to-transparent" />
 
-      <div className="absolute left-3 right-3 top-3 z-30 flex items-center justify-between gap-3 md:left-4 md:right-4 md:top-4">
-        <h1 className="font-headline text-xl font-black tracking-tight text-white drop-shadow-md md:text-2xl">
-          {lang === "VN" ? "Theo dõi tàu" : "Live tracking"}
-        </h1>
-        <div className="flex items-center gap-2">
+      <div className="absolute left-3 right-3 top-3 z-30 flex items-start justify-between gap-2 md:left-4 md:right-4 md:top-4">
+        <div className="pointer-events-auto inline-flex max-w-[min(100%,18rem)] flex-wrap items-center gap-1.5 rounded-2xl bg-black/30 px-2.5 py-1.5 backdrop-blur-md">
+          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-white/90">
+            <span className="h-2 w-2 rounded-full bg-[#124757] ring-1 ring-white/40" />
+            {lang === "VN" ? "1 tầng" : "1 deck"}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-white/90">
+            <span className="h-2 w-2 rounded-full bg-[#1D4ED8] ring-1 ring-white/40" />
+            {lang === "VN" ? "2 tầng" : "2 decks"}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-white/90">
+            <span className="h-2 w-2 rounded-full bg-[#EA580C] ring-1 ring-white/40" />
+            {lang === "VN" ? "Cứu hộ" : "Rescue"}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-white/90">
+            <span className="h-2 w-2 rounded-full bg-[#DC2626] ring-1 ring-white/40" />
+            {lang === "VN" ? "Sự cố" : "Incident"}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-white/90" title={chip.label}>
+            <span className={`h-2 w-2 rounded-full ${chip.dot} ring-1 ring-white/40`} />
+            {chip.label}
+          </span>
+        </div>
+        <div className="pointer-events-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {viewTabs}
           {canReportIncident ? (
             <button
               type="button"
               onClick={() => openReportForBoat(selectedBoat || enrichedBoats[0] || null)}
               className="inline-flex h-9 items-center gap-1.5 rounded-full bg-rose-600 px-3 text-[11px] font-headline font-black uppercase tracking-wider text-white shadow-md transition hover:brightness-110"
-              title={lang === "VN" ? "Báo sự cố (test Manager)" : "Report incident (Manager test)"}
+              title={lang === "VN" ? "Báo sự cố" : "Report incident"}
             >
               <span className="material-symbols-outlined text-[16px]" aria-hidden>report</span>
-              {lang === "VN" ? "Báo sự cố" : "Report"}
+              <span className="hidden sm:inline">{lang === "VN" ? "Báo sự cố" : "Report"}</span>
             </button>
           ) : null}
           <button
             type="button"
-            onClick={() => refresh().catch(() => {})}
+            onClick={() => {
+              refresh().catch(() => {});
+              refreshIncidents().catch(() => {});
+              refreshOpsSchedule().catch(() => {});
+            }}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#124757] shadow-md transition hover:bg-slate-50"
             title={lang === "VN" ? "Tải lại" : "Refresh"}
           >
@@ -369,13 +547,13 @@ export function LiveTracking() {
         </div>
       </div>
 
-      {/* ===== Panel đội tàu (trái) ===== */}
-      {panelCollapsed ? (
+      {/* ===== 2 bảng: trái Đội tàu · phải Tình hình (nền kính) ===== */}
+      {fleetCollapsed ? (
         <button
           type="button"
-          onClick={() => setPanelCollapsed(false)}
-          className="absolute bottom-3 left-3 z-30 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-2xl bg-white/95 px-3.5 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.16)] ring-1 ring-slate-200/80 backdrop-blur-xl transition hover:bg-white dark:bg-slate-900/95 dark:ring-slate-700 md:bottom-4 md:left-4"
-          title={lang === "VN" ? "Mở danh sách tàu" : "Open fleet list"}
+          onClick={() => setFleetCollapsed(false)}
+          className="absolute bottom-3 left-3 z-30 inline-flex items-center gap-2 rounded-2xl bg-white/55 px-3.5 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.14)] ring-1 ring-white/50 backdrop-blur-xl transition hover:bg-white/70 dark:bg-slate-900/55 dark:ring-slate-700/60 md:bottom-4 md:left-4"
+          title={lang === "VN" ? "Mở đội tàu" : "Open fleet"}
         >
           <span className="material-symbols-outlined text-[18px] text-[#124757] dark:text-yellow-400" aria-hidden>
             keyboard_arrow_up
@@ -386,25 +564,25 @@ export function LiveTracking() {
           <span className={`inline-flex h-2 w-2 rounded-full ${chip.dot}`} />
         </button>
       ) : (
-        <aside className="absolute bottom-3 left-3 z-30 flex max-h-[min(48vh,22rem)] w-[min(calc(100%-1.5rem),17rem)] flex-col overflow-hidden rounded-2xl bg-white/95 shadow-[0_18px_40px_rgba(15,23,42,0.18)] ring-1 ring-slate-200/80 backdrop-blur-xl dark:bg-slate-900/95 dark:ring-slate-700 md:bottom-4 md:left-4">
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
-            <div className="min-w-0 pl-0.5">
+        <aside className="absolute bottom-3 left-3 z-30 flex max-h-[min(48vh,22rem)] w-[min(calc(100%-1.5rem),17.5rem)] flex-col overflow-hidden rounded-2xl bg-white/55 shadow-[0_18px_40px_rgba(15,23,42,0.14)] ring-1 ring-white/50 backdrop-blur-xl dark:bg-slate-900/55 dark:ring-slate-700/60 md:bottom-4 md:left-4">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/40 px-3 py-2 dark:border-slate-700/50">
+            <div className="min-w-0">
               <p className="font-headline text-[11px] font-black uppercase tracking-[0.14em] text-[#124757] dark:text-yellow-400">
                 {lang === "VN" ? "Đội tàu" : "Fleet"}
               </p>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
                 {enrichedBoats.length} {lang === "VN" ? "tàu" : "boats"}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider ring-1 ${chip.className}`}>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/40 px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 ring-1 ring-white/50 dark:bg-slate-800/40 dark:text-slate-200">
                 <span className={`h-1.5 w-1.5 rounded-full ${chip.dot}`} />
                 {chip.label}
               </span>
               <button
                 type="button"
-                onClick={() => setPanelCollapsed(true)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-[#124757] dark:hover:bg-slate-800 dark:hover:text-yellow-400"
+                onClick={() => setFleetCollapsed(true)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/50 hover:text-[#124757] dark:hover:bg-slate-800 dark:hover:text-yellow-400"
                 title={lang === "VN" ? "Thu gọn" : "Collapse"}
               >
                 <span className="material-symbols-outlined text-[20px]" aria-hidden>keyboard_arrow_down</span>
@@ -412,8 +590,8 @@ export function LiveTracking() {
             </div>
           </div>
 
-          <div className="shrink-0 px-2.5 pt-2.5">
-            <label className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200/80 focus-within:ring-[#124757]/35 dark:bg-slate-800 dark:ring-slate-700">
+          <div className="shrink-0 px-2.5 pt-2">
+            <label className="flex items-center gap-2 rounded-xl bg-white/45 px-2.5 py-1.5 ring-1 ring-white/55 focus-within:ring-[#124757]/35 dark:bg-slate-800/45 dark:ring-slate-700/55">
               <span className="material-symbols-outlined text-[15px] text-slate-400" aria-hidden>search</span>
               <input
                 value={query}
@@ -423,76 +601,102 @@ export function LiveTracking() {
               />
             </label>
             {errorMsg ? (
-              <p className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">
+              <p className="mt-1.5 rounded-xl bg-rose-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-rose-600 dark:text-rose-300">
                 {errorMsg}
               </p>
             ) : null}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5 pb-2.5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5 pb-2">
             {isInitialLoading ? (
-              <div className="flex justify-center py-8">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-[#124757] dark:border-t-yellow-400" />
+              <div className="flex justify-center py-6">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-[#124757] dark:border-t-yellow-400" />
               </div>
             ) : filteredBoats.length === 0 ? (
-              <p className="px-3 py-6 text-center text-xs font-medium text-slate-400">
+              <p className="px-2 py-5 text-center text-[11px] font-medium text-slate-400">
                 {lang === "VN" ? "Chưa có tín hiệu GPS." : "No GPS signal yet."}
               </p>
             ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredBoats.map((boat, index) => {
+              <ul>
+                {filteredBoats.map((boat) => {
                   const active = selectedBoatId === boat.boatId;
                   const isIncident = boat.hasOpenIncident === true;
                   const underMaintenance = isBoatUnderMaintenance(boat) && !isIncident;
                   const tag = getBoatStatusTag(boat, stations, lang);
+                  const service = String(boat.serviceType || "").toLowerCase();
+                  const decks = Number(boat.numberOfDecks) || 1;
+                  const isRescue = service === "rescue" || String(boat.boatCode || "").toUpperCase().startsWith("SOS");
+                  const kindLabel = isRescue
+                    ? (lang === "VN" ? "Cứu hộ" : "Rescue")
+                    : decks >= 2
+                      ? (lang === "VN" ? "2 tầng" : "2 decks")
+                      : (lang === "VN" ? "1 tầng" : "1 deck");
+                  const kindColor = isIncident
+                    ? "#DC2626"
+                    : isRescue
+                      ? "#EA580C"
+                      : decks >= 2
+                        ? "#1D4ED8"
+                        : "#124757";
+                  const missionLine = boat.rescuingBoatCode
+                    ? (lang === "VN" ? `Đang cứu ${boat.rescuingBoatCode}` : `Rescuing ${boat.rescuingBoatCode}`)
+                    : boat.rescuedByBoatCode
+                      ? (lang === "VN" ? `${boat.rescuedByBoatCode} đang kéo` : `${boat.rescuedByBoatCode} towing`)
+                      : null;
+                  const statusTag = boat.rescuingBoatCode
+                    ? {
+                      label: lang === "VN" ? `CỨU ${boat.rescuingBoatCode}` : `TOW ${boat.rescuingBoatCode}`,
+                      tone: "rescue",
+                      detail: missionLine,
+                    }
+                    : tag;
 
                   return (
                     <li key={boat.boatId}>
                       <button
                         type="button"
                         onClick={() => setSelectedBoatId((prev) => (prev === boat.boatId ? "" : boat.boatId))}
-                        className={`flex w-full items-center gap-2 px-2 py-2 text-left transition ${
+                        className={`flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition ${
                           underMaintenance ? "opacity-80" : ""
                         } ${
                           isIncident
-                            ? "bg-rose-50/70 dark:bg-rose-500/10"
-                            : active
-                              ? "bg-[#124757]/10 dark:bg-yellow-400/10"
-                              : index % 2 === 1
-                                ? "bg-slate-50/70 dark:bg-slate-800/40"
-                                : "hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                            ? "bg-rose-500/10"
+                            : boat.rescuingBoatCode
+                              ? "bg-amber-500/10"
+                              : active
+                                ? "bg-[#124757]/10 dark:bg-yellow-400/10"
+                                : "hover:bg-white/40 dark:hover:bg-slate-800/50"
                         }`}
                       >
-                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center ${
-                          isIncident
-                            ? "text-rose-500"
-                            : underMaintenance
-                              ? "text-slate-400 dark:text-slate-500"
-                              : active
-                                ? "text-[#0E4050] dark:text-yellow-400"
-                                : "text-[#124757] dark:text-slate-300"
-                        }`}>
-                          <Ship size={18} strokeWidth={2.25} aria-hidden />
+                        <span
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                          style={{ color: kindColor, background: `${kindColor}18` }}
+                        >
+                          <Ship size={15} strokeWidth={2.25} aria-hidden />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className={`block truncate font-headline text-[12px] font-black tracking-wide ${
-                            isIncident
-                              ? "text-rose-700 dark:text-rose-300"
-                              : underMaintenance
-                                ? "text-slate-500 dark:text-slate-400"
-                                : "text-slate-800 dark:text-slate-100"
-                          }`}>
-                            {boat.boatCode}
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className={`truncate font-headline text-[12px] font-black tracking-wide ${
+                              isIncident
+                                ? "text-rose-700 dark:text-rose-300"
+                                : boat.rescuingBoatCode
+                                  ? "text-amber-800 dark:text-amber-300"
+                                  : underMaintenance
+                                    ? "text-slate-500 dark:text-slate-400"
+                                    : "text-slate-800 dark:text-slate-100"
+                            }`}>
+                              {boat.boatCode}
+                            </span>
+                            <span
+                              className={`wb-board-tag shrink-0 text-[10px] ${boardTagClass(statusTag.tone)}`}
+                              title={statusTag.detail || statusTag.label}
+                            >
+                              {statusTag.label}
+                            </span>
                           </span>
-                          <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-400">
-                            {formatRelative(boat.recordedAt, lang)}
+                          <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-500">
+                            {missionLine || `${kindLabel} · ${formatRelative(boat.recordedAt, lang)}`}
                           </span>
-                        </span>
-                        <span
-                          className={`wb-board-tag shrink-0 text-right ${boardTagClass(tag.tone)}`}
-                          title={tag.detail || tag.label}
-                        >
-                          {tag.label}
                         </span>
                       </button>
                     </li>
@@ -504,17 +708,12 @@ export function LiveTracking() {
         </aside>
       )}
 
-      {/* ===== Bảng tình hình (phải) — ẩn/hiện bằng mũi tên ===== */}
       {situationCollapsed ? (
         <button
           type="button"
           onClick={() => setSituationCollapsed(false)}
-          className={`absolute bottom-3 right-3 z-30 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-2xl bg-white/95 px-3.5 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.16)] ring-1 backdrop-blur-xl transition hover:bg-white dark:bg-slate-900/95 md:bottom-4 md:right-4 ${
-            incidentCount > 0
-              ? "ring-rose-300 dark:ring-rose-500/40"
-              : "ring-slate-200/80 dark:ring-slate-700"
-          }`}
-          title={lang === "VN" ? "Mở tình hình tàu" : "Open boat status"}
+          className="absolute bottom-3 right-3 z-30 inline-flex items-center gap-2 rounded-2xl bg-white/55 px-3.5 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.14)] ring-1 ring-white/50 backdrop-blur-xl transition hover:bg-white/70 dark:bg-slate-900/55 dark:ring-slate-700/60 md:bottom-4 md:right-4"
+          title={lang === "VN" ? "Mở tình hình" : "Open situation"}
         >
           <span className="material-symbols-outlined text-[18px] text-[#124757] dark:text-yellow-400" aria-hidden>
             keyboard_arrow_up
@@ -529,43 +728,43 @@ export function LiveTracking() {
           ) : null}
         </button>
       ) : (
-        <aside className={`absolute bottom-3 right-3 z-30 flex max-h-[min(48vh,22rem)] w-[min(calc(100%-1.5rem),17.5rem)] flex-col overflow-hidden rounded-2xl bg-white/95 shadow-[0_18px_40px_rgba(15,23,42,0.18)] ring-1 backdrop-blur-xl dark:bg-slate-900/95 md:bottom-4 md:right-4 ${
-          incidentCount > 0
-            ? "ring-rose-300 dark:ring-rose-500/40"
-            : "ring-slate-200/80 dark:ring-slate-700"
-        }`}
-        >
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+        <aside className="absolute bottom-3 right-3 z-30 flex max-h-[min(48vh,22rem)] w-[min(calc(100%-1.5rem),17.5rem)] flex-col overflow-hidden rounded-2xl bg-white/55 shadow-[0_18px_40px_rgba(15,23,42,0.14)] ring-1 ring-white/50 backdrop-blur-xl dark:bg-slate-900/55 dark:ring-slate-700/60 md:bottom-4 md:right-4">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/40 px-3 py-2 dark:border-slate-700/50">
             <div className="min-w-0">
               <p className="font-headline text-[11px] font-black uppercase tracking-[0.14em] text-[#124757] dark:text-yellow-400">
                 {lang === "VN" ? "Tình hình" : "Situation"}
               </p>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">
-                {lang === "VN"
-                  ? "Sắp tới bến · sự cố"
-                  : "Arrivals · incidents"}
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                {lang === "VN" ? "Sắp tới · sự cố" : "Arrivals · incidents"}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setSituationCollapsed(true)}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-[#124757] dark:hover:bg-slate-800 dark:hover:text-yellow-400"
-              title={lang === "VN" ? "Thu gọn" : "Collapse"}
-            >
-              <span className="material-symbols-outlined text-[20px]" aria-hidden>keyboard_arrow_down</span>
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              {incidentCount > 0 ? (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white">
+                  {incidentCount}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setSituationCollapsed(true)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/50 hover:text-[#124757] dark:hover:bg-slate-800 dark:hover:text-yellow-400"
+                title={lang === "VN" ? "Thu gọn" : "Collapse"}
+              >
+                <span className="material-symbols-outlined text-[20px]" aria-hidden>keyboard_arrow_down</span>
+              </button>
+            </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 pb-2.5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5 pb-2">
             {situations.length === 0 ? (
-              <p className="px-2 py-6 text-center text-[11px] font-medium leading-relaxed text-slate-400">
+              <p className="px-2 py-5 text-center text-[11px] font-medium leading-relaxed text-slate-400">
                 {lang === "VN"
                   ? "Chưa có tàu đang chạy / sắp tới / sự cố."
                   : "No moving / arriving / incident boats."}
               </p>
             ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {situations.map((row, index) => {
+              <ul>
+                {situations.map((row) => {
                   const tagTone = row.phase === "incident"
                     ? "incident"
                     : row.phase === "docked" || row.phase === "arriving" || row.phase === "starting"
@@ -576,40 +775,41 @@ export function LiveTracking() {
                   const tagLabel = lang === "VN"
                     ? String(row.labelVn || "").toUpperCase()
                     : String(row.labelEn || "").toUpperCase();
+                  const detail = [
+                    row.stationCode
+                      ? (lang === "VN"
+                        ? `${row.phase === "docked" ? "Tại" : row.phase === "arriving" ? "Tới" : "Tới"} ${row.stationCode}`
+                        : `${row.phase === "docked" ? "At" : row.phase === "arriving" ? "To" : "To"} ${row.stationCode}`)
+                      : (lang === "VN" ? "Chưa có bến tiếp theo" : "No next station"),
+                    Number.isFinite(row.meters) && row.phase !== "docked"
+                      ? formatDistance(row.meters, lang)
+                      : null,
+                    Number.isFinite(row.remainingMinutes) && row.phase !== "docked"
+                      ? (lang === "VN" ? `~${Math.round(row.remainingMinutes)} phút` : `~${Math.round(row.remainingMinutes)}m`)
+                      : null,
+                  ].filter(Boolean).join(" · ");
 
                   return (
                     <li key={`${row.boatId}-${row.phase}`}>
                       <button
                         type="button"
                         onClick={() => setSelectedBoatId(row.boatId)}
-                        className={`flex w-full items-center gap-2 px-2 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/80 ${
-                          row.phase === "incident" ? "bg-rose-50/60 dark:bg-rose-500/10" : ""
-                        } ${index % 2 === 1 && row.phase !== "incident" ? "bg-slate-50/70 dark:bg-slate-800/40" : ""}`}
+                        className={`flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition hover:bg-white/40 dark:hover:bg-slate-800/50 ${
+                          row.phase === "incident" ? "bg-rose-500/10" : ""
+                        }`}
                       >
                         <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-1.5">
+                          <span className="flex items-baseline justify-between gap-2">
                             <span className="truncate font-headline text-[12px] font-black tracking-wide text-slate-800 dark:text-slate-100">
                               {row.boatCode}
                             </span>
+                            <span className={`wb-board-tag shrink-0 text-[10px] ${boardTagClass(tagTone)}`}>
+                              {tagLabel}
+                            </span>
                           </span>
-                          <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                            {row.stationCode
-                              ? (lang === "VN"
-                                ? `${row.phase === "docked" ? "Tại" : row.phase === "arriving" ? "Tới" : "Gần"} ${row.stationCode}`
-                                : `${row.phase === "docked" ? "At" : row.phase === "arriving" ? "To" : "Near"} ${row.stationCode}`)
-                              : (lang === "VN" ? "Chưa gần bến" : "No nearby station")}
-                            {Number.isFinite(row.meters) && row.phase !== "docked"
-                              ? ` · ${formatDistance(row.meters, lang)}`
-                              : ""}
-                            {row.phase === "docked" && Number.isFinite(row.remainingMs)
-                              ? (lang === "VN"
-                                ? ` · ẩn ${Math.ceil(row.remainingMs / 1000)}s`
-                                : ` · hide ${Math.ceil(row.remainingMs / 1000)}s`)
-                              : ""}
+                          <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-500">
+                            {detail}
                           </span>
-                        </span>
-                        <span className={`wb-board-tag shrink-0 text-right ${boardTagClass(tagTone)}`}>
-                          {tagLabel}
                         </span>
                       </button>
                     </li>
