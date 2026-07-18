@@ -105,6 +105,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
     refresh: refreshOpsSchedule,
   } = useOperationsSchedule({ enabled: true });
   const [selectedBoatId, setSelectedBoatId] = useState("");
+  const [focusView, setFocusView] = useState(null);
   const [query, setQuery] = useState("");
   const [fleetCollapsed, setFleetCollapsed] = useState(true);
   const [situationCollapsed, setSituationCollapsed] = useState(true);
@@ -116,6 +117,8 @@ export function LiveTracking({ viewTabs = null } = {}) {
   const [reportBusy, setReportBusy] = useState(false);
   const [reportForm, setReportForm] = useState({
     boatId: "",
+    tripId: "",
+    tripCode: "",
     incidentType: "MechanicalFailure",
     severity: "High",
     description: "",
@@ -320,13 +323,32 @@ export function LiveTracking({ viewTabs = null } = {}) {
           mission = null;
         }
 
-        // Marker luôn theo GPS tracking; chỉ bổ sung lat/lng từ schedule khi tracking thiếu.
+        // Marker chỉ từ tracking GPS (đã sticky/stabilize). Không lấy coords ops schedule.
         const trackingLat = Number(boat.latitude);
         const trackingLng = Number(boat.longitude);
         const hasTrackingPos = Number.isFinite(trackingLat) && Number.isFinite(trackingLng);
-        const scheduleLat = Number(schedule?.latestLatitude);
-        const scheduleLng = Number(schedule?.latestLongitude);
-        const hasSchedulePos = Number.isFinite(scheduleLat) && Number.isFinite(scheduleLng);
+
+        const latitude = hasTrackingPos ? trackingLat : NaN;
+        const longitude = hasTrackingPos ? trackingLng : NaN;
+        const hasLiveCoords = hasTrackingPos;
+
+        let isGpsOnline = false;
+        let showLiveGps = false;
+        if (hasLiveCoords) {
+          if (schedule?.isGpsOnline === false) {
+            isGpsOnline = false;
+            showLiveGps = false;
+          } else if (schedule?.isGpsOnline === true || boat.isOnline === true || boat.fromSticky) {
+            isGpsOnline = boat.isOnline === true || schedule?.isGpsOnline === true;
+            showLiveGps = true;
+          } else if (boat.isOnline === false) {
+            isGpsOnline = false;
+            showLiveGps = Boolean(boat.fromSticky);
+          } else {
+            isGpsOnline = true;
+            showLiveGps = true;
+          }
+        }
 
         const base = meta
           ? {
@@ -349,15 +371,14 @@ export function LiveTracking({ viewTabs = null } = {}) {
 
         return {
           ...base,
-          latitude: hasTrackingPos ? trackingLat : (hasSchedulePos ? scheduleLat : boat.latitude),
-          longitude: hasTrackingPos ? trackingLng : (hasSchedulePos ? scheduleLng : boat.longitude),
-          speed: Number.isFinite(Number(boat.speed))
-            ? boat.speed
-            : (schedule?.latestSpeedKmh ?? boat.speed),
-          isOnline: boat.isOnline === true
-            || schedule?.isGpsOnline === true
-            || base.isOnline === true,
-          // Ops schedule = nguồn movement / ETA / khoảng cách tới bến (không tự snap marker).
+          latitude: hasLiveCoords ? latitude : boat.latitude,
+          longitude: hasLiveCoords ? longitude : boat.longitude,
+          speed: schedule?.latestSpeedKmh
+            ?? (Number.isFinite(Number(boat.speed)) ? boat.speed : null),
+          isOnline: isGpsOnline === true,
+          isGpsOnline: isGpsOnline === true,
+          showLiveGps,
+          // Ops schedule = nguồn movement / ETA / khoảng cách (FE không tự đổi tripStatus).
           movementStatus: schedule?.movementStatus || boat.movementStatus || null,
           tripId: schedule?.tripId || boat.tripId || null,
           tripCode: schedule?.tripCode || boat.tripCode || null,
@@ -375,6 +396,8 @@ export function LiveTracking({ viewTabs = null } = {}) {
             schedule?.remainingMinutesToNextStation
             ?? boat.remainingMinutesToNextStation
             ?? null,
+          scheduledDepartureAt: schedule?.scheduledDepartureAt || boat.scheduledDepartureAt || null,
+          minutesUntilDeparture: schedule?.minutesUntilDeparture ?? boat.minutesUntilDeparture ?? null,
           hasOpenIncident,
           activeIncident: hasOpenIncident || boat.activeIncident === true,
           rescueMission: mission,
@@ -384,6 +407,12 @@ export function LiveTracking({ viewTabs = null } = {}) {
       })
       .filter(isBoatEligibleForLiveMap),
     [boats, boatCatalogByKey, openBoatIds, opsByBoatKey, rescueMissionByKey],
+  );
+
+  // Chỉ vẽ theo GPS BE — không snap / không tự nhảy sang bến gần nhất.
+  const mapBoats = useMemo(
+    () => enrichedBoats.filter((boat) => boat.showLiveGps === true),
+    [enrichedBoats],
   );
 
   const filteredBoats = useMemo(() => {
@@ -421,13 +450,27 @@ export function LiveTracking({ viewTabs = null } = {}) {
     [enrichedBoats, selectedBoatId],
   );
 
-  const focusView = selectedBoat
-    ? { latitude: selectedBoat.latitude, longitude: selectedBoat.longitude }
-    : null;
+  // Chỉ pan khi user chọn tàu — không theo dõi GPS liên tục (tránh cảm giác map/tàu nhảy).
+  useEffect(() => {
+    if (!selectedBoatId || !selectedBoat?.showLiveGps) {
+      setFocusView(null);
+      return;
+    }
+    if (!Number.isFinite(Number(selectedBoat.latitude)) || !Number.isFinite(Number(selectedBoat.longitude))) {
+      return;
+    }
+    setFocusView({
+      latitude: selectedBoat.latitude,
+      longitude: selectedBoat.longitude,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ khi đổi tàu được chọn
+  }, [selectedBoatId]);
 
   const openReportForBoat = (boat) => {
     setReportForm({
       boatId: boat?.boatId || "",
+      tripId: boat?.tripId || "",
+      tripCode: boat?.tripCode || "",
       incidentType: "MechanicalFailure",
       severity: "High",
       description: "",
@@ -449,10 +492,11 @@ export function LiveTracking({ viewTabs = null } = {}) {
       const boat = enrichedBoats.find((item) => String(item.boatId) === String(reportForm.boatId));
       const description = reportForm.description.trim()
         || (lang === "VN" ? "Test báo sự cố (Manager)" : "Manager test incident");
+      const tripId = reportForm.tripId || boat?.tripId || null;
 
       await reportIncident({
         boatId: reportForm.boatId,
-        tripId: null,
+        tripId: tripId || null,
         incidentType: reportForm.incidentType,
         severity: reportForm.severity,
         description,
@@ -462,6 +506,13 @@ export function LiveTracking({ viewTabs = null } = {}) {
       showToast({
         icon: "success",
         title: lang === "VN" ? "Đã báo sự cố" : "Incident reported",
+        text: tripId
+          ? (lang === "VN"
+            ? `Đã gắn chuyến ${boat?.tripCode || reportForm.tripCode || ""}`.trim()
+            : `Linked trip ${boat?.tripCode || reportForm.tripCode || ""}`.trim())
+          : (lang === "VN"
+            ? "Tàu chưa có chuyến đang chạy — sự cố không gắn trip."
+            : "Boat has no active trip — incident saved without trip."),
       });
       setShowReport(false);
       await Promise.all([
@@ -483,7 +534,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
   return (
     <div className="live-tracking-page fixed inset-x-0 bottom-0 top-16 z-20 overflow-hidden bg-slate-200 lg:left-64">
       <WaterwayMap
-        boatMarkers={enrichedBoats}
+        boatMarkers={mapBoats}
         stationsList={stations}
         routeOverlays={routeOverlays}
         selectedBoatId={selectedBoatId}
@@ -695,7 +746,9 @@ export function LiveTracking({ viewTabs = null } = {}) {
                             </span>
                           </span>
                           <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-500">
-                            {missionLine || `${kindLabel} · ${formatRelative(boat.recordedAt, lang)}`}
+                            {missionLine
+                              || statusTag.detail
+                              || `${kindLabel} · ${formatRelative(boat.recordedAt, lang)}`}
                           </span>
                         </span>
                       </button>
@@ -775,19 +828,20 @@ export function LiveTracking({ viewTabs = null } = {}) {
                   const tagLabel = lang === "VN"
                     ? String(row.labelVn || "").toUpperCase()
                     : String(row.labelEn || "").toUpperCase();
-                  const detail = [
-                    row.stationCode
-                      ? (lang === "VN"
-                        ? `${row.phase === "docked" ? "Tại" : row.phase === "arriving" ? "Tới" : "Tới"} ${row.stationCode}`
-                        : `${row.phase === "docked" ? "At" : row.phase === "arriving" ? "To" : "To"} ${row.stationCode}`)
-                      : (lang === "VN" ? "Chưa có bến tiếp theo" : "No next station"),
-                    Number.isFinite(row.meters) && row.phase !== "docked"
-                      ? formatDistance(row.meters, lang)
-                      : null,
-                    Number.isFinite(row.remainingMinutes) && row.phase !== "docked"
-                      ? (lang === "VN" ? `~${Math.round(row.remainingMinutes)} phút` : `~${Math.round(row.remainingMinutes)}m`)
-                      : null,
-                  ].filter(Boolean).join(" · ");
+                  const detail = (lang === "VN" ? row.detailVn : row.detailEn)
+                    || [
+                      row.stationCode
+                        ? (lang === "VN"
+                          ? `${row.phase === "docked" ? "Tại" : "Tới"} ${row.stationCode}`
+                          : `${row.phase === "docked" ? "At" : "To"} ${row.stationCode}`)
+                        : null,
+                      Number.isFinite(row.meters) && row.phase !== "docked" && row.phase !== "starting"
+                        ? formatDistance(row.meters, lang)
+                        : null,
+                      Number.isFinite(row.remainingMinutes) && row.phase !== "docked"
+                        ? (lang === "VN" ? `~${Math.round(row.remainingMinutes)} phút` : `~${Math.round(row.remainingMinutes)}m`)
+                        : null,
+                    ].filter(Boolean).join(" · ");
 
                   return (
                     <li key={`${row.boatId}-${row.phase}`}>
@@ -834,17 +888,36 @@ export function LiveTracking({ viewTabs = null } = {}) {
               <select
                 required
                 value={reportForm.boatId}
-                onChange={(e) => setReportForm((prev) => ({ ...prev, boatId: e.target.value }))}
+                onChange={(e) => {
+                  const boatId = e.target.value;
+                  const boat = enrichedBoats.find((item) => String(item.boatId) === String(boatId));
+                  setReportForm((prev) => ({
+                    ...prev,
+                    boatId,
+                    tripId: boat?.tripId || "",
+                    tripCode: boat?.tripCode || "",
+                  }));
+                }}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
               >
                 <option value="">{lang === "VN" ? "Chọn tàu" : "Select boat"}</option>
                 {enrichedBoats.map((boat) => (
                   <option key={boat.boatId} value={boat.boatId}>
                     {boat.boatCode}
+                    {boat.tripCode ? ` · ${boat.tripCode}` : ""}
                     {boat.hasOpenIncident || boat.activeIncident ? " · INCIDENT" : ""}
                   </option>
                 ))}
               </select>
+              <p className="text-[11px] font-medium text-slate-500">
+                {reportForm.tripCode || reportForm.tripId
+                  ? (lang === "VN"
+                    ? `Gắn chuyến: ${reportForm.tripCode || reportForm.tripId}`
+                    : `Link trip: ${reportForm.tripCode || reportForm.tripId}`)
+                  : (lang === "VN"
+                    ? "Tàu chưa có chuyến đang chạy trên lịch vận hành — sẽ báo không gắn trip."
+                    : "No active trip on operations schedule — will report without trip.")}
+              </p>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1.5">

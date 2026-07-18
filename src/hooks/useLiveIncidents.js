@@ -22,23 +22,6 @@ export function useLiveIncidents({ enabled = true, toast = true } = {}) {
       });
       if (!activeRef.current) return list;
 
-      if (import.meta.env.DEV) {
-        console.info(
-          "[incidents:open]",
-          list.map((item) => ({
-            incidentId: item.incidentId,
-            boatCode: item.boatCode || null,
-            rescueBoatId: item.rescueBoatId || null,
-            rescueBoatCode: item.rescueBoatCode || null,
-            replacementBoatId: item.replacementBoatId || null,
-            replacementBoatCode: item.replacementBoatCode || null,
-            rawRescueKeys: item.raw
-              ? Object.keys(item.raw).filter((k) => /rescue|replacement/i.test(k))
-              : [],
-          })),
-        );
-      }
-
       if (announceNew && toast) {
         const prev = knownIdsRef.current;
         list.forEach((item) => {
@@ -156,10 +139,18 @@ export function useLiveIncidents({ enabled = true, toast = true } = {}) {
       if (cancelled || !activeRef.current) return;
 
       try {
-        await incidentHub.start();
+        await incidentHub.acquire();
+        if (cancelled || !activeRef.current) {
+          incidentHub.release();
+          return;
+        }
         if (!cancelled && activeRef.current) setConnectionMode("live");
       } catch (error) {
-        console.warn("Incidents hub unavailable — REST only:", error);
+        const aborted = error?.name === "AbortError"
+          || /stop\(\) was called|cancelled|aborted/i.test(String(error?.message || error));
+        if (!aborted) {
+          console.warn("Incidents hub unavailable — REST only:", error);
+        }
         if (!cancelled && activeRef.current) setConnectionMode("polling");
       }
     };
@@ -178,7 +169,7 @@ export function useLiveIncidents({ enabled = true, toast = true } = {}) {
       unsubRescue();
       unsubStatus();
       window.clearInterval(poll);
-      incidentHub.stop().catch(() => {});
+      incidentHub.release();
     };
   }, [enabled, loadOpen, upsertOne, toast]);
 

@@ -2,10 +2,14 @@ import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import { getTrackingHubUrl } from "../utils/hubBaseUrl";
 import { buildHubConnectionOptions } from "../utils/hubConnectionOptions";
 
+const RELEASE_DEBOUNCE_MS = 800;
+
 class TrackingHubClient {
   constructor() {
     this.connection = null;
     this.startPromise = null;
+    this.refCount = 0;
+    this.releaseTimer = null;
     this.locationListeners = new Set();
     this.statusListeners = new Set();
   }
@@ -35,7 +39,6 @@ class TrackingHubClient {
       });
     };
 
-    // BE có thể dùng casing khác nhau.
     connection.on("boatLocation", forward);
     connection.on("BoatLocation", forward);
     connection.on("boatlocation", forward);
@@ -50,20 +53,12 @@ class TrackingHubClient {
       return this.connection;
     }
 
-    if (
-      this.connection
-      && (this.connection.state === HubConnectionState.Connecting
-        || this.connection.state === HubConnectionState.Reconnecting)
-      && this.startPromise
-    ) {
-      await this.startPromise;
-      if (this.connection?.state === HubConnectionState.Connected) {
-        return this.connection;
-      }
-    }
-
     if (this.startPromise) {
-      await this.startPromise;
+      try {
+        await this.startPromise;
+      } catch {
+        // start thất bại — thử tạo connection mới bên dưới
+      }
       if (this.connection?.state === HubConnectionState.Connected) {
         return this.connection;
       }
@@ -73,28 +68,72 @@ class TrackingHubClient {
       try {
         await this.connection.stop();
       } catch {
-        // ignore dispose errors
+        // ignore
       }
       this.connection = null;
     }
 
-    this.connection = new HubConnectionBuilder()
+    const connection = new HubConnectionBuilder()
       .withUrl(getTrackingHubUrl(), buildHubConnectionOptions(() => this.getAccessToken()))
       .withAutomaticReconnect([0, 1000, 2000, 5000, 10000])
       .build();
 
-    this.attachLifecycleHandlers(this.connection);
+    this.connection = connection;
+    this.attachLifecycleHandlers(connection);
 
-    this.startPromise = this.connection.start().catch((error) => {
+    this.startPromise = connection.start().then(() => {
+      if (this.connection !== connection) {
+        // Đã bị replace/stop trong lúc start (Strict Mode) — bỏ qua.
+        return null;
+      }
+      this.notifyStatus("live");
+      return connection;
+    }).catch((error) => {
+      if (this.connection === connection) {
+        this.connection = null;
+      }
       this.startPromise = null;
-      this.connection = null;
-      this.notifyStatus("offline");
+      const aborted = error?.name === "AbortError"
+        || /stop\(\) was called|aborted/i.test(String(error?.message || error));
+      if (!aborted) this.notifyStatus("offline");
       throw error;
     });
 
-    await this.startPromise;
-    this.notifyStatus("live");
-    return this.connection;
+    const started = await this.startPromise;
+    this.startPromise = null;
+    if (!started || this.connection !== connection) {
+      const err = new Error("Tracking hub start cancelled");
+      err.name = "AbortError";
+      throw err;
+    }
+    return connection;
+  }
+
+  /** Giữ connection sống qua Strict Mode remount. */
+  async acquire() {
+    if (this.releaseTimer) {
+      window.clearTimeout(this.releaseTimer);
+      this.releaseTimer = null;
+    }
+    this.refCount += 1;
+    try {
+      return await this.ensureConnection();
+    } catch (error) {
+      this.refCount = Math.max(0, this.refCount - 1);
+      throw error;
+    }
+  }
+
+  release() {
+    this.refCount = Math.max(0, this.refCount - 1);
+    if (this.refCount > 0) return;
+    if (this.releaseTimer) window.clearTimeout(this.releaseTimer);
+    this.releaseTimer = window.setTimeout(() => {
+      this.releaseTimer = null;
+      if (this.refCount === 0) {
+        this.stop().catch(() => {});
+      }
+    }, RELEASE_DEBOUNCE_MS);
   }
 
   subscribeBoatLocation(listener) {
@@ -108,18 +147,19 @@ class TrackingHubClient {
   }
 
   async start() {
-    return this.ensureConnection();
+    return this.acquire();
   }
 
   async stop() {
-    if (!this.connection) return;
+    const connection = this.connection;
+    this.connection = null;
+    this.startPromise = null;
+    if (!connection) return;
     try {
-      await this.connection.stop();
+      await connection.stop();
     } catch {
       // ignore
     }
-    this.connection = null;
-    this.startPromise = null;
     this.notifyStatus("offline");
   }
 

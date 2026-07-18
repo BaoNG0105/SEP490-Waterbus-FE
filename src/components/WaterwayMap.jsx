@@ -607,7 +607,7 @@ export const WaterwayMap = ({
 
           return (
             <Marker
-              key={`boat-${boat.boatId || boat.boatCode}`}
+              key={`boat-${String(boat.boatCode || boat.boatId).toUpperCase()}`}
               position={[boat.latitude, boat.longitude]}
               icon={getBoatLeafletIcon({
                 selected,

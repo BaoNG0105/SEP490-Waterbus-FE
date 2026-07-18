@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchLatestBoatLocations } from "../services/trackingService";
 import { trackingHub } from "../services/trackingHubClient";
-import { upsertBoatLocationMap } from "../utils/boatTracking";
+import { upsertBoatLocationMap, loadStickyBoatLocationMap } from "../utils/boatTracking";
 
 /** Poll REST khi không có hub. Khi Live chỉ backup nếu SignalR im lâu. */
 const POLL_FALLBACK_MS = 2000;
@@ -12,7 +12,7 @@ const HUB_STALE_MS = 6000;
  * Live boat positions: REST initial → SignalR boatLocation → poll khi cần.
  */
 export function useLiveBoatTracking({ enabled = true } = {}) {
-  const [boatsById, setBoatsById] = useState(() => new Map());
+  const [boatsById, setBoatsById] = useState(() => loadStickyBoatLocationMap());
   const [connectionMode, setConnectionMode] = useState("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -53,8 +53,16 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
   const applyOneLocation = useCallback((payload) => {
     lastHubEventAtRef.current = Date.now();
     if (!pendingBatchRef.current) pendingBatchRef.current = [];
-    // SignalR = GPS realtime — luôn đưa vào batch, không lọc tọa độ phía FE.
-    pendingBatchRef.current.push(payload);
+    const items = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : [payload];
+    items.forEach((item) => {
+      if (item) pendingBatchRef.current.push(item);
+    });
     if (!rafRef.current) {
       rafRef.current = window.requestAnimationFrame(flushPending);
     }
@@ -151,14 +159,21 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
       if (cancelled || !activeRef.current) return;
 
       try {
-        await trackingHub.start();
-        if (cancelled || !activeRef.current) return;
+        await trackingHub.acquire();
+        if (cancelled || !activeRef.current) {
+          trackingHub.release();
+          return;
+        }
         hubLiveRef.current = true;
         lastHubEventAtRef.current = Date.now();
         setConnectionMode("live");
         startPolling(POLL_LIVE_BACKUP_MS, { liveBackup: true });
       } catch (error) {
-        console.warn("Tracking hub unavailable — falling back to polling:", error);
+        const aborted = error?.name === "AbortError"
+          || /stop\(\) was called|cancelled|aborted/i.test(String(error?.message || error));
+        if (!aborted) {
+          console.warn("Tracking hub unavailable — falling back to polling:", error);
+        }
         if (!cancelled && activeRef.current) {
           hubLiveRef.current = false;
           setConnectionMode("polling");
@@ -188,7 +203,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
       if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
-      trackingHub.stop().catch(() => {});
+      trackingHub.release();
     };
   }, [enabled, applyOneLocation, loadLatest, startPolling, stopPolling]);
 

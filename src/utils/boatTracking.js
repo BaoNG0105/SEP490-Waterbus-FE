@@ -63,9 +63,204 @@ const toTime = (value) => {
   return Number.isNaN(ms) ? 0 : ms;
 };
 
+const toRad = (deg) => (deg * Math.PI) / 180;
+
+const haversineMeters = (lat1, lng1, lat2, lng2) => {
+  const r = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(a)));
+};
+
+/**
+ * Chặn teleport giả (BE idle nhảy vài km A↔B).
+ * Vẫn nhận GPS thật: kéo sim / chạy có tốc độ / dịch chuyển liên tục.
+ */
+const TELEPORT_REJECT_M = 120;
+const TELEPORT_CONFIRM_M = 80;
+const PROGRESSIVE_STEP_M = 500;
+let lastTeleportWarnAt = 0;
+
+const stabilizeIdleTeleport = (prev, next) => {
+  if (!prev || !isValidLatLng(prev.latitude, prev.longitude)) {
+    return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
+  }
+
+  const meters = haversineMeters(
+    Number(prev.latitude),
+    Number(prev.longitude),
+    Number(next.latitude),
+    Number(next.longitude),
+  );
+  if (!Number.isFinite(meters) || meters < TELEPORT_REJECT_M) {
+    return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
+  }
+
+  const speedKmh = Number.isFinite(Number(next.speed)) ? Math.max(0, Number(next.speed)) : 0;
+  const prevTs = toTime(prev.recordedAt);
+  const nextTs = toTime(next.recordedAt);
+  const dtSec = prevTs > 0 && nextTs > prevTs
+    ? Math.min(20, Math.max(1, (nextTs - prevTs) / 1000))
+    : 5;
+  // Cho phép theo tốc độ GPS (sim 80km/h) + margin.
+  const maxBySpeed = Math.max(
+    TELEPORT_REJECT_M,
+    (Math.max(speedKmh, 0) / 3.6) * dtSec * 2.5,
+  );
+  if (speedKmh >= 1.2 && meters <= maxBySpeed) {
+    return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
+  }
+
+  const candLat = Number(prev.gpsCandidateLatitude);
+  const candLng = Number(prev.gpsCandidateLongitude);
+  if (isValidLatLng(candLat, candLng)) {
+    const toCand = haversineMeters(
+      candLat,
+      candLng,
+      Number(next.latitude),
+      Number(next.longitude),
+    );
+    // 2 packet cùng chỗ mới → nhận (kéo xong / BE ổn định)
+    if (Number.isFinite(toCand) && toCand < TELEPORT_CONFIRM_M) {
+      return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
+    }
+    // Đang kéo liên tục A→B→C: theo GPS mới, không kẹt chỗ cũ
+    if (Number.isFinite(toCand) && toCand < PROGRESSIVE_STEP_M) {
+      return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
+    }
+  }
+
+  if (typeof console !== "undefined" && Date.now() - lastTeleportWarnAt > 8000) {
+    lastTeleportWarnAt = Date.now();
+    console.warn(
+      `[GPS] Giữ vị trí cũ — chờ xác nhận teleport ${Math.round(meters)}m`,
+      next.boatCode || next.boatId,
+    );
+  }
+
+  return {
+    ...next,
+    latitude: prev.latitude,
+    longitude: prev.longitude,
+    heading: Number.isFinite(Number(prev.heading)) ? prev.heading : next.heading,
+    gpsCandidateLatitude: next.latitude,
+    gpsCandidateLongitude: next.longitude,
+  };
+};
+
+/** Persist GPS đã chấp nhận — tránh mỗi lần F5 lấy packet teleport khác từ BE. */
+const STICKY_GPS_KEY = "wb.liveGps.lastPositions.v1";
+const STICKY_GPS_TTL_MS = 12 * 60 * 60 * 1000;
+
+/** Bộ nhớ process — sống qua remount React; bổ sung cho localStorage. */
+const lastAcceptedGpsByKey = new Map();
+
+const stickyKeyFor = (boat) => {
+  const code = String(boat?.boatCode || "").trim().toUpperCase();
+  if (code) return `code:${code}`;
+  const id = String(boat?.boatId || "").trim();
+  return id ? `id:${id}` : "";
+};
+
+const readStickyStore = () => {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(STICKY_GPS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeStickyStore = (store) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STICKY_GPS_KEY, JSON.stringify(store));
+  } catch {
+    // quota / private mode
+  }
+};
+
+export const getStickyBoatPosition = (boatLike) => {
+  const key = stickyKeyFor(boatLike);
+  if (!key) return null;
+  const row = readStickyStore()[key];
+  if (!row) return null;
+  if (Date.now() - Number(row.savedAt || 0) > STICKY_GPS_TTL_MS) return null;
+  if (!isValidLatLng(row.latitude, row.longitude)) return null;
+  return {
+    boatId: row.boatId || boatLike.boatId,
+    boatCode: row.boatCode || boatLike.boatCode,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    heading: Number.isFinite(Number(row.heading)) ? Number(row.heading) : null,
+    recordedAt: row.recordedAt || null,
+    savedAt: row.savedAt,
+  };
+};
+
+export const saveStickyBoatPosition = (boat) => {
+  if (!boat || !isValidLatLng(boat.latitude, boat.longitude)) return;
+  const key = stickyKeyFor(boat);
+  if (!key) return;
+  const store = readStickyStore();
+  store[key] = {
+    boatId: boat.boatId || "",
+    boatCode: boat.boatCode || "",
+    latitude: Number(boat.latitude),
+    longitude: Number(boat.longitude),
+    heading: Number.isFinite(Number(boat.heading)) ? Number(boat.heading) : null,
+    recordedAt: boat.recordedAt || null,
+    savedAt: Date.now(),
+  };
+  writeStickyStore(store);
+};
+
+/** Seed map từ GPS đã lưu (F5 vẫn giữ chỗ cũ nếu BE đang teleport). */
+export const loadStickyBoatLocationMap = () => {
+  const store = readStickyStore();
+  const map = new Map();
+  const now = Date.now();
+  Object.values(store).forEach((row) => {
+    if (!row || now - Number(row.savedAt || 0) > STICKY_GPS_TTL_MS) return;
+    if (!isValidLatLng(row.latitude, row.longitude)) return;
+    const boatCode = String(row.boatCode || "").trim();
+    const boatId = String(row.boatId || boatCode || "").trim();
+    if (!boatId && !boatCode) return;
+    const mapKey = boatCode ? boatCode.toUpperCase() : boatId;
+    const seeded = {
+      boatId: boatId || boatCode,
+      boatCode: boatCode || boatId,
+      latitude: Number(row.latitude),
+      longitude: Number(row.longitude),
+      heading: Number.isFinite(Number(row.heading)) ? Number(row.heading) : null,
+      recordedAt: row.recordedAt || null,
+      isOnline: false,
+      status: "sticky",
+      fromSticky: true,
+    };
+    map.set(mapKey, seeded);
+    const memKey = stickyKeyFor(seeded);
+    if (memKey) {
+      lastAcceptedGpsByKey.set(memKey, {
+        boatId: seeded.boatId,
+        boatCode: seeded.boatCode,
+        latitude: seeded.latitude,
+        longitude: seeded.longitude,
+        heading: seeded.heading,
+        recordedAt: seeded.recordedAt,
+      });
+    }
+  });
+  return map;
+};
+
 /**
  * Chuẩn hóa payload BE/GPS/SignalR → marker.
- * FE hiển thị đúng tọa độ GPS; không lọc/chặn nhảy vị trí phía client.
  */
 export const normalizeBoatLocation = (raw) => {
   if (!raw || typeof raw !== "object") return null;
@@ -297,18 +492,50 @@ export const normalizeBoatLocationList = (payload) => {
 };
 
 /**
- * Ghi nhận vị trí GPS thô — không snap bến, không giữ tọa độ cũ.
- * Bỏ packet cũ hơn (recordedAt ưu tiên; sequence chỉ khi thiếu/timestamp bằng nhau).
+ * Ghi nhận vị trí GPS. Chặn teleport khi idle (BE hay nhảy 100m–2km).
+ * Bỏ packet cũ hơn (recordedAt ưu tiên; sequence khi thiếu/timestamp bằng nhau).
  */
 export const upsertBoatLocationMap = (prevMap, location) => {
   const normalized = normalizeBoatLocation(location);
   if (!normalized) return prevMap;
 
-  const prev = prevMap.get(normalized.boatId);
-  if (prev) {
+  const codeKey = stickyKeyFor(normalized);
+  // Ưu tiên key theo boatCode để luôn gộp đúng 1 marker / tàu.
+  const preferredKey = normalized.boatCode
+    ? String(normalized.boatCode).trim().toUpperCase()
+    : normalized.boatId;
+
+  // Gộp theo boatId hoặc boatCode nếu đã có bản ghi cùng tàu.
+  let prev = prevMap.get(preferredKey) || prevMap.get(normalized.boatId);
+  let mapKey = preferredKey;
+  if (!prev && normalized.boatCode) {
+    for (const [key, row] of prevMap.entries()) {
+      if (
+        String(row.boatCode || "").toUpperCase() === String(normalized.boatCode).toUpperCase()
+        || String(row.boatId || "") === String(normalized.boatCode)
+        || String(key).toUpperCase() === String(normalized.boatCode).toUpperCase()
+      ) {
+        prev = row;
+        mapKey = preferredKey;
+        break;
+      }
+    }
+  }
+
+  // F5 / remount: lấy GPS lần cuối (memory → localStorage).
+  if (!prev) {
+    const mem = codeKey ? lastAcceptedGpsByKey.get(codeKey) : null;
+    if (mem && isValidLatLng(mem.latitude, mem.longitude)) {
+      prev = { ...mem, fromSticky: true };
+    } else {
+      const sticky = getStickyBoatPosition(normalized);
+      if (sticky) prev = sticky;
+    }
+  }
+
+  if (prev && !prev.fromSticky) {
     const prevTs = toTime(prev.recordedAt);
     const nextTs = toTime(normalized.recordedAt);
-    // Không cho REST/packet cũ kéo marker về bến cũ.
     if (prevTs > 0 && nextTs > 0 && nextTs < prevTs) {
       return prevMap;
     }
@@ -333,13 +560,48 @@ export const upsertBoatLocationMap = (prevMap, location) => {
     if (samePos) return prevMap;
   }
 
+  const stabilized = stabilizeIdleTeleport(prev, normalized);
+  const merged = {
+    ...(prev?.fromSticky ? {} : (prev || {})),
+    ...stabilized,
+    boatId: (prev && !prev.fromSticky ? prev.boatId : null) || stabilized.boatId,
+    boatCode: stabilized.boatCode || prev?.boatCode,
+    latitude: stabilized.latitude,
+    longitude: stabilized.longitude,
+    gpsCandidateLatitude: stabilized.gpsCandidateLatitude ?? null,
+    gpsCandidateLongitude: stabilized.gpsCandidateLongitude ?? null,
+    fromSticky: false,
+  };
+  saveStickyBoatPosition(merged);
+  if (codeKey && isValidLatLng(merged.latitude, merged.longitude)) {
+    lastAcceptedGpsByKey.set(codeKey, {
+      boatId: merged.boatId,
+      boatCode: merged.boatCode,
+      latitude: merged.latitude,
+      longitude: merged.longitude,
+      heading: merged.heading,
+      recordedAt: merged.recordedAt,
+      gpsCandidateLatitude: merged.gpsCandidateLatitude ?? null,
+      gpsCandidateLongitude: merged.gpsCandidateLongitude ?? null,
+    });
+  }
+
   const next = new Map(prevMap);
-  // Chỉ giữ metadata cũ; lat/lng/heading/... luôn từ packet GPS mới.
-  next.set(normalized.boatId, {
-    ...(prev || {}),
-    ...normalized,
-    latitude: normalized.latitude,
-    longitude: normalized.longitude,
-  });
+  // Dọn key cũ (UUID / code khác) cùng tàu — chỉ giữ preferredKey.
+  if (normalized.boatCode) {
+    const codeUp = String(normalized.boatCode).toUpperCase();
+    for (const [key, row] of next.entries()) {
+      if (key === mapKey) continue;
+      const sameBoat =
+        String(row.boatCode || "").toUpperCase() === codeUp
+        || String(row.boatId || "").toUpperCase() === codeUp
+        || String(key).toUpperCase() === codeUp
+        || (normalized.boatId && String(key) === String(normalized.boatId));
+      if (sameBoat) next.delete(key);
+    }
+  } else if (mapKey !== normalized.boatId && prevMap.has(normalized.boatId)) {
+    next.delete(normalized.boatId);
+  }
+  next.set(mapKey, merged);
   return next;
 };
