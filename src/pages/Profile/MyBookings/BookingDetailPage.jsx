@@ -3,10 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { QRCodeSVG } from "qrcode.react";
 import { useApp } from "../../../context/AppContext";
-import { cancelMyBooking, fetchMyBookingDetail } from "../../../services/bookingService";
+import { fetchMyBookingDetail } from "../../../services/bookingService";
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
-import { getApiErrorMessage } from "../../../utils/apiError";
-import { notify } from "../../../utils/swalToast";
 import { getBookingServiceConfig } from "../../../utils/bookingServiceType";
 
 const pick = (source, keys, fallback = "") => {
@@ -62,6 +60,13 @@ const formatTime = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--";
   return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+};
+
+const formatDateOnly = (value) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
 const normalizeItem = (item) => ({
@@ -211,7 +216,6 @@ export function BookingDetailPage({ serviceType }) {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [notFound, setNotFound] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),
@@ -261,52 +265,24 @@ export function BookingDetailPage({ serviceType }) {
     }));
   }, [booking]);
 
-  // Chỉ cho phép hủy khi booking chưa ở trạng thái kết thúc VÀ còn ít nhất 1 chặng chưa khởi hành —
-  // kiểm tra mềm phía FE để ẩn nút cho rõ ràng; điều kiện chính xác (departureTime <= now) do BE quyết định.
-  const canCancel = Boolean(booking)
+  // Chỉ vé WaterSightseeing được tự yêu cầu hoàn tiền, và chỉ khi còn hơn 24h trước giờ khởi hành sớm nhất.
+  // Nút luôn hiện với Sightseeing (khóa mờ nếu chưa đủ điều kiện) — yêu cầu hoàn tiền cũng tự hủy booking
+  // nên không cần nút "Hủy booking" riêng nữa.
+  const REFUND_ELIGIBLE_HOURS = 24;
+  const isSightseeingBooking = config.serviceType === "Sightseeing";
+  const earliestDepartureMs = useMemo(() => {
+    if (!booking) return 0;
+    const times = booking.items
+      .map((item) => new Date(item.scheduledDeparture).getTime())
+      .filter((time) => Number.isFinite(time));
+    return times.length ? Math.min(...times) : 0;
+  }, [booking]);
+  const canRequestRefund = isSightseeingBooking
+    && Boolean(booking)
     && !["cancelled", "completed", "expired"].includes(getStatusKey(booking.status))
-    && booking.items.some((item) => {
-      const departureMs = new Date(item.scheduledDeparture).getTime();
-      return Number.isNaN(departureMs) || departureMs > Date.now();
-    });
-
-  const handleCancel = () => {
-    if (!booking) return;
-    notify({
-      title: lang === "VN" ? "Hủy booking này?" : "Cancel this booking?",
-      text: lang === "VN"
-        ? "Toàn bộ vé trong booking sẽ bị hủy. Hành động này không thể hoàn tác."
-        : "All tickets in this booking will be cancelled. This action cannot be undone.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#e11d48",
-      cancelButtonColor: "#124757",
-      confirmButtonText: lang === "VN" ? "Hủy booking" : "Cancel booking",
-      cancelButtonText: lang === "VN" ? "Đóng" : "Close",
-    }).then(async (result) => {
-      if (!result.isConfirmed) return;
-      try {
-        setIsCancelling(true);
-        await cancelMyBooking(booking.id);
-        await loadDetail();
-        notify({
-          toast: true,
-          icon: "success",
-          title: lang === "VN" ? "Đã hủy booking" : "Booking cancelled",
-        });
-      } catch (error) {
-        console.error(`Lỗi khi hủy booking ${booking.id}:`, error);
-        notify({
-          toast: true,
-          icon: "error",
-          title: lang === "VN" ? "Không thể hủy booking" : "Unable to cancel booking",
-          text: getApiErrorMessage(error, lang === "VN" ? "Vui lòng thử lại sau." : "Please try again later."),
-        });
-      } finally {
-        setIsCancelling(false);
-      }
-    });
-  };
+    && booking.payments.some((payment) => getStatusKey(payment.paymentStatus) === "paid")
+    && earliestDepartureMs > 0
+    && earliestDepartureMs - Date.now() > REFUND_ELIGIBLE_HOURS * 60 * 60 * 1000;
 
   if (isLoading) {
     return (
@@ -367,29 +343,14 @@ export function BookingDetailPage({ serviceType }) {
                 {lang === "VN" ? "Đặt lúc" : "Booked at"}: {formatDateTime(booking.bookedAt)}
               </p>
             </div>
-            <div className="flex flex-col items-start gap-3 md:items-end">
-              <div className="flex flex-wrap gap-2">
-                <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.status)}`}>
-                  {getStatusLabel(booking.status, lang)}
+            <div className="flex flex-wrap gap-2 md:justify-end">
+              <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.status)}`}>
+                {getStatusLabel(booking.status, lang)}
+              </span>
+              {booking.paymentStatus && (
+                <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.paymentStatus)}`}>
+                  {getStatusLabel(booking.paymentStatus, lang)}
                 </span>
-                {booking.paymentStatus && (
-                  <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.paymentStatus)}`}>
-                    {getStatusLabel(booking.paymentStatus, lang)}
-                  </span>
-                )}
-              </div>
-              {canCancel && (
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  disabled={isCancelling}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300/40 bg-rose-500/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide text-rose-100 transition hover:bg-rose-500/20 disabled:opacity-50"
-                >
-                  {isCancelling && <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>}
-                  {isCancelling
-                    ? (lang === "VN" ? "Đang hủy..." : "Cancelling...")
-                    : (lang === "VN" ? "Hủy booking" : "Cancel booking")}
-                </button>
               )}
             </div>
           </div>
@@ -439,7 +400,9 @@ export function BookingDetailPage({ serviceType }) {
                         </div>
 
                         <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-bold text-slate-500 dark:text-slate-400">
-                          <span>{formatTime(item.scheduledDeparture)} → {formatTime(item.scheduledArrival)}</span>
+                          <span>
+                            {formatDateOnly(item.scheduledDeparture)} · {formatTime(item.scheduledDeparture)} → {formatDateOnly(item.scheduledArrival) !== formatDateOnly(item.scheduledDeparture) ? `${formatDateOnly(item.scheduledArrival)} ` : ""}{formatTime(item.scheduledArrival)}
+                          </span>
                           <span>{lang === "VN" ? "Ghế" : "Seat"}: <span className="text-[#124757] dark:text-yellow-400">{item.seatNumber || "--"}</span></span>
                           <span>{item.ticketTypeName}</span>
                         </div>
@@ -560,10 +523,25 @@ export function BookingDetailPage({ serviceType }) {
             {/* LỊCH SỬ THANH TOÁN */}
             {booking.payments.length > 0 && (
               <section className="overflow-hidden rounded-4xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-                <div className="border-b border-slate-100 px-6 py-4 dark:border-slate-700 md:px-8">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-700 md:px-8">
                   <h3 className="font-headline font-black text-[#124757] dark:text-white">
                     {lang === "VN" ? "Lịch sử thanh toán" : "Payment history"}
                   </h3>
+                  {isSightseeingBooking && (
+                    <button
+                      type="button"
+                      onClick={() => canRequestRefund && navigate(`/profile/my-sightseeing-booking/${booking.id}/refund`)}
+                      disabled={!canRequestRefund}
+                      title={!canRequestRefund
+                        ? (lang === "VN"
+                          ? `Chỉ áp dụng khi đã thanh toán và còn hơn ${REFUND_ELIGIBLE_HOURS}h trước giờ khởi hành`
+                          : `Only available when paid and more than ${REFUND_ELIGIBLE_HOURS}h remain before departure`)
+                        : undefined}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-sky-50 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20 dark:disabled:hover:bg-sky-500/10"
+                    >
+                      {lang === "VN" ? "Yêu cầu hoàn tiền" : "Request refund"}
+                    </button>
+                  )}
                 </div>
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
                   {booking.payments.map((payment) => {
