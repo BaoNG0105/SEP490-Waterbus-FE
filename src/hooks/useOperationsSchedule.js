@@ -4,17 +4,27 @@ import {
   indexOperationsScheduleByBoat,
   toOperationsScheduleDate,
 } from "../services/operationsService";
+import { trackingHub } from "../services/trackingHubClient";
 
 const POLL_MS = 4000;
 
+const movementFromStopEvent = (event) => {
+  const key = String(event || "").trim().toLowerCase();
+  if (key === "arrived") return "AtStation";
+  if (key === "arriving") return "Arriving";
+  if (key === "departed") return "Departed";
+  return null;
+};
+
 /**
  * Lịch vận hành trong ngày (movementStatus + remainingDistance + latest lat/lng).
- * FE không gọi GPS hook — chỉ GET /api/operations/schedule.
+ * Poll operations/schedule; tripStopUpdated → patch ngay + refetch.
  */
 export function useOperationsSchedule({ enabled = true } = {}) {
   const [entries, setEntries] = useState([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [lastTripStop, setLastTripStop] = useState(null);
   const activeRef = useRef(false);
   const inFlightRef = useRef(false);
 
@@ -40,6 +50,64 @@ export function useOperationsSchedule({ enabled = true } = {}) {
     }
   }, []);
 
+  const applyTripStopPayload = useCallback((payload) => {
+    if (!payload || typeof payload !== "object") return;
+    const event = String(payload.event || payload.Event || "").trim();
+    if (!event) return;
+
+    const boatCode = String(payload.boatCode || payload.BoatCode || "").trim();
+    const boatId = String(payload.boatId || payload.BoatId || "").trim();
+    const stationName = String(payload.stationName || payload.StationName || "").trim();
+    const stationCode = String(payload.stationCode || payload.StationCode || "").trim();
+    const movementStatus = movementFromStopEvent(event);
+
+    setLastTripStop({
+      event,
+      boatCode,
+      boatId,
+      stationName,
+      stationCode,
+      tripId: payload.tripId || payload.TripId || null,
+      tripCode: payload.tripCode || payload.TripCode || null,
+      occurredAt: payload.occurredAt || payload.OccurredAt || Date.now(),
+      lat: payload.lat ?? payload.Lat ?? null,
+      lng: payload.lng ?? payload.Lng ?? null,
+    });
+
+    setEntries((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      let changed = false;
+      const next = prev.map((row) => {
+        const sameBoat = (boatCode && String(row.boatCode || "").toUpperCase() === boatCode.toUpperCase())
+          || (boatId && String(row.boatId || "") === boatId);
+        if (!sameBoat) return row;
+        changed = true;
+        const arrived = String(event).toLowerCase() === "arrived";
+        const departed = String(event).toLowerCase() === "departed";
+        return {
+          ...row,
+          lastStopEvent: event,
+          movementStatus: movementStatus || row.movementStatus,
+          currentStationName: arrived || departed
+            ? (stationName || row.currentStationName)
+            : row.currentStationName,
+          currentStationCode: arrived || departed
+            ? (stationCode || row.currentStationCode)
+            : row.currentStationCode,
+          nextStationName: String(event).toLowerCase() === "arriving"
+            ? (stationName || row.nextStationName)
+            : row.nextStationName,
+          nextStationCode: String(event).toLowerCase() === "arriving"
+            ? (stationCode || row.nextStationCode)
+            : row.nextStationCode,
+          tripId: payload.tripId || payload.TripId || row.tripId,
+          tripCode: payload.tripCode || payload.TripCode || row.tripCode,
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, []);
+
   useEffect(() => {
     if (!enabled) {
       activeRef.current = false;
@@ -59,12 +127,23 @@ export function useOperationsSchedule({ enabled = true } = {}) {
     const onFocus = () => load({ silent: true }).catch(() => {});
     window.addEventListener("focus", onFocus);
 
+    const unsubTripStop = trackingHub.subscribeTripStopUpdated((payload) => {
+      if (!activeRef.current) return;
+      applyTripStopPayload(payload);
+      // Refetch để timeline / ETA đầy đủ theo DB.
+      load({ silent: true }).catch(() => {});
+    });
+
+    trackingHub.acquire().catch(() => {});
+
     return () => {
       activeRef.current = false;
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
+      unsubTripStop();
+      trackingHub.release();
     };
-  }, [enabled, load]);
+  }, [enabled, load, applyTripStopPayload]);
 
   const byBoatKey = useMemo(() => indexOperationsScheduleByBoat(entries), [entries]);
 
@@ -73,6 +152,7 @@ export function useOperationsSchedule({ enabled = true } = {}) {
     byBoatKey,
     errorMsg,
     isLoading,
+    lastTripStop,
     refresh: () => load({ silent: false }),
   };
 }

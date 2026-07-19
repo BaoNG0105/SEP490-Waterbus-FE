@@ -41,13 +41,17 @@ export const getMovementStatusLabel = (status, lang = "VN") => {
     case "scheduled":
       return isVn ? "Chưa chạy" : "Scheduled";
     case "boarding":
-      return isVn ? "Đang chuẩn bị" : "Boarding";
+      return isVn ? "Đang chuẩn bị / chờ xuất bến" : "Boarding";
     case "moving":
       return isVn ? "Đang di chuyển" : "Moving";
     case "arriving":
       return isVn ? "Sắp cập bến" : "Arriving";
     case "atstation":
-      return isVn ? "Đang ở bến" : "At station";
+    case "arrived":
+      return isVn ? "Đã cập bến" : "Arrived";
+    case "departed":
+    case "departing":
+      return isVn ? "Đã rời bến" : "Departed";
     case "delayed":
       return isVn ? "Trễ" : "Delayed";
     case "completed":
@@ -114,6 +118,28 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     "currentStationCode", "CurrentStationCode", "currentStation.stationCode",
   ], "")).trim() || null;
 
+  const scheduledDepartureAt = pick(raw, [
+    "scheduledDepartureAt",
+    "ScheduledDepartureAt",
+    "departureTime",
+    "DepartureTime",
+    "scheduledDeparture",
+    "ScheduledDeparture",
+  ], null) || null;
+  const minutesUntilDepartureRaw = toFiniteNumber(pick(raw, [
+    "minutesUntilDeparture",
+    "MinutesUntilDeparture",
+    "minutesToDeparture",
+    "remainingMinutesToDeparture",
+  ], null));
+  let minutesUntilDeparture = minutesUntilDepartureRaw;
+  if (minutesUntilDeparture == null && scheduledDepartureAt) {
+    const ts = Date.parse(String(scheduledDepartureAt));
+    if (!Number.isNaN(ts)) {
+      minutesUntilDeparture = Math.round((ts - Date.now()) / 60000);
+    }
+  }
+
   const gpsOnlineRaw = pick(raw, ["isGpsOnline", "IsGpsOnline", "isOnline"], null);
   const isGpsOnline = gpsOnlineRaw === true
     || gpsOnlineRaw === false
@@ -139,10 +165,16 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     nextStationCode,
     remainingDistanceKmToNextStation: remainingKm,
     remainingMinutesToNextStation: remainingMin,
+    scheduledDepartureAt,
+    minutesUntilDeparture,
     latestLatitude: lat,
     latestLongitude: lng,
     latestSpeedKmh: speed,
     isGpsOnline,
+    lastStopEvent: String(pick(raw, [
+      "lastStopEvent", "LastStopEvent", "stopEvent", "StopEvent",
+      "tripStopEvent", "TripStopEvent", "latestStopEvent",
+    ], "")).trim() || null,
     recordedAt: pick(raw, ["recordedAt", "RecordedAt", "updatedAt", "gpsRecordedAt"], null) || null,
     raw,
   };

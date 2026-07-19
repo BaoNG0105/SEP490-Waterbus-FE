@@ -2,10 +2,14 @@ import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import { getIncidentsHubUrl } from "../utils/hubBaseUrl";
 import { buildHubConnectionOptions } from "../utils/hubConnectionOptions";
 
+const RELEASE_DEBOUNCE_MS = 800;
+
 class IncidentHubClient {
   constructor() {
     this.connection = null;
     this.startPromise = null;
+    this.refCount = 0;
+    this.releaseTimer = null;
     this.updatedListeners = new Set();
     this.rescueListeners = new Set();
     this.statusListeners = new Set();
@@ -72,20 +76,12 @@ class IncidentHubClient {
       return this.connection;
     }
 
-    if (
-      this.connection
-      && (this.connection.state === HubConnectionState.Connecting
-        || this.connection.state === HubConnectionState.Reconnecting)
-      && this.startPromise
-    ) {
-      await this.startPromise;
-      if (this.connection?.state === HubConnectionState.Connected) {
-        return this.connection;
-      }
-    }
-
     if (this.startPromise) {
-      await this.startPromise;
+      try {
+        await this.startPromise;
+      } catch {
+        // retry below
+      }
       if (this.connection?.state === HubConnectionState.Connected) {
         return this.connection;
       }
@@ -100,23 +96,63 @@ class IncidentHubClient {
       this.connection = null;
     }
 
-    this.connection = new HubConnectionBuilder()
+    const connection = new HubConnectionBuilder()
       .withUrl(getIncidentsHubUrl(), buildHubConnectionOptions(() => this.getAccessToken()))
       .withAutomaticReconnect([0, 1000, 2000, 5000, 10000])
       .build();
 
-    this.attachLifecycleHandlers(this.connection);
+    this.connection = connection;
+    this.attachLifecycleHandlers(connection);
 
-    this.startPromise = this.connection.start().catch((error) => {
+    this.startPromise = connection.start().then(() => {
+      if (this.connection !== connection) return null;
+      this.notifyStatus("live");
+      return connection;
+    }).catch((error) => {
+      if (this.connection === connection) {
+        this.connection = null;
+      }
       this.startPromise = null;
-      this.connection = null;
-      this.notifyStatus("offline");
+      const aborted = error?.name === "AbortError"
+        || /stop\(\) was called|aborted/i.test(String(error?.message || error));
+      if (!aborted) this.notifyStatus("offline");
       throw error;
     });
 
-    await this.startPromise;
-    this.notifyStatus("live");
-    return this.connection;
+    const started = await this.startPromise;
+    this.startPromise = null;
+    if (!started || this.connection !== connection) {
+      const err = new Error("Incidents hub start cancelled");
+      err.name = "AbortError";
+      throw err;
+    }
+    return connection;
+  }
+
+  async acquire() {
+    if (this.releaseTimer) {
+      window.clearTimeout(this.releaseTimer);
+      this.releaseTimer = null;
+    }
+    this.refCount += 1;
+    try {
+      return await this.ensureConnection();
+    } catch (error) {
+      this.refCount = Math.max(0, this.refCount - 1);
+      throw error;
+    }
+  }
+
+  release() {
+    this.refCount = Math.max(0, this.refCount - 1);
+    if (this.refCount > 0) return;
+    if (this.releaseTimer) window.clearTimeout(this.releaseTimer);
+    this.releaseTimer = window.setTimeout(() => {
+      this.releaseTimer = null;
+      if (this.refCount === 0) {
+        this.stop().catch(() => {});
+      }
+    }, RELEASE_DEBOUNCE_MS);
   }
 
   subscribeIncidentUpdated(listener) {
@@ -135,18 +171,19 @@ class IncidentHubClient {
   }
 
   async start() {
-    return this.ensureConnection();
+    return this.acquire();
   }
 
   async stop() {
-    if (!this.connection) return;
+    const connection = this.connection;
+    this.connection = null;
+    this.startPromise = null;
+    if (!connection) return;
     try {
-      await this.connection.stop();
+      await connection.stop();
     } catch {
       // ignore
     }
-    this.connection = null;
-    this.startPromise = null;
     this.notifyStatus("offline");
   }
 }

@@ -975,8 +975,8 @@ export function IncidentManagement({
             </h2>
             <p className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:ring-slate-700">
               {lang === "VN"
-                ? "Backup khi GPS chưa gọi rescue-mission-completed. Chuẩn: GPS kéo về bến → BE tự Resolved + UnderMaintenance."
-                : "Backup if GPS did not call rescue-mission-completed. Main flow: GPS completes tow → BE auto Resolved + UnderMaintenance."}
+                ? "Dùng khi GPS chưa báo hoàn tất kéo cứu. Luồng chuẩn: GPS kéo về bến xong thì sự cố tự đóng và tàu chuyển sang bảo trì."
+                : "Use if GPS has not reported tow completion. Main flow: after GPS finishes towing to dock, the incident closes and the boat moves to maintenance."}
             </p>
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
@@ -1011,7 +1011,7 @@ export function IncidentManagement({
                   onChange={(e) => setResolveForm((prev) => ({ ...prev, tripStatus: e.target.value }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
                 >
-                  <option value="">{lang === "VN" ? "null (mặc định BE)" : "null (BE default)"}</option>
+                  <option value="">{lang === "VN" ? "Để trống (mặc định hệ thống)" : "Leave empty (system default)"}</option>
                   <option value="Cancelled">Cancelled</option>
                   <option value="Delayed">Delayed</option>
                   <option value="Completed">Completed</option>

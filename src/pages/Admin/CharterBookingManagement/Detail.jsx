@@ -401,7 +401,7 @@ export function AdminCharterBookingDetail() {
         console.error("BE route-candidates lỗi — fallback catalog GPS:", error);
         beErrorMessage = getApiErrorMessage(
           error,
-          lang === "VN" ? "BE chưa trả candidates — đang lấy Route nguồn GPS theo 2 station." : "BE candidates unavailable — loading GPS routes by 2 stations.",
+          lang === "VN" ? "Chưa có gợi ý tuyến — đang lấy tuyến GPS theo 2 bến." : "No route suggestions yet — loading GPS routes by 2 stations.",
         );
       }
 

@@ -715,8 +715,8 @@ export function BoatManagement() {
                             {selectedStatus === "Active" && (
                                 <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[11px] font-bold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
                                     {lang === "VN"
-                                        ? "Active cần đủ ghế + 4 hồ sơ. Sau bảo trì chỉ cập nhật Đăng kiểm nếu BE đánh dấu requiresRefresh — giữ nguyên các hồ sơ khác."
-                                        : "Active needs seats + 4 documents. After maintenance, refresh Inspection only when requiresRefresh — keep other files."}
+                                        ? "Để chuyển sang Hoạt động cần đủ ghế và 4 hồ sơ pháp lý. Sau bảo trì, chỉ cần cập nhật Đăng kiểm khi hệ thống yêu cầu — các hồ sơ khác giữ nguyên."
+                                        : "To set Active, the boat needs seats and all 4 legal documents. After maintenance, update Inspection only when the system requests it — other documents stay unchanged."}
                                 </div>
                             )}
                         </div>

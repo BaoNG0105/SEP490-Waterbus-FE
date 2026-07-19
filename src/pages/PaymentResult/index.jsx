@@ -206,8 +206,8 @@ export function PaymentResult() {
         ) : (
           <p className="mt-3 text-[11px] font-semibold text-amber-600 dark:text-amber-300">
             {lang === "VN"
-              ? "Không thấy orderCode trên URL — kiểm tra ReturnUrl BE (PayOs.ReturnUrl phải trỏ /payment/success)."
-              : "No orderCode in URL — check BE PayOs.ReturnUrl (must point to /payment/success)."}
+              ? "Không thấy mã đơn trên đường dẫn — kiểm tra cấu hình trang thanh toán thành công."
+              : "No order code in the URL — check the payment success page configuration."}
           </p>
         )}
 

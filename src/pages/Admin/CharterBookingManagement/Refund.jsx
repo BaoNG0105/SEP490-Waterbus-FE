@@ -263,7 +263,7 @@ export function AdminCharterBookingRefund() {
               <div>
                 <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Ngữ cảnh hoàn tiền" : "Refund Context"}</h3>
                 <p className="mt-1 text-xs font-bold text-slate-400">
-                  {lang === "VN" ? "FE không gửi amount. Backend tự tính số tiền hoàn theo payment và chính sách." : "The frontend does not send amount. Backend calculates the refund from payment data and policy."}
+                  {lang === "VN" ? "Số tiền hoàn được hệ thống tự tính theo thanh toán và chính sách — bạn không cần nhập tay." : "The refund amount is calculated automatically from the payment and policy — you do not enter it manually."}
                 </p>
               </div>
               <button
