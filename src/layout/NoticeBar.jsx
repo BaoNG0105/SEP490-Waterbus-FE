@@ -73,7 +73,7 @@ export const NoticeBar = ({ isVisible, setVisible }) => {
     return current;
   });
 
-  const goToNotifications = () => navigate("/profile/notifications");
+  const goToNotifications = () => navigate("/notifications");
 
   const handleNoticeClick = async () => {
     const current = notifications[noticeIndex];
@@ -89,7 +89,7 @@ export const NoticeBar = ({ isVisible, setVisible }) => {
       }
     }
 
-    navigate(resolveNotificationLink(current) || "/profile/notifications");
+    navigate(resolveNotificationLink(current) || "/notifications");
   };
 
   if (!isVisible) return null;

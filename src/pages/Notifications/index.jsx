@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { useApp } from "../../../context/AppContext";
-import { notify } from "../../../utils/swalToast";
+import { useApp } from "../../context/AppContext";
+import { notify } from "../../utils/swalToast";
 import {
   fetchNotifications,
   markNotificationRead,
   markAllNotificationsRead,
-} from "../../../services/notificationService";
+} from "../../services/notificationService";
 import {
   normalizeNotification,
   getNotificationTypeMeta,
   NOTIFICATION_COLOR_CLASSES,
   resolveNotificationLink,
   formatNotificationTime,
-} from "../../../utils/notifications";
+} from "../../utils/notifications";
 
 const PAGE_SIZE = 10;
 
@@ -135,11 +135,11 @@ export function Notifications() {
       <main className="mx-auto max-w-4xl space-y-6">
         <button
           type="button"
-          onClick={() => navigate("/profile")}
+          onClick={() => navigate("/")}
           className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-[#124757] dark:text-slate-400 dark:hover:text-yellow-400"
         >
           <span className="material-symbols-outlined text-xl">arrow_back</span>
-          {lang === "VN" ? "Về hồ sơ" : "Back to profile"}
+          {lang === "VN" ? "Trở về trang chủ" : "Back to home"}
         </button>
 
         <section className="overflow-hidden rounded-4xl border border-slate-100 bg-white shadow-xl dark:border-slate-700/50 dark:bg-slate-800">
