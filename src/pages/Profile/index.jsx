@@ -161,6 +161,12 @@ export const Profile = () => {
                     </div>
                     <span className="material-symbols-outlined text-slate-400">chevron_right</span>
                   </button>
+                  <button onClick={() => navigate("/profile/my-sightseeing-booking")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Vé WaterSightseeing của tôi" : "My Sightseeing Booking"}</span>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-400">chevron_right</span>
+                  </button>
                   <button onClick={() => navigate("/profile/my-charter-booking")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Yêu cầu thuê tàu" : "Charter Requests"}</span>

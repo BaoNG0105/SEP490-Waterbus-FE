@@ -27,6 +27,8 @@ import { CharterList } from "./pages/Profile/MyCharterBooking";
 import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefundRequest";
 import { MyWaterbusBookingList } from "./pages/Profile/MyWaterbusBooking";
 import { MyWaterbusBookingDetail } from "./pages/Profile/MyWaterbusBooking/MyWaterbusBookingDetail";
+import { MySightseeingBookingList } from "./pages/Profile/MySightseeingBooking";
+import { MySightseeingBookingDetail } from "./pages/Profile/MySightseeingBooking/MySightseeingBookingDetail";
 import { WaterbusBooking } from "./pages/WaterbusBooking";
 import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
 import { CharterBooking } from "./pages/CharterBooking";
@@ -255,6 +257,26 @@ function App() {
           element={
             <MainLayout>
               <MyWaterbusBookingDetail />
+            </MainLayout>
+          }
+        />
+
+        {/* My Sightseeing Booking List Page */}
+        <Route
+          path="/profile/my-sightseeing-booking"
+          element={
+            <MainLayout>
+              <MySightseeingBookingList />
+            </MainLayout>
+          }
+        />
+
+        {/* My Sightseeing Booking Detail Page */}
+        <Route
+          path="/profile/my-sightseeing-booking/:id"
+          element={
+            <MainLayout>
+              <MySightseeingBookingDetail />
             </MainLayout>
           }
         />

@@ -462,20 +462,22 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                     />
                   </div>
 
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Loại vé" : "Ticket Type"}</label>
-                    <select
-                      value={passenger.ticketType}
-                      onChange={(e) => handlePassengerChange(index, "ticketType", e.target.value)}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
-                    >
-                      {TICKET_TYPE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {lang === "VN" ? option.labelVn : option.labelEn}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {!isLoopRoute && (
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Loại vé" : "Ticket Type"}</label>
+                      <select
+                        value={passenger.ticketType}
+                        onChange={(e) => handlePassengerChange(index, "ticketType", e.target.value)}
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                      >
+                        {TICKET_TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {lang === "VN" ? option.labelVn : option.labelEn}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Số điện thoại (Không bắt buộc)" : "Phone Number (Optional)"}</label>
