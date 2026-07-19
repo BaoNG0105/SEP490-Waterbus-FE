@@ -17,7 +17,7 @@ import {
 import { getBoatImageUrl } from "../../../utils/charterBookingAdmin";
 import { isBoatEligibleForLiveMap, isBoatUnderMaintenance, resolveBoatNumberOfDecks, resolveBoatServiceType } from "../../../utils/boatTracking";
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
-import { buildBoatSituations, getBoatStatusTag } from "../../../utils/boatSituation";
+import { buildBoatSituations, getBoatStatusTag, NOTICE_FLASH_MS_EXPORT } from "../../../utils/boatSituation";
 import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { notify, showToast } from "../../../utils/swalToast";
 
@@ -103,6 +103,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
   const {
     byBoatKey: opsByBoatKey,
     refresh: refreshOpsSchedule,
+    lastTripStop,
   } = useOperationsSchedule({ enabled: true });
   const [selectedBoatId, setSelectedBoatId] = useState("");
   const [focusView, setFocusView] = useState(null);
@@ -124,11 +125,89 @@ export function LiveTracking({ viewTabs = null } = {}) {
     description: "",
   });
   const arrivedAtRef = useRef(new Map());
+  const lastTripStopToastKeyRef = useRef("");
+  const flashTimersRef = useRef(new Map());
+  const [flashByBoatKey, setFlashByBoatKey] = useState(() => new Map());
   const chip = modeChip(connectionMode, lang);
 
   useEffect(() => {
     const timer = window.setInterval(() => setTick(Date.now()), 5000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  // Flash ngắn trên tàu khi tripStopUpdated; hết hạn thì ẩn, event mới → hiện lại.
+  useEffect(() => {
+    if (!lastTripStop?.event) return;
+    const boatKey = String(lastTripStop.boatCode || lastTripStop.boatId || "").trim();
+    if (!boatKey) return;
+
+    const eventKey = `${boatKey}|${lastTripStop.event}|${lastTripStop.occurredAt}`;
+    const station = lastTripStop.stationName || lastTripStop.stationCode || "";
+    const boat = lastTripStop.boatCode || "";
+    const ev = String(lastTripStop.event).toLowerCase();
+
+    let noticeVn = "";
+    let noticeEn = "";
+    if (ev === "arriving") {
+      noticeVn = station ? `Tàu sắp cập ${station}` : "Tàu sắp cập bến";
+      noticeEn = station ? `About to dock at ${station}` : "About to dock";
+    } else if (ev === "arrived") {
+      noticeVn = station ? `Đã cập bến ${station}` : "Đã cập bến";
+      noticeEn = station ? `Arrived at ${station}` : "Arrived";
+    } else if (ev === "departed") {
+      noticeVn = station ? `Đã rời bến ${station}` : "Đã rời bến";
+      noticeEn = station ? `Departed ${station}` : "Departed";
+    }
+    if (!noticeVn) return;
+
+    const flash = {
+      eventKey,
+      event: lastTripStop.event,
+      noticeVn,
+      noticeEn,
+      stationName: station,
+      shownAt: Date.now(),
+    };
+
+    setFlashByBoatKey((prev) => {
+      const next = new Map(prev);
+      next.set(boatKey.toUpperCase(), flash);
+      if (lastTripStop.boatId) next.set(String(lastTripStop.boatId), flash);
+      return next;
+    });
+
+    const clearKeys = [boatKey.toUpperCase(), String(lastTripStop.boatId || "")].filter(Boolean);
+    clearKeys.forEach((k) => {
+      const old = flashTimersRef.current.get(k);
+      if (old) window.clearTimeout(old);
+    });
+    const timer = window.setTimeout(() => {
+      setFlashByBoatKey((prev) => {
+        const next = new Map(prev);
+        clearKeys.forEach((k) => next.delete(k));
+        return next;
+      });
+      clearKeys.forEach((k) => flashTimersRef.current.delete(k));
+    }, NOTICE_FLASH_MS_EXPORT);
+    clearKeys.forEach((k) => flashTimersRef.current.set(k, timer));
+
+    if (eventKey !== lastTripStopToastKeyRef.current) {
+      lastTripStopToastKeyRef.current = eventKey;
+      showToast({
+        icon: "info",
+        title: lang === "VN" ? `${boat} · ${noticeVn}`.trim() : `${boat} · ${noticeEn}`.trim(),
+      });
+      setSituationCollapsed(false);
+    }
+
+    return () => {
+      // không clear timer ở đây — để flash tự hết hạn
+    };
+  }, [lastTripStop, lang]);
+
+  useEffect(() => () => {
+    flashTimersRef.current.forEach((t) => window.clearTimeout(t));
+    flashTimersRef.current.clear();
   }, []);
 
   useEffect(() => {
@@ -369,6 +448,10 @@ export function LiveTracking({ viewTabs = null } = {}) {
             operationalStatus: opsFromTracking || boat.operationalStatus || "",
           };
 
+        const flash = flashByBoatKey.get(String(codeKey).toUpperCase())
+          || flashByBoatKey.get(String(idKey))
+          || null;
+
         return {
           ...base,
           latitude: hasLiveCoords ? latitude : boat.latitude,
@@ -388,6 +471,17 @@ export function LiveTracking({ viewTabs = null } = {}) {
           nextStationId: schedule?.nextStationId || boat.nextStationId || null,
           nextStationName: schedule?.nextStationName || boat.nextStationName || null,
           nextStationCode: schedule?.nextStationCode || boat.nextStationCode || null,
+          lastStopEvent: schedule?.lastStopEvent || boat.lastStopEvent || flash?.event || null,
+          flashNotice: flash
+            ? (lang === "VN" ? flash.noticeVn : flash.noticeEn)
+            : null,
+          flashNoticeTone: flash
+            ? (String(flash.event).toLowerCase() === "departed"
+              ? "departed"
+              : String(flash.event).toLowerCase() === "arrived"
+                ? "arrived"
+                : "arriving")
+            : null,
           remainingDistanceKmToNextStation:
             schedule?.remainingDistanceKmToNextStation
             ?? boat.remainingDistanceKmToNextStation
@@ -406,7 +500,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
         };
       })
       .filter(isBoatEligibleForLiveMap),
-    [boats, boatCatalogByKey, openBoatIds, opsByBoatKey, rescueMissionByKey],
+    [boats, boatCatalogByKey, openBoatIds, opsByBoatKey, rescueMissionByKey, flashByBoatKey, lang],
   );
 
   // Chỉ vẽ theo GPS BE — không snap / không tự nhảy sang bến gần nhất.
@@ -746,7 +840,8 @@ export function LiveTracking({ viewTabs = null } = {}) {
                             </span>
                           </span>
                           <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-500">
-                            {missionLine
+                            {boat.flashNotice
+                              || missionLine
                               || statusTag.detail
                               || `${kindLabel} · ${formatRelative(boat.recordedAt, lang)}`}
                           </span>

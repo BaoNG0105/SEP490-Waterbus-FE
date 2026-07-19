@@ -584,7 +584,20 @@ export const WaterwayMap = ({
                   />
                   {kindLabel}
                 </p>
-                {boat.rescuingBoatCode ? (
+                {boat.flashNotice ? (
+                  <p
+                    className="wb-boat-card__note"
+                    style={{
+                      color: boat.flashNoticeTone === "departed"
+                        ? "#0369A1"
+                        : boat.flashNoticeTone === "arrived"
+                          ? "#059669"
+                          : "#D97706",
+                    }}
+                  >
+                    {boat.flashNotice}
+                  </p>
+                ) : boat.rescuingBoatCode ? (
                   <p className="wb-boat-card__note" style={{ color: "#EA580C" }}>
                     Đang cứu {boat.rescuingBoatCode}
                   </p>
@@ -596,7 +609,7 @@ export const WaterwayMap = ({
                   <p className="wb-boat-card__note">Sự cố</p>
                 ) : underMaintenance ? (
                   <p className="wb-boat-card__note">Đang bảo trì</p>
-                ) : occupancyValue ? (
+                ) : (occupancyValue && markerKind !== "rescue") ? (
                   <p className="wb-boat-card__seats">
                     <strong>{occupancyValue}</strong>
                   </p>

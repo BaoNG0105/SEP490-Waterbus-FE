@@ -47,7 +47,11 @@ export const getMovementStatusLabel = (status, lang = "VN") => {
     case "arriving":
       return isVn ? "Sắp cập bến" : "Arriving";
     case "atstation":
-      return isVn ? "Đang ở bến" : "At station";
+    case "arrived":
+      return isVn ? "Đã cập bến" : "Arrived";
+    case "departed":
+    case "departing":
+      return isVn ? "Đã rời bến" : "Departed";
     case "delayed":
       return isVn ? "Trễ" : "Delayed";
     case "completed":
@@ -167,6 +171,10 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     latestLongitude: lng,
     latestSpeedKmh: speed,
     isGpsOnline,
+    lastStopEvent: String(pick(raw, [
+      "lastStopEvent", "LastStopEvent", "stopEvent", "StopEvent",
+      "tripStopEvent", "TripStopEvent", "latestStopEvent",
+    ], "")).trim() || null,
     recordedAt: pick(raw, ["recordedAt", "RecordedAt", "updatedAt", "gpsRecordedAt"], null) || null,
     raw,
   };

@@ -75,12 +75,11 @@ const haversineMeters = (lat1, lng1, lat2, lng2) => {
 };
 
 /**
- * Chặn teleport giả (BE idle nhảy vài km A↔B).
- * Vẫn nhận GPS thật: kéo sim / chạy có tốc độ / dịch chuyển liên tục.
+ * Bám GPS. Chỉ chặn "teleport đứng yên" cực lớn (BE nhảy vài km khi speed 0)
+ * và cần 2 packet xác nhận chỗ mới. Mọi dịch chuyển bình thường → theo GPS.
  */
-const TELEPORT_REJECT_M = 120;
-const TELEPORT_CONFIRM_M = 80;
-const PROGRESSIVE_STEP_M = 500;
+const IDLE_TELEPORT_M = 600; // idle mà nhảy >= mức này mới nghi teleport
+const TELEPORT_CONFIRM_M = 120; // 2 packet trong bán kính này = chỗ mới thật
 let lastTeleportWarnAt = 0;
 
 const stabilizeIdleTeleport = (prev, next) => {
@@ -94,40 +93,25 @@ const stabilizeIdleTeleport = (prev, next) => {
     Number(next.latitude),
     Number(next.longitude),
   );
-  if (!Number.isFinite(meters) || meters < TELEPORT_REJECT_M) {
+  if (!Number.isFinite(meters)) {
     return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
   }
 
   const speedKmh = Number.isFinite(Number(next.speed)) ? Math.max(0, Number(next.speed)) : 0;
-  const prevTs = toTime(prev.recordedAt);
-  const nextTs = toTime(next.recordedAt);
-  const dtSec = prevTs > 0 && nextTs > prevTs
-    ? Math.min(20, Math.max(1, (nextTs - prevTs) / 1000))
-    : 5;
-  // Cho phép theo tốc độ GPS (sim 80km/h) + margin.
-  const maxBySpeed = Math.max(
-    TELEPORT_REJECT_M,
-    (Math.max(speedKmh, 0) / 3.6) * dtSec * 2.5,
-  );
-  if (speedKmh >= 1.2 && meters <= maxBySpeed) {
+  const status = String(next.status || "").toLowerCase().replace(/[_\s-]/g, "");
+  const idleLike = speedKmh < 1.2 && (status === "idle" || status === "stopped" || status === "docked" || status === "stationary" || status === "");
+
+  // Tàu đang chạy (có tốc độ) hoặc dịch chuyển vừa phải → theo GPS luôn.
+  if (!idleLike || meters < IDLE_TELEPORT_M) {
     return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
   }
 
+  // Idle + nhảy rất xa: cần 2 packet cùng chỗ mới mới nhận.
   const candLat = Number(prev.gpsCandidateLatitude);
   const candLng = Number(prev.gpsCandidateLongitude);
   if (isValidLatLng(candLat, candLng)) {
-    const toCand = haversineMeters(
-      candLat,
-      candLng,
-      Number(next.latitude),
-      Number(next.longitude),
-    );
-    // 2 packet cùng chỗ mới → nhận (kéo xong / BE ổn định)
+    const toCand = haversineMeters(candLat, candLng, Number(next.latitude), Number(next.longitude));
     if (Number.isFinite(toCand) && toCand < TELEPORT_CONFIRM_M) {
-      return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
-    }
-    // Đang kéo liên tục A→B→C: theo GPS mới, không kẹt chỗ cũ
-    if (Number.isFinite(toCand) && toCand < PROGRESSIVE_STEP_M) {
       return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
     }
   }
@@ -359,6 +343,11 @@ export const normalizeBoatLocation = (raw) => {
       : null,
     remainingDistanceKmToNextStation: Number.isFinite(remainingKmRaw) ? remainingKmRaw : null,
     remainingMinutesToNextStation: Number.isFinite(remainingMinRaw) ? remainingMinRaw : null,
+    lastStopEvent: (() => {
+      const v = raw.lastStopEvent ?? raw.LastStopEvent ?? raw.stopEvent ?? raw.StopEvent
+        ?? raw.tripStopEvent ?? raw.TripStopEvent ?? null;
+      return v != null && String(v).trim() ? String(v).trim() : null;
+    })(),
   };
 };
 

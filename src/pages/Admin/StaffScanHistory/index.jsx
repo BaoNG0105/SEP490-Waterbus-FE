@@ -27,8 +27,8 @@ export function StaffScanHistoryPage() {
         <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600">history</span>
         <p className="mt-3 text-sm font-bold text-slate-500 dark:text-slate-400">
           {lang === "VN"
-            ? "Chưa có dữ liệu — BE chưa có API lịch sử quét."
-            : "No data yet — BE has no scan-history API."}
+            ? "Chưa có dữ liệu — lịch sử quét chưa sẵn sàng."
+            : "No data yet — scan history is not available."}
         </p>
         <p className="mt-1.5 text-xs text-slate-400">
           {lang === "VN"

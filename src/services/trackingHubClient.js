@@ -11,6 +11,7 @@ class TrackingHubClient {
     this.refCount = 0;
     this.releaseTimer = null;
     this.locationListeners = new Set();
+    this.tripStopListeners = new Set();
     this.statusListeners = new Set();
   }
 
@@ -39,9 +40,23 @@ class TrackingHubClient {
       });
     };
 
+    const forwardTripStop = (payload) => {
+      this.tripStopListeners.forEach((listener) => {
+        try {
+          listener(payload);
+        } catch (error) {
+          console.warn("Tracking hub tripStopUpdated listener error:", error);
+        }
+      });
+    };
+
     connection.on("boatLocation", forward);
     connection.on("BoatLocation", forward);
     connection.on("boatlocation", forward);
+
+    // BE sẽ broadcast khi GPS gọi stop event (Arriving/Arrived/Departed).
+    connection.on("tripStopUpdated", forwardTripStop);
+    connection.on("TripStopUpdated", forwardTripStop);
 
     connection.onreconnecting(() => this.notifyStatus("reconnecting"));
     connection.onreconnected(() => this.notifyStatus("live"));
@@ -139,6 +154,11 @@ class TrackingHubClient {
   subscribeBoatLocation(listener) {
     this.locationListeners.add(listener);
     return () => this.locationListeners.delete(listener);
+  }
+
+  subscribeTripStopUpdated(listener) {
+    this.tripStopListeners.add(listener);
+    return () => this.tripStopListeners.delete(listener);
   }
 
   subscribeStatus(listener) {
