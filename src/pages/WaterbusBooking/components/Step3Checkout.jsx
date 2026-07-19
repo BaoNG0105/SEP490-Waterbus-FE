@@ -139,9 +139,9 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     setPassengers(updated);
   };
 
-  // Kéo tên/SĐT/email từ tài khoản đang đăng nhập xuống Thông tin liên hệ hoặc Hành khách 1
+  // Kéo tên/SĐT/email từ tài khoản đang đăng nhập xuống Thông tin liên hệ (người đặt)
   const [isLoadingAccountInfo, setIsLoadingAccountInfo] = useState(false);
-  const handleUseAccountInfo = async (target) => {
+  const handleUseAccountInfo = async () => {
     setIsLoadingAccountInfo(true);
     try {
       const profile = await fetchCurrentUserProfile();
@@ -149,25 +149,12 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       const accountPhone = profile?.phoneNumber || profile?.phone || "";
       const accountEmail = profile?.email || "";
 
-      if (target === "contact") {
-        setContact((prev) => ({
-          ...prev,
-          name: accountName || prev.name,
-          phone: accountPhone || prev.phone,
-          email: accountEmail || prev.email,
-        }));
-      } else {
-        setPassengers((prev) => prev.map((passenger, i) => (
-          i === target
-            ? {
-              ...passenger,
-              name: accountName || passenger.name,
-              phone: accountPhone || passenger.phone,
-              email: accountEmail || passenger.email,
-            }
-            : passenger
-        )));
-      }
+      setContact((prev) => ({
+        ...prev,
+        name: accountName || prev.name,
+        phone: accountPhone || prev.phone,
+        email: accountEmail || prev.email,
+      }));
     } catch (error) {
       console.error("Lỗi khi lấy thông tin tài khoản:", error);
       showToast({
@@ -178,6 +165,20 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     } finally {
       setIsLoadingAccountInfo(false);
     }
+  };
+
+  // Chiếu tên/SĐT/email từ Thông tin liên hệ (đã điền ở trên) xuống Hành khách 1
+  const handleUseContactInfoForPassenger = (index) => {
+    setPassengers((prev) => prev.map((passenger, i) => (
+      i === index
+        ? {
+          ...passenger,
+          name: contact.name || passenger.name,
+          phone: contact.phone || passenger.phone,
+          email: contact.email || passenger.email,
+        }
+        : passenger
+    )));
   };
 
   // 3. STATE: HÀNH KHÁCH TRẺ EM DƯỚI 2 TUỔI (INFANT — không chiếm ghế, miễn phí, đi kèm chuyến của người lớn)
@@ -359,7 +360,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
             </h3>
             <button
               type="button"
-              onClick={() => handleUseAccountInfo("contact")}
+              onClick={handleUseAccountInfo}
               disabled={isLoadingAccountInfo}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
             >
@@ -436,14 +437,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                   {index === 0 && (
                     <button
                       type="button"
-                      onClick={() => handleUseAccountInfo(0)}
-                      disabled={isLoadingAccountInfo}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
+                      onClick={() => handleUseContactInfoForPassenger(0)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10"
                     >
-                      <span className={`material-symbols-outlined text-sm ${isLoadingAccountInfo ? "animate-spin" : ""}`}>
-                        {isLoadingAccountInfo ? "progress_activity" : "person"}
-                      </span>
-                      {lang === "VN" ? "Dùng thông tin tài khoản" : "Use account info"}
+                      <span className="material-symbols-outlined text-sm">content_copy</span>
+                      {lang === "VN" ? "Dùng thông tin liên hệ" : "Use contact info"}
                     </button>
                   )}
                 </div>

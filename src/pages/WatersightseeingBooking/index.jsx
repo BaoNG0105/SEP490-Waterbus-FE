@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { guidelines } from "../../data/homeData";
+import { getTodayDateString } from "../../utils/dateOnly";
 
 import Step1SearchSightseeing from "./components/Step1SearchSightseeing";
 import Step2SelectTripAndSeats from "../WaterbusBooking/components/Step2SelectTripAndSeats";
@@ -17,7 +18,7 @@ export function WatersightseeingBooking() {
             isRoundTrip: false,
             fromWharf: "",
             toWharf: "",
-            departureDate: "",
+            departureDate: getTodayDateString(),
             returnDate: "",
             passengerCount: 1,
             selectedDepartureTrip: null,
