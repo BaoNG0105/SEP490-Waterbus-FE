@@ -3,6 +3,7 @@ import { AdminLayout } from "./layout/Admin/AdminLayout";
 import { MainLayout } from "./layout/MainLayout";
 import { NotFound } from "./pages/NotFound";
 
+//Phân quyền
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 import { CustomerOnlyRoute } from "./components/CustomerOnlyRoute";
 
