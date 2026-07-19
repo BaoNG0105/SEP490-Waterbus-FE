@@ -20,6 +20,7 @@ import { Promotions } from "./pages/Promotions";
 import { PromotionDetail } from "./pages/Promotions/PromotionDetail";
 import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
+import { Notifications } from "./pages/Profile/Notifications";
 import { EditProfile } from "./pages/Profile/EditProfie";
 import { ChangePassword } from "./pages/Profile/ChangePassword";
 import { CharterDetail } from "./pages/Profile/MyCharterBooking/MyCharterDetail";
@@ -200,6 +201,16 @@ function App() {
           path="/profile/change-password"
           element={
             <ChangePassword />
+          }
+        />
+
+        {/* Notifications Page */}
+        <Route
+          path="/profile/notifications"
+          element={
+            <MainLayout>
+              <Notifications />
+            </MainLayout>
           }
         />
 

@@ -1,48 +1,121 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useApp } from "../context/AppContext"; // Đi lên 1 cấp ra src/ rồi vào context
+import { fetchNotifications, fetchUnreadNotificationCount, markNotificationRead } from "../services/notificationService";
+import { normalizeNotification, resolveNotificationLink } from "../utils/notifications";
 
-// DỮ LIỆU THÔNG BÁO CHẠY CHỮ (MOCK DATA)
-const announcements = [
-  {
-    vn: "[THÔNG BÁO] Từ ngày 15/04/2026, hành khách tại Sân bay/Bến tàu cần thực hiện khai báo thông tin trước khi lên tàu.",
-    en: "[NOTICE] From April 15, 2026, passengers must declare information before boarding.",
-  },
-  {
-    vn: "[KHUYẾN MÃI] Nhập mã SUMMER26 giảm ngay 20% cho các chuyến đi trong tuần. Số lượng có hạn!",
-    en: "[PROMOTION] Enter code SUMMER26 for 20% off weekday trips. Limited quantity!",
-  },
-  {
-    vn: "[TIN TỨC] WaterBus chính thức mở thêm tuyến mới nối liền Quận 1 và Quận 7 vào tháng 6 này.",
-    en: "[NEWS] WaterBus officially opens a new route connecting District 1 and District 7 this June.",
-  },
-];
+const POLL_INTERVAL_MS = 60000;
 
 export const NoticeBar = ({ isVisible, setVisible }) => {
   const { lang } = useApp();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useSelector((state) => state.auth);
+
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [noticeIndex, setNoticeIndex] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const loadNotifications = useCallback(async () => {
+    if (!isAuthenticated) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setIsLoaded(true);
+      return;
+    }
+    try {
+      const [list, unread] = await Promise.all([
+        fetchNotifications({ page: 1, pageSize: 5 }),
+        fetchUnreadNotificationCount(),
+      ]);
+      const items = Array.isArray(list?.items) ? list.items.map(normalizeNotification) : [];
+      setNotifications(items);
+      setUnreadCount(Number(unread?.unreadCount ?? 0));
+    } catch (error) {
+      console.error("Lỗi tải thông báo:", error);
+    } finally {
+      setIsLoaded(true);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!isVisible) return;
+    loadNotifications();
+    const poll = setInterval(loadNotifications, POLL_INTERVAL_MS);
+    return () => clearInterval(poll);
+  }, [loadNotifications]);
+
+  // Không có thông báo (khách chưa đăng nhập hoặc user không có tin nào) thì tự ẩn thanh
+  useEffect(() => {
+    if (isLoaded && isVisible && notifications.length === 0) {
+      setVisible(false);
+    }
+  }, [isLoaded, notifications.length, isVisible, setVisible]);
+
+  useEffect(() => {
+    setNoticeIndex(0);
+  }, [notifications.length]);
+
+  useEffect(() => {
+    if (!isVisible || notifications.length <= 1) return;
     const timer = setInterval(() => {
-      setNoticeIndex((prev) => (prev + 1) % announcements.length);
+      setNoticeIndex((prev) => (prev + 1) % notifications.length);
     }, 12000);
     return () => clearInterval(timer);
-  }, [isVisible]);
+  }, [isVisible, notifications.length]);
 
-  const nextNotice = () => setNoticeIndex((prev) => (prev + 1) % announcements.length);
-  const prevNotice = () => setNoticeIndex((prev) => (prev === 0 ? announcements.length - 1 : prev - 1));
+  const nextNotice = () => setNotifications((current) => {
+    if (current.length > 0) setNoticeIndex((prev) => (prev + 1) % current.length);
+    return current;
+  });
+  const prevNotice = () => setNotifications((current) => {
+    if (current.length > 0) setNoticeIndex((prev) => (prev === 0 ? current.length - 1 : prev - 1));
+    return current;
+  });
+
+  const goToNotifications = () => navigate("/profile/notifications");
+
+  const handleNoticeClick = async () => {
+    const current = notifications[noticeIndex];
+    if (!current) return;
+
+    if (!current.isRead) {
+      try {
+        await markNotificationRead(current.id);
+        setNotifications((prev) => prev.map((n) => (n.id === current.id ? { ...n, isRead: true } : n)));
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      } catch (error) {
+        console.error("Lỗi đánh dấu đã đọc:", error);
+      }
+    }
+
+    navigate(resolveNotificationLink(current) || "/profile/notifications");
+  };
 
   if (!isVisible) return null;
+  if (isLoaded && notifications.length === 0) return null;
+
+  const current = notifications[noticeIndex];
 
   return (
     <div className="fixed top-0 left-0 w-full h-10 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/80 z-120 flex items-center justify-between px-4 md:px-8 shadow-sm transition-colors duration-300 select-none">
-      
-      {/* Icon trạng thái nhấp nháy */}
-      <div className="flex items-center shrink-0 z-10 bg-white dark:bg-slate-900 py-2 pr-3">
+
+      {/* Icon trạng thái nhấp nháy + badge số thông báo chưa đọc */}
+      <button
+        type="button"
+        onClick={goToNotifications}
+        title={lang === "VN" ? "Xem tất cả thông báo" : "View all notifications"}
+        className="relative flex items-center shrink-0 z-10 bg-white dark:bg-slate-900 py-2 pr-3"
+      >
         <span className="material-symbols-outlined text-red-600 dark:text-red-500 text-[18px] animate-pulse">
           notifications_active
         </span>
-      </div>
+        {unreadCount > 0 && (
+          <span className="absolute -top-0.5 left-3 min-w-3.5 h-3.5 px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[9px] font-bold leading-none">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </button>
 
       {/* Hiệu ứng chữ chạy Marquee */}
       <div className="flex-1 relative h-full flex items-center overflow-hidden group">
@@ -58,12 +131,17 @@ export const NoticeBar = ({ isVisible, setVisible }) => {
           }
         `}</style>
 
-        <p
-          key={noticeIndex}
-          className="text-xs md:text-sm font-body font-medium text-slate-700 dark:text-slate-300 animate-ticker group-hover:[animation-play-state:paused] cursor-default"
-        >
-          {lang === "VN" ? announcements[noticeIndex].vn : announcements[noticeIndex].en}
-        </p>
+        {current && (
+          <p
+            key={current.id || noticeIndex}
+            onClick={handleNoticeClick}
+            className="text-xs md:text-sm font-body font-medium text-slate-700 dark:text-slate-300 animate-ticker group-hover:[animation-play-state:paused] cursor-pointer"
+          >
+            {!current.isRead && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-2 align-middle" />}
+            <span className="font-bold">{current.title}</span>
+            {current.body ? ` — ${current.body}` : ""}
+          </p>
+        )}
       </div>
 
       {/* Các nút bấm điều khiển */}

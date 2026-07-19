@@ -201,6 +201,12 @@ export const Profile = () => {
               <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100">
                 <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Danh mục & Cài đặt" : "Categories & Settings"}</h2>
                 <div className="space-y-3">
+                  <button onClick={() => navigate("/profile/notifications")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Thông báo" : "Notifications"}</span>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-400">chevron_right</span>
+                  </button>
                   <button onClick={() => navigate("/profile/my-waterbus-booking")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Vé Waterbus của tôi" : "My Waterbus Booking"}</span>
