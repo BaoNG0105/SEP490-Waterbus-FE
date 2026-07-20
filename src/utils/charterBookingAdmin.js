@@ -223,6 +223,137 @@ export const getAssignedBoatIdsFromBooking = (booking) => {
   return [...ids];
 };
 
+/** TripId đã gắn từ booking / charter boats (sau khi Admin tạo trip). */
+export const getCharterBookingLinkedTripIds = (booking) => {
+  const ids = new Set();
+  const push = (value) => {
+    const id = String(value || "").trim();
+    if (id) ids.add(id);
+  };
+
+  push(booking?.tripId);
+  push(pick(booking, ["sourceTripId", "charterTripId"], ""));
+  (Array.isArray(booking?.tripIds) ? booking.tripIds : []).forEach(push);
+
+  const tripCollections = [
+    booking?.trips,
+    booking?.charterTrips,
+    booking?.linkedTrips,
+  ];
+  tripCollections.forEach((list) => {
+    (Array.isArray(list) ? list : []).forEach((trip) => {
+      push(pick(trip, ["tripId", "id", "TripId"], ""));
+    });
+  });
+
+  const boatCollections = [
+    booking?.selectedBoats,
+    booking?.quoteBoats,
+    booking?.assignedBoats,
+    booking?.boats,
+    booking?.charterBoats,
+  ];
+  boatCollections.forEach((list) => {
+    (Array.isArray(list) ? list : []).forEach((boat) => {
+      push(pick(boat, ["tripId", "TripId", "trip.id"], ""));
+    });
+  });
+
+  return [...ids];
+};
+
+/** Lấy tripId từ response POST .../trip (nhiều shape BE). */
+export const extractTripIdsFromCharterTripCreateResponse = (payload) => {
+  const ids = new Set();
+  const push = (value) => {
+    const id = String(value || "").trim();
+    if (id) ids.add(id);
+  };
+
+  if (!payload || typeof payload !== "object") return [];
+
+  push(payload.tripId);
+  push(payload.id);
+  (Array.isArray(payload.tripIds) ? payload.tripIds : []).forEach(push);
+  (Array.isArray(payload.trips) ? payload.trips : []).forEach((trip) => {
+    push(pick(trip, ["tripId", "id", "TripId"], ""));
+  });
+  (Array.isArray(payload.charterBoats) ? payload.charterBoats : []).forEach((boat) => {
+    push(pick(boat, ["tripId", "TripId", "trip.id"], ""));
+  });
+  (Array.isArray(payload.boats) ? payload.boats : []).forEach((boat) => {
+    push(pick(boat, ["tripId", "TripId", "trip.id"], ""));
+  });
+  if (payload.data && typeof payload.data === "object") {
+    extractTripIdsFromCharterTripCreateResponse(payload.data).forEach(push);
+  }
+
+  return [...ids];
+};
+
+/**
+ * Điều kiện FE để bật nút Tạo chuyến (BE vẫn là nguồn xác thực cuối).
+ * Không yêu cầu GPS / gần giờ khởi hành.
+ */
+export const evaluateCharterTripCreateGate = (booking, {
+  otherBookings = [],
+  lang = "VN",
+} = {}) => {
+  const reasons = [];
+  const status = String(booking?.status || "");
+  const departureDate = booking?.departureDate;
+  const boatIds = getAssignedBoatIdsFromBooking(booking);
+  const tripIds = getCharterBookingLinkedTripIds(booking);
+  const hasStartTime = Boolean(normalizeCharterScheduleTime(booking?.startTime));
+
+  if (status !== "Confirmed") {
+    reasons.push(lang === "VN"
+      ? "Booking phải ở trạng thái Confirmed (đã thanh toán / xác nhận)."
+      : "Booking must be Confirmed (paid / confirmed).");
+  }
+
+  if (!normalizeCharterScheduleDate(departureDate)) {
+    reasons.push(lang === "VN"
+      ? "Chưa có ngày khởi hành."
+      : "Departure date is missing.");
+  }
+
+  if (boatIds.length === 0) {
+    reasons.push(lang === "VN"
+      ? "Chưa chốt tàu trong báo giá."
+      : "No boats locked in the quote yet.");
+  }
+
+  if (tripIds.length > 0) {
+    reasons.push(lang === "VN"
+      ? "Booking đã có trip — không tạo lại."
+      : "Trips already exist for this booking.");
+  }
+
+  let conflicts = [];
+  if (boatIds.length > 0 && normalizeCharterScheduleDate(departureDate)) {
+    conflicts = findCharterBoatScheduleConflicts({
+      currentBookingId: booking?.id,
+      departureDate,
+      startTime: booking?.startTime,
+      boatIds,
+      otherBookings,
+      matchMode: hasStartTime ? "datetime" : "day",
+    });
+    if (conflicts.length > 0) {
+      reasons.push(getCharterBoatScheduleConflictMessage(conflicts, lang));
+    }
+  }
+
+  return {
+    canCreate: reasons.length === 0,
+    reasons,
+    boatIds,
+    tripIds,
+    conflicts,
+  };
+};
+
 /**
  * BE giữ tàu theo ngày khởi hành ("trong ngày này") — mặc định matchMode = "day".
  * matchMode "datetime" chỉ dùng khi cần lọc đúng cả giờ.
@@ -342,12 +473,16 @@ export const isCharterBoatScheduleConflictError = (errorOrMessage) => {
     || message.includes("trong ngày này")
     || message.includes("chon tàu khác")
     || message.includes("chọn tàu khác")
+    || message.includes("trùng")
+    || message.includes("overlap")
+    || message.includes("overlapping")
     || message.includes("already booked")
     || message.includes("already assigned")
     || message.includes("already held")
     || message.includes("boat conflict")
     || message.includes("schedule conflict")
     || (message.includes("boat") && message.includes("conflict"))
+    || (message.includes("trip") && (message.includes("conflict") || message.includes("overlap")))
   );
 };
 
@@ -718,6 +853,19 @@ export const paymentWaitsCustomerRefundInfo = (payment, bookingStatus) =>
   && !isRefundProcessing(payment)
   && !isRefundFailed(payment);
 export const isActiveBoat = (boat) => String(pick(boat, ["status", "boatStatus", "boat.status"], "Active")).toLowerCase() === "active";
+
+/** Tàu cứu hộ — không dùng cho charter quote / chọn tàu thuê. */
+export const isRescueBoat = (boat) => {
+  const service = String(pick(boat, ["serviceType", "ServiceType", "boat.serviceType"], "")).toLowerCase();
+  if (service === "rescue") return true;
+
+  const code = String(pick(boat, ["boatCode", "code", "boat.code", "name", "boatName"], "")).toUpperCase();
+  return code.startsWith("SOS") || code.startsWith("RS_") || code.includes("CỨU HỘ") || code.includes("CUU HO");
+};
+
+/** Active Passenger boat — đủ điều kiện hiện trong dropdown chốt giá charter. */
+export const isCharterSelectableBoat = (boat) => isActiveBoat(boat) && !isRescueBoat(boat);
+
 export const getBoatPrice = (boat, unit) => {
   const directPrice = Number(
     pick(boat, unit === "Hour" ? ["hourlyRentalPrice", "hourlyPrice"] : ["dailyRentalPrice", "dailyPrice"], 0),
@@ -1516,6 +1664,8 @@ export const normalizeBooking = (item) => {
       contactName: pick(item, ["contactName", "customerName", "fullName"], ""),
     }),
     payments: collectCharterPayments(item),
+    trips: Array.isArray(item?.trips) ? item.trips : (Array.isArray(item?.charterTrips) ? item.charterTrips : []),
+    tripIds: getCharterBookingLinkedTripIds(item),
     createdAt: pick(item, ["createdAt", "createdDate"]),
     assignedManagerId: String(pick(item, ["assignedManagerId", "managerUserId", "assignedManager.id", "assignedManager.userId"], "")),
     assignedManagerName: pick(item, ["assignedManagerName", "assignedManager.fullName", "assignedManager.name"], ""),

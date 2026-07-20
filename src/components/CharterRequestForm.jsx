@@ -5,10 +5,14 @@ import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePac
 import { fetchCurrentUserProfile } from "../services/authService";
 import { updateUserProfile } from "../redux/authSlice";
 import {
+  CHARTER_DAY_WINDOW_END,
+  CHARTER_DAY_WINDOW_START,
   createEmptyBoatRequest,
   createEmptyStop,
   deckOptions,
+  getCharterDayStartTimeError,
   getMinDepartureDate,
+  isCharterDayStartTimeValid,
   normalizeDeckCount,
 } from "../utils/charterRequestForm";
 import { getCharterInsuranceNote, getInsurancePendingMessage } from "../utils/insurancePreview";
@@ -357,6 +361,10 @@ export function CharterRequestForm({
     if (!formData.startTime) {
       return lang === "VN" ? "Vui lòng chọn giờ đi." : "Please choose a start time.";
     }
+    if (formData.rentalUnit === "Day") {
+      const dayTimeError = getCharterDayStartTimeError(formData.startTime, lang);
+      if (dayTimeError) return dayTimeError;
+    }
     return null;
   };
 
@@ -433,7 +441,13 @@ export function CharterRequestForm({
   };
 
   const handleFieldChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "rentalUnit" && value === "Day" && !isCharterDayStartTimeValid(prev.startTime)) {
+        next.startTime = CHARTER_DAY_WINDOW_START;
+      }
+      return next;
+    });
     setFieldErrors((prev) => {
       if (!prev[field]) return prev;
       const next = { ...prev };
@@ -640,6 +654,19 @@ export function CharterRequestForm({
         confirmButtonColor: "#124757",
       });
       return;
+    }
+
+    if (formData.rentalUnit === "Day") {
+      const dayTimeError = getCharterDayStartTimeError(formData.startTime, lang);
+      if (dayTimeError) {
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "Giờ đi chưa hợp lệ" : "Invalid start time",
+          text: dayTimeError,
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
     }
 
     if (!Number.isInteger(adultCount) || !Number.isInteger(childCount) || adultCount < 0 || childCount < 0 || adultCount > 1000 || childCount > 1000 || totalPassengerCount <= 0 || totalPassengerCount > 1000) {
@@ -888,7 +915,15 @@ export function CharterRequestForm({
               </div>
               <div className="flex flex-col gap-2.5">
                 <label className={contactLabelClass}>{lang === "VN" ? "Giờ đi" : "Start Time"}{requiredMark}</label>
-                <input type="time" value={formData.startTime} onChange={(e) => handleFieldChange("startTime", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                <input
+                  type="time"
+                  value={formData.startTime}
+                  min={formData.rentalUnit === "Day" ? CHARTER_DAY_WINDOW_START : undefined}
+                  max={formData.rentalUnit === "Day" ? "22:59" : undefined}
+                  onChange={(e) => handleFieldChange("startTime", e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
+                />
               </div>
             </div>
 
@@ -917,9 +952,13 @@ export function CharterRequestForm({
                 })}
               </div>
               <p className="text-[11px] font-medium leading-relaxed text-slate-400">
-                {lang === "VN"
-                  ? "Bạn chỉ chọn theo giờ hoặc theo ngày. Số giờ/ngày tính tiền do hệ thống ước tính từ lộ trình — không cần nhập tay."
-                  : "Choose hourly or daily only. Chargeable duration is calculated from the route — you don't enter hours manually."}
+                {formData.rentalUnit === "Day"
+                  ? (lang === "VN"
+                    ? `Thuê theo ngày: giờ đi từ ${CHARTER_DAY_WINDOW_START} đến trước ${CHARTER_DAY_WINDOW_END}. 1 ngày kết thúc ${CHARTER_DAY_WINDOW_END} cùng ngày; 2 ngày kết thúc ${CHARTER_DAY_WINDOW_END} ngày hôm sau.`
+                    : `Daily rental: start between ${CHARTER_DAY_WINDOW_START} and before ${CHARTER_DAY_WINDOW_END}. 1 day ends at ${CHARTER_DAY_WINDOW_END} same day; 2 days end at ${CHARTER_DAY_WINDOW_END} next day.`)
+                  : (lang === "VN"
+                    ? "Bạn chỉ chọn theo giờ hoặc theo ngày. Số giờ/ngày tính tiền do hệ thống ước tính từ lộ trình — không cần nhập tay."
+                    : "Choose hourly or daily only. Chargeable duration is calculated from the route — you don't enter hours manually.")}
               </p>
             </div>
           </section>

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ASSIGNMENT_STATUS, ASSIGNMENT_TYPE, SHIFT_STATE, labelAssignmentStatus, labelShiftState, resolveShiftState } from "../services/staffAssignmentService";
+import { ASSIGNMENT_STATUS, ASSIGNMENT_TYPE, SHIFT_STATE, labelAssignmentStatus, labelShiftState, resolveShiftState, isAssignmentInactive } from "../services/staffAssignmentService";
 import {
   addDays,
   assignmentCoversDay,
@@ -31,18 +31,18 @@ const getBoatKey = (row) => {
 };
 
 const statusChip = (row) => {
-  if (row.status === ASSIGNMENT_STATUS.CANCELLED) {
+  if (isAssignmentInactive(row.status)) {
     return "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300";
   }
   const state = resolveShiftState(row);
   switch (state) {
     case SHIFT_STATE.ACTIVE:
-      return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300";
+      return "border-emerald-200/80 bg-emerald-50/90 text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300";
     case SHIFT_STATE.COMPLETED:
       return "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300";
     case SHIFT_STATE.UPCOMING:
     default:
-      return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300";
+      return "border-[#124757]/20 bg-[#124757]/5 text-[#124757] dark:border-yellow-400/25 dark:bg-yellow-400/10 dark:text-yellow-200";
   }
 };
 
@@ -148,7 +148,7 @@ export function StaffAssignmentCalendar({
     const map = new Map();
     assignments.forEach((row) => {
       if (row.assignmentType !== ASSIGNMENT_TYPE.BOAT) return;
-      if (row.status === ASSIGNMENT_STATUS.CANCELLED) return;
+      if (isAssignmentInactive(row.status)) return;
       const key = getBoatKey(row);
       if (!key) return;
       if (!map.has(key)) {
@@ -158,7 +158,8 @@ export function StaffAssignmentCalendar({
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
   }, [assignments, layout]);
 
-  const cellsForDay = (dayKey) => assignments.filter((row) => assignmentCoversDay(row, dayKey));
+  const cellsForDay = (dayKey) =>
+    assignments.filter((row) => !isAssignmentInactive(row.status) && assignmentCoversDay(row, dayKey));
 
   const renderChip = (row, keySuffix = "") => {
     const label =
@@ -192,16 +193,19 @@ export function StaffAssignmentCalendar({
     const today = isToday(day);
     const outside = isOutsideMonth(day);
     let cls = tall ? "min-h-[110px] " : "min-h-[92px] ";
-    cls += "rounded-2xl border p-1.5 ";
+    cls += "rounded-2xl border p-1.5 transition-colors ";
     if (today) {
-      cls += "border-[#124757]/45 bg-[#124757]/5 dark:border-yellow-400/45 dark:bg-yellow-400/5 ";
+      cls += "border-[#124757]/50 bg-[#124757]/8 dark:border-yellow-400/50 dark:bg-yellow-400/10 ";
     } else if (weekend) {
+      // Cuối tuần: xám ấm nhẹ — không cam / không cyan
       cls +=
-        "border-amber-200/80 bg-amber-50/70 dark:border-amber-500/25 dark:bg-amber-500/10 ";
+        "border-slate-200/90 bg-slate-100/80 dark:border-slate-600 dark:bg-slate-800/50 ";
     } else {
-      cls += "border-slate-100 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-900/30 ";
+      cls += "border-slate-100 dark:border-slate-700/60 bg-white dark:bg-slate-900/25 ";
     }
-    if (outside) cls += "opacity-40 ";
+    if (outside) {
+      cls += "opacity-45 bg-slate-50/80 dark:bg-slate-900/40 ";
+    }
     return cls;
   };
 
@@ -281,7 +285,7 @@ export function StaffAssignmentCalendar({
                 onClick={() => onLayoutChange("calendar")}
                 className={`px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider inline-flex items-center gap-1 ${
                   layout === "calendar"
-                    ? "bg-sky-600 text-white"
+                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
                     : "border border-slate-200 dark:border-slate-700 text-slate-500"
                 }`}
               >
@@ -293,7 +297,7 @@ export function StaffAssignmentCalendar({
                 onClick={() => onLayoutChange("byBoat")}
                 className={`px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider inline-flex items-center gap-1 ${
                   layout === "byBoat"
-                    ? "bg-sky-600 text-white"
+                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
                     : "border border-slate-200 dark:border-slate-700 text-slate-500"
                 }`}
               >
@@ -314,7 +318,7 @@ export function StaffAssignmentCalendar({
           <div
             className={`rounded-3xl border px-4 py-3 ${
               isWeekend(anchor)
-                ? "border-amber-200 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10"
+                ? "border-slate-200 bg-slate-100/90 dark:border-slate-600 dark:bg-slate-800/60"
                 : "border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40"
             }`}
           >
@@ -382,10 +386,10 @@ export function StaffAssignmentCalendar({
                           isToday(day)
                             ? "text-[#124757] dark:text-yellow-400"
                             : weekend
-                              ? "text-amber-600 dark:text-amber-300"
+                              ? "text-slate-500 dark:text-slate-400"
                               : "text-slate-400"
                         } ${isOutsideMonth(day) ? "opacity-40" : ""} ${
-                          weekend ? "bg-amber-50/80 dark:bg-amber-500/10" : ""
+                          weekend ? "bg-slate-100/80 dark:bg-slate-800/50" : ""
                         }`}
                       >
                         <div>{weekdayLabels[(day.getDay() + 6) % 7]}</div>
@@ -414,7 +418,7 @@ export function StaffAssignmentCalendar({
                             isToday(day)
                               ? "bg-[#124757]/5 dark:bg-yellow-400/5"
                               : weekend
-                                ? "bg-amber-50/60 dark:bg-amber-500/10"
+                                ? "bg-slate-100/70 dark:bg-slate-800/40"
                                 : ""
                           }`}
                         >
@@ -438,7 +442,7 @@ export function StaffAssignmentCalendar({
                   key={label}
                   className={`text-center text-[10px] font-headline font-black uppercase tracking-widest py-1 rounded-lg ${
                     weekend
-                      ? "text-amber-600 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-500/10"
+                      ? "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60"
                       : "text-slate-400"
                   }`}
                 >
@@ -472,7 +476,7 @@ export function StaffAssignmentCalendar({
                         isToday(day)
                           ? "text-[#124757] dark:text-yellow-400"
                           : isWeekend(day)
-                            ? "text-amber-700 dark:text-amber-300"
+                            ? "text-slate-500 dark:text-slate-400"
                             : "text-slate-600 dark:text-slate-300"
                       }`}
                     >
@@ -497,19 +501,19 @@ export function StaffAssignmentCalendar({
 
       <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700/60 flex flex-wrap gap-3 text-[10px] font-bold text-slate-400">
         <span className="inline-flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />{" "}
+          <span className="w-2.5 h-2.5 rounded-full bg-[#124757]/70 dark:bg-yellow-400" />{" "}
           {labelShiftState(SHIFT_STATE.UPCOMING, lang)}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />{" "}
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />{" "}
           {labelShiftState(SHIFT_STATE.ACTIVE, lang)}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />{" "}
           {labelShiftState(SHIFT_STATE.COMPLETED, lang)}
         </span>
-        <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-300">
-          <span className="w-2.5 h-2.5 rounded-sm bg-amber-300 dark:bg-amber-500/50" />
+        <span className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+          <span className="w-2.5 h-2.5 rounded-sm bg-slate-300 dark:bg-slate-600" />
           {lang === "VN" ? "Cuối tuần (T7/CN)" : "Weekend"}
         </span>
         <span className="text-slate-300 dark:text-slate-600">

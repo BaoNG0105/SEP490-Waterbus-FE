@@ -36,6 +36,7 @@ import {
   hasCompletedCharterRefund,
   hasEmptyRouteCandidateLegs,
   isCharterRoutePricingBlocked,
+  isRescueBoat,
   normalizeRouteEstimateLegs,
   buildCharterRoutePlan,
 } from "../utils/charterBookingAdmin";
@@ -569,13 +570,19 @@ function AdminBoatQuoteSelect({
       ? formatQuoteUnitPriceLabel(hourPrice, "Hour", currencyFormatter, lang)
       : (lang === "VN" ? "Chưa có giá/giờ" : "No hourly rate");
 
-    return { dayLabel, hourLabel, dayPrice, hourPrice };
+    return {
+      dayLabel,
+      hourLabel,
+      dayPrice,
+      hourPrice,
+      activeLabel: activeUnit === "Hour" ? hourLabel : dayLabel,
+    };
   };
 
   const renderBoatLabel = (boat) => {
     const code = getBoatCode(boat);
     const name = getBoatNameOnly(boat);
-    const { dayLabel, hourLabel } = formatBoatPrices(boat);
+    const { activeLabel } = formatBoatPrices(boat);
     return (
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold text-slate-800 dark:text-white">
@@ -586,14 +593,8 @@ function AdminBoatQuoteSelect({
         <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
           {formatBoatMeta(boat)}
         </p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-headline font-black">
-          <span className={activeUnit === "Day" ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"}>
-            {dayLabel}
-          </span>
-          <span className="font-medium text-slate-300 dark:text-slate-600">·</span>
-          <span className={activeUnit === "Hour" ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"}>
-            {hourLabel}
-          </span>
+        <p className="mt-0.5 text-[11px] font-headline font-black text-[#124757] dark:text-yellow-400">
+          {activeLabel}
         </p>
       </div>
     );
@@ -1225,6 +1226,11 @@ export function AdminBookingActionsTab({
   onQuoteRentalUnitChange,
   onStatusChange,
   onNavigateTab,
+  onCreateTrip,
+  canCreateTrip = false,
+  createTripBlockers = [],
+  linkedTripIds = [],
+  canManageTripCreate = false,
 }) {
   const routeQuoteOptions = {
     routeCandidateLegs: routeCandidatesLoaded ? routeCandidateLegs : undefined,
@@ -1350,6 +1356,7 @@ export function AdminBookingActionsTab({
                     const isOccupiedElsewhere =
                       occupiedSet.has(boatId) && boatId !== String(quoteBoat.boatId || "").trim();
                     return isActiveBoat(boat)
+                      && !isRescueBoat(boat)
                       && matchesDeck
                       && matchesSeatSetup
                       && !isOccupiedElsewhere
@@ -1518,39 +1525,88 @@ export function AdminBookingActionsTab({
   }
 
   if (phase === "operate") {
+    const hasLinkedTrips = Array.isArray(linkedTripIds) && linkedTripIds.length > 0;
+    const showCreateTrip = Boolean(canManageTripCreate);
     return (
       <section className="space-y-6">
-        <div className="rounded-4xl border border-emerald-100 bg-emerald-50 p-6 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+        <div className={`rounded-4xl border p-6 ${
+          hasLinkedTrips
+            ? "border-sky-100 bg-sky-50 dark:border-sky-500/20 dark:bg-sky-500/10"
+            : "border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10"
+        }`}
+        >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-3xl text-emerald-600 dark:text-emerald-300">sailing</span>
+              <span className={`material-symbols-outlined text-3xl ${
+                hasLinkedTrips
+                  ? "text-sky-600 dark:text-sky-300"
+                  : "text-emerald-600 dark:text-emerald-300"
+              }`}
+              >
+                {hasLinkedTrips ? "check_circle" : "sailing"}
+              </span>
               <div>
-                <h3 className="font-headline font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-                  {lang === "VN" ? "Sẵn sàng vận hành" : "Ready for operation"}
+                <h3 className={`font-headline font-black uppercase tracking-wide ${
+                  hasLinkedTrips
+                    ? "text-sky-800 dark:text-sky-300"
+                    : "text-emerald-800 dark:text-emerald-300"
+                }`}
+                >
+                  {hasLinkedTrips
+                    ? (lang === "VN" ? "Đã có trip" : "Trip created")
+                    : (lang === "VN" ? "Sẵn sàng vận hành" : "Ready for operation")}
                 </h3>
-                <p className="mt-1 text-sm font-bold text-emerald-700/80 dark:text-emerald-200">
+                <p className={`mt-1 text-sm font-bold ${
+                  hasLinkedTrips
+                    ? "text-sky-700/80 dark:text-sky-200"
+                    : "text-emerald-700/80 dark:text-emerald-200"
+                }`}
+                >
                   {formatPassengerSummary(booking, lang)} · {booking.route}
                 </p>
+                {hasLinkedTrips && (
+                  <p className="mt-2 text-xs font-bold text-sky-700 dark:text-sky-200">
+                    {lang === "VN"
+                      ? (linkedTripIds.length > 1
+                        ? `Đã gắn ${linkedTripIds.length} chuyến Charter.`
+                        : "Booking đã được gắn chuyến Charter.")
+                      : (linkedTripIds.length > 1
+                        ? `${linkedTripIds.length} Charter trips linked.`
+                        : "Charter trip is linked to this booking.")}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => onNavigateTab("overview")}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800"
-              >
-                {lang === "VN" ? "Tổng quan" : "Overview"}
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigateTab("tickets")}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white"
-              >
-                {lang === "VN" ? "Quản lý vé/khách" : "Manage tickets"}
-                <span className="material-symbols-outlined text-base">confirmation_number</span>
-              </button>
+              {showCreateTrip && (
+                <button
+                  type="button"
+                  disabled={!canCreateTrip || isSubmitting || hasLinkedTrips}
+                  onClick={onCreateTrip}
+                  className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-70 ${
+                    hasLinkedTrips
+                      ? "border border-sky-200 bg-white text-sky-800 dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-200"
+                      : "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 disabled:opacity-50"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-base">
+                    {hasLinkedTrips ? "check_circle" : "directions_boat"}
+                  </span>
+                  {hasLinkedTrips
+                    ? (lang === "VN" ? "Đã có trip" : "Trip exists")
+                    : (lang === "VN" ? "Tạo chuyến" : "Create trip")}
+                </button>
+              )}
             </div>
           </div>
+
+          {showCreateTrip && !hasLinkedTrips && createTripBlockers.length > 0 && (
+            <ul className="mt-4 space-y-1 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              {createTripBlockers.map((reason) => (
+                <li key={reason}>• {reason}</li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {!hideManualStatusPanel && (

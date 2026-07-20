@@ -151,23 +151,18 @@ export const normalizeReplacementMissionType = (value) => {
   return String(value || "None").trim() || "None";
 };
 
-/** Cần tàu thay thế (chở khách) theo mission BE — không chỉ nhìn activeTicketCount. */
-export const incidentNeedsReplacementBoat = (incident) => {
-  const mission = normalizeReplacementMissionType(incident?.replacementMissionType);
-  if (mission === "TransferAtIncidentLocation" || mission === "ContinueFromStation") return true;
-  if (mission === "None") return false;
-  if (mission === "PassengerRecoveryRequired") return false; // Manager tự quyết sau khi kiểm tra
-  return Number(incident?.activeTicketCount) > 0;
+/** Sự cố đã gắn chuyến — mới có vé / mission thay thế theo trip. */
+export const incidentHasTrip = (incident) => {
+  const id = incident?.tripId;
+  if (id == null || id === "") return false;
+  return String(id).trim() !== "";
 };
 
-/** Hiện ô chọn tàu thay thế (bắt buộc hoặc tuỳ chọn). */
-export const incidentShowsReplacementBoatField = (incident) => {
-  const mission = normalizeReplacementMissionType(incident?.replacementMissionType);
-  if (mission === "TransferAtIncidentLocation" || mission === "ContinueFromStation") return true;
-  if (mission === "PassengerRecoveryRequired") return true;
-  if (mission === "None") return false;
-  return Number(incident?.activeTicketCount) > 0;
-};
+/** Có tripId → bắt buộc tàu thay thế (spec BE điều tàu). Không trip → chỉ cứu hộ. */
+export const incidentNeedsReplacementBoat = (incident) => incidentHasTrip(incident);
+
+/** Hiện ô chọn tàu thay thế khi sự cố gắn chuyến. */
+export const incidentShowsReplacementBoatField = (incident) => incidentHasTrip(incident);
 
 /** Copy hiển thị theo replacementMissionType (spec FE). */
 export const getReplacementMissionCopy = (incident, lang = "VN") => {
@@ -236,5 +231,33 @@ export const getApiErrorMessage = (error) => {
   } catch {
     return error?.message || "";
   }
+};
+
+/** Lỗi validation điều tàu — map replacementBoatId theo copy BE. */
+export const getDispatchReplacementErrorMessage = (error, lang = "VN") => {
+  const data = error?.response?.data;
+  const errors = data?.errors && typeof data.errors === "object" ? data.errors : null;
+  const replacementKeys = errors
+    ? Object.keys(errors).filter((key) => /replacementboatid/i.test(String(key).replace(/[_\s.-]/g, "")))
+    : [];
+  const blob = [
+    data?.detail,
+    data?.title,
+    data?.message,
+    getApiErrorMessage(error),
+    error?.message,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  const isReplacementRequired = replacementKeys.length > 0
+    || /replacementboatid/.test(blob)
+    || (/replacement/.test(blob) && /required|bắt buộc|bat buoc|must/.test(blob));
+
+  if (isReplacementRequired) {
+    return lang === "VN"
+      ? "Chuyến đang chạy nên phải chọn tàu thay thế"
+      : "Trip is running — a replacement boat must be selected";
+  }
+
+  return getApiErrorMessage(error) || error?.message || "";
 };
 

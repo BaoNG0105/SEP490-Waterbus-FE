@@ -664,11 +664,41 @@
 }
 
 .admin-swal-toast-icon {
+  position: relative !important;
   margin: 0 0.65rem 0 0 !important;
   width: 2rem !important;
   height: 2rem !important;
   border-width: 2px !important;
   box-shadow: none !important;
+  flex-shrink: 0 !important;
+}
+
+.admin-swal-toast-icon.swal2-success {
+  border-color: #059669 !important;
+  background: #ecfdf5 !important;
+}
+
+.admin-swal-toast-icon.swal2-success .swal2-success-circular-line-left,
+.admin-swal-toast-icon.swal2-success .swal2-success-circular-line-right,
+.admin-swal-toast-icon.swal2-success .swal2-success-fix-placeholder,
+.admin-swal-toast-icon.swal2-success .swal2-success-ring,
+.admin-swal-toast-icon.swal2-success .swal2-success-line-tip,
+.admin-swal-toast-icon.swal2-success .swal2-success-line-long,
+.admin-swal-toast-icon.swal2-success .swal2-icon-content {
+  display: none !important;
+}
+
+.admin-swal-toast-icon.swal2-success::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 0.38rem;
+  height: 0.7rem;
+  border: solid #059669;
+  border-width: 0 0.14rem 0.14rem 0;
+  transform: translate(-50%, -58%) rotate(45deg);
+  box-sizing: border-box;
 }
 
 .admin-swal-toast-icon .swal2-icon-content {
@@ -739,6 +769,7 @@
 }
 
 .admin-swal-icon {
+  position: relative !important;
   margin: 0.15rem auto 1rem !important;
   width: 3.5rem !important;
   height: 3.5rem !important;
@@ -759,37 +790,34 @@
 .admin-swal-icon.swal2-success {
   border-color: #059669 !important;
   color: #059669 !important;
+  background: #ecfdf5 !important;
 }
 
-/* Avoid doubled/misaligned ✓ when icon size is overridden */
+/*
+ * SWAL success dùng line-tip/line-long theo em của icon 5em.
+ * Khi ép 3.5rem, geometry mặc định bị lệch → ẩn animation mặc định, vẽ ✓ CSS.
+ */
 .admin-swal-icon.swal2-success .swal2-success-circular-line-left,
 .admin-swal-icon.swal2-success .swal2-success-circular-line-right,
-.admin-swal-icon.swal2-success .swal2-success-fix-placeholder {
-  display: none !important;
-}
-
-.admin-swal-icon.swal2-success .swal2-success-ring {
-  width: 3.5rem !important;
-  height: 3.5rem !important;
-  border-width: 0.2em !important;
-}
-
-.admin-swal-icon.swal2-success .swal2-success-line-tip {
-  top: 1.25rem !important;
-  left: 0.55rem !important;
-  width: 1rem !important;
-  height: 0.2rem !important;
-}
-
-.admin-swal-icon.swal2-success .swal2-success-line-long {
-  top: 1.05rem !important;
-  right: 0.45rem !important;
-  width: 1.6rem !important;
-  height: 0.2rem !important;
-}
-
+.admin-swal-icon.swal2-success .swal2-success-fix-placeholder,
+.admin-swal-icon.swal2-success .swal2-success-ring,
+.admin-swal-icon.swal2-success .swal2-success-line-tip,
+.admin-swal-icon.swal2-success .swal2-success-line-long,
 .admin-swal-icon.swal2-success .swal2-icon-content {
   display: none !important;
+}
+
+.admin-swal-icon.swal2-success::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 0.7rem;
+  height: 1.25rem;
+  border: solid #059669;
+  border-width: 0 0.22rem 0.22rem 0;
+  transform: translate(-50%, -58%) rotate(45deg);
+  box-sizing: border-box;
 }
 
 .admin-swal-icon.swal2-warning {

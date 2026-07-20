@@ -2,6 +2,8 @@ import {
     getStaffAssignments as apiGetStaffAssignments,
     getMyStaffAssignments as apiGetMyStaffAssignments,
     createStaffAssignment as apiCreateStaffAssignment,
+    createStaffAssignmentsBulk as apiCreateStaffAssignmentsBulk,
+    replaceStaffAssignment as apiReplaceStaffAssignment,
     deleteStaffAssignment as apiDeleteStaffAssignment,
 } from '../api/staffAssignmentApi';
 import { getStaffMeAssignments as apiGetStaffMeAssignments } from '../api/staffMeApi';
@@ -11,10 +13,11 @@ export const ASSIGNMENT_TYPE = {
     STATION: 'Station',
 };
 
-/** DB status — chỉ Scheduled | Cancelled (không set Active/Completed tay) */
+/** DB status — Scheduled | Cancelled | Replaced */
 export const ASSIGNMENT_STATUS = {
     SCHEDULED: 'Scheduled',
     CANCELLED: 'Cancelled',
+    REPLACED: 'Replaced',
 };
 
 /** BE tính theo startAt/endAt — không lưu DB / không PATCH */
@@ -27,6 +30,22 @@ export const SHIFT_STATE = {
 export const DUTY_ROLE = {
     ON_BOARD: 'OnBoard',
     GATE: 'Gate',
+};
+
+/** 1 = Thứ 2 … 7 = Chủ nhật (ISO weekday) */
+export const DAYS_OF_WEEK = [
+    { value: 1, labelVn: 'T2', labelEn: 'Mon' },
+    { value: 2, labelVn: 'T3', labelEn: 'Tue' },
+    { value: 3, labelVn: 'T4', labelEn: 'Wed' },
+    { value: 4, labelVn: 'T5', labelEn: 'Thu' },
+    { value: 5, labelVn: 'T6', labelEn: 'Fri' },
+    { value: 6, labelVn: 'T7', labelEn: 'Sat' },
+    { value: 7, labelVn: 'CN', labelEn: 'Sun' },
+];
+
+export const isAssignmentInactive = (status) => {
+    const key = String(status || '').toLowerCase();
+    return key === 'cancelled' || key === 'canceled' || key === 'replaced';
 };
 
 const pick = (source, keys, fallback = '') => {
@@ -71,7 +90,7 @@ const normalizeNestedStation = (item) => {
 
 /** Fallback khi BE chưa trả shiftState */
 export const deriveShiftState = (startAt, endAt, status, now = new Date()) => {
-    if (String(status) === ASSIGNMENT_STATUS.CANCELLED) return null;
+    if (isAssignmentInactive(status)) return null;
     const start = startAt ? new Date(startAt) : null;
     const end = endAt ? new Date(endAt) : null;
     if (!start || Number.isNaN(start.getTime())) return SHIFT_STATE.UPCOMING;
@@ -81,7 +100,7 @@ export const deriveShiftState = (startAt, endAt, status, now = new Date()) => {
 };
 
 export const resolveShiftState = (row, now = new Date()) => {
-    if (!row || row.status === ASSIGNMENT_STATUS.CANCELLED) return null;
+    if (!row || isAssignmentInactive(row.status)) return null;
     const fromApi = String(row.shiftState || '').trim();
     if (
         fromApi === SHIFT_STATE.ACTIVE ||
@@ -90,7 +109,6 @@ export const resolveShiftState = (row, now = new Date()) => {
     ) {
         return fromApi;
     }
-    // BE có thể trả Active/Completed với casing khác
     const lower = fromApi.toLowerCase();
     if (lower === 'active') return SHIFT_STATE.ACTIVE;
     if (lower === 'completed') return SHIFT_STATE.COMPLETED;
@@ -135,6 +153,15 @@ export const toIsoWithOffset = (datetimeLocalValue) => {
     return `${datetimeLocalValue}:00+07:00`;
 };
 
+/** HH:mm hoặc HH:mm:ss → HH:mm:ss */
+export const toApiTime = (timeValue) => {
+    const raw = String(timeValue || '').trim();
+    if (!raw) return null;
+    if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) return raw;
+    if (/^\d{2}:\d{2}$/.test(raw)) return `${raw}:00`;
+    return raw;
+};
+
 export const buildCreateAssignmentPayload = (form) => {
     const assignmentType = form.assignmentType || ASSIGNMENT_TYPE.BOAT;
     const isBoat = assignmentType === ASSIGNMENT_TYPE.BOAT;
@@ -144,6 +171,35 @@ export const buildCreateAssignmentPayload = (form) => {
         assignmentType,
         startAt: toIsoWithOffset(form.startAt),
         endAt: toIsoWithOffset(form.endAt),
+        dutyRole: isBoat ? DUTY_ROLE.ON_BOARD : DUTY_ROLE.GATE,
+        note: String(form.note || '').trim() || null,
+    };
+
+    if (isBoat) {
+        payload.boatId = String(form.boatId || '').trim();
+    } else {
+        payload.stationId = String(form.stationId || '').trim();
+    }
+
+    return payload;
+};
+
+/** Payload POST /staff-assignments/bulk */
+export const buildBulkAssignmentPayload = (form) => {
+    const assignmentType = form.assignmentType || ASSIGNMENT_TYPE.BOAT;
+    const isBoat = assignmentType === ASSIGNMENT_TYPE.BOAT;
+    const days = Array.isArray(form.daysOfWeek)
+        ? form.daysOfWeek.map(Number).filter((n) => n >= 1 && n <= 7)
+        : [];
+
+    const payload = {
+        staffUserId: String(form.staffUserId || '').trim(),
+        assignmentType,
+        fromDate: String(form.fromDate || '').trim(),
+        toDate: String(form.toDate || '').trim(),
+        startTime: toApiTime(form.startTime),
+        endTime: toApiTime(form.endTime),
+        daysOfWeek: days,
         dutyRole: isBoat ? DUTY_ROLE.ON_BOARD : DUTY_ROLE.GATE,
         note: String(form.note || '').trim() || null,
     };
@@ -178,6 +234,34 @@ export const validateCreateAssignmentForm = (form, lang = 'VN') => {
         return lang === 'VN' ? 'Loại phân công không hợp lệ.' : 'Invalid assignment type.';
     }
 
+    return null;
+};
+
+export const validateBulkAssignmentForm = (form, lang = 'VN') => {
+    if (!form.staffUserId) {
+        return lang === 'VN' ? 'Chọn nhân viên.' : 'Select a staff member.';
+    }
+    if (!form.fromDate || !form.toDate) {
+        return lang === 'VN' ? 'Chọn fromDate và toDate.' : 'Select fromDate and toDate.';
+    }
+    if (form.toDate < form.fromDate) {
+        return lang === 'VN' ? 'toDate phải ≥ fromDate.' : 'toDate must be on or after fromDate.';
+    }
+    if (!form.startTime || !form.endTime) {
+        return lang === 'VN' ? 'Chọn giờ bắt đầu / kết thúc ca.' : 'Select shift start / end time.';
+    }
+    if (toApiTime(form.endTime) === toApiTime(form.startTime)) {
+        return lang === 'VN' ? 'endTime phải khác startTime.' : 'endTime must differ from startTime.';
+    }
+    if (form.assignmentType === ASSIGNMENT_TYPE.BOAT) {
+        if (!form.boatId) return lang === 'VN' ? 'Chọn tàu (boatId bắt buộc).' : 'Select a boat (boatId required).';
+    } else if (form.assignmentType === ASSIGNMENT_TYPE.STATION) {
+        if (!form.stationId) {
+            return lang === 'VN' ? 'Chọn bến (stationId bắt buộc).' : 'Select a station (stationId required).';
+        }
+    } else {
+        return lang === 'VN' ? 'Loại phân công không hợp lệ.' : 'Invalid assignment type.';
+    }
     return null;
 };
 
@@ -251,6 +335,34 @@ export const addStaffAssignment = async (payload) => {
     }
 };
 
+export const addStaffAssignmentsBulk = async (payload) => {
+    try {
+        return await apiCreateStaffAssignmentsBulk(payload);
+    } catch (error) {
+        console.error('Lỗi khi tạo phân công bulk:', error);
+        throw error;
+    }
+};
+
+export const replaceStaffOnAssignment = async (assignmentId, payload) => {
+    try {
+        const body = {
+            replacementStaffUserId: String(
+                payload?.replacementStaffUserId
+                || payload?.staffUserId
+                || payload?.replacementStaffId
+                || "",
+            ).trim(),
+            reason: String(payload?.reason || "").trim() || null,
+            note: String(payload?.note || "").trim() || null,
+        };
+        return await apiReplaceStaffAssignment(assignmentId, body);
+    } catch (error) {
+        console.error(`Lỗi khi thay nhân viên ca ${assignmentId}:`, error);
+        throw error;
+    }
+};
+
 export const cancelStaffAssignment = async (assignmentId) => {
     try {
         return await apiDeleteStaffAssignment(assignmentId);
@@ -268,6 +380,8 @@ export const labelAssignmentStatus = (status, lang = 'EN') => {
             return isVn ? 'Đã xếp lịch' : 'Scheduled';
         case ASSIGNMENT_STATUS.CANCELLED:
             return isVn ? 'Đã hủy' : 'Cancelled';
+        case ASSIGNMENT_STATUS.REPLACED:
+            return isVn ? 'Đã thay người' : 'Replaced';
         default:
             return status || '—';
     }

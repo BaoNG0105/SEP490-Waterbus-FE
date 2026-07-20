@@ -113,6 +113,10 @@ export const quoteAdminCharterBooking = (id, data) =>
 export const assignAdminCharterBookingManager = (id, data) =>
     api.put(`/charter-bookings/admin/${id}/manager`, data).then(response => response.data);
 
+/** Admin: tạo trip Charter từ booking đã Confirmed (1 trip / tàu đã chốt). */
+export const createAdminCharterBookingTrip = (id) =>
+    api.post(`/charter-bookings/admin/${encodeURIComponent(id)}/trip`).then((response) => response.data);
+
 export const getAssignedCharterBookings = () =>
     api.get('/charter-bookings/assigned').then(response => response.data);
 

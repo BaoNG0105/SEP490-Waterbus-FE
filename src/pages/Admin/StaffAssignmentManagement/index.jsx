@@ -11,25 +11,41 @@ import {
 import {
   ASSIGNMENT_STATUS,
   ASSIGNMENT_TYPE,
+  DAYS_OF_WEEK,
   SHIFT_STATE,
   addStaffAssignment,
+  addStaffAssignmentsBulk,
+  buildBulkAssignmentPayload,
   buildCreateAssignmentPayload,
   cancelStaffAssignment,
   fetchStaffAssignments,
   fetchMyStaffAssignments,
+  isAssignmentInactive,
   labelAssignmentStatus,
   labelAssignmentType,
   labelShiftState,
+  replaceStaffOnAssignment,
   resolveShiftState,
+  validateBulkAssignmentForm,
   validateCreateAssignmentForm,
 } from "../../../services/staffAssignmentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getUserId, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
+import { FormSelect } from "../../../components/FormSelect";
 import { getRangeForScheduleMode, toDateKey } from "../../../utils/staffAssignmentCalendarUtils";
 import { notify } from "../../../utils/swalToast";
 
 const pad2 = (n) => String(n).padStart(2, "0");
+
+/** Ca Full ngày — khớp cửa sổ vận hành charter/ngày (BE). */
+const FULL_DAY_START_TIME = "07:40";
+const FULL_DAY_END_TIME = "23:00";
+const FULL_DAY_DAYS_OF_WEEK = [1, 2, 3, 4, 5, 6, 7];
+
+/** Khoảng mặc định list: hôm nay → +6 = 7 ngày. BE giới hạn tối đa 62 ngày. */
+const DEFAULT_RANGE_DAYS = 7;
+const MAX_RANGE_DAYS = 62;
 
 const toDateInputValue = (date) => {
   const d = date instanceof Date ? date : new Date(date);
@@ -37,16 +53,26 @@ const toDateInputValue = (date) => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
-const defaultDateRange = ({ wide = false } = {}) => {
+const parseDateInput = (value) => {
+  if (!value) return null;
+  const d = new Date(`${value}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+/** Số ngày inclusive từ from→to (cùng ngày = 1). */
+const inclusiveDaySpan = (fromValue, toValue) => {
+  const from = parseDateInput(fromValue);
+  const to = parseDateInput(toValue);
+  if (!from || !to) return null;
+  const ms = to.getTime() - from.getTime();
+  if (ms < 0) return null;
+  return Math.floor(ms / 86400000) + 1;
+};
+
+const defaultDateRange = () => {
   const from = new Date();
   const to = new Date();
-  if (wide) {
-    // Staff xem lịch của mình: lùi 7 ngày + tới 60 ngày để không miss ca gần đây / sắp tới.
-    from.setDate(from.getDate() - 7);
-    to.setDate(to.getDate() + 60);
-  } else {
-    to.setDate(to.getDate() + 6);
-  }
+  to.setDate(to.getDate() + (DEFAULT_RANGE_DAYS - 1));
   return { fromDate: toDateInputValue(from), toDate: toDateInputValue(to) };
 };
 
@@ -57,13 +83,23 @@ const emptyCreateForm = (assignmentType = ASSIGNMENT_TYPE.STATION) => {
   end.setHours(16, 0, 0, 0);
   const toLocal = (d) =>
     `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const today = toDateInputValue(new Date());
+  const monthEnd = new Date();
+  monthEnd.setDate(monthEnd.getDate() + 30);
+  const isBoat = assignmentType === ASSIGNMENT_TYPE.BOAT;
   return {
+    mode: isBoat ? "fullDay" : "single",
     assignmentType,
     staffUserId: "",
     boatId: "",
     stationId: "",
     startAt: toLocal(start),
     endAt: toLocal(end),
+    fromDate: today,
+    toDate: toDateInputValue(monthEnd),
+    startTime: isBoat ? FULL_DAY_START_TIME : "07:30",
+    endTime: isBoat ? FULL_DAY_END_TIME : "15:00",
+    daysOfWeek: isBoat ? [...FULL_DAY_DAYS_OF_WEEK] : [1, 2, 3, 4, 5],
     note: "",
   };
 };
@@ -87,6 +123,8 @@ const statusTone = (status) => {
       return "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400";
     case ASSIGNMENT_STATUS.CANCELLED:
       return "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400";
+    case ASSIGNMENT_STATUS.REPLACED:
+      return "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300";
     default:
       return "bg-slate-100 text-slate-500 border-slate-200";
   }
@@ -125,8 +163,8 @@ export function StaffAssignmentManagement() {
   const canReceive = (isStaff || isManager) && !isAdmin;
   const canAccess = isAdmin || isManager || isStaff;
 
-  // Staff/Manager xem "của tôi": mặc định khoảng rộng hơn để thấy ca gần đây & sắp tới.
-  const range0 = defaultDateRange({ wide: canReceive });
+  // Mặc định luôn 7 ngày (BE tối đa 62 ngày / request).
+  const range0 = defaultDateRange();
   const [viewMode, setViewMode] = useState(() => (canViewManage ? "manage" : "mine"));
   const isMineView = viewMode === "mine" || (!canViewManage && canReceive);
 
@@ -137,9 +175,8 @@ export function StaffAssignmentManagement() {
   );
   const [statusFilter, setStatusFilter] = useState("All");
   const [shiftStateFilter, setShiftStateFilter] = useState("All");
-  const [staffFilter, setStaffFilter] = useState("");
-  const [boatFilter, setBoatFilter] = useState("");
   const [stationFilter, setStationFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [assignments, setAssignments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -158,6 +195,15 @@ export function StaffAssignmentManagement() {
   );
   const [createError, setCreateError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [replaceForm, setReplaceForm] = useState({
+    assignmentId: "",
+    staffName: "",
+    staffUserId: "",
+    reason: "",
+    note: "",
+  });
+  const [replaceError, setReplaceError] = useState("");
+  const [isReplacing, setIsReplacing] = useState(false);
 
   // list | schedule — Ngày/Tuần/Tháng gộp trong StaffAssignmentCalendar
   const [displayMode, setDisplayMode] = useState("list");
@@ -173,15 +219,12 @@ export function StaffAssignmentManagement() {
   }, [displayMode, calendarMode, anchorDate]);
 
   useEffect(() => {
-    if (displayMode !== "schedule" || calendarLayout !== "byBoat") return;
-    if (isAdmin) setAssignmentTypeFilter(ASSIGNMENT_TYPE.BOAT);
-  }, [displayMode, calendarLayout, isAdmin]);
-
-  // Tránh giữ filter mục tiêu không khớp phạm vi đang chọn.
-  useEffect(() => {
-    if (assignmentTypeFilter !== ASSIGNMENT_TYPE.BOAT) setBoatFilter("");
-    if (assignmentTypeFilter !== ASSIGNMENT_TYPE.STATION) setStationFilter("");
-  }, [assignmentTypeFilter]);
+    if (isAdmin) {
+      setAssignmentTypeFilter(ASSIGNMENT_TYPE.BOAT);
+      return;
+    }
+    if (canCreateStation) setAssignmentTypeFilter(ASSIGNMENT_TYPE.STATION);
+  }, [displayMode, calendarLayout, isAdmin, canCreateStation]);
 
   const labelStyle =
     "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1 block";
@@ -199,19 +242,31 @@ export function StaffAssignmentManagement() {
     return stations;
   }, [isAdmin, isManager, stations, managerStationIds]);
 
+  const stationSelectOptions = useMemo(() => {
+    return usableStations.map((s) => {
+      const id = getStationId(s);
+      const code = s.stationCode || s.code || "";
+      const name = s.stationName || s.name || "";
+      return {
+        value: id,
+        label: [code, name].filter(Boolean).join(" · ") || id,
+        searchText: `${code} ${name} ${id}`,
+      };
+    });
+  }, [usableStations]);
+
+  const stationFilterOptions = useMemo(
+    () => [
+      { value: "", label: lang === "VN" ? "Tất cả bến" : "All stations" },
+      ...stationSelectOptions,
+    ],
+    [stationSelectOptions, lang],
+  );
+
   const staffOptionsForCreate = useMemo(() => {
     if (createForm.assignmentType === ASSIGNMENT_TYPE.BOAT) return onBoardStaff;
     return groundStaff;
   }, [createForm.assignmentType, onBoardStaff, groundStaff]);
-
-  const allStaffForFilter = useMemo(() => {
-    const map = new Map();
-    [...onBoardStaff, ...groundStaff].forEach((s) => {
-      const id = getStaffId(s);
-      if (id) map.set(id, s);
-    });
-    return [...map.values()];
-  }, [onBoardStaff, groundStaff]);
 
   useEffect(() => {
     const loadLookups = async () => {
@@ -246,10 +301,32 @@ export function StaffAssignmentManagement() {
     currentUser?.id,
   ]);
 
+  const dateRangeDays = useMemo(
+    () => inclusiveDaySpan(fromDate, toDate),
+    [fromDate, toDate],
+  );
+  const dateRangeTooWide = dateRangeDays != null && dateRangeDays > MAX_RANGE_DAYS;
+  const dateRangeInvalid = fromDate && toDate && dateRangeDays == null;
+
   const loadAssignments = useCallback(async () => {
     try {
       setIsLoading(true);
       setErrorMsg("");
+
+      const span = inclusiveDaySpan(fromDate, toDate);
+      if (fromDate && toDate && (span == null || span > MAX_RANGE_DAYS)) {
+        setAssignments([]);
+        setErrorMsg(
+          span == null
+            ? (lang === "VN"
+              ? "Khoảng ngày không hợp lệ (Từ ngày phải ≤ Đến ngày)."
+              : "Invalid date range (From must be ≤ To).")
+            : (lang === "VN"
+              ? `Chỉ xem tối đa ${MAX_RANGE_DAYS} ngày / lần. Hiện đang chọn ${span} ngày — hãy thu hẹp khoảng ngày.`
+              : `You can view at most ${MAX_RANGE_DAYS} days at a time. Current range is ${span} days — please narrow the dates.`)
+        );
+        return;
+      }
 
       if (isMineView) {
         if (!myUserId) {
@@ -263,6 +340,8 @@ export function StaffAssignmentManagement() {
             status: statusFilter !== "All" ? statusFilter : undefined,
             staffUserId: myUserId,
           });
+          // Staff không thấy Cancelled / Replaced
+          data = data.filter((row) => !isAssignmentInactive(row.status));
           if (shiftStateFilter !== "All") {
             data = data.filter((row) => resolveShiftState(row) === shiftStateFilter);
           }
@@ -274,34 +353,29 @@ export function StaffAssignmentManagement() {
         return;
       }
 
-      // Manager (không Admin): bảng quản lý chỉ Station của mình.
-      // Admin: bảng tổng Boat + Station.
+      // Manager: chỉ Station của mình. Admin: chỉ Boat (phân NV theo tàu, không theo chuyến/bến).
       const forcedType =
         isManager && !isAdmin
           ? ASSIGNMENT_TYPE.STATION
-          : assignmentTypeFilter !== "All"
-            ? assignmentTypeFilter
-            : undefined;
+          : isAdmin
+            ? ASSIGNMENT_TYPE.BOAT
+            : assignmentTypeFilter !== "All"
+              ? assignmentTypeFilter
+              : undefined;
 
       const params = {
         fromDate: fromDate || undefined,
         toDate: toDate || undefined,
-        staffUserId: staffFilter || undefined,
         assignmentType: forcedType,
-        boatId:
-          forcedType === ASSIGNMENT_TYPE.BOAT || (!forcedType && isAdmin)
-            ? boatFilter || undefined
-            : undefined,
-        stationId:
-          forcedType === ASSIGNMENT_TYPE.STATION || !forcedType || (isManager && !isAdmin)
-            ? stationFilter || undefined
-            : undefined,
+        stationId: !isAdmin && stationFilter ? stationFilter : undefined,
         status: statusFilter !== "All" ? statusFilter : undefined,
       };
 
       let data = await fetchStaffAssignments(params);
 
-      if (isManager && !isAdmin) {
+      if (isAdmin) {
+        data = data.filter((row) => row.assignmentType === ASSIGNMENT_TYPE.BOAT);
+      } else if (isManager && !isAdmin) {
         const allowed = new Set(managerStationIds.map(String));
         data = data.filter(
           (row) =>
@@ -329,9 +403,7 @@ export function StaffAssignmentManagement() {
   }, [
     fromDate,
     toDate,
-    staffFilter,
     assignmentTypeFilter,
-    boatFilter,
     stationFilter,
     statusFilter,
     shiftStateFilter,
@@ -343,18 +415,40 @@ export function StaffAssignmentManagement() {
     lang,
   ]);
 
+  const visibleAssignments = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return assignments;
+    return assignments.filter((row) => {
+      const hay = [
+        row.staffName,
+        row.staffType,
+        row.staffUserId,
+        row.boat?.boatCode,
+        row.boat?.boatName,
+        row.station?.stationCode,
+        row.station?.stationName,
+        row.note,
+        labelAssignmentType(row.assignmentType, lang),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [assignments, searchQuery, lang]);
+
   useEffect(() => {
     if (canAccess) loadAssignments();
   }, [canAccess, loadAssignments]);
 
   const stats = useMemo(
     () => ({
-      total: assignments.length,
-      scheduled: assignments.filter((a) => a.status === ASSIGNMENT_STATUS.SCHEDULED).length,
-      active: assignments.filter((a) => resolveShiftState(a) === SHIFT_STATE.ACTIVE).length,
-      cancelled: assignments.filter((a) => a.status === ASSIGNMENT_STATUS.CANCELLED).length,
+      total: visibleAssignments.length,
+      scheduled: visibleAssignments.filter((a) => a.status === ASSIGNMENT_STATUS.SCHEDULED).length,
+      active: visibleAssignments.filter((a) => resolveShiftState(a) === SHIFT_STATE.ACTIVE).length,
+      cancelled: visibleAssignments.filter((a) => a.status === ASSIGNMENT_STATUS.CANCELLED).length,
     }),
-    [assignments]
+    [visibleAssignments]
   );
 
   const canMutateAssignment = (row) => {
@@ -382,6 +476,23 @@ export function StaffAssignmentManagement() {
         next.staffUserId = "";
         next.boatId = "";
         next.stationId = "";
+        next.mode = value === ASSIGNMENT_TYPE.BOAT ? "fullDay" : prev.mode || "single";
+        if (next.mode === "fullDay") {
+          next.startTime = FULL_DAY_START_TIME;
+          next.endTime = FULL_DAY_END_TIME;
+          next.daysOfWeek = [...FULL_DAY_DAYS_OF_WEEK];
+        }
+      }
+      if (field === "mode") {
+        if (value === "fullDay") {
+          next.startTime = FULL_DAY_START_TIME;
+          next.endTime = FULL_DAY_END_TIME;
+          next.daysOfWeek = [...FULL_DAY_DAYS_OF_WEEK];
+        } else if (value === "bulk" && prev.mode === "fullDay") {
+          // Giữ khoảng ngày; admin tự chỉnh giờ ca tùy chọn.
+          next.startTime = prev.startTime || "07:30";
+          next.endTime = prev.endTime || "15:00";
+        }
       }
       return next;
     });
@@ -406,12 +517,6 @@ export function StaffAssignmentManagement() {
         return;
       }
 
-      const formError = validateCreateAssignmentForm(createForm, lang);
-      if (formError) {
-        setCreateError(formError);
-        return;
-      }
-
       if (createForm.assignmentType === ASSIGNMENT_TYPE.STATION && isManager) {
         const allowed = new Set(managerStationIds.map(String));
         if (allowed.size && !allowed.has(String(createForm.stationId))) {
@@ -420,15 +525,41 @@ export function StaffAssignmentManagement() {
         }
       }
 
-      await addStaffAssignment(buildCreateAssignmentPayload(createForm));
+      const isBulk = createForm.mode === "bulk" || createForm.mode === "fullDay";
+      const formForSubmit = createForm.mode === "fullDay"
+        ? {
+          ...createForm,
+          startTime: FULL_DAY_START_TIME,
+          endTime: FULL_DAY_END_TIME,
+          daysOfWeek: Array.isArray(createForm.daysOfWeek) && createForm.daysOfWeek.length > 0
+            ? createForm.daysOfWeek
+            : [...FULL_DAY_DAYS_OF_WEEK],
+        }
+        : createForm;
+
+      const formError = isBulk
+        ? validateBulkAssignmentForm(formForSubmit, lang)
+        : validateCreateAssignmentForm(formForSubmit, lang);
+      if (formError) {
+        setCreateError(formError);
+        return;
+      }
+
+      if (isBulk) {
+        await addStaffAssignmentsBulk(buildBulkAssignmentPayload(formForSubmit));
+      } else {
+        await addStaffAssignment(buildCreateAssignmentPayload(formForSubmit));
+      }
       setIsCreateOpen(false);
       notify({
         toast: true,
         position: "top-end",
         icon: "success",
-        title: lang === "VN" ? "Đã tạo phân công" : "Assignment created",
+        title: isBulk
+          ? (lang === "VN" ? "Đã tạo lịch phân công" : "Schedule created")
+          : (lang === "VN" ? "Đã tạo phân công" : "Assignment created"),
         showConfirmButton: false,
-        timer: 1600,
+        timer: 1800,
       });
       await loadAssignments();
     } catch (error) {
@@ -437,6 +568,54 @@ export function StaffAssignmentManagement() {
       );
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const openReplace = (row) => {
+    setReplaceError("");
+    setReplaceForm({
+      assignmentId: row.assignmentId,
+      staffName: row.staffName || "",
+      staffUserId: "",
+      reason: lang === "VN" ? "Nghỉ đột xuất" : "Sudden leave",
+      note: lang === "VN" ? "Ca thay thế" : "Replacement shift",
+    });
+  };
+
+  const handleReplaceSubmit = async (e) => {
+    e.preventDefault();
+    if (!replaceForm.assignmentId || !replaceForm.staffUserId) {
+      setReplaceError(lang === "VN" ? "Chọn nhân viên thay thế." : "Select replacement staff.");
+      return;
+    }
+    if (!String(replaceForm.reason || "").trim()) {
+      setReplaceError(lang === "VN" ? "Nhập lý do thay." : "Enter a replacement reason.");
+      return;
+    }
+    try {
+      setIsReplacing(true);
+      setReplaceError("");
+      await replaceStaffOnAssignment(replaceForm.assignmentId, {
+        replacementStaffUserId: replaceForm.staffUserId,
+        reason: replaceForm.reason.trim(),
+        note: replaceForm.note?.trim() || null,
+      });
+      setReplaceForm({ assignmentId: "", staffName: "", staffUserId: "", reason: "", note: "" });
+      notify({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: lang === "VN" ? "Đã thay nhân viên" : "Staff replaced",
+        showConfirmButton: false,
+        timer: 1600,
+      });
+      await loadAssignments();
+    } catch (error) {
+      setReplaceError(
+        getApiErrorMessage(error, lang === "VN" ? "Thay nhân viên thất bại." : "Failed to replace staff.")
+      );
+    } finally {
+      setIsReplacing(false);
     }
   };
 
@@ -502,11 +681,10 @@ export function StaffAssignmentManagement() {
     );
   }
 
-  // Chỉ hiện select mục tiêu khớp phạm vi: Tàu → tàu, Bến → bến (Tất cả → ẩn cả hai).
-  const showBoatFilter =
-    !isMineView && isAdmin && assignmentTypeFilter === ASSIGNMENT_TYPE.BOAT;
-  const showStationFilter =
-    !isMineView && assignmentTypeFilter === ASSIGNMENT_TYPE.STATION;
+  // Admin: phân theo tàu — không filter bến. Manager: filter bến.
+  const showStationFilter = !isMineView && canCreateStation && !isAdmin;
+  const isAdminBoatManage = !isMineView && isAdmin;
+  const tableColSpan = isAdminBoatManage ? 8 : 9;
 
   const pageTitle = isMineView
     ? lang === "VN"
@@ -520,9 +698,13 @@ export function StaffAssignmentManagement() {
     ? lang === "VN"
       ? "Các ca Admin/Manager đã gán cho bạn — Đang diễn ra / Đã kết thúc tính theo giờ ca."
       : "Shifts assigned to you — Active / Completed follow shift times."
-    : lang === "VN"
-      ? "Tạo · xem · hủy ca. Trạng thái: Đã xếp lịch / Đã hủy. Tiến độ ca (Sắp tới / Đang diễn ra / Đã kết thúc) tính tự động."
-      : "Create · view · cancel. Status: Scheduled / Cancelled. Shift progress (Upcoming / Active / Completed) is automatic.";
+    : isAdmin
+      ? (lang === "VN"
+        ? "Admin phân nhân viên theo tàu (OnBoard). Không gắn theo chuyến."
+        : "Admin assigns staff by boat (OnBoard). Not by trip.")
+      : (lang === "VN"
+        ? "Tạo · xem · hủy ca bến. Trạng thái / tiến độ ca tính tự động."
+        : "Create · view · cancel station shifts. Status / progress are automatic.");
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
@@ -623,6 +805,11 @@ export function StaffAssignmentManagement() {
               onClick={() => {
                 setDisplayMode(opt.id);
                 if (opt.id === "schedule") setAnchorDate(new Date());
+                if (opt.id === "list") {
+                  const next = defaultDateRange();
+                  setFromDate(next.fromDate);
+                  setToDate(next.toDate);
+                }
               }}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider inline-flex items-center gap-1 transition-all ${
                 displayMode === opt.id
@@ -647,6 +834,17 @@ export function StaffAssignmentManagement() {
                 <label className={labelStyle}>{lang === "VN" ? "Đến ngày" : "To"}</label>
                 <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={filterInputStyle} />
               </div>
+              {(dateRangeTooWide || dateRangeInvalid) ? (
+                <p className="w-full text-[11px] font-semibold text-rose-600 dark:text-rose-300">
+                  {dateRangeInvalid
+                    ? (lang === "VN"
+                      ? "Từ ngày phải nhỏ hơn hoặc bằng Đến ngày."
+                      : "From date must be on or before To date.")
+                    : (lang === "VN"
+                      ? `Chỉ xem tối đa ${MAX_RANGE_DAYS} ngày / lần (đang chọn ${dateRangeDays} ngày).`
+                      : `Max ${MAX_RANGE_DAYS} days per view (currently ${dateRangeDays} days).`)}
+                </p>
+              ) : null}
             </>
           ) : (
             <div className="w-[148px]">
@@ -669,6 +867,9 @@ export function StaffAssignmentManagement() {
               <option value={ASSIGNMENT_STATUS.CANCELLED}>
                 {labelAssignmentStatus(ASSIGNMENT_STATUS.CANCELLED, lang)}
               </option>
+              <option value={ASSIGNMENT_STATUS.REPLACED}>
+                {labelAssignmentStatus(ASSIGNMENT_STATUS.REPLACED, lang)}
+              </option>
             </select>
           </div>
           <div className="w-[140px]">
@@ -682,73 +883,42 @@ export function StaffAssignmentManagement() {
               ))}
             </select>
           </div>
-          {!isMineView && (
-            <div className="w-[120px]">
-              <label className={labelStyle}>{lang === "VN" ? "Phạm vi" : "Scope"}</label>
-              <select
-                value={assignmentTypeFilter}
-                disabled={(isManager && !isAdmin) || (displayMode === "schedule" && calendarLayout === "byBoat" && isAdmin)}
-                onChange={(e) => {
-                  setAssignmentTypeFilter(e.target.value);
-                  setBoatFilter("");
-                  setStationFilter("");
-                }}
-                className={filterInputStyle}
-              >
-                {isAdmin && <option value="All">{lang === "VN" ? "Tất cả" : "All"}</option>}
-                {isAdmin && (
-                  <option value={ASSIGNMENT_TYPE.BOAT}>{labelAssignmentType(ASSIGNMENT_TYPE.BOAT, lang)}</option>
-                )}
-                <option value={ASSIGNMENT_TYPE.STATION}>{labelAssignmentType(ASSIGNMENT_TYPE.STATION, lang)}</option>
-              </select>
-            </div>
-          )}
-          {!isMineView && (canCreateBoat || canCreateStation || isAdmin) && (
-            <div className="w-[168px]">
-              <label className={labelStyle}>{lang === "VN" ? "Nhân viên" : "Staff"}</label>
-              <select value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)} className={filterInputStyle}>
-                <option value="">{lang === "VN" ? "Tất cả nhân viên" : "All staff"}</option>
-                {allStaffForFilter.map((s) => (
-                  <option key={getStaffId(s)} value={getStaffId(s)}>
-                    {getStaffName(s)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {showBoatFilter && (
-            <div className="w-[168px]">
-              <label className={labelStyle}>{lang === "VN" ? "Tàu" : "Boat"}</label>
-              <select value={boatFilter} onChange={(e) => setBoatFilter(e.target.value)} className={filterInputStyle}>
-                <option value="">{lang === "VN" ? "Tất cả tàu" : "All boats"}</option>
-                {boats.map((b) => (
-                  <option key={getBoatId(b)} value={getBoatId(b)}>
-                    {b.boatCode || b.code} · {b.boatName || b.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {showStationFilter && (
-            <div className="w-[168px]">
+          {showStationFilter ? (
+            <div className="min-w-[200px] w-[220px]">
               <label className={labelStyle}>{lang === "VN" ? "Bến" : "Station"}</label>
-              <select value={stationFilter} onChange={(e) => setStationFilter(e.target.value)} className={filterInputStyle}>
-                <option value="">{lang === "VN" ? "Tất cả bến" : "All stations"}</option>
-                {usableStations.map((s) => (
-                  <option key={getStationId(s)} value={getStationId(s)}>
-                    {s.stationCode || s.code} · {s.stationName || s.name}
-                  </option>
-                ))}
-              </select>
+              <FormSelect
+                value={stationFilter}
+                onChange={(value) => setStationFilter(String(value ?? ""))}
+                options={stationFilterOptions}
+                searchable
+                placeholder={lang === "VN" ? "Tất cả bến" : "All stations"}
+                searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
+                emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
+                className={filterInputStyle}
+              />
             </div>
-          )}
+          ) : null}
+          <div className="min-w-[180px] flex-1 max-w-xs">
+            <label className={labelStyle}>{lang === "VN" ? "Tìm kiếm" : "Search"}</label>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={
+                isAdminBoatManage
+                  ? (lang === "VN" ? "Tên NV, mã tàu..." : "Staff, boat code...")
+                  : (lang === "VN" ? "Tên NV, bến..." : "Staff, station...")
+              }
+              className={filterInputStyle}
+            />
+          </div>
         </div>
       </div>
 
       {displayMode === "schedule" ? (
         <StaffAssignmentCalendar
           lang={lang}
-          assignments={assignments}
+          assignments={visibleAssignments}
           mode={calendarMode}
           onModeChange={setCalendarMode}
           layout={calendarLayout}
@@ -766,8 +936,14 @@ export function StaffAssignmentManagement() {
               <tr className="bg-slate-50 dark:bg-slate-900/50 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60">
                 <th className="py-4 px-5">{lang === "VN" ? "Nhân viên" : "Staff"}</th>
                 <th className="py-4 px-4">{lang === "VN" ? "Loại NV" : "Staff type"}</th>
-                <th className="py-4 px-4">{lang === "VN" ? "Phạm vi" : "Scope"}</th>
-                <th className="py-4 px-4">{lang === "VN" ? "Bến / Tàu" : "Target"}</th>
+                {!isAdminBoatManage ? (
+                  <th className="py-4 px-4">{lang === "VN" ? "Phạm vi" : "Scope"}</th>
+                ) : null}
+                <th className="py-4 px-4">
+                  {isAdminBoatManage
+                    ? (lang === "VN" ? "Tàu" : "Boat")
+                    : (lang === "VN" ? "Bến" : "Station")}
+                </th>
                 <th className="py-4 px-4">{lang === "VN" ? "Bắt đầu" : "Start"}</th>
                 <th className="py-4 px-4">{lang === "VN" ? "Kết thúc" : "End"}</th>
                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
@@ -778,13 +954,13 @@ export function StaffAssignmentManagement() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center">
+                  <td colSpan={tableColSpan} className="py-16 text-center">
                     <div className="inline-block w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />
                   </td>
                 </tr>
-              ) : assignments.length === 0 ? (
+              ) : visibleAssignments.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-14 text-center text-slate-400 font-bold">
+                  <td colSpan={tableColSpan} className="py-14 text-center text-slate-400 font-bold">
                     {isMineView
                       ? lang === "VN"
                         ? "Chưa có ca được gán cho bạn."
@@ -795,7 +971,7 @@ export function StaffAssignmentManagement() {
                   </td>
                 </tr>
               ) : (
-                assignments.map((row) => {
+                visibleAssignments.map((row) => {
                   const targetLabel =
                     row.assignmentType === ASSIGNMENT_TYPE.BOAT
                       ? row.boat
@@ -813,11 +989,13 @@ export function StaffAssignmentManagement() {
                         <p className="font-bold text-slate-800 dark:text-white">{row.staffName}</p>
                       </td>
                       <td className="py-3.5 px-4">{row.staffType || "—"}</td>
-                      <td className="py-3.5 px-4">
-                        <span className="font-headline font-black text-[10px] uppercase tracking-wide">
-                          {labelAssignmentType(row.assignmentType, lang)}
-                        </span>
-                      </td>
+                      {!isAdminBoatManage ? (
+                        <td className="py-3.5 px-4">
+                          <span className="font-headline font-black text-[10px] uppercase tracking-wide">
+                            {labelAssignmentType(row.assignmentType, lang)}
+                          </span>
+                        </td>
+                      ) : null}
                       <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-200">
                         {targetLabel || "—"}
                       </td>
@@ -843,18 +1021,29 @@ export function StaffAssignmentManagement() {
                       </td>
                       <td className="py-3.5 px-5">
                         <div className="flex flex-wrap items-center justify-center gap-1.5">
-                          {canMutate && row.status !== ASSIGNMENT_STATUS.CANCELLED && (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => handleCancel(row)}
-                              className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-500 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-rose-500 hover:text-white disabled:opacity-50 dark:border-rose-500/30"
-                              title={lang === "VN" ? "Hủy ca" : "Cancel shift"}
-                            >
-                              {busy ? "…" : lang === "VN" ? "Hủy ca" : "Cancel"}
-                            </button>
+                          {canMutate && !isAssignmentInactive(row.status) && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => openReplace(row)}
+                                className="px-3 py-1.5 rounded-xl border border-sky-200 text-sky-700 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-sky-600 hover:text-white disabled:opacity-50 dark:border-sky-500/30 dark:text-sky-300"
+                                title={lang === "VN" ? "Thay nhân viên" : "Replace staff"}
+                              >
+                                {lang === "VN" ? "Thay NV" : "Replace"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => handleCancel(row)}
+                                className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-500 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-rose-500 hover:text-white disabled:opacity-50 dark:border-rose-500/30"
+                                title={lang === "VN" ? "Hủy ca" : "Cancel shift"}
+                              >
+                                {busy ? "…" : lang === "VN" ? "Hủy ca" : "Cancel"}
+                              </button>
+                            </>
                           )}
-                          {(!canMutate || row.status === ASSIGNMENT_STATUS.CANCELLED) && (
+                          {(!canMutate || isAssignmentInactive(row.status)) && (
                             <span className="text-[10px] font-bold uppercase text-slate-300 dark:text-slate-600 tracking-wider">
                               {lang === "VN" ? "Chỉ xem" : "View only"}
                             </span>
@@ -934,13 +1123,46 @@ export function StaffAssignmentManagement() {
                     </div>
                   );
                 })()}
-                {isAdmin && (
-                  <p className="text-[10px] text-slate-400 mt-1.5">
-                    {lang === "VN"
-                      ? "Admin tạo ca tàu. Ca bến: chỉ xem (Manager tạo). Roster dài hạn: tab Lịch NV trên chi tiết tàu."
-                      : "Admin creates boat shifts. Station: view only (Manager creates). Long-term roster: Onboard schedule tab on boat detail."}
-                  </p>
-                )}
+              </div>
+
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Cách tạo (*)" : "Create mode (*)"}</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                  {[
+                    { value: "fullDay", vn: "Full ngày", en: "Full day" },
+                    { value: "bulk", vn: "Lịch nhiều ngày", en: "Custom bulk" },
+                    { value: "single", vn: "1 ca (≤24h)", en: "Single shift" },
+                  ].map((opt) => {
+                    const selected = createForm.mode === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleCreateField("mode", opt.value)}
+                        className={`h-10 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
+                          selected
+                            ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                            : "text-slate-500 hover:bg-white dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        {lang === "VN" ? opt.vn : opt.en}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  {createForm.mode === "fullDay"
+                    ? (lang === "VN"
+                      ? `Full ngày: ${FULL_DAY_START_TIME} → ${FULL_DAY_END_TIME}, gọi bulk theo từng ngày. Có thể chọn thứ trong tuần.`
+                      : `Full day: ${FULL_DAY_START_TIME} → ${FULL_DAY_END_TIME}, bulk per day. Weekdays optional.`)
+                    : createForm.mode === "bulk"
+                      ? (lang === "VN"
+                        ? "BE tách thành từng ca theo ngày (fromDate → toDate). Để trống thứ = mọi ngày trong khoảng."
+                        : "BE splits into daily shifts (fromDate → toDate). Empty weekdays = every day in range.")
+                      : (lang === "VN"
+                        ? "Tạo 1 ca đơn — tối đa 24 giờ."
+                        : "Create one shift — max 24 hours.")}
+                </p>
               </div>
 
               <div>
@@ -988,44 +1210,146 @@ export function StaffAssignmentManagement() {
               ) : (
                 <div>
                   <label className={labelStyle}>{lang === "VN" ? "Bến (*)" : "Station (*)"}</label>
-                  <select
+                  <FormSelect
                     required
                     value={createForm.stationId}
-                    onChange={(e) => handleCreateField("stationId", e.target.value)}
+                    onChange={(value) => handleCreateField("stationId", String(value ?? ""))}
+                    options={stationSelectOptions}
+                    searchable
+                    placeholder={lang === "VN" ? "-- Chọn bến --" : "-- Select station --"}
+                    searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
+                    emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
                     className={inputStyle}
-                  >
-                    <option value="">{lang === "VN" ? "-- Chọn bến --" : "-- Select station --"}</option>
-                    {usableStations.map((s) => (
-                      <option key={getStationId(s)} value={getStationId(s)}>
-                        {s.stationCode || s.code} · {s.stationName || s.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelStyle}>startAt (*)</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={createForm.startAt}
-                    onChange={(e) => handleCreateField("startAt", e.target.value)}
-                    className={inputStyle}
-                  />
+              {createForm.mode === "bulk" || createForm.mode === "fullDay" ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
+                      <input
+                        type="date"
+                        required
+                        value={createForm.fromDate}
+                        onChange={(e) => handleCreateField("fromDate", e.target.value)}
+                        className={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "To date (*)"}</label>
+                      <input
+                        type="date"
+                        required
+                        value={createForm.toDate}
+                        onChange={(e) => handleCreateField("toDate", e.target.value)}
+                        className={inputStyle}
+                      />
+                    </div>
+                  </div>
+                  {createForm.mode === "fullDay" ? (
+                    <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 dark:border-sky-500/20 dark:bg-sky-500/10">
+                      <p className="text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">
+                        {lang === "VN" ? "Ca full ngày (cố định)" : "Full-day shift (fixed)"}
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-sky-800 dark:text-sky-200">
+                        {FULL_DAY_START_TIME} → {FULL_DAY_END_TIME}
+                      </p>
+                      <p className="mt-1 text-[10px] font-medium text-sky-600/80 dark:text-sky-200/80">
+                        {lang === "VN"
+                          ? "Gửi bulk: startTime 07:40:00 · endTime 23:00:00"
+                          : "Bulk payload: startTime 07:40:00 · endTime 23:00:00"}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelStyle}>{lang === "VN" ? "Giờ bắt đầu (*)" : "Start time (*)"}</label>
+                        <input
+                          type="time"
+                          required
+                          value={createForm.startTime}
+                          onChange={(e) => handleCreateField("startTime", e.target.value)}
+                          className={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelStyle}>{lang === "VN" ? "Giờ kết thúc (*)" : "End time (*)"}</label>
+                        <input
+                          type="time"
+                          required
+                          value={createForm.endTime}
+                          onChange={(e) => handleCreateField("endTime", e.target.value)}
+                          className={inputStyle}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className={labelStyle}>
+                      {lang === "VN" ? "Ngày trong tuần" : "Days of week"}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {DAYS_OF_WEEK.map((day) => {
+                        const selected = (createForm.daysOfWeek || []).includes(day.value);
+                        return (
+                          <button
+                            key={day.value}
+                            type="button"
+                            onClick={() => {
+                              const prev = Array.isArray(createForm.daysOfWeek) ? createForm.daysOfWeek : [];
+                              const next = selected
+                                ? prev.filter((d) => d !== day.value)
+                                : [...prev, day.value].sort((a, b) => a - b);
+                              handleCreateField("daysOfWeek", next);
+                            }}
+                            className={`min-w-[2.4rem] h-9 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider border transition ${
+                              selected
+                                ? "bg-[#124757] text-white border-[#124757] dark:bg-yellow-400 dark:text-slate-900 dark:border-yellow-400"
+                                : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900 dark:border-slate-700"
+                            }`}
+                          >
+                            {lang === "VN" ? day.labelVn : day.labelEn}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {createForm.mode === "fullDay"
+                        ? (lang === "VN"
+                          ? "Mặc định cả tuần (T2–CN). Admin có thể bỏ bớt thứ."
+                          : "Defaults to every day (Mon–Sun). Admin can deselect days.")
+                        : (lang === "VN"
+                          ? "Bỏ chọn hết = tạo mọi ngày trong khoảng."
+                          : "Deselect all = every day in the range.")}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelStyle}>startAt (*)</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={createForm.startAt}
+                      onChange={(e) => handleCreateField("startAt", e.target.value)}
+                      className={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelStyle}>endAt (*)</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={createForm.endAt}
+                      onChange={(e) => handleCreateField("endAt", e.target.value)}
+                      className={inputStyle}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className={labelStyle}>endAt (*)</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={createForm.endAt}
-                    onChange={(e) => handleCreateField("endAt", e.target.value)}
-                    className={inputStyle}
-                  />
-                </div>
-              </div>
+              )}
 
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Ghi chú" : "Note"}</label>
@@ -1046,12 +1370,94 @@ export function StaffAssignmentManagement() {
                 {isSaving && (
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                 )}
-                {lang === "VN" ? "Tạo phân công" : "Create assignment"}
+                {createForm.mode === "bulk" || createForm.mode === "fullDay"
+                  ? (lang === "VN" ? "Tạo lịch phân công" : "Create schedule")
+                  : (lang === "VN" ? "Tạo phân công" : "Create assignment")}
               </button>
             </form>
           </div>
         </div>
       )}
+
+      {replaceForm.assignmentId ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <form
+            onSubmit={handleReplaceSubmit}
+            className="bg-white dark:bg-slate-800 w-full max-w-md rounded-4xl border border-slate-100 dark:border-slate-700 shadow-2xl p-5 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-headline font-black text-sm uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                {lang === "VN" ? "Thay nhân viên" : "Replace staff"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setReplaceForm({ assignmentId: "", staffName: "", staffUserId: "", reason: "", note: "" })}
+                className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            {replaceError ? (
+              <div className="bg-red-50 dark:bg-red-500/10 text-red-600 p-3 rounded-xl text-xs font-bold border border-red-100">
+                {replaceError}
+              </div>
+            ) : null}
+            <p className="text-xs font-semibold text-slate-500">
+              {lang === "VN" ? "Ca hiện tại" : "Current"}: {replaceForm.staffName || "—"}
+            </p>
+            <p className="text-[10px] text-slate-400">
+              {lang === "VN"
+                ? "Ca cũ chuyển Replaced — nhân viên cũ không còn thấy ca/chuyến."
+                : "Old shift becomes Replaced — previous staff no longer sees it."}
+            </p>
+            <label className="block space-y-1.5">
+              <span className={labelStyle}>{lang === "VN" ? "Nhân viên mới (*)" : "New staff (*)"}</span>
+              <select
+                required
+                value={replaceForm.staffUserId}
+                onChange={(e) => setReplaceForm((prev) => ({ ...prev, staffUserId: e.target.value }))}
+                className={inputStyle}
+              >
+                <option value="">{lang === "VN" ? "-- Chọn staff --" : "-- Select staff --"}</option>
+                {staffOptionsForCreate.map((s) => (
+                  <option key={getStaffId(s)} value={getStaffId(s)}>
+                    {getStaffName(s)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1.5">
+              <span className={labelStyle}>{lang === "VN" ? "Lý do thay (*)" : "Reason (*)"}</span>
+              <input
+                type="text"
+                required
+                value={replaceForm.reason}
+                onChange={(e) => setReplaceForm((prev) => ({ ...prev, reason: e.target.value }))}
+                className={inputStyle}
+                placeholder={lang === "VN" ? "VD: Nghỉ đột xuất" : "e.g. Sudden leave"}
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <span className={labelStyle}>{lang === "VN" ? "Ghi chú" : "Note"}</span>
+              <input
+                type="text"
+                value={replaceForm.note}
+                onChange={(e) => setReplaceForm((prev) => ({ ...prev, note: e.target.value }))}
+                className={inputStyle}
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={isReplacing}
+              className="w-full bg-sky-600 text-white font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl hover:brightness-110 disabled:opacity-50"
+            >
+              {isReplacing
+                ? "…"
+                : (lang === "VN" ? "Xác nhận thay" : "Confirm replace")}
+            </button>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }
