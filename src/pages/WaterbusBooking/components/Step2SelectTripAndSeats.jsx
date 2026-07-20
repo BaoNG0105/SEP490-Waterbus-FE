@@ -11,6 +11,9 @@ import { notify, showToast } from "../../../utils/swalToast";
 const MAX_SEATS_PER_LEG = 10;
 const LOCKED_STATUSES = ["Held", "Booked", "Blocked"];
 
+const WATERBUS_TRIP_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1783792724/cqi2n26pl7etht4ad5q3.webp";
+const SIGHTSEEING_TRIP_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1783792723/qozuixs81skui0fwokvm.webp";
+
 const TIME_FILTER_OPTIONS_VN = [
   { value: "all", label: "Tất cả khung giờ" },
   { value: "morning", label: "Buổi sáng" },
@@ -31,6 +34,15 @@ const formatTripTime = (isoString) => {
   const date = new Date(isoString);
   if (Number.isNaN(date.getTime())) return "--";
   return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+};
+
+// Giờ khởi hành/đến của cả chuyến (departureTime/arrivalTime) khác với giờ theo chặng khách chọn —
+// kèm ngày vì có thể lệch ngày (VD: 23:00 hôm nay -> 00:00 hôm sau).
+const formatTripDateTime = (isoString) => {
+  if (!isoString) return "--";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 };
 
 const formatTripDuration = (departureIso, arrivalIso) => {
@@ -96,6 +108,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   const {
     isRoundTrip,
     fromWharf, toWharf,
+    fromWharfName, toWharfName,
     routeType,
     departureTripOptions, returnTripOptions,
     selectedDepartureTrip, selectedReturnTrip,
@@ -106,6 +119,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   // không cần (và thường không tra được) stationCode theo cặp chặng như tuyến Regular; BE trả
   // nguyên sơ đồ ghế cả chuyến khi gọi API không kèm fromStationCode/toStationCode.
   const isLoopRoute = routeType === "SightseeingLoop";
+  const tripCardImage = isLoopRoute ? SIGHTSEEING_TRIP_IMAGE : WATERBUS_TRIP_IMAGE;
 
   // Mã bến đi/đến của từng chặng — chặng về đi ngược chiều (toWharf -> fromWharf)
   const getLegStationCodes = (leg, trip) => {
@@ -118,6 +132,10 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   // Quản lý tab nội bộ của bước 2 nếu là khứ hồi: 'departure' (chiều đi) hoặc 'return' (chiều về)
   const [activeLeg, setActiveLeg] = useState("departure");
   const [filterTime, setFilterTime] = useState("all");
+
+  // Tên bến hiển thị trên thẻ chuyến — chặng về đi ngược chiều nên phải đảo lại thứ tự tên bến
+  const legFromWharfName = activeLeg === "departure" ? fromWharfName : toWharfName;
+  const legToWharfName = activeLeg === "departure" ? toWharfName : fromWharfName;
 
   // Sơ đồ ghế thực tế lấy từ API, lưu riêng theo từng chiều (departure/return) — chỉ để hiển thị,
   // việc chọn/bỏ chọn ghế ở bước này thuần local, KHÔNG gọi API giữ ghế.
@@ -449,6 +467,16 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
         </div>
       )}
 
+      {(fromWharfName || toWharfName) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm font-bold text-slate-500 dark:border-slate-700/50 dark:bg-slate-800 dark:text-slate-300">
+          <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400">search</span>
+          {lang === "VN" ? "Tìm kiếm từ bến" : "Searching from"}
+          <span className="text-[#124757] dark:text-yellow-400">{fromWharfName || "--"}</span>
+          {lang === "VN" ? "đến bến" : "to"}
+          <span className="text-[#124757] dark:text-yellow-400">{toWharfName || "--"}</span>
+        </div>
+      )}
+
       {/* --- BỐ CỤC CHÍNH ĐƯỢC CHIA ĐÔI: TRÁI CHỌN TUYẾN - PHẢI CHỌN GHẾ --- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
@@ -483,33 +511,57 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                 <div
                   key={trip.tripId}
                   onClick={() => handleSelectTrip(trip)}
-                  className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm cursor-pointer transition-all ${
+                  className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border shadow-sm cursor-pointer transition-all space-y-3 ${
                     currentTrip?.tripId === trip.tripId
                       ? "border-[#124757] ring-2 ring-[#124757]/10 bg-teal-50/5"
                       : "border-slate-100 dark:border-slate-700 hover:border-slate-300"
                   } ${isSoldOut ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  <div className="flex items-center gap-5">
-                    <div className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(getSegmentDeparture(trip))}</div>
-                    <div>
-                      <div className="font-bold text-sm text-slate-800 dark:text-white">{trip.routeName}</div>
-                      <div className="text-xs text-slate-400">{lang === "VN" ? `Thời gian đi: ${formatTripDuration(getSegmentDeparture(trip), getSegmentArrival(trip))}` : `Duration: ${formatTripDuration(getSegmentDeparture(trip), getSegmentArrival(trip))}`}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto">
-                    <div className="text-right">
-                      <div className="text-base font-headline font-black text-[#124757] dark:text-[#FFD100]">{Number(trip.minPrice || 0).toLocaleString()} VND</div>
-                      <div className="text-xs text-slate-500">
-                        {isSoldOut
-                          ? (lang === "VN" ? "Hết chỗ" : "Sold out")
-                          : (lang === "VN" ? `Còn trống ${trip.availableSeats} chỗ` : `${trip.availableSeats} left`)}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-4">
+                      <img
+                        src={tripCardImage}
+                        alt=""
+                        className="h-14 w-14 shrink-0 rounded-xl object-cover"
+                      />
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2.5 pb-3">
+                          <span className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(getSegmentDeparture(trip))}</span>
+                          <span className="relative inline-flex shrink-0 items-center justify-center">
+                            <span className="material-symbols-outlined text-base text-[#FFD100]">arrow_forward</span>
+                            <span className="absolute top-full left-1/2 mt-0.5 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-slate-400">{formatTripDuration(getSegmentDeparture(trip), getSegmentArrival(trip))}</span>
+                          </span>
+                          <span className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(getSegmentArrival(trip))}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
+                          <span>{legFromWharfName || "--"}</span>
+                          <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                          <span>{legToWharfName || "--"}</span>
+                        </div>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                      currentTrip?.tripId === trip.tripId ? "border-[#124757] dark:border-[#FFD100]" : "border-slate-300"
-                    }`}>
-                      {currentTrip?.tripId === trip.tripId && <div className="w-2.5 h-2.5 rounded-full bg-[#124757] dark:bg-[#FFD100]"></div>}
+                    <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto">
+                      <div className="text-right">
+                        <div className="text-base font-headline font-black text-[#124757] dark:text-[#FFD100]">{Number(trip.minPrice || 0).toLocaleString()} VND</div>
+                        <div className="text-xs text-slate-500">
+                          {isSoldOut
+                            ? (lang === "VN" ? "Hết chỗ" : "Sold out")
+                            : (lang === "VN" ? `Còn trống ${trip.availableSeats}/${trip.totalSeats} chỗ` : `${trip.availableSeats}/${trip.totalSeats} left`)}
+                        </div>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                        currentTrip?.tripId === trip.tripId ? "border-[#124757] dark:border-[#FFD100]" : "border-slate-300"
+                      }`}>
+                        {currentTrip?.tripId === trip.tripId && <div className="w-2.5 h-2.5 rounded-full bg-[#124757] dark:bg-[#FFD100]"></div>}
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="border-t border-dashed border-slate-100 pt-2 text-[11px] font-medium text-rose-500 dark:border-slate-700 dark:text-rose-400">
+                    {lang === "VN" ? "Thuộc chuyến" : "Trip"}{" "}
+                    <span className="font-bold">{trip.routeName}</span>
+                    {lang === "VN" ? ", vào " : ", at "}
+                    {formatTripDateTime(trip.departureTime)} → {formatTripDateTime(trip.arrivalTime)}
                   </div>
                 </div>
               );
