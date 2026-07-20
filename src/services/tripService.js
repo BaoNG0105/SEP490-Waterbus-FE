@@ -56,6 +56,88 @@ export const isTripRunningStatus = (status) => {
   return key === 'Boarding' || key === 'InProgress' || key === 'Delayed';
 };
 
+/** Chuyến còn gắn được khi báo sự cố (chưa Completed/Cancelled). */
+export const isTripAttachableStatus = (status) => {
+  const key = normalizeTripStatusKey(status);
+  return key === 'Scheduled'
+    || key === 'Boarding'
+    || key === 'InProgress'
+    || key === 'Delayed';
+};
+
+const tripStatusRank = (status) => {
+  const key = normalizeTripStatusKey(status);
+  if (key === 'InProgress') return 0;
+  if (key === 'Boarding') return 1;
+  if (key === 'Delayed') return 2;
+  if (key === 'Scheduled') return 3;
+  return 9;
+};
+
+const tripDepartureMs = (trip) => {
+  const raw = trip?.departureTime
+    || trip?.scheduledDepartureAt
+    || trip?.DepartureTime
+    || trip?.operatingDate;
+  const ms = Date.parse(String(raw || ''));
+  return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
+};
+
+const unwrapTripList = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.trips)) return data.trips;
+  return [];
+};
+
+/** Lọc chuyến đang gắn được với 1 tàu (theo boatId / boatCode). */
+export const filterAttachableTripsForBoat = (trips, boatLike = {}) => {
+  const boatId = String(boatLike?.boatId || boatLike?.id || '').trim();
+  const boatCode = String(boatLike?.boatCode || boatLike?.code || '').trim().toLowerCase();
+  if (!boatId && !boatCode) return [];
+
+  return unwrapTripList(trips).filter((trip) => {
+    const status = trip?.tripStatus ?? trip?.status ?? trip?.TripStatus;
+    if (!isTripAttachableStatus(status)) return false;
+
+    const tripBoatId = String(trip?.boatId || trip?.boat?.boatId || trip?.BoatId || '').trim();
+    const tripBoatCode = String(
+      trip?.boatCode || trip?.boat?.boatCode || trip?.BoatCode || '',
+    ).trim().toLowerCase();
+
+    if (boatId && tripBoatId && tripBoatId === boatId) return true;
+    if (boatCode && tripBoatCode && tripBoatCode === boatCode) return true;
+    return false;
+  });
+};
+
+/**
+ * Chọn 1 chuyến tốt nhất để gắn sự cố:
+ * InProgress → Boarding → Delayed → Scheduled (gần giờ chạy nhất).
+ */
+export const pickActiveTripForBoat = (trips, boatLike = {}) => {
+  const list = filterAttachableTripsForBoat(trips, boatLike);
+  if (!list.length) return null;
+
+  const sorted = [...list].sort((a, b) => {
+    const ra = tripStatusRank(a?.tripStatus ?? a?.status);
+    const rb = tripStatusRank(b?.tripStatus ?? b?.status);
+    if (ra !== rb) return ra - rb;
+    return tripDepartureMs(a) - tripDepartureMs(b);
+  });
+
+  const best = sorted[0];
+  const tripId = best?.tripId || best?.id || best?.TripId || null;
+  if (!tripId) return null;
+  return {
+    tripId: String(tripId),
+    tripCode: String(best?.tripCode || best?.TripCode || tripId),
+    tripStatus: best?.tripStatus ?? best?.status ?? null,
+    raw: best,
+  };
+};
+
 // input[type=date] "YYYY-MM-DD" -> "dd/MM/yyyy" (định dạng operatingDate BE yêu cầu)
 export const toDdMmYyyy = (yyyyMmDd) => {
     if (!yyyyMmDd) return null;

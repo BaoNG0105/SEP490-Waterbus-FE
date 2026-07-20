@@ -4,7 +4,7 @@ import { useSelector } from "react-redux";
 import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
 import { fetchActiveBoatsByServiceType, fetchAllBoats } from "../../../services/boatService";
-import { fetchAllTrips } from "../../../services/tripService";
+import { fetchAllTrips, filterAttachableTripsForBoat, pickActiveTripForBoat, toDdMmYyyy } from "../../../services/tripService";
 import { fetchManagerUsers } from "../../../services/userService";
 import {
   assignManagerToIncident,
@@ -18,14 +18,6 @@ import {
   reportIncident,
 } from "../../../services/incidentService";
 import { notify, showToast } from "../../../utils/swalToast";
-
-const ACTIVE_TRIP_STATUSES = new Set([
-  "scheduled",
-  "boarding",
-  "departed",
-  "inprogress",
-  "delayed",
-]);
 
 const EMPTY_RESCUE_FORM = {
   incidentId: "",
@@ -131,7 +123,13 @@ export function IncidentManagement({
       .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
       .catch((error) => console.error("Failed to load passenger boats:", error));
 
-    fetchAllTrips()
+    fetchAllTrips({
+      operatingDate: toDdMmYyyy((() => {
+        const now = new Date();
+        const pad2 = (n) => String(n).padStart(2, "0");
+        return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+      })()),
+    })
       .then((data) => setTrips(unwrapList(data)))
       .catch((error) => console.error("Failed to load trips for incidents:", error));
   }, []);
@@ -206,22 +204,23 @@ export function IncidentManagement({
     [incidents, boatById],
   );
 
-  const tripsForSelectedBoat = useMemo(() => {
-    if (!selectedBoat) return [];
-    const boatId = String(selectedBoat.boatId || selectedBoat.id || "");
-    const boatCode = String(selectedBoat.boatCode || selectedBoat.code || "").toLowerCase();
+  const tripsForSelectedBoat = useMemo(
+    () => filterAttachableTripsForBoat(trips, selectedBoat),
+    [trips, selectedBoat],
+  );
 
-    return trips.filter((trip) => {
-      const status = String(trip.status || "").toLowerCase();
-      if (status && !ACTIVE_TRIP_STATUSES.has(status)) return false;
-
-      const tripBoatId = String(trip.boatId || trip.boat?.boatId || "");
-      const tripBoatCode = String(trip.boatCode || trip.boat?.boatCode || "").toLowerCase();
-      if (boatId && tripBoatId && tripBoatId === boatId) return true;
-      if (boatCode && tripBoatCode && tripBoatCode === boatCode) return true;
-      return false;
-    });
-  }, [trips, selectedBoat]);
+  // Chọn tàu → tự gắn chuyến đang chạy / sắp chạy trong ngày (nếu có).
+  useEffect(() => {
+    if (!reportForm.boatId || !selectedBoat) return;
+    if (reportForm.tripId) return;
+    const best = pickActiveTripForBoat(trips, selectedBoat);
+    if (!best?.tripId) return;
+    setReportForm((prev) => (
+      prev.boatId === reportForm.boatId && !prev.tripId
+        ? { ...prev, tripId: best.tripId }
+        : prev
+    ));
+  }, [reportForm.boatId, reportForm.tripId, selectedBoat, trips]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -259,9 +258,12 @@ export function IncidentManagement({
     }
     setBusyId("report");
     try {
+      const boat = boats.find((item) => String(item.boatId || item.id) === String(reportForm.boatId));
+      const best = pickActiveTripForBoat(trips, boat);
+      const tripId = reportForm.tripId || best?.tripId || null;
       await reportIncident({
         boatId: reportForm.boatId,
-        tripId: reportForm.tripId || null,
+        tripId,
         incidentType: reportForm.incidentType,
         severity: reportForm.severity,
         description: reportForm.description.trim(),
@@ -271,6 +273,9 @@ export function IncidentManagement({
       showToast({
         icon: "success",
         title: lang === "VN" ? "Đã báo sự cố" : "Incident reported",
+        text: tripId
+          ? (lang === "VN" ? `Đã gắn chuyến ${best?.tripCode || tripId}` : `Linked trip ${best?.tripCode || tripId}`)
+          : undefined,
       });
       setShowReport(false);
       setReportForm({
@@ -678,11 +683,16 @@ export function IncidentManagement({
               <select
                 required
                 value={reportForm.boatId}
-                onChange={(e) => setReportForm((prev) => ({
-                  ...prev,
-                  boatId: e.target.value,
-                  tripId: "",
-                }))}
+                onChange={(e) => {
+                  const boatId = e.target.value;
+                  const boat = boats.find((item) => String(item.boatId || item.id) === String(boatId));
+                  const best = pickActiveTripForBoat(trips, boat);
+                  setReportForm((prev) => ({
+                    ...prev,
+                    boatId,
+                    tripId: best?.tripId || "",
+                  }));
+                }}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#124757]/30 dark:border-slate-600 dark:bg-slate-900"
               >
                 <option value="">{lang === "VN" ? "Chọn tàu" : "Select boat"}</option>
@@ -711,7 +721,7 @@ export function IncidentManagement({
                 {tripsForSelectedBoat.map((trip) => (
                   <option key={trip.tripId || trip.id} value={trip.tripId || trip.id}>
                     {trip.tripCode || trip.tripId}
-                    {trip.status ? ` · ${trip.status}` : ""}
+                    {(trip.tripStatus || trip.status) ? ` · ${trip.tripStatus || trip.status}` : ""}
                   </option>
                 ))}
               </select>

@@ -143,12 +143,17 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
 /**
- * Marker tàu — cùng icon thân tàu, chỉ khác màu:
- * - deck1: xanh brand (#124757)
- * - deck2: xanh dương (#1D4ED8)
- * - rescue: cam (#EA580C)
- * Sự cố ưu tiên đỏ.
+ * Marker tàu:
+ * - style "gps": mũi tên cam xoay theo heading (giống Live GPS)
+ * - style "hull": thân tàu màu theo loại (1 tầng / 2 tầng / cứu hộ)
  */
 const boatLeafletIcons = new Map();
 
@@ -175,6 +180,14 @@ const resolveBoatMarkerKind = (boat = {}) => {
   return "deck1";
 };
 
+/** Nhãn ngắn trên mũi tên GPS: WB_001 → 001, SOS_1 → SOS1 */
+const shortBoatMarkerLabel = (boat = {}) => {
+  const raw = String(boat.boatCode || boat.boatId || boat.code || "").trim().toUpperCase();
+  if (!raw) return "";
+  const stripped = raw.replace(/^WB[-_]?/i, "").replace(/[^A-Z0-9]/g, "");
+  return (stripped || raw).slice(0, 4);
+};
+
 const boatHullSvg = (fill, ring, deck) => `
   <svg width="100%" height="100%" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M24 4
@@ -197,6 +210,14 @@ const boatHullSvg = (fill, ring, deck) => `
   </svg>
 `;
 
+/** Mũi tên hướng đi (0° = Bắc) — giống Live GPS. */
+const gpsArrowSvg = (fill, stroke) => `
+  <svg width="100%" height="100%" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M20 2 L34 34 L20 26 L6 34 Z"
+      fill="${fill}" stroke="${stroke}" stroke-width="2.2" stroke-linejoin="round"/>
+  </svg>
+`;
+
 const getBoatLeafletIcon = ({
   selected = false,
   dimmed = false,
@@ -204,9 +225,11 @@ const getBoatLeafletIcon = ({
   incident = false,
   heading = null,
   kind = "deck1",
+  style = "hull",
+  label = "",
 } = {}) => {
   const markerKind = ["rescue", "deck2", "deck1"].includes(kind) ? kind : "deck1";
-  const palette = BOAT_KIND_COLORS[markerKind] || BOAT_KIND_COLORS.deck1;
+  const markerStyle = style === "gps" ? "gps" : "hull";
   const state = incident
     ? "incident"
     : maintenance
@@ -217,9 +240,45 @@ const getBoatLeafletIcon = ({
           ? "offline"
           : "online";
   const rot = Number.isFinite(Number(heading)) ? Math.round(Number(heading) / 5) * 5 : 0;
-  const key = `${markerKind}|${state}|${rot}`;
+  const safeLabel = escapeHtml(String(label || "").slice(0, 4));
+  const key = `${markerStyle}|${markerKind}|${state}|${rot}|${safeLabel}`;
   if (boatLeafletIcons.has(key)) return boatLeafletIcons.get(key);
 
+  if (markerStyle === "gps") {
+    let fill = "#F97316";
+    if (incident) fill = "#DC2626";
+    else if (selected) fill = "#FFD100";
+    else if (maintenance || dimmed) fill = "#94A3B8";
+    else if (markerKind === "rescue") fill = "#EA580C";
+
+    const stroke = selected ? "#0E4050" : "#FFFFFF";
+    const size = selected || incident ? 36 : 32;
+    const wrapW = Math.max(size, safeLabel ? 44 : size);
+    const wrapH = size + (safeLabel ? 14 : 0);
+    const html = `
+      <div class="wb-gps ${dimmed ? "is-offline" : ""} ${maintenance ? "is-maintenance" : ""} ${incident ? "is-incident" : ""} ${selected ? "is-selected" : ""}" style="width:${wrapW}px;height:${wrapH}px;">
+        <span class="wb-gps__rot" style="width:${size}px;height:${size}px;transform:rotate(${rot}deg);">
+          ${gpsArrowSvg(fill, stroke)}
+        </span>
+        ${safeLabel ? `<span class="wb-gps__label">${safeLabel}</span>` : ""}
+      </div>
+    `;
+    const icon = L.divIcon({
+      className: "live-boat-marker",
+      html,
+      iconSize: [wrapW, wrapH],
+      iconAnchor: [wrapW / 2, size / 2],
+      popupAnchor: [0, -(size / 2)],
+    });
+    boatLeafletIcons.set(key, icon);
+    if (boatLeafletIcons.size > 320) {
+      const first = boatLeafletIcons.keys().next().value;
+      boatLeafletIcons.delete(first);
+    }
+    return icon;
+  }
+
+  const palette = BOAT_KIND_COLORS[markerKind] || BOAT_KIND_COLORS.deck1;
   const size = selected || incident ? 50 : 44;
   let fill = palette.fill;
   let deck = palette.deck;
@@ -264,13 +323,6 @@ const getBoatLeafletIcon = ({
 /** Marker bến: ô mã xám + cột + tên bến (kiểu như bản đồ waterbus). */
 const stationIconCache = new Map();
 
-const escapeHtml = (value) =>
-  String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-
 /** ST-BD / ST_BD → BD — chỉ hiện phần mã ngắn trên cờ. */
 const shortStationCode = (code) => {
   const raw = String(code || "").trim().toUpperCase();
@@ -280,7 +332,7 @@ const shortStationCode = (code) => {
 
 const getStationPinIcon = (code) => {
   const label = shortStationCode(code);
-  const cacheKey = `code:${label}`;
+  const cacheKey = `gpsflag:${label}`;
   const cached = stationIconCache.get(cacheKey);
   if (cached) return cached;
 
@@ -294,13 +346,13 @@ const getStationPinIcon = (code) => {
     </div>
   `;
 
-  // Neo tại chân cột (giữa tip) — badge nằm phía trên
+  // Neo tại chân cột (đỉnh tip) — badge nằm phía trên
   const icon = L.divIcon({
     className: "live-boat-marker",
     html,
-    iconSize: [40, 36],
-    iconAnchor: [20, 34],
-    popupAnchor: [0, -36],
+    iconSize: [44, 42],
+    iconAnchor: [22, 41],
+    popupAnchor: [0, -40],
   });
   stationIconCache.set(cacheKey, icon);
   if (stationIconCache.size > 200) {
@@ -354,6 +406,8 @@ export const WaterwayMap = ({
   lineOpacity = 0.85,
   fitBoatMarkers = false,
   stationAsFlag = false,
+  /** "gps" = mũi tên cam như Live GPS; "hull" = icon thân tàu. */
+  boatMarkerStyle = "hull",
   /** Hiện tên bến cố định trên map (trang Home). */
   showStationLabels = false,
   /** Hiện ảnh bến trong popup. */
@@ -629,6 +683,8 @@ export const WaterwayMap = ({
                 incident: isIncident,
                 heading: boat.heading,
                 kind: markerKind,
+                style: boatMarkerStyle,
+                label: boatMarkerStyle === "gps" ? shortBoatMarkerLabel(boat) : "",
               })}
               zIndexOffset={selected ? 1000 : isIncident ? 400 : markerKind === "rescue" ? 350 : underMaintenance ? 80 : dimmed ? 100 : 200}
               eventHandlers={{
