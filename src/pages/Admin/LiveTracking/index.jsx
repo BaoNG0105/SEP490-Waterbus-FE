@@ -625,6 +625,14 @@ export function LiveTracking({ viewTabs = null } = {}) {
           })(),
           scheduledDepartureAt: schedule?.scheduledDepartureAt || boat.scheduledDepartureAt || null,
           minutesUntilDeparture: schedule?.minutesUntilDeparture ?? boat.minutesUntilDeparture ?? null,
+          delayMinutes: (() => {
+            const n = Number(schedule?.delayMinutes ?? boat.delayMinutes);
+            return Number.isFinite(n) ? n : null;
+          })(),
+          delayReason: schedule?.delayReason || boat.delayReason || null,
+          adjustedStartAt: schedule?.adjustedStartAt || boat.adjustedStartAt || null,
+          adjustedEndAt: schedule?.adjustedEndAt || boat.adjustedEndAt || null,
+          operationStatus: schedule?.operationStatus || boat.operationStatus || null,
           hasOpenIncident,
           activeIncident: hasOpenIncident || boat.activeIncident === true,
           rescueMission: mission,
@@ -924,13 +932,26 @@ export function LiveTracking({ viewTabs = null } = {}) {
                     : boat.rescuedByBoatCode
                       ? (lang === "VN" ? `${boat.rescuedByBoatCode} đang kéo` : `${boat.rescuedByBoatCode} towing`)
                       : null;
+                  const delayMin = Number(boat.delayMinutes);
+                  const delayLine = Number.isFinite(delayMin) && delayMin > 0
+                    ? (lang === "VN"
+                      ? `Trễ ${delayMin}p${boat.delayReason ? ` · ${boat.delayReason}` : ""}`
+                      : `Delay ${delayMin}m${boat.delayReason ? ` · ${boat.delayReason}` : ""}`)
+                    : null;
                   const statusTag = boat.rescuingBoatCode
                     ? {
                       label: lang === "VN" ? `CỨU ${boat.rescuingBoatCode}` : `TOW ${boat.rescuingBoatCode}`,
                       tone: "rescue",
                       detail: missionLine,
                     }
-                    : tag;
+                    : (Number.isFinite(delayMin) && delayMin > 0 && !isIncident
+                      ? {
+                        ...tag,
+                        tone: "delayed",
+                        label: lang === "VN" ? `TRỄ ${delayMin}P` : `DELAY ${delayMin}M`,
+                        detail: delayLine || tag.detail,
+                      }
+                      : tag);
 
                   return (
                     <li key={boat.boatId}>
@@ -978,6 +999,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
                           <span className="mt-0.5 block truncate text-[10px] font-medium text-slate-500">
                             {boat.flashNotice
                               || missionLine
+                              || delayLine
                               || statusTag.detail
                               || `${kindLabel} · ${formatRelative(boat.recordedAt, lang)}`}
                           </span>
