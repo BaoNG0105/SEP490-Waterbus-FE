@@ -10,7 +10,7 @@ import {
 import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
 import { PageLoading } from "../../../components/PageLoading";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllBoats } from "../../../services/boatService";
+import { fetchAllBoats, fetchActiveBoatsByServiceType } from "../../../services/boatService";
 import {
   fetchAdminCharterBookingDetail,
   fetchAssignedCharterBookingDetail,
@@ -20,6 +20,7 @@ import {
   modifyAdminCharterBookingStatus,
   previewAdminCharterBookingQuote,
   submitAdminCharterBookingQuote,
+  createAdminCharterBookingTrip,
 } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { buildConfirmBodyHtml, showConfirmDialog, showToast, showValidationMessage } from "../../../utils/swalToast";
@@ -42,7 +43,6 @@ import {
   canAdminHandleRefund,
   enrichAssignedBoat,
   extractCharterBookingList,
-  findCharterBoatScheduleConflicts,
   formatCountdown,
   formatDate,
   formatDateTime,
@@ -78,11 +78,15 @@ import {
   isPaidPayment,
   isRefundDone,
   isRefundFailed,
+  isRescueBoat,
   manualStatusOptions,
   normalizeBooking,
   normalizeRequestedBoats,
   normalizeRouteCandidateLegs,
   enrichCandidateLegsWithManualGpsRoutes,
+  evaluateCharterTripCreateGate,
+  extractTripIdsFromCharterTripCreateResponse,
+  getCharterBookingLinkedTripIds,
   paymentWaitsCustomerRefundInfo,
   pick,
   resolveQuoteDepositAmount,
@@ -117,6 +121,8 @@ export function AdminCharterBookingDetail() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [quotePreviewError, setQuotePreviewError] = useState("");
   const [occupiedBoatIds, setOccupiedBoatIds] = useState([]);
+  const [charterTripGateBookings, setCharterTripGateBookings] = useState([]);
+  const [localCreatedTripIds, setLocalCreatedTripIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -147,11 +153,14 @@ export function AdminCharterBookingDetail() {
       const fetchDetail = useAssignedApi ? fetchAssignedCharterBookingDetail : fetchAdminCharterBookingDetail;
       const [detail, boatData] = await Promise.all([
         fetchDetail(id),
-        fetchAllBoats({ status: "Active" }).catch(() => []),
+        fetchActiveBoatsByServiceType("Passenger").catch(() =>
+          fetchAllBoats({ status: "Active" }).catch(() => []),
+        ),
       ]);
       const normalized = normalizeBooking(detail);
       setBooking(normalized);
-      setBoats(Array.isArray(boatData) ? boatData : []);
+      const boatList = Array.isArray(boatData) ? boatData : (boatData?.items || boatData?.data || []);
+      setBoats(boatList.filter((boat) => !isRescueBoat(boat)));
       setQuoteForm(buildQuoteFormFromBooking(normalized));
       setQuotePreview(null);
       setQuotePreviewError("");
@@ -379,13 +388,153 @@ export function AdminCharterBookingDetail() {
     if (!booking) return "closed";
     const status = booking.status;
     if (["Cancelled", "Expired", "Refunded", "Completed"].includes(status)) return "closed";
+    // Confirmed (kể cả đã Paid/DepositPaid) → màn vận hành + nút Tạo chuyến.
+    if (status === "Confirmed") return "operate";
     if (isBookingPaymentClosed(booking) && status !== "PendingQuote") return "closed";
-    // Đã chốt giá → tab Actions sang theo dõi thanh toán, không còn form Chốt giá.
     if (status === "PendingQuote") return "quote";
     if (["Quoted", "PendingPayment"].includes(status)) return "payment";
-    if (status === "Confirmed") return "operate";
     return "closed";
   }, [booking]);
+
+  const canManageTripCreate = Boolean(booking)
+    && capabilities.canManageStatus
+    && booking.status === "Confirmed";
+
+  const linkedTripIds = useMemo(() => {
+    const fromBooking = booking ? getCharterBookingLinkedTripIds(booking) : [];
+    return [...new Set([...fromBooking, ...localCreatedTripIds])];
+  }, [booking, localCreatedTripIds]);
+
+  useEffect(() => {
+    setLocalCreatedTripIds([]);
+  }, [booking?.id]);
+
+  // Detail sau tạo trip có thể đã có tripId từ BE → đồng bộ local.
+  useEffect(() => {
+    if (!booking) return;
+    const fromBooking = getCharterBookingLinkedTripIds(booking);
+    if (fromBooking.length === 0) return;
+    setLocalCreatedTripIds((prev) => [...new Set([...prev, ...fromBooking])]);
+  }, [booking]);
+
+  const charterTripGate = useMemo(() => {
+    if (!booking || !canManageTripCreate) {
+      return { canCreate: false, reasons: [], boatIds: [], tripIds: [], conflicts: [] };
+    }
+    return evaluateCharterTripCreateGate(booking, {
+      otherBookings: charterTripGateBookings,
+      lang,
+    });
+  }, [booking, canManageTripCreate, charterTripGateBookings, lang]);
+
+  useEffect(() => {
+    if (!canManageTripCreate || !booking?.id) {
+      setCharterTripGateBookings([]);
+      return undefined;
+    }
+
+    let isActive = true;
+    const loadGateBookings = async () => {
+      try {
+        const listPayload = await fetchAdminCharterBookings();
+        if (!isActive) return;
+        setCharterTripGateBookings(extractCharterBookingList(listPayload).map(normalizeBooking));
+      } catch (error) {
+        console.error("Không tải danh sách booking để kiểm tra trùng giờ trip:", error);
+        if (isActive) setCharterTripGateBookings([]);
+      }
+    };
+
+    loadGateBookings();
+    return () => {
+      isActive = false;
+    };
+  }, [
+    canManageTripCreate,
+    booking?.id,
+    booking?.departureDate,
+    booking?.startTime,
+    booking?.selectedBoats,
+  ]);
+
+  const handleCreateCharterTrip = async () => {
+    if (!booking?.id || !canManageTripCreate) return;
+
+    const gate = evaluateCharterTripCreateGate(booking, {
+      otherBookings: charterTripGateBookings,
+      lang,
+    });
+    if (!gate.canCreate) {
+      showToast({
+        icon: "warning",
+        title: lang === "VN" ? "Chưa đủ điều kiện tạo chuyến" : "Cannot create trip yet",
+        text: gate.reasons[0] || "",
+        timer: 4000,
+      });
+      return;
+    }
+
+    const boatCount = gate.boatIds.length;
+    const result = await showConfirmDialog({
+      tone: "brand",
+      icon: "question",
+      title: lang === "VN" ? "Tạo chuyến thuê tàu?" : "Create charter trip?",
+      html: buildConfirmBodyHtml({
+        code: String(booking.bookingCode || "--"),
+        text: lang === "VN"
+          ? (boatCount > 1
+            ? `Xác nhận tạo ${boatCount} chuyến theo số tàu đã chốt và lịch trình của yêu cầu này?`
+            : "Xác nhận tạo chuyến theo tàu đã chốt và lịch trình của yêu cầu này?")
+          : (boatCount > 1
+            ? `Create ${boatCount} trips for the locked boats and this booking’s schedule?`
+            : "Create a trip for the locked boat and this booking’s schedule?"),
+      }),
+      confirmButtonText: lang === "VN" ? "Tạo chuyến" : "Create trip",
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      setIsSubmitting(true);
+      const created = await createAdminCharterBookingTrip(booking.id);
+      const createdIds = extractTripIdsFromCharterTripCreateResponse(created);
+      const fallbackIds = createdIds.length > 0
+        ? createdIds
+        : gate.boatIds.map((_, index) => `created-${booking.id}-${index + 1}`);
+      setLocalCreatedTripIds((prev) => [...new Set([...prev, ...fallbackIds])]);
+      setBooking((prev) => (prev ? {
+        ...prev,
+        tripIds: [...new Set([...(prev.tripIds || []), ...fallbackIds])],
+        trips: [
+          ...(Array.isArray(prev.trips) ? prev.trips : []),
+          ...fallbackIds
+            .filter((id) => !(prev.trips || []).some((trip) => String(trip?.tripId || trip?.id) === String(id)))
+            .map((id) => ({ tripId: id })),
+        ],
+      } : prev));
+      await loadDetail({ silent: true });
+      showToast({
+        icon: "success",
+        title: lang === "VN" ? "Đã tạo chuyến" : "Trip created",
+        timer: 2500,
+      });
+    } catch (error) {
+      console.error("Tạo trip charter thất bại:", error);
+      showToast({
+        icon: "error",
+        title: lang === "VN" ? "Không tạo được chuyến" : "Unable to create trip",
+        text: getApiErrorMessage(
+          error,
+          lang === "VN"
+            ? "Kiểm tra Confirmed, tàu đã chốt, chưa có trip, và không trùng giờ."
+            : "Check Confirmed status, locked boats, no existing trip, and schedule conflicts.",
+        ),
+        timer: 5000,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleLoadRouteCandidates = useCallback(async () => {
     if (!booking?.id || !canManageQuote) return;
@@ -664,48 +813,15 @@ export function AdminCharterBookingDetail() {
           icon: "warning",
           title: lang === "VN" ? "Tàu đã được giữ" : "Boat already held",
           text: lang === "VN"
-            ? "Tàu đã được giữ trong ngày này nên không còn trong danh sách. Hãy chọn tàu khác."
-            : "That boat is already held on this day and was removed from the list. Pick another boat.",
+            ? "Tàu đã được giữ nên không còn trong danh sách. Hãy chọn tàu khác."
+            : "That boat is already held and was removed from the list. Pick another boat.",
           timer: 4000,
         });
         return;
       }
 
-      const listPayload = useAssignedApi
-        ? await fetchAssignedCharterBookings()
-        : await fetchAdminCharterBookings();
-      const otherBookings = extractCharterBookingList(listPayload).map(normalizeBooking);
-      const conflicts = findCharterBoatScheduleConflicts({
-        currentBookingId: booking.id,
-        departureDate: booking.departureDate,
-        startTime: booking.startTime,
-        boatIds: selectedBoatIds,
-        otherBookings,
-        matchMode: "day",
-      });
-
-      if (conflicts.length > 0) {
-        const occupied = new Set(conflicts.map((item) => item.boatId));
-        setOccupiedBoatIds((prev) => [...new Set([...prev, ...occupied])]);
-        // Không báo lỗi — bỏ chọn tàu trùng để admin chọn lại từ danh sách còn trống.
-        setQuoteForm((prev) => ({
-          ...prev,
-          boats: prev.boats.map((boat) => (
-            occupied.has(String(boat.boatId || "").trim())
-              ? { ...boat, boatId: "" }
-              : boat
-          )),
-        }));
-        showToast({
-          icon: "warning",
-          title: lang === "VN" ? "Tàu đã được giữ" : "Boat already held",
-          text: lang === "VN"
-            ? "Một tàu đã được giữ cho booking khác trong ngày này. Đã bỏ chọn — hãy chọn tàu khác."
-            : "A boat is held by another booking on this day. Selection cleared — pick another boat.",
-          timer: 4000,
-        });
-        return;
-      }
+      // Không chặn cứng bằng check cùng ngày FE — BE quyết định trùng lịch (booking/trip overlap).
+      // Soft-filter occupiedBoatIds chỉ để UX chọn tàu.
 
       const depositAmount = resolveQuoteDepositAmount(quotePreview);
       const payload = {
@@ -728,7 +844,7 @@ export function AdminCharterBookingDetail() {
         : "Please check boat, passenger count, duration, and subtotal.";
       const rawMessage = getApiErrorMessage(error, fallback);
 
-      // Conflict từ BE: ẩn tàu / bỏ chọn, không hiện popup lỗi trùng lịch.
+      // Trùng tàu/lịch từ BE: hiện đúng message BE, bỏ chọn tàu, không chốt quote.
       if (isCharterBoatScheduleConflictError(error) || isCharterBoatScheduleConflictError(rawMessage)) {
         const selectedIds = quoteForm.boats
           .map((boat) => String(boat.boatId || "").trim())
@@ -740,9 +856,9 @@ export function AdminCharterBookingDetail() {
         }));
         showToast({
           icon: "warning",
-          title: lang === "VN" ? "Tàu đã được giữ" : "Boat already held",
+          title: lang === "VN" ? "Tàu trùng lịch" : "Boat schedule conflict",
           text: rawMessage,
-          timer: 4000,
+          timer: 5000,
         });
         return;
       }
@@ -1094,6 +1210,11 @@ export function AdminCharterBookingDetail() {
           onPreviewQuote={handlePreviewQuote}
           onQuoteRentalUnitChange={handleDetailQuoteRentalUnitChange}
           onStatusChange={handleDetailStatusChange}
+          onCreateTrip={handleCreateCharterTrip}
+          canCreateTrip={charterTripGate.canCreate}
+          createTripBlockers={charterTripGate.reasons}
+          linkedTripIds={linkedTripIds}
+          canManageTripCreate={canManageTripCreate}
           onNavigateTab={(tabId) => {
             const tab = workspaceTabs.find((item) => item.id === tabId);
             goToTab(tabId, tab?.badge);

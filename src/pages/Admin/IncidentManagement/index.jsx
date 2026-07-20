@@ -14,6 +14,7 @@ import {
   dispatchReplacementBoat,
   fetchResolvedIncidents,
   getApiErrorMessage,
+  getDispatchReplacementErrorMessage,
   getIncidentTypeLabel,
   getReplacementMissionCopy,
   getSeverityLabel,
@@ -421,8 +422,8 @@ export function IncidentManagement({
         icon: "warning",
         title: lang === "VN" ? "Chọn tàu thay thế" : "Select replacement boat",
         text: lang === "VN"
-          ? "Có vé active — cần tàu chở khách thay thế."
-          : "Active tickets — a replacement passenger boat is required.",
+          ? "Sự cố có chuyến (tripId) — bắt buộc chọn tàu Passenger thay thế."
+          : "Incident has a trip — replacement passenger boat is required.",
       });
       return;
     }
@@ -459,7 +460,9 @@ export function IncidentManagement({
     setBusyId(rescueForm.incidentId);
     try {
       const delayRaw = Number(rescueForm.delayMinutes);
-      // FE chỉ gọi Azure JWT — BE forward lệnh sang GPS hook.
+      const delayMinutes = rescueHasTrip && Number.isFinite(delayRaw)
+        ? Math.max(0, Math.trunc(delayRaw))
+        : 0;
       await dispatchReplacementBoat(rescueForm.incidentId, {
         rescueBoatId: rescueForm.rescueBoatId,
         replacementBoatId: (needsReplacementBoat || rescueForm.replacementBoatId)
@@ -478,12 +481,21 @@ export function IncidentManagement({
         title: lang === "VN" ? "Đã điều tàu cứu hộ" : "Rescue boat assigned",
       });
       setRescueForm(EMPTY_RESCUE_FORM);
-      await refresh();
+      // Refetch theo spec BE: incident + schedule (+ boats); Live Tracking tự poll GPS.
+      const day = toDdMmYyyy(new Date());
+      const opsDay = toOperationsScheduleDate();
+      await Promise.all([
+        refresh(),
+        fetchResolvedIncidents().then((list) => setHistoryIncidents(Array.isArray(list) ? list : [])).catch(() => {}),
+        fetchAllBoats().then((data) => setBoats(unwrapList(data))).catch(() => {}),
+        fetchAllTrips({ fromDate: day, toDate: day }).then((data) => setTrips(unwrapList(data))).catch(() => {}),
+        fetchOperationsSchedule({ fromDate: opsDay, toDate: opsDay }).catch(() => {}),
+      ]);
     } catch (error) {
       notify({
         icon: "error",
         title: lang === "VN" ? "Điều tàu thất bại" : "Dispatch failed",
-        text: getApiErrorMessage(error) || error?.message || "",
+        text: getDispatchReplacementErrorMessage(error, lang),
       });
     } finally {
       setBusyId("");
@@ -1066,10 +1078,10 @@ export function IncidentManagement({
             {!rescueForm.tripId ? (
               <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-300 dark:ring-slate-700">
                 {lang === "VN"
-                  ? "Không có trip — vẫn điều được tàu cứu hộ (kéo về). Không cần tàu thay thế."
-                  : "No trip — rescue boat can still be dispatched (tow). No replacement needed."}
+                  ? "Chưa gắn chuyến · Chỉ là sự cố tàu — điều tàu cứu hộ kéo về, không cần tàu thay thế."
+                  : "No trip · Boat-only incident — dispatch rescue to tow; no replacement needed."}
               </p>
-            ) : null}
+            )}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
                 {lang === "VN" ? "Tàu cứu hộ (kéo) *" : "Rescue boat *"}
@@ -1134,7 +1146,7 @@ export function IncidentManagement({
             )}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                Delay (min)
+                {lang === "VN" ? "Delay (phút) — Manager nhập" : "Delay (min) — Manager input"}
               </span>
               <input
                 type="number"

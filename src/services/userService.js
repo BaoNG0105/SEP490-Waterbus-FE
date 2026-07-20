@@ -133,48 +133,88 @@ export const fetchManagerUsers = (options = {}) => fetchUsersByRole(USER_ROLE.MA
 
 export const fetchStaffUsers = (options = {}) => fetchUsersByRole(USER_ROLE.STAFF, options);
 
-/** Nhân viên trên tàu đang Active — dropdown phân công tàu (BE: GET /users?staffType=OnBoard&status=Active) */
+const normalizeStaffTypeKey = (value) => {
+  const raw = String(value || "").toLowerCase().replace(/[_\s-]/g, "");
+  if (raw === "onboard" || raw === "2") return "OnBoard";
+  if (raw === "ground" || raw === "1") return "Ground";
+  return "";
+};
+
+const isActiveUserStatus = (value) => {
+  const status = String(value || "").toLowerCase();
+  return !status || status === "active";
+};
+
+/** Lọc staff từ list đầy đủ (cùng nguồn trang Quản lý NV) — tránh BE query staffType trả rỗng / thiếu field. */
+const filterStaffUsersByType = (rows, staffType) => {
+  const wanted = normalizeStaffTypeKey(staffType);
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => {
+      const type = normalizeStaffTypeKey(pick(row, ["staffType", "staff_type", "StaffType"], ""));
+      if (wanted && type !== wanted) return false;
+      if (!isActiveUserStatus(pick(row, ["status", "accountStatus", "Status"], "Active"))) return false;
+      const roles = Array.isArray(row?.roles) ? row.roles : (row?.role ? [row.role] : []);
+      // Có roles → phải là Staff; không có roles nhưng đúng staffType thì vẫn nhận.
+      if (roles.length > 0) {
+        const asOption = normalizeUserOption(row);
+        if (!userMatchesRole(asOption, USER_ROLE.STAFF)) return false;
+      }
+      return Boolean(pick(row, ["id", "userId", "accountId"], ""));
+    })
+    .map(normalizeUserOption)
+    .filter((item) => item.id);
+};
+
+/** Nhân viên trên tàu đang Active — dropdown phân công tàu */
 export const fetchOnBoardStaffUsers = async ({ force = false } = {}) => {
+  // Ưu tiên list đầy đủ như Staff Management (có staffType trên từng row).
+  try {
+    const rows = await fetchUserList({ force });
+    const fromList = filterStaffUsersByType(rows, "OnBoard");
+    if (fromList.length > 0) return fromList;
+  } catch (error) {
+    console.warn("fetchOnBoardStaffUsers: fetchUserList failed, try filtered /users", error);
+  }
+
   const users = await fetchAllUsers({
     force,
     params: { staffType: "OnBoard", status: "Active" },
   });
-  // Siết client: chỉ OnBoard + Active (+ role Staff nếu có). Không nhận user thiếu staffType
-  // (tránh hiện Ground khi BE chưa hỗ trợ query staffType).
   return users.filter((item) => {
-    const type = String(pick(item?.raw || item, ["staffType", "staff_type"], ""))
-      .toLowerCase()
-      .replace(/[_\s-]/g, "");
-    if (type !== "onboard" && type !== "2") return false;
-
-    const status = String(pick(item?.raw || item, ["status", "accountStatus"], "")).toLowerCase();
-    if (status && status !== "active") return false;
-
+    const type = normalizeStaffTypeKey(pick(item?.raw || item, ["staffType", "staff_type", "StaffType"], ""));
+    if (type && type !== "OnBoard") return false;
+    if (!isActiveUserStatus(pick(item?.raw || item, ["status", "accountStatus", "Status"], "Active"))) {
+      return false;
+    }
     const roles = Array.isArray(item?.roles) ? item.roles : [];
     if (roles.length > 0 && !userMatchesRole(item, USER_ROLE.STAFF)) return false;
-
+    // Query đã lọc OnBoard — nhận cả row thiếu staffType (BE param ok nhưng field omit).
     return true;
   });
 };
 
 /** Nhân viên mặt đất đang Active — dropdown phân công bến */
 export const fetchGroundStaffUsers = async ({ force = false } = {}) => {
+  try {
+    const rows = await fetchUserList({ force });
+    const fromList = filterStaffUsersByType(rows, "Ground");
+    if (fromList.length > 0) return fromList;
+  } catch (error) {
+    console.warn("fetchGroundStaffUsers: fetchUserList failed, try filtered /users", error);
+  }
+
   const users = await fetchAllUsers({
     force,
     params: { staffType: "Ground", status: "Active" },
   });
   return users.filter((item) => {
-    const type = String(pick(item?.raw || item, ["staffType", "staff_type"], ""))
-      .toLowerCase()
-      .replace(/[_\s-]/g, "");
-    if (type && type !== "ground" && type !== "1") return false;
-
-    const status = String(pick(item?.raw || item, ["status", "accountStatus"], "")).toLowerCase();
-    if (status && status !== "active") return false;
-
+    const type = normalizeStaffTypeKey(pick(item?.raw || item, ["staffType", "staff_type", "StaffType"], ""));
+    if (type && type !== "Ground") return false;
+    if (!isActiveUserStatus(pick(item?.raw || item, ["status", "accountStatus", "Status"], "Active"))) {
+      return false;
+    }
     const roles = Array.isArray(item?.roles) ? item.roles : [];
     if (roles.length > 0 && !userMatchesRole(item, USER_ROLE.STAFF)) return false;
-
     return true;
   });
 };

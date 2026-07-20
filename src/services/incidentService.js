@@ -238,3 +238,31 @@ export const getApiErrorMessage = (error) => {
   }
 };
 
+/** Lỗi validation điều tàu — map replacementBoatId theo copy BE. */
+export const getDispatchReplacementErrorMessage = (error, lang = "VN") => {
+  const data = error?.response?.data;
+  const errors = data?.errors && typeof data.errors === "object" ? data.errors : null;
+  const replacementKeys = errors
+    ? Object.keys(errors).filter((key) => /replacementboatid/i.test(String(key).replace(/[_\s.-]/g, "")))
+    : [];
+  const blob = [
+    data?.detail,
+    data?.title,
+    data?.message,
+    getApiErrorMessage(error),
+    error?.message,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  const isReplacementRequired = replacementKeys.length > 0
+    || /replacementboatid/.test(blob)
+    || (/replacement/.test(blob) && /required|bắt buộc|bat buoc|must/.test(blob));
+
+  if (isReplacementRequired) {
+    return lang === "VN"
+      ? "Chuyến đang chạy nên phải chọn tàu thay thế"
+      : "Trip is running — a replacement boat must be selected";
+  }
+
+  return getApiErrorMessage(error) || error?.message || "";
+};
+

@@ -8,10 +8,18 @@ export const getStaffAssignments = (params = {}) =>
 export const getMyStaffAssignments = (params = {}) =>
     api.get('/staff-assignments/mine', { params }).then((response) => response.data);
 
-// API: Tạo phân công (Boat cần boatId + staff OnBoard; Station cần stationId + staff Ground)
+// API: Tạo 1 ca (tối đa 24h)
 export const createStaffAssignment = (payload) =>
     api.post('/staff-assignments', payload).then((response) => response.data);
 
-// API: Hủy phân công (soft) → status = Cancelled. Không còn PATCH /status.
+/** Tạo lịch nhiều ngày — BE tự tách ca theo ngày */
+export const createStaffAssignmentsBulk = (payload) =>
+    api.post('/staff-assignments/bulk', payload).then((response) => response.data);
+
+/** Thay nhân viên trên ca — ca cũ → Replaced */
+export const replaceStaffAssignment = (assignmentId, payload) =>
+    api.post(`/staff-assignments/${assignmentId}/replace`, payload).then((response) => response.data);
+
+// API: Hủy phân công (soft) → status = Cancelled
 export const deleteStaffAssignment = (assignmentId) =>
     api.delete(`/staff-assignments/${assignmentId}`).then((response) => response.data);
