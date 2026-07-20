@@ -12,6 +12,11 @@ export const createTrip = (data) =>
 export const searchTrips = (params) =>
     api.get('/trips/search', { params }).then(response => response.data);
 
+// API: Tìm chuyến tham quan ngắm cảnh (Water Sightseeing) theo ngày (params: operatingDate dd/MM/yyyy —
+// không cần fromStationId/toStationId vì tuyến ngắm cảnh là vòng lặp, bến bắt đầu = bến kết thúc).
+export const searchSightseeingTrips = (params) =>
+    api.get('/trips/search/sightseeing', { params }).then(response => response.data);
+
 // API: Chi tiết 1 chuyến tàu kèm danh sách bến dừng (trip_stops)
 export const getTripById = (id) =>
     api.get(`/trips/${id}`).then(response => response.data);

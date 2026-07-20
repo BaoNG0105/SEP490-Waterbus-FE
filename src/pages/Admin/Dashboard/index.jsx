@@ -1,20 +1,16 @@
 import { Link } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
+import { hasRole, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 
 export const Dashboard = () => {
   const { lang } = useApp();
+  const { user } = useSelector((state) => state.auth);
 
-  // Định nghĩa mảng 16 danh mục chức năng quản lý tối ưu cho trang chủ Dashboard
+  const staffOnly = isStaffUser(user) && !isAdminUser(user) && !isManagerUser(user);
+
+  // Danh mục chức năng quản lý đồng bộ với menu sidebar (AdminSidebar.jsx)
   const dashboardModules = [
-    {
-      path: "/admin",
-      icon: "dashboard",
-      titleVn: "Tổng quan Dashboard",
-      titleEn: "System Overview",
-      descVn: "Xem biểu đồ phân tích và hiệu suất hệ thống.",
-      descEn: "Analyze system charts and core performance.",
-      color: "from-blue-500/10 to-cyan-500/10 text-blue-600 dark:text-blue-400"
-    },
     {
       path: "/admin/revenue",
       icon: "payments",
@@ -22,35 +18,39 @@ export const Dashboard = () => {
       titleEn: "Revenue Financials",
       descVn: "Thống kê dòng tiền, vé bán và hạch toán.",
       descEn: "Track cash flows, ticketing and accounting.",
-      color: "from-emerald-500/10 to-teal-500/10 text-emerald-600 dark:text-emerald-400"
+      color: "from-emerald-500/10 to-teal-500/10 text-emerald-600 dark:text-emerald-400",
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/users-management",
       icon: "manage_accounts",
-      titleVn: "Quản lý người dùng",
-      titleEn: "User Management",
-      descVn: "Quản lý tài khoản Nhân viên, Quản lý và Khách hàng.",
-      descEn: "Manage staff, manager, and customer accounts.",
-      color: "from-indigo-500/10 to-blue-500/10 text-indigo-600 dark:text-indigo-400"
+      titleVn: "Quản lý Khách hàng",
+      titleEn: "Customer Management",
+      descVn: "Xem danh sách tài khoản Khách hàng trong hệ thống.",
+      descEn: "View the list of customer accounts.",
+      color: "from-indigo-500/10 to-blue-500/10 text-indigo-600 dark:text-indigo-400",
+      roles: ["ADMIN", "MANAGER"],
     },
     {
-      path: "/admin/ticketing",
-      icon: "local_activity",
-      titleVn: "Hệ thống bán vé",
-      titleEn: "POS Counter Sales",
-      descVn: "Xuất vé trực tiếp tại quầy ga trung tâm.",
-      descEn: "Issue physical tickets at wharf box office.",
-      color: "from-pink-500/10 to-rose-500/10 text-pink-600 dark:text-pink-400"
+      path: "/admin/managers-management",
+      icon: "supervisor_account",
+      titleVn: "Quản lý Manager",
+      titleEn: "Manager Management",
+      descVn: "Quản lý tài khoản Quản lý (Manager) và bến phụ trách.",
+      descEn: "Manage manager accounts and their assigned stations.",
+      color: "from-amber-500/10 to-orange-500/10 text-amber-600 dark:text-amber-400",
+      roles: ["ADMIN"],
     },
-    // {
-    //   path: "/admin/verification",
-    //   icon: "qr_code_scanner",
-    //   titleVn: "Kiểm soát soát vé",
-    //   titleEn: "Ticket Gate Scanning",
-    //   descVn: "Giám sát quét mã QR tại các cửa kiểm soát.",
-    //   descEn: "Monitor QR access control at boat boarding.",
-    //   color: "from-sky-500/10 to-blue-500/10 text-sky-600 dark:text-sky-400"
-    // },
+    {
+      path: "/admin/staffs-management",
+      icon: "badge",
+      titleVn: "Quản lý Nhân viên",
+      titleEn: "Staff Management",
+      descVn: "Quản lý tài khoản Nhân viên mặt đất / trên tàu.",
+      descEn: "Manage ground and onboard staff accounts.",
+      color: "from-sky-500/10 to-blue-500/10 text-sky-600 dark:text-sky-400",
+      roles: ["ADMIN", "MANAGER"],
+    },
     {
       path: "/admin/charter-bookings-management",
       icon: "directions_boat",
@@ -58,7 +58,8 @@ export const Dashboard = () => {
       titleEn: "Charter Booking Management",
       descVn: "Điều phối yêu cầu thuê tàu riêng, gán tàu và chốt giá.",
       descEn: "Handle private charter requests, boat assignment, and quotes.",
-      color: "from-violet-500/10 to-purple-500/10 text-violet-600 dark:text-violet-400"
+      color: "from-violet-500/10 to-purple-500/10 text-violet-600 dark:text-violet-400",
+      roles: ["ADMIN", "MANAGER"],
     },
     {
       path: "/admin/bookings",
@@ -67,7 +68,8 @@ export const Dashboard = () => {
       titleEn: "Order Invoice Logs",
       descVn: "Danh sách các Booking của Waterbus & Water SightSeeing.",
       descEn: "Full invoice transactions and status codes.",
-      color: "from-amber-500/10 to-yellow-500/10 text-amber-600 dark:text-amber-500"
+      color: "from-amber-500/10 to-yellow-500/10 text-amber-600 dark:text-amber-500",
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/stations-management",
@@ -76,7 +78,8 @@ export const Dashboard = () => {
       titleEn: "Wharf Station Hubs",
       descVn: "Cấu hình thông tin bến tàu, dịch vụ bến.",
       descEn: "Configure river terminal piers and utilities.",
-      color: "from-teal-500/10 to-emerald-500/10 text-teal-600 dark:text-teal-400"
+      color: "from-teal-500/10 to-emerald-500/10 text-teal-600 dark:text-teal-400",
+      roles: ["ADMIN", "MANAGER"],
     },
     {
       path: "/admin/boats-management",
@@ -85,16 +88,92 @@ export const Dashboard = () => {
       titleEn: "Boat Fleet Matrix",
       descVn: "Theo dõi trạng thái, bảo trì phương tiện.",
       descEn: "Track watercraft assets and maintenance.",
-      color: "from-cyan-500/10 to-sky-500/10 text-cyan-600 dark:text-cyan-400"
+      color: "from-cyan-500/10 to-sky-500/10 text-cyan-600 dark:text-cyan-400",
+      roles: ["ADMIN", "MANAGER"],
     },
     {
-      path: "/admin/schedules",
-      icon: "calendar_month",
-      titleVn: "Quản lý lịch trình",
-      titleEn: "Trip Timetable Matrix",
+      path: "/admin/live-tracking",
+      icon: "my_location",
+      titleVn: "Theo dõi tàu trực tiếp",
+      titleEn: "Live Fleet Tracking",
+      descVn: "Giám sát vị trí và hành trình tàu theo thời gian thực.",
+      descEn: "Monitor real-time boat positions and routes.",
+      color: "from-blue-500/10 to-indigo-500/10 text-blue-600 dark:text-blue-400",
+      roles: ["ADMIN", "MANAGER"],
+    },
+    {
+      path: "/admin/incidents",
+      icon: "emergency",
+      titleVn: "Sự cố / Cứu hộ",
+      titleEn: "Incidents & Rescue",
+      descVn: "Ghi nhận và xử lý sự cố khẩn cấp trên tuyến.",
+      descEn: "Log and resolve on-route emergencies.",
+      color: "from-red-500/10 to-rose-500/10 text-red-600 dark:text-red-400",
+      roles: ["ADMIN", "MANAGER", "STAFF"],
+    },
+    {
+      path: "/admin/staff-assignments",
+      icon: "badge",
+      titleVn: "Phân công Nhân viên",
+      titleEn: "Staff Assignments",
+      titleVnStaff: "Lịch làm việc của tôi",
+      titleEnStaff: "My Schedule",
+      descVn: "Sắp xếp ca trực và phân công nhân viên theo tuyến.",
+      descEn: "Schedule shifts and assign staff to routes.",
+      descVnStaff: "Xem lịch trực và phân công của bạn.",
+      descEnStaff: "View your assigned shifts and routes.",
+      color: "from-purple-500/10 to-violet-500/10 text-purple-600 dark:text-purple-400",
+      roles: ["ADMIN", "MANAGER", "STAFF"],
+    },
+    {
+      path: "/admin/staff/my-trips",
+      icon: "directions_boat",
+      titleVn: "Chuyến của tôi",
+      titleEn: "My Trips",
+      descVn: "Danh sách chuyến tàu bạn được phân công.",
+      descEn: "View the trips assigned to you.",
+      color: "from-cyan-500/10 to-teal-500/10 text-cyan-600 dark:text-cyan-400",
+      roles: ["STAFF"],
+    },
+    {
+      path: "/admin/staff/ticket-scan",
+      icon: "qr_code_scanner",
+      titleVn: "Quét vé",
+      titleEn: "Ticket Scan",
+      descVn: "Quét mã QR kiểm soát vé lên tàu.",
+      descEn: "Scan QR tickets at boarding.",
+      color: "from-sky-500/10 to-blue-500/10 text-sky-600 dark:text-sky-400",
+      roles: ["STAFF"],
+    },
+    {
+      path: "/admin/staff/scan-history",
+      icon: "history",
+      titleVn: "Lịch sử quét vé",
+      titleEn: "Scan History",
+      descVn: "Tra cứu lịch sử các lượt quét vé đã thực hiện.",
+      descEn: "Review your past ticket scan activity.",
+      color: "from-slate-500/10 to-gray-500/10 text-slate-600 dark:text-slate-300",
+      roles: ["STAFF"],
+    },
+    {
+      path: "/admin/insurance-management",
+      icon: "shield",
+      titleVn: "Quản lý bảo hiểm",
+      titleEn: "Insurance Packages",
+      descVn: "Cấu hình các gói bảo hiểm hành khách.",
+      descEn: "Configure passenger insurance packages.",
+      color: "from-emerald-500/10 to-green-500/10 text-emerald-600 dark:text-emerald-400",
+      roles: ["ADMIN"],
+    },
+    {
+      path: "/admin/trips-management",
+      icon: "sailing",
+      titleVn: "Quản lý chuyến tàu",
+      titleEn: "Trip Management",
       descVn: "Thiết lập khung giờ chạy, tần suất chuyến.",
       descEn: "Setup daily departure hours and intervals.",
-      color: "from-lime-500/10 to-emerald-500/10 text-lime-700 dark:text-lime-400"
+      color: "from-lime-500/10 to-emerald-500/10 text-lime-700 dark:text-lime-400",
+      roles: ["ADMIN", "MANAGER"],
     },
     {
       path: "/admin/routes-management",
@@ -103,7 +182,8 @@ export const Dashboard = () => {
       titleEn: "Route Canal Networks",
       descVn: "Quản lý lộ trình kết nối các bến sông.",
       descEn: "Control destination paths along the river.",
-      color: "from-fuchsia-500/10 to-pink-500/10 text-fuchsia-600 dark:text-fuchsia-400"
+      color: "from-fuchsia-500/10 to-pink-500/10 text-fuchsia-600 dark:text-fuchsia-400",
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/promotions",
@@ -112,7 +192,8 @@ export const Dashboard = () => {
       titleEn: "Promo Offers & Vouchers",
       descVn: "Phát hành mã voucher giảm giá, chiến dịch.",
       descEn: "Issue promotional discount code campaigns.",
-      color: "from-red-500/10 to-orange-500/10 text-red-600 dark:text-red-400"
+      color: "from-red-500/10 to-orange-500/10 text-red-600 dark:text-red-400",
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/news",
@@ -121,16 +202,8 @@ export const Dashboard = () => {
       titleEn: "CMS News Hub Feed",
       descVn: "Viết bài thông báo lịch trình, tin sự kiện.",
       descEn: "Publish announcements and holiday news.",
-      color: "from-yellow-500/10 to-amber-500/10 text-amber-700 dark:text-amber-400"
-    },
-    {
-      path: "/admin/cskh",
-      icon: "support_agent",
-      titleVn: "Bộ phận CSKH",
-      titleEn: "Customer Care Center",
-      descVn: "Hộp thư phản hồi, xử lý khiếu nại hoàn vé.",
-      descEn: "Support tickets, feedback and refunds.",
-      color: "from-indigo-500/10 to-purple-500/10 text-indigo-600 dark:text-indigo-400"
+      color: "from-yellow-500/10 to-amber-500/10 text-amber-700 dark:text-amber-400",
+      roles: ["ADMIN", "MANAGER", "STAFF"],
     },
     {
       path: "/admin/ai-data",
@@ -139,9 +212,24 @@ export const Dashboard = () => {
       titleEn: "AI Context Training",
       descVn: "Nạp dữ liệu kiến thức cho chatbot thông minh.",
       descEn: "Feed knowledge data into context engine.",
-      color: "from-emerald-500/10 to-cyan-500/10 text-teal-700 dark:text-teal-400"
-    }
+      color: "from-emerald-500/10 to-cyan-500/10 text-teal-700 dark:text-teal-400",
+      roles: ["ADMIN"],
+    },
   ];
+
+  // Staff thuần chỉ thấy các mục vận hành cá nhân, không thấy các trang quản lý cấp cao.
+  const staffDashboardPaths = new Set([
+    "/admin/incidents",
+    "/admin/staff-assignments",
+    "/admin/staff/my-trips",
+    "/admin/staff/ticket-scan",
+    "/admin/staff/scan-history",
+    "/admin/news",
+  ]);
+
+  const visibleModules = staffOnly
+    ? dashboardModules.filter((module) => staffDashboardPaths.has(module.path))
+    : dashboardModules.filter((module) => hasRole(user, ...module.roles));
 
   return (
     <div className="p-1.5 md:p-4 min-h-screen bg-slate-50 dark:bg-slate-900/40 text-slate-800 dark:text-slate-100 transition-colors duration-300">
@@ -188,41 +276,50 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      {/* SECTION 1: LƯỚI MA TRẬN 16 DANH MỤC QUẢN LÝ BENTO HỘP KHỐI */}
+      {/* SECTION 1: LƯỚI MA TRẬN DANH MỤC QUẢN LÝ BENTO HỘP KHỐI */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-        {dashboardModules.map((module, index) => (
-          <Link
-            key={index}
-            to={module.path}
-            className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/60 rounded-4xl p-6 shadow-sm hover:shadow-xl hover:border-[#124757]/30 dark:hover:border-yellow-400/30 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group cursor-pointer"
-          >
-            {/* Lớp đầu: Icon tròn phủ mờ kết hợp dòng trạng thái nhanh */}
-            <div className="flex items-start justify-between gap-4">
-              <div className={`w-12 h-12 rounded-2xl bg-linear-to-br ${module.color} flex items-center justify-center shadow-inner shrink-0`}>
-                <span className="material-symbols-outlined text-[24px] font-bold">
-                  {module.icon}
+        {visibleModules.map((module) => {
+          const title = staffOnly && module.titleVnStaff
+            ? (lang === "VN" ? module.titleVnStaff : module.titleEnStaff)
+            : (lang === "VN" ? module.titleVn : module.titleEn);
+          const desc = staffOnly && module.descVnStaff
+            ? (lang === "VN" ? module.descVnStaff : module.descEnStaff)
+            : (lang === "VN" ? module.descVn : module.descEn);
+
+          return (
+            <Link
+              key={module.path}
+              to={module.path}
+              className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/60 rounded-4xl p-6 shadow-sm hover:shadow-xl hover:border-[#124757]/30 dark:hover:border-yellow-400/30 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+            >
+              {/* Lớp đầu: Icon tròn phủ mờ kết hợp dòng trạng thái nhanh */}
+              <div className="flex items-start justify-between gap-4">
+                <div className={`w-12 h-12 rounded-2xl bg-linear-to-br ${module.color} flex items-center justify-center shadow-inner shrink-0`}>
+                  <span className="material-symbols-outlined text-[24px] font-bold">
+                    {module.icon}
+                  </span>
+                </div>
+              </div>
+
+              {/* Lớp nội dung chữ ở dưới */}
+              <div className="mt-8 space-y-2">
+                <h3 className="font-headline font-black text-base text-[#124757] dark:text-white leading-tight group-hover:text-yellow-500 dark:group-hover:text-yellow-400 transition-colors">
+                  {title}
+                </h3>
+                <p className="text-xs font-medium text-slate-400 dark:text-slate-400 font-body leading-relaxed line-clamp-2">
+                  {desc}
+                </p>
+              </div>
+
+              {/* Mũi tên khép góc tạo chiều hướng hành động */}
+              <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-700/50 flex justify-end">
+                <span className="material-symbols-outlined text-sm font-black text-slate-300 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-transform duration-300 group-hover:translate-x-1">
+                  arrow_forward
                 </span>
               </div>
-            </div>
-
-            {/* Lớp nội dung chữ ở dưới */}
-            <div className="mt-8 space-y-2">
-              <h3 className="font-headline font-black text-base text-[#124757] dark:text-white leading-tight group-hover:text-yellow-500 dark:group-hover:text-yellow-400 transition-colors">
-                {lang === "VN" ? module.titleVn : module.titleEn}
-              </h3>
-              <p className="text-xs font-medium text-slate-400 dark:text-slate-400 font-body leading-relaxed line-clamp-2">
-                {lang === "VN" ? module.descVn : module.descEn}
-              </p>
-            </div>
-
-            {/* Mũi tên khép góc tạo chiều hướng hành động */}
-            <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-700/50 flex justify-end">
-              <span className="material-symbols-outlined text-sm font-black text-slate-300 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-transform duration-300 group-hover:translate-x-1">
-                arrow_forward
-              </span>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
 
     </div>

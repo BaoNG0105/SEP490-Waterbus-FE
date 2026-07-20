@@ -164,9 +164,6 @@ export function TripManagement() {
             {/* SECTION 1: KHỐI CARD THỐNG KÊ SỐ LIỆU */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 group-hover:bg-[#124757] group-hover:text-white dark:group-hover:bg-yellow-400 dark:group-hover:text-slate-900 transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">sailing</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số chuyến" : "Total Trips"}</span>
                         <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">{isLoading ? "..." : stats.total}</h3>
@@ -174,9 +171,6 @@ export function TripManagement() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">event_upcoming</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đã lên lịch" : "Scheduled"}</span>
                         <h3 className="text-xl font-black font-headline text-blue-600 dark:text-blue-400 mt-0.5">{isLoading ? "..." : stats.scheduled}</h3>
@@ -184,9 +178,6 @@ export function TripManagement() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">directions_boat</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đang vận hành" : "Running"}</span>
                         <h3 className="text-xl font-black font-headline text-indigo-600 dark:text-indigo-400 mt-0.5">{isLoading ? "..." : stats.running}</h3>
@@ -194,9 +185,6 @@ export function TripManagement() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400 group-hover:bg-rose-600 group-hover:text-white transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">cancel</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đã hủy" : "Cancelled"}</span>
                         <h3 className="text-xl font-black font-headline text-rose-600 dark:text-rose-400 mt-0.5">{isLoading ? "..." : stats.cancelled}</h3>
@@ -273,7 +261,6 @@ export function TripManagement() {
                             ) : trips.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
-                                        <span className="material-symbols-outlined text-4xl block mb-2">sailing</span>
                                         {lang === "VN" ? "Không có chuyến tàu nào phù hợp với bộ lọc." : "No trips found matching filters."}
                                     </td>
                                 </tr>

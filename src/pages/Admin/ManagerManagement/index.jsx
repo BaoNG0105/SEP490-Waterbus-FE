@@ -1,13 +1,16 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { fetchUserList } from "../../../services/userService";
-import { getRoleSystemName, isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
+import { fetchUserList, deleteUser } from "../../../services/userService";
+import { getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
+import { notify } from "../../../utils/swalToast";
 
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp";
 
-export function UserManagement() {
+export function ManagerManagement() {
     const { lang } = useApp();
+    const navigate = useNavigate();
     const { user: currentUser } = useSelector((state) => state.auth);
 
     const [users, setUsers] = useState([]);
@@ -19,7 +22,7 @@ export function UserManagement() {
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 8;
 
-    const canAccessPage = isAdminUser(currentUser) || isManagerUser(currentUser);
+    const canAccessPage = isAdminUser(currentUser);
 
     const loadUsers = async () => {
         try {
@@ -28,11 +31,11 @@ export function UserManagement() {
             const data = await fetchUserList({ force: true });
             setUsers(Array.isArray(data) ? data : []);
         } catch (error) {
-            console.error("Lỗi khi tải danh sách khách hàng:", error);
+            console.error("Lỗi khi tải danh sách quản lý:", error);
             setErrorMsg(
                 lang === "VN"
-                    ? "Không thể kết nối tới máy chủ để tải danh sách khách hàng."
-                    : "Failed to connect to server to fetch customer records."
+                    ? "Không thể kết nối tới máy chủ để tải danh sách quản lý."
+                    : "Failed to connect to server to fetch manager records."
             );
         } finally {
             setIsLoading(false);
@@ -49,18 +52,18 @@ export function UserManagement() {
         setCurrentPage(1);
     }, [searchTerm, statusFilter]);
 
-    const customers = useMemo(
-        () => users.filter((u) => (u.roles || []).some((r) => getRoleSystemName(r) === "CUSTOMER")),
+    const managers = useMemo(
+        () => users.filter((u) => (u.roles || []).some((r) => getRoleSystemName(r) === "MANAGER")),
         [users]
     );
 
     const stats = useMemo(() => ({
-        total: customers.length,
-        active: customers.filter((u) => u.status === "Active").length,
-        inactive: customers.filter((u) => u.status !== "Active").length,
-    }), [customers]);
+        total: managers.length,
+        active: managers.filter((u) => u.status === "Active").length,
+        inactive: managers.filter((u) => u.status !== "Active").length,
+    }), [managers]);
 
-    const filteredUsers = customers.filter((item) => {
+    const filteredUsers = managers.filter((item) => {
         const term = searchTerm.trim().toLowerCase();
         const matchesSearch =
             !term ||
@@ -93,6 +96,47 @@ export function UserManagement() {
         return pages;
     };
 
+    const handleDelete = async (item) => {
+        const confirmResult = await notify({
+            icon: "question",
+            title: lang === "VN" ? "Xóa quản lý?" : "Delete manager?",
+            html: lang === "VN"
+                ? `Bạn chắc chắn muốn xóa vĩnh viễn tài khoản <b>${item.fullName}</b> (${item.code})?<br/><span style="color:#94a3b8;font-size:12px">Hành động này không thể hoàn tác.</span>`
+                : `Permanently delete <b>${item.fullName}</b> (${item.code})?<br/><span style="color:#94a3b8;font-size:12px">This action cannot be undone.</span>`,
+            showCancelButton: true,
+            focusCancel: true,
+            reverseButtons: true,
+            confirmButtonColor: "#dc2626",
+            cancelButtonColor: "#124757",
+            confirmButtonText: lang === "VN" ? "Xác nhận xóa" : "Yes, delete",
+            cancelButtonText: lang === "VN" ? "Không" : "No",
+        });
+
+        if (!confirmResult.isConfirmed) return;
+
+        try {
+            setIsLoading(true);
+            await deleteUser(item.id);
+            notify({
+                icon: "success",
+                title: lang === "VN" ? "Đã xóa!" : "Deleted!",
+                text: lang === "VN" ? `Quản lý ${item.code} đã được xóa khỏi hệ thống.` : `Manager ${item.code} has been deleted.`,
+                confirmButtonColor: "#124757",
+            });
+            await loadUsers();
+        } catch (error) {
+            console.error("Lỗi xóa quản lý:", error);
+            notify({
+                icon: "error",
+                title: lang === "VN" ? "Không thể xóa" : "Delete Failed",
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể xóa quản lý này." : "Failed to delete this manager."),
+                confirmButtonColor: "#124757",
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     if (!canAccessPage) {
         return (
             <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
@@ -115,16 +159,23 @@ export function UserManagement() {
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
 
-            {/* KHỐI TIÊU ĐỀ HEADER */}
+            {/* KHỐI TIÊU ĐỀ HEADER & NÚT THÊM MỚI */}
             <div className="flex flex-col sm:flex-row bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-start sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-                        {lang === "VN" ? "Quản lý danh sách Khách hàng" : "Customer Management"}
+                        {lang === "VN" ? "Quản lý tài khoản Manager" : "Manager Management"}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN" ? "Xem danh sách tài khoản Khách hàng trong hệ thống." : "View the list of customer accounts across the system."}
+                        {lang === "VN" ? "Danh sách tài khoản Quản lý (Manager) trong hệ thống." : "Manage manager accounts across the system."}
                     </p>
                 </div>
+                <button
+                    onClick={() => navigate("/admin/managers-management/create")}
+                    className="px-5 py-3 bg-yellow-400 text-slate-900 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 shrink-0"
+                >
+                    <span className="material-symbols-outlined text-sm font-bold">person_add</span>
+                    {lang === "VN" ? "Thêm quản lý" : "Add Manager"}
+                </button>
             </div>
 
             {errorMsg && (
@@ -138,7 +189,7 @@ export function UserManagement() {
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số" : "Total"}</span>
-                        <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">{stats.total}</h3>
+                        <h3 className="text-xl font-black font-headline text-amber-600 dark:text-amber-400 mt-0.5">{stats.total}</h3>
                     </div>
                 </div>
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
@@ -189,23 +240,24 @@ export function UserManagement() {
                 </div>
             </div>
 
-            {/* BẢNG DANH SÁCH KHÁCH HÀNG */}
+            {/* BẢNG DANH SÁCH QUẢN LÝ */}
             <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto custom-scrollbar">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
-                                <th className="py-4 px-6">{lang === "VN" ? "Thông tin khách hàng" : "Customer Information"}</th>
+                                <th className="py-4 px-6">{lang === "VN" ? "Thông tin quản lý" : "Manager Information"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Liên hệ" : "Contact"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                                <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {currentUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={3} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={4} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         <span className="material-symbols-outlined text-4xl block mb-2">person_off</span>
-                                        {lang === "VN" ? "Không có khách hàng nào phù hợp bộ lọc." : "No records found matching filters."}
+                                        {lang === "VN" ? "Không có quản lý nào phù hợp bộ lọc." : "No records found matching filters."}
                                     </td>
                                 </tr>
                             ) : (
@@ -245,6 +297,24 @@ export function UserManagement() {
                                                 <span className={`w-1.5 h-1.5 rounded-full ${item.status === "Active" ? "bg-emerald-500" : "bg-rose-500"}`}></span>
                                                 {item.status || "Inactive"}
                                             </span>
+                                        </td>
+                                        <td className="py-4 px-6 text-center">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button
+                                                    onClick={() => navigate(`/admin/managers-management/edit/${item.id}`)}
+                                                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
+                                                    title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
+                                                >
+                                                    <span className="material-symbols-outlined text-[18px]">edit</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(item)}
+                                                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm"
+                                                    title={lang === "VN" ? "Xóa" : "Delete"}
+                                                >
+                                                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))

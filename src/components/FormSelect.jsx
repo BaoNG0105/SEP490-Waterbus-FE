@@ -140,14 +140,14 @@ export function FormSelect({
                       <button
                         type="button"
                         onClick={() => pick(opt.value)}
-                        className={`flex w-full items-start justify-between gap-2 px-3.5 py-2.5 text-left text-xs font-bold transition-colors ${
+                        className={`flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-xs font-bold transition-colors ${
                           active
                             ? "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
                             : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
                         }`}
                       >
                         <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{opt.label}</span>
-                        {active && <span className="material-symbols-outlined mt-0.5 shrink-0 text-base">check</span>}
+                        {active && <span className="material-symbols-outlined shrink-0 text-base">check</span>}
                       </button>
                     </li>
                   );

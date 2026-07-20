@@ -14,6 +14,11 @@ export const Header = ({ isNoticeVisible }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobileServicesOpen, setIsMobileServicesOpen] = useState(false);
 
+  const closeMobileMenu = () => {
+    setIsMobileMenuOpen(false);
+    setIsMobileServicesOpen(false);
+  };
+
   const location = useLocation();
   const currentPath = location.pathname;
 
@@ -96,14 +101,10 @@ export const Header = ({ isNoticeVisible }) => {
 
   useEffect(() => {
     const handleScrollClose = () => {
-      if (isMobileMenuOpen) setIsMobileMenuOpen(false);
+      if (isMobileMenuOpen) closeMobileMenu();
     };
     window.addEventListener("scroll", handleScrollClose);
     return () => window.removeEventListener("scroll", handleScrollClose);
-  }, [isMobileMenuOpen]);
-
-  useEffect(() => {
-    if (!isMobileMenuOpen) setIsMobileServicesOpen(false);
   }, [isMobileMenuOpen]);
 
   // ĐỒNG BỘ MÀU CHỮ VỚI FOOTER: Nền #124757 nên chữ bình thường màu trắng, active/hover màu vàng rực rỡ
@@ -237,17 +238,21 @@ export const Header = ({ isNoticeVisible }) => {
             )}
           </div>
 
-          {/* Book Now button nổi bật góc phải */}
-          <a
-            className="hidden sm:block bg-white dark:bg-yellow-400 text-[#124757] dark:text-slate-900 px-7 py-2.5 rounded-full font-bold text-xs uppercase tracking-wider hover:bg-yellow-400 hover:text-slate-900 dark:hover:brightness-110 transition-all shadow-md"
-            href="/#services-section"
-          >
-            {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
-          </a>
+          {/* Icon chuông thông báo, chỉ hiện khi đã đăng nhập */}
+          {isAuthenticated && (
+            <Link
+              to="/notifications"
+              className="hidden sm:flex items-center justify-center w-9 h-9 rounded-full bg-white/10 dark:bg-slate-800 border border-white/10 dark:border-slate-700 hover:border-yellow-400 dark:hover:border-yellow-400 transition-colors text-white hover:text-yellow-400 shrink-0"
+              title={lang === "VN" ? "Thông báo" : "Notifications"}
+              aria-label={lang === "VN" ? "Thông báo" : "Notifications"}
+            >
+              <span className="material-symbols-outlined text-lg" aria-hidden="true">notifications</span>
+            </Link>
+          )}
 
           {/* Mobile hamburger menu button */}
           <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            onClick={() => (isMobileMenuOpen ? closeMobileMenu() : setIsMobileMenuOpen(true))}
             className="lg:hidden flex items-center justify-center text-white hover:text-yellow-400 dark:text-white dark:hover:text-yellow-400 transition-colors p-1"
           >
             <span className="material-symbols-outlined text-2xl">
@@ -271,7 +276,7 @@ export const Header = ({ isNoticeVisible }) => {
           <Link
             to="/"
             className={`font-bold text-base transition-colors ${isHomeActive ? "text-yellow-400" : "text-white"}`}
-            onClick={() => setIsMobileMenuOpen(false)}
+            onClick={closeMobileMenu}
           >
             {lang === "VN" ? "Trang chủ" : "Home"}
           </Link>
@@ -279,7 +284,7 @@ export const Header = ({ isNoticeVisible }) => {
           <Link
             to="/promotions"
             className={`font-bold text-base transition-colors ${isPromotionsActive ? "text-yellow-400" : "text-white"}`}
-            onClick={() => setIsMobileMenuOpen(false)}
+            onClick={closeMobileMenu}
           >
             {lang === "VN" ? "Khuyến mãi" : "Promotions"}
           </Link>
@@ -287,7 +292,7 @@ export const Header = ({ isNoticeVisible }) => {
           <Link
             to="/schedule"
             className="font-bold text-white text-base hover:text-yellow-400"
-            onClick={() => setIsMobileMenuOpen(false)}
+            onClick={closeMobileMenu}
           >
             {lang === "VN" ? "Lịch khởi hành" : "Schedule"}
           </Link>
@@ -311,21 +316,21 @@ export const Header = ({ isNoticeVisible }) => {
                 <Link
                   to="/waterbus-booking"
                   className="text-white/80 text-sm font-medium hover:text-yellow-400"
-                  onClick={() => setIsMobileMenuOpen(false)}
+                  onClick={closeMobileMenu}
                 >
                   {lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
                 </Link>
                 <Link
                   to="/watersightseeing-booking"
                   className="text-white/80 text-sm font-medium hover:text-yellow-400"
-                  onClick={() => setIsMobileMenuOpen(false)}
+                  onClick={closeMobileMenu}
                 >
                   {lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
                 </Link>
                 <Link
                   to="/charter-booking"
                   className="text-white/80 text-sm font-medium hover:text-yellow-400"
-                  onClick={() => setIsMobileMenuOpen(false)}
+                  onClick={closeMobileMenu}
                 >
                   {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
                 </Link>
@@ -336,7 +341,7 @@ export const Header = ({ isNoticeVisible }) => {
           <Link
             to="/blog"
             className={`font-bold text-base transition-colors ${isBlogActive ? "text-yellow-400" : "text-white"}`}
-            onClick={() => setIsMobileMenuOpen(false)}
+            onClick={closeMobileMenu}
           >
             {lang === "VN" ? "Tin tức" : "Blog"}
           </Link>
@@ -344,7 +349,7 @@ export const Header = ({ isNoticeVisible }) => {
           <Link
             to="/contact"
             className={`font-bold text-base transition-colors ${isContactActive ? "text-yellow-400" : "text-white"}`}
-            onClick={() => setIsMobileMenuOpen(false)}
+            onClick={closeMobileMenu}
           >
             {lang === "VN" ? "Liên hệ" : "Contact"}
           </Link>
@@ -353,7 +358,7 @@ export const Header = ({ isNoticeVisible }) => {
             <Link
               to="/admin"
               className="flex items-center gap-2 font-bold text-base text-white hover:text-yellow-400 transition-colors"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={closeMobileMenu}
             >
               <span className="material-symbols-outlined text-xl">admin_panel_settings</span>
               {lang === "VN" ? "Trang quản trị" : "Admin Dashboard"}
@@ -362,19 +367,16 @@ export const Header = ({ isNoticeVisible }) => {
 
           <hr className="border-white/10 dark:border-slate-800 my-2" />
 
-          <a
-            href="/#booking-section"
-            onClick={(e) => {
-              setIsMobileMenuOpen(false);
-              if (window.location.pathname === "/") {
-                e.preventDefault();
-                document.querySelector("#booking-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }
-            }}
-            className="bg-white dark:bg-yellow-400 text-center text-[#124757] dark:text-slate-900 px-8 py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-yellow-400 hover:text-slate-900 transition-colors"
-          >
-            {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
-          </a>
+          {isAuthenticated && (
+            <Link
+              to="/notifications"
+              onClick={closeMobileMenu}
+              className="flex items-center justify-center gap-2.5 bg-white dark:bg-yellow-400 text-center text-[#124757] dark:text-slate-900 px-8 py-3.5 rounded-xl font-bold text-sm shadow-md hover:bg-yellow-400 hover:text-slate-900 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[20px]">notifications</span>
+              {lang === "VN" ? "Thông báo" : "Notifications"}
+            </Link>
+          )}
 
           <div className="grid grid-cols-2 gap-3.5 mt-1">
             <button

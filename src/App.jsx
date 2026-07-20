@@ -3,7 +3,9 @@ import { AdminLayout } from "./layout/Admin/AdminLayout";
 import { MainLayout } from "./layout/MainLayout";
 import { NotFound } from "./pages/NotFound";
 
+//Phân quyền
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
+import { CustomerOnlyRoute } from "./components/CustomerOnlyRoute";
 
 //Client
 import { Home } from "./pages/Home";
@@ -18,6 +20,7 @@ import { Promotions } from "./pages/Promotions";
 import { PromotionDetail } from "./pages/Promotions/PromotionDetail";
 import { Contact } from "./pages/Contact";
 import { Profile } from "./pages/Profile";
+import { Notifications } from "./pages/Notifications";
 import { EditProfile } from "./pages/Profile/EditProfie";
 import { ChangePassword } from "./pages/Profile/ChangePassword";
 import { CharterDetail } from "./pages/Profile/MyCharterBooking/MyCharterDetail";
@@ -25,6 +28,10 @@ import { EditCharter } from "./pages/Profile/MyCharterBooking/EditCharter";
 import { CharterList } from "./pages/Profile/MyCharterBooking";
 import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefundRequest";
 import { MyWaterbusBookingList } from "./pages/Profile/MyWaterbusBooking";
+import { MyWaterbusBookingDetail } from "./pages/Profile/MyWaterbusBooking/MyWaterbusBookingDetail";
+import { MySightseeingBookingList } from "./pages/Profile/MySightseeingBooking";
+import { MySightseeingBookingDetail } from "./pages/Profile/MySightseeingBooking/MySightseeingBookingDetail";
+import { SightseeingRefundRequest } from "./pages/Profile/MySightseeingBooking/SightseeingRefundRequest";
 import { WaterbusBooking } from "./pages/WaterbusBooking";
 import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
 import { CharterBooking } from "./pages/CharterBooking";
@@ -37,8 +44,12 @@ import { StationManagement } from "./pages/Admin/StationManagement";
 import { InsuranceManagement } from "./pages/Admin/InsuranceManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { UserManagement } from "./pages/Admin/UserManagement";
-import { CreateUser } from "./pages/Admin/UserManagement/CreateUser";
-import { EditUser } from "./pages/Admin/UserManagement/EditUser";
+import { ManagerManagement } from "./pages/Admin/ManagerManagement";
+import { CreateManager } from "./pages/Admin/ManagerManagement/CreateManager";
+import { EditManager } from "./pages/Admin/ManagerManagement/EditManager";
+import { StaffManagement } from "./pages/Admin/StaffManagement";
+import { CreateStaff } from "./pages/Admin/StaffManagement/CreateStaff";
+import { EditStaff } from "./pages/Admin/StaffManagement/EditStaff";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 import { RouteManagement } from "./pages/Admin/RouteManagement";
 import { RouteDetail } from "./pages/Admin/RouteManagement/RouteDetail";
@@ -132,35 +143,38 @@ function App() {
           }
         />
 
-        {/* Waterbus Booking Page */}
-        <Route
-          path="/waterbus-booking"
-          element={
-            <MainLayout>
-              <WaterbusBooking />
-            </MainLayout>
-          }
-        />
+        {/* Các trang đặt vé: chỉ dành cho Khách hàng, chặn Admin/Staff/Manager */}
+        <Route element={<CustomerOnlyRoute />}>
+          {/* Waterbus Booking Page */}
+          <Route
+            path="/waterbus-booking"
+            element={
+              <MainLayout>
+                <WaterbusBooking />
+              </MainLayout>
+            }
+          />
 
-        {/* Watersightseeing Booking Page */}
-        <Route
-          path="/watersightseeing-booking"
-          element={
-            <MainLayout>
-              <WatersightseeingBooking />
-            </MainLayout>
-          }
-        />
+          {/* Watersightseeing Booking Page */}
+          <Route
+            path="/watersightseeing-booking"
+            element={
+              <MainLayout>
+                <WatersightseeingBooking />
+              </MainLayout>
+            }
+          />
 
-        {/* Charter Booking Page */}
-        <Route
-          path="/charter-booking"
-          element={
-            <MainLayout>
-              <CharterBooking />
-            </MainLayout>
-          }
-        />
+          {/* Charter Booking Page */}
+          <Route
+            path="/charter-booking"
+            element={
+              <MainLayout>
+                <CharterBooking />
+              </MainLayout>
+            }
+          />
+        </Route>
 
         {/* Profile Page */}
         <Route
@@ -187,6 +201,16 @@ function App() {
           path="/profile/change-password"
           element={
             <ChangePassword />
+          }
+        />
+
+        {/* Notifications Page */}
+        <Route
+          path="/notifications"
+          element={
+            <MainLayout>
+              <Notifications />
+            </MainLayout>
           }
         />
 
@@ -240,6 +264,46 @@ function App() {
           }
         />
 
+        {/* My Waterbus Booking Detail Page */}
+        <Route
+          path="/profile/my-waterbus-booking/:id"
+          element={
+            <MainLayout>
+              <MyWaterbusBookingDetail />
+            </MainLayout>
+          }
+        />
+
+        {/* My Sightseeing Booking List Page */}
+        <Route
+          path="/profile/my-sightseeing-booking"
+          element={
+            <MainLayout>
+              <MySightseeingBookingList />
+            </MainLayout>
+          }
+        />
+
+        {/* My Sightseeing Booking Refund Page */}
+        <Route
+          path="/profile/my-sightseeing-booking/:id/refund"
+          element={
+            <MainLayout>
+              <SightseeingRefundRequest />
+            </MainLayout>
+          }
+        />
+
+        {/* My Sightseeing Booking Detail Page */}
+        <Route
+          path="/profile/my-sightseeing-booking/:id"
+          element={
+            <MainLayout>
+              <MySightseeingBookingDetail />
+            </MainLayout>
+          }
+        />
+
         {/* Charter Booking Payment Result Page */}
         <Route
           path="/payment/result"
@@ -288,32 +352,72 @@ function App() {
             }
           />
 
-          {/* ******* User Management Page ******* */}
+          {/* ******* Customer Management Page ******* */}
           <Route
             path="/admin/users-management"
             element={
-              <AdminLayout title="User Management">
+              <AdminLayout title="Customer Management">
                 <UserManagement />
               </AdminLayout>
             }
           />
 
-          {/* Create User Page */}
+          {/* ******* Manager Management Page ******* */}
           <Route
-            path="/admin/users-management/create"
+            path="/admin/managers-management"
             element={
-              <AdminLayout title="Create User">
-                <CreateUser />
+              <AdminLayout title="Manager Management">
+                <ManagerManagement />
               </AdminLayout>
             }
           />
 
-          {/* Edit User Page */}
+          {/* Create Manager Page */}
           <Route
-            path="/admin/users-management/edit/:id"
+            path="/admin/managers-management/create"
             element={
-              <AdminLayout title="Edit User">
-                <EditUser />
+              <AdminLayout title="Create Manager">
+                <CreateManager />
+              </AdminLayout>
+            }
+          />
+
+          {/* Edit Manager Page */}
+          <Route
+            path="/admin/managers-management/edit/:id"
+            element={
+              <AdminLayout title="Edit Manager">
+                <EditManager />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Staff Management Page ******* */}
+          <Route
+            path="/admin/staffs-management"
+            element={
+              <AdminLayout title="Staff Management">
+                <StaffManagement />
+              </AdminLayout>
+            }
+          />
+
+          {/* Create Staff Page */}
+          <Route
+            path="/admin/staffs-management/create"
+            element={
+              <AdminLayout title="Create Staff">
+                <CreateStaff />
+              </AdminLayout>
+            }
+          />
+
+          {/* Edit Staff Page */}
+          <Route
+            path="/admin/staffs-management/edit/:id"
+            element={
+              <AdminLayout title="Edit Staff">
+                <EditStaff />
               </AdminLayout>
             }
           />

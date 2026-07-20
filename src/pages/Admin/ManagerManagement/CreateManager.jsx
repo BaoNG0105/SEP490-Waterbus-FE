@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserRoles, createUser } from "../../../services/userService";
-import { getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
+import { getRoleSystemName } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
 import { NationalitySelect } from "../../../components/NationalitySelect";
-import { StationAssignField, canAssignStations } from "../../../components/StationAssignField";
+import { StationAssignField } from "../../../components/StationAssignField";
 import { notify } from "../../../utils/swalToast";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
@@ -19,11 +18,9 @@ const isAllowedEmail = (email) => {
   return ALLOWED_EMAIL_DOMAINS.includes(trimmed.slice(at + 1));
 };
 
-export function CreateUser() {
+export function CreateManager() {
     const { lang } = useApp();
     const navigate = useNavigate();
-    const { user: currentUser } = useSelector((state) => state.auth);
-    const canCreateOnBoard = isAdminUser(currentUser);
 
     const [roles, setRoles] = useState([]);
     const [isLoadingRoles, setIsLoadingRoles] = useState(true);
@@ -37,8 +34,6 @@ export function CreateUser() {
         nationality: "Vietnam",
         phoneNumber: "",
         email: "",
-        roleId: "",
-        staffType: "Ground",
         stationIds: [],
     });
 
@@ -48,15 +43,12 @@ export function CreateUser() {
                 setIsLoadingRoles(true);
                 const data = await fetchUserRoles({ force: true });
                 setRoles(data || []);
-                if (data?.length) {
-                    setFormData((prev) => ({ ...prev, roleId: data[0].id }));
-                }
             } catch (error) {
                 console.error("Lỗi khi tải danh sách vai trò:", error);
                 setErrorMsg(
                     lang === "VN"
-                        ? "Không thể tải danh sách vai trò có thể gán."
-                        : "Failed to load assignable roles."
+                        ? "Không thể tải vai trò Manager để gán."
+                        : "Failed to load the Manager role."
                 );
             } finally {
                 setIsLoadingRoles(false);
@@ -66,38 +58,13 @@ export function CreateUser() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const selectedRole = useMemo(
-        () => roles.find((role) => String(role.id) === String(formData.roleId)),
-        [roles, formData.roleId]
+    const managerRole = useMemo(
+        () => roles.find((role) => getRoleSystemName(role) === "MANAGER"),
+        [roles]
     );
-    const isStaffRole = getRoleSystemName(selectedRole) === "STAFF";
-    const showStationAssign = canAssignStations({
-        roleSystemName: getRoleSystemName(selectedRole),
-        staffType: formData.staffType,
-    });
 
     const handleInputChange = (field, value) => {
-        setFormData((prev) => {
-            const next = { ...prev, [field]: value };
-            if (field === "roleId") {
-                const role = roles.find((item) => String(item.id) === String(value));
-                if (getRoleSystemName(role) === "STAFF") {
-                    next.staffType = canCreateOnBoard ? (prev.staffType || "Ground") : "Ground";
-                } else {
-                    next.staffType = "";
-                }
-            }
-            if (field === "roleId" || field === "staffType") {
-                const role = field === "roleId"
-                    ? roles.find((item) => String(item.id) === String(value))
-                    : roles.find((item) => String(item.id) === String(next.roleId));
-                const staffType = field === "staffType" ? value : next.staffType;
-                if (!canAssignStations({ roleSystemName: getRoleSystemName(role), staffType })) {
-                    next.stationIds = [];
-                }
-            }
-            return next;
-        });
+        setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
     const handleFormSubmit = async (e) => {
@@ -106,8 +73,8 @@ export function CreateUser() {
             setIsSubmitting(true);
             setErrorMsg("");
 
-            if (isStaffRole && !formData.staffType) {
-                setErrorMsg(lang === "VN" ? "Chọn loại nhân viên (mặt đất / trên tàu)." : "Select staff type (Ground / OnBoard).");
+            if (!managerRole) {
+                setErrorMsg(lang === "VN" ? "Không tìm thấy vai trò Manager." : "Manager role not found.");
                 return;
             }
 
@@ -127,9 +94,8 @@ export function CreateUser() {
                 nationality: formData.nationality.trim() || null,
                 phoneNumber: formData.phoneNumber.trim(),
                 email: formData.email.trim(),
-                roleId: formData.roleId,
-                ...(isStaffRole ? { staffType: formData.staffType } : {}),
-                ...(showStationAssign ? { stationIds: formData.stationIds.map(String) } : {}),
+                roleId: managerRole.id,
+                stationIds: formData.stationIds.map(String),
             };
 
             const result = await createUser(payload);
@@ -138,22 +104,22 @@ export function CreateUser() {
 
             await notify({
                 icon: "success",
-                title: lang === "VN" ? "Tạo người dùng thành công!" : "User Created Successfully!",
+                title: lang === "VN" ? "Tạo quản lý thành công!" : "Manager Created Successfully!",
                 html: generatedPassword
                     ? (lang === "VN"
                         ? `Tài khoản đã được tạo. Mật khẩu khởi tạo: <b>${generatedPassword}</b><br/>Vui lòng gửi cho người dùng và yêu cầu đổi mật khẩu khi đăng nhập lần đầu.`
                         : `Account created. Initial password: <b>${generatedPassword}</b><br/>Please share it with the user and ask them to change it on first login.`)
-                    : (lang === "VN" ? "Tài khoản mới đã được thêm vào hệ thống." : "New account has been added to the system."),
+                    : (lang === "VN" ? "Tài khoản quản lý mới đã được thêm vào hệ thống." : "New manager account has been added to the system."),
                 confirmButtonColor: "#124757",
             });
 
-            navigate("/admin/users-management");
+            navigate("/admin/managers-management");
         } catch (error) {
-            console.error("Lỗi tạo người dùng:", error);
+            console.error("Lỗi tạo quản lý:", error);
             setErrorMsg(
                 getApiErrorMessage(
                     error,
-                    lang === "VN" ? "Tạo người dùng thất bại." : "Failed to create user."
+                    lang === "VN" ? "Tạo quản lý thất bại." : "Failed to create manager."
                 )
             );
         } finally {
@@ -170,14 +136,6 @@ export function CreateUser() {
         { value: "Female", label: lang === "VN" ? "Nữ" : "Female" },
         { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
     ];
-    const roleOptions = roles.map((role) => ({
-        value: role.id,
-        label: role.displayName || role.systemName,
-    }));
-    const staffTypeOptions = [
-        { value: "Ground", label: lang === "VN" ? "Mặt đất (bến)" : "Ground (station)" },
-        ...(canCreateOnBoard ? [{ value: "OnBoard", label: lang === "VN" ? "Trên tàu" : "Onboard" }] : []),
-    ];
 
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-3xl mx-auto">
@@ -186,17 +144,17 @@ export function CreateUser() {
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
                 <button
                     type="button"
-                    onClick={() => navigate("/admin/users-management")}
+                    onClick={() => navigate("/admin/managers-management")}
                     className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner shrink-0"
                 >
                     <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
                 </button>
                 <div>
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-                        {lang === "VN" ? "Thêm người dùng mới" : "Add New User"}
+                        {lang === "VN" ? "Thêm quản lý mới" : "Add New Manager"}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN" ? "Khai báo hồ sơ và gán vai trò cho tài khoản Nhân viên/Quản lý mới." : "Register profile details and assign a role for the new staff/manager account."}
+                        {lang === "VN" ? "Khai báo hồ sơ và gắn bến phụ trách cho tài khoản Quản lý mới." : "Register profile details and assign stations for the new manager account."}
                     </p>
                 </div>
             </div>
@@ -269,53 +227,27 @@ export function CreateUser() {
                     </div>
 
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán (*)" : "Assigned Role (*)"}</label>
-                        <FormSelect
-                            required
-                            disabled={isLoadingRoles || roles.length === 0}
-                            value={formData.roleId}
-                            onChange={(v) => handleInputChange("roleId", v)}
-                            options={roleOptions}
-                            placeholder={isLoadingRoles ? (lang === "VN" ? "Đang tải..." : "Loading...") : (lang === "VN" ? "Chọn vai trò" : "Select role")}
-                            className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
-                        />
+                        <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán" : "Assigned Role"}</label>
+                        <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
+                            {isLoadingRoles
+                                ? (lang === "VN" ? "Đang tải..." : "Loading...")
+                                : (managerRole?.displayName || managerRole?.systemName || "Manager")}
+                        </div>
                     </div>
 
-                    {isStaffRole && (
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
-                            {staffTypeOptions.length <= 1 ? (
-                                <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
-                                    {staffTypeOptions[0]?.label ||
-                                        (lang === "VN" ? "Mặt đất (bến)" : "Ground (station)")}
-                                </div>
-                            ) : (
-                                <FormSelect
-                                    required
-                                    value={formData.staffType || "Ground"}
-                                    onChange={(v) => handleInputChange("staffType", v)}
-                                    options={staffTypeOptions}
-                                    className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
-                                />
-                            )}
-                        </div>
-                    )}
-
-                    {showStationAssign && (
-                        <StationAssignField
-                            value={formData.stationIds}
-                            onChange={(ids) => handleInputChange("stationIds", ids)}
-                        />
-                    )}
+                    <StationAssignField
+                        value={formData.stationIds}
+                        onChange={(ids) => handleInputChange("stationIds", ids)}
+                    />
                 </div>
 
                 <button
                     type="submit"
-                    disabled={isSubmitting || isLoadingRoles || roles.length === 0}
+                    disabled={isSubmitting || isLoadingRoles || !managerRole}
                     className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                     {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
-                    {lang === "VN" ? "Tạo người dùng" : "Create User"}
+                    {lang === "VN" ? "Tạo quản lý" : "Create Manager"}
                 </button>
             </form>
         </div>

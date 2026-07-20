@@ -53,6 +53,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     isRoundTrip,
     fromWharf,
     toWharf,
+    routeType,
     fromWharfName,
     toWharfName,
     departureDate,
@@ -63,6 +64,10 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     selectedSeatsReturn,
     seatHoldExpiresAt
   } = bookingData;
+
+  // Tuyến tham quan vòng (SightseeingLoop) không bán ghế theo chặng nên không bắt buộc phải tra
+  // được stationCode theo cặp bến đi/đến như tuyến Regular.
+  const isLoopRoute = routeType === "SightseeingLoop";
 
   // Đếm ngược thời gian giữ ghế (ghế đã được giữ ở Bước 2 khi bấm "Tiếp tục thanh toán")
   const [nowTick, setNowTick] = useState(Date.now());
@@ -134,9 +139,9 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     setPassengers(updated);
   };
 
-  // Kéo tên/SĐT/email từ tài khoản đang đăng nhập xuống Thông tin liên hệ hoặc Hành khách 1
+  // Kéo tên/SĐT/email từ tài khoản đang đăng nhập xuống Thông tin liên hệ (người đặt)
   const [isLoadingAccountInfo, setIsLoadingAccountInfo] = useState(false);
-  const handleUseAccountInfo = async (target) => {
+  const handleUseAccountInfo = async () => {
     setIsLoadingAccountInfo(true);
     try {
       const profile = await fetchCurrentUserProfile();
@@ -144,25 +149,12 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       const accountPhone = profile?.phoneNumber || profile?.phone || "";
       const accountEmail = profile?.email || "";
 
-      if (target === "contact") {
-        setContact((prev) => ({
-          ...prev,
-          name: accountName || prev.name,
-          phone: accountPhone || prev.phone,
-          email: accountEmail || prev.email,
-        }));
-      } else {
-        setPassengers((prev) => prev.map((passenger, i) => (
-          i === target
-            ? {
-              ...passenger,
-              name: accountName || passenger.name,
-              phone: accountPhone || passenger.phone,
-              email: accountEmail || passenger.email,
-            }
-            : passenger
-        )));
-      }
+      setContact((prev) => ({
+        ...prev,
+        name: accountName || prev.name,
+        phone: accountPhone || prev.phone,
+        email: accountEmail || prev.email,
+      }));
     } catch (error) {
       console.error("Lỗi khi lấy thông tin tài khoản:", error);
       showToast({
@@ -173,6 +165,20 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     } finally {
       setIsLoadingAccountInfo(false);
     }
+  };
+
+  // Chiếu tên/SĐT/email từ Thông tin liên hệ (đã điền ở trên) xuống Hành khách 1
+  const handleUseContactInfoForPassenger = (index) => {
+    setPassengers((prev) => prev.map((passenger, i) => (
+      i === index
+        ? {
+          ...passenger,
+          name: contact.name || passenger.name,
+          phone: contact.phone || passenger.phone,
+          email: contact.email || passenger.email,
+        }
+        : passenger
+    )));
   };
 
   // 3. STATE: HÀNH KHÁCH TRẺ EM DƯỚI 2 TUỔI (INFANT — không chiếm ghế, miễn phí, đi kèm chuyến của người lớn)
@@ -260,7 +266,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
 
     const departureFromCode = findStationCode(selectedDepartureTrip?.stops, fromWharf);
     const departureToCode = findStationCode(selectedDepartureTrip?.stops, toWharf);
-    if (!departureFromCode || !departureToCode) {
+    if (!isLoopRoute && (!departureFromCode || !departureToCode)) {
       showError(
         lang === "VN" ? "Thiếu mã bến" : "Missing station code",
         lang === "VN" ? "Không xác định được mã bến của chuyến đi. Vui lòng quay lại chọn chuyến." : "Unable to resolve the departure trip's station codes. Please go back and reselect the trip."
@@ -270,14 +276,14 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
 
     const payload = {
       tripCode: selectedDepartureTrip.tripCode,
-      items: buildLegItems(selectedSeatsDeparture, departureFromCode, departureToCode),
+      items: buildLegItems(selectedSeatsDeparture, departureFromCode || null, departureToCode || null),
       promotionCode: promoCode.trim() || null,
     };
 
     if (isRoundTrip) {
       const returnFromCode = findStationCode(selectedReturnTrip?.stops, toWharf);
       const returnToCode = findStationCode(selectedReturnTrip?.stops, fromWharf);
-      if (!returnFromCode || !returnToCode) {
+      if (!isLoopRoute && (!returnFromCode || !returnToCode)) {
         showError(
           lang === "VN" ? "Thiếu mã bến" : "Missing station code",
           lang === "VN" ? "Không xác định được mã bến của chuyến về. Vui lòng quay lại chọn chuyến." : "Unable to resolve the return trip's station codes. Please go back and reselect the trip."
@@ -354,7 +360,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
             </h3>
             <button
               type="button"
-              onClick={() => handleUseAccountInfo("contact")}
+              onClick={handleUseAccountInfo}
               disabled={isLoadingAccountInfo}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
             >
@@ -431,14 +437,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                   {index === 0 && (
                     <button
                       type="button"
-                      onClick={() => handleUseAccountInfo(0)}
-                      disabled={isLoadingAccountInfo}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
+                      onClick={() => handleUseContactInfoForPassenger(0)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10"
                     >
-                      <span className={`material-symbols-outlined text-sm ${isLoadingAccountInfo ? "animate-spin" : ""}`}>
-                        {isLoadingAccountInfo ? "progress_activity" : "person"}
-                      </span>
-                      {lang === "VN" ? "Dùng thông tin tài khoản" : "Use account info"}
+                      <span className="material-symbols-outlined text-sm">content_copy</span>
+                      {lang === "VN" ? "Dùng thông tin liên hệ" : "Use contact info"}
                     </button>
                   )}
                 </div>
@@ -457,20 +460,22 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                     />
                   </div>
 
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Loại vé" : "Ticket Type"}</label>
-                    <select
-                      value={passenger.ticketType}
-                      onChange={(e) => handlePassengerChange(index, "ticketType", e.target.value)}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
-                    >
-                      {TICKET_TYPE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {lang === "VN" ? option.labelVn : option.labelEn}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {!isLoopRoute && (
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Loại vé" : "Ticket Type"}</label>
+                      <select
+                        value={passenger.ticketType}
+                        onChange={(e) => handlePassengerChange(index, "ticketType", e.target.value)}
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                      >
+                        {TICKET_TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {lang === "VN" ? option.labelVn : option.labelEn}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Số điện thoại (Không bắt buộc)" : "Phone Number (Optional)"}</label>
@@ -588,15 +593,30 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           <div className="bg-slate-50 dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-inner">
             <div className="flex items-center justify-between mb-2">
               <span className="bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300 text-[10px] font-bold uppercase px-2 py-1 rounded">
-                {lang === "VN" ? "Chiều đi" : "Departure"}
+                {isLoopRoute
+                  ? (lang === "VN" ? "Chuyến tham quan" : "Sightseeing Trip")
+                  : (lang === "VN" ? "Chiều đi" : "Departure")}
               </span>
               <span className="text-xs font-bold text-slate-500">{departureDate}</span>
             </div>
-            <div className="font-headline font-black text-[#124757] dark:text-white flex items-center gap-2 text-lg">
-              {(fromWharfName || "--").toUpperCase()}
-              <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span>
-              {(toWharfName || "--").toUpperCase()}
-            </div>
+            {isLoopRoute ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-xs font-bold uppercase text-slate-400 shrink-0">{lang === "VN" ? "Bến đón:" : "Pickup:"}</span>
+                  <span className="font-headline font-black text-[#124757] dark:text-white">{(fromWharfName || "--").toUpperCase()}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-xs font-bold uppercase text-slate-400 shrink-0">{lang === "VN" ? "Bến trả:" : "Drop-off:"}</span>
+                  <span className="font-headline font-black text-[#124757] dark:text-white">{(toWharfName || "--").toUpperCase()}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="font-headline font-black text-[#124757] dark:text-white flex items-center gap-2 text-lg">
+                {(fromWharfName || "--").toUpperCase()}
+                <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span>
+                {(toWharfName || "--").toUpperCase()}
+              </div>
+            )}
             <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2">
               {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedDepartureTrip))}</span>
             </div>

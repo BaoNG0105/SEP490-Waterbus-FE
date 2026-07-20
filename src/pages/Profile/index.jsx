@@ -4,9 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { logout } from "../../redux/authSlice";
 import { fetchCurrentUserProfile } from "../../services/authService";
+import { fetchMyPoints } from "../../services/pointService";
 import { notify } from "../../utils/swalToast";
-
-const mockUserStats = { points: 0 };
 
 export const Profile = () => {
   const { lang } = useApp();
@@ -14,6 +13,9 @@ export const Profile = () => {
   const dispatch = useDispatch();
 
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [pointsData, setPointsData] = useState({ pointBalance: 0, totalCount: 0, page: 1, pageSize: 10, transactions: [] });
+  const [isLoadingPoints, setIsLoadingPoints] = useState(false);
+  const [showPointsModal, setShowPointsModal] = useState(false);
   const [profileData, setProfileData] = useState({
     fullName: "",
     email: "",
@@ -48,6 +50,46 @@ export const Profile = () => {
     };
     loadProfileData();
   }, []);
+
+  const loadPoints = async (page = 1) => {
+    try {
+      setIsLoadingPoints(true);
+      const data = await fetchMyPoints({ page, pageSize: 10 });
+      setPointsData({
+        pointBalance: data.pointBalance || 0,
+        totalCount: data.totalCount || 0,
+        page: data.page || page,
+        pageSize: data.pageSize || 10,
+        transactions: data.transactions || [],
+      });
+    } catch (error) {
+      console.error("Lỗi tải điểm tích lũy:", error);
+    } finally {
+      setIsLoadingPoints(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPoints(1);
+  }, []);
+
+  const transactionTypeMeta = {
+    Earn: { label: lang === "VN" ? "Tích điểm" : "Earned", color: "emerald" },
+    Redeem: { label: lang === "VN" ? "Dùng điểm" : "Redeemed", color: "rose" },
+    RedeemCancelled: { label: lang === "VN" ? "Hủy dùng điểm" : "Redeem Cancelled", color: "amber" },
+    RedeemReturned: { label: lang === "VN" ? "Hoàn điểm" : "Redeem Returned", color: "sky" },
+    EarnRevoked: { label: lang === "VN" ? "Thu hồi điểm" : "Earn Revoked", color: "slate" },
+  };
+
+  const totalPointsPages = Math.max(1, Math.ceil(pointsData.totalCount / pointsData.pageSize));
+
+  const badgeClassMap = {
+    emerald: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200",
+    rose: "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-200",
+    amber: "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200",
+    sky: "bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-200",
+    slate: "bg-slate-100 dark:bg-slate-700/40 text-slate-600 dark:text-slate-300 border-slate-200",
+  };
 
   const handleLogout = () => {
     notify({
@@ -125,10 +167,14 @@ export const Profile = () => {
 
               {/* Phần Khối Points & Stats giữ nguyên không đổi... */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-10 pt-8 border-t border-slate-100 dark:border-slate-700">
-                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setShowPointsModal(true)}
+                  className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border shadow-inner hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all cursor-pointer"
+                >
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">{lang === "VN" ? "Điểm tích lũy" : "Reward Points"}</p>
-                  <h3 className="text-2xl font-black text-[#124757] dark:text-yellow-400">{mockUserStats.points.toLocaleString()}</h3>
-                </div>
+                  <h3 className="text-2xl font-black text-[#124757] dark:text-yellow-400">{pointsData.pointBalance.toLocaleString()}</h3>
+                </button>
                 <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border shadow-inner">
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">{lang === "VN" ? "Chuyến đi" : "Total Trips"}</p>
                   <h3 className="text-2xl font-black text-[#124757] dark:text-yellow-400">0</h3>
@@ -144,32 +190,34 @@ export const Profile = () => {
           <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 pb-10">
             <div className="md:col-span-2 space-y-6">
               <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100">
-                <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Chuyến đi sắp tới" : "Upcoming Trips"}</h2>
-                <div className="text-center py-10 border-2 border-dashed rounded-2xl text-slate-400">
-                  <p className="text-sm font-bold">{lang === "VN" ? "Chưa có chuyến đi nào được đặt." : "No upcoming trips found."}</p>
+                <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Vé & Dịch vụ của tôi" : "My Tickets & Services"}</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <button onClick={() => navigate("/profile/my-waterbus-booking")} className="flex items-center gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-transparent hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all text-left group">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Vé Waterbus của tôi" : "My Waterbus Booking"}</p>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+                  </button>
+                  <button onClick={() => navigate("/profile/my-sightseeing-booking")} className="flex items-center gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-transparent hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all text-left group">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Vé Sightseeing của tôi" : "My Sightseeing Booking"}</p>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+                  </button>
+                  <button onClick={() => navigate("/profile/my-charter-booking")} className="flex items-center gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-transparent hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all text-left group">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Yêu cầu thuê tàu" : "Charter Requests"}</p>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+                  </button>
                 </div>
               </div>
             </div>
 
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100">
-                <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Danh mục & Cài đặt" : "Categories & Settings"}</h2>
+                <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Cài đặt tài khoản" : "Account Settings"}</h2>
                 <div className="space-y-3">
-                  <button onClick={() => navigate("/profile/my-waterbus-booking")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Vé Waterbus của tôi" : "My Waterbus Booking"}</span>
-                    </div>
-                    <span className="material-symbols-outlined text-slate-400">chevron_right</span>
-                  </button>
-                  <button onClick={() => navigate("/profile/my-charter-booking")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Yêu cầu thuê tàu" : "Charter Requests"}</span>
-                    </div>
-                    <span className="material-symbols-outlined text-slate-400">chevron_right</span>
-                  </button>
-                </div>
-
-                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-700 space-y-3">
                   <button onClick={() => navigate("/profile/change-password")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-500 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors">
@@ -188,6 +236,100 @@ export const Profile = () => {
             </div>
           </div>
         </>
+      )}
+
+      {showPointsModal && (
+        <div className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+          <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col bg-white dark:bg-slate-900 rounded-4xl overflow-hidden shadow-2xl animate-[fadeIn_0.4s_ease-out]">
+            <div className="flex items-center justify-between px-6 sm:px-8 py-6 border-b border-slate-100 dark:border-slate-700 shrink-0">
+              <div>
+                <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest">
+                  {lang === "VN" ? "Lịch sử điểm tích lũy" : "Points History"}
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {lang === "VN" ? "Số dư hiện tại: " : "Current balance: "}
+                  <span className="font-bold text-[#124757] dark:text-yellow-400">{pointsData.pointBalance.toLocaleString()}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPointsModal(false)}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-4">
+              {isLoadingPoints ? (
+                <div className="flex justify-center items-center h-40">
+                  <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+                </div>
+              ) : pointsData.transactions.length === 0 ? (
+                <div className="text-center py-10 border-2 border-dashed rounded-2xl text-slate-400">
+                  <p className="text-sm font-bold">{lang === "VN" ? "Chưa có giao dịch điểm nào." : "No point transactions yet."}</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pointsData.transactions.map((tx) => {
+                    const meta = transactionTypeMeta[tx.transactionType] || { label: tx.transactionType, color: "slate" };
+                    return (
+                      <div key={tx.id} className="p-4 rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${badgeClassMap[meta.color]}`}>
+                              {meta.label}
+                            </span>
+                            <p className="text-sm text-slate-700 dark:text-slate-200 font-medium mt-2">{tx.description}</p>
+                            {tx.bookingCode && (
+                              <p className="text-xs text-slate-400 mt-1">
+                                {lang === "VN" ? "Mã đặt chỗ" : "Booking"}: {tx.bookingCode}
+                              </p>
+                            )}
+                            <p className="text-xs text-slate-400 mt-1">
+                              {new Date(tx.createdAt).toLocaleString(lang === "VN" ? "vi-VN" : "en-US")}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className={`text-lg font-black ${tx.points > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                              {tx.points > 0 ? "+" : ""}{tx.points.toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              {lang === "VN" ? "Số dư" : "Balance"}: {tx.balanceAfter.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {totalPointsPages > 1 && (
+              <div className="flex items-center justify-between px-6 sm:px-8 py-4 border-t border-slate-100 dark:border-slate-700 shrink-0">
+                <button
+                  type="button"
+                  disabled={pointsData.page <= 1 || isLoadingPoints}
+                  onClick={() => loadPoints(pointsData.page - 1)}
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <span className="material-symbols-outlined text-base">chevron_left</span>
+                  {lang === "VN" ? "Trước" : "Prev"}
+                </button>
+                <span className="text-xs font-bold text-slate-400">{pointsData.page} / {totalPointsPages}</span>
+                <button
+                  type="button"
+                  disabled={pointsData.page >= totalPointsPages || isLoadingPoints}
+                  onClick={() => loadPoints(pointsData.page + 1)}
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {lang === "VN" ? "Sau" : "Next"}
+                  <span className="material-symbols-outlined text-base">chevron_right</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

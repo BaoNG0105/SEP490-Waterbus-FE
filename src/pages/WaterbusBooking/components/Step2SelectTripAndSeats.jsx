@@ -96,17 +96,24 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   const {
     isRoundTrip,
     fromWharf, toWharf,
+    routeType,
     departureTripOptions, returnTripOptions,
     selectedDepartureTrip, selectedReturnTrip,
     selectedSeatsDeparture, selectedSeatsReturn
   } = bookingData;
 
+  // Tuyến tham quan vòng (SightseeingLoop) không bán ghế theo chặng — bến đi/đến trùng nhau nên
+  // không cần (và thường không tra được) stationCode theo cặp chặng như tuyến Regular; BE trả
+  // nguyên sơ đồ ghế cả chuyến khi gọi API không kèm fromStationCode/toStationCode.
+  const isLoopRoute = routeType === "SightseeingLoop";
+
   // Mã bến đi/đến của từng chặng — chặng về đi ngược chiều (toWharf -> fromWharf)
-  const getLegStationCodes = (leg, trip) => (
-    leg === "departure"
+  const getLegStationCodes = (leg, trip) => {
+    if (isLoopRoute) return { fromStationCode: undefined, toStationCode: undefined };
+    return leg === "departure"
       ? { fromStationCode: findStationCode(trip?.stops, fromWharf), toStationCode: findStationCode(trip?.stops, toWharf) }
-      : { fromStationCode: findStationCode(trip?.stops, toWharf), toStationCode: findStationCode(trip?.stops, fromWharf) }
-  );
+      : { fromStationCode: findStationCode(trip?.stops, toWharf), toStationCode: findStationCode(trip?.stops, fromWharf) };
+  };
 
   // Quản lý tab nội bộ của bước 2 nếu là khứ hồi: 'departure' (chiều đi) hoặc 'return' (chiều về)
   const [activeLeg, setActiveLeg] = useState("departure");
@@ -137,7 +144,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       try {
         await Promise.all(legsToHydrate.map(async ([leg, trip]) => {
           const { fromStationCode, toStationCode } = getLegStationCodes(leg, trip);
-          if (!fromStationCode || !toStationCode) return;
+          if (!isLoopRoute && (!fromStationCode || !toStationCode)) return;
           const seatMapResponse = await fetchTripSeatMap(trip.tripId, { fromStationCode, toStationCode });
           if (cancelled) return;
           setSeatMapByLeg((prev) => ({ ...prev, [leg]: seatMapResponse?.seats || [] }));
@@ -231,7 +238,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       };
       const { fromStationCode, toStationCode } = getLegStationCodes(activeLeg, mergedTrip);
 
-      if (!fromStationCode || !toStationCode) {
+      if (!isLoopRoute && (!fromStationCode || !toStationCode)) {
         setSeatMapError(
           lang === "VN"
             ? "Không xác định được mã bến đón/trả trên chuyến này. Vui lòng chọn chuyến khác."
@@ -449,9 +456,11 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
         <div className="lg:col-span-5 space-y-4">
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border shadow-sm flex justify-between items-center gap-3">
             <h3 className="shrink-0 text-lg font-headline font-bold text-[#124757] dark:text-white">
-              {activeLeg === "departure"
-                ? (lang === "VN" ? "Chuyến đi" : "Departure")
-                : (lang === "VN" ? "Chuyến về" : "Return")}
+              {isLoopRoute
+                ? (lang === "VN" ? "Chuyến tham quan" : "Sightseeing Trip")
+                : activeLeg === "departure"
+                  ? (lang === "VN" ? "Chuyến đi" : "Departure")
+                  : (lang === "VN" ? "Chuyến về" : "Return")}
             </h3>
             <FormSelect
               value={filterTime}
@@ -527,6 +536,39 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
             </p>
           )}
 
+          {/* Công cụ tính giá — cập nhật ngay khi chọn/bỏ chọn ghế */}
+          {currentSeats.length > 0 && (
+            <div className="rounded-2xl border border-[#FFD100]/40 bg-[#FFD100]/10 dark:bg-yellow-400/10 dark:border-yellow-400/20 p-4 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-headline font-bold uppercase tracking-wide text-[#124757] dark:text-yellow-300">
+                  {lang === "VN" ? "Ghế đã chọn" : "Selected seats"}
+                </h5>
+                <span className="text-xs font-bold text-slate-500">{currentSeats.length}/{MAX_SEATS_PER_LEG}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {currentSeats.map((seat) => (
+                  <span
+                    key={seat.seatNumber}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    {seat.seatNumber}
+                    <span className="text-[#124757] dark:text-yellow-400">
+                      {Number(seat.basePrice || 0).toLocaleString()}₫
+                    </span>
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center justify-between border-t border-[#FFD100]/30 pt-2.5 dark:border-yellow-400/20">
+                <span className="text-xs font-bold uppercase text-slate-500">
+                  {lang === "VN" ? "Tạm tính" : "Subtotal"}
+                </span>
+                <span className="text-lg font-headline font-black text-[#124757] dark:text-yellow-400">
+                  {currentSeats.reduce((sum, s) => sum + Number(s.basePrice || 0), 0).toLocaleString()} VND
+                </span>
+              </div>
+            </div>
+          )}
+
           {isLoadingSeats ? (
             <div className="h-64 flex items-center justify-center">
               <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
@@ -595,20 +637,37 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                         {activeDeckData.seats.map((seat) => {
                           const isSelected = currentSeats.some((s) => s.seatNumber === seat.seatNumber);
                           const isLockedByOthers = LOCKED_STATUSES.includes(seat.status) && !isSelected;
+                          const seatStatusLabel = isLockedByOthers
+                            ? (lang === "VN" ? "Đã khóa" : "Locked")
+                            : isSelected
+                              ? (lang === "VN" ? "Đang chọn" : "Selected")
+                              : (lang === "VN" ? "Chỗ trống" : "Available");
                           return (
                             <button
                               key={seat.seatNumber}
                               type="button"
                               disabled={isLockedByOthers}
                               onClick={() => handleSeatClick(seat)}
-                              className={`relative z-1 flex items-center justify-center rounded-lg transition-all ${
+                              className={`group relative z-1 flex items-center justify-center rounded-lg transition-all ${
                                 isLockedByOthers ? "cursor-not-allowed opacity-70" :
                                 isSelected ? "scale-95 ring-2 ring-[#124757]/25 dark:ring-yellow-400/40 rounded-xl" :
                                 "hover:scale-105"
                               }`}
                               style={{ gridRow: rowLetterToIndex(seat.row), gridColumn: seat.column }}
-                              title={`${seat.seatNumber} · ${seat.seatTypeName || seat.seatTypeCode} · ${Number(seat.basePrice || 0).toLocaleString()} VND`}
                             >
+                              {/* Tooltip giá ghế — hiện khi di chuột vào, không cản thao tác click */}
+                              <div className="pointer-events-none absolute -top-1.5 left-1/2 z-30 -translate-x-1/2 -translate-y-full opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-150">
+                                <div className="whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-center shadow-lg dark:border-slate-600 dark:bg-slate-800">
+                                  <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-300">
+                                    {seatStatusLabel}
+                                  </div>
+                                  <div className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
+                                    {lang === "VN" ? "Giá" : "Price"}: {Number(seat.basePrice || 0).toLocaleString()} {lang === "VN" ? "VNĐ" : "VND"}
+                                  </div>
+                                </div>
+                                <div className="mx-auto -mt-1 h-2 w-2 rotate-45 border-b border-r border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800" />
+                              </div>
+
                               <SeatMapIcon
                                 label={seat.seatNumber}
                                 tone={seatToneFromCode(seat.seatTypeCode)}
