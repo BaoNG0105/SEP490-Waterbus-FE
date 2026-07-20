@@ -60,7 +60,18 @@ class TrackingHubClient {
 
     connection.onreconnecting(() => this.notifyStatus("reconnecting"));
     connection.onreconnected(() => this.notifyStatus("live"));
-    connection.onclose(() => this.notifyStatus("offline"));
+    connection.onclose(() => {
+      this.notifyStatus("offline");
+      // Vite proxy → Azure hay ECONNRESET; auto-reconnect hết retry thì tự nối lại nếu vẫn còn subscriber.
+      if (this.refCount <= 0) return;
+      if (this.connection !== connection) return;
+      this.connection = null;
+      this.startPromise = null;
+      window.setTimeout(() => {
+        if (this.refCount <= 0 || this.connection) return;
+        this.ensureConnection().catch(() => {});
+      }, 1500);
+    });
   }
 
   async ensureConnection() {

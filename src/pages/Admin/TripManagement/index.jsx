@@ -4,7 +4,7 @@ import { useApp } from "../../../context/AppContext";
 import { fetchAllTrips, toDdMmYyyy, getTripStatusLabel, normalizeTripStatusKey, isTripRunningStatus } from "../../../services/tripService";
 import { fetchAllRoutes } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
-import { getRouteKindLabel } from "../../../utils/routeTypes";
+import { getRouteShortLabel } from "../../../utils/routeTypes";
 
 const todayInputValue = () => {
     const now = new Date();
@@ -268,30 +268,26 @@ export function TripManagement() {
                                 trips.map((trip) => (
                                     <tr key={trip.tripId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
 
-                                        {/* Cột 1: Mã chuyến + loại chuyến */}
+                                        {/* Cột 1: Mã chuyến + loại (Bus / Sightseeing / Charter) theo routeType */}
                                         <td className="py-4 px-6">
                                             <div className="flex items-center gap-4">
-
                                                 <div className="space-y-1">
                                                     <h4 className="font-headline font-black text-slate-800 dark:text-white text-xs tracking-wide">
                                                         {trip.tripCode}
                                                     </h4>
-                                                    <span className={`inline-flex text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${trip.tripType === "Charter" ? "bg-[#EAF3F5] text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400" : "bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300"}`}>
-                                                        {trip.tripType || "—"}
+                                                    <span className={`inline-flex text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${routeKindBadgeClass(trip.tripType === "Charter" ? "Charter" : trip.routeType)}`}>
+                                                        {trip.tripType === "Charter"
+                                                            ? "Charter"
+                                                            : getRouteShortLabel(trip.routeType, lang)}
                                                     </span>
                                                 </div>
                                             </div>
                                         </td>
 
-                                        {/* Cột 2: Tuyến */}
+                                        {/* Cột 2: Tuyến — tên + mã (loại đã ở cột 1) */}
                                         <td className="py-4 px-4 max-w-[16rem]">
                                             <p className="font-bold text-slate-800 dark:text-white truncate">{trip.routeName}</p>
-                                            <div className="flex items-center gap-1.5 mt-1">
-                                                <span className="text-[10px] text-slate-400">{trip.routeCode}</span>
-                                                <span className={`inline-flex text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${routeKindBadgeClass(trip.routeType)}`}>
-                                                    {getRouteKindLabel(trip.routeType, lang)}
-                                                </span>
-                                            </div>
+                                            <span className="text-[10px] text-slate-400 mt-1 block">{trip.routeCode}</span>
                                         </td>
 
                                         {/* Cột 3: Ngày vận hành */}

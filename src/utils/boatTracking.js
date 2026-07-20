@@ -99,7 +99,10 @@ const stabilizeIdleTeleport = (prev, next) => {
 
   const speedKmh = Number.isFinite(Number(next.speed)) ? Math.max(0, Number(next.speed)) : 0;
   const status = String(next.status || "").toLowerCase().replace(/[_\s-]/g, "");
-  const idleLike = speedKmh < 1.2 && (status === "idle" || status === "stopped" || status === "docked" || status === "stationary" || status === "");
+  // Chỉ coi idle khi BE/GPS nói rõ đứng yên — status rỗng không chặn cập nhật.
+  const idleLike = speedKmh < 1.2 && (
+    status === "idle" || status === "stopped" || status === "docked" || status === "stationary"
+  );
 
   // Tàu đang chạy (có tốc độ) hoặc dịch chuyển vừa phải → theo GPS luôn.
   if (!idleLike || meters < IDLE_TELEPORT_M) {
@@ -262,7 +265,9 @@ export const normalizeBoatLocation = (raw) => {
   const key = boatId || boatCode;
   if (!key) return null;
 
-  const headingRaw = Number(raw.heading ?? raw.Heading ?? raw.course ?? raw.Course);
+  const headingRaw = Number(
+    raw.heading ?? raw.Heading ?? raw.direction ?? raw.Direction ?? raw.course ?? raw.Course,
+  );
   const heading = Number.isFinite(headingRaw) ? ((headingRaw % 360) + 360) % 360 : null;
 
   const seatRaw = Number(
@@ -300,14 +305,33 @@ export const normalizeBoatLocation = (raw) => {
     raw.remainingDistanceKmToNextStation
     ?? raw.RemainingDistanceKmToNextStation
     ?? raw.remainingDistanceKm
+    ?? raw.RemainingDistanceKm
+    ?? raw.distanceKmToNextStation
+    ?? raw.DistanceKmToNextStation
     ?? NaN,
   );
   const remainingMinRaw = Number(
     raw.remainingMinutesToNextStation
     ?? raw.RemainingMinutesToNextStation
+    ?? raw.etaMinutesToNextStation
+    ?? raw.EtaMinutesToNextStation
+    ?? raw.remainingMinutes
+    ?? raw.RemainingMinutes
+    ?? raw.etaMinutes
+    ?? raw.EtaMinutes
     ?? NaN,
   );
-  const movementStatus = raw.movementStatus ?? raw.MovementStatus ?? null;
+  const movementStatus = raw.movementStatus
+    ?? raw.MovementStatus
+    ?? raw.tripMovementStatus
+    ?? raw.TripMovementStatus
+    ?? null;
+  // GPS Trip Boarding đôi khi chỉ nằm ở status
+  const statusRaw = String(raw.status ?? raw.Status ?? "").trim();
+  const statusKey = statusRaw.toLowerCase().replace(/[_\s-]/g, "");
+  const resolvedMovement = movementStatus
+    || (statusKey === "boarding" ? "Boarding" : null)
+    || (statusKey === "scheduled" ? "Scheduled" : null);
   const nextStationId = raw.nextStationId ?? raw.NextStationId ?? null;
   const nextStationName = raw.nextStationName ?? raw.NextStationName ?? null;
   const nextStationCode = raw.nextStationCode ?? raw.NextStationCode ?? null;
@@ -325,7 +349,7 @@ export const normalizeBoatLocation = (raw) => {
     heading,
     accuracyMeters: Number.isFinite(accuracyRaw) && accuracyRaw > 0 ? accuracyRaw : null,
     isOnline: raw.isOnline === true || raw.IsOnline === true,
-    status: raw.status ?? raw.Status ?? null,
+    status: statusRaw || null,
     boatStatus: boatStatus ? String(boatStatus) : null,
     operationalStatus: boatStatus ? String(boatStatus) : null,
     activeIncident,
@@ -334,7 +358,7 @@ export const normalizeBoatLocation = (raw) => {
     passengerCount: Number.isFinite(passengerRaw) && passengerRaw >= 0 ? passengerRaw : null,
     imageUrl: raw.imageUrl ?? raw.ImageUrl ?? raw.boat?.imageUrl ?? null,
     // GPS/BE có thể gửi kèm (tracking hoặc operations schedule merge).
-    movementStatus: movementStatus ? String(movementStatus) : null,
+    movementStatus: resolvedMovement ? String(resolvedMovement) : null,
     nextStationId: nextStationId ? String(nextStationId) : null,
     nextStationName: nextStationName ? String(nextStationName) : null,
     nextStationCode: nextStationCode ? String(nextStationCode) : null,
@@ -544,21 +568,110 @@ export const upsertBoatLocationMap = (prevMap, location) => {
       && String(prev.sequence ?? "") === String(normalized.sequence ?? "")
       && String(prev.recordedAt ?? "") === String(normalized.recordedAt ?? "")
       && Boolean(prev.isOnline) === Boolean(normalized.isOnline)
-      && Number(prev.heading ?? NaN) === Number(normalized.heading ?? NaN);
+      && Number(prev.heading ?? NaN) === Number(normalized.heading ?? NaN)
+      && Number(prev.speed ?? NaN) === Number(normalized.speed ?? NaN)
+      && Number(prev.remainingMinutesToNextStation ?? NaN)
+        === Number(normalized.remainingMinutesToNextStation ?? NaN)
+      && Number(prev.remainingDistanceKmToNextStation ?? NaN)
+        === Number(normalized.remainingDistanceKmToNextStation ?? NaN)
+      && String(prev.movementStatus ?? "") === String(normalized.movementStatus ?? "")
+      && String(prev.nextStationName ?? "") === String(normalized.nextStationName ?? "")
+      && String(prev.nextStationCode ?? "") === String(normalized.nextStationCode ?? "")
+      && String(prev.currentStationName ?? "") === String(normalized.currentStationName ?? "")
+      && String(prev.lastStopEvent ?? "") === String(normalized.lastStopEvent ?? "")
+      && String(prev.status ?? "") === String(normalized.status ?? "");
 
     if (samePos) return prevMap;
   }
 
   const stabilized = stabilizeIdleTeleport(prev, normalized);
+  const prevLive = prev && !prev.fromSticky ? prev : null;
+  const statusLower = String(stabilized.status || prevLive?.status || "").toLowerCase();
+  const tripCleared = ["idle", "stopped", "offline", "sticky"].includes(statusLower);
+  const APPROACH_KM = 0.4;
+
+  const keepStr = (nextVal, prevVal) => {
+    const n = nextVal != null && String(nextVal).trim() ? String(nextVal).trim() : null;
+    if (n) return n;
+    if (tripCleared) return null;
+    const p = prevVal != null && String(prevVal).trim() ? String(prevVal).trim() : null;
+    return p;
+  };
+
+  // GPS/Azure: list hay gửi null hoặc 0p/0km sau packet đủ → đừng đè ETA đang đúng.
+  const nextKmRaw = Number(stabilized.remainingDistanceKmToNextStation);
+  const prevKmRaw = Number(prevLive?.remainingDistanceKmToNextStation);
+  let remainingDistanceKmToNextStation = null;
+  if (tripCleared) {
+    remainingDistanceKmToNextStation = Number.isFinite(nextKmRaw) ? nextKmRaw : null;
+  } else if (Number.isFinite(nextKmRaw)) {
+    if (nextKmRaw <= 0 && Number.isFinite(prevKmRaw) && prevKmRaw > APPROACH_KM) {
+      remainingDistanceKmToNextStation = prevKmRaw;
+    } else {
+      remainingDistanceKmToNextStation = nextKmRaw;
+    }
+  } else if (Number.isFinite(prevKmRaw)) {
+    remainingDistanceKmToNextStation = prevKmRaw;
+  }
+
+  const nextMinRaw = Number(stabilized.remainingMinutesToNextStation);
+  const prevMinRaw = Number(prevLive?.remainingMinutesToNextStation);
+  let remainingMinutesToNextStation = null;
+  if (tripCleared) {
+    remainingMinutesToNextStation = Number.isFinite(nextMinRaw) ? nextMinRaw : null;
+  } else if (Number.isFinite(nextMinRaw)) {
+    // 0p / <1p nhưng còn xa (2.9km) → giữ phút cũ hoặc để ước từ km
+    const stillFar = Number.isFinite(remainingDistanceKmToNextStation)
+      && remainingDistanceKmToNextStation > APPROACH_KM;
+    if (nextMinRaw <= 0 && stillFar) {
+      remainingMinutesToNextStation = Number.isFinite(prevMinRaw) && prevMinRaw > 0
+        ? prevMinRaw
+        : null;
+    } else {
+      remainingMinutesToNextStation = nextMinRaw;
+    }
+  } else if (Number.isFinite(prevMinRaw)) {
+    remainingMinutesToNextStation = prevMinRaw;
+  }
+
+  const speedNum = Number.isFinite(Number(stabilized.speed))
+    ? Number(stabilized.speed)
+    : Number(prevLive?.speed);
+  if (
+    Number.isFinite(remainingDistanceKmToNextStation)
+    && remainingDistanceKmToNextStation > APPROACH_KM
+    && Number.isFinite(speedNum)
+    && speedNum >= 1.2
+  ) {
+    const fromSpeed = Math.max(
+      0,
+      Math.round((remainingDistanceKmToNextStation / speedNum) * 60),
+    );
+    // Chỉ ước khi thiếu phút hoặc bị packet 0p đè — không đè phút GPS hợp lệ (~5p).
+    if (
+      remainingMinutesToNextStation == null
+      || remainingMinutesToNextStation <= 0
+    ) {
+      remainingMinutesToNextStation = fromSpeed;
+    }
+  }
+
   const merged = {
-    ...(prev?.fromSticky ? {} : (prev || {})),
+    ...(prevLive || {}),
     ...stabilized,
-    boatId: (prev && !prev.fromSticky ? prev.boatId : null) || stabilized.boatId,
-    boatCode: stabilized.boatCode || prev?.boatCode,
+    boatId: (prevLive ? prevLive.boatId : null) || stabilized.boatId,
+    boatCode: stabilized.boatCode || prevLive?.boatCode,
     latitude: stabilized.latitude,
     longitude: stabilized.longitude,
     gpsCandidateLatitude: stabilized.gpsCandidateLatitude ?? null,
     gpsCandidateLongitude: stabilized.gpsCandidateLongitude ?? null,
+    nextStationId: keepStr(stabilized.nextStationId, prevLive?.nextStationId),
+    nextStationName: keepStr(stabilized.nextStationName, prevLive?.nextStationName),
+    nextStationCode: keepStr(stabilized.nextStationCode, prevLive?.nextStationCode),
+    currentStationName: keepStr(stabilized.currentStationName, prevLive?.currentStationName),
+    movementStatus: keepStr(stabilized.movementStatus, prevLive?.movementStatus),
+    remainingDistanceKmToNextStation,
+    remainingMinutesToNextStation,
     fromSticky: false,
   };
   saveStickyBoatPosition(merged);

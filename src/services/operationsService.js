@@ -150,6 +150,22 @@ export const normalizeOperationsScheduleEntry = (raw) => {
         ? false
         : null;
 
+  const delayMinutes = toFiniteNumber(pick(raw, [
+    "delayMinutes", "DelayMinutes", "replacementDelayMinutes",
+  ], null));
+  const delayReason = String(pick(raw, [
+    "delayReason", "DelayReason",
+  ], "")).trim() || null;
+  const adjustedStartAt = pick(raw, [
+    "adjustedStartAt", "AdjustedStartAt", "adjustedDepartureAt",
+  ], null) || null;
+  const adjustedEndAt = pick(raw, [
+    "adjustedEndAt", "AdjustedEndAt", "adjustedArrivalAt",
+  ], null) || null;
+  const operationStatus = String(pick(raw, [
+    "operationStatus", "OperationStatus", "operationalStatus", "status",
+  ], "")).trim() || null;
+
   return {
     boatId: boatId || boatCode,
     boatCode: boatCode || boatId,
@@ -157,6 +173,7 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     tripId: pick(raw, ["tripId", "TripId"], null) || null,
     tripCode: pick(raw, ["tripCode", "TripCode"], "") || null,
     routeName: pick(raw, ["routeName", "RouteName"], "") || null,
+    routeCode: pick(raw, ["routeCode", "RouteCode"], "") || null,
     movementStatus,
     currentStationName,
     currentStationCode,
@@ -171,6 +188,11 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     latestLongitude: lng,
     latestSpeedKmh: speed,
     isGpsOnline,
+    delayMinutes,
+    delayReason,
+    adjustedStartAt,
+    adjustedEndAt,
+    operationStatus,
     lastStopEvent: String(pick(raw, [
       "lastStopEvent", "LastStopEvent", "stopEvent", "StopEvent",
       "tripStopEvent", "TripStopEvent", "latestStopEvent",

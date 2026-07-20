@@ -62,6 +62,28 @@ export const normalizeIncident = (raw) => {
     managerUserId: pick(raw, ["managerUserId", "assignedManagerId", "manager.id"], ""),
     managerName: pick(raw, ["managerName", "assignedManagerName", "manager.fullName"], ""),
     activeTicketCount: Number(pick(raw, ["activeTicketCount", "ActiveTicketCount"], 0)) || 0,
+    onboardPassengerCount: Number(pick(raw, [
+      "onboardPassengerCount", "OnboardPassengerCount", "onBoardPassengerCount",
+    ], 0)) || 0,
+    futurePassengerCount: Number(pick(raw, [
+      "futurePassengerCount", "FuturePassengerCount",
+    ], 0)) || 0,
+    replacementMissionType: String(pick(raw, [
+      "replacementMissionType", "ReplacementMissionType",
+    ], "")).trim() || "None",
+    replacementTargetStationName: String(pick(raw, [
+      "replacementTargetStationName", "ReplacementTargetStationName",
+    ], "")).trim() || "",
+    replacementTargetStationId: pick(raw, [
+      "replacementTargetStationId", "ReplacementTargetStationId",
+    ], null) || null,
+    replacementDelayMinutes: (() => {
+      const n = Number(pick(raw, ["replacementDelayMinutes", "ReplacementDelayMinutes"], null));
+      return Number.isFinite(n) ? n : null;
+    })(),
+    replacementEstimatedResumeAt: pick(raw, [
+      "replacementEstimatedResumeAt", "ReplacementEstimatedResumeAt",
+    ], null) || null,
     rescueBoatId: pick(raw, ["rescueBoatId", "RescueBoatId", "rescueBoat.boatId", "rescueBoat.id", "RescueBoat.BoatId", "RescueBoat.Id"], ""),
     rescueBoatName: pick(raw, ["rescueBoatName", "RescueBoatName", "rescueBoat.boatName", "rescueBoat.name", "RescueBoat.BoatName", "RescueBoat.Name"], ""),
     rescueBoatCode: pick(raw, ["rescueBoatCode", "RescueBoatCode", "rescueBoat.boatCode", "rescueBoat.code", "RescueBoat.BoatCode", "RescueBoat.Code"], ""),
@@ -83,6 +105,15 @@ export const fetchIncidents = async (params = {}) => {
 
 export const fetchOpenIncidents = async () =>
   fetchIncidents({ resolutionStatus: "Open" });
+
+/** Lịch sử sự cố / cứu hộ đã đóng (Resolved). */
+export const fetchResolvedIncidents = async () => {
+  const list = await fetchIncidents({ resolutionStatus: "Resolved" });
+  return list.filter((item) => {
+    const status = String(item?.resolutionStatus || "").toLowerCase();
+    return status === "resolved" || status === "closed";
+  });
+};
 
 export const reportIncident = async (payload) => {
   const data = await apiCreateIncident(payload);
@@ -108,6 +139,73 @@ export const getSeverityLabel = (severity, lang = "VN") => {
   const row = INCIDENT_SEVERITIES.find((item) => item.value === severity);
   if (!row) return severity || "—";
   return lang === "VN" ? row.labelVn : row.labelEn;
+};
+
+/** Chuẩn hoá key mission thay thế khách. */
+export const normalizeReplacementMissionType = (value) => {
+  const key = String(value || "").trim().toLowerCase().replace(/[_\s-]/g, "");
+  if (key === "transferatincidentlocation") return "TransferAtIncidentLocation";
+  if (key === "continuefromstation") return "ContinueFromStation";
+  if (key === "passengerrecoveryrequired") return "PassengerRecoveryRequired";
+  if (key === "none" || !key) return "None";
+  return String(value || "None").trim() || "None";
+};
+
+/** Cần tàu thay thế (chở khách) theo mission BE — không chỉ nhìn activeTicketCount. */
+export const incidentNeedsReplacementBoat = (incident) => {
+  const mission = normalizeReplacementMissionType(incident?.replacementMissionType);
+  if (mission === "TransferAtIncidentLocation" || mission === "ContinueFromStation") return true;
+  if (mission === "None") return false;
+  if (mission === "PassengerRecoveryRequired") return false; // Manager tự quyết sau khi kiểm tra
+  return Number(incident?.activeTicketCount) > 0;
+};
+
+/** Hiện ô chọn tàu thay thế (bắt buộc hoặc tuỳ chọn). */
+export const incidentShowsReplacementBoatField = (incident) => {
+  const mission = normalizeReplacementMissionType(incident?.replacementMissionType);
+  if (mission === "TransferAtIncidentLocation" || mission === "ContinueFromStation") return true;
+  if (mission === "PassengerRecoveryRequired") return true;
+  if (mission === "None") return false;
+  return Number(incident?.activeTicketCount) > 0;
+};
+
+/** Copy hiển thị theo replacementMissionType (spec FE). */
+export const getReplacementMissionCopy = (incident, lang = "VN") => {
+  const mission = normalizeReplacementMissionType(incident?.replacementMissionType);
+  const station = String(incident?.replacementTargetStationName || "").trim();
+  const isVn = lang === "VN";
+
+  switch (mission) {
+    case "TransferAtIncidentLocation":
+      return isVn
+        ? "Có khách đang trên tàu. Tàu thay thế sẽ tới vị trí sự cố để chuyển khách."
+        : "Passengers are onboard. Replacement boat goes to the incident location to transfer them.";
+    case "ContinueFromStation":
+      return isVn
+        ? (station
+          ? `Chưa có khách trên tàu. Tàu thay thế sẽ tới ${station} để đón khách.`
+          : "Chưa có khách trên tàu. Tàu thay thế sẽ tới bến chỉ định để đón khách.")
+        : (station
+          ? `No passengers onboard. Replacement boat will go to ${station} to pick up passengers.`
+          : "No passengers onboard. Replacement boat will go to the target station to pick up passengers.");
+    case "PassengerRecoveryRequired":
+      return isVn
+        ? "Không đủ dữ liệu vị trí/chặng khách. Manager cần kiểm tra thủ công."
+        : "Insufficient passenger location/segment data. Manager must verify manually.";
+    case "None":
+    default:
+      return isVn
+        ? "Không có khách bị ảnh hưởng. Chỉ cần tàu cứu hộ."
+        : "No passengers affected. Rescue boat only.";
+  }
+};
+
+/** delayMinutes >= 15 → ảnh hưởng thêm các chuyến sau cùng tàu/tuyến trong ngày. */
+export const DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES = 15;
+
+export const delayAffectsFollowingTrips = (delayMinutes) => {
+  const n = Number(delayMinutes);
+  return Number.isFinite(n) && n >= DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES;
 };
 
 export const isIncidentOpen = (incident) => {

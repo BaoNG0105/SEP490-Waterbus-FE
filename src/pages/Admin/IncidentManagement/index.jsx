@@ -4,28 +4,27 @@ import { useSelector } from "react-redux";
 import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
 import { fetchActiveBoatsByServiceType, fetchAllBoats } from "../../../services/boatService";
-import { fetchAllTrips } from "../../../services/tripService";
+import { fetchAllTrips, filterAttachableTripsForBoat, pickActiveTripForBoat, toDdMmYyyy } from "../../../services/tripService";
 import { fetchManagerUsers } from "../../../services/userService";
 import {
   assignManagerToIncident,
   closeIncident,
+  delayAffectsFollowingTrips,
+  DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES,
   dispatchReplacementBoat,
+  fetchResolvedIncidents,
   getApiErrorMessage,
   getIncidentTypeLabel,
+  getReplacementMissionCopy,
   getSeverityLabel,
+  incidentNeedsReplacementBoat,
+  incidentShowsReplacementBoatField,
   INCIDENT_SEVERITIES,
   INCIDENT_TYPES,
+  normalizeReplacementMissionType,
   reportIncident,
 } from "../../../services/incidentService";
 import { notify, showToast } from "../../../utils/swalToast";
-
-const ACTIVE_TRIP_STATUSES = new Set([
-  "scheduled",
-  "boarding",
-  "departed",
-  "inprogress",
-  "delayed",
-]);
 
 const EMPTY_RESCUE_FORM = {
   incidentId: "",
@@ -34,6 +33,12 @@ const EMPTY_RESCUE_FORM = {
   incidentDescription: "",
   tripId: "",
   activeTicketCount: 0,
+  onboardPassengerCount: 0,
+  futurePassengerCount: 0,
+  replacementMissionType: "None",
+  replacementTargetStationName: "",
+  replacementDelayMinutes: null,
+  replacementEstimatedResumeAt: null,
   rescueBoatId: "",
   replacementBoatId: "",
   delayMinutes: 0,
@@ -96,6 +101,10 @@ export function IncidentManagement({
   const [trips, setTrips] = useState([]);
   const [managers, setManagers] = useState([]);
   const [query, setQuery] = useState("");
+  const [listTab, setListTab] = useState("open"); // open | history
+  const [historyIncidents, setHistoryIncidents] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const [busyId, setBusyId] = useState("");
   const [showReport, setShowReport] = useState(false);
   const [reportForm, setReportForm] = useState({
@@ -131,7 +140,13 @@ export function IncidentManagement({
       .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
       .catch((error) => console.error("Failed to load passenger boats:", error));
 
-    fetchAllTrips()
+    fetchAllTrips({
+      operatingDate: toDdMmYyyy((() => {
+        const now = new Date();
+        const pad2 = (n) => String(n).padStart(2, "0");
+        return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+      })()),
+    })
       .then((data) => setTrips(unwrapList(data)))
       .catch((error) => console.error("Failed to load trips for incidents:", error));
   }, []);
@@ -143,6 +158,35 @@ export function IncidentManagement({
       .catch((error) => console.error("Failed to load managers:", error));
     return undefined;
   }, [canAssignManager]);
+
+  const loadHistory = async ({ silent = false } = {}) => {
+    if (!silent) setHistoryLoading(true);
+    try {
+      const list = await fetchResolvedIncidents();
+      setHistoryIncidents(Array.isArray(list) ? list : []);
+      setHistoryError("");
+      return list;
+    } catch (error) {
+      console.error("Failed to load incident history:", error);
+      setHistoryError(getApiErrorMessage(error) || error?.message || "");
+      throw error;
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (listTab !== "history") return undefined;
+    loadHistory().catch(() => {});
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ khi đổi tab lịch sử
+  }, [listTab]);
+
+  // Prefetch nhẹ để badge Lịch sử có số.
+  useEffect(() => {
+    loadHistory({ silent: true }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const excludeIncidentBoat = (list) => list.filter((boat) => {
     const id = String(boat.boatId || boat.id || "");
@@ -177,7 +221,19 @@ export function IncidentManagement({
     }));
   }, [passengerBoats, boats, rescueForm.incidentBoatId, rescueForm.rescueBoatId]);
 
-  const needsReplacementBoat = Number(rescueForm.activeTicketCount) > 0;
+  const needsReplacementBoat = incidentNeedsReplacementBoat({
+    replacementMissionType: rescueForm.replacementMissionType,
+    activeTicketCount: rescueForm.activeTicketCount,
+  });
+  const showReplacementField = incidentShowsReplacementBoatField({
+    replacementMissionType: rescueForm.replacementMissionType,
+    activeTicketCount: rescueForm.activeTicketCount,
+  });
+  const missionCopy = getReplacementMissionCopy({
+    replacementMissionType: rescueForm.replacementMissionType,
+    replacementTargetStationName: rescueForm.replacementTargetStationName,
+  }, lang);
+  const delaySpreads = delayAffectsFollowingTrips(rescueForm.delayMinutes);
 
   const selectedBoat = useMemo(
     () => boats.find((boat) => String(boat.boatId || boat.id) === String(reportForm.boatId)) || null,
@@ -206,33 +262,59 @@ export function IncidentManagement({
     [incidents, boatById],
   );
 
-  const tripsForSelectedBoat = useMemo(() => {
-    if (!selectedBoat) return [];
-    const boatId = String(selectedBoat.boatId || selectedBoat.id || "");
-    const boatCode = String(selectedBoat.boatCode || selectedBoat.code || "").toLowerCase();
+  const enrichedHistory = useMemo(
+    () => historyIncidents.map((incident) => {
+      const boat = boatById.get(String(incident.boatId || ""));
+      if (!boat) return incident;
+      return {
+        ...incident,
+        boatCode: incident.boatCode || boat.boatCode || boat.code || "",
+        boatName: incident.boatName || boat.boatName || boat.name || "",
+      };
+    }),
+    [historyIncidents, boatById],
+  );
 
-    return trips.filter((trip) => {
-      const status = String(trip.status || "").toLowerCase();
-      if (status && !ACTIVE_TRIP_STATUSES.has(status)) return false;
+  const tripsForSelectedBoat = useMemo(
+    () => filterAttachableTripsForBoat(trips, selectedBoat),
+    [trips, selectedBoat],
+  );
 
-      const tripBoatId = String(trip.boatId || trip.boat?.boatId || "");
-      const tripBoatCode = String(trip.boatCode || trip.boat?.boatCode || "").toLowerCase();
-      if (boatId && tripBoatId && tripBoatId === boatId) return true;
-      if (boatCode && tripBoatCode && tripBoatCode === boatCode) return true;
-      return false;
-    });
-  }, [trips, selectedBoat]);
+  // Chọn tàu → tự gắn chuyến đang chạy / sắp chạy trong ngày (nếu có).
+  useEffect(() => {
+    if (!reportForm.boatId || !selectedBoat) return;
+    if (reportForm.tripId) return;
+    const best = pickActiveTripForBoat(trips, selectedBoat);
+    if (!best?.tripId) return;
+    setReportForm((prev) => (
+      prev.boatId === reportForm.boatId && !prev.tripId
+        ? { ...prev, tripId: best.tripId }
+        : prev
+    ));
+  }, [reportForm.boatId, reportForm.tripId, selectedBoat, trips]);
 
   const filtered = useMemo(() => {
+    const source = listTab === "history" ? enrichedHistory : enrichedIncidents;
     const q = query.trim().toLowerCase();
-    if (!q) return enrichedIncidents;
-    return enrichedIncidents.filter((item) =>
-      String(item.boatCode || "").toLowerCase().includes(q)
-      || String(item.description || "").toLowerCase().includes(q)
-      || String(item.incidentType || "").toLowerCase().includes(q)
-      || String(item.managerName || "").toLowerCase().includes(q),
-    );
-  }, [enrichedIncidents, query]);
+    const matched = !q
+      ? source
+      : source.filter((item) =>
+        String(item.boatCode || "").toLowerCase().includes(q)
+        || String(item.description || "").toLowerCase().includes(q)
+        || String(item.incidentType || "").toLowerCase().includes(q)
+        || String(item.managerName || "").toLowerCase().includes(q)
+        || String(item.rescueBoatCode || "").toLowerCase().includes(q)
+        || String(item.rescueBoatName || "").toLowerCase().includes(q)
+        || String(item.resolutionNote || "").toLowerCase().includes(q),
+      );
+
+    if (listTab !== "history") return matched;
+    return [...matched].sort((a, b) => {
+      const ta = Date.parse(String(a.resolvedAt || a.occurredAt || 0)) || 0;
+      const tb = Date.parse(String(b.resolvedAt || b.occurredAt || 0)) || 0;
+      return tb - ta;
+    });
+  }, [enrichedIncidents, enrichedHistory, listTab, query]);
 
   const stats = useMemo(() => {
     const open = enrichedIncidents.length;
@@ -244,8 +326,8 @@ export function IncidentManagement({
       item.rescueBoatId || item.rescueBoatCode || item.rescueBoatName,
     ).length;
     const unassigned = enrichedIncidents.filter((item) => !item.managerName && !item.managerUserId).length;
-    return { open, high, rescued, unassigned };
-  }, [enrichedIncidents]);
+    return { open, high, rescued, unassigned, history: enrichedHistory.length };
+  }, [enrichedIncidents, enrichedHistory]);
 
   const handleReport = async (event) => {
     event.preventDefault();
@@ -259,9 +341,12 @@ export function IncidentManagement({
     }
     setBusyId("report");
     try {
+      const boat = boats.find((item) => String(item.boatId || item.id) === String(reportForm.boatId));
+      const best = pickActiveTripForBoat(trips, boat);
+      const tripId = reportForm.tripId || best?.tripId || null;
       await reportIncident({
         boatId: reportForm.boatId,
-        tripId: reportForm.tripId || null,
+        tripId,
         incidentType: reportForm.incidentType,
         severity: reportForm.severity,
         description: reportForm.description.trim(),
@@ -271,6 +356,9 @@ export function IncidentManagement({
       showToast({
         icon: "success",
         title: lang === "VN" ? "Đã báo sự cố" : "Incident reported",
+        text: tripId
+          ? (lang === "VN" ? `Đã gắn chuyến ${best?.tripCode || tripId}` : `Linked trip ${best?.tripCode || tripId}`)
+          : undefined,
       });
       setShowReport(false);
       setReportForm({
@@ -374,12 +462,14 @@ export function IncidentManagement({
       // FE chỉ gọi Azure JWT — BE forward lệnh sang GPS hook.
       await dispatchReplacementBoat(rescueForm.incidentId, {
         rescueBoatId: rescueForm.rescueBoatId,
-        replacementBoatId: needsReplacementBoat ? rescueForm.replacementBoatId : null,
-        delayMinutes: needsReplacementBoat
+        replacementBoatId: (needsReplacementBoat || rescueForm.replacementBoatId)
+          ? (rescueForm.replacementBoatId || null)
+          : null,
+        delayMinutes: (needsReplacementBoat || rescueForm.replacementBoatId)
           ? (Number.isFinite(delayRaw) ? Math.trunc(delayRaw) : 30)
           : 0,
         note: rescueForm.note.trim() || (needsReplacementBoat
-          ? (lang === "VN" ? "Điều tàu cứu hộ và tàu thay thế tiếp tục hành trình" : "Dispatch rescue and replacement")
+          ? (lang === "VN" ? "Điều tàu thay thế" : "Dispatch replacement boat")
           : (lang === "VN" ? "Điều tàu cứu hộ kéo tàu lỗi về" : "Dispatch rescue to tow broken boat")),
       });
 
@@ -432,6 +522,12 @@ export function IncidentManagement({
         tripStatus: "",
       });
       await refresh();
+      if (listTab === "history") {
+        await loadHistory({ silent: true }).catch(() => {});
+      } else {
+        // Prefetch history so count/tab sẵn sàng sau khi đóng.
+        loadHistory({ silent: true }).catch(() => {});
+      }
     } catch (error) {
       notify({
         icon: "error",
@@ -453,11 +549,11 @@ export function IncidentManagement({
           <p className="mt-0.5 text-xs text-slate-400">
             {lang === "VN"
               ? (hideReport
-                ? "Danh sách Open · điều cứu hộ · đóng sự cố. Báo sự cố trên Bản đồ."
-                : "Danh sách Open · điều cứu hộ · đóng sự cố.")
+                ? "Đang mở · lịch sử cứu hộ · điều cứu · đóng. Báo sự cố trên Bản đồ."
+                : "Đang mở · lịch sử cứu hộ · điều cứu · đóng sự cố.")
               : (hideReport
-                ? "Open list · dispatch rescue · resolve. Report on the Live map."
-                : "Open list · dispatch rescue · resolve.")}
+                ? "Open · rescue history · dispatch · resolve. Report on the Live map."
+                : "Open · rescue history · dispatch · resolve.")}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -473,6 +569,31 @@ export function IncidentManagement({
             </button>
           ) : null}
         </div>
+      </div>
+
+      <div className="inline-flex rounded-2xl bg-slate-100 p-1 dark:bg-slate-900">
+        <button
+          type="button"
+          onClick={() => setListTab("open")}
+          className={`rounded-xl px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${
+            listTab === "open"
+              ? "bg-white text-[#124757] shadow-sm dark:bg-slate-800 dark:text-yellow-400"
+              : "text-slate-500 hover:text-slate-700 dark:text-slate-400"
+          }`}
+        >
+          {lang === "VN" ? `Đang mở (${stats.open})` : `Open (${stats.open})`}
+        </button>
+        <button
+          type="button"
+          onClick={() => setListTab("history")}
+          className={`rounded-xl px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${
+            listTab === "history"
+              ? "bg-white text-[#124757] shadow-sm dark:bg-slate-800 dark:text-yellow-400"
+              : "text-slate-500 hover:text-slate-700 dark:text-slate-400"
+          }`}
+        >
+          {lang === "VN" ? `Lịch sử (${stats.history})` : `History (${stats.history})`}
+        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -511,21 +632,41 @@ export function IncidentManagement({
             className="w-full bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-100"
           />
         </label>
-        {errorMsg ? (
+        {listTab === "history" && historyError ? (
+          <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            {historyError}
+          </div>
+        ) : null}
+        {listTab === "open" && errorMsg ? (
           <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
             {errorMsg}
+          </div>
+        ) : null}
+        {listTab === "history" ? (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => loadHistory().catch(() => {})}
+              disabled={historyLoading}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-100 disabled:opacity-50 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700"
+            >
+              <span className="material-symbols-outlined text-[14px]" aria-hidden>refresh</span>
+              {lang === "VN" ? "Tải lại lịch sử" : "Refresh history"}
+            </button>
           </div>
         ) : null}
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-        {isInitialLoading ? (
+        {(listTab === "open" ? isInitialLoading : historyLoading) ? (
           <div className="flex justify-center py-16">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#124757] dark:border-t-yellow-400" />
           </div>
         ) : filtered.length === 0 ? (
           <p className="px-6 py-14 text-center text-sm font-medium text-slate-400">
-            {lang === "VN" ? "Không có sự cố đang Open." : "No open incidents."}
+            {listTab === "history"
+              ? (lang === "VN" ? "Chưa có lịch sử cứu hộ / sự cố đã đóng." : "No rescue / resolved incident history yet.")
+              : (lang === "VN" ? "Không có sự cố đang Open." : "No open incidents.")}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -535,10 +676,18 @@ export function IncidentManagement({
                   <th className="px-4 py-3">{lang === "VN" ? "Tàu" : "Boat"}</th>
                   <th className="px-4 py-3">{lang === "VN" ? "Loại" : "Type"}</th>
                   <th className="px-4 py-3">Severity</th>
-                  <th className="px-4 py-3">{lang === "VN" ? "Mô tả" : "Description"}</th>
+                  <th className="px-4 py-3">{lang === "VN" ? "Mô tả / Cứu hộ" : "Description / Rescue"}</th>
                   <th className="px-4 py-3">{lang === "VN" ? "Manager" : "Manager"}</th>
-                  <th className="px-4 py-3">{lang === "VN" ? "Thời điểm" : "When"}</th>
-                  <th className="px-4 py-3 text-right">{lang === "VN" ? "Thao tác" : "Actions"}</th>
+                  <th className="px-4 py-3">
+                    {listTab === "history"
+                      ? (lang === "VN" ? "Đóng lúc" : "Resolved")
+                      : (lang === "VN" ? "Thời điểm" : "When")}
+                  </th>
+                  {listTab === "open" ? (
+                    <th className="px-4 py-3 text-right">{lang === "VN" ? "Thao tác" : "Actions"}</th>
+                  ) : (
+                    <th className="px-4 py-3">{lang === "VN" ? "Ghi chú đóng" : "Resolution note"}</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -562,15 +711,40 @@ export function IncidentManagement({
                     </td>
                     <td className="max-w-xs px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
                       <p className="line-clamp-2">{item.description || "—"}</p>
-                      <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                        {lang === "VN" ? "Vé active" : "Active tickets"}: {item.activeTicketCount ?? 0}
-                      </p>
+                      {listTab === "open" ? (
+                        <>
+                          <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                            {lang === "VN" ? "Vé active" : "Active tickets"}: {item.activeTicketCount ?? 0}
+                            {" · "}
+                            {lang === "VN" ? "Trên tàu" : "Onboard"}: {item.onboardPassengerCount ?? 0}
+                            {" · "}
+                            {lang === "VN" ? "Chặng sau" : "Future"}: {item.futurePassengerCount ?? 0}
+                          </p>
+                          <p className="mt-1 text-[11px] font-semibold text-[#124757] dark:text-yellow-400/90">
+                            {getReplacementMissionCopy(item, lang)}
+                          </p>
+                          {item.replacementEstimatedResumeAt ? (
+                            <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                              ETA resume: {formatWhen(item.replacementEstimatedResumeAt)}
+                              {Number.isFinite(Number(item.replacementDelayMinutes))
+                                ? ` · delay ${item.replacementDelayMinutes}p`
+                                : ""}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : null}
                       {item.rescueBoatName || item.rescueBoatCode || item.rescueBoatId ? (
                         <p className="mt-0.5 text-[11px] font-semibold text-rose-600 dark:text-rose-300">
                           {lang === "VN" ? "Cứu hộ" : "Rescue"}: {item.rescueBoatName || item.rescueBoatCode || String(item.rescueBoatId).slice(0, 8)}
                           {item.rescueDispatchedAt ? ` · ${formatWhen(item.rescueDispatchedAt)}` : ""}
                         </p>
-                      ) : null}
+                      ) : (
+                        listTab === "history" ? (
+                          <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                            {lang === "VN" ? "Không điều cứu hộ" : "No rescue dispatched"}
+                          </p>
+                        ) : null
+                      )}
                       {item.replacementBoatName || item.replacementBoatCode || item.replacementBoatId ? (
                         <p className="mt-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-300">
                           {lang === "VN" ? "Thay thế" : "Replacement"}: {item.replacementBoatName || item.replacementBoatCode || String(item.replacementBoatId).slice(0, 8)}
@@ -581,8 +755,15 @@ export function IncidentManagement({
                       {item.managerName || (item.managerUserId ? String(item.managerUserId).slice(0, 8) : "—")}
                     </td>
                     <td className="px-4 py-3 text-xs font-medium text-slate-400">
-                      {formatWhen(item.occurredAt)}
+                      {listTab === "history"
+                        ? formatWhen(item.resolvedAt || item.occurredAt)
+                        : formatWhen(item.occurredAt)}
                     </td>
+                    {listTab === "history" ? (
+                      <td className="max-w-[14rem] px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        <p className="line-clamp-3">{item.resolutionNote || "—"}</p>
+                      </td>
+                    ) : (
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap justify-end gap-1.5">
                         {canAssignManager ? (
@@ -604,6 +785,11 @@ export function IncidentManagement({
                             disabled={busyId === item.incidentId}
                             onClick={() => {
                               const ticketCount = Number(item.activeTicketCount) || 0;
+                              const mission = normalizeReplacementMissionType(item.replacementMissionType);
+                              const needsReplace = incidentNeedsReplacementBoat(item);
+                              const suggestedDelay = Number.isFinite(Number(item.replacementDelayMinutes))
+                                ? Number(item.replacementDelayMinutes)
+                                : (needsReplace ? 30 : 0);
                               setRescueForm({
                                 incidentId: item.incidentId,
                                 incidentBoatId: item.boatId || "",
@@ -611,21 +797,27 @@ export function IncidentManagement({
                                 incidentDescription: item.description || "",
                                 tripId: item.tripId || "",
                                 activeTicketCount: ticketCount,
+                                onboardPassengerCount: Number(item.onboardPassengerCount) || 0,
+                                futurePassengerCount: Number(item.futurePassengerCount) || 0,
+                                replacementMissionType: mission,
+                                replacementTargetStationName: item.replacementTargetStationName || "",
+                                replacementDelayMinutes: item.replacementDelayMinutes ?? null,
+                                replacementEstimatedResumeAt: item.replacementEstimatedResumeAt || null,
                                 rescueBoatId: "",
                                 replacementBoatId: "",
-                                delayMinutes: ticketCount > 0 ? 30 : 0,
+                                delayMinutes: suggestedDelay,
                                 note: lang === "VN"
-                                  ? (ticketCount > 0
+                                  ? (needsReplace
                                     ? `Điều tàu cứu hộ và tàu thay thế cho ${item.boatCode || ""}`
                                     : `Điều tàu cứu hộ cho ${item.boatCode || ""}`)
-                                  : (ticketCount > 0
+                                  : (needsReplace
                                     ? `Dispatch rescue and replacement for ${item.boatCode || ""}`
                                     : `Dispatch rescue for ${item.boatCode || ""}`),
                               });
                               fetchActiveBoatsByServiceType("Rescue")
                                 .then((data) => setRescueBoats(Array.isArray(data) ? data : []))
                                 .catch(() => {});
-                              if (ticketCount > 0) {
+                              if (needsReplace || incidentShowsReplacementBoatField(item)) {
                                 fetchActiveBoatsByServiceType("Passenger")
                                   .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
                                   .catch(() => {});
@@ -656,6 +848,7 @@ export function IncidentManagement({
                         ) : null}
                       </div>
                     </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -678,11 +871,16 @@ export function IncidentManagement({
               <select
                 required
                 value={reportForm.boatId}
-                onChange={(e) => setReportForm((prev) => ({
-                  ...prev,
-                  boatId: e.target.value,
-                  tripId: "",
-                }))}
+                onChange={(e) => {
+                  const boatId = e.target.value;
+                  const boat = boats.find((item) => String(item.boatId || item.id) === String(boatId));
+                  const best = pickActiveTripForBoat(trips, boat);
+                  setReportForm((prev) => ({
+                    ...prev,
+                    boatId,
+                    tripId: best?.tripId || "",
+                  }));
+                }}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#124757]/30 dark:border-slate-600 dark:bg-slate-900"
               >
                 <option value="">{lang === "VN" ? "Chọn tàu" : "Select boat"}</option>
@@ -711,7 +909,7 @@ export function IncidentManagement({
                 {tripsForSelectedBoat.map((trip) => (
                   <option key={trip.tripId || trip.id} value={trip.tripId || trip.id}>
                     {trip.tripCode || trip.tripId}
-                    {trip.status ? ` · ${trip.status}` : ""}
+                    {(trip.tripStatus || trip.status) ? ` · ${trip.tripStatus || trip.status}` : ""}
                   </option>
                 ))}
               </select>
@@ -848,10 +1046,23 @@ export function IncidentManagement({
               {" · "}
               {lang === "VN" ? "Vé active" : "Active tickets"}: {rescueForm.activeTicketCount}
               {" · "}
-              {rescueForm.tripId
-                ? `trip ${String(rescueForm.tripId).slice(0, 8)}…`
-                : (lang === "VN" ? "Không có chuyến" : "No trip")}
+              {lang === "VN" ? "Trên tàu" : "Onboard"}: {rescueForm.onboardPassengerCount}
+              {" · "}
+              {lang === "VN" ? "Chặng sau" : "Future"}: {rescueForm.futurePassengerCount}
             </p>
+            <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-200 dark:ring-slate-700">
+              <span className="block text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 mb-1">
+                {normalizeReplacementMissionType(rescueForm.replacementMissionType)}
+              </span>
+              {missionCopy}
+            </p>
+            {normalizeReplacementMissionType(rescueForm.replacementMissionType) === "PassengerRecoveryRequired" ? (
+              <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/30">
+                {lang === "VN"
+                  ? "BE thiếu dữ liệu chặng khách — kiểm tra thủ công trước khi chọn tàu thay thế."
+                  : "BE lacks passenger segment data — verify manually before choosing a replacement boat."}
+              </p>
+            ) : null}
             {!rescueForm.tripId ? (
               <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-300 dark:ring-slate-700">
                 {lang === "VN"
@@ -893,13 +1104,15 @@ export function IncidentManagement({
                 </p>
               ) : null}
             </label>
-            {needsReplacementBoat ? (
+            {showReplacementField ? (
               <label className="block space-y-1.5">
                 <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                  {lang === "VN" ? "Tàu thay thế (chở khách) *" : "Replacement passenger boat *"}
+                  {needsReplacementBoat
+                    ? (lang === "VN" ? "Tàu thay thế (chở khách) *" : "Replacement passenger boat *")
+                    : (lang === "VN" ? "Tàu thay thế (tuỳ chọn)" : "Replacement boat (optional)")}
                 </span>
                 <select
-                  required
+                  required={needsReplacementBoat}
                   value={rescueForm.replacementBoatId}
                   onChange={(e) => setRescueForm((prev) => ({ ...prev, replacementBoatId: e.target.value }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
@@ -915,8 +1128,8 @@ export function IncidentManagement({
             ) : (
               <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:ring-slate-700">
                 {lang === "VN"
-                  ? "Không có vé active — chỉ điều tàu cứu hộ (replacementBoatId = null)."
-                  : "No active tickets — rescue only (replacementBoatId = null)."}
+                  ? "Mission None — chỉ điều tàu cứu hộ (replacementBoatId = null)."
+                  : "Mission None — rescue only (replacementBoatId = null)."}
               </p>
             )}
             <label className="block space-y-1.5">
@@ -926,11 +1139,22 @@ export function IncidentManagement({
               <input
                 type="number"
                 min={0}
-                disabled={!needsReplacementBoat}
+                disabled={!showReplacementField}
                 value={rescueForm.delayMinutes}
                 onChange={(e) => setRescueForm((prev) => ({ ...prev, delayMinutes: e.target.value }))}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900"
               />
+              {showReplacementField ? (
+                <p className="text-[11px] font-medium text-slate-400">
+                  {delaySpreads
+                    ? (lang === "VN"
+                      ? `≥ ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} phút: ảnh hưởng chuyến hiện tại + các chuyến sau cùng tàu/tuyến trong ngày (xem operations/schedule).`
+                      : `≥ ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} min: affects current + later same-boat/route trips today (see operations/schedule).`)
+                    : (lang === "VN"
+                      ? `< ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} phút: chỉ ảnh hưởng chuyến hiện tại.`
+                      : `< ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} min: only the current trip is affected.`)}
+                </p>
+              ) : null}
             </label>
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">Note</span>
