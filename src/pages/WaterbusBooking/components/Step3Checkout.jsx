@@ -24,6 +24,7 @@ const formatTripTime = (isoString) => {
 // Ưu tiên giờ theo đúng chặng khách đã chọn (fromStopScheduledDeparture) thay vì giờ khởi hành
 // đầu tuyến (departureTime) — hai bến lên tàu khác nhau trên cùng chuyến sẽ có giờ khác nhau.
 const getSegmentDeparture = (trip) => trip?.fromStopScheduledDeparture || trip?.departureTime;
+const getSegmentArrival = (trip) => trip?.toStopScheduledArrival || trip?.arrivalTime;
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -597,7 +598,6 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                   ? (lang === "VN" ? "Chuyến tham quan" : "Sightseeing Trip")
                   : (lang === "VN" ? "Chiều đi" : "Departure")}
               </span>
-              <span className="text-xs font-bold text-slate-500">{departureDate}</span>
             </div>
             {isLoopRoute ? (
               <div className="space-y-1.5">
@@ -617,9 +617,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                 {(toWharfName || "--").toUpperCase()}
               </div>
             )}
-            <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2">
-              {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedDepartureTrip))}</span>
+            <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span>{lang === "VN" ? "Giờ khởi hành:" : "Departure:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedDepartureTrip))}</span></span>
+              <span>{lang === "VN" ? "Giờ đến:" : "Arrival:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentArrival(selectedDepartureTrip))}</span></span>
             </div>
+            <div className="text-xs text-slate-500 font-medium mt-1">{departureDate}</div>
             <div className="text-xs text-slate-500 font-medium mt-1">
               Ghế: {selectedSeatsDeparture.map((seat) => seat.seatNumber).join(", ")}
             </div>
@@ -632,16 +634,17 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                 <span className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 text-[10px] font-bold uppercase px-2 py-1 rounded">
                   {lang === "VN" ? "Chiều về" : "Return"}
                 </span>
-                <span className="text-xs font-bold text-slate-500">{returnDate}</span>
               </div>
               <div className="font-headline font-black text-[#124757] dark:text-white flex items-center gap-2 text-lg">
                 {(toWharfName || "--").toUpperCase()}
                 <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span>
                 {(fromWharfName || "--").toUpperCase()}
               </div>
-              <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2">
-                {lang === "VN" ? "Giờ khởi hành:" : "Time:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedReturnTrip))}</span>
+              <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span>{lang === "VN" ? "Giờ khởi hành:" : "Departure:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedReturnTrip))}</span></span>
+                <span>{lang === "VN" ? "Giờ đến:" : "Arrival:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentArrival(selectedReturnTrip))}</span></span>
               </div>
+              <div className="text-xs text-slate-500 font-medium mt-1">{returnDate}</div>
               <div className="text-xs text-slate-500 font-medium mt-1">
                 Ghế: {selectedSeatsReturn.map((seat) => seat.seatNumber).join(", ")}
               </div>

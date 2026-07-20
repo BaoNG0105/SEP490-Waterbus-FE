@@ -5,7 +5,6 @@ import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelp
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
 import { fetchActiveBoatsByServiceType, fetchAllBoats } from "../../../services/boatService";
 import { fetchAllTrips, filterAttachableTripsForBoat, pickActiveTripForBoat, toDdMmYyyy } from "../../../services/tripService";
-import { fetchOperationsSchedule, toOperationsScheduleDate } from "../../../services/operationsService";
 import { fetchManagerUsers } from "../../../services/userService";
 import {
   assignManagerToIncident,
@@ -19,7 +18,6 @@ import {
   getIncidentTypeLabel,
   getReplacementMissionCopy,
   getSeverityLabel,
-  incidentHasTrip,
   incidentNeedsReplacementBoat,
   incidentShowsReplacementBoatField,
   INCIDENT_SEVERITIES,
@@ -224,14 +222,11 @@ export function IncidentManagement({
     }));
   }, [passengerBoats, boats, rescueForm.incidentBoatId, rescueForm.rescueBoatId]);
 
-  const rescueHasTrip = incidentHasTrip(rescueForm);
   const needsReplacementBoat = incidentNeedsReplacementBoat({
-    tripId: rescueForm.tripId,
     replacementMissionType: rescueForm.replacementMissionType,
     activeTicketCount: rescueForm.activeTicketCount,
   });
   const showReplacementField = incidentShowsReplacementBoatField({
-    tripId: rescueForm.tripId,
     replacementMissionType: rescueForm.replacementMissionType,
     activeTicketCount: rescueForm.activeTicketCount,
   });
@@ -470,12 +465,14 @@ export function IncidentManagement({
         : 0;
       await dispatchReplacementBoat(rescueForm.incidentId, {
         rescueBoatId: rescueForm.rescueBoatId,
-        replacementBoatId: needsReplacementBoat ? rescueForm.replacementBoatId : null,
-        delayMinutes,
+        replacementBoatId: (needsReplacementBoat || rescueForm.replacementBoatId)
+          ? (rescueForm.replacementBoatId || null)
+          : null,
+        delayMinutes: (needsReplacementBoat || rescueForm.replacementBoatId)
+          ? (Number.isFinite(delayRaw) ? Math.trunc(delayRaw) : 30)
+          : 0,
         note: rescueForm.note.trim() || (needsReplacementBoat
-          ? (lang === "VN"
-            ? "Điều tàu cứu hộ và tàu thay thế tiếp tục hành trình"
-            : "Dispatch rescue and replacement to continue the trip")
+          ? (lang === "VN" ? "Điều tàu thay thế" : "Dispatch replacement boat")
           : (lang === "VN" ? "Điều tàu cứu hộ kéo tàu lỗi về" : "Dispatch rescue to tow broken boat")),
       });
 
@@ -727,34 +724,26 @@ export function IncidentManagement({
                     <td className="max-w-xs px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
                       <p className="line-clamp-2">{item.description || "—"}</p>
                       {listTab === "open" ? (
-                        incidentHasTrip(item) ? (
-                          <>
-                            <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                              {lang === "VN" ? "Vé active" : "Active tickets"}: {item.activeTicketCount ?? 0}
-                              {" · "}
-                              {lang === "VN" ? "Trên tàu" : "Onboard"}: {item.onboardPassengerCount ?? 0}
-                              {" · "}
-                              {lang === "VN" ? "Chặng sau" : "Future"}: {item.futurePassengerCount ?? 0}
-                            </p>
-                            <p className="mt-1 text-[11px] font-semibold text-[#124757] dark:text-yellow-400/90">
-                              {getReplacementMissionCopy(item, lang)}
-                            </p>
-                            {item.replacementEstimatedResumeAt || Number.isFinite(Number(item.replacementDelayMinutes)) ? (
-                              <p className="mt-0.5 text-[11px] font-medium text-slate-400">
-                                {item.replacementEstimatedResumeAt
-                                  ? `ETA resume: ${formatWhen(item.replacementEstimatedResumeAt)}`
-                                  : null}
-                                {Number.isFinite(Number(item.replacementDelayMinutes))
-                                  ? `${item.replacementEstimatedResumeAt ? " · " : ""}delay ${item.replacementDelayMinutes}p`
-                                  : ""}
-                              </p>
-                            ) : null}
-                          </>
-                        ) : (
+                        <>
                           <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                            {lang === "VN" ? "Chưa gắn chuyến · Chỉ là sự cố tàu" : "No trip · Boat-only incident"}
+                            {lang === "VN" ? "Vé active" : "Active tickets"}: {item.activeTicketCount ?? 0}
+                            {" · "}
+                            {lang === "VN" ? "Trên tàu" : "Onboard"}: {item.onboardPassengerCount ?? 0}
+                            {" · "}
+                            {lang === "VN" ? "Chặng sau" : "Future"}: {item.futurePassengerCount ?? 0}
                           </p>
-                        )
+                          <p className="mt-1 text-[11px] font-semibold text-[#124757] dark:text-yellow-400/90">
+                            {getReplacementMissionCopy(item, lang)}
+                          </p>
+                          {item.replacementEstimatedResumeAt ? (
+                            <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                              ETA resume: {formatWhen(item.replacementEstimatedResumeAt)}
+                              {Number.isFinite(Number(item.replacementDelayMinutes))
+                                ? ` · delay ${item.replacementDelayMinutes}p`
+                                : ""}
+                            </p>
+                          ) : null}
+                        </>
                       ) : null}
                       {item.rescueBoatName || item.rescueBoatCode || item.rescueBoatId ? (
                         <p className="mt-0.5 text-[11px] font-semibold text-rose-600 dark:text-rose-300">
@@ -810,10 +799,9 @@ export function IncidentManagement({
                               const ticketCount = Number(item.activeTicketCount) || 0;
                               const mission = normalizeReplacementMissionType(item.replacementMissionType);
                               const needsReplace = incidentNeedsReplacementBoat(item);
-                              // Chỉ prefill từ BE; FE không tự tính delay.
                               const suggestedDelay = Number.isFinite(Number(item.replacementDelayMinutes))
                                 ? Number(item.replacementDelayMinutes)
-                                : 0;
+                                : (needsReplace ? 30 : 0);
                               setRescueForm({
                                 incidentId: item.incidentId,
                                 incidentBoatId: item.boatId || "",
@@ -1065,32 +1053,29 @@ export function IncidentManagement({
             <h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
               {lang === "VN" ? "Điều tàu cứu hộ" : "Assign rescue boat"}
             </h2>
-            {rescueHasTrip ? (
-              <>
-                <p className="text-[11px] font-medium text-slate-500">
-                  {rescueForm.incidentBoatCode || "—"}
-                  {" · "}
-                  {lang === "VN" ? "Vé active" : "Active tickets"}: {rescueForm.activeTicketCount}
-                  {" · "}
-                  {lang === "VN" ? "Trên tàu" : "Onboard"}: {rescueForm.onboardPassengerCount}
-                  {" · "}
-                  {lang === "VN" ? "Chặng sau" : "Future"}: {rescueForm.futurePassengerCount}
-                </p>
-                <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-200 dark:ring-slate-700">
-                  <span className="block text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 mb-1">
-                    {normalizeReplacementMissionType(rescueForm.replacementMissionType)}
-                  </span>
-                  {missionCopy}
-                </p>
-                {normalizeReplacementMissionType(rescueForm.replacementMissionType) === "PassengerRecoveryRequired" ? (
-                  <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/30">
-                    {lang === "VN"
-                      ? "BE thiếu dữ liệu chặng khách — kiểm tra thủ công trước khi chọn tàu thay thế."
-                      : "BE lacks passenger segment data — verify manually before choosing a replacement boat."}
-                  </p>
-                ) : null}
-              </>
-            ) : (
+            <p className="text-[11px] font-medium text-slate-500">
+              {rescueForm.incidentBoatCode || "—"}
+              {" · "}
+              {lang === "VN" ? "Vé active" : "Active tickets"}: {rescueForm.activeTicketCount}
+              {" · "}
+              {lang === "VN" ? "Trên tàu" : "Onboard"}: {rescueForm.onboardPassengerCount}
+              {" · "}
+              {lang === "VN" ? "Chặng sau" : "Future"}: {rescueForm.futurePassengerCount}
+            </p>
+            <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-200 dark:ring-slate-700">
+              <span className="block text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 mb-1">
+                {normalizeReplacementMissionType(rescueForm.replacementMissionType)}
+              </span>
+              {missionCopy}
+            </p>
+            {normalizeReplacementMissionType(rescueForm.replacementMissionType) === "PassengerRecoveryRequired" ? (
+              <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/30">
+                {lang === "VN"
+                  ? "BE thiếu dữ liệu chặng khách — kiểm tra thủ công trước khi chọn tàu thay thế."
+                  : "BE lacks passenger segment data — verify manually before choosing a replacement boat."}
+              </p>
+            ) : null}
+            {!rescueForm.tripId ? (
               <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-300 dark:ring-slate-700">
                 {lang === "VN"
                   ? "Chưa gắn chuyến · Chỉ là sự cố tàu — điều tàu cứu hộ kéo về, không cần tàu thay thế."
@@ -1134,10 +1119,12 @@ export function IncidentManagement({
             {showReplacementField ? (
               <label className="block space-y-1.5">
                 <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                  {lang === "VN" ? "Tàu thay thế (chở khách) *" : "Replacement passenger boat *"}
+                  {needsReplacementBoat
+                    ? (lang === "VN" ? "Tàu thay thế (chở khách) *" : "Replacement passenger boat *")
+                    : (lang === "VN" ? "Tàu thay thế (tuỳ chọn)" : "Replacement boat (optional)")}
                 </span>
                 <select
-                  required
+                  required={needsReplacementBoat}
                   value={rescueForm.replacementBoatId}
                   onChange={(e) => setRescueForm((prev) => ({ ...prev, replacementBoatId: e.target.value }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
@@ -1150,7 +1137,13 @@ export function IncidentManagement({
                   ))}
                 </select>
               </label>
-            ) : null}
+            ) : (
+              <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:ring-slate-700">
+                {lang === "VN"
+                  ? "Mission None — chỉ điều tàu cứu hộ (replacementBoatId = null)."
+                  : "Mission None — rescue only (replacementBoatId = null)."}
+              </p>
+            )}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
                 {lang === "VN" ? "Delay (phút) — Manager nhập" : "Delay (min) — Manager input"}
@@ -1165,10 +1158,13 @@ export function IncidentManagement({
               />
               {showReplacementField ? (
                 <p className="text-[11px] font-medium text-slate-400">
-                  {lang === "VN"
-                    ? `FE chỉ gửi delayMinutes; BE tính Delayed / adjusted time. Rule BE: <${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES}p = chuyến hiện tại; ≥${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES}p = thêm chuyến sau cùng tàu+tuyến trong ngày.`
-                    : `FE only sends delayMinutes; BE computes Delayed / adjusted times. BE rule: <${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES}m = current trip; ≥${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES}m = also later same boat+route trips today.`}
-                  {delaySpreads ? (lang === "VN" ? " (giá trị hiện tại ≥ ngưỡng)." : " (current value ≥ threshold).") : ""}
+                  {delaySpreads
+                    ? (lang === "VN"
+                      ? `≥ ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} phút: ảnh hưởng chuyến hiện tại + các chuyến sau cùng tàu/tuyến trong ngày (xem operations/schedule).`
+                      : `≥ ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} min: affects current + later same-boat/route trips today (see operations/schedule).`)
+                    : (lang === "VN"
+                      ? `< ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} phút: chỉ ảnh hưởng chuyến hiện tại.`
+                      : `< ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} min: only the current trip is affected.`)}
                 </p>
               ) : null}
             </label>

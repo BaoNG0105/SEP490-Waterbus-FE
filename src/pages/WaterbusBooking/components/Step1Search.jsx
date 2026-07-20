@@ -140,7 +140,7 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
       </div>
 
       {/* Điểm đi / Điểm đến */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 sm:items-end sm:gap-4">
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Bến đi" : "From"}</label>
           <FormSelect
@@ -152,6 +152,19 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
             options={fromOptions}
           />
         </div>
+
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => updateData({ fromWharf: toWharf, toWharf: fromWharf })}
+            disabled={!fromWharf && !toWharf}
+            title={lang === "VN" ? "Đảo bến đi/đến" : "Swap stations"}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-[#124757] hover:text-[#124757] hover:rotate-180 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-[#FFD100]"
+          >
+            <span className="material-symbols-outlined text-xl">swap_horiz</span>
+          </button>
+        </div>
+
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Bến đến" : "To"}</label>
           <FormSelect

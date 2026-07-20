@@ -24,34 +24,34 @@ export const heroSlides = [
 export const guidelines = [
     {
         id: 1,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png",
+        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570508/hi4eokbj9cwae9p6kghd.png",
         titleVn: "Chọn hành trình mong muốn",
         titleEn: "Choose Your Desired Route",
-        descVn: "Bắt đầu bằng việc chọn bến đi, bến đến, ngày giờ và loại vé phù hợp với nhu cầu di chuyển của bạn.",
+        descVn: "Bắt đầu bằng việc chọn chuyến đi yêu thích, ngày giờ và loại vé phù hợp với nhu cầu di chuyển của bạn.",
         descEn: "Start by selecting your departure wharf, destination, date, time, and ticket type that fits your needs."
     },
     {
         id: 2,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg",
-        titleVn: "Chọn ghế & Nhập thông tin hành khách",
-        titleEn: "Select Seat & Enter Passenger Info",
-        descVn: "Lựa chọn vị trí ghế ngồi yêu thích trên sơ đồ tàu và nhập thông tin hành khách chính xác.",
-        descEn: "Choose your preferred seat location on the vessel layout and enter accurate passenger information."
+        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570509/fphxlsflzplexebwbas0.png",
+        titleVn: "Chọn vị trí ngồi",
+        titleEn: "Select Seat Location",
+        descVn: "Lựa chọn vị trí ghế ngồi yêu thích trên sơ đồ tàu.",
+        descEn: "Choose your preferred seat location on the boat layout."
     },
     {
         id: 3,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075336/wkzbfwc5xyfby9ueute1.png",
-        titleVn: "Thanh toán an toàn, đa phương thức",
-        titleEn: "Secure Multi-method Payment",
-        descVn: "Thực hiện thanh toán nhanh chóng và bảo mật qua các ví điện tử, thẻ ngân hàng hoặc cổng thanh toán hỗ trợ.",
-        descEn: "Make quick and secure payment via supported e-wallets, bank cards, or payment gateways."
+        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570508/pgee4jcvkxksuoigvefk.png",
+        titleVn: "Nhập thông tin hành khác & thanh toán an toàn",
+        titleEn: "Enter passenger information and safe payment",
+        descVn: "Nhập thông tin hành khách chính xác và thực hiện thanh toán nhanh chóng và bảo mật qua PayOS.",
+        descEn: "Enter accurate passenger information and make quick and secure payment via PayOS."
     },
     {
         id: 4,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png",
+        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570508/ws8ueijujgru30bcjoff.png",
         titleVn: "Nhận vé QR qua Email & SMS",
         titleEn: "Receive QR Ticket via Email & SMS",
-        descVn: "Hệ thống sẽ gửi mã QR vé về email và số điện thoại của bạn. Xuất trình mã này khi lên tàu.",
+        descVn: "Hệ thống sẽ gửi mã QR vé về email và app của bạn. Xuất trình mã này khi lên tàu.",
         descEn: "The system will send your ticket QR code to your email and phone. Present this code when boarding."
     },
 ];
