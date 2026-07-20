@@ -368,7 +368,6 @@ export function BookingDetailPage({ serviceType }) {
                     <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase ${group.isReturn ? "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" : "bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300"}`}>
                       {group.isReturn ? (lang === "VN" ? "Chiều về" : "Return") : (lang === "VN" ? "Chiều đi" : "Departure")}
                     </span>
-                    <span className="font-mono text-xs font-bold text-slate-400">{group.tripCode}</span>
                   </div>
                   <span className="text-xs font-bold text-slate-400">
                     {group.items.length} {lang === "VN" ? "vé" : "ticket(s)"}
@@ -469,28 +468,24 @@ export function BookingDetailPage({ serviceType }) {
                     <span>{lang === "VN" ? "Tạm tính" : "Subtotal"}</span>
                     <span className="font-bold">{currencyFormatter.format(booking.subtotalAmount)}</span>
                   </div>
-                  {booking.discountAmount > 0 && (
-                    <div className="flex justify-between font-bold text-emerald-600 dark:text-emerald-400">
-                      <span>{lang === "VN" ? "Giảm giá" : "Discount"}</span>
-                      <span>-{currencyFormatter.format(booking.discountAmount)}</span>
-                    </div>
-                  )}
-                  {booking.promotionCode && (
-                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                      <span>{lang === "VN" ? "Mã ưu đãi" : "Promotion code"}</span>
-                      <span className="font-mono font-bold text-[#124757] dark:text-yellow-400">{booking.promotionCode}</span>
-                    </div>
-                  )}
-                  {(booking.pointsUsed > 0 || booking.pointsEarned > 0) && (
-                    <div className="flex justify-between text-slate-600 dark:text-slate-300">
-                      <span>{lang === "VN" ? "Điểm tích lũy" : "Points"}</span>
-                      <span className="font-bold">
-                        {booking.pointsUsed > 0 ? `-${booking.pointsUsed}` : ""}
-                        {booking.pointsUsed > 0 && booking.pointsEarned > 0 ? " / " : ""}
-                        {booking.pointsEarned > 0 ? `+${booking.pointsEarned}` : ""}
-                      </span>
-                    </div>
-                  )}
+                  <div className={`flex justify-between ${booking.discountAmount > 0 ? "font-bold text-emerald-600 dark:text-emerald-400" : "text-slate-600 dark:text-slate-300"}`}>
+                    <span>{lang === "VN" ? "Giảm giá" : "Discount"}</span>
+                    <span className="font-bold">{booking.discountAmount > 0 ? `-${currencyFormatter.format(booking.discountAmount)}` : currencyFormatter.format(0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span>{lang === "VN" ? "Mã ưu đãi" : "Promotion code"}</span>
+                    <span className={booking.promotionCode ? "font-mono font-bold text-[#124757] dark:text-yellow-400" : "font-bold"}>
+                      {booking.promotionCode || "--"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                    <span>{lang === "VN" ? "Điểm đã dùng" : "Points used"}</span>
+                    <span className="font-bold">{booking.pointsUsed > 0 ? `-${booking.pointsUsed}` : 0}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                    <span>{lang === "VN" ? "Điểm tích được" : "Points earned"}</span>
+                    <span className="font-bold">{booking.pointsEarned > 0 ? `+${booking.pointsEarned}` : 0}</span>
+                  </div>
                   <div className="flex justify-between border-t border-dashed border-slate-200 pt-3 dark:border-slate-700">
                     <span className="font-headline font-black text-[#124757] dark:text-white">{lang === "VN" ? "Tổng cộng" : "Total"}</span>
                     <span className="font-headline text-xl font-black text-[#124757] dark:text-yellow-400">{currencyFormatter.format(booking.totalAmount)}</span>
