@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import { FormSelect } from "../../../components/FormSelect";
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchTripSearch } from "../../../services/tripService";
+import { getTodayDateString } from "../../../utils/dateOnly";
 
 const getStationId = (station) => String(station.stationId || station.id || "");
 const getStationName = (station) => station.stationName || station.name || "--";
@@ -182,12 +183,12 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Ngày đi" : "Departure Date"}</label>
-          <input type="date" value={departureDate} onChange={(e) => updateData({ departureDate: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+          <input type="date" value={departureDate} min={getTodayDateString()} onChange={(e) => updateData({ departureDate: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
         </div>
         {isRoundTrip && (
           <div className="space-y-2 animate-fade-in">
             <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Ngày về" : "Return Date"}</label>
-            <input type="date" value={returnDate} min={departureDate} onChange={(e) => updateData({ returnDate: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+            <input type="date" value={returnDate} min={departureDate || getTodayDateString()} onChange={(e) => updateData({ returnDate: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
           </div>
         )}
       </div>
