@@ -1081,7 +1081,7 @@ export function IncidentManagement({
                   ? "Chưa gắn chuyến · Chỉ là sự cố tàu — điều tàu cứu hộ kéo về, không cần tàu thay thế."
                   : "No trip · Boat-only incident — dispatch rescue to tow; no replacement needed."}
               </p>
-            )}
+            ) : null}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
                 {lang === "VN" ? "Tàu cứu hộ (kéo) *" : "Rescue boat *"}
