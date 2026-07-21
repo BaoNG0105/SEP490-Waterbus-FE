@@ -185,14 +185,12 @@ export function PromotionDetail() {
               </h3>
               <ul className="space-y-2.5 text-sm text-slate-600 dark:text-slate-300 font-body">
                 <li className="flex items-start gap-2">
-                  <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400 mt-0.5">event</span>
                   {lang === "VN"
                     ? `Hiệu lực từ ${formatDate(promo.validFrom, lang)} đến ${formatDate(promo.validTo, lang)}`
                     : `Valid from ${formatDate(promo.validFrom, lang)} to ${formatDate(promo.validTo, lang)}`}
                 </li>
                 {promo.minOrderValue != null && (
                   <li className="flex items-start gap-2">
-                    <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400 mt-0.5">payments</span>
                     {lang === "VN"
                       ? `Áp dụng cho đơn hàng từ ${formatCurrency(promo.minOrderValue, lang)}`
                       : `Applies to orders from ${formatCurrency(promo.minOrderValue, lang)}`}
@@ -200,7 +198,6 @@ export function PromotionDetail() {
                 )}
                 {promo.promotionType === PROMOTION_TYPE.PERCENT && promo.maxDiscountAmount != null && (
                   <li className="flex items-start gap-2">
-                    <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400 mt-0.5">savings</span>
                     {lang === "VN"
                       ? `Giảm tối đa ${formatCurrency(promo.maxDiscountAmount, lang)}`
                       : `Maximum discount of ${formatCurrency(promo.maxDiscountAmount, lang)}`}
@@ -250,7 +247,7 @@ export function PromotionDetail() {
             <div className="flex flex-wrap gap-4 pt-2">
               {showWaterbusCta && (
                 <Link
-                  to="/waterbus-booking"
+                  to="/#services-section"
                   className="bg-yellow-400 text-[#124757] px-8 py-3.5 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-300 hover:scale-105 hover:shadow-xl transition-all duration-300 flex items-center gap-2"
                 >
                   {lang === "VN" ? "Đặt vé ngay" : "Book Now"}

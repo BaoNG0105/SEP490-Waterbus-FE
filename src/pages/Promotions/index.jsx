@@ -57,7 +57,7 @@ export const Promotions = () => {
   }, [heroPromos.length]);
 
   return (
-    <main className="pt-28 pb-20 bg-surface dark:bg-slate-900 transition-colors duration-300 min-h-screen relative">
+    <main className="pt-28 pb-20 bg-white dark:bg-slate-900 transition-colors duration-300 min-h-screen relative">
       <section className="px-4 md:px-8 max-w-7xl mx-auto mb-20">
         <div className="relative w-full h-105 md:h-125 rounded-4xl overflow-hidden group shadow-2xl bg-slate-800">
           {isLoading ? (
@@ -93,9 +93,6 @@ export const Promotions = () => {
                   <div className="absolute inset-0 bg-linear-to-r from-slate-900/90 via-slate-900/50 to-transparent" />
                 </div>
                 <div className="relative h-full flex flex-col justify-center px-8 md:px-16 max-w-3xl">
-                  <p className="text-yellow-400 font-headline font-black text-xs uppercase tracking-widest mb-3">
-                    {slide.promotionCode} · {formatDiscount(slide, lang)}
-                  </p>
                   <h1 className="text-4xl md:text-6xl font-bold font-headline text-white leading-[1.1] mb-6 tracking-tighter">
                     {slide.promotionName}
                   </h1>
@@ -110,7 +107,7 @@ export const Promotions = () => {
                         block: "start",
                       })
                     }
-                    className="w-fit bg-primary-container dark:bg-yellow-400 text-slate-900 px-8 py-4 rounded-full font-bold hover:scale-105 transition-all flex items-center gap-2 shadow-lg"
+                    className="w-fit bg-yellow-400 text-[#124757] px-8 py-4 rounded-full font-headline font-bold hover:bg-yellow-300 hover:scale-105 transition-all flex items-center gap-2 shadow-lg"
                   >
                     {lang === "VN" ? "Khám phá ngay" : "Explore Now"}
                     <span className="material-symbols-outlined">arrow_downward</span>
@@ -129,7 +126,7 @@ export const Promotions = () => {
                   onClick={() => setCurrentSlide(idx)}
                   className={`h-1.5 rounded-full transition-all duration-300 ${
                     currentSlide === idx
-                      ? "w-12 bg-primary-container dark:bg-yellow-400"
+                      ? "w-12 bg-yellow-400"
                       : "w-6 bg-white/30 hover:bg-white/50"
                   }`}
                 />
@@ -140,8 +137,11 @@ export const Promotions = () => {
       </section>
 
       <section id="promotions-grid" className="px-4 md:px-8 max-w-7xl mx-auto scroll-mt-24">
-        <div className="flex flex-col mb-12">
-          <h2 className="text-4xl font-bold font-headline tracking-tighter mb-2 text-slate-900 dark:text-white">
+        <div className="flex flex-col items-center text-center mb-16 space-y-4">
+          <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+            {lang === "VN" ? "Chương trình ưu đãi" : "Exclusive Offers"}
+          </p>
+          <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
             {lang === "VN" ? "Ưu đãi hiện hành" : "Current Offers"}
           </h2>
         </div>
@@ -151,7 +151,7 @@ export const Promotions = () => {
             <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />
           </div>
         ) : promotions.length === 0 ? (
-          <p className="text-center text-slate-400 py-16 font-bold">
+          <p className="text-center text-slate-400 py-16 font-medium">
             {errorMsg || (lang === "VN" ? "Chưa có ưu đãi." : "No offers available.")}
           </p>
         ) : (
@@ -160,7 +160,7 @@ export const Promotions = () => {
               <Link
                 key={promo.promotionCode}
                 to={`/promotions/${promo.promotionCode}`}
-                className="group bg-surface-container-lowest dark:bg-slate-800 rounded-[2.5rem] p-4 transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 border border-surface-variant dark:border-slate-700 block"
+                className="group bg-white dark:bg-slate-800 rounded-4xl shadow-lg p-4 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1.5 border border-slate-100 dark:border-slate-700/50 block"
               >
                 <div className="relative h-64 rounded-4xl overflow-hidden mb-6">
                   <img
@@ -170,16 +170,13 @@ export const Promotions = () => {
                   />
                 </div>
                 <div className="px-4 pb-4">
-                  {/* <p className="text-[10px] font-black uppercase tracking-widest text-[#124757] dark:text-yellow-400 mb-2">
-                    {promo.promotionCode} · {formatDiscount(promo, lang)}
-                  </p> */}
-                  <h3 className="text-2xl font-bold font-headline mb-3 tracking-tight text-slate-900 dark:text-white">
+                  <h3 className="text-2xl font-bold font-headline mb-3 tracking-tight text-[#124757] dark:text-white">
                     {promo.promotionName}
                   </h3>
-                  <p className="text-on-surface-variant dark:text-white/70 text-sm mb-6 line-clamp-3 leading-relaxed">
+                  <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 line-clamp-3 leading-relaxed">
                     {promo.description || formatDiscount(promo, lang)}
                   </p>
-                  <div className="w-full py-4 rounded-xl border-2 border-outline-variant dark:border-slate-600 font-bold text-sm text-center text-slate-700 dark:text-white group-hover:bg-primary group-hover:border-primary group-hover:text-white dark:group-hover:bg-yellow-400 dark:group-hover:border-yellow-400 dark:group-hover:text-slate-900 transition-colors">
+                  <div className="w-full py-4 rounded-xl border-2 border-slate-200 dark:border-slate-600 font-bold text-sm text-center text-slate-700 dark:text-white group-hover:bg-[#124757] group-hover:border-[#124757] group-hover:text-white dark:group-hover:bg-yellow-400 dark:group-hover:border-yellow-400 dark:group-hover:text-slate-900 transition-colors">
                     {lang === "VN" ? "Xem chi tiết" : "View Details"}
                   </div>
                 </div>
