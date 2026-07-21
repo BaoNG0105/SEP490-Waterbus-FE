@@ -1,12 +1,5 @@
 // src/data/homeData.js
 
-// DỮ LIỆU MODAL QUẢNG CÁO
-export const promoPosters = [
-    "https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=800",
-    "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=800",
-    "https://images.unsplash.com/photo-1528150395403-992a693e26c8?q=80&w=800",
-];
-
 // DỮ LIỆU SLIDE HERO
 export const heroSlides = [
     {

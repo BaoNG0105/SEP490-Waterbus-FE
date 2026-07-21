@@ -12,7 +12,6 @@ const heroVideo = "https://res.cloudinary.com/dygipvoal/video/upload/v1783865624
 const fallbackPromoImg = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
 import {
-  promoPosters,
   testimonialsData,
   appImages
 } from "../../data/homeData";
@@ -59,6 +58,12 @@ export const Home = () => {
   // State quản lý danh sách Khuyến mãi công khai
   const [promotions, setPromotions] = useState([]);
   const [isLoadingPromotions, setIsLoadingPromotions] = useState(true);
+
+  // Danh sách khuyến mãi có ảnh, dùng làm poster cho Modal Quảng Cáo (dữ liệu thật thay cho mock)
+  const promoPosterSlides = useMemo(
+    () => promotions.filter((promo) => promo.imageUrl),
+    [promotions]
+  );
 
   // Các state hiển thị
   const [heroSlide, setHeroSlide] = useState(0);
@@ -166,26 +171,26 @@ export const Home = () => {
     return () => elements.forEach((el) => observer.unobserve(el));
   }, []);
 
-  // Hiển thị Modal Quảng Cáo sau 3 giây
+  // Hiển thị Modal Quảng Cáo sau 3 giây (chỉ khi đã có ảnh khuyến mãi thật để hiển thị)
   useEffect(() => {
     const hasSeenPromo = sessionStorage.getItem("hasSeenPromo");
-    if (!hasSeenPromo) {
+    if (!hasSeenPromo && promoPosterSlides.length > 0) {
       const timer = setTimeout(() => {
         setShowPromoModal(true);
         sessionStorage.setItem("hasSeenPromo", "true");
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [promoPosterSlides.length]);
 
   // Tự động chuyển slide trong Modal Quảng Cáo khi nó đang hiển thị
   useEffect(() => {
-    if (!showPromoModal) return;
+    if (!showPromoModal || promoPosterSlides.length === 0) return;
     const slideTimer = setInterval(() => {
-      setPromoSlide((prev) => (prev + 1) % promoPosters.length);
+      setPromoSlide((prev) => (prev + 1) % promoPosterSlides.length);
     }, 3000);
     return () => clearInterval(slideTimer);
-  }, [showPromoModal]);
+  }, [showPromoModal, promoPosterSlides.length]);
 
   // Icon cuộn hero: thấp ở đáy — ẩn khi đã lướt xuống
   useEffect(() => {
@@ -989,11 +994,11 @@ export const Home = () => {
                 <span className="material-symbols-outlined text-sm">close</span>
               </button>
               <div className="relative w-full aspect-4/5 bg-slate-100 dark:bg-slate-800">
-                {promoPosters.map((poster, index) => (
+                {promoPosterSlides.map((promo, index) => (
                   <img
-                    key={index}
-                    src={poster}
-                    alt="Promotion"
+                    key={promo.promotionCode}
+                    src={promo.imageUrl}
+                    alt={promo.promotionName}
                     className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${index === promoSlide ? "opacity-100 z-10" : "opacity-0 z-0"
                       }`}
                   />
@@ -1004,13 +1009,18 @@ export const Home = () => {
                 <span className="inline-block px-3 py-1 bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 text-[10px] font-bold rounded-full mb-3 uppercase tracking-widest">
                   {lang === "VN" ? "Ưu đãi giới hạn" : "Limited Offer"}
                 </span>
-                <h3 className="text-2xl font-headline font-bold text-white mb-6 shadow-sm">
-                  {lang === "VN"
-                    ? "Nhận Deal hấp dẫn cùng WaterBus"
-                    : "Get attractive deals with WaterBus"}
+                <h3 className="text-2xl font-headline font-bold text-white mb-6 shadow-sm line-clamp-2">
+                  {promoPosterSlides[promoSlide]?.promotionName ||
+                    (lang === "VN"
+                      ? "Nhận Deal hấp dẫn cùng WaterBus"
+                      : "Get attractive deals with WaterBus")}
                 </h3>
                 <Link
-                  to="/promotions"
+                  to={
+                    promoPosterSlides[promoSlide]
+                      ? `/promotions/${promoPosterSlides[promoSlide].promotionCode}`
+                      : "/promotions"
+                  }
                   className="w-full bg-primary-container dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 py-4 rounded-xl font-headline font-bold hover:scale-105 transition-transform flex items-center justify-center gap-2 shadow-lg"
                 >
                   {lang === "VN"
@@ -1022,9 +1032,9 @@ export const Home = () => {
                 </Link>
               </div>
               <div className="absolute top-5 left-1/2 -translate-x-1/2 flex gap-1.5 z-30 bg-black/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                {promoPosters.map((_, index) => (
+                {promoPosterSlides.map((promo, index) => (
                   <div
-                    key={index}
+                    key={promo.promotionCode}
                     className={`h-1.5 rounded-full transition-all duration-300 ${index === promoSlide ? "w-4 bg-white" : "w-1.5 bg-white/50"
                       }`}
                   ></div>
