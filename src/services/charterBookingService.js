@@ -30,6 +30,14 @@ import {
     exportCharterBookingTicketsPdf as apiExportCharterBookingTicketsPdf,
     exportCharterBookingTicketsPdfByQrToken as apiExportCharterBookingTicketsPdfByQrToken,
 } from '../api/charterBookingApi';
+import {
+    CHARTER_BOAT_HOLDING_STATUSES,
+    collectOccupiedBoatIdsForSchedule,
+    extractCharterBookingList,
+    getAssignedBoatIdsFromBooking,
+    normalizeBooking,
+    normalizeCharterScheduleDate,
+} from '../utils/charterBookingAdmin';
 
 export const fetchMyCharterBookings = async () => {
     try {
@@ -141,7 +149,9 @@ export const modifyAdminCharterBookingStatus = async (id, bookingStatusOrPayload
 
 export const submitAdminCharterBookingQuote = async (id, quotePayload) => {
     try {
-        return await apiQuoteAdminCharterBooking(id, quotePayload);
+        const response = await apiQuoteAdminCharterBooking(id, quotePayload);
+        invalidateOccupiedBoatsCache();
+        return response;
     } catch (error) {
         console.error(`Lỗi khi chốt giá charter booking ${id}:`, error);
         throw error;
@@ -241,5 +251,95 @@ export const rejectCharterPassengerAddRequest = async (id, requestBatchId, note,
     } catch (error) {
         console.error(`Lỗi từ chối thêm HK ${requestBatchId}:`, error);
         throw error;
+    }
+};
+
+/**
+ * Soft-filter cho dropdown chốt giá: lấy boatId đang bị giữ cùng ngày.
+ * Cache 2 phút + chỉ hydrate detail các booking cùng ngày thiếu selectedBoats
+ * (không dùng cho gate tạo trip — trùng giờ do BE validate).
+ */
+const OCCUPIED_BOATS_TTL_MS = 2 * 60 * 1000;
+const occupiedBoatsCache = new Map(); // cacheKey -> { at, ids }
+const occupiedBoatsInflight = new Map();
+
+export const invalidateOccupiedBoatsCache = () => {
+    occupiedBoatsCache.clear();
+    occupiedBoatsInflight.clear();
+};
+
+export const fetchOccupiedBoatIdsForCharterDate = async ({
+    currentBookingId,
+    departureDate,
+    useAssignedApi = false,
+    force = false,
+} = {}) => {
+    const dateKey = normalizeCharterScheduleDate(departureDate);
+    if (!dateKey) return [];
+
+    const scope = useAssignedApi ? "assigned" : "admin";
+    const cacheKey = `${scope}|${dateKey}|${String(currentBookingId || "")}`;
+    const cached = occupiedBoatsCache.get(cacheKey);
+    if (!force && cached && Date.now() - cached.at < OCCUPIED_BOATS_TTL_MS) {
+        return cached.ids;
+    }
+    if (!force && occupiedBoatsInflight.has(cacheKey)) {
+        return occupiedBoatsInflight.get(cacheKey);
+    }
+
+    const promise = (async () => {
+        const listPayload = useAssignedApi
+            ? await fetchAssignedCharterBookings()
+            : await fetchAdminCharterBookings();
+        const otherBookings = extractCharterBookingList(listPayload).map(normalizeBooking);
+
+        const sameDayHoldings = otherBookings.filter((other) => (
+            String(other.id) !== String(currentBookingId || "")
+            && CHARTER_BOAT_HOLDING_STATUSES.has(String(other.status || ""))
+            && normalizeCharterScheduleDate(other.departureDate) === dateKey
+        ));
+
+        const needsDetail = sameDayHoldings.filter(
+            (other) => getAssignedBoatIdsFromBooking(other).length === 0,
+        );
+        const hydratedById = new Map();
+        if (needsDetail.length > 0) {
+            const fetchDetail = useAssignedApi
+                ? fetchAssignedCharterBookingDetail
+                : fetchAdminCharterBookingDetail;
+            const details = await Promise.all(
+                needsDetail.map(async (other) => {
+                    try {
+                        return normalizeBooking(await fetchDetail(other.id));
+                    } catch (error) {
+                        console.error(`Không tải detail để ẩn tàu trùng lịch ${other.id}:`, error);
+                        return null;
+                    }
+                }),
+            );
+            details.filter(Boolean).forEach((detail) => {
+                hydratedById.set(String(detail.id), detail);
+            });
+        }
+
+        const bookingsForConflict = otherBookings.map((other) => (
+            hydratedById.get(String(other.id)) || other
+        ));
+
+        const ids = collectOccupiedBoatIdsForSchedule({
+            currentBookingId,
+            departureDate,
+            otherBookings: bookingsForConflict,
+            matchMode: "day",
+        });
+        occupiedBoatsCache.set(cacheKey, { at: Date.now(), ids });
+        return ids;
+    })();
+
+    occupiedBoatsInflight.set(cacheKey, promise);
+    try {
+        return await promise;
+    } finally {
+        occupiedBoatsInflight.delete(cacheKey);
     }
 };

@@ -1,11 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllRoutes } from "../../../services/routeService";
+import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
 import { fetchAllBoats } from "../../../services/boatService";
-import { addNewTrip, buildTripPayload, SEAT_TYPE_OPTIONS } from "../../../services/tripService";
+import {
+  addNewTrip,
+  buildTripPayload,
+  getTripCreateLeadTimeError,
+  SEAT_TYPE_OPTIONS,
+} from "../../../services/tripService";
 import { FormSelect } from "../../../components/FormSelect";
+import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify } from "../../../utils/swalToast";
+
+const pickStopOrder = (stop) => Number(stop?.stopOrder ?? stop?.order ?? stop?.StopOrder ?? 0);
+const pickStationLabel = (stop) =>
+  stop?.stationName
+  || stop?.station?.stationName
+  || stop?.stationCode
+  || stop?.station?.stationCode
+  || stop?.name
+  || "--";
+
+/** Bến giữa tuyến (bỏ đầu + cuối) — cần gửi full stops[] kể cả stayDurationMinutes = 0. */
+const toIntermediateStops = (routeDetail) => {
+  const raw = Array.isArray(routeDetail?.stops)
+    ? routeDetail.stops
+    : (Array.isArray(routeDetail?.routeStops) ? routeDetail.routeStops : []);
+  const sorted = [...raw].sort((a, b) => pickStopOrder(a) - pickStopOrder(b));
+  if (sorted.length <= 2) return [];
+  return sorted.slice(1, -1).map((stop) => ({
+    stopOrder: pickStopOrder(stop),
+    stationLabel: pickStationLabel(stop),
+    stayDurationMinutes: Number(stop?.stayDurationMinutes ?? stop?.standardStayMin ?? 0) || 0,
+  }));
+};
 
 export function CreateTrip() {
   const { lang } = useApp();
@@ -17,11 +46,13 @@ export function CreateTrip() {
     operatingDate: "",
     departureTime: "",
     seatTypePrices: [],
+    stops: [],
   });
 
   const [routes, setRoutes] = useState([]);
   const [boats, setBoats] = useState([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [isLoadingStops, setIsLoadingStops] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -45,6 +76,41 @@ export function CreateTrip() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleRouteChange = async (routeCode) => {
+    setFormData((prev) => ({ ...prev, routeCode, stops: [] }));
+    const selected = routes.find((r) => String(r.routeCode) === String(routeCode));
+    const routeId = selected?.routeId || selected?.id;
+    if (!routeId) return;
+
+    try {
+      setIsLoadingStops(true);
+      const detail = await fetchRouteDetail(routeId);
+      const intermediates = toIntermediateStops(detail);
+      setFormData((prev) => ({ ...prev, stops: intermediates }));
+    } catch (error) {
+      console.error("Lỗi tải route stops:", error);
+      setErrorMsg(
+        lang === "VN"
+          ? "Không tải được danh sách bến dừng của tuyến."
+          : "Unable to load route stops.",
+      );
+    } finally {
+      setIsLoadingStops(false);
+    }
+  };
+
+  const handleStopMinutesChange = (stopOrder, value) => {
+    const minutes = Math.max(0, Number(value) || 0);
+    setFormData((prev) => ({
+      ...prev,
+      stops: prev.stops.map((stop) => (
+        Number(stop.stopOrder) === Number(stopOrder)
+          ? { ...stop, stayDurationMinutes: minutes }
+          : stop
+      )),
+    }));
+  };
+
   const handleAddSeatPrice = () => {
     setFormData((prev) => ({
       ...prev,
@@ -54,7 +120,7 @@ export function CreateTrip() {
 
   const handleSeatPriceChange = (index, field, value) => {
     const updated = [...formData.seatTypePrices];
-    updated[index] = { ...updated[index], [field]: field === "price" ? value : value };
+    updated[index] = { ...updated[index], [field]: value };
     setFormData((prev) => ({ ...prev, seatTypePrices: updated }));
   };
 
@@ -71,6 +137,12 @@ export function CreateTrip() {
       setIsSubmitting(true);
       setErrorMsg("");
 
+      const leadError = getTripCreateLeadTimeError(formData.operatingDate, formData.departureTime, lang);
+      if (leadError) {
+        setErrorMsg(leadError);
+        return;
+      }
+
       const payload = buildTripPayload(formData);
       await addNewTrip(payload);
 
@@ -82,11 +154,12 @@ export function CreateTrip() {
       }).then(() => navigate("/admin/trips-management"));
     } catch (error) {
       console.error("Lỗi tạo chuyến tàu mới:", error);
-      let validationError = "";
-      if (error.response?.data?.errors) {
-        validationError = Object.values(error.response.data.errors).flat().join(" | ");
-      }
-      setErrorMsg(validationError || error.response?.data?.message || (lang === "VN" ? "Tạo chuyến tàu thất bại." : "Failed to create trip."));
+      setErrorMsg(
+        getApiErrorMessage(
+          error,
+          lang === "VN" ? "Tạo chuyến tàu thất bại." : "Failed to create trip.",
+        ),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -96,14 +169,18 @@ export function CreateTrip() {
   const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
   const selectStyle = `${inputStyle} cursor-pointer`;
 
-  const routeOptions = routes.map((r) => ({ value: r.routeCode, label: `${r.routeCode} — ${r.routeName}` }));
-  const boatOptions = boats.map((b) => ({ value: b.code, label: `${b.code} — ${b.name}` }));
+  const routeOptions = useMemo(
+    () => routes.map((r) => ({ value: r.routeCode, label: `${r.routeCode} — ${r.routeName}` })),
+    [routes],
+  );
+  const boatOptions = useMemo(
+    () => boats.map((b) => ({ value: b.code, label: `${b.code} — ${b.name}` })),
+    [boats],
+  );
   const seatTypeSelectOptions = SEAT_TYPE_OPTIONS.map((code) => ({ value: code, label: code }));
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-4xl mx-auto animate-fade-in">
-
-      {/* KHỐI TIÊU ĐỀ HEADER */}
       <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
         <button
           type="button"
@@ -117,7 +194,9 @@ export function CreateTrip() {
             {lang === "VN" ? "Tạo chuyến tàu mới" : "Create New Trip"}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            {lang === "VN" ? "Gán tàu và giờ chạy cho một tuyến đường trong lịch vận hành." : "Assign a boat and departure time to a route in the schedule."}
+            {lang === "VN"
+              ? "Chuyến phải tạo trước giờ khởi hành ≥ 20 phút. Bến giữa tuyến cần nhập phút dừng (có thể 0)."
+              : "Trip must be created ≥ 20 minutes before departure. Intermediate stops need dwell minutes (0 allowed)."}
           </p>
         </div>
       </div>
@@ -128,10 +207,7 @@ export function CreateTrip() {
         </div>
       )}
 
-      {/* FORM NHẬP THÔNG TIN */}
       <form onSubmit={handleFormSubmit} className="space-y-6">
-
-        {/* KHỐI 1: TUYẾN - TÀU - THỜI GIAN */}
         <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 overflow-visible">
           <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
             {lang === "VN" ? "Thông tin chuyến" : "Trip Information"}
@@ -142,7 +218,7 @@ export function CreateTrip() {
               <label className={labelStyle}>{lang === "VN" ? "Tuyến đường (*)" : "Route (*)"}</label>
               <FormSelect
                 value={formData.routeCode}
-                onChange={(v) => handleInputChange("routeCode", v)}
+                onChange={handleRouteChange}
                 options={routeOptions}
                 disabled={isLoadingOptions}
                 searchable
@@ -182,17 +258,77 @@ export function CreateTrip() {
             <div>
               <label className={labelStyle}>{lang === "VN" ? "Giờ khởi hành (*)" : "Departure Time (*)"}</label>
               <input
-                type="datetime-local"
+                type="time"
                 required
                 value={formData.departureTime}
                 onChange={(e) => handleInputChange("departureTime", e.target.value)}
                 className={inputStyle}
               />
+              <p className="mt-1 text-[10px] text-slate-400">
+                {lang === "VN"
+                  ? "Giờ theo ngày vận hành (VN +07). Phải cách hiện tại ≥ 20 phút."
+                  : "Time on the operating date (VN +07). Must be ≥ 20 minutes from now."}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* KHỐI 2: GIÁ VÉ THEO LOẠI GHẾ (TÙY CHỌN) */}
+        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+          <div className="border-b border-slate-100 dark:border-slate-700 pb-3">
+            <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+              {lang === "VN" ? "Phút dừng bến giữa tuyến" : "Intermediate stop dwell"}
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {lang === "VN"
+                ? "Bắt buộc gửi đầy đủ stops[] cho mọi bến giữa (kể cả 0 phút). Không nhập bến đầu/cuối."
+                : "Must send full stops[] for every intermediate stop (0 minutes allowed). First/last stops are excluded."}
+            </p>
+          </div>
+
+          {isLoadingStops ? (
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+              <div className="w-4 h-4 border-2 border-slate-300 border-t-[#124757] rounded-full animate-spin" />
+              {lang === "VN" ? "Đang tải bến dừng…" : "Loading stops…"}
+            </div>
+          ) : !formData.routeCode ? (
+            <p className="text-xs text-slate-400 font-medium">
+              {lang === "VN" ? "Chọn tuyến để hiện các bến giữa." : "Select a route to load intermediate stops."}
+            </p>
+          ) : formData.stops.length === 0 ? (
+            <p className="text-xs text-slate-400 font-medium">
+              {lang === "VN" ? "Tuyến này không có bến giữa — không cần gửi stops[]." : "This route has no intermediate stops — stops[] not required."}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {formData.stops.map((stop) => (
+                <div
+                  key={stop.stopOrder}
+                  className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-end rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
+                >
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {lang === "VN" ? `Bến #${stop.stopOrder}` : `Stop #${stop.stopOrder}`}
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{stop.stationLabel}</p>
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">
+                      {lang === "VN" ? "Phút dừng" : "Stay (min)"}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={stop.stayDurationMinutes}
+                      onChange={(e) => handleStopMinutesChange(stop.stopOrder, e.target.value)}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
             <div>
@@ -219,7 +355,6 @@ export function CreateTrip() {
                   <button type="button" onClick={() => handleRemoveSeatPrice(index)} className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 transition-colors">
                     <span className="material-symbols-outlined text-lg">cancel</span>
                   </button>
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pr-6">
                     <div>
                       <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Loại ghế" : "Seat type"}</label>
@@ -248,21 +383,19 @@ export function CreateTrip() {
           </div>
         </div>
 
-        {/* NÚT SUBMIT LƯU THÔNG TIN */}
         <div>
           <button
             type="submit"
-            disabled={isSubmitting || isLoadingOptions}
+            disabled={isSubmitting || isLoadingOptions || isLoadingStops}
             className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
           >
             {isSubmitting && (
-              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
             )}
             {lang === "VN" ? "Khởi tạo chuyến" : "Create Trip"}
           </button>
         </div>
       </form>
-
     </div>
   );
 }

@@ -62,10 +62,25 @@ export function PaymentResult() {
       );
 
       if (waterbusBookingId) {
+        const serviceType = (
+          (payosId ? sessionStorage.getItem(`ticketPaymentService:${payosId}`) : "")
+          || (orderCode ? sessionStorage.getItem(`ticketPaymentServiceOrder:${orderCode}`) : "")
+          || sessionStorage.getItem("latestTicketPaymentService")
+          || "Waterbus"
+        );
+        const isSightseeing = String(serviceType).toLowerCase() === "sightseeing";
+        // Hủy PayOS / return: về trang đặt lại đúng loại vé.
+        if (outcome === "cancel") {
+          return {
+            kind: isSightseeing ? "sightseeing" : "waterbus",
+            bookingId: waterbusBookingId,
+            path: isSightseeing ? "/watersightseeing-booking" : "/waterbus-booking",
+          };
+        }
         return {
-          kind: "waterbus",
+          kind: isSightseeing ? "sightseeing" : "waterbus",
           bookingId: waterbusBookingId,
-          path: `/profile/my-waterbus-booking`,
+          path: isSightseeing ? "/profile/my-sightseeing-booking" : "/profile/my-waterbus-booking",
         };
       }
 
@@ -130,7 +145,7 @@ export function PaymentResult() {
 
       const nextSearch = `?${query.toString()}`;
 
-      if (target.kind === "waterbus") {
+      if (target.kind === "waterbus" || target.kind === "sightseeing") {
         navigate(`${target.path}${nextSearch}`, {
           replace: true,
           state: {

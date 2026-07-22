@@ -19,6 +19,10 @@ export const getApiErrorMessage = (error, fallback) => {
     if (/^forbidden$/i.test(data.trim())) {
       return "Bạn không có quyền thực hiện thao tác này.";
     }
+    // ASP.NET generic HTML/text 500
+    if (/an error occurred while processing your request/i.test(data)) {
+      return "Máy chủ gặp lỗi khi xử lý (500). Kiểm tra log BE — thường do payload tạo chuyến (stops, trùng lịch tàu, giờ khởi hành).";
+    }
     return rewriteCharterValidationMessage(data) || data;
   }
 

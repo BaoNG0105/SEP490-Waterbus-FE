@@ -318,22 +318,25 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
         throw new Error("Payment created but no checkout URL was returned.");
       }
 
-      // Ghi nhớ bookingId theo paymentId / orderCode để /payment/success nhận diện Waterbus
-      // (không phải charter) và sync PayOS rồi về "Vé Waterbus của tôi".
+      // Ghi nhớ bookingId + loại dịch vụ để /payment/* điều hướng đúng Waterbus / Sightseeing.
       const paymentId = pick(payment, ["id", "paymentId", "data.id", "data.paymentId", "payment.id", "payment.paymentId"]);
       const orderCode = pick(payment, [
         "orderCode", "paymentOrderCode", "payosOrderCode",
         "data.orderCode", "data.paymentOrderCode", "data.payosOrderCode",
         "payment.orderCode", "data.payment.orderCode",
       ]);
+      const paymentServiceType = isLoopRoute ? "Sightseeing" : "Waterbus";
       if (paymentId) {
         sessionStorage.setItem(`waterbusPaymentBooking:${paymentId}`, bookingId);
+        sessionStorage.setItem(`ticketPaymentService:${paymentId}`, paymentServiceType);
       }
       if (orderCode) {
         sessionStorage.setItem(`waterbusPaymentBookingOrder:${orderCode}`, bookingId);
+        sessionStorage.setItem(`ticketPaymentServiceOrder:${orderCode}`, paymentServiceType);
         sessionStorage.setItem("latestWaterbusPaymentOrderCode", String(orderCode));
       }
       sessionStorage.setItem("latestWaterbusPaymentBooking", bookingId);
+      sessionStorage.setItem("latestTicketPaymentService", paymentServiceType);
 
       window.location.assign(checkoutUrl);
     } catch (error) {

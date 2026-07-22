@@ -4,6 +4,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchTripSearch } from "../../../services/tripService";
 import { getTodayDateString } from "../../../utils/dateOnly";
+import { getApiErrorMessage } from "../../../utils/apiError";
 
 const getStationId = (station) => String(station.stationId || station.id || "");
 const getStationName = (station) => station.stationName || station.name || "--";
@@ -65,8 +66,8 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
       if (!departureTripOptions.length) {
         setSearchError(
           lang === "VN"
-            ? "Không tìm thấy chuyến tàu phù hợp cho chiều đi. Vui lòng thử bến hoặc ngày khác."
-            : "No matching trips found for the departure leg. Please try another station or date."
+            ? "Không có chuyến phù hợp ngày/chặng này. Cần tạo trip Regular trước (vd. TEST-BOOKING: Bạch Đằng → Thủ Thiêm → Ba Son), giờ còn > 10 phút."
+            : "No matching trips for this date/segment. Create a Regular trip first (e.g. TEST-BOOKING), with departure still > 10 minutes away."
         );
         return;
       }
@@ -105,9 +106,12 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
     } catch (error) {
       console.error("Lỗi tìm chuyến tàu:", error);
       setSearchError(
-        lang === "VN"
-          ? "Đã xảy ra lỗi khi tìm chuyến. Vui lòng thử lại."
-          : "Something went wrong while searching trips. Please try again."
+        getApiErrorMessage(
+          error,
+          lang === "VN"
+            ? "Đã xảy ra lỗi khi tìm chuyến. Vui lòng thử lại."
+            : "Something went wrong while searching trips. Please try again.",
+        ),
       );
     } finally {
       setIsSearching(false);

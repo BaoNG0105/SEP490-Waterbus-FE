@@ -2,17 +2,22 @@ import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { registerCustomer, verifyRegisterOtp, resendRegisterOtp } from "../../services/authService";
-import "flag-icons/css/flag-icons.min.css";
+import { FormSelect } from "../../components/FormSelect";
+import { NationalitySelect } from "../../components/NationalitySelect";
+import { getApiErrorMessage } from "../../utils/apiError";
 import { notify } from "../../utils/swalToast";
 
-// THƯ VIỆN QUỐC GIA
-import countries from "i18n-iso-countries";
-import viLocale from "i18n-iso-countries/langs/vi.json";
-import enLocale from "i18n-iso-countries/langs/en.json";
+/** UI dùng SMS/EMAIL; BE chỉ nhận phone/email. */
+const toApiOtpChannel = (channel) => {
+  const value = String(channel || "").trim().toUpperCase();
+  if (value === "EMAIL") return "email";
+  return "phone";
+};
 
-// Đăng ký ngôn ngữ cho thư viện
-countries.registerLocale(viLocale);
-countries.registerLocale(enLocale);
+const MAX_OTP_ATTEMPTS = 5;
+
+const SELECT_TRIGGER_CLASS =
+  "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner";
 
 export const Register = () => {
   const { lang, isDarkMode } = useApp();
@@ -21,6 +26,7 @@ export const Register = () => {
   const [step, setStep] = useState(1);
   const [challengeId, setChallengeId] = useState(0);
   const [otpCode, setOtpCode] = useState("");
+  const [otpFailedAttempts, setOtpFailedAttempts] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
   const [expireTime, setExpireTime] = useState(300); 
@@ -28,16 +34,6 @@ export const Register = () => {
 
   // Lưu thông tin đích đến đã được che (Masked) để hiện lên màn hình bảo mật OTP
   const [maskedTarget, setMaskedDestination] = useState("");
-
-  // TẠO DANH SÁCH QUỐC GIA ĐỘNG TỪ THƯ VIỆN
-  const countryList = useMemo(() => {
-    const countryObj = countries.getNames(lang === "VN" ? "vi" : "en", { select: "official" });
-    return Object.entries(countryObj).map(([code, name]) => ({
-      code: code.toLowerCase(),
-      name: name,
-      isoCode: code
-    }));
-  }, [lang]);
 
   // STATE LƯU TRỮ DỮ LIỆU ĐĂNG KÝ
   const [formData, setFormData] = useState({
@@ -53,10 +49,15 @@ export const Register = () => {
     termsAccepted: false,
   });
 
-  const [selectedFlag, setSelectedFlag] = useState("vn");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const genderOptions = useMemo(() => ([
+    { value: "Male", label: lang === "VN" ? "Nam" : "Male" },
+    { value: "Female", label: lang === "VN" ? "Nữ" : "Female" },
+    { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
+  ]), [lang]);
 
   // KIỂM TRA ĐỘ MẠNH MẬT KHẨU: tối thiểu 8 ký tự, 1 chữ hoa, 1 số, 1 ký tự đặc biệt
   const passwordCriteria = useMemo(() => ({
@@ -122,17 +123,6 @@ export const Register = () => {
     });
   };
 
-  const handleNationalityChange = (e) => {
-    const matched = countryList.find(item => item.code === e.target.value);
-    if (matched) {
-      setSelectedFlag(matched.code);
-      setFormData({
-        ...formData,
-        nationality: countries.getName(matched.isoCode, "en") // Luôn gửi chuỗi tiếng Anh cho BE chuẩn quốc tế
-      });
-    }
-  };
-
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -186,7 +176,7 @@ export const Register = () => {
       password: formData.password,
       phone: formData.phone,
       email: formData.email,
-      otpChannel: formData.otpChannel,
+      otpChannel: toApiOtpChannel(formData.otpChannel),
       gender: formData.gender,
       nationality: formData.nationality
     };
@@ -206,12 +196,17 @@ export const Register = () => {
 
       setExpireTime(expireDiff > 0 ? expireDiff : 300);
       setResendCooldown(resendDiff > 0 ? resendDiff : 60);
+      setOtpFailedAttempts(0);
+      setOtpCode("");
       
       setStep(2); // Tiến tới bước xác thực OTP
 
     } catch (error) {
       console.error("Lỗi đăng ký hành khách:", error);
-      setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Đăng ký thất bại. Vui lòng thử lại." : "Registration failed. Please try again."));
+      setErrorMsg(getApiErrorMessage(
+        error,
+        lang === "VN" ? "Đăng ký thất bại. Vui lòng thử lại." : "Registration failed. Please try again.",
+      ));
     } finally {
       setIsLoading(false);
     }
@@ -249,7 +244,37 @@ export const Register = () => {
 
     } catch (error) {
       console.error("Lỗi khi xác thực OTP:", error);
-      setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Mã OTP không hợp lệ hoặc đã hết hạn." : "Invalid or expired OTP."));
+      const apiMessage = getApiErrorMessage(
+        error,
+        lang === "VN" ? "Mã OTP không hợp lệ hoặc đã hết hạn." : "Invalid or expired OTP.",
+      );
+      // Lỗi mạng/5xx không phải do người dùng nhập sai nên không trừ lượt.
+      if (!error?.response || Number(error.response.status) >= 500) {
+        setErrorMsg(apiMessage);
+        return;
+      }
+      const nextFailedAttempts = otpFailedAttempts + 1;
+
+      if (nextFailedAttempts >= MAX_OTP_ATTEMPTS) {
+        setStep(1);
+        setChallengeId(0);
+        setOtpCode("");
+        setOtpFailedAttempts(0);
+        setErrorMsg(
+          lang === "VN"
+            ? "Bạn đã nhập sai OTP 5 lần. Phiên xác thực đã đóng, vui lòng đăng ký lại."
+            : "You entered an incorrect OTP 5 times. The verification session was closed; please register again.",
+        );
+      } else {
+        setOtpFailedAttempts(nextFailedAttempts);
+        setOtpCode("");
+        const remainingAttempts = MAX_OTP_ATTEMPTS - nextFailedAttempts;
+        setErrorMsg(
+          lang === "VN"
+            ? `${apiMessage} Bạn còn ${remainingAttempts} lần thử.`
+            : `${apiMessage} You have ${remainingAttempts} attempts remaining.`,
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -268,6 +293,8 @@ export const Register = () => {
 
       setExpireTime(expireDiff > 0 ? expireDiff : 300);
       setResendCooldown(resendDiff > 0 ? resendDiff : 60);
+      setOtpFailedAttempts(0);
+      setOtpCode("");
 
       notify({
         icon: "success",
@@ -281,7 +308,10 @@ export const Register = () => {
       });
     } catch (error) {
       console.error("Lỗi gửi lại OTP:", error);
-      setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Lỗi gửi lại OTP. Thử lại sau." : "Failed to resend OTP. Try again."));
+      setErrorMsg(getApiErrorMessage(
+        error,
+        lang === "VN" ? "Lỗi gửi lại OTP. Thử lại sau." : "Failed to resend OTP. Try again.",
+      ));
     } finally {
       setIsLoading(false);
     }
@@ -383,39 +413,25 @@ export const Register = () => {
                   <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                     {lang === "VN" ? "Giới tính" : "Gender"}
                   </label>
-                  <select
-                    name="gender" value={formData.gender} onChange={handleChange}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
-                  >
-                    <option value="Male">{lang === "VN" ? "Nam" : "Male"}</option>
-                    <option value="Female">{lang === "VN" ? "Nữ" : "Female"}</option>
-                    <option value="Other">{lang === "VN" ? "Khác" : "Other"}</option>
-                  </select>
+                  <FormSelect
+                    value={formData.gender}
+                    onChange={(value) => setFormData((prev) => ({ ...prev, gender: String(value || "Male") }))}
+                    options={genderOptions}
+                    className={SELECT_TRIGGER_CLASS}
+                    placeholder={lang === "VN" ? "Chọn giới tính" : "Select gender"}
+                  />
                 </div>
                 {/* QUỐC TỊCH */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                     {lang === "VN" ? "Quốc tịch" : "Nationality"}
                   </label>
-                  <div className="relative w-full">
-                    <span className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 leading-none">
-                      <span className={`fi fi-${selectedFlag} !block rounded-sm shadow-sm`} aria-hidden="true" />
-                    </span>
-                    <select
-                      value={selectedFlag}
-                      onChange={handleNationalityChange}
-                      className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-10 text-sm font-semibold text-slate-800 shadow-inner outline-none transition-all focus:ring-2 focus:ring-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:ring-yellow-400"
-                    >
-                      {countryList.map((country) => (
-                        <option key={country.code} value={country.code}>
-                          {country.name}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base text-slate-400 material-symbols-outlined">
-                      arrow_drop_down
-                    </span>
-                  </div>
+                  <NationalitySelect
+                    value={formData.nationality}
+                    onChange={(value) => setFormData((prev) => ({ ...prev, nationality: String(value || "Vietnam") }))}
+                    className={SELECT_TRIGGER_CLASS}
+                    placeholder={lang === "VN" ? "Chọn quốc tịch" : "Select nationality"}
+                  />
                 </div>
               </div>
               {/* EMAIL & PHONE */}
@@ -603,6 +619,11 @@ export const Register = () => {
                     className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-4 text-center text-2xl font-black tracking-[0.5em] text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
                     placeholder="------"
                   />
+                  <p className="mt-2 text-center text-[11px] font-bold text-slate-400">
+                    {lang === "VN"
+                      ? `Còn ${MAX_OTP_ATTEMPTS - otpFailedAttempts} lần nhập`
+                      : `${MAX_OTP_ATTEMPTS - otpFailedAttempts} attempts remaining`}
+                  </p>
                 </div>
 
                 <button

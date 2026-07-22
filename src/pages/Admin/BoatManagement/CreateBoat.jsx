@@ -330,10 +330,15 @@ export function CreateBoat() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pr-6">
                     <div>
                       <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Đơn vị (Unit)</label>
-                      <select value={price.rentalUnit} onChange={(e) => handleRentalPriceChange(index, "rentalUnit", e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-[#124757] dark:text-yellow-400 outline-none cursor-pointer">
-                        <option value="Day">Theo Ngày (Day)</option>
-                        <option value="Hour">Theo Giờ (Hour)</option>
-                      </select>
+                      <FormSelect
+                        value={price.rentalUnit}
+                        onChange={(value) => handleRentalPriceChange(index, "rentalUnit", value)}
+                        options={[
+                          { value: "Day", label: "Theo Ngày (Day)" },
+                          { value: "Hour", label: "Theo Giờ (Hour)" },
+                        ]}
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-[#124757] dark:text-yellow-400 outline-none cursor-pointer"
+                      />
                     </div>
                     <div>
                       <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Giá tiền (Price)</label>

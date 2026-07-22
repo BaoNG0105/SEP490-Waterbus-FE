@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { guidelines } from "../../data/homeData";
 import { getTodayDateString } from "../../utils/dateOnly";
+import { useBookingWizardStep } from "../../hooks/useBookingWizardStep";
 
 import Step1SearchSightseeing from "./components/Step1SearchSightseeing";
 import Step2SelectTripAndSeats from "../WaterbusBooking/components/Step2SelectTripAndSeats";
@@ -11,8 +12,10 @@ import Step3Checkout from "../WaterbusBooking/components/Step3Checkout";
 export function WatersightseeingBooking() {
     const { lang } = useApp();
     const location = useLocation();
+    const { currentStep, goToStep } = useBookingWizardStep({
+        initialStep: location.state?.step || 1,
+    });
 
-    const [currentStep, setCurrentStep] = useState(location.state?.step || 1);
     const [bookingData, setBookingData] = useState(
         location.state?.bookingData || {
             isRoundTrip: false,
@@ -27,10 +30,6 @@ export function WatersightseeingBooking() {
             selectedSeatsReturn: [],
         }
     );
-
-    useEffect(() => {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-    }, [currentStep]);
 
     const updateBookingData = (fields) => {
         setBookingData((prev) => ({ ...prev, ...fields }));
@@ -124,20 +123,27 @@ export function WatersightseeingBooking() {
 
                 {/* --- ĐIỀU HƯỚNG BƯỚC --- */}
                 {currentStep === 1 && (
-                    <Step1SearchSightseeing bookingData={bookingData} updateData={updateBookingData} onNext={() => setCurrentStep(2)} />
+                    <Step1SearchSightseeing bookingData={bookingData} updateData={updateBookingData} onNext={() => goToStep(2)} />
                 )}
 
                 {currentStep === 2 && (
                     <Step2SelectTripAndSeats
                         bookingData={bookingData}
                         updateData={updateBookingData}
-                        onNext={() => setCurrentStep(3)}
-                        onBack={() => setCurrentStep(1)}
+                        onNext={() => goToStep(3)}
+                        onBack={() => goToStep(1)}
                     />
                 )}
 
                 {currentStep === 3 && (
-                    <Step3Checkout bookingData={bookingData} onBack={() => setCurrentStep(2)} />
+                    <Step3Checkout
+                        bookingData={bookingData}
+                        onBack={() => goToStep(2)}
+                        onExpire={() => {
+                            updateBookingData({ seatHoldExpiresAt: null });
+                            goToStep(1, { replace: true });
+                        }}
+                    />
                 )}
 
             </main>

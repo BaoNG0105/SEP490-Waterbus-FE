@@ -39,7 +39,7 @@ import { PaymentResult } from "./pages/PaymentResult";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
 import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor, BoatCrewSchedule } from "./pages/Admin/BoatManagement";
-import { TripManagement, CreateTrip } from "./pages/Admin/TripManagement";
+import { TripManagement, CreateTrip, TripDetail } from "./pages/Admin/TripManagement";
 import { StationManagement } from "./pages/Admin/StationManagement";
 import { InsuranceManagement } from "./pages/Admin/InsuranceManagement";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
@@ -500,6 +500,15 @@ function App() {
             element={
               <AdminLayout title="Create Trip">
                 <CreateTrip />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/trips-management/:id"
+            element={
+              <AdminLayout title="Trip Detail">
+                <TripDetail />
               </AdminLayout>
             }
           />

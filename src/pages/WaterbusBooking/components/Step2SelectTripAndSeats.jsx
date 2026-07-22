@@ -66,6 +66,39 @@ const getTripHourBucket = (isoString) => {
 const getSegmentDeparture = (trip) => trip?.fromStopScheduledDeparture || trip?.departureTime;
 const getSegmentArrival = (trip) => trip?.toStopScheduledArrival || trip?.arrivalTime;
 
+/** BE: khóa chặng khi fromStopScheduledDeparture <= now + 10 phút (không dùng trip.departureTime). */
+const SEGMENT_BOOKING_CLOSE_LEAD_MS = 10 * 60 * 1000;
+const isSegmentBookingClosed = (trip) => {
+  const raw = trip?.fromStopScheduledDeparture;
+  if (!raw) return false;
+  const ms = new Date(raw).getTime();
+  if (Number.isNaN(ms)) return false;
+  return ms <= Date.now() + SEGMENT_BOOKING_CLOSE_LEAD_MS;
+};
+
+/**
+ * BE: dùng isBookable + availableSeats — KHÔNG disable vì tripStatus = Boarding.
+ * Fallback khi BE chưa gửi isBookable: còn ghế và chặng chưa khóa 10 phút.
+ */
+const isTripSelectable = (trip) => {
+  if (!trip) return false;
+  if (Number(trip.availableSeats) <= 0) return false;
+  if (typeof trip.isBookable === "boolean") return trip.isBookable;
+  return !isSegmentBookingClosed(trip);
+};
+
+const getTripUnavailableLabel = (trip, lang) => {
+  const reason = String(trip?.bookingClosedReason || "").trim();
+  if (reason) return reason;
+  if (Number(trip?.availableSeats) <= 0) {
+    return lang === "VN" ? "Hết chỗ" : "Sold out";
+  }
+  if (trip?.isBookable === false || isSegmentBookingClosed(trip)) {
+    return lang === "VN" ? "Đã khóa bến lên" : "Boarding closed";
+  }
+  return lang === "VN" ? "Không thể chọn" : "Unavailable";
+};
+
 // Chuyển ký tự hàng ghế (A, B, C...) thành số thứ tự hàng cho CSS grid
 const rowLetterToIndex = (row) => {
   const letter = String(row || "A").toUpperCase();
@@ -98,9 +131,64 @@ const findStop = (stops, stationId) => {
   return stops.find((s) => String(s.stationId) === String(stationId)) || null;
 };
 
+const pickStopOrder = (stop) => Number(stop?.stopOrder ?? stop?.order ?? 0);
+
+/**
+ * Tuyến vòng có thể qua cùng station nhiều lần — KHÔNG lấy find() đầu tiên.
+ * Chọn cặp boarding→alighting (stopOrder tăng) khớp giờ search fromStopScheduledDeparture nếu có.
+ */
+const findSegmentStops = (stops, fromStationId, toStationId, preferredDepartureIso) => {
+  if (!Array.isArray(stops) || !fromStationId || !toStationId) {
+    return { boarding: null, alighting: null };
+  }
+  const sorted = [...stops].sort((a, b) => pickStopOrder(a) - pickStopOrder(b));
+  const candidates = [];
+  for (let i = 0; i < sorted.length; i += 1) {
+    if (String(sorted[i].stationId) !== String(fromStationId)) continue;
+    for (let j = i + 1; j < sorted.length; j += 1) {
+      if (String(sorted[j].stationId) === String(toStationId)) {
+        candidates.push({ boarding: sorted[i], alighting: sorted[j] });
+        break;
+      }
+    }
+  }
+  if (candidates.length === 0) {
+    return {
+      boarding: findStop(stops, fromStationId),
+      alighting: findStop(stops, toStationId),
+    };
+  }
+  if (preferredDepartureIso) {
+    const prefMs = Date.parse(preferredDepartureIso);
+    if (!Number.isNaN(prefMs)) {
+      const matched = candidates.find((pair) => {
+        const dep = pair.boarding?.scheduledDeparture || pair.boarding?.plannedDepartureTime;
+        const ms = Date.parse(dep || "");
+        return !Number.isNaN(ms) && Math.abs(ms - prefMs) <= 60_000;
+      });
+      if (matched) return matched;
+    }
+  }
+  // Ưu tiên cặp còn mở đặt (> 10 phút); không thì cặp đầu còn lại.
+  const open = candidates.find((pair) => !isSegmentBookingClosed({
+    fromStopScheduledDeparture: pair.boarding?.scheduledDeparture || pair.boarding?.plannedDepartureTime,
+  }));
+  return open || candidates[0];
+};
+
 // Tìm mã bến (stationCode) từ danh sách stops của chuyến, khớp theo stationId đã chọn ở Bước 1
 const findStationCode = (stops, stationId) => findStop(stops, stationId)?.stationCode || "";
 
+/** Khóa sơ đồ ghế: ưu tiên đúng field BE isBookingClosed; chỉ fallback local khi BE không gửi. */
+const resolveSeatMapBookingClosed = (seatMapResponse, trip) => {
+  if (typeof seatMapResponse?.isBookingClosed === "boolean") {
+    return seatMapResponse.isBookingClosed;
+  }
+  if (typeof trip?.isBookable === "boolean") {
+    return !trip.isBookable;
+  }
+  return isSegmentBookingClosed(trip);
+};
 export default function Step2SelectTripAndSeats({ bookingData, updateData, onNext, onBack }) {
   const { lang } = useApp();
   const navigate = useNavigate();
@@ -121,12 +209,20 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   const isLoopRoute = routeType === "SightseeingLoop";
   const tripCardImage = isLoopRoute ? SIGHTSEEING_TRIP_IMAGE : WATERBUS_TRIP_IMAGE;
 
-  // Mã bến đi/đến của từng chặng — chặng về đi ngược chiều (toWharf -> fromWharf)
+  // Mã bến đi/đến của từng chặng — chặng về đi ngược chiều (toWharf -> fromWharf).
+  // Tuyến vòng: lấy đúng lần xuất hiện theo giờ search (không lấy bến đầu tiên trùng mã).
   const getLegStationCodes = (leg, trip) => {
     if (isLoopRoute) return { fromStationCode: undefined, toStationCode: undefined };
-    return leg === "departure"
-      ? { fromStationCode: findStationCode(trip?.stops, fromWharf), toStationCode: findStationCode(trip?.stops, toWharf) }
-      : { fromStationCode: findStationCode(trip?.stops, toWharf), toStationCode: findStationCode(trip?.stops, fromWharf) };
+    const fromId = leg === "departure" ? fromWharf : toWharf;
+    const toId = leg === "departure" ? toWharf : fromWharf;
+    const preferredDep = leg === "departure"
+      ? (trip?.fromStopScheduledDeparture || trip?.departureTime)
+      : (trip?.fromStopScheduledDeparture || trip?.departureTime);
+    const { boarding, alighting } = findSegmentStops(trip?.stops, fromId, toId, preferredDep);
+    return {
+      fromStationCode: boarding?.stationCode || findStationCode(trip?.stops, fromId),
+      toStationCode: alighting?.stationCode || findStationCode(trip?.stops, toId),
+    };
   };
 
   // Quản lý tab nội bộ của bước 2 nếu là khứ hồi: 'departure' (chiều đi) hoặc 'return' (chiều về)
@@ -140,6 +236,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   // Sơ đồ ghế thực tế lấy từ API, lưu riêng theo từng chiều (departure/return) — chỉ để hiển thị,
   // việc chọn/bỏ chọn ghế ở bước này thuần local, KHÔNG gọi API giữ ghế.
   const [seatMapByLeg, setSeatMapByLeg] = useState({ departure: [], return: [] });
+  const [bookingClosedByLeg, setBookingClosedByLeg] = useState({ departure: false, return: false });
   const [activeDeckByLeg, setActiveDeckByLeg] = useState({ departure: 1, return: 1 });
   const [isLoadingSeats, setIsLoadingSeats] = useState(false);
   const [seatMapError, setSeatMapError] = useState("");
@@ -166,6 +263,10 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
           const seatMapResponse = await fetchTripSeatMap(trip.tripId, { fromStationCode, toStationCode });
           if (cancelled) return;
           setSeatMapByLeg((prev) => ({ ...prev, [leg]: seatMapResponse?.seats || [] }));
+          setBookingClosedByLeg((prev) => ({
+            ...prev,
+            [leg]: resolveSeatMapBookingClosed(seatMapResponse, trip),
+          }));
         }));
       } catch (error) {
         if (!cancelled) {
@@ -185,14 +286,14 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
     return () => {
       cancelled = true;
     };
-    // Chỉ chạy 1 lần khi mount — không tải lại khi người dùng đổi chuyến trong phiên này (đã có handleSelectTrip lo).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fromWharf, toWharf]);
 
   const tripOptions = activeLeg === "departure" ? departureTripOptions : returnTripOptions;
   const currentTrip = activeLeg === "departure" ? selectedDepartureTrip : selectedReturnTrip;
   const currentSeats = activeLeg === "departure" ? selectedSeatsDeparture : selectedSeatsReturn;
   const currentSeatMap = seatMapByLeg[activeLeg];
+  const isCurrentBookingClosed = Boolean(bookingClosedByLeg[activeLeg]);
 
   const filteredTripOptions = (tripOptions || []).filter((trip) => {
     if (filterTime === "all") return true;
@@ -221,12 +322,24 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       confirmButtonText: "OK",
       allowOutsideClick: false,
       showCancelButton: false,
-    }).then(() => navigate("/login"));
+    }).then(() => {
+      const next = `${window.location.pathname}${window.location.search || ""}`;
+      navigate(`/login?redirect=${encodeURIComponent(next)}`);
+    });
   };
 
   // Khi người dùng chọn 1 chuyến: tải chi tiết chuyến (bến dừng) + sơ đồ ghế thực tế của chặng đang xem
   const handleSelectTrip = async (trip, { silent = false } = {}) => {
-    if (trip.availableSeats <= 0 || trip.tripStatus !== "Scheduled") return;
+    if (!isTripSelectable(trip)) {
+      if (!silent) {
+        showToast({
+          icon: "warning",
+          title: lang === "VN" ? "Không thể chọn chuyến này" : "Trip unavailable",
+          text: getTripUnavailableLabel(trip, lang),
+        });
+      }
+      return;
+    }
     if (currentTrip?.tripId === trip.tripId) return;
 
     if (!isAuthenticated) {
@@ -240,13 +353,17 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       const tripDetail = await fetchTripDetail(trip.tripId);
       const stops = tripDetail?.stops || [];
 
-      // Giờ khởi hành/đến đúng theo chặng khách chọn phải lấy từ scheduledDeparture/scheduledArrival
-      // của chính bến lên/xuống trong stops[] — không dùng field gợi ý fromStopScheduledDeparture của
-      // API search vì field đó không đáng tin cậy (từng trả sai giờ khi đổi bến lên tàu).
+      // Giờ khởi hành/đến đúng theo chặng — trên tuyến vòng phải chọn đúng lần qua bến
+      // (không lấy findStop đầu tiên, dễ khóa nhầm theo giờ bến đầu tuyến).
       const boardingStationId = activeLeg === "departure" ? fromWharf : toWharf;
       const alightingStationId = activeLeg === "departure" ? toWharf : fromWharf;
-      const boardingStop = findStop(stops, boardingStationId);
-      const alightingStop = findStop(stops, alightingStationId);
+      const preferredDep = trip.fromStopScheduledDeparture || trip.departureTime;
+      const { boarding: boardingStop, alighting: alightingStop } = findSegmentStops(
+        stops,
+        boardingStationId,
+        alightingStationId,
+        preferredDep,
+      );
 
       const mergedTrip = {
         ...trip,
@@ -266,8 +383,22 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       }
 
       const seatMapResponse = await fetchTripSeatMap(trip.tripId, { fromStationCode, toStationCode });
+      const closed = resolveSeatMapBookingClosed(seatMapResponse, mergedTrip);
       setSeatMapByLeg((prev) => ({ ...prev, [activeLeg]: seatMapResponse?.seats || [] }));
+      setBookingClosedByLeg((prev) => ({ ...prev, [activeLeg]: closed }));
       setActiveDeckByLeg((prev) => ({ ...prev, [activeLeg]: 1 }));
+
+      if (closed) {
+        const reason = seatMapResponse?.bookingClosedReason
+          || getTripUnavailableLabel(mergedTrip, lang);
+        setSeatMapError(
+          lang === "VN"
+            ? `Chặng này đã khóa đặt ghế${reason ? `: ${reason}` : "."}`
+            : `This segment is closed for booking${reason ? `: ${reason}` : "."}`,
+        );
+      } else {
+        setSeatMapError("");
+      }
 
       if (activeLeg === "departure") {
         updateData({ selectedDepartureTrip: mergedTrip, selectedSeatsDeparture: [] });
@@ -291,9 +422,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
     if (!isAuthenticated) return;
     if (currentTrip?.tripId) return;
 
-    const firstAvailable = filteredTripOptions.find(
-      (trip) => trip.availableSeats > 0 && trip.tripStatus === "Scheduled",
-    );
+    const firstAvailable = filteredTripOptions.find((trip) => isTripSelectable(trip));
     if (!firstAvailable?.tripId) return;
 
     const key = `${activeLeg}:${firstAvailable.tripId}:${filterTime}`;
@@ -310,6 +439,16 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       return;
     }
     if (!currentTrip?.tripId) return;
+    if (isCurrentBookingClosed) {
+      showToast({
+        icon: "warning",
+        title: lang === "VN" ? "Chặng đã khóa đặt ghế" : "Seat booking closed",
+        text: lang === "VN"
+          ? "Không thể chọn ghế vì chặng đã đóng đặt vé."
+          : "Seats cannot be selected because this segment is closed.",
+      });
+      return;
+    }
 
     const isSelected = currentSeats.some((s) => s.seatNumber === seat.seatNumber);
     const isLockedByOthers = LOCKED_STATUSES.includes(seat.status) && !isSelected;
@@ -344,11 +483,15 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
     && selectedSeatsDeparture.length !== selectedSeatsReturn.length;
 
   // Kiểm tra xem đã hoàn thành điều kiện để ấn nút "Tiếp tục" sang bước thanh toán chưa
-  const isStepComplete = selectedDepartureTrip && selectedSeatsDeparture.length > 0 &&
-    (!isRoundTrip || (
+  const isStepComplete = selectedDepartureTrip && selectedSeatsDeparture.length > 0
+    && isTripSelectable(selectedDepartureTrip)
+    && !bookingClosedByLeg.departure
+    && (!isRoundTrip || (
       selectedReturnTrip
       && selectedSeatsReturn.length > 0
       && selectedSeatsReturn.length === selectedSeatsDeparture.length
+      && isTripSelectable(selectedReturnTrip)
+      && !bookingClosedByLeg.return
     ));
 
   // Chỉ THỰC SỰ giữ ghế (gọi API hold) khi bấm "Tiếp tục thanh toán" — đây là lúc rời Bước 2 sang Bước 3.
@@ -506,7 +649,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
               </div>
             )}
             {filteredTripOptions.map((trip) => {
-              const isSoldOut = trip.availableSeats <= 0 || trip.tripStatus !== "Scheduled";
+              const selectable = isTripSelectable(trip);
               return (
                 <div
                   key={trip.tripId}
@@ -515,7 +658,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                     currentTrip?.tripId === trip.tripId
                       ? "border-[#124757] ring-2 ring-[#124757]/10 bg-teal-50/5"
                       : "border-slate-100 dark:border-slate-700 hover:border-slate-300"
-                  } ${isSoldOut ? "opacity-50 cursor-not-allowed" : ""}`}
+                  } ${!selectable ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-4">
@@ -544,9 +687,9 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                       <div className="text-right">
                         <div className="text-base font-headline font-black text-[#124757] dark:text-[#FFD100]">{Number(trip.minPrice || 0).toLocaleString()} VND</div>
                         <div className="text-xs text-slate-500">
-                          {isSoldOut
-                            ? (lang === "VN" ? "Hết chỗ" : "Sold out")
-                            : (lang === "VN" ? `Còn trống ${trip.availableSeats}/${trip.totalSeats} chỗ` : `${trip.availableSeats}/${trip.totalSeats} left`)}
+                          {selectable
+                            ? (lang === "VN" ? `Còn trống ${trip.availableSeats}/${trip.totalSeats} chỗ` : `${trip.availableSeats}/${trip.totalSeats} left`)
+                            : getTripUnavailableLabel(trip, lang)}
                         </div>
                       </div>
                       <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -585,6 +728,14 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
           {seatMapError && (
             <p className="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl px-4 py-3">
               {seatMapError}
+            </p>
+          )}
+
+          {isCurrentBookingClosed && currentTrip && (
+            <p className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl px-4 py-3">
+              {lang === "VN"
+                ? "Chặng này đã khóa đặt ghế. Không thể chọn ghế — hãy chọn chuyến khác hoặc đổi bến lên."
+                : "This segment is closed for seat booking. Pick another trip or change boarding station."}
             </p>
           )}
 

@@ -12,16 +12,16 @@ import { notify } from "../../utils/swalToast";
 export function CharterBooking() {
   const { lang } = useApp();
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useSelector((state) => state.auth);
+  const { isAuthenticated } = useSelector((state) => state.auth);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   const initialFormData = {
-    customerName: user?.fullName || "",
-    contactPhone: user?.phoneNumber || user?.phone || "",
-    contactEmail: user?.email || "",
+    customerName: "",
+    contactPhone: "",
+    contactEmail: "",
     departureDate: getMinDepartureDate(),
     adultCount: 1,
     childCount: 0,

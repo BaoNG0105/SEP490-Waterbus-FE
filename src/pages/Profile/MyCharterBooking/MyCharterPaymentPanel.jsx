@@ -177,7 +177,7 @@ export function MyCharterPaymentPanel({
                   </button>
                 </div>
               ) : (expiredPendingPayment || (Boolean(expiredPaymentCheckoutUrl || paymentCheckoutUrl) && isPaymentLinkExpired)) ? (
-                <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-center dark:border-slate-700 dark:bg-slate-900">
                   <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
                     {lang === "VN" ? "Link thanh toán cũ đã hết hạn. Vui lòng tạo giao dịch thanh toán mới." : "The previous payment link has expired. Create a new payment transaction."}
                   </p>

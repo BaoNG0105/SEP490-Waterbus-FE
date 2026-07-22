@@ -637,6 +637,9 @@
   border: 1px solid rgba(18, 71, 87, 0.1) !important;
   border-right: none !important;
   background: #fff !important;
+  overflow: visible !important;
+  display: flex !important;
+  align-items: center !important;
   box-shadow:
     -8px 12px 32px rgba(15, 23, 42, 0.12),
     0 0 0 1px rgba(255, 255, 255, 0.7) inset !important;
@@ -665,40 +668,60 @@
 
 .admin-swal-toast-icon {
   position: relative !important;
-  margin: 0 0.65rem 0 0 !important;
+  margin: 0 0.75rem 0 0 !important;
   width: 2rem !important;
+  min-width: 2rem !important;
   height: 2rem !important;
+  min-height: 2rem !important;
   border-width: 2px !important;
+  border-style: solid !important;
+  border-radius: 50% !important;
   box-shadow: none !important;
   flex-shrink: 0 !important;
+  align-self: center !important;
+  overflow: visible !important;
+  box-sizing: border-box !important;
 }
 
 .admin-swal-toast-icon.swal2-success {
   border-color: #059669 !important;
   background: #ecfdf5 !important;
+  color: #059669 !important;
+  overflow: visible !important;
+  animation: none !important;
 }
 
+/* Ẩn SVG/animation mặc định của SweetAlert (gây cắt ngang khi scale nhỏ). */
 .admin-swal-toast-icon.swal2-success .swal2-success-circular-line-left,
 .admin-swal-toast-icon.swal2-success .swal2-success-circular-line-right,
 .admin-swal-toast-icon.swal2-success .swal2-success-fix-placeholder,
 .admin-swal-toast-icon.swal2-success .swal2-success-ring,
 .admin-swal-toast-icon.swal2-success .swal2-success-line-tip,
 .admin-swal-toast-icon.swal2-success .swal2-success-line-long,
-.admin-swal-toast-icon.swal2-success .swal2-icon-content {
+.admin-swal-toast-icon.swal2-success .swal2-icon-content,
+.admin-swal-toast-icon.swal2-success [class^="swal2-success-"] {
   display: none !important;
+  animation: none !important;
+}
+
+.admin-swal-toast-icon.swal2-success::before {
+  display: none !important;
+  content: none !important;
 }
 
 .admin-swal-toast-icon.swal2-success::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 46%;
-  width: 0.38rem;
-  height: 0.7rem;
-  border: solid #059669;
-  border-width: 0 0.14rem 0.14rem 0;
-  transform: translate(-50%, -58%) rotate(45deg);
-  box-sizing: border-box;
+  content: "" !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: 0.35rem !important;
+  height: 0.65rem !important;
+  margin: 0 !important;
+  border: solid #059669 !important;
+  border-width: 0 0.15rem 0.15rem 0 !important;
+  transform: translate(-50%, -60%) rotate(45deg) !important;
+  box-sizing: border-box !important;
+  display: block !important;
 }
 
 .admin-swal-toast-icon .swal2-icon-content {

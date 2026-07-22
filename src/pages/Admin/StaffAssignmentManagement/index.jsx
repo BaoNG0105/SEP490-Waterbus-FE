@@ -13,10 +13,8 @@ import {
   ASSIGNMENT_TYPE,
   DAYS_OF_WEEK,
   SHIFT_STATE,
-  addStaffAssignment,
   addStaffAssignmentsBulk,
   buildBulkAssignmentPayload,
-  buildCreateAssignmentPayload,
   cancelStaffAssignment,
   fetchStaffAssignments,
   fetchMyStaffAssignments,
@@ -27,8 +25,8 @@ import {
   replaceStaffOnAssignment,
   resolveShiftState,
   validateBulkAssignmentForm,
-  validateCreateAssignmentForm,
 } from "../../../services/staffAssignmentService";
+import { fetchAllTrips, fetchTripDetail, toDdMmYyyy } from "../../../services/tripService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getUserId, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
@@ -86,20 +84,22 @@ const emptyCreateForm = (assignmentType = ASSIGNMENT_TYPE.STATION) => {
   const today = toDateInputValue(new Date());
   const monthEnd = new Date();
   monthEnd.setDate(monthEnd.getDate() + 30);
-  const isBoat = assignmentType === ASSIGNMENT_TYPE.BOAT;
+  // Mặc định Full ngày cho mọi loại phân công (tàu lẫn bến).
   return {
-    mode: isBoat ? "fullDay" : "single",
+    mode: "fullDay",
     assignmentType,
     staffUserId: "",
     boatId: "",
     stationId: "",
+    tripId: "",
+    tripStopId: "",
     startAt: toLocal(start),
     endAt: toLocal(end),
     fromDate: today,
     toDate: toDateInputValue(monthEnd),
-    startTime: isBoat ? FULL_DAY_START_TIME : "07:30",
-    endTime: isBoat ? FULL_DAY_END_TIME : "15:00",
-    daysOfWeek: isBoat ? [...FULL_DAY_DAYS_OF_WEEK] : [1, 2, 3, 4, 5],
+    startTime: FULL_DAY_START_TIME,
+    endTime: FULL_DAY_END_TIME,
+    daysOfWeek: [...FULL_DAY_DAYS_OF_WEEK],
     note: "",
   };
 };
@@ -204,12 +204,73 @@ export function StaffAssignmentManagement() {
   });
   const [replaceError, setReplaceError] = useState("");
   const [isReplacing, setIsReplacing] = useState(false);
+  const [gateTrips, setGateTrips] = useState([]);
+  const [gateStops, setGateStops] = useState([]);
+  const [isLoadingGateTrips, setIsLoadingGateTrips] = useState(false);
+  const [isLoadingGateStops, setIsLoadingGateStops] = useState(false);
 
   // list | schedule — Ngày/Tuần/Tháng gộp trong StaffAssignmentCalendar
   const [displayMode, setDisplayMode] = useState("list");
   const [calendarMode, setCalendarMode] = useState("month"); // day | week | month
   const [calendarLayout, setCalendarLayout] = useState("calendar");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
+
+  // Gate scan: tải chuyến theo fromDate khi chọn bến.
+  useEffect(() => {
+    if (!isCreateOpen || createForm.assignmentType !== ASSIGNMENT_TYPE.STATION || !createForm.fromDate) {
+      setGateTrips([]);
+      return undefined;
+    }
+    let active = true;
+    const load = async () => {
+      try {
+        setIsLoadingGateTrips(true);
+        const list = await fetchAllTrips({ operatingDate: toDdMmYyyy(createForm.fromDate) });
+        if (!active) return;
+        setGateTrips(Array.isArray(list) ? list : []);
+      } catch (error) {
+        console.error("Lỗi tải trips cho gate assignment:", error);
+        if (active) setGateTrips([]);
+      } finally {
+        if (active) setIsLoadingGateTrips(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [isCreateOpen, createForm.assignmentType, createForm.fromDate]);
+
+  // Gate scan: chọn trip → load stops, lọc theo stationId nếu có.
+  useEffect(() => {
+    if (!isCreateOpen || createForm.assignmentType !== ASSIGNMENT_TYPE.STATION || !createForm.tripId) {
+      setGateStops([]);
+      return undefined;
+    }
+    let active = true;
+    const load = async () => {
+      try {
+        setIsLoadingGateStops(true);
+        const detail = await fetchTripDetail(createForm.tripId);
+        if (!active) return;
+        const stops = Array.isArray(detail?.stops) ? detail.stops : [];
+        const stationId = String(createForm.stationId || "");
+        const filtered = stationId
+          ? stops.filter((s) => String(s.stationId || s.station?.stationId || "") === stationId)
+          : stops;
+        setGateStops(filtered.length > 0 ? filtered : stops);
+      } catch (error) {
+        console.error("Lỗi tải trip stops cho gate assignment:", error);
+        if (active) setGateStops([]);
+      } finally {
+        if (active) setIsLoadingGateStops(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [isCreateOpen, createForm.assignmentType, createForm.tripId, createForm.stationId]);
 
   useEffect(() => {
     if (displayMode !== "schedule") return;
@@ -476,23 +537,20 @@ export function StaffAssignmentManagement() {
         next.staffUserId = "";
         next.boatId = "";
         next.stationId = "";
-        next.mode = value === ASSIGNMENT_TYPE.BOAT ? "fullDay" : prev.mode || "single";
-        if (next.mode === "fullDay") {
-          next.startTime = FULL_DAY_START_TIME;
-          next.endTime = FULL_DAY_END_TIME;
-          next.daysOfWeek = [...FULL_DAY_DAYS_OF_WEEK];
-        }
+        next.tripId = "";
+        next.tripStopId = "";
+        // Chỉ còn Full ngày — luôn khóa giờ + đủ 7 thứ.
+        next.mode = "fullDay";
+        next.startTime = FULL_DAY_START_TIME;
+        next.endTime = FULL_DAY_END_TIME;
+        next.daysOfWeek = [...FULL_DAY_DAYS_OF_WEEK];
       }
-      if (field === "mode") {
-        if (value === "fullDay") {
-          next.startTime = FULL_DAY_START_TIME;
-          next.endTime = FULL_DAY_END_TIME;
-          next.daysOfWeek = [...FULL_DAY_DAYS_OF_WEEK];
-        } else if (value === "bulk" && prev.mode === "fullDay") {
-          // Giữ khoảng ngày; admin tự chỉnh giờ ca tùy chọn.
-          next.startTime = prev.startTime || "07:30";
-          next.endTime = prev.endTime || "15:00";
-        }
+      if (field === "stationId" || field === "fromDate") {
+        next.tripId = "";
+        next.tripStopId = "";
+      }
+      if (field === "tripId") {
+        next.tripStopId = "";
       }
       return next;
     });
@@ -525,39 +583,30 @@ export function StaffAssignmentManagement() {
         }
       }
 
-      const isBulk = createForm.mode === "bulk" || createForm.mode === "fullDay";
-      const formForSubmit = createForm.mode === "fullDay"
-        ? {
-          ...createForm,
-          startTime: FULL_DAY_START_TIME,
-          endTime: FULL_DAY_END_TIME,
-          daysOfWeek: Array.isArray(createForm.daysOfWeek) && createForm.daysOfWeek.length > 0
-            ? createForm.daysOfWeek
-            : [...FULL_DAY_DAYS_OF_WEEK],
-        }
-        : createForm;
+      // Chỉ còn Full ngày → luôn bulk với giờ cố định 07:40–23:00.
+      const formForSubmit = {
+        ...createForm,
+        mode: "fullDay",
+        startTime: FULL_DAY_START_TIME,
+        endTime: FULL_DAY_END_TIME,
+        daysOfWeek: Array.isArray(createForm.daysOfWeek) && createForm.daysOfWeek.length > 0
+          ? createForm.daysOfWeek
+          : [...FULL_DAY_DAYS_OF_WEEK],
+      };
 
-      const formError = isBulk
-        ? validateBulkAssignmentForm(formForSubmit, lang)
-        : validateCreateAssignmentForm(formForSubmit, lang);
+      const formError = validateBulkAssignmentForm(formForSubmit, lang);
       if (formError) {
         setCreateError(formError);
         return;
       }
 
-      if (isBulk) {
-        await addStaffAssignmentsBulk(buildBulkAssignmentPayload(formForSubmit));
-      } else {
-        await addStaffAssignment(buildCreateAssignmentPayload(formForSubmit));
-      }
+      await addStaffAssignmentsBulk(buildBulkAssignmentPayload(formForSubmit));
       setIsCreateOpen(false);
       notify({
         toast: true,
         position: "top-end",
         icon: "success",
-        title: isBulk
-          ? (lang === "VN" ? "Đã tạo lịch phân công" : "Schedule created")
-          : (lang === "VN" ? "Đã tạo phân công" : "Assignment created"),
+        title: lang === "VN" ? "Đã tạo lịch phân công" : "Schedule created",
         showConfirmButton: false,
         timer: 1800,
       });
@@ -1125,43 +1174,17 @@ export function StaffAssignmentManagement() {
                 })()}
               </div>
 
-              <div>
-                <label className={labelStyle}>{lang === "VN" ? "Cách tạo (*)" : "Create mode (*)"}</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                  {[
-                    { value: "fullDay", vn: "Full ngày", en: "Full day" },
-                    { value: "bulk", vn: "Lịch nhiều ngày", en: "Custom bulk" },
-                    { value: "single", vn: "1 ca (≤24h)", en: "Single shift" },
-                  ].map((opt) => {
-                    const selected = createForm.mode === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => handleCreateField("mode", opt.value)}
-                        className={`h-10 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
-                          selected
-                            ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
-                            : "text-slate-500 hover:bg-white dark:hover:bg-slate-800"
-                        }`}
-                      >
-                        {lang === "VN" ? opt.vn : opt.en}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1.5">
-                  {createForm.mode === "fullDay"
-                    ? (lang === "VN"
-                      ? `Full ngày: ${FULL_DAY_START_TIME} → ${FULL_DAY_END_TIME}, gọi bulk theo từng ngày. Có thể chọn thứ trong tuần.`
-                      : `Full day: ${FULL_DAY_START_TIME} → ${FULL_DAY_END_TIME}, bulk per day. Weekdays optional.`)
-                    : createForm.mode === "bulk"
-                      ? (lang === "VN"
-                        ? "BE tách thành từng ca theo ngày (fromDate → toDate). Để trống thứ = mọi ngày trong khoảng."
-                        : "BE splits into daily shifts (fromDate → toDate). Empty weekdays = every day in range.")
-                      : (lang === "VN"
-                        ? "Tạo 1 ca đơn — tối đa 24 giờ."
-                        : "Create one shift — max 24 hours.")}
+              <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 dark:border-sky-500/20 dark:bg-sky-500/10">
+                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">
+                  {lang === "VN" ? "Ca full ngày (cố định)" : "Full-day shift (fixed)"}
+                </p>
+                <p className="mt-1 text-sm font-bold text-sky-800 dark:text-sky-200">
+                  {FULL_DAY_START_TIME} → {FULL_DAY_END_TIME}
+                </p>
+                <p className="mt-1 text-[10px] font-medium text-sky-600/80 dark:text-sky-200/80">
+                  {lang === "VN"
+                    ? "Tạo lịch bulk theo từng ngày trong khoảng. Có thể chọn thứ trong tuần."
+                    : "Creates a daily bulk schedule in the date range. Weekdays optional."}
                 </p>
               </div>
 
@@ -1208,148 +1231,126 @@ export function StaffAssignmentManagement() {
                   </select>
                 </div>
               ) : (
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Bến (*)" : "Station (*)"}</label>
-                  <FormSelect
-                    required
-                    value={createForm.stationId}
-                    onChange={(value) => handleCreateField("stationId", String(value ?? ""))}
-                    options={stationSelectOptions}
-                    searchable
-                    placeholder={lang === "VN" ? "-- Chọn bến --" : "-- Select station --"}
-                    searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
-                    emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
-                    className={inputStyle}
-                  />
-                </div>
-              )}
-
-              {createForm.mode === "bulk" || createForm.mode === "fullDay" ? (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
-                      <input
-                        type="date"
-                        required
-                        value={createForm.fromDate}
-                        onChange={(e) => handleCreateField("fromDate", e.target.value)}
-                        className={inputStyle}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "To date (*)"}</label>
-                      <input
-                        type="date"
-                        required
-                        value={createForm.toDate}
-                        onChange={(e) => handleCreateField("toDate", e.target.value)}
-                        className={inputStyle}
-                      />
-                    </div>
-                  </div>
-                  {createForm.mode === "fullDay" ? (
-                    <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 dark:border-sky-500/20 dark:bg-sky-500/10">
-                      <p className="text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">
-                        {lang === "VN" ? "Ca full ngày (cố định)" : "Full-day shift (fixed)"}
-                      </p>
-                      <p className="mt-1 text-sm font-bold text-sky-800 dark:text-sky-200">
-                        {FULL_DAY_START_TIME} → {FULL_DAY_END_TIME}
-                      </p>
-                      <p className="mt-1 text-[10px] font-medium text-sky-600/80 dark:text-sky-200/80">
-                        {lang === "VN"
-                          ? "Gửi bulk: startTime 07:40:00 · endTime 23:00:00"
-                          : "Bulk payload: startTime 07:40:00 · endTime 23:00:00"}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Giờ bắt đầu (*)" : "Start time (*)"}</label>
-                        <input
-                          type="time"
-                          required
-                          value={createForm.startTime}
-                          onChange={(e) => handleCreateField("startTime", e.target.value)}
-                          className={inputStyle}
-                        />
-                      </div>
-                      <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Giờ kết thúc (*)" : "End time (*)"}</label>
-                        <input
-                          type="time"
-                          required
-                          value={createForm.endTime}
-                          onChange={(e) => handleCreateField("endTime", e.target.value)}
-                          className={inputStyle}
-                        />
-                      </div>
-                    </div>
-                  )}
                   <div>
-                    <label className={labelStyle}>
-                      {lang === "VN" ? "Ngày trong tuần" : "Days of week"}
-                    </label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {DAYS_OF_WEEK.map((day) => {
-                        const selected = (createForm.daysOfWeek || []).includes(day.value);
-                        return (
-                          <button
-                            key={day.value}
-                            type="button"
-                            onClick={() => {
-                              const prev = Array.isArray(createForm.daysOfWeek) ? createForm.daysOfWeek : [];
-                              const next = selected
-                                ? prev.filter((d) => d !== day.value)
-                                : [...prev, day.value].sort((a, b) => a - b);
-                              handleCreateField("daysOfWeek", next);
-                            }}
-                            className={`min-w-[2.4rem] h-9 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider border transition ${
-                              selected
-                                ? "bg-[#124757] text-white border-[#124757] dark:bg-yellow-400 dark:text-slate-900 dark:border-yellow-400"
-                                : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900 dark:border-slate-700"
-                            }`}
-                          >
-                            {lang === "VN" ? day.labelVn : day.labelEn}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      {createForm.mode === "fullDay"
-                        ? (lang === "VN"
-                          ? "Mặc định cả tuần (T2–CN). Admin có thể bỏ bớt thứ."
-                          : "Defaults to every day (Mon–Sun). Admin can deselect days.")
-                        : (lang === "VN"
-                          ? "Bỏ chọn hết = tạo mọi ngày trong khoảng."
-                          : "Deselect all = every day in the range.")}
+                    <label className={labelStyle}>{lang === "VN" ? "Bến (*)" : "Station (*)"}</label>
+                    <FormSelect
+                      required
+                      value={createForm.stationId}
+                      onChange={(value) => handleCreateField("stationId", String(value ?? ""))}
+                      options={stationSelectOptions}
+                      searchable
+                      placeholder={lang === "VN" ? "-- Chọn bến --" : "-- Select station --"}
+                      searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
+                      emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
+                      className={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelStyle}>{lang === "VN" ? "Chuyến (để chọn tripStop) (*)" : "Trip (for tripStop) (*)"}</label>
+                    <FormSelect
+                      required
+                      value={createForm.tripId}
+                      onChange={(value) => handleCreateField("tripId", String(value ?? ""))}
+                      options={gateTrips.map((t) => ({
+                        value: String(t.tripId || t.id || ""),
+                        label: `${t.tripCode || t.tripId} · ${t.routeName || t.routeCode || ""}`.trim(),
+                      })).filter((o) => o.value)}
+                      searchable
+                      disabled={isLoadingGateTrips || !createForm.fromDate}
+                      placeholder={lang === "VN" ? "-- Chọn chuyến --" : "-- Select trip --"}
+                      emptyLabel={lang === "VN" ? "Không có chuyến" : "No trips"}
+                      className={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelStyle}>{lang === "VN" ? "Trip stop (quét vé bến) (*)" : "Trip stop (gate scan) (*)"}</label>
+                    <FormSelect
+                      required
+                      value={createForm.tripStopId}
+                      onChange={(value) => handleCreateField("tripStopId", String(value ?? ""))}
+                      options={gateStops.map((s) => {
+                        const id = String(s.tripStopId || s.id || s.stopId || "");
+                        const order = s.stopOrder ?? s.order ?? "";
+                        const name = s.stationName || s.station?.stationName || s.stationCode || "";
+                        return {
+                          value: id,
+                          label: `#${order} · ${name}`.trim(),
+                        };
+                      }).filter((o) => o.value)}
+                      searchable
+                      disabled={isLoadingGateStops || !createForm.tripId}
+                      placeholder={lang === "VN" ? "-- Chọn tripStopId --" : "-- Select tripStopId --"}
+                      emptyLabel={lang === "VN" ? "Không có stop" : "No stops"}
+                      className={inputStyle}
+                    />
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      {lang === "VN"
+                        ? "BE yêu cầu tripStopId khi phân công quét vé bến — không đủ chỉ stationId."
+                        : "BE requires tripStopId for station scan assignment — stationId alone is not enough."}
                     </p>
                   </div>
                 </>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelStyle}>startAt (*)</label>
-                    <input
-                      type="datetime-local"
-                      required
-                      value={createForm.startAt}
-                      onChange={(e) => handleCreateField("startAt", e.target.value)}
-                      className={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelStyle}>endAt (*)</label>
-                    <input
-                      type="datetime-local"
-                      required
-                      value={createForm.endAt}
-                      onChange={(e) => handleCreateField("endAt", e.target.value)}
-                      className={inputStyle}
-                    />
-                  </div>
-                </div>
               )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
+                  <input
+                    type="date"
+                    required
+                    value={createForm.fromDate}
+                    onChange={(e) => handleCreateField("fromDate", e.target.value)}
+                    className={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "To date (*)"}</label>
+                  <input
+                    type="date"
+                    required
+                    value={createForm.toDate}
+                    onChange={(e) => handleCreateField("toDate", e.target.value)}
+                    className={inputStyle}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className={labelStyle}>
+                  {lang === "VN" ? "Ngày trong tuần" : "Days of week"}
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {DAYS_OF_WEEK.map((day) => {
+                    const selected = (createForm.daysOfWeek || []).includes(day.value);
+                    return (
+                      <button
+                        key={day.value}
+                        type="button"
+                        onClick={() => {
+                          const prev = Array.isArray(createForm.daysOfWeek) ? createForm.daysOfWeek : [];
+                          const next = selected
+                            ? prev.filter((d) => d !== day.value)
+                            : [...prev, day.value].sort((a, b) => a - b);
+                          handleCreateField("daysOfWeek", next);
+                        }}
+                        className={`min-w-[2.4rem] h-9 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider border transition ${
+                          selected
+                            ? "bg-[#124757] text-white border-[#124757] dark:bg-yellow-400 dark:text-slate-900 dark:border-yellow-400"
+                            : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900 dark:border-slate-700"
+                        }`}
+                      >
+                        {lang === "VN" ? day.labelVn : day.labelEn}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {lang === "VN"
+                    ? "Mặc định cả tuần (T2–CN). Admin có thể bỏ bớt thứ."
+                    : "Defaults to every day (Mon–Sun). Admin can deselect days."}
+                </p>
+              </div>
 
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Ghi chú" : "Note"}</label>
@@ -1357,7 +1358,7 @@ export function StaffAssignmentManagement() {
                   type="text"
                   value={createForm.note}
                   onChange={(e) => handleCreateField("note", e.target.value)}
-                  placeholder={lang === "VN" ? "Ca sáng" : "Morning shift"}
+                  placeholder={lang === "VN" ? "Ca full ngày" : "Full-day shift"}
                   className={inputStyle}
                 />
               </div>
@@ -1370,9 +1371,7 @@ export function StaffAssignmentManagement() {
                 {isSaving && (
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                 )}
-                {createForm.mode === "bulk" || createForm.mode === "fullDay"
-                  ? (lang === "VN" ? "Tạo lịch phân công" : "Create schedule")
-                  : (lang === "VN" ? "Tạo phân công" : "Create assignment")}
+                {lang === "VN" ? "Tạo lịch phân công" : "Create schedule"}
               </button>
             </form>
           </div>

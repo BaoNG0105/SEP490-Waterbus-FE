@@ -325,11 +325,11 @@ export function TripManagement() {
                                             <div className="flex items-center justify-center gap-2">
                                                 <button
                                                     type="button"
-                                                    disabled
-                                                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-300 dark:text-slate-600 opacity-50 cursor-not-allowed shadow-sm"
-                                                    title={lang === "VN" ? "Chưa hỗ trợ sửa chuyến (chưa có API)" : "Editing not supported yet (API pending)"}
+                                                    onClick={() => navigate(`/admin/trips-management/${trip.tripId}`)}
+                                                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-[#124757] dark:hover:text-yellow-400 shadow-sm transition-colors"
+                                                    title={lang === "VN" ? "Xem chi tiết chuyến" : "View trip detail"}
                                                 >
-                                                    <span className="material-symbols-outlined text-[18px]">edit</span>
+                                                    <span className="material-symbols-outlined text-[18px]">visibility</span>
                                                 </button>
                                             </div>
                                         </td>
@@ -346,3 +346,4 @@ export function TripManagement() {
 }
 
 export { CreateTrip } from "./CreateTrip";
+export { TripDetail } from "./TripDetail";

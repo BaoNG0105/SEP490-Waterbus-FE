@@ -179,6 +179,8 @@ export const buildCreateAssignmentPayload = (form) => {
         payload.boatId = String(form.boatId || '').trim();
     } else {
         payload.stationId = String(form.stationId || '').trim();
+        // Gate scan: BE yêu cầu tripStopId (không đủ chỉ tripId + stationId).
+        if (form.tripStopId) payload.tripStopId = String(form.tripStopId).trim();
     }
 
     return payload;
@@ -208,6 +210,7 @@ export const buildBulkAssignmentPayload = (form) => {
         payload.boatId = String(form.boatId || '').trim();
     } else {
         payload.stationId = String(form.stationId || '').trim();
+        if (form.tripStopId) payload.tripStopId = String(form.tripStopId).trim();
     }
 
     return payload;
@@ -229,6 +232,11 @@ export const validateCreateAssignmentForm = (form, lang = 'VN') => {
     } else if (form.assignmentType === ASSIGNMENT_TYPE.STATION) {
         if (!form.stationId) {
             return lang === 'VN' ? 'Chọn bến (stationId bắt buộc).' : 'Select a station (stationId required).';
+        }
+        if (!String(form.tripStopId || '').trim()) {
+            return lang === 'VN'
+                ? 'Chọn tripStopId (bến dừng của chuyến) để phân công quét vé tại bến.'
+                : 'Select a tripStopId (trip stop) for station ticket scanning.';
         }
     } else {
         return lang === 'VN' ? 'Loại phân công không hợp lệ.' : 'Invalid assignment type.';
@@ -258,6 +266,11 @@ export const validateBulkAssignmentForm = (form, lang = 'VN') => {
     } else if (form.assignmentType === ASSIGNMENT_TYPE.STATION) {
         if (!form.stationId) {
             return lang === 'VN' ? 'Chọn bến (stationId bắt buộc).' : 'Select a station (stationId required).';
+        }
+        if (!String(form.tripStopId || '').trim()) {
+            return lang === 'VN'
+                ? 'Chọn tripStopId (bến dừng của chuyến) để phân công quét vé tại bến.'
+                : 'Select a tripStopId (trip stop) for station ticket scanning.';
         }
     } else {
         return lang === 'VN' ? 'Loại phân công không hợp lệ.' : 'Invalid assignment type.';
