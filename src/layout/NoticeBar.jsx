@@ -24,6 +24,9 @@ export const NoticeBar = ({ isVisible, setVisible }) => {
       setIsLoaded(true);
       return;
     }
+    // Tab ẩn (treo qua đêm) / mất mạng: bỏ lượt poll — tránh spam ETIMEDOUT lên BE Azure.
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
     try {
       const [list, unread] = await Promise.all([
         fetchNotifications({ page: 1, pageSize: 5 }),
@@ -42,7 +45,15 @@ export const NoticeBar = ({ isVisible, setVisible }) => {
   useEffect(() => {
     loadNotifications();
     const poll = setInterval(loadNotifications, POLL_INTERVAL_MS);
-    return () => clearInterval(poll);
+    // Quay lại tab thì refresh ngay cho kịp thông báo mới.
+    const onVisible = () => {
+      if (!document.hidden) loadNotifications();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [loadNotifications]);
 
   // Không có thông báo (khách chưa đăng nhập hoặc user không có tin nào) thì tự ẩn thanh

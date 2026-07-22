@@ -30,6 +30,12 @@ export default defineConfig(({ mode }) => {
             proxy: {
               "/api": {
                 ...proxyCommon,
+                // Mất mạng / BE Azure không phản hồi: log 1 dòng, không dump stack mỗi request poll.
+                configure: (proxy) => {
+                  proxy.on("error", (err, req) => {
+                    console.warn(`[vite /api proxy] ${err?.code || err?.message}: ${req?.url || ""}`)
+                  })
+                },
               },
               "/hubs": {
                 ...proxyCommon,

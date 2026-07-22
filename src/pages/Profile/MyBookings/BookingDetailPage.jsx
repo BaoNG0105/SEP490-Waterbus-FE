@@ -265,25 +265,7 @@ export function BookingDetailPage({ serviceType }) {
     }));
   }, [booking]);
 
-  // Chỉ vé WaterSightseeing được tự yêu cầu hoàn tiền, và chỉ khi còn hơn 24h trước giờ khởi hành sớm nhất.
-  // Nút luôn hiện với Sightseeing (khóa mờ nếu chưa đủ điều kiện) — yêu cầu hoàn tiền cũng tự hủy booking
-  // nên không cần nút "Hủy booking" riêng nữa.
-  const REFUND_ELIGIBLE_HOURS = 24;
-  const isSightseeingBooking = config.serviceType === "Sightseeing";
-  const earliestDepartureMs = useMemo(() => {
-    if (!booking) return 0;
-    const times = booking.items
-      .map((item) => new Date(item.scheduledDeparture).getTime())
-      .filter((time) => Number.isFinite(time));
-    return times.length ? Math.min(...times) : 0;
-  }, [booking]);
-  const canRequestRefund = isSightseeingBooking
-    && Boolean(booking)
-    && !["cancelled", "completed", "expired"].includes(getStatusKey(booking.status))
-    && booking.payments.some((payment) => getStatusKey(payment.paymentStatus) === "paid")
-    && earliestDepartureMs > 0
-    && earliestDepartureMs - Date.now() > REFUND_ELIGIBLE_HOURS * 60 * 60 * 1000;
-
+  // BE: ẩn hoàn tiền cho booking thường + sightseeing. Charter dùng luồng riêng (hủy → nhập STK).
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 py-30 px-4 font-body transition-colors dark:bg-slate-900 sm:px-6 lg:px-8">
@@ -522,21 +504,6 @@ export function BookingDetailPage({ serviceType }) {
                   <h3 className="font-headline font-black text-[#124757] dark:text-white">
                     {lang === "VN" ? "Lịch sử thanh toán" : "Payment history"}
                   </h3>
-                  {isSightseeingBooking && (
-                    <button
-                      type="button"
-                      onClick={() => canRequestRefund && navigate(`/profile/my-sightseeing-booking/${booking.id}/refund`)}
-                      disabled={!canRequestRefund}
-                      title={!canRequestRefund
-                        ? (lang === "VN"
-                          ? `Chỉ áp dụng khi đã thanh toán và còn hơn ${REFUND_ELIGIBLE_HOURS}h trước giờ khởi hành`
-                          : `Only available when paid and more than ${REFUND_ELIGIBLE_HOURS}h remain before departure`)
-                        : undefined}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-sky-50 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20 dark:disabled:hover:bg-sky-500/10"
-                    >
-                      {lang === "VN" ? "Yêu cầu hoàn tiền" : "Request refund"}
-                    </button>
-                  )}
                 </div>
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
                   {booking.payments.map((payment) => {

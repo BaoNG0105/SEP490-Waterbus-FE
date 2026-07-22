@@ -14,13 +14,12 @@ import { fetchAllBoats, fetchActiveBoatsByServiceType } from "../../../services/
 import {
   fetchAdminCharterBookingDetail,
   fetchAssignedCharterBookingDetail,
-  fetchAdminCharterBookings,
-  fetchAssignedCharterBookings,
   fetchAdminCharterBookingRouteCandidates,
   modifyAdminCharterBookingStatus,
   previewAdminCharterBookingQuote,
   submitAdminCharterBookingQuote,
   createAdminCharterBookingTrip,
+  fetchOccupiedBoatIdsForCharterDate,
 } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { buildConfirmBodyHtml, showConfirmDialog, showToast, showValidationMessage } from "../../../utils/swalToast";
@@ -42,14 +41,12 @@ import {
   buildQuoteFormFromBooking,
   canAdminHandleRefund,
   enrichAssignedBoat,
-  extractCharterBookingList,
   formatCountdown,
   formatDate,
   formatDateTime,
   formatDeckCount,
   formatDuration,
   formatPassengerSummary,
-  getAssignedBoatIdsFromBooking,
   getBoatDeckCount,
   getBoatId,
   getBoatPrice,
@@ -61,9 +58,6 @@ import {
   isCharterRoutePlanComplete,
   isCharterRoutePricingBlocked,
   isUsableRouteCandidateForBooking,
-  CHARTER_BOAT_HOLDING_STATUSES,
-  collectOccupiedBoatIdsForSchedule,
-  normalizeCharterScheduleDate,
   getPaymentAmount,
   getPaymentStatusInfo,
   getRefundAmount,
@@ -121,7 +115,6 @@ export function AdminCharterBookingDetail() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [quotePreviewError, setQuotePreviewError] = useState("");
   const [occupiedBoatIds, setOccupiedBoatIds] = useState([]);
-  const [charterTripGateBookings, setCharterTripGateBookings] = useState([]);
   const [localCreatedTripIds, setLocalCreatedTripIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -283,6 +276,8 @@ export function AdminCharterBookingDetail() {
     setIsPreviewLoading(false);
   }, [booking?.id, canManageQuote]);
 
+  // Soft-filter dropdown: chỉ khi đang chốt giá. Cache 2 phút, chỉ hydrate booking cùng ngày.
+  // Trùng lịch cứng vẫn do BE quyết; occupiedBoatIds chỉ để ẩn tàu đã giữ khỏi dropdown.
   useEffect(() => {
     if (!booking?.id || !canManageQuote) {
       setOccupiedBoatIds([]);
@@ -292,54 +287,11 @@ export function AdminCharterBookingDetail() {
     let isActive = true;
     const loadOccupiedBoats = async () => {
       try {
-        const listPayload = useAssignedApi
-          ? await fetchAssignedCharterBookings()
-          : await fetchAdminCharterBookings();
-        if (!isActive) return;
-
-        const otherBookings = extractCharterBookingList(listPayload).map(normalizeBooking);
-        const dateKey = normalizeCharterScheduleDate(booking.departureDate);
-        const sameDayHoldings = otherBookings.filter((other) => (
-          String(other.id) !== String(booking.id)
-          && CHARTER_BOAT_HOLDING_STATUSES.has(String(other.status || ""))
-          && normalizeCharterScheduleDate(other.departureDate) === dateKey
-        ));
-
-        // List API thường thiếu selectedBoats → hydrate detail cho booking cùng ngày đang giữ tàu.
-        const needsDetail = sameDayHoldings.filter(
-          (other) => getAssignedBoatIdsFromBooking(other).length === 0,
-        );
-        const hydratedById = new Map();
-        if (needsDetail.length > 0) {
-          const fetchDetail = useAssignedApi
-            ? fetchAssignedCharterBookingDetail
-            : fetchAdminCharterBookingDetail;
-          const details = await Promise.all(
-            needsDetail.map(async (other) => {
-              try {
-                return normalizeBooking(await fetchDetail(other.id));
-              } catch (error) {
-                console.error(`Không tải detail để ẩn tàu trùng lịch ${other.id}:`, error);
-                return null;
-              }
-            }),
-          );
-          details.filter(Boolean).forEach((detail) => {
-            hydratedById.set(String(detail.id), detail);
-          });
-        }
-
-        const bookingsForConflict = otherBookings.map((other) => (
-          hydratedById.get(String(other.id)) || other
-        ));
-
-        const occupied = collectOccupiedBoatIdsForSchedule({
+        const occupied = await fetchOccupiedBoatIdsForCharterDate({
           currentBookingId: booking.id,
           departureDate: booking.departureDate,
-          otherBookings: bookingsForConflict,
-          matchMode: "day",
+          useAssignedApi,
         });
-
         if (!isActive) return;
         setOccupiedBoatIds(occupied);
         if (occupied.length > 0) {
@@ -354,7 +306,7 @@ export function AdminCharterBookingDetail() {
           }));
         }
       } catch (error) {
-        console.error("Không tải được lịch tàu để kiểm tra trùng:", error);
+        console.error("Không tải được lịch tàu để ẩn khỏi dropdown:", error);
         if (isActive) setOccupiedBoatIds([]);
       }
     };
@@ -366,7 +318,6 @@ export function AdminCharterBookingDetail() {
   }, [
     booking?.id,
     booking?.departureDate,
-    booking?.startTime,
     canManageQuote,
     useAssignedApi,
   ]);
@@ -421,49 +372,16 @@ export function AdminCharterBookingDetail() {
     if (!booking || !canManageTripCreate) {
       return { canCreate: false, reasons: [], boatIds: [], tripIds: [], conflicts: [] };
     }
-    return evaluateCharterTripCreateGate(booking, {
-      otherBookings: charterTripGateBookings,
-      lang,
-    });
-  }, [booking, canManageTripCreate, charterTripGateBookings, lang]);
+    return evaluateCharterTripCreateGate(booking, { otherBookings: [], lang });
+  }, [booking, canManageTripCreate, lang]);
 
-  useEffect(() => {
-    if (!canManageTripCreate || !booking?.id) {
-      setCharterTripGateBookings([]);
-      return undefined;
-    }
-
-    let isActive = true;
-    const loadGateBookings = async () => {
-      try {
-        const listPayload = await fetchAdminCharterBookings();
-        if (!isActive) return;
-        setCharterTripGateBookings(extractCharterBookingList(listPayload).map(normalizeBooking));
-      } catch (error) {
-        console.error("Không tải danh sách booking để kiểm tra trùng giờ trip:", error);
-        if (isActive) setCharterTripGateBookings([]);
-      }
-    };
-
-    loadGateBookings();
-    return () => {
-      isActive = false;
-    };
-  }, [
-    canManageTripCreate,
-    booking?.id,
-    booking?.departureDate,
-    booking?.startTime,
-    booking?.selectedBoats,
-  ]);
+  // Bỏ pre-check trùng giờ trip ở FE (không kéo full list). BE validate khi tạo trip
+  // và trả message trùng lịch (isCharterBoatScheduleConflictError) → xử lý ở handleCreateCharterTrip.
 
   const handleCreateCharterTrip = async () => {
     if (!booking?.id || !canManageTripCreate) return;
 
-    const gate = evaluateCharterTripCreateGate(booking, {
-      otherBookings: charterTripGateBookings,
-      lang,
-    });
+    const gate = evaluateCharterTripCreateGate(booking, { otherBookings: [], lang });
     if (!gate.canCreate) {
       showToast({
         icon: "warning",

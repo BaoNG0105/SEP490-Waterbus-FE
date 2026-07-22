@@ -30,16 +30,46 @@ export const fetchAllBoats = async (params) => {
     }
 };
 
+// Cache tàu Active theo serviceType: tàu ít đổi, tránh gọi lại mỗi lần mở màn (giảm transfer/query Neon).
+const ACTIVE_BOATS_TTL_MS = 5 * 60 * 1000;
+const activeBoatsCache = new Map(); // serviceType -> { at, data }
+const activeBoatsInflight = new Map(); // serviceType -> Promise
+
+/** Xóa cache tàu (gọi sau khi tạo/sửa/xóa/đổi trạng thái tàu). */
+export const invalidateActiveBoatsCache = () => {
+    activeBoatsCache.clear();
+    activeBoatsInflight.clear();
+};
+
 /** Active boats by serviceType: Passenger | Rescue */
-export const fetchActiveBoatsByServiceType = async (serviceType) => {
-    const data = await fetchAllBoats({ status: "Active", serviceType });
-    return unwrapList(data);
+export const fetchActiveBoatsByServiceType = async (serviceType, { force = false } = {}) => {
+    const key = String(serviceType || "");
+    const cached = activeBoatsCache.get(key);
+    if (!force && cached && Date.now() - cached.at < ACTIVE_BOATS_TTL_MS) {
+        return cached.data;
+    }
+    if (!force && activeBoatsInflight.has(key)) {
+        return activeBoatsInflight.get(key);
+    }
+    const promise = (async () => {
+        const data = await fetchAllBoats({ status: "Active", serviceType });
+        const list = unwrapList(data);
+        activeBoatsCache.set(key, { at: Date.now(), data: list });
+        return list;
+    })();
+    activeBoatsInflight.set(key, promise);
+    try {
+        return await promise;
+    } finally {
+        activeBoatsInflight.delete(key);
+    }
 };
 
 // Hàm Service tạo tàu mới
 export const addNewBoat = async (boatPayload) => {
     try {
         const response = await apiCreateBoat(boatPayload);
+        invalidateActiveBoatsCache();
         return response;
     } catch (error) {
         console.error('Error in addNewBoat Service:', error);
@@ -60,7 +90,9 @@ export const fetchBoatDetail = async (boatId) => {
 // Hàm Service cập nhật tàu
 export const modifyBoat = async (boatId, boatPayload) => {
     try {
-        return await apiUpdateBoat(boatId, boatPayload);
+        const response = await apiUpdateBoat(boatId, boatPayload);
+        invalidateActiveBoatsCache();
+        return response;
     } catch (error) {
         console.error(`Lỗi trong service modifyBoat tại ID ${boatId}:`, error);
         throw error;
@@ -70,7 +102,9 @@ export const modifyBoat = async (boatId, boatPayload) => {
 // Hàm Service cập nhật trạng thái tàu
 export const modifyBoatStatus = async (boatId, statusPayload) => {
     try {
-        return await apiUpdateBoatStatus(boatId, statusPayload);
+        const response = await apiUpdateBoatStatus(boatId, statusPayload);
+        invalidateActiveBoatsCache();
+        return response;
     } catch (error) {
         console.error(`Lỗi khi cập nhật trạng thái tàu ${boatId}:`, error);
         throw error;
@@ -80,7 +114,9 @@ export const modifyBoatStatus = async (boatId, statusPayload) => {
 // Hàm service xóa tàu
 export const deleteBoat = async (boatId) => {
     try {
-        return await apiDeleteBoat(boatId);
+        const response = await apiDeleteBoat(boatId);
+        invalidateActiveBoatsCache();
+        return response;
     } catch (error) {
         console.error(`Lỗi khi xóa tàu ${boatId}:`, error);
         throw error;

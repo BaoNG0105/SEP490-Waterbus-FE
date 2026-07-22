@@ -1,7 +1,7 @@
 export const deckOptions = [1, 2];
 
-/** Thuê theo ngày: cửa sổ vận hành 1 ngày = 07:40 → 23:00 (BE). */
-export const CHARTER_DAY_WINDOW_START = "07:40";
+/** Cửa sổ giờ khởi hành áp dụng cho cả thuê theo giờ và theo ngày. */
+export const CHARTER_DAY_WINDOW_START = "07:30";
 export const CHARTER_DAY_WINDOW_END = "23:00";
 
 export const toCharterTimeMinutes = (value) => {
@@ -15,20 +15,20 @@ export const toCharterTimeMinutes = (value) => {
   return hours * 60 + minutes;
 };
 
-/** startTime hợp lệ cho rentalUnit=Day: từ 07:40 đến trước 23:00. */
+/** Giờ khởi hành hợp lệ: từ 07:30 đến 23:00 (bao gồm hai mốc). */
 export const isCharterDayStartTimeValid = (startTime) => {
   const minutes = toCharterTimeMinutes(startTime);
   if (minutes == null) return false;
   const start = toCharterTimeMinutes(CHARTER_DAY_WINDOW_START);
   const end = toCharterTimeMinutes(CHARTER_DAY_WINDOW_END);
-  return minutes >= start && minutes < end;
+  return minutes >= start && minutes <= end;
 };
 
 export const getCharterDayStartTimeError = (startTime, lang = "VN") => {
   if (isCharterDayStartTimeValid(startTime)) return null;
   return lang === "VN"
-    ? `Thuê theo ngày: giờ đi phải từ ${CHARTER_DAY_WINDOW_START} đến trước ${CHARTER_DAY_WINDOW_END}.`
-    : `Daily rental: start time must be from ${CHARTER_DAY_WINDOW_START} until before ${CHARTER_DAY_WINDOW_END}.`;
+    ? `Giờ đi phải từ ${CHARTER_DAY_WINDOW_START} đến ${CHARTER_DAY_WINDOW_END}.`
+    : `Start time must be from ${CHARTER_DAY_WINDOW_START} to ${CHARTER_DAY_WINDOW_END}.`;
 };
 
 export const getMinDepartureDate = () => {

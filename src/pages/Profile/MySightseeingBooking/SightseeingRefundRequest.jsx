@@ -129,11 +129,8 @@ export function SightseeingRefundRequest() {
     ? (booking.earliestDepartureMs - Date.now()) / (60 * 60 * 1000)
     : null;
   const isPastEligibilityWindow = hoursUntilDeparture !== null && hoursUntilDeparture <= REFUND_ELIGIBLE_HOURS;
-  const isEligible = Boolean(booking)
-    && isSightseeing
-    && !isClosedStatus
-    && Boolean(paymentId)
-    && !isPastEligibilityWindow;
+  // BE: ẩn/disable self-refund cho booking thường + sightseeing (charter dùng luồng riêng).
+  const isEligible = false;
 
   const handleFieldChange = (field) => (event) => {
     const value = field === "accountNumber"
@@ -256,15 +253,9 @@ export function SightseeingRefundRequest() {
   }
 
   if (!isEligible) {
-    const reason = !isSightseeing
-      ? (lang === "VN" ? "Chỉ vé WaterSightseeing mới hỗ trợ tự yêu cầu hoàn tiền." : "Only WaterSightseeing bookings support self-service refund requests.")
-      : isClosedStatus
-        ? (lang === "VN" ? "Booking này đã kết thúc hoặc đã hủy nên không thể yêu cầu hoàn tiền." : "This booking is already closed or cancelled, so it can no longer request a refund.")
-        : !paymentId
-          ? (lang === "VN" ? "Chưa có khoản thanh toán nào cần hoàn." : "There is no paid payment to refund yet.")
-          : (lang === "VN"
-            ? `Chỉ có thể yêu cầu hoàn tiền trước ${REFUND_ELIGIBLE_HOURS} giờ so với giờ khởi hành. Tour này sắp khởi hành hoặc đã khởi hành.`
-            : `Refund requests are only allowed at least ${REFUND_ELIGIBLE_HOURS} hours before departure. This tour is departing soon or has already departed.`);
+    const reason = lang === "VN"
+      ? "Vé thường và vé tham quan không hỗ trợ tự yêu cầu hoàn tiền trên app. Liên hệ hỗ trợ nếu cần xử lý thủ công."
+      : "Regular and sightseeing tickets do not support self-service refunds in the app. Contact support for manual handling.";
 
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-30 font-body dark:bg-slate-900">

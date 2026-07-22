@@ -509,10 +509,17 @@ export function EditBoat() {
             </div>
             {formData.rentalPrices.map((price, idx) => (
               <div key={idx} className="flex flex-col sm:flex-row gap-2 bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-700">
-                <select value={price.rentalUnit} onChange={(e) => handlePriceChange(idx, "rentalUnit", e.target.value)} className="w-full sm:w-1/3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none">
-                  <option value="Day">Theo Ngày (Day)</option>
-                  <option value="Hour">Theo Giờ (Hour)</option>
-                </select>
+                <div className="w-full sm:w-1/3 min-w-0">
+                  <FormSelect
+                    value={price.rentalUnit}
+                    onChange={(value) => handlePriceChange(idx, "rentalUnit", value)}
+                    options={[
+                      { value: "Day", label: "Theo Ngày (Day)" },
+                      { value: "Hour", label: "Theo Giờ (Hour)" },
+                    ]}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none"
+                  />
+                </div>
                 <input type="number" min={0} value={price.unitPrice} onChange={(e) => handlePriceChange(idx, "unitPrice", e.target.value)} placeholder="Giá tiền" className="w-full sm:flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none" />
                 <input type="text" value={price.note || ""} onChange={(e) => handlePriceChange(idx, "note", e.target.value)} placeholder="Ghi chú (VD: Gồm VAT)" className="w-full sm:flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none" />
                 <button type="button" onClick={() => handleRemovePrice(idx)} className="w-full sm:w-auto px-3 py-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors">
