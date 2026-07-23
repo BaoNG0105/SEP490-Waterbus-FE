@@ -176,14 +176,14 @@ export function FormSelect({
         className={`flex min-w-0 items-center justify-between gap-1.5 overflow-hidden text-left ${fullWidth ? "w-full max-w-full" : "w-auto"} ${className}`}
       >
         <span className={`flex min-w-0 flex-1 items-center gap-2 text-left ${selected ? "" : "text-slate-400"}`}>
-          {selected?.icon ? <span className="inline-flex shrink-0 items-center">{selected.icon}</span> : null}
-          <span className="min-w-0 flex-1 break-words line-clamp-2 leading-snug">
+          {selected?.icon ? <span className="inline-flex shrink-0 items-center leading-none">{selected.icon}</span> : null}
+          <span className="min-w-0 flex-1 truncate leading-none">
             {selected ? selected.label : placeholder}
           </span>
         </span>
         <span
           aria-hidden="true"
-          className={`material-symbols-outlined inline-flex h-5 w-5 shrink-0 items-center justify-center self-center text-[20px] leading-none text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={`material-symbols-outlined inline-flex h-5 w-5 shrink-0 items-center justify-center text-[20px] leading-none text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
         >
           expand_more
         </span>

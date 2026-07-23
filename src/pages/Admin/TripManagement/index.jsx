@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllTrips, toDdMmYyyy, getTripStatusLabel, normalizeTripStatusKey, isTripRunningStatus, sortTripsForOpsList } from "../../../services/tripService";
+import { fetchAllTrips, toOperatingDateQuery, getTripStatusLabel, normalizeTripStatusKey, isTripRunningStatus, sortTripsForOpsList } from "../../../services/tripService";
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
 import { trackingHub } from "../../../services/trackingHubClient";
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { getRouteShortLabel } from "../../../utils/routeTypes";
-import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../../../utils/charterBookingAdmin";
+import { getApiErrorMessage } from "../../../utils/apiError";
 import {
   applyDelayPayloadToTrip,
   formatActiveDelayLine,
@@ -105,11 +105,11 @@ const labelFromStationLike = (station) => {
 
 const labelFromStop = (stop) => {
     if (!stop) return "";
-    return labelFromStationLike(stop)
+    // Stop trên trip chỉ còn stationId + stationName.
+    return cleanLabel(stop.stationName)
         || labelFromStationLike(stop.station)
         || labelFromStationLike(stop.Station)
-        || cleanLabel(stop.stationName)
-        || cleanLabel(stop.stationCode);
+        || cleanLabel(stop.station?.stationName);
 };
 
 /** Mã tuyến kiểu WB-BD-LB / RS-TT-BD → [BD, LB] */
@@ -183,27 +183,18 @@ const resolveStationLabel = (trip, edge = "from", routeMeta = null) => {
 
 const resolveBoatLabel = (trip, lang) => {
     const boat = trip?.boat || trip?.Boat || trip?.vessel || trip?.Vessel || {};
-    const code = cleanLabel(
-        trip?.boatCode
-        || trip?.BoatCode
-        || trip?.vesselCode
-        || boat.boatCode
-        || boat.vesselCode
-        || boat.code
-        || boat.BoatCode,
-    );
+    // List/admin chỉ dùng boatId + boatName (hoặc vesselId/vesselName nested).
     const name = cleanLabel(
         trip?.boatName
         || trip?.BoatName
-        || trip?.vesselName
-        || boat.boatName
         || boat.vesselName
+        || boat.boatName
         || boat.name
         || boat.BoatName,
     );
-    if (code || name) return [code, name].filter(Boolean).join(" · ");
+    if (name) return name;
 
-    const boatId = trip?.boatId || trip?.BoatId || boat.boatId || boat.vesselId || boat.id;
+    const boatId = trip?.boatId || trip?.BoatId || boat.vesselId || boat.boatId || boat.id;
     const hasCapacity = trip?.capacitySnapshot != null || boat.capacity != null || boat.seatCount != null;
     if (boatId || hasCapacity) {
         return lang === "VN" ? "Đã gán tàu" : "Boat assigned";
@@ -237,24 +228,6 @@ const resolveRemainingSeats = (trip) => {
     return Number.isFinite(n) ? n : null;
 };
 
-const resolveTripThumb = (trip) => {
-    const boat = trip?.boat || trip?.Boat || {};
-    const candidates = [
-        trip?.boatImageUrl,
-        boat.imageUrl,
-        Array.isArray(boat.imageUrls) ? boat.imageUrls[0] : "",
-        trip?.fromStation?.imageUrl,
-        trip?.fromStation?.stationImageUrl,
-        Array.isArray(trip?.stops) ? trip.stops[0]?.stationImageUrl : "",
-    ].filter(Boolean);
-    const first = candidates.find((url) => {
-        const s = String(url).trim();
-        return s && !/image\s*not\s*available/i.test(s);
-    });
-    if (first) return first;
-    return getBoatImageUrl(boat, DEFAULT_BOAT_IMAGE);
-};
-
 const formatFareAdjustment = (trip, lang) => {
     const adj = trip?.fareAdjustment || trip?.FareAdjustment || trip?.effectiveFareAdjustment;
     if (!adj) return null;
@@ -279,7 +252,7 @@ const formatStopTimesBrief = (trip) => {
     if (list.length < 2) return null;
     return list
         .map((stop) => {
-            const name = labelFromStop(stop) || cleanLabel(stop.stationCode) || `#${stop.stopOrder}`;
+            const name = labelFromStop(stop) || `#${stop.stopOrder}`;
             const t = formatTime(stop.scheduledDeparture || stop.scheduledArrival || stop.plannedDepartureTime);
             return `${name} ${t}`;
         })
@@ -314,18 +287,19 @@ export function TripManagement() {
                 setIsLoading(true);
                 setErrorMsg("");
                 const params = {};
-                if (operatingDate) params.operatingDate = toDdMmYyyy(operatingDate);
+                if (operatingDate) params.operatingDate = toOperatingDateQuery(operatingDate);
                 if (statusFilter !== "All") params.status = statusFilter;
                 const data = await fetchAllTrips(params);
                 const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
                 setTrips(sortTripsForOpsList(list));
             } catch (error) {
                 console.error("Lỗi giao diện tải danh sách chuyến tàu:", error);
-                setErrorMsg(
+                setErrorMsg(getApiErrorMessage(
+                    error,
                     lang === "VN"
-                        ? "Không thể kết nối tới máy chủ để tải danh sách chuyến tàu."
-                        : "Failed to connect to server to fetch trip list."
-                );
+                        ? "Không thể tải danh sách chuyến tàu (lỗi máy chủ). Báo BE kiểm tra GET /api/trips."
+                        : "Unable to load trips (server error). Ask BE to check GET /api/trips.",
+                ));
             } finally {
                 setIsLoading(false);
             }
@@ -565,7 +539,6 @@ export function TripManagement() {
                                     const stopCount = trip.stopCount
                                         ?? (Array.isArray(trip.stops) ? trip.stops.length : null)
                                         ?? (Array.isArray(routeMeta?.stops) ? routeMeta.stops.length : null);
-                                    const thumb = resolveTripThumb(trip);
                                     const remaining = resolveRemainingSeats(trip);
                                     const fareAdj = formatFareAdjustment(trip, lang);
                                     const stopTimes = formatStopTimesBrief(trip);
@@ -573,37 +546,29 @@ export function TripManagement() {
                                     return (
                                         <tr key={trip.tripId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
                                             <td className="py-3.5 px-5 align-middle">
-                                                <div className="flex min-w-0 items-start gap-3">
-                                                    <img
-                                                        src={thumb}
-                                                        alt=""
-                                                        className="h-12 w-12 shrink-0 rounded-xl object-cover bg-slate-100"
-                                                        onError={(e) => { e.currentTarget.src = DEFAULT_BOAT_IMAGE; }}
-                                                    />
-                                                    <div className="min-w-0 space-y-1">
-                                                        <h4 className="truncate font-headline text-xs font-black tracking-wide text-slate-800 dark:text-white">
-                                                            {trip.tripCode}
-                                                        </h4>
-                                                        <p className="truncate text-[11px] font-bold text-slate-500">
-                                                            {boatLabel}
-                                                        </p>
-                                                        <div className="flex flex-wrap items-center gap-1.5">
-                                                            <span className={`inline-flex rounded-md px-2 py-0.5 text-[9px] font-bold uppercase ${routeKindBadgeClass(trip.tripType === "Charter" ? "Charter" : trip.routeType)}`}>
-                                                                {trip.tripType === "Charter"
-                                                                    ? "Charter"
-                                                                    : getRouteShortLabel(trip.routeType, lang)}
+                                                <div className="min-w-0 space-y-1">
+                                                    <h4 className="truncate font-headline text-xs font-black tracking-wide text-slate-800 dark:text-white">
+                                                        {trip.tripCode}
+                                                    </h4>
+                                                    <p className="truncate text-[11px] font-bold text-slate-500">
+                                                        {boatLabel}
+                                                    </p>
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        <span className={`inline-flex rounded-md px-2 py-0.5 text-[9px] font-bold uppercase ${routeKindBadgeClass(trip.tripType === "Charter" ? "Charter" : trip.routeType)}`}>
+                                                            {trip.tripType === "Charter"
+                                                                ? "Charter"
+                                                                : getRouteShortLabel(trip.routeType, lang)}
+                                                        </span>
+                                                        {trip.operatingDate ? (
+                                                            <span className="text-[10px] font-medium text-slate-400">
+                                                                {trip.operatingDate}
                                                             </span>
-                                                            {trip.operatingDate ? (
-                                                                <span className="text-[10px] font-medium text-slate-400">
-                                                                    {trip.operatingDate}
-                                                                </span>
-                                                            ) : null}
-                                                            {fareAdj ? (
-                                                                <span className="inline-flex rounded-md bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" title={fareAdj}>
-                                                                    {fareAdj}
-                                                                </span>
-                                                            ) : null}
-                                                        </div>
+                                                        ) : null}
+                                                        {fareAdj ? (
+                                                            <span className="inline-flex rounded-md bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" title={fareAdj}>
+                                                                {fareAdj}
+                                                            </span>
+                                                        ) : null}
                                                     </div>
                                                 </div>
                                             </td>

@@ -4,7 +4,7 @@ import { useApp } from "../../../context/AppContext";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { fetchStaffMeAssignments, fetchStaffMeTrips, normalizeStaffTrip } from "../../../services/staffMeService";
 import { ASSIGNMENT_TYPE } from "../../../services/staffAssignmentService";
-import { fetchAllTrips, fetchTripDetail, resumeTripDelay, startTripDelay, toDdMmYyyy } from "../../../services/tripService";
+import { fetchAllTrips, fetchTripDetail, resumeTripDelay, startTripDelay, toOperatingDateQuery } from "../../../services/tripService";
 import { trackingHub } from "../../../services/trackingHubClient";
 import {
   addDays,
@@ -20,6 +20,7 @@ import {
   canStartTripDelay,
   formatActiveDelayLine,
   formatPostResumeDelayLine,
+  getTripDelayTooEarlyMessage,
   isDelayActive,
   mergeAffectedTripsIntoList,
   pickAffectedTrips,
@@ -91,7 +92,9 @@ const tripMatchesAssignment = (trip, assignment) => {
   if (assignment.assignmentType === ASSIGNMENT_TYPE.BOAT) {
     const boatId = String(assignment.boat?.boatId || assignment.boatId || "").trim();
     const boatCode = String(assignment.boat?.boatCode || assignment.boatCode || "").trim().toUpperCase();
-    const tripBoatId = String(trip.boatId || trip.boat?.boatId || "").trim();
+    const tripBoatId = String(
+      trip.boatId || trip.boat?.vesselId || trip.boat?.boatId || "",
+    ).trim();
     const tripBoatCode = String(trip.boatCode || trip.boat?.boatCode || "").trim().toUpperCase();
     if (boatId && tripBoatId && boatId === tripBoatId) return true;
     if (boatCode && tripBoatCode && boatCode === tripBoatCode) return true;
@@ -103,11 +106,16 @@ const tripMatchesAssignment = (trip, assignment) => {
     if (!stationId && !stationCode) return false;
     const fromId = String(trip.fromStationId || trip.fromStation?.stationId || "").trim();
     const toId = String(trip.toStationId || trip.toStation?.stationId || "").trim();
+    // Ưu tiên khớp stationId; fallback stop.stationId trên trip.
+    const stopIds = Array.isArray(trip.stops)
+      ? trip.stops.map((s) => String(s?.stationId || "").trim()).filter(Boolean)
+      : [];
+    if (stationId && (stationId === fromId || stationId === toId || stopIds.includes(stationId))) {
+      return true;
+    }
     const fromCode = String(trip.fromStationCode || trip.fromStation?.stationCode || "").trim().toUpperCase();
     const toCode = String(trip.toStationCode || trip.toStation?.stationCode || "").trim().toUpperCase();
-    if (stationId && (stationId === fromId || stationId === toId)) return true;
     if (stationCode && (stationCode === fromCode || stationCode === toCode)) return true;
-    // Station trên route (BE staff/me/trips xử lý đủ hơn) — giữ trip từ API me nếu đã có.
     return false;
   }
   return false;
@@ -167,7 +175,7 @@ export function StaffMyTripsPage() {
       try {
         const [assignments, tripRows] = await Promise.all([
           fetchStaffMeAssignments({ fromDate: date, toDate: date }),
-          fetchAllTrips({ operatingDate: toDdMmYyyy(date) }),
+          fetchAllTrips({ operatingDate: toOperatingDateQuery(date) }),
         ]);
         const dayAssignments = (assignments || []).filter((row) => assignmentCoversDay(row, date));
         const boatAssignments = dayAssignments.filter((a) => a.assignmentType === ASSIGNMENT_TYPE.BOAT);
@@ -224,9 +232,35 @@ export function StaffMyTripsPage() {
   const handleStartDelay = async (trip) => {
     const tripId = trip?.tripId || trip?.id;
     if (!tripId || !canStartTripDelay(trip) || delayBusyId) return;
+
+    const tooEarly = getTripDelayTooEarlyMessage(trip, lang);
+    if (tooEarly) {
+      await notify({
+        dialog: true,
+        icon: "warning",
+        title: lang === "VN" ? "Chưa đến giờ xuất phát" : "Before departure time",
+        text: tooEarly,
+        confirmButtonText: lang === "VN" ? "Đã hiểu" : "OK",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+
     setDelayBusyId(String(tripId));
     try {
       const detail = await fetchTripDetail(tripId).catch(() => trip);
+      const tooEarlyDetail = getTripDelayTooEarlyMessage(detail || trip, lang);
+      if (tooEarlyDetail) {
+        await notify({
+          dialog: true,
+          icon: "warning",
+          title: lang === "VN" ? "Chưa đến giờ xuất phát" : "Before departure time",
+          text: tooEarlyDetail,
+          confirmButtonText: lang === "VN" ? "Đã hiểu" : "OK",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
       const stops = detail?.stops || trip?.stops || [];
       const stopOrder = resolveDelayStartStopOrder(stops);
       const stationName = pickStationNameForStopOrder(stops, stopOrder);
@@ -421,7 +455,7 @@ export function StaffMyTripsPage() {
                     <div className="min-w-0">
                       <p className="font-bold text-slate-800 dark:text-white truncate">{trip.routeName}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        {[trip.tripCode, trip.boatCode || trip.boatName].filter(Boolean).join(" · ")}
+                        {[trip.tripCode, trip.boatName || trip.boat?.vesselName || trip.boatId].filter(Boolean).join(" · ")}
                       </p>
                       <p className="text-[11px] text-slate-400 mt-1">
                         {[trip.fromStationName, trip.toStationName].filter(Boolean).join(" → ") || "—"}

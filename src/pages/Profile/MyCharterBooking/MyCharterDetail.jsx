@@ -54,18 +54,16 @@ const getRemainingMs = (deadline, now = Date.now()) => {
   return time ? Math.max(0, time - now) : 0;
 };
 
-const DEFAULT_PAYMENT_LINK_MS = 5 * 60 * 1000;
-
 const isDeadlineExpired = (deadline, now = Date.now()) => {
   const time = getDeadlineTime(deadline);
   return Boolean(time && now >= time);
 };
 
+/** Chỉ dùng expiresAt từ BE — không tự cộng thêm phút trên FE. */
+const getPaymentExpiresAt = (payment) => pick(payment, ["expiresAt"], "");
+
 const getPaymentAmount = (payment) =>
   Number(pick(payment, ["amount", "paymentAmount", "paidAmount", "totalAmount"], 0)) || 0;
-
-const getPaymentCreatedAt = (payment) =>
-  pick(payment, ["createdAt", "paymentCreatedAt", "createdDate", "createdTime"], "");
 
 const getPaymentPurpose = (payment) =>
   String(pick(payment, ["paymentPurpose", "purpose", "type"], "")).toLowerCase();
@@ -91,12 +89,6 @@ const getRefundablePayment = (booking) => {
   }
 
   return null;
-};
-
-const getEstimatedPaymentDeadline = (payment) => {
-  const createdAt = getPaymentCreatedAt(payment);
-  const createdTime = getDeadlineTime(createdAt);
-  return createdTime ? new Date(createdTime + DEFAULT_PAYMENT_LINK_MS).toISOString() : "";
 };
 
 const normalizeBooking = (item) => {
@@ -830,7 +822,7 @@ export function CharterDetail() {
       }
     }
 
-    const deadline = expiresAt || new Date(Date.now() + DEFAULT_PAYMENT_LINK_MS).toISOString();
+    const deadline = expiresAt || "";
     setPaymentWatcher({
       isActive: false,
       orderCode,
@@ -966,7 +958,7 @@ export function CharterDetail() {
     const activePendingPayment = Array.isArray(booking.payments)
       ? booking.payments.find((payment) => {
         const isPending = String(payment.paymentStatus).toLowerCase() === "pending";
-        const expiresAt = pick(payment, ["expiresAt"], "") || getEstimatedPaymentDeadline(payment);
+        const expiresAt = pick(payment, ["expiresAt"], "");
         return isPending && (!expiresAt || !isDeadlineExpired(expiresAt));
       })
       : null;
@@ -1068,7 +1060,7 @@ export function CharterDetail() {
         orderCode,
         checkoutUrl,
         amount: createdPaymentAmount,
-        deadline: expiresAt || current.deadline || new Date(Date.now() + DEFAULT_PAYMENT_LINK_MS).toISOString(),
+        deadline: expiresAt || current.deadline || "",
         statusText: lang === "VN" ? "Đang chờ thanh toán trên PayOS" : "Waiting for PayOS payment",
       }));
 
@@ -1076,7 +1068,7 @@ export function CharterDetail() {
         openPaymentPage(checkoutUrl, {
           orderCode,
           amount: createdPaymentAmount,
-          expiresAt: expiresAt || new Date(Date.now() + DEFAULT_PAYMENT_LINK_MS).toISOString(),
+          expiresAt: expiresAt || "",
         });
         return;
       }
@@ -1626,7 +1618,7 @@ export function CharterDetail() {
   const activePendingPayment = Array.isArray(booking.payments)
     ? booking.payments.find((payment) => {
       const isPending = String(payment.paymentStatus).toLowerCase() === "pending";
-      const expiresAt = pick(payment, ["expiresAt"], "") || getEstimatedPaymentDeadline(payment);
+      const expiresAt = getPaymentExpiresAt(payment);
       return isPending && (!expiresAt || !isDeadlineExpired(expiresAt, nowTick));
     })
     : null;
@@ -1645,7 +1637,7 @@ export function CharterDetail() {
     ? pick(activePendingPayment, ["expiresAt"], booking.latestPaymentExpiresAt)
     : (statePaymentIsActive ? (paymentExpiresAt || booking.latestPaymentExpiresAt) : "");
   const expiredPendingPayment = Array.isArray(booking.payments)
-    ? booking.payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending" && isDeadlineExpired(pick(payment, ["expiresAt"], "") || getEstimatedPaymentDeadline(payment), nowTick))
+    ? booking.payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending" && isDeadlineExpired(getPaymentExpiresAt(payment), nowTick))
     : null;
   const expiredPaymentCheckoutUrl = pick(expiredPendingPayment, ["checkoutUrl", "paymentUrl"], "");
   const quotePaymentDeadline = getCharterQuotePaymentDeadline(booking);
@@ -1723,11 +1715,10 @@ export function CharterDetail() {
       : booking.hasDepositPaid
         ? remainingAmount
         : payableQuoteTotal;
-  const estimatedPendingPaymentDeadline = activePendingPayment ? getEstimatedPaymentDeadline(activePendingPayment) : "";
   const effectivePendingPaymentAmount = activePendingPayment
     ? getPaymentAmount(activePendingPayment) || selectedPaymentAmount
     : Number(paymentAmount || booking.latestPaymentAmount || selectedPaymentAmount) || selectedPaymentAmount;
-  const effectivePaymentDeadline = effectivePaymentExpiresAt || paymentWatcher.deadline || estimatedPendingPaymentDeadline;
+  const effectivePaymentDeadline = effectivePaymentExpiresAt || paymentWatcher.deadline || "";
   const paymentWatcherRemainingMs = getRemainingMs(effectivePaymentDeadline, nowTick);
   const routeStops = booking.route && booking.route !== "--" ? booking.route.split(/\s+-\s+/) : [];
   const estimateLegs = Array.isArray(booking.routeEstimate?.legs) ? booking.routeEstimate.legs : [];

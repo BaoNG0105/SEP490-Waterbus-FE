@@ -4,7 +4,7 @@ import api from './axios';
 export const getFarePolicy = () =>
   api.get('/fare-policy').then((response) => response.data);
 
-/** PUT /api/fare-policy — chỉnh baseFare / pricePerKm / roundingStep / minFare. */
+/** PUT /api/fare-policy — chỉnh baseFare / pricePerKm / minFare (roundingStep do BE mặc định 1000). */
 export const updateFarePolicy = (payload) =>
   api.put('/fare-policy', payload).then((response) => response.data);
 

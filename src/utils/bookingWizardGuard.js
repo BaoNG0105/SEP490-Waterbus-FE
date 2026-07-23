@@ -14,17 +14,29 @@ export const bookingHasSeatSelection = (bookingData = {}) => Boolean(
   || (bookingData.selectedSeatsReturn?.length > 0)
 );
 
-/** Xác nhận rời bước chọn ghế (UI Back hoặc Back trình duyệt). */
-export const confirmLeaveSeatSelection = async (lang = "VN") => {
+/**
+ * Xác nhận rời bước chọn ghế.
+ * @param {"search"|"home"} leaveTarget - search = về bước tìm chuyến; home = thoát về trang chủ.
+ */
+export const confirmLeaveSeatSelection = async (lang = "VN", { leaveTarget = "search" } = {}) => {
+  const exitHome = leaveTarget === "home";
   const result = await notify({
     dialog: true,
     icon: "warning",
     tone: "warning",
-    title: lang === "VN" ? "Quay lại bước tìm chuyến?" : "Go back to search?",
-    text: lang === "VN"
-      ? "Bạn đã chọn chuyến/ghế. Nếu quay lại, lựa chọn hiện tại sẽ bị xóa."
-      : "You already selected a trip/seats. Going back will clear your current selection.",
-    confirmButtonText: lang === "VN" ? "Quay lại" : "Go back",
+    title: exitHome
+      ? (lang === "VN" ? "Thoát đặt vé?" : "Leave booking?")
+      : (lang === "VN" ? "Quay lại bước tìm chuyến?" : "Go back to search?"),
+    text: exitHome
+      ? (lang === "VN"
+        ? "Bạn sẽ thoát khỏi quy trình đặt vé. Lựa chọn chuyến/ghế hiện tại sẽ bị xóa."
+        : "You will leave the booking flow. Your current trip/seat selection will be cleared.")
+      : (lang === "VN"
+        ? "Bạn đã chọn chuyến/ghế. Nếu quay lại, lựa chọn hiện tại sẽ bị xóa."
+        : "You already selected a trip/seats. Going back will clear your current selection."),
+    confirmButtonText: exitHome
+      ? (lang === "VN" ? "Thoát" : "Leave")
+      : (lang === "VN" ? "Quay lại" : "Go back"),
     cancelButtonText: lang === "VN" ? "Ở lại" : "Stay",
     showCancelButton: true,
   });

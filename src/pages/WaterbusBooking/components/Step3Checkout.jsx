@@ -66,18 +66,20 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
-// Tìm mã bến (stationCode) từ danh sách stops của chuyến, khớp theo stationId đã chọn ở Bước 1
-const findStationCode = (stops, stationId) => {
-  if (!Array.isArray(stops) || !stationId) return "";
-  const stop = stops.find((s) => String(s.stationId) === String(stationId));
-  return stop?.stationCode || "";
-};
+// Mã bến lấy từ catalog Step1 — không đọc stationCode trên trip.stops.
 
 const formatCountdown = (msRemaining) => {
   const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+const formatHoldDeadline = (value) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" });
 };
 
 export default function Step3Checkout({ bookingData, onBack, onExpire }) {
@@ -90,6 +92,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     routeType,
     fromWharfName,
     toWharfName,
+    fromWharfCode,
+    toWharfCode,
     departureDate,
     returnDate,
     selectedDepartureTrip,
@@ -395,8 +399,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       return;
     }
 
-    const departureFromCode = findStationCode(selectedDepartureTrip?.stops, fromWharf);
-    const departureToCode = findStationCode(selectedDepartureTrip?.stops, toWharf);
+    const departureFromCode = fromWharfCode || "";
+    const departureToCode = toWharfCode || "";
     if (!isLoopRoute && (!departureFromCode || !departureToCode)) {
       showError(
         lang === "VN" ? "Thiếu mã bến" : "Missing station code",
@@ -414,8 +418,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     };
 
     if (isRoundTrip) {
-      const returnFromCode = findStationCode(selectedReturnTrip?.stops, toWharf);
-      const returnToCode = findStationCode(selectedReturnTrip?.stops, fromWharf);
+      const returnFromCode = toWharfCode || "";
+      const returnToCode = fromWharfCode || "";
       if (!isLoopRoute && (!returnFromCode || !returnToCode)) {
         showError(
           lang === "VN" ? "Thiếu mã bến" : "Missing station code",
@@ -433,6 +437,16 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       const bookingId = pick(booking, ["id", "bookingId", "data.id", "data.bookingId"]);
       if (!bookingId) {
         throw new Error("Booking created but no booking id was returned.");
+      }
+
+      // holdExpiresAt do BE tính (min(+15p, giờ đi - 10p)) — không hardcode trên FE.
+      const bookingHoldExpiresAt = pick(booking, [
+        "holdExpiresAt", "data.holdExpiresAt", "booking.holdExpiresAt", "data.booking.holdExpiresAt",
+      ]);
+      if (bookingHoldExpiresAt) {
+        // Cập nhật mốc giữ chỗ theo booking (có thể ngắn hơn hold ghế ở bước 2).
+        // updateData không có trong Step3 — lưu session để payment/detail dùng nếu cần.
+        sessionStorage.setItem(`bookingHoldExpiresAt:${bookingId}`, String(bookingHoldExpiresAt));
       }
 
       // Giá chốt: luôn lấy subtotalAmount / totalAmount từ booking response (không tự khóa tổng trên FE).
@@ -489,6 +503,19 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
         "payment.checkoutUrl", "payment.paymentUrl",
         "data.payment.checkoutUrl", "data.payment.paymentUrl",
       ]);
+      const paymentExpiresAt = pick(payment, [
+        "expiresAt", "data.expiresAt", "payment.expiresAt", "data.payment.expiresAt",
+      ]);
+      const paymentBookingHoldExpiresAt = pick(payment, [
+        "bookingHoldExpiresAt", "data.bookingHoldExpiresAt",
+        "payment.bookingHoldExpiresAt", "data.payment.bookingHoldExpiresAt",
+      ]);
+      if (paymentExpiresAt) {
+        sessionStorage.setItem(`paymentExpiresAt:${bookingId}`, String(paymentExpiresAt));
+      }
+      if (paymentBookingHoldExpiresAt) {
+        sessionStorage.setItem(`bookingHoldExpiresAt:${bookingId}`, String(paymentBookingHoldExpiresAt));
+      }
       const paymentStatus = String(pick(payment, [
         "paymentStatus", "status", "data.paymentStatus", "data.status",
         "payment.paymentStatus", "data.payment.paymentStatus",
@@ -775,19 +802,31 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
         </h3>
 
         {seatHoldExpiresAt && (
-          <div className={`rounded-xl px-4 py-3 text-center border ${isHoldExpired ? "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300" : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"}`}>
-            <p className="text-[10px] font-black uppercase tracking-widest opacity-80">
-              {isHoldExpired
-                ? (lang === "VN" ? "Ghế đã hết hạn giữ chỗ" : "Seat hold has expired")
-                : (lang === "VN" ? "Ghế đang được giữ, hoàn tất trong" : "Seats held — complete checkout within")}
-            </p>
-            {!isHoldExpired && (
-              <p className="font-headline font-black text-lg tabular-nums">{formatCountdown(holdRemainingMs)}</p>
-            )}
-            {isHoldExpired && (
-              <p className="text-[11px] font-bold mt-1">
-                {lang === "VN" ? "Vui lòng quay lại chọn ghế để giữ chỗ lại." : "Please go back and reselect seats to hold them again."}
-              </p>
+          <div className={`rounded-xl px-4 py-3 border ${isHoldExpired ? "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300" : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"}`}>
+            {isHoldExpired ? (
+              <>
+                <p className="text-xs font-black uppercase tracking-wide">
+                  {lang === "VN" ? "Ghế đã hết hạn giữ chỗ" : "Seat hold has expired"}
+                </p>
+                <p className="mt-1 text-[11px] font-bold">
+                  {lang === "VN" ? "Vui lòng quay lại chọn ghế để giữ chỗ lại." : "Please go back and reselect seats to hold them again."}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-bold">
+                  {lang === "VN" ? "Giữ chỗ đến" : "Held until"}{" "}
+                  <span className="font-black">{formatHoldDeadline(seatHoldExpiresAt)}</span>
+                </p>
+                <p className="mt-1 font-headline text-lg font-black tabular-nums">
+                  {formatCountdown(holdRemainingMs)}
+                </p>
+                <p className="mt-1 text-[10px] font-medium opacity-80">
+                  {lang === "VN"
+                    ? "Thời gian giữ chỗ có thể ngắn hơn nếu gần giờ tàu chạy."
+                    : "Hold time may be shorter when departure is near."}
+                </p>
+              </>
             )}
           </div>
         )}

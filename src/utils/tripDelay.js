@@ -71,12 +71,99 @@ export const pickDisplayArrival = (trip) => (
   ?? null
 );
 
-/** Có thể bấm Delay: chưa Completed/Cancelled và không đang delay. */
+/** Parse datetime trip — thiếu timezone thì mặc định +07 (VN). */
+const parseTripDateTime = (raw) => {
+  if (raw == null || raw === "") return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const d = new Date(`${text}T00:00:00+07:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(text)) {
+    const d = new Date(text);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const normalized = text.includes("T") ? text : text.replace(" ", "T");
+  const withSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)
+    ? `${normalized}:00`
+    : normalized;
+  const d = new Date(`${withSeconds}+07:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+/**
+ * Giờ xuất phát theo lịch gốc (KHÔNG dùng adjusted — adjusted đã cộng delay).
+ */
+export const resolveTripPlannedDepartureDate = (trip) => {
+  if (!trip) return null;
+  return parseTripDateTime(
+    trip.plannedDepartureTime
+    ?? trip.plannedDeparture
+    ?? trip.scheduledDepartureAt
+    ?? trip.departureTime
+    ?? trip.DepartureTime
+    ?? null,
+  );
+};
+
+/** Giờ xuất phát đang hiển thị (có thể đã adjusted). */
+export const resolveTripDepartureDate = (trip) => {
+  if (!trip) return null;
+  return parseTripDateTime(pickDisplayDeparture(trip));
+};
+
+/** Tàu đã rời ít nhất 1 bến (bắt đầu chạy thật). Chỉ actualArrival ở bến đầu ≠ đã xuất phát. */
+export const hasTripLeftAStop = (trip) => {
+  const stops = Array.isArray(trip?.stops) ? trip.stops : [];
+  return stops.some((stop) => Boolean(stop?.actualDeparture));
+};
+
+/** @deprecated dùng hasTripLeftAStop */
+export const hasTripActuallyStarted = (trip) => hasTripLeftAStop(trip);
+
+/**
+ * Chặn Delay khi chưa tới giờ xuất phát theo lịch.
+ * Chỉ mở khi: đã tới giờ planned OR tàu đã rời bến.
+ */
+export const getTripDelayTooEarlyMessage = (trip, lang = "VN") => {
+  if (!trip) {
+    return lang === "VN" ? "Không có thông tin chuyến." : "Trip information is missing.";
+  }
+  // Đã rời bến → cho delay (dù đồng hồ lệch).
+  if (hasTripLeftAStop(trip)) return "";
+
+  const departure = resolveTripPlannedDepartureDate(trip);
+  if (!departure) {
+    return lang === "VN"
+      ? "Không xác định được giờ xuất phát — chưa thể bắt đầu delay."
+      : "Departure time is unknown — cannot start delay yet.";
+  }
+
+  if (Date.now() >= departure.getTime()) return "";
+
+  const timeLabel = departure.toLocaleString(lang === "VN" ? "vi-VN" : "en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return lang === "VN"
+    ? `Chuyến chưa tới giờ xuất phát (${timeLabel}). Không thể Delay trước giờ chạy.`
+    : `Trip has not reached departure time (${timeLabel}). Cannot delay before departure.`;
+};
+
+/** Có thể bấm Delay: chưa xong/hủy, không đang delay, và đã tới giờ xuất phát. */
 export const canStartTripDelay = (trip) => {
   if (!trip) return false;
   const status = normalizeStatusKey(trip.tripStatus || trip.status);
   if (status === "Completed" || status === "Cancelled") return false;
-  return !isDelayActive(trip);
+  if (isDelayActive(trip)) return false;
+  // Ẩn nút Delay khi chưa tới giờ — không chỉ cảnh báo lúc bấm.
+  if (getTripDelayTooEarlyMessage(trip, "EN")) return false;
+  return true;
 };
 
 /** Đang delay → hiện nút Tiếp tục. */

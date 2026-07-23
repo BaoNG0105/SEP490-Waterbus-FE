@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { guidelines } from "../../data/homeData";
 import { getTodayDateString } from "../../utils/dateOnly";
@@ -19,6 +19,7 @@ import Step3Checkout from "../WaterbusBooking/components/Step3Checkout";
 export function WatersightseeingBooking() {
     const { lang } = useApp();
     const location = useLocation();
+    const navigate = useNavigate();
 
     const [bookingData, setBookingData] = useState(
         location.state?.bookingData || {
@@ -39,15 +40,24 @@ export function WatersightseeingBooking() {
         setBookingData((prev) => ({ ...prev, ...fields }));
     };
 
+    const exitBookingToHome = useCallback(() => {
+        updateBookingData(clearSeatSelectionFields());
+        navigate("/", { replace: true });
+    }, [navigate]);
+
     const confirmLeaveStep = useCallback(async (fromStep, toStep) => {
         if (toStep >= fromStep) return true;
 
+        // Bước 2 → thoát hẳn về Home (không kẹt lại step 2 đã xóa ghế / không về step 1).
         if (fromStep === 2) {
-            if (!bookingHasSeatSelection(bookingData)) return true;
-            const ok = await confirmLeaveSeatSelection(lang);
+            if (!bookingHasSeatSelection(bookingData)) {
+                exitBookingToHome();
+                return false;
+            }
+            const ok = await confirmLeaveSeatSelection(lang, { leaveTarget: "home" });
             if (!ok) return false;
-            updateBookingData(clearSeatSelectionFields());
-            return true;
+            exitBookingToHome();
+            return false;
         }
 
         if (fromStep === 3) {
@@ -58,8 +68,14 @@ export function WatersightseeingBooking() {
             return true;
         }
 
+        // Bước 1 ← back trình duyệt: về Home.
+        if (fromStep === 1) {
+            navigate("/", { replace: true });
+            return false;
+        }
+
         return true;
-    }, [bookingData, lang]);
+    }, [bookingData, exitBookingToHome, lang, navigate]);
 
     const { currentStep, goToStep } = useBookingWizardStep({
         initialStep: location.state?.step || 1,
@@ -162,7 +178,8 @@ export function WatersightseeingBooking() {
                         bookingData={bookingData}
                         updateData={updateBookingData}
                         onNext={() => goToStep(3)}
-                        onBack={() => goToStep(1)}
+                        onBack={exitBookingToHome}
+                        leaveTarget="home"
                     />
                 )}
 
@@ -199,7 +216,7 @@ export function WatersightseeingBooking() {
                                 <div className="aspect-4/3 rounded-2xl overflow-hidden shadow-md mb-6">
                                     <img
                                         src={guide.image}
-                                        alt={`Guideline step ${index + 1}`}
+                                        alt={`Guideline step ${guide.id}`}
                                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                                     />
                                 </div>

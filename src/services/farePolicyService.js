@@ -53,11 +53,12 @@ export const normalizeFareAdjustment = (item) => {
 export const fetchFarePolicy = async () => normalizeFarePolicy(await apiGetFarePolicy());
 
 export const saveFarePolicy = async (form) => {
+  // roundingStep là cấu hình kỹ thuật BE (mặc định 1000) — FE không gửi / không cho sửa.
   const payload = {
     baseFare: Number(form.baseFare) || 0,
     pricePerKm: Number(form.pricePerKm) || 0,
-    roundingStep: Number(form.roundingStep) || 1000,
     minFare: toNumberOrNull(form.minFare),
+    currency: form.currency || 'VND',
   };
   return normalizeFarePolicy(await apiUpdateFarePolicy(payload));
 };

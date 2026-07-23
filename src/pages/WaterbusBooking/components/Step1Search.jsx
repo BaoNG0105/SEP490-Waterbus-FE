@@ -9,6 +9,7 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 
 const getStationId = (station) => String(station.stationId || station.id || "");
 const getStationName = (station) => station.stationName || station.name || "--";
+const getStationCode = (station) => String(station?.stationCode || station?.code || "").trim();
 const isActiveWaterbusStation = (station) => {
   const status = String(station?.status || "Active").toLowerCase();
   return status === "active" && station?.isWaterbusStation === true;
@@ -90,14 +91,17 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
         }
       }
 
-      const fromWharfName = stations.find((s) => getStationId(s) === String(fromWharf));
-      const toWharfName = stations.find((s) => getStationId(s) === String(toWharf));
+      const fromStation = stations.find((s) => getStationId(s) === String(fromWharf));
+      const toStation = stations.find((s) => getStationId(s) === String(toWharf));
 
       updateData({
         departureTripOptions,
         returnTripOptions,
-        fromWharfName: fromWharfName ? getStationName(fromWharfName) : "",
-        toWharfName: toWharfName ? getStationName(toWharfName) : "",
+        fromWharfName: fromStation ? getStationName(fromStation) : "",
+        toWharfName: toStation ? getStationName(toStation) : "",
+        // Mã bến lấy từ catalog stations — không đọc stationCode trên trip.stops.
+        fromWharfCode: fromStation ? getStationCode(fromStation) : "",
+        toWharfCode: toStation ? getStationCode(toStation) : "",
         selectedDepartureTrip: null,
         selectedReturnTrip: null,
         selectedSeatsDeparture: [],

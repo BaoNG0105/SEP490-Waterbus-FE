@@ -34,12 +34,11 @@ import {
   formatActiveDelayLine,
   formatAffectedTripLine,
   formatPostResumeDelayLine,
+  getTripDelayTooEarlyMessage,
   isDelayActive,
   pickAffectedTrips,
   pickDelayInfo,
   pickDelayMinutes,
-  pickDisplayArrival,
-  pickDisplayDeparture,
   pickStationNameForStopOrder,
   resolveDelayStartStopOrder,
 } from "../../../utils/tripDelay";
@@ -66,26 +65,6 @@ const formatOperatingDate = (value, lang) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString(lang === "VN" ? "vi-VN" : "en-GB");
-};
-
-const pickStaffName = (staff) => {
-  if (!staff || typeof staff !== "object") return "—";
-  return staff.fullName
-    || staff.name
-    || staff.staffName
-    || staff.staffFullName
-    || staff.displayName
-    || staff.user?.fullName
-    || staff.user?.name
-    || staff.userName
-    || staff.email
-    || "—";
-};
-
-const normalizeStaffList = (value) => {
-  if (Array.isArray(value)) return value.filter(Boolean);
-  if (value && typeof value === "object") return [value];
-  return [];
 };
 
 /** operatingDate trip → yyyy-MM-dd để lọc ca OnBoard theo tàu. */
@@ -129,36 +108,6 @@ const toCount = (value) => {
 const formatCount = (value) => {
   const n = toCount(value);
   return n == null ? "—" : String(n);
-};
-
-/** Chênh lệch phút theo đúng giờ đang hiển thị (HH:mm local).
- * Tránh lệch giây / timezone khiến cùng "21:25" mà báo trễ 1p. */
-const diffMinutes = (scheduled, actual) => {
-  if (!scheduled || !actual) return null;
-  const parts = (value) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-    return { h: date.getHours(), m: date.getMinutes(), day: date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate() };
-  };
-  const a = parts(actual);
-  const b = parts(scheduled);
-  if (!a || !b) return null;
-  return (a.day * 24 * 60 + a.h * 60 + a.m) - (b.day * 24 * 60 + b.h * 60 + b.m);
-};
-
-const formatDelayLabel = (minutes, lang) => {
-  if (!Number.isFinite(minutes) || minutes === 0) return null;
-  const abs = Math.abs(minutes);
-  if (lang === "VN") return minutes > 0 ? `Trễ ${abs}p` : `Sớm ${abs}p`;
-  return minutes > 0 ? `Late ${abs}m` : `Early ${abs}m`;
-};
-
-const delayToneClass = (minutes) => {
-  if (!Number.isFinite(minutes) || minutes === 0) return "";
-  if (minutes > 0) {
-    return "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300";
-  }
-  return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300";
 };
 
 /** Trạng thái vận hành tại bến: đang lên tàu / đang dừng / đã rời. */
@@ -260,74 +209,83 @@ const resolveOperatingDate = (trip, lang) => {
   return "—";
 };
 
-const resolveHeroImage = (trip, boatCatalog) => {
+const resolveHeroImage = (_trip, boatCatalog) => {
+  // Ảnh chỉ lấy từ GET /boats/{id} — không đọc trip.boat.imageUrl / boatImageUrl.
   const candidates = [
-    trip?.boatImageUrl,
-    trip?.boat?.imageUrl,
-    Array.isArray(trip?.boat?.imageUrls) ? trip.boat.imageUrls[0] : "",
     boatCatalog?.imageUrl,
     Array.isArray(boatCatalog?.imageUrls) ? boatCatalog.imageUrls[0] : "",
-    trip?.fromStation?.imageUrl,
-    trip?.fromStation?.stationImageUrl,
-    sortStops(trip?.stops)[0]?.stationImageUrl,
   ].filter(Boolean);
   const first = candidates.find((url) => {
     const s = String(url).trim();
     return s && !/image\s*not\s*available/i.test(s);
   });
   if (first) return first;
-  return getBoatImageUrl(boatCatalog || trip?.boat, DEFAULT_BOAT_IMAGE);
+  return getBoatImageUrl(boatCatalog, DEFAULT_BOAT_IMAGE);
 };
 
+/** Trip chỉ còn reference: boatId / boatName hoặc boat.vesselId / vesselName. */
+const pickTripBoatId = (trip) => String(
+  trip?.boatId
+  || trip?.boat?.vesselId
+  || trip?.boat?.boatId
+  || trip?.BoatId
+  || "",
+).trim();
+
+const pickTripBoatName = (trip) => String(
+  trip?.boatName
+  || trip?.boat?.vesselName
+  || trip?.boat?.boatName
+  || trip?.BoatName
+  || "",
+).trim();
+
 const resolveBoat = (trip, boatCatalog) => {
-  const boat = { ...(trip?.boat || {}), ...(boatCatalog || {}) };
+  const catalog = boatCatalog && typeof boatCatalog === "object" ? boatCatalog : {};
+  const id = pickTripBoatId(trip)
+    || String(catalog.boatId || catalog.vesselId || catalog.id || "").trim();
   return {
-    id: boat.boatId || boat.vesselId || boat.id || trip?.boatId || "",
-    code: boat.boatCode || boat.vesselCode || boat.code || trip?.boatCode || "",
-    name: boat.boatName || boat.vesselName || boat.name || trip?.boatName || "",
-    registrationNumber: boat.registrationNumber || boat.registrationNo || boat.plateNumber || "",
-    serviceType: boat.serviceType || boat.ServiceType || "",
-    numberOfDecks: toCount(boat.numberOfDecks ?? boat.NumberOfDecks),
-    maxSpeedKmh: toCount(boat.maxSpeedKmh ?? boat.maxSpeed ?? boat.MaxSpeedKmh),
-    capacity: toCount(boat.capacity ?? boat.seatCount ?? trip?.capacitySnapshot),
-    status: boat.status || "",
-    imageUrl: resolveHeroImage(trip, boatCatalog),
+    id,
+    // Mã / biển / tầng / tốc độ / ảnh chỉ từ boat detail API.
+    code: catalog.boatCode || catalog.code || catalog.vesselCode || "",
+    name: pickTripBoatName(trip)
+      || catalog.boatName
+      || catalog.vesselName
+      || catalog.name
+      || "",
+    registrationNumber: catalog.registrationNumber || catalog.registrationNo || catalog.plateNumber || "",
+    serviceType: catalog.serviceType || catalog.ServiceType || "",
+    numberOfDecks: toCount(catalog.numberOfDecks ?? catalog.NumberOfDecks),
+    maxSpeedKmh: toCount(catalog.maxSpeedKmh ?? catalog.maxSpeed ?? catalog.MaxSpeedKmh),
+    capacity: toCount(catalog.capacity ?? catalog.seatCount ?? trip?.capacitySnapshot),
+    status: catalog.status || "",
+    imageUrl: resolveHeroImage(trip, catalog),
   };
 };
 
-const ScheduleDelayBadge = ({ delayMin, delayLabel }) => (
-  delayLabel ? (
-    <span className={`mt-1 inline-flex rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase ${delayToneClass(delayMin)}`}>
-      {delayLabel}
-    </span>
-  ) : null
-);
-
-/** Grid cố định: nhãn | Đến | Đi — mọi bến cùng khung để thẳng hàng.
- * Bến đầu: cột Đến = — · Bến cuối: cột Đi = — (không ẩn cột). */
+/** Grid: nhãn | Đến | Đi — 3 dòng: kế hoạch / dự kiến mới (nếu có) / thực tế GPS.
+ * Không tính delay thủ công từ scheduled vs actual. */
 const ScheduleCompare = ({
   scheduledArr,
   scheduledDep,
+  adjustedArr,
+  adjustedDep,
   actualArr,
   actualDep,
   lang,
   isFirst = false,
   isLast = false,
 }) => {
-  const arriveDelayMin = !isFirst ? diffMinutes(scheduledArr, actualArr) : null;
-  const departDelayMin = !isLast ? diffMinutes(scheduledDep, actualDep) : null;
-  const arriveDelayLabel = formatDelayLabel(arriveDelayMin, lang);
-  const departDelayLabel = formatDelayLabel(departDelayMin, lang);
-
-  const actualClass = (delayMin) => {
-    if (delayMin > 0) return "text-orange-700 dark:text-orange-300";
-    if (delayMin < 0) return "text-emerald-700 dark:text-emerald-300";
-    return "text-slate-800 dark:text-slate-100";
-  };
-
   const timeText = (time) => formatTime(time);
-
   const gridClass = "grid grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,1fr)] items-start gap-x-2";
+  const hasAdjusted = Boolean(adjustedArr || adjustedDep);
+
+  const plannedArrive = isFirst ? null : scheduledArr;
+  const plannedDepart = isLast ? null : scheduledDep;
+  const estimateArrive = isFirst ? null : adjustedArr;
+  const estimateDepart = isLast ? null : adjustedDep;
+  const gpsArrive = isFirst ? null : actualArr;
+  const gpsDepart = isLast ? null : actualDep;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
@@ -342,40 +300,41 @@ const ScheduleCompare = ({
           {lang === "VN" ? "Kế hoạch" : "Planned"}
         </span>
         <span className="text-center text-sm font-bold tabular-nums text-slate-700 dark:text-slate-200">
-          {timeText(isFirst ? null : scheduledArr)}
+          {timeText(plannedArrive)}
         </span>
         <span className="text-center text-sm font-bold tabular-nums text-slate-700 dark:text-slate-200">
-          {timeText(isLast ? null : scheduledDep)}
+          {timeText(plannedDepart)}
         </span>
       </div>
 
+      {hasAdjusted ? (
+        <div className={`${gridClass} border-t border-amber-100 bg-amber-50/40 px-3 py-2.5 dark:border-amber-500/20 dark:bg-amber-500/5`}>
+          <span className="pt-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">
+            {lang === "VN" ? "Dự kiến mới" : "Adjusted"}
+          </span>
+          <span className="text-center text-sm font-black tabular-nums text-amber-800 dark:text-amber-200">
+            {timeText(estimateArrive)}
+          </span>
+          <span className="text-center text-sm font-black tabular-nums text-amber-800 dark:text-amber-200">
+            {timeText(estimateDepart)}
+          </span>
+        </div>
+      ) : null}
+
       <div className={`${gridClass} border-t border-slate-100 px-3 py-2.5 dark:border-slate-700/60`}>
         <span className="pt-0.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
-          {lang === "VN" ? "Thực tế" : "Actual"}
+          {lang === "VN" ? "Thực tế GPS" : "Actual GPS"}
         </span>
-        <div className="flex min-h-[2.5rem] flex-col items-center text-center">
-          <span className={`text-sm font-black tabular-nums ${actualClass(arriveDelayMin)}`}>
-            {timeText(isFirst ? null : actualArr)}
-          </span>
-          <ScheduleDelayBadge delayMin={arriveDelayMin} delayLabel={arriveDelayLabel} />
-        </div>
-        <div className="flex min-h-[2.5rem] flex-col items-center text-center">
-          <span className={`text-sm font-black tabular-nums ${actualClass(departDelayMin)}`}>
-            {timeText(isLast ? null : actualDep)}
-          </span>
-          <ScheduleDelayBadge delayMin={departDelayMin} delayLabel={departDelayLabel} />
-        </div>
+        <span className="text-center text-sm font-black tabular-nums text-slate-800 dark:text-slate-100">
+          {timeText(gpsArrive)}
+        </span>
+        <span className="text-center text-sm font-black tabular-nums text-slate-800 dark:text-slate-100">
+          {timeText(gpsDepart)}
+        </span>
       </div>
     </div>
   );
 };
-
-const MetaCell = ({ label, children }) => (
-  <div className="min-w-0">
-    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-    <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">{children}</div>
-  </div>
-);
 
 const isValidCoord = (lat, lng) => (
   Number.isFinite(Number(lat))
@@ -551,6 +510,7 @@ const shortStationName = (name) => String(name || "").replace(/^Bến\s+/i, "").
 /**
  * GPS chuyến = cùng WaterwayMap như Live (icon tàu hull, cờ bến, tuyến teal),
  * thêm đoạn đã đi vàng + nhãn tuyến + bám tàu.
+ * Chuyến Completed/Cancelled: không marker tàu, chỉ đường route.
  */
 const TripRealRouteMap = ({
   routeLine = [],
@@ -561,6 +521,7 @@ const TripRealRouteMap = ({
   routeLabel = "",
   routeCode = "",
   isMoving = false,
+  showBoat = true,
   lang = "VN",
 }) => {
   const pathPoints = useMemo(() => {
@@ -575,14 +536,16 @@ const TripRealRouteMap = ({
   }, [routeLine, stations]);
 
   const snappedBoat = useMemo(() => {
+    if (!showBoat) return null;
     if (liveLocation && isValidCoord(liveLocation.latitude, liveLocation.longitude) && pathPoints.length >= 2) {
       const p = progressNearGps(pathPoints, liveLocation.latitude, liveLocation.longitude);
       return pointAtProgress(pathPoints, p ?? progress);
     }
     return pointAtProgress(pathPoints, progress);
-  }, [liveLocation, pathPoints, progress]);
+  }, [showBoat, liveLocation, pathPoints, progress]);
 
   const boatLatLng = useMemo(() => {
+    if (!showBoat) return null;
     if (liveLocation && isValidCoord(liveLocation.latitude, liveLocation.longitude)) {
       return { latitude: Number(liveLocation.latitude), longitude: Number(liveLocation.longitude) };
     }
@@ -590,7 +553,7 @@ const TripRealRouteMap = ({
       return { latitude: snappedBoat.latitude, longitude: snappedBoat.longitude };
     }
     return null;
-  }, [liveLocation, snappedBoat]);
+  }, [showBoat, liveLocation, snappedBoat]);
 
   const traveledPoints = useMemo(() => {
     if (!pathPoints.length) return [];
@@ -634,7 +597,7 @@ const TripRealRouteMap = ({
 
   const boatId = String(boat?.boatId || boat?.id || boat?.code || "trip-boat");
   const mapBoats = useMemo(() => {
-    if (!boatLatLng) return [];
+    if (!showBoat || !boatLatLng) return [];
     return [{
       boatId,
       boatCode: boat?.code || boat?.boatCode || "",
@@ -651,7 +614,7 @@ const TripRealRouteMap = ({
       isOnline: Boolean(liveLocation) || isMoving,
       speed: liveLocation?.speed,
     }];
-  }, [boat, boatId, boatLatLng, liveLocation, isMoving]);
+  }, [showBoat, boat, boatId, boatLatLng, liveLocation, isMoving]);
 
   const endStation = stations[stations.length - 1];
   const displayRoute = routeLabel
@@ -680,15 +643,19 @@ const TripRealRouteMap = ({
         highlightCoordinates={traveledPoints}
         stationsList={mapStations}
         boatMarkers={mapBoats}
-        selectedBoatId={boatId}
-        focusView={boatLatLng}
-        preferFocus
-        fitBoatMarkers
+        selectedBoatId={showBoat ? boatId : null}
+        focusView={showBoat ? boatLatLng : null}
+        preferFocus={showBoat}
+        fitBoatMarkers={showBoat}
         stationAsFlag
         hideStationLink
         boatMarkerStyle="hull"
         waterwayName={displayRoute}
-        overlayEyebrow={lang === "VN" ? "Đang bám theo tàu" : "Following boat"}
+        overlayEyebrow={
+          showBoat
+            ? (lang === "VN" ? "Đang bám theo tàu" : "Following boat")
+            : (lang === "VN" ? "Tuyến đã kết thúc" : "Trip finished")
+        }
         className="h-full min-h-0"
       />
     </div>
@@ -701,6 +668,7 @@ export function TripDetail() {
   const { id } = useParams();
   const [trip, setTrip] = useState(null);
   const [boatCatalog, setBoatCatalog] = useState(null);
+  const [stationCatalogById, setStationCatalogById] = useState(() => new Map());
   const [tracking, setTracking] = useState(null);
   const [trackingAt, setTrackingAt] = useState(null);
   const [isTrackingBusy, setIsTrackingBusy] = useState(false);
@@ -733,6 +701,7 @@ export function TripDetail() {
         setIsLoading(true);
         setErrorMsg("");
         setBoatCatalog(null);
+        setStationCatalogById(new Map());
         setRouteLine([]);
         setRouteStations([]);
         setRouteMeta({ routeId: "", routeCode: "", routeName: "" });
@@ -741,18 +710,16 @@ export function TripDetail() {
         if (!active) return;
         setTrip(detail || null);
 
-        const boatId = detail?.boatId
-          || detail?.boat?.boatId
-          || detail?.boat?.vesselId
-          || detail?.boat?.id
-          || "";
-        const boatCode = detail?.boatCode
-          || detail?.boat?.boatCode
-          || detail?.boat?.vesselCode
-          || detail?.boat?.code
-          || "";
-
-        await refreshTracking(id, boatCode, { silent: true });
+        const boatId = pickTripBoatId(detail);
+        const detailStatus = normalizeTripStatusKey(detail?.tripStatus || detail?.status);
+        const gpsLive = ACTIVE_TRACK_STATUSES.has(detailStatus);
+        // Chuyến xong / hủy: ngắt GPS — không gọi tracking, không giữ marker tàu.
+        if (gpsLive) {
+          await refreshTracking(id, "", { silent: true });
+        } else if (active) {
+          setTracking(null);
+          setTrackingAt(null);
+        }
 
         if (boatId) {
           fetchBoatDetail(boatId)
@@ -760,18 +727,24 @@ export function TripDetail() {
               if (!active) return;
               const unwrapped = boat?.data && typeof boat.data === "object" ? boat.data : boat;
               setBoatCatalog(unwrapped || null);
+              const code = unwrapped?.boatCode || unwrapped?.code || "";
+              if (gpsLive && code) refreshTracking(id, code, { silent: true });
             })
-            .catch(() => {});
+            .catch(() => {
+              if (active) setBoatCatalog(null);
+            });
+        } else if (active) {
+          setBoatCatalog(null);
         }
 
-        // Crew OnBoard theo tàu + ngày chuyến (check vé trên tàu).
+        // Crew OnBoard theo đúng ngày chuyến — khớp theo boatId (không phụ thuộc boatCode trên trip).
         const dayKey = toOperatingDayKey(detail);
-        if (boatId || boatCode) {
+        if (boatId && dayKey) {
           fetchStaffAssignments({
             assignmentType: ASSIGNMENT_TYPE.BOAT,
-            boatId: boatId || undefined,
-            fromDate: dayKey || undefined,
-            toDate: dayKey || undefined,
+            boatId,
+            fromDate: dayKey,
+            toDate: dayKey,
             status: ASSIGNMENT_STATUS.SCHEDULED,
           })
             .then((rows) => {
@@ -781,12 +754,9 @@ export function TripDetail() {
               (rows || []).forEach((row) => {
                 if (!row || isAssignmentInactive(row.status)) return;
                 if (row.assignmentType !== ASSIGNMENT_TYPE.BOAT) return;
-                if (dayKey && !assignmentCoversDay(row, dayKey)) return;
-                const rowBoatId = String(row.boat?.boatId || "").trim();
-                const rowBoatCode = String(row.boat?.boatCode || "").trim().toUpperCase();
-                const match = (boatId && rowBoatId && boatId === rowBoatId)
-                  || (boatCode && rowBoatCode && String(boatCode).toUpperCase() === rowBoatCode);
-                if (!match) return;
+                if (!assignmentCoversDay(row, dayKey)) return;
+                const rowBoatId = String(row.boat?.boatId || row.boatId || "").trim();
+                if (!rowBoatId || rowBoatId !== boatId) return;
                 const name = String(row.staffName || "").trim();
                 const key = String(row.staffUserId || name).trim();
                 if (!name || !key || seen.has(key)) return;
@@ -798,6 +768,8 @@ export function TripDetail() {
             .catch(() => {
               if (active) setBoatCrewNames([]);
             });
+        } else if (active) {
+          setBoatCrewNames([]);
         }
 
         // Geometry đúng của route gắn trip (+ waterway fallback)
@@ -813,8 +785,11 @@ export function TripDetail() {
             ? allStations
             : (Array.isArray(allStations?.data) ? allStations.data : []);
           const stationById = new Map(
-            stationList.map((s) => [String(s.stationId ?? s.id ?? ""), s]),
+            stationList
+              .map((s) => [String(s.stationId ?? s.id ?? "").trim(), s])
+              .filter(([sid]) => sid),
           );
+          if (active) setStationCatalogById(stationById);
 
           let routeId = detail?.routeId
             || detail?.RouteId
@@ -841,11 +816,10 @@ export function TripDetail() {
 
           const tripStops = sortStops(detail?.stops);
           const buildStation = (stop, index) => {
-            const sid = String(stop?.stationId ?? stop?.station?.stationId ?? "");
+            // Stop trên trip chỉ còn stationId + stationName — tọa độ/mã lấy từ catalog stations.
+            const sid = String(stop?.stationId ?? stop?.station?.stationId ?? "").trim();
             const catalog = sid ? stationById.get(sid) : null;
-            const coords = readStationCoords(stop)
-              || readStationCoords(stop?.station)
-              || readStationCoords(catalog);
+            const coords = readStationCoords(catalog);
             if (!coords) return null;
             return {
               stationId: sid || `stop-${index}`,
@@ -853,7 +827,7 @@ export function TripDetail() {
                 || stop?.station?.stationName
                 || catalog?.stationName
                 || `Stop ${index + 1}`,
-              stationCode: stop?.stationCode || stop?.station?.stationCode || catalog?.stationCode || "",
+              stationCode: catalog?.stationCode || catalog?.code || "",
               latitude: coords.latitude,
               longitude: coords.longitude,
               stopOrder: Number(stop?.stopOrder ?? index + 1),
@@ -934,12 +908,10 @@ export function TripDetail() {
   const stops = useMemo(() => sortStops(trip?.stops), [trip]);
   const boat = useMemo(() => resolveBoat(trip, boatCatalog), [trip, boatCatalog]);
   const onBoardCrewDisplay = useMemo(() => {
-    const fromTrip = normalizeStaffList(
-      trip?.onBoardStaff ?? trip?.onboardStaff ?? trip?.OnBoardStaff,
-    ).map(pickStaffName).filter((n) => n && n !== "—");
-    if (fromTrip.length > 0) return fromTrip;
+    // Chỉ hiện ca OnBoard đúng ngày chuyến (boatCrewNames đã lọc).
+    // Không dùng trip.onBoardStaff — BE có thể trả crew lịch sử của tàu.
     return boatCrewNames;
-  }, [trip, boatCrewNames]);
+  }, [boatCrewNames]);
 
   const fromName = stationLabel(trip?.fromStation)
     || trip?.fromStationName
@@ -974,6 +946,13 @@ export function TripDetail() {
   const lastStopIndex = stops.length - 1;
   const statusKey = normalizeTripStatusKey(trip?.tripStatus || trip?.status);
   const shouldPollTracking = ACTIVE_TRACK_STATUSES.has(statusKey);
+  const tripGpsFinished = statusKey === "Completed" || statusKey === "Cancelled";
+
+  useEffect(() => {
+    if (!tripGpsFinished) return;
+    setTracking(null);
+    setTrackingAt(null);
+  }, [tripGpsFinished]);
 
   useEffect(() => {
     if (!id || !shouldPollTracking) return undefined;
@@ -998,12 +977,65 @@ export function TripDetail() {
   const showDelayStart = canStartTripDelay(trip);
   const showDelayResume = canResumeTripDelay(trip);
 
-  // JoinBoat + lắng nghe tripDelayUpdated khi mở chi tiết.
+  /** Giờ chạy top card: adjusted ưu tiên; gốc lấy planned* nếu có. */
+  const scheduleDisplay = useMemo(() => {
+    if (!trip) {
+      return {
+        displayDep: null,
+        displayArr: null,
+        plannedDep: null,
+        plannedArr: null,
+        depChanged: false,
+        arrChanged: false,
+        showDelayNote: false,
+      };
+    }
+    const plannedDep = trip.plannedDepartureTime
+      ?? trip.plannedDeparture
+      ?? trip.departureTime
+      ?? null;
+    const plannedArr = trip.plannedArrivalTime
+      ?? trip.plannedArrival
+      ?? trip.arrivalTime
+      ?? null;
+    const adjustedDep = trip.adjustedDepartureTime ?? trip.adjustedDeparture ?? null;
+    const adjustedArr = trip.adjustedArrivalTime ?? trip.adjustedArrival ?? null;
+    const displayDep = adjustedDep ?? plannedDep;
+    const displayArr = adjustedArr ?? plannedArr;
+    const depLabel = formatTime(displayDep);
+    const arrLabel = formatTime(displayArr);
+    const plannedDepLabel = formatTime(plannedDep);
+    const plannedArrLabel = formatTime(plannedArr);
+    const depChanged = Boolean(adjustedDep && depLabel !== plannedDepLabel && plannedDepLabel !== "—");
+    const arrChanged = Boolean(adjustedArr && arrLabel !== plannedArrLabel && plannedArrLabel !== "—");
+    const hasAdjustedField = Boolean(adjustedDep || adjustedArr);
+    const mins = pickDelayMinutes(trip);
+    const active = isDelayActive(trip);
+    return {
+      displayDep,
+      displayArr,
+      plannedDep,
+      plannedArr,
+      depChanged,
+      arrChanged,
+      depLabel,
+      arrLabel,
+      plannedDepLabel,
+      plannedArrLabel,
+      hasAdjustedField,
+      showDelayNote: hasAdjustedField || mins > 0 || active,
+      delayMinutes: mins,
+      delayActive: active,
+    };
+  }, [trip]);
+
+  // JoinBoat + lắng nghe tripDelayUpdated khi mở chi tiết (bỏ qua chuyến đã hoàn thành).
   useEffect(() => {
     const boatId = String(
       boat.id || trip?.boatId || trip?.boat?.boatId || "",
     ).trim();
     if (!boatId) return undefined;
+    if (statusKey === "Completed" || statusKey === "Cancelled") return undefined;
 
     let cancelled = false;
     trackingHub.joinBoat(boatId).catch(() => {});
@@ -1026,11 +1058,24 @@ export function TripDetail() {
       unsub();
       trackingHub.leaveBoat(boatId).catch(() => {});
     };
-  }, [boat.id, trip?.boatId, trip?.boat?.boatId]);
+  }, [boat.id, trip?.boatId, trip?.boat?.boatId, statusKey]);
 
   const handleStartDelay = async () => {
     if (!trip?.tripId && !id) return;
     if (!showDelayStart || isDelayBusy) return;
+
+    const tooEarly = getTripDelayTooEarlyMessage(trip, lang);
+    if (tooEarly) {
+      await notify({
+        dialog: true,
+        icon: "warning",
+        title: lang === "VN" ? "Chưa đến giờ xuất phát" : "Before departure time",
+        text: tooEarly,
+        confirmButtonText: lang === "VN" ? "Đã hiểu" : "OK",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
 
     const stopOrder = resolveDelayStartStopOrder(stops);
     const stationName = pickStationNameForStopOrder(stops, stopOrder);
@@ -1146,12 +1191,13 @@ export function TripDetail() {
   };
 
   const liveLocation = useMemo(() => {
+    if (tripGpsFinished) return null;
     const tripLoc = tracking?.latestLocation;
     if (tripLoc && isValidCoord(tripLoc.latitude, tripLoc.longitude)) {
       return { ...tripLoc, source: "trip", matched: Boolean(tracking?.hasLiveLocationForTrip) };
     }
     return null;
-  }, [tracking]);
+  }, [tracking, tripGpsFinished]);
 
   const routeProgress = useMemo(
     () => resolveRouteProgress(stops, liveLocation, statusKey, routeLine),
@@ -1195,7 +1241,7 @@ export function TripDetail() {
             ) : null}
             {delayActive ? (
               <span className="inline-flex rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
-                {lang === "VN" ? "Đang dừng / Delay" : "Stopped / Delay"}
+                {lang === "VN" ? "Đang dừng" : "Stopped"}
               </span>
             ) : null}
             {!delayActive && delayMinutes > 0 ? (
@@ -1228,6 +1274,17 @@ export function TripDetail() {
               <span className="material-symbols-outlined text-[16px]">pause_circle</span>
               Delay
             </button>
+          ) : null}
+          {!showDelayStart && !showDelayResume && !delayActive && trip ? (
+            (() => {
+              const early = getTripDelayTooEarlyMessage(trip, lang);
+              if (!early) return null;
+              return (
+                <p className="max-w-[16rem] text-right text-[10px] font-semibold leading-snug text-slate-400">
+                  {early}
+                </p>
+              );
+            })()
           ) : null}
           {showDelayResume ? (
             <button
@@ -1339,15 +1396,51 @@ export function TripDetail() {
                       {lang === "VN" ? "Giờ chạy" : "Schedule"}
                     </p>
                     <p className="mt-1.5 text-sm font-black tabular-nums text-slate-800 dark:text-slate-100">
-                      {formatTime(pickDisplayDeparture(trip))}
-                      <span className="mx-1.5 text-slate-300">→</span>
-                      {formatTime(pickDisplayArrival(trip))}
+                      <span className={scheduleDisplay.depChanged ? "text-amber-700 dark:text-amber-300" : undefined}>
+                        {scheduleDisplay.depLabel}
+                      </span>
+                      <span className="mx-1.5 font-bold text-slate-300">→</span>
+                      <span className={scheduleDisplay.arrChanged ? "text-amber-700 dark:text-amber-300" : undefined}>
+                        {scheduleDisplay.arrLabel}
+                      </span>
                     </p>
-                    {(trip.adjustedDepartureTime || trip.adjustedArrivalTime) ? (
-                      <p className="mt-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
-                        {lang === "VN" ? "Đã điều chỉnh giờ" : "Adjusted times"}
-                        {delayMinutes > 0 ? ` · ${lang === "VN" ? `trễ ${delayMinutes}p` : `late ${delayMinutes}m`}` : ""}
-                      </p>
+                    {scheduleDisplay.showDelayNote ? (
+                      <div className="mt-1.5 space-y-0.5 border-t border-slate-200/80 pt-1.5 dark:border-slate-700/60">
+                        {scheduleDisplay.hasAdjustedField ? (
+                          <p className="text-[10px] font-semibold tabular-nums text-slate-400">
+                            {lang === "VN" ? "Gốc" : "Original"}{" "}
+                            {scheduleDisplay.plannedDepLabel}
+                            <span className="mx-1 text-slate-300">→</span>
+                            {scheduleDisplay.plannedArrLabel}
+                          </p>
+                        ) : null}
+                        <p className="text-[10px] font-bold leading-snug text-amber-700 dark:text-amber-300">
+                          {scheduleDisplay.depChanged || scheduleDisplay.arrChanged ? (
+                            <>
+                              {lang === "VN" ? "Đã đổi: " : "Changed: "}
+                              {[
+                                scheduleDisplay.depChanged
+                                  ? (lang === "VN"
+                                    ? `giờ đi ${scheduleDisplay.plannedDepLabel} → ${scheduleDisplay.depLabel}`
+                                    : `depart ${scheduleDisplay.plannedDepLabel} → ${scheduleDisplay.depLabel}`)
+                                  : null,
+                                scheduleDisplay.arrChanged
+                                  ? (lang === "VN"
+                                    ? `giờ đến ${scheduleDisplay.plannedArrLabel} → ${scheduleDisplay.arrLabel}`
+                                    : `arrive ${scheduleDisplay.plannedArrLabel} → ${scheduleDisplay.arrLabel}`)
+                                  : null,
+                              ].filter(Boolean).join(" · ")}
+                            </>
+                          ) : scheduleDisplay.delayActive ? (
+                            lang === "VN" ? "Đang delay — giờ sẽ cập nhật khi tiếp tục" : "Delaying — times update on resume"
+                          ) : (
+                            lang === "VN" ? "Giờ đã điều chỉnh do delay" : "Times adjusted by delay"
+                          )}
+                          {scheduleDisplay.delayMinutes > 0
+                            ? ` · ${lang === "VN" ? `trễ ${scheduleDisplay.delayMinutes}p` : `late ${scheduleDisplay.delayMinutes}m`}`
+                            : ""}
+                        </p>
+                      </div>
                     ) : null}
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-3.5 py-3 dark:bg-slate-900/60">
@@ -1404,17 +1497,19 @@ export function TripDetail() {
                     {formatTime(trackingAt instanceof Date ? trackingAt.toISOString() : trackingAt)}
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  disabled={isTrackingBusy}
-                  onClick={() => refreshTracking(id, boat.code || trip?.boatCode || "")}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-[#124757]/30 hover:text-[#124757] disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
-                  title={lang === "VN" ? "Làm mới" : "Refresh"}
-                >
-                  <span className={`material-symbols-outlined text-[16px] ${isTrackingBusy ? "animate-spin" : ""}`}>
-                    refresh
-                  </span>
-                </button>
+                {statusKey !== "Completed" && statusKey !== "Cancelled" ? (
+                  <button
+                    type="button"
+                    disabled={isTrackingBusy}
+                    onClick={() => refreshTracking(id, boat.code || trip?.boatCode || "")}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-[#124757]/30 hover:text-[#124757] disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                    title={lang === "VN" ? "Làm mới" : "Refresh"}
+                  >
+                    <span className={`material-symbols-outlined text-[16px] ${isTrackingBusy ? "animate-spin" : ""}`}>
+                      refresh
+                    </span>
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -1423,6 +1518,7 @@ export function TripDetail() {
               stations={routeStations}
               progress={routeProgress}
               liveLocation={liveLocation}
+              showBoat={!tripGpsFinished}
               boat={{
                 boatId: boat.id || trip?.boatId || boat.code || trip?.boatCode,
                 code: boat.code || trip?.boatCode,
@@ -1465,50 +1561,74 @@ export function TripDetail() {
                 {lang === "VN" ? "Phân công OnBoard" : "Assign OnBoard"}
               </Link>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <MetaCell label={lang === "VN" ? "Mã tàu" : "Boat code"}>{boat.code || "—"}</MetaCell>
-              <MetaCell label={lang === "VN" ? "Tên tàu" : "Boat name"}>{boat.name || "—"}</MetaCell>
-              <MetaCell label={lang === "VN" ? "Biển kiểm soát" : "Registration"}>
-                {boat.registrationNumber || "—"}
-              </MetaCell>
-              <MetaCell label={lang === "VN" ? "Loại dịch vụ" : "Service"}>
-                {boat.serviceType || "—"}
-              </MetaCell>
-              <MetaCell label={lang === "VN" ? "Số tầng" : "Decks"}>
-                {boat.numberOfDecks ?? "—"}
-              </MetaCell>
-              <MetaCell label={lang === "VN" ? "Tốc độ tối đa" : "Max speed"}>
-                {boat.maxSpeedKmh != null ? `${boat.maxSpeedKmh} km/h` : "—"}
-              </MetaCell>
-            </div>
 
-            <div className="mt-4 rounded-2xl border border-teal-100 bg-teal-50/70 px-4 py-3 dark:border-teal-500/20 dark:bg-teal-500/10">
-              <p className="text-[10px] font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">
-                {lang === "VN" ? "Nhân viên OnBoard (check vé trên tàu)" : "OnBoard crew (ticket check on boat)"}
-              </p>
-              {onBoardCrewDisplay.length > 0 ? (
-                <ul className="mt-2 flex flex-wrap gap-2">
-                  {onBoardCrewDisplay.map((name) => (
-                    <li
-                      key={name}
-                      className="rounded-lg border border-teal-200 bg-white px-2.5 py-1 text-[12px] font-bold text-[#124757] dark:border-teal-500/30 dark:bg-slate-900 dark:text-yellow-400"
-                    >
-                      {name}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-1.5 text-[12px] font-medium text-teal-800/70 dark:text-teal-200/80">
-                  {lang === "VN"
-                    ? "Chưa có ca OnBoard cho tàu ngày này. Gán ≥ 2 nhân viên trên tàu trước khi vận hành."
-                    : "No OnBoard shift for this boat today. Assign ≥ 2 boat crew before operating."}
+            <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-4">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Mã tàu" : "Boat code"}
                 </p>
-              )}
-              <p className="mt-2 text-[10px] font-medium text-teal-700/80 dark:text-teal-200/70">
-                {lang === "VN"
-                  ? "Check vé theo tàu — không phân nhân viên quét theo từng bến trên trip."
-                  : "Ticket check is by boat — not assigned per station stop on the trip."}
-              </p>
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                  {boat.code || "—"}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Tên tàu" : "Boat name"}
+                </p>
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                  {boat.name || "—"}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Biển kiểm soát" : "Registration"}
+                </p>
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                  {boat.registrationNumber || "—"}
+                </div>
+              </div>
+
+              <div className="min-w-0 col-span-2 row-span-1 sm:col-span-1 sm:row-span-2 sm:col-start-4 sm:row-start-1">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Nhân viên" : "Staff"}
+                </p>
+                <div className="mt-1 space-y-0.5 text-sm font-bold text-slate-800 dark:text-slate-100">
+                  {onBoardCrewDisplay.length > 0 ? (
+                    onBoardCrewDisplay.map((name) => (
+                      <p key={name} className="break-words leading-snug">
+                        {name}
+                      </p>
+                    ))
+                  ) : (
+                    <p>—</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Loại dịch vụ" : "Service"}
+                </p>
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                  {boat.serviceType || "—"}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Số tầng" : "Decks"}
+                </p>
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                  {boat.numberOfDecks ?? "—"}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Tốc độ tối đa" : "Max speed"}
+                </p>
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                  {boat.maxSpeedKmh != null ? `${boat.maxSpeedKmh} km/h` : "—"}
+                </div>
+              </div>
             </div>
           </section>
 
@@ -1528,9 +1648,16 @@ export function TripDetail() {
                 {stops.map((stop, index) => {
                   const isFirst = index === 0;
                   const isLast = index === lastStopIndex;
-                  const name = stop.stationName || stop.station?.stationName || "—";
-                  const code = stop.stationCode || stop.station?.stationCode || "";
-                  const address = stop.stationAddress || stop.station?.address || "";
+                  const sid = String(stop.stationId || stop.station?.stationId || "").trim();
+                  const catalog = sid ? stationCatalogById.get(sid) : null;
+                  // Stop chỉ còn stationId + stationName; mã/địa chỉ lấy từ GET stations.
+                  const name = stop.stationName
+                    || stop.station?.stationName
+                    || catalog?.stationName
+                    || catalog?.name
+                    || "—";
+                  const code = catalog?.stationCode || catalog?.code || "";
+                  const address = catalog?.address || catalog?.stationAddress || "";
                   const stopOpsBadge = resolveStopOpsBadge(stop, {
                     isFirst,
                     isLast,
@@ -1539,6 +1666,12 @@ export function TripDetail() {
                   });
                   const scheduledArr = isFirst ? null : (stop.scheduledArrival ?? null);
                   const scheduledDep = isLast ? null : (stop.scheduledDeparture ?? null);
+                  const adjustedArr = isFirst
+                    ? null
+                    : (stop.adjustedArrival ?? stop.adjustedArrivalTime ?? null);
+                  const adjustedDep = isLast
+                    ? null
+                    : (stop.adjustedDeparture ?? stop.adjustedDepartureTime ?? null);
                   // Bến đầu không dùng giờ đến (kể cả actualArrival BE gửi nhầm).
                   // Bến cuối không dùng giờ đi.
                   const actualArr = isFirst ? null : (stop.actualArrival ?? null);
@@ -1584,6 +1717,8 @@ export function TripDetail() {
                         <ScheduleCompare
                           scheduledArr={scheduledArr}
                           scheduledDep={scheduledDep}
+                          adjustedArr={adjustedArr}
+                          adjustedDep={adjustedDep}
                           actualArr={actualArr}
                           actualDep={actualDep}
                           lang={lang}
