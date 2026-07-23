@@ -1,4 +1,5 @@
 import { getOperationsSchedule as apiGetOperationsSchedule } from "../api/operationsApi";
+import { normalizeDwellCountdown } from "../utils/boatTracking";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -166,6 +167,14 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     "operationStatus", "OperationStatus", "operationalStatus", "status",
   ], "")).trim() || null;
 
+  const dwellCountdown = normalizeDwellCountdown(raw);
+  const passengerSource = pick(raw, [
+    "onboardPassengerCount", "OnboardPassengerCount",
+    "passengerCount", "PassengerCount",
+    "totalPassengerCount", "TotalPassengerCount",
+  ], null);
+  const passengerCount = toFiniteNumber(passengerSource);
+
   return {
     boatId: boatId || boatCode,
     boatCode: boatCode || boatId,
@@ -193,6 +202,8 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     adjustedStartAt,
     adjustedEndAt,
     operationStatus,
+    dwellCountdown,
+    passengerCount,
     lastStopEvent: String(pick(raw, [
       "lastStopEvent", "LastStopEvent", "stopEvent", "StopEvent",
       "tripStopEvent", "TripStopEvent", "latestStopEvent",

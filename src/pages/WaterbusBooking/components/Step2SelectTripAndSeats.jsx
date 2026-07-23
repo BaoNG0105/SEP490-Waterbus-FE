@@ -7,6 +7,20 @@ import { SeatMapIcon, seatToneFromCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
 import { fetchTripDetail, fetchTripSeatMap, holdSeats, releaseSeats } from "../../../services/tripService";
 import { notify, showToast } from "../../../utils/swalToast";
+import {
+  bookingHasSeatSelection,
+  clearSeatSelectionFields,
+  confirmLeaveSeatSelection,
+} from "../../../utils/bookingWizardGuard";
+import {
+  formatBookingClosedMessage,
+  formatFareAdjustmentLabel,
+  formatMinPriceLabel,
+  formatSegmentDistanceLabel,
+  formatSegmentLockedSeatHint,
+  isMissingKmBookingBlock,
+  pickSegmentDistanceKm,
+} from "../../../utils/bookingFareMessages";
 
 const MAX_SEATS_PER_LEG = 10;
 const LOCKED_STATUSES = ["Held", "Booked", "Blocked"];
@@ -36,22 +50,13 @@ const formatTripTime = (isoString) => {
   return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 };
 
-// Giờ khởi hành/đến của cả chuyến (departureTime/arrivalTime) khác với giờ theo chặng khách chọn —
-// kèm ngày vì có thể lệch ngày (VD: 23:00 hôm nay -> 00:00 hôm sau).
-const formatTripDateTime = (isoString) => {
-  if (!isoString) return "--";
-  const date = new Date(isoString);
-  if (Number.isNaN(date.getTime())) return "--";
-  return date.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-};
-
-const formatTripDuration = (departureIso, arrivalIso) => {
+const formatTripDuration = (departureIso, arrivalIso, lang = "VN") => {
   if (!departureIso || !arrivalIso) return "--";
   const start = new Date(departureIso);
   const end = new Date(arrivalIso);
   const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
   if (!Number.isFinite(minutes) || minutes <= 0) return "--";
-  return `${minutes} min`;
+  return lang === "VN" ? `${minutes} phút` : `${minutes} min`;
 };
 
 const getTripHourBucket = (isoString) => {
@@ -87,17 +92,7 @@ const isTripSelectable = (trip) => {
   return !isSegmentBookingClosed(trip);
 };
 
-const getTripUnavailableLabel = (trip, lang) => {
-  const reason = String(trip?.bookingClosedReason || "").trim();
-  if (reason) return reason;
-  if (Number(trip?.availableSeats) <= 0) {
-    return lang === "VN" ? "Hết chỗ" : "Sold out";
-  }
-  if (trip?.isBookable === false || isSegmentBookingClosed(trip)) {
-    return lang === "VN" ? "Đã khóa bến lên" : "Boarding closed";
-  }
-  return lang === "VN" ? "Không thể chọn" : "Unavailable";
-};
+const getTripUnavailableLabel = (trip, lang) => formatBookingClosedMessage(trip, lang);
 
 // Chuyển ký tự hàng ghế (A, B, C...) thành số thứ tự hàng cho CSS grid
 const rowLetterToIndex = (row) => {
@@ -236,6 +231,10 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   // Sơ đồ ghế thực tế lấy từ API, lưu riêng theo từng chiều (departure/return) — chỉ để hiển thị,
   // việc chọn/bỏ chọn ghế ở bước này thuần local, KHÔNG gọi API giữ ghế.
   const [seatMapByLeg, setSeatMapByLeg] = useState({ departure: [], return: [] });
+  const [seatMapMetaByLeg, setSeatMapMetaByLeg] = useState({
+    departure: { segmentDistanceKm: null, fareAdjustment: null },
+    return: { segmentDistanceKm: null, fareAdjustment: null },
+  });
   const [bookingClosedByLeg, setBookingClosedByLeg] = useState({ departure: false, return: false });
   const [activeDeckByLeg, setActiveDeckByLeg] = useState({ departure: 1, return: 1 });
   const [isLoadingSeats, setIsLoadingSeats] = useState(false);
@@ -262,11 +261,36 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
           if (!isLoopRoute && (!fromStationCode || !toStationCode)) return;
           const seatMapResponse = await fetchTripSeatMap(trip.tripId, { fromStationCode, toStationCode });
           if (cancelled) return;
+          const meta = {
+            segmentDistanceKm: pickSegmentDistanceKm(seatMapResponse),
+            fareAdjustment: seatMapResponse?.fareAdjustment
+              ?? seatMapResponse?.FareAdjustment
+              ?? trip?.fareAdjustment
+              ?? null,
+          };
           setSeatMapByLeg((prev) => ({ ...prev, [leg]: seatMapResponse?.seats || [] }));
+          setSeatMapMetaByLeg((prev) => ({ ...prev, [leg]: meta }));
           setBookingClosedByLeg((prev) => ({
             ...prev,
             [leg]: resolveSeatMapBookingClosed(seatMapResponse, trip),
           }));
+          if (leg === "departure") {
+            updateData({
+              selectedDepartureTrip: {
+                ...trip,
+                segmentDistanceKm: meta.segmentDistanceKm,
+                fareAdjustment: meta.fareAdjustment,
+              },
+            });
+          } else {
+            updateData({
+              selectedReturnTrip: {
+                ...trip,
+                segmentDistanceKm: meta.segmentDistanceKm,
+                fareAdjustment: meta.fareAdjustment,
+              },
+            });
+          }
         }));
       } catch (error) {
         if (!cancelled) {
@@ -294,6 +318,21 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   const currentSeats = activeLeg === "departure" ? selectedSeatsDeparture : selectedSeatsReturn;
   const currentSeatMap = seatMapByLeg[activeLeg];
   const isCurrentBookingClosed = Boolean(bookingClosedByLeg[activeLeg]);
+
+  const resolveLegSegmentKm = (leg, trip) => (
+    seatMapMetaByLeg[leg]?.segmentDistanceKm
+    ?? pickSegmentDistanceKm(trip)
+  );
+  const legHasSegmentKm = (leg, trip) => (
+    isLoopRoute || resolveLegSegmentKm(leg, trip) != null
+  );
+  const currentSeatMapMeta = seatMapMetaByLeg[activeLeg] || {};
+  const currentSegmentKm = resolveLegSegmentKm(activeLeg, currentTrip);
+  const currentFareAdjLabel = formatFareAdjustmentLabel(
+    currentSeatMapMeta.fareAdjustment ?? currentTrip?.fareAdjustment,
+    lang,
+  );
+  const isCurrentMissingKm = Boolean(currentTrip) && !isLoopRoute && currentSegmentKm == null;
 
   const filteredTripOptions = (tripOptions || []).filter((trip) => {
     if (filterTime === "all") return true;
@@ -384,34 +423,72 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
 
       const seatMapResponse = await fetchTripSeatMap(trip.tripId, { fromStationCode, toStationCode });
       const closed = resolveSeatMapBookingClosed(seatMapResponse, mergedTrip);
+      const segmentDistanceKm = pickSegmentDistanceKm(seatMapResponse);
+      const fareAdjustment = seatMapResponse?.fareAdjustment
+        ?? seatMapResponse?.FareAdjustment
+        ?? trip?.fareAdjustment
+        ?? null;
+      const tripWithFare = {
+        ...mergedTrip,
+        segmentDistanceKm,
+        fareAdjustment,
+        minPrice: seatMapResponse?.minPrice ?? mergedTrip.minPrice,
+      };
       setSeatMapByLeg((prev) => ({ ...prev, [activeLeg]: seatMapResponse?.seats || [] }));
+      setSeatMapMetaByLeg((prev) => ({
+        ...prev,
+        [activeLeg]: { segmentDistanceKm, fareAdjustment },
+      }));
       setBookingClosedByLeg((prev) => ({ ...prev, [activeLeg]: closed }));
       setActiveDeckByLeg((prev) => ({ ...prev, [activeLeg]: 1 }));
 
-      if (closed) {
-        const reason = seatMapResponse?.bookingClosedReason
-          || getTripUnavailableLabel(mergedTrip, lang);
+      const missingKm = !isLoopRoute && segmentDistanceKm == null;
+      if (closed || missingKm) {
+        const reasonPayload = {
+          ...tripWithFare,
+          ...seatMapResponse,
+          bookingClosedReason: seatMapResponse?.bookingClosedReason || mergedTrip?.bookingClosedReason,
+          isBookingClosed: true,
+          minPrice: seatMapResponse?.minPrice ?? mergedTrip?.minPrice,
+          segmentDistanceKm,
+        };
         setSeatMapError(
-          lang === "VN"
-            ? `Chặng này đã khóa đặt ghế${reason ? `: ${reason}` : "."}`
-            : `This segment is closed for booking${reason ? `: ${reason}` : "."}`,
+          missingKm || isMissingKmBookingBlock(reasonPayload)
+            ? formatBookingClosedMessage({ ...reasonPayload, minPrice: null, isBookable: false }, lang)
+            : (lang === "VN"
+              ? `Chặng này đã khóa đặt ghế${seatMapResponse?.bookingClosedReason || getTripUnavailableLabel(mergedTrip, lang) ? `: ${seatMapResponse?.bookingClosedReason || getTripUnavailableLabel(mergedTrip, lang)}` : "."}`
+              : `This segment is closed for booking${seatMapResponse?.bookingClosedReason || getTripUnavailableLabel(mergedTrip, lang) ? `: ${seatMapResponse?.bookingClosedReason || getTripUnavailableLabel(mergedTrip, lang)}` : "."}`),
         );
       } else {
         setSeatMapError("");
       }
 
       if (activeLeg === "departure") {
-        updateData({ selectedDepartureTrip: mergedTrip, selectedSeatsDeparture: [] });
+        updateData({ selectedDepartureTrip: tripWithFare, selectedSeatsDeparture: [] });
       } else {
-        updateData({ selectedReturnTrip: mergedTrip, selectedSeatsReturn: [] });
+        updateData({ selectedReturnTrip: tripWithFare, selectedSeatsReturn: [] });
       }
     } catch (error) {
       console.error("Lỗi khi tải chi tiết chuyến/sơ đồ ghế:", error);
-      setSeatMapError(
-        lang === "VN"
-          ? "Không thể tải sơ đồ ghế cho chuyến này. Vui lòng thử lại."
-          : "Unable to load the seat map for this trip. Please try again."
-      );
+      const apiMsg = error?.response?.data;
+      const detail = typeof apiMsg === "string"
+        ? apiMsg
+        : (apiMsg?.bookingClosedReason || apiMsg?.detail || apiMsg?.message || apiMsg?.title || "");
+      const reasonPayload = {
+        bookingClosedReason: detail,
+        isBookingClosed: true,
+        minPrice: apiMsg?.minPrice,
+        validationMessage: detail,
+      };
+      if (isMissingKmBookingBlock(reasonPayload)) {
+        setSeatMapError(formatBookingClosedMessage(reasonPayload, lang));
+      } else {
+        setSeatMapError(
+          lang === "VN"
+            ? "Không thể tải sơ đồ ghế cho chuyến này. Vui lòng thử lại."
+            : "Unable to load the seat map for this trip. Please try again."
+        );
+      }
     } finally {
       setIsLoadingSeats(false);
     }
@@ -439,13 +516,19 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       return;
     }
     if (!currentTrip?.tripId) return;
-    if (isCurrentBookingClosed) {
+    if (isCurrentBookingClosed || isCurrentMissingKm) {
       showToast({
         icon: "warning",
-        title: lang === "VN" ? "Chặng đã khóa đặt ghế" : "Seat booking closed",
-        text: lang === "VN"
-          ? "Không thể chọn ghế vì chặng đã đóng đặt vé."
-          : "Seats cannot be selected because this segment is closed.",
+        title: isCurrentMissingKm
+          ? (lang === "VN" ? "Thiếu quãng đường" : "Missing segment distance")
+          : (lang === "VN" ? "Chặng đã khóa đặt ghế" : "Seat booking closed"),
+        text: isCurrentMissingKm
+          ? (lang === "VN"
+            ? "Chưa có segmentDistanceKm từ seat-map — không thể đặt vé."
+            : "segmentDistanceKm is missing from seat-map — booking is blocked.")
+          : (lang === "VN"
+            ? "Không thể chọn ghế vì chặng đã đóng đặt vé."
+            : "Seats cannot be selected because this segment is closed."),
       });
       return;
     }
@@ -486,13 +569,35 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   const isStepComplete = selectedDepartureTrip && selectedSeatsDeparture.length > 0
     && isTripSelectable(selectedDepartureTrip)
     && !bookingClosedByLeg.departure
+    && legHasSegmentKm("departure", selectedDepartureTrip)
     && (!isRoundTrip || (
       selectedReturnTrip
       && selectedSeatsReturn.length > 0
       && selectedSeatsReturn.length === selectedSeatsDeparture.length
       && isTripSelectable(selectedReturnTrip)
       && !bookingClosedByLeg.return
+      && legHasSegmentKm("return", selectedReturnTrip)
     ));
+
+  const hasSelectionProgress = bookingHasSeatSelection({
+    selectedDepartureTrip,
+    selectedReturnTrip,
+    selectedSeatsDeparture,
+    selectedSeatsReturn,
+  });
+
+  const handleBack = async () => {
+    if (!hasSelectionProgress) {
+      onBack();
+      return;
+    }
+
+    const ok = await confirmLeaveSeatSelection(lang);
+    if (!ok) return;
+
+    updateData(clearSeatSelectionFields());
+    onBack();
+  };
 
   // Chỉ THỰC SỰ giữ ghế (gọi API hold) khi bấm "Tiếp tục thanh toán" — đây là lúc rời Bước 2 sang Bước 3.
   const handleContinueToCheckout = async () => {
@@ -517,8 +622,8 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
         setSeatMapByLeg((prev) => ({ ...prev, departure: refreshed?.seats || [] }));
         setSeatMapError(
           lang === "VN"
-            ? `Ghế ${departureFailed.join(", ")} (chiều đi) vừa được người khác giữ. Vui lòng chọn lại.`
-            : `Seat(s) ${departureFailed.join(", ")} (departure) were just taken by someone else. Please reselect.`
+            ? `Ghế ${departureFailed.join(", ")} (chiều đi) vừa được giữ trên chặng giao nhau hoặc bởi người khác. Vui lòng chọn lại.`
+            : `Seat(s) ${departureFailed.join(", ")} (departure) were held on an overlapping segment or by someone else. Please reselect.`
         );
         return;
       }
@@ -549,8 +654,8 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
           setSeatMapByLeg((prev) => ({ ...prev, return: refreshed?.seats || [] }));
           setSeatMapError(
             lang === "VN"
-              ? `Ghế ${returnFailed.join(", ")} (chiều về) vừa được người khác giữ. Vui lòng chọn lại.`
-              : `Seat(s) ${returnFailed.join(", ")} (return) were just taken by someone else. Please reselect.`
+              ? `Ghế ${returnFailed.join(", ")} (chiều về) vừa được giữ trên chặng giao nhau hoặc bởi người khác. Vui lòng chọn lại.`
+              : `Seat(s) ${returnFailed.join(", ")} (return) were held on an overlapping segment or by someone else. Please reselect.`
           );
           return;
         }
@@ -650,6 +755,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
             )}
             {filteredTripOptions.map((trip) => {
               const selectable = isTripSelectable(trip);
+              const fareAdjLabel = formatFareAdjustmentLabel(trip.fareAdjustment, lang);
               return (
                 <div
                   key={trip.tripId}
@@ -672,7 +778,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                           <span className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(getSegmentDeparture(trip))}</span>
                           <span className="relative inline-flex shrink-0 items-center justify-center">
                             <span className="material-symbols-outlined text-base text-[#FFD100]">arrow_forward</span>
-                            <span className="absolute top-full left-1/2 mt-0.5 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-slate-400">{formatTripDuration(getSegmentDeparture(trip), getSegmentArrival(trip))}</span>
+                            <span className="absolute top-full left-1/2 mt-0.5 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-slate-400">{formatTripDuration(getSegmentDeparture(trip), getSegmentArrival(trip), lang)}</span>
                           </span>
                           <span className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(getSegmentArrival(trip))}</span>
                         </div>
@@ -681,12 +787,31 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                           <span className="material-symbols-outlined text-xs">arrow_forward</span>
                           <span>{legToWharfName || "--"}</span>
                         </div>
+                        {fareAdjLabel ? (
+                          <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                            {fareAdjLabel}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto">
                       <div className="text-right">
-                        <div className="text-base font-headline font-black text-[#124757] dark:text-[#FFD100]">{Number(trip.minPrice || 0).toLocaleString()} VND</div>
-                        <div className="text-xs text-slate-500">
+                        {/* BE: card chuyến show minPrice dạng "từ 9.000đ" — null khi thiếu km */}
+                        <div className={`text-base font-headline font-black ${
+                          trip.minPrice == null
+                            ? "text-rose-600 dark:text-rose-300"
+                            : "text-[#124757] dark:text-[#FFD100]"
+                        }`}>
+                          {trip.minPrice != null && Number.isFinite(Number(trip.minPrice)) ? (
+                            <>
+                              <span className="text-xs font-bold text-slate-400 mr-1">{lang === "VN" ? "từ" : "from"}</span>
+                              {formatMinPriceLabel(trip.minPrice, lang)}
+                            </>
+                          ) : (
+                            formatMinPriceLabel(trip.minPrice, lang)
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500 whitespace-nowrap">
                           {selectable
                             ? (lang === "VN" ? `Còn trống ${trip.availableSeats}/${trip.totalSeats} chỗ` : `${trip.availableSeats}/${trip.totalSeats} left`)
                             : getTripUnavailableLabel(trip, lang)}
@@ -698,13 +823,6 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                         {currentTrip?.tripId === trip.tripId && <div className="w-2.5 h-2.5 rounded-full bg-[#124757] dark:bg-[#FFD100]"></div>}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="border-t border-dashed border-slate-100 pt-2 text-[11px] font-medium text-rose-500 dark:border-slate-700 dark:text-rose-400">
-                    {lang === "VN" ? "Thuộc chuyến" : "Trip"}{" "}
-                    <span className="font-bold">{trip.routeName}</span>
-                    {lang === "VN" ? ", vào " : ", at "}
-                    {formatTripDateTime(trip.departureTime)} → {formatTripDateTime(trip.arrivalTime)}
                   </div>
                 </div>
               );
@@ -723,6 +841,21 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                 ? (lang === "VN" ? `Đã chọn: ${currentSeats.length} ghế (tối đa ${MAX_SEATS_PER_LEG})` : `Selected: ${currentSeats.length} seats (max ${MAX_SEATS_PER_LEG})`)
                 : (lang === "VN" ? "Vui lòng chọn một chuyến tàu ở bên trái trước" : "Please choose a voyage list first")}
             </p>
+            {currentTrip && !isLoopRoute ? (
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold">
+                <span className={isCurrentMissingKm ? "text-rose-600 dark:text-rose-300" : "text-slate-600 dark:text-slate-300"}>
+                  {formatSegmentDistanceLabel(currentSegmentKm, lang)}
+                </span>
+                {currentFareAdjLabel ? (
+                  <span className="text-amber-700 dark:text-amber-300">{currentFareAdjLabel}</span>
+                ) : null}
+              </div>
+            ) : null}
+            {currentTrip ? (
+              <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
+                {formatSegmentLockedSeatHint(lang)}
+              </p>
+            ) : null}
           </div>
 
           {seatMapError && (
@@ -731,7 +864,15 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
             </p>
           )}
 
-          {isCurrentBookingClosed && currentTrip && (
+          {isCurrentMissingKm && currentTrip && (
+            <p className="text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl px-4 py-3">
+              {lang === "VN"
+                ? "Thiếu quãng đường chặng (segmentDistanceKm). Không thể đặt vé cho chặng này."
+                : "Missing segment distance (segmentDistanceKm). Booking is blocked for this segment."}
+            </p>
+          )}
+
+          {isCurrentBookingClosed && currentTrip && !isCurrentMissingKm && (
             <p className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl px-4 py-3">
               {lang === "VN"
                 ? "Chặng này đã khóa đặt ghế. Không thể chọn ghế — hãy chọn chuyến khác hoặc đổi bến lên."
@@ -840,19 +981,24 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                         {activeDeckData.seats.map((seat) => {
                           const isSelected = currentSeats.some((s) => s.seatNumber === seat.seatNumber);
                           const isLockedByOthers = LOCKED_STATUSES.includes(seat.status) && !isSelected;
+                          const seatBlocked = isLockedByOthers || isCurrentBookingClosed || isCurrentMissingKm;
                           const seatStatusLabel = isLockedByOthers
-                            ? (lang === "VN" ? "Đã khóa" : "Locked")
-                            : isSelected
-                              ? (lang === "VN" ? "Đang chọn" : "Selected")
-                              : (lang === "VN" ? "Chỗ trống" : "Available");
+                            ? (lang === "VN" ? "Đã khóa (chặng giao)" : "Locked (overlap)")
+                            : isCurrentMissingKm
+                              ? (lang === "VN" ? "Thiếu km chặng" : "Missing segment km")
+                              : isCurrentBookingClosed
+                                ? (lang === "VN" ? "Chặng đã khóa" : "Segment closed")
+                                : isSelected
+                                  ? (lang === "VN" ? "Đang chọn" : "Selected")
+                                  : (lang === "VN" ? "Chỗ trống" : "Available");
                           return (
                             <button
                               key={seat.seatNumber}
                               type="button"
-                              disabled={isLockedByOthers}
+                              disabled={seatBlocked}
                               onClick={() => handleSeatClick(seat)}
                               className={`group relative z-1 flex items-center justify-center rounded-lg transition-all ${
-                                isLockedByOthers ? "cursor-not-allowed opacity-70" :
+                                seatBlocked ? "cursor-not-allowed opacity-70" :
                                 isSelected ? "scale-95 ring-2 ring-[#124757]/25 dark:ring-yellow-400/40 rounded-xl" :
                                 "hover:scale-105"
                               }`}
@@ -874,7 +1020,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
                               <SeatMapIcon
                                 label={seat.seatNumber}
                                 tone={seatToneFromCode(seat.seatTypeCode)}
-                                disabled={isLockedByOthers}
+                                disabled={seatBlocked}
                                 selected={isSelected}
                                 className="w-[92%] h-[92%]"
                               />
@@ -916,7 +1062,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
 
       {/* --- NÚT ĐIỀU HƯỚNG CHUYỂN BƯỚC DƯỚI CÙNG --- */}
       <div className="pt-6 border-t flex justify-between">
-        <button type="button" onClick={onBack} className="border px-6 py-3 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800">
+        <button type="button" onClick={handleBack} className="border px-6 py-3 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800">
           {lang === "VN" ? "Quay lại" : "Back"}
         </button>
 

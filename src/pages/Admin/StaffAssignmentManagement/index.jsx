@@ -30,6 +30,7 @@ import { fetchAllTrips, fetchTripDetail, toDdMmYyyy } from "../../../services/tr
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getUserId, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
+import { AppDateInput } from "../../../components/AppDateInput";
 import { FormSelect } from "../../../components/FormSelect";
 import { getRangeForScheduleMode, toDateKey } from "../../../utils/staffAssignmentCalendarUtils";
 import { notify } from "../../../utils/swalToast";
@@ -877,11 +878,11 @@ export function StaffAssignmentManagement() {
             <>
               <div className="w-[148px]">
                 <label className={labelStyle}>{lang === "VN" ? "Từ ngày" : "From"}</label>
-                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={filterInputStyle} />
+                <AppDateInput value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={filterInputStyle} />
               </div>
               <div className="w-[148px]">
                 <label className={labelStyle}>{lang === "VN" ? "Đến ngày" : "To"}</label>
-                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={filterInputStyle} />
+                <AppDateInput value={toDate} onChange={(e) => setToDate(e.target.value)} className={filterInputStyle} />
               </div>
               {(dateRangeTooWide || dateRangeInvalid) ? (
                 <p className="w-full text-[11px] font-semibold text-rose-600 dark:text-rose-300">
@@ -898,8 +899,7 @@ export function StaffAssignmentManagement() {
           ) : (
             <div className="w-[148px]">
               <label className={labelStyle}>{lang === "VN" ? "Ngày" : "Date"}</label>
-              <input
-                type="date"
+              <AppDateInput
                 value={toDateKey(anchorDate)}
                 onChange={(e) => setAnchorDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : new Date())}
                 className={filterInputStyle}
@@ -1296,8 +1296,7 @@ export function StaffAssignmentManagement() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
-                  <input
-                    type="date"
+                  <AppDateInput
                     required
                     value={createForm.fromDate}
                     onChange={(e) => handleCreateField("fromDate", e.target.value)}
@@ -1306,8 +1305,7 @@ export function StaffAssignmentManagement() {
                 </div>
                 <div>
                   <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "To date (*)"}</label>
-                  <input
-                    type="date"
+                  <AppDateInput
                     required
                     value={createForm.toDate}
                     onChange={(e) => handleCreateField("toDate", e.target.value)}

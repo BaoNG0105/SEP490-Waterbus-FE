@@ -1,6 +1,6 @@
-import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
+import { HubConnectionState } from "@microsoft/signalr";
 import { getIncidentsHubUrl } from "../utils/hubBaseUrl";
-import { buildHubConnectionOptions } from "../utils/hubConnectionOptions";
+import { createHubConnection } from "../utils/createHubConnection";
 
 const RELEASE_DEBOUNCE_MS = 800;
 
@@ -96,10 +96,7 @@ class IncidentHubClient {
       this.connection = null;
     }
 
-    const connection = new HubConnectionBuilder()
-      .withUrl(getIncidentsHubUrl(), buildHubConnectionOptions(() => this.getAccessToken()))
-      .withAutomaticReconnect([0, 1000, 2000, 5000, 10000])
-      .build();
+    const connection = createHubConnection(getIncidentsHubUrl(), () => this.getAccessToken());
 
     this.connection = connection;
     this.attachLifecycleHandlers(connection);

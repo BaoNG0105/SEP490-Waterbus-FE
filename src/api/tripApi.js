@@ -4,7 +4,8 @@ import api from './axios';
 export const getTrips = (params) =>
     api.get('/trips', { params }).then(response => response.data);
 
-// API: Tạo chuyến tàu mới (routeCode, boatCode, operatingDate, departureTime bắt buộc; seatTypePrices optional)
+// API: Tạo chuyến tàu mới (routeCode, boatCode, operatingDate, departureTime bắt buộc).
+// Giá lấy từ seat-types / fare-policy — không gửi seatTypePrices.
 export const createTrip = (data) =>
     api.post('/trips', data).then(response => response.data);
 

@@ -6,8 +6,8 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify } from "../../../utils/swalToast";
 
 /**
- * Quét vé Staff — manual code (camera sau).
- * Không kiểm tra ca hợp lệ bến/tàu lúc này (BE rule chưa bắt buộc).
+ * Quét vé Staff OnBoard trên tàu.
+ * Nhân viên bến (Ground) không phải luồng chính — dùng ca Boat.
  */
 export function StaffTicketScanPage() {
   const { lang } = useApp();
@@ -114,13 +114,18 @@ export function StaffTicketScanPage() {
           {lang === "VN" ? "Vận hành" : "Operations"}
         </p>
         <h2 className="mt-1 text-2xl font-headline font-black text-[#124757] dark:text-yellow-400">
-          {lang === "VN" ? "Quét vé" : "Ticket scan"}
+          {lang === "VN" ? "Quét vé (OnBoard)" : "Ticket scan (OnBoard)"}
         </h2>
         <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-300">
           {lang === "VN"
-            ? "Nhập mã vé hoặc dán token QR. Quét bằng camera sẽ bổ sung sau."
-            : "Enter ticket code or paste QR token. Camera scan comes later."}
+            ? "Dành cho nhân viên OnBoard trên tàu. Nhập mã vé hoặc dán token QR. Nhân viên bến (Ground) không dùng luồng này làm chính."
+            : "For OnBoard crew on the boat. Enter ticket code or paste QR token. Station (Ground) staff are not the primary users of this flow."}
         </p>
+        <div className="mt-3 rounded-2xl border border-teal-100 bg-teal-50/80 px-3.5 py-2.5 text-[11px] font-semibold text-teal-800 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-teal-200">
+          {lang === "VN"
+            ? "Trip chỉ chạy khi tàu có ≥ 2 nhân viên OnBoard được phân công đủ thời gian chuyến."
+            : "A trip only runs when the boat has ≥ 2 OnBoard staff assigned for the full trip window."}
+        </div>
         <Link
           to="/admin/staff/scan-history"
           className="inline-flex mt-3 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 underline"

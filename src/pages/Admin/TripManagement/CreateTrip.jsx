@@ -7,11 +7,47 @@ import {
   addNewTrip,
   buildTripPayload,
   getTripCreateLeadTimeError,
-  SEAT_TYPE_OPTIONS,
 } from "../../../services/tripService";
+import {
+  ASSIGNMENT_STATUS,
+  ASSIGNMENT_TYPE,
+  fetchStaffAssignments,
+  isAssignmentInactive,
+} from "../../../services/staffAssignmentService";
 import { FormSelect } from "../../../components/FormSelect";
+import { AppDateInput } from "../../../components/AppDateInput";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { assignmentCoversDay } from "../../../utils/staffAssignmentCalendarUtils";
 import { notify } from "../../../utils/swalToast";
+
+const MIN_ONBOARD_STAFF = 2;
+
+const unwrapBoats = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const countOnBoardStaffForBoatDay = (assignments, boatId, boatCode, dayKey) => {
+  const id = String(boatId || "").trim();
+  const code = String(boatCode || "").trim().toUpperCase();
+  const staffIds = new Set();
+  (assignments || []).forEach((row) => {
+    if (!row || isAssignmentInactive(row.status)) return;
+    if (row.assignmentType !== ASSIGNMENT_TYPE.BOAT) return;
+    if (String(row.status || "") === ASSIGNMENT_STATUS.CANCELLED) return;
+    if (!assignmentCoversDay(row, dayKey)) return;
+    const rowBoatId = String(row.boat?.boatId || row.boatId || "").trim();
+    const rowBoatCode = String(row.boat?.boatCode || row.boatCode || "").trim().toUpperCase();
+    const matchBoat = (id && rowBoatId && id === rowBoatId)
+      || (code && rowBoatCode && code === rowBoatCode);
+    if (!matchBoat) return;
+    const sid = String(row.staffUserId || "").trim();
+    if (sid) staffIds.add(sid);
+  });
+  return staffIds.size;
+};
 
 const pickStopOrder = (stop) => Number(stop?.stopOrder ?? stop?.order ?? stop?.StopOrder ?? 0);
 const pickStationLabel = (stop) =>
@@ -45,7 +81,6 @@ export function CreateTrip() {
     boatCode: "",
     operatingDate: "",
     departureTime: "",
-    seatTypePrices: [],
     stops: [],
   });
 
@@ -62,7 +97,7 @@ export function CreateTrip() {
         setIsLoadingOptions(true);
         const [routeData, boatData] = await Promise.all([fetchAllRoutes(), fetchAllBoats()]);
         setRoutes((routeData || []).filter((r) => r.routeType === "Regular" || r.routeType === "SightseeingLoop"));
-        setBoats((boatData || []).filter((b) => b.status?.toLowerCase() === "active" && b.seatsConfigured));
+        setBoats(unwrapBoats(boatData).filter((b) => b.status?.toLowerCase() === "active" && b.seatsConfigured));
       } catch (error) {
         console.error("Lỗi tải dữ liệu tuyến/tàu cho form tạo chuyến:", error);
       } finally {
@@ -111,26 +146,6 @@ export function CreateTrip() {
     }));
   };
 
-  const handleAddSeatPrice = () => {
-    setFormData((prev) => ({
-      ...prev,
-      seatTypePrices: [...prev.seatTypePrices, { seatTypeCode: SEAT_TYPE_OPTIONS[0], price: "" }],
-    }));
-  };
-
-  const handleSeatPriceChange = (index, field, value) => {
-    const updated = [...formData.seatTypePrices];
-    updated[index] = { ...updated[index], [field]: value };
-    setFormData((prev) => ({ ...prev, seatTypePrices: updated }));
-  };
-
-  const handleRemoveSeatPrice = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      seatTypePrices: prev.seatTypePrices.filter((_, i) => i !== index),
-    }));
-  };
-
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -141,6 +156,35 @@ export function CreateTrip() {
       if (leadError) {
         setErrorMsg(leadError);
         return;
+      }
+
+      const selectedBoat = boats.find((b) => String(b.code || b.boatCode) === String(formData.boatCode));
+      const boatId = selectedBoat?.id || selectedBoat?.boatId || selectedBoat?.BoatId;
+      try {
+        const assignments = await fetchStaffAssignments({
+          assignmentType: ASSIGNMENT_TYPE.BOAT,
+          boatId: boatId || undefined,
+          fromDate: formData.operatingDate,
+          toDate: formData.operatingDate,
+          status: ASSIGNMENT_STATUS.SCHEDULED,
+        });
+        const onboardCount = countOnBoardStaffForBoatDay(
+          assignments,
+          boatId,
+          formData.boatCode,
+          formData.operatingDate,
+        );
+        if (onboardCount < MIN_ONBOARD_STAFF) {
+          setErrorMsg(
+            lang === "VN"
+              ? `Tàu cần ít nhất ${MIN_ONBOARD_STAFF} nhân viên OnBoard được phân công đủ ngày chuyến (hiện có ${onboardCount}). Gán ca tại Phân công nhân sự trước khi tạo trip.`
+              : `Boat needs at least ${MIN_ONBOARD_STAFF} OnBoard staff covering the trip day (currently ${onboardCount}). Assign duty in Staff assignments before creating the trip.`,
+          );
+          return;
+        }
+      } catch (crewError) {
+        console.warn("Không kiểm tra được OnBoard crew trước khi tạo trip:", crewError);
+        // Không chặn cứng nếu API list assignments lỗi — BE vẫn validate khi create.
       }
 
       const payload = buildTripPayload(formData);
@@ -177,7 +221,6 @@ export function CreateTrip() {
     () => boats.map((b) => ({ value: b.code, label: `${b.code} — ${b.name}` })),
     [boats],
   );
-  const seatTypeSelectOptions = SEAT_TYPE_OPTIONS.map((code) => ({ value: code, label: code }));
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-4xl mx-auto animate-fade-in">
@@ -195,8 +238,8 @@ export function CreateTrip() {
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
-              ? "Chuyến phải tạo trước giờ khởi hành ≥ 20 phút. Bến giữa tuyến cần nhập phút dừng (có thể 0)."
-              : "Trip must be created ≥ 20 minutes before departure. Intermediate stops need dwell minutes (0 allowed)."}
+              ? `Chuyến phải tạo trước giờ khởi hành ≥ 20 phút. Tàu cần ≥ ${MIN_ONBOARD_STAFF} nhân viên OnBoard đủ ngày chuyến. Bến giữa tuyến cần nhập phút dừng (có thể 0).`
+              : `Trip must be created ≥ 20 minutes before departure. Boat needs ≥ ${MIN_ONBOARD_STAFF} OnBoard staff covering the trip day. Intermediate stops need dwell minutes (0 allowed).`}
           </p>
         </div>
       </div>
@@ -241,14 +284,18 @@ export function CreateTrip() {
                 emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
                 className={selectStyle}
               />
+              <p className="mt-1.5 text-[10px] text-slate-400">
+                {lang === "VN"
+                  ? `Cần ≥ ${MIN_ONBOARD_STAFF} ca OnBoard (Boat) trong ngày vận hành.`
+                  : `Requires ≥ ${MIN_ONBOARD_STAFF} OnBoard (Boat) shifts on the operating day.`}
+              </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
               <label className={labelStyle}>{lang === "VN" ? "Ngày vận hành (*)" : "Operating Date (*)"}</label>
-              <input
-                type="date"
+              <AppDateInput
                 required
                 value={formData.operatingDate}
                 onChange={(e) => handleInputChange("operatingDate", e.target.value)}
@@ -329,58 +376,23 @@ export function CreateTrip() {
           )}
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-            <div>
-              <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-                {lang === "VN" ? "Giá vé theo loại ghế" : "Seat Type Pricing"}
-              </h3>
-              <p className="text-[10px] text-slate-400 mt-1">
-                {lang === "VN" ? "Tùy chọn — bỏ trống loại ghế nào thì lấy giá gốc từ cấu hình loại ghế." : "Optional — omitted seat types fall back to the base seat-type price."}
-              </p>
-            </div>
-            <button type="button" onClick={handleAddSeatPrice} className="px-3 py-1.5 bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-colors flex items-center gap-1 shrink-0">
-              <span className="material-symbols-outlined text-sm">add</span> {lang === "VN" ? "Thêm giá" : "Add"}
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {formData.seatTypePrices.length === 0 ? (
-              <div className="text-center py-6 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                <p className="text-xs text-slate-400 font-medium">{lang === "VN" ? "Chưa chốt giá riêng — chuyến sẽ dùng giá gốc theo loại ghế." : "No custom pricing set — trip will use base seat-type prices."}</p>
-              </div>
-            ) : (
-              formData.seatTypePrices.map((item, index) => (
-                <div key={index} className="flex flex-col gap-3 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 relative group">
-                  <button type="button" onClick={() => handleRemoveSeatPrice(index)} className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 transition-colors">
-                    <span className="material-symbols-outlined text-lg">cancel</span>
-                  </button>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pr-6">
-                    <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Loại ghế" : "Seat type"}</label>
-                      <FormSelect
-                        value={item.seatTypeCode}
-                        onChange={(v) => handleSeatPriceChange(index, "seatTypeCode", v)}
-                        options={seatTypeSelectOptions}
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-[#124757] dark:text-yellow-400 outline-none cursor-pointer"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{lang === "VN" ? "Giá vé (VND)" : "Price (VND)"}</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={item.price}
-                        onChange={(e) => handleSeatPriceChange(index, "price", e.target.value)}
-                        placeholder="0"
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
+          <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+            {lang === "VN" ? "Giá vé" : "Pricing"}
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            {lang === "VN"
+              ? "Giá được tính tự động từ Chính sách giá (giá gốc loại ghế / giá theo km + phụ thu cuối tuần / ngày lễ). Không nhập giá riêng khi tạo chuyến."
+              : "Prices are computed from Fare Policy (seat-type base / distance fare + weekend/holiday surcharges). No per-trip seat prices on create."}
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/admin/seat-types")}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[#124757] transition hover:border-[#124757]/30 dark:border-slate-600 dark:bg-slate-900 dark:text-yellow-400"
+          >
+            <span className="material-symbols-outlined text-[16px]">sell</span>
+            {lang === "VN" ? "Mở chính sách giá" : "Open fare policy"}
+          </button>
         </div>
 
         <div>

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { registerCustomer, verifyRegisterOtp, resendRegisterOtp } from "../../services/authService";
 import { FormSelect } from "../../components/FormSelect";
+import { AppDateInput } from "../../components/AppDateInput";
 import { NationalitySelect } from "../../components/NationalitySelect";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { notify } from "../../utils/swalToast";
@@ -400,9 +401,10 @@ export const Register = () => {
                   <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                     {lang === "VN" ? "Ngày sinh" : "Date of Birth"}
                   </label>
-                  <input
-                    type="date" name="dateOfBirth"
-                    value={formData.dateOfBirth} onChange={handleChange}
+                  <AppDateInput
+                    name="dateOfBirth"
+                    value={formData.dateOfBirth}
+                    onChange={handleChange}
                     className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
                   />
                 </div>

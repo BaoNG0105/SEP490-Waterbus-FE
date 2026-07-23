@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
+import { AppDateInput } from "../../../components/AppDateInput";
 import { fetchStaffMeAssignments, fetchStaffMeTrips, normalizeStaffTrip } from "../../../services/staffMeService";
 import { ASSIGNMENT_TYPE } from "../../../services/staffAssignmentService";
 import { fetchAllTrips, toDdMmYyyy } from "../../../services/tripService";
@@ -146,14 +147,17 @@ export function StaffMyTripsPage() {
           fetchAllTrips({ operatingDate: toDdMmYyyy(date) }),
         ]);
         const dayAssignments = (assignments || []).filter((row) => assignmentCoversDay(row, date));
-        if (dayAssignments.length === 0 && fromMe.length === 0) {
+        const boatAssignments = dayAssignments.filter((a) => a.assignmentType === ASSIGNMENT_TYPE.BOAT);
+        // Check vé / chuyến của staff: ưu tiên ca OnBoard (Boat); Ground chỉ fallback.
+        const relevantAssignments = boatAssignments.length > 0 ? boatAssignments : dayAssignments;
+        if (relevantAssignments.length === 0 && fromMe.length === 0) {
           setTrips([]);
           setEmptyReason("no_assignment");
           return;
         }
         const rawTrips = unwrapTrips(tripRows);
         fromFallback = rawTrips
-          .filter((trip) => dayAssignments.some((a) => tripMatchesAssignment(trip, a)))
+          .filter((trip) => relevantAssignments.some((a) => tripMatchesAssignment(trip, a)))
           .map(normalizeStaffTrip)
           .filter(Boolean);
       } catch {
@@ -185,8 +189,8 @@ export function StaffMyTripsPage() {
     }
     if (emptyReason === "no_assignment") {
       return lang === "VN"
-        ? "Bạn chưa có ca (Boat/Station) trong ngày này."
-        : "You have no Boat/Station duty on this day.";
+        ? "Bạn chưa có ca OnBoard (Boat) trong ngày này. Check vé dùng nhân viên trên tàu."
+        : "You have no OnBoard (Boat) duty this day. Ticket check uses boat crew.";
     }
     if (emptyReason === "no_trips") {
       return lang === "VN"
@@ -208,8 +212,8 @@ export function StaffMyTripsPage() {
           </h2>
           <p className="mt-1 text-sm font-medium text-slate-500">
             {lang === "VN"
-              ? "Xem chuyến theo ca của bạn từ 3 ngày trước ngày vận hành. Admin/Manager quản lý toàn bộ ở Quản lý chuyến tàu."
-              : "View your duty trips from 3 days before operating day. Admins/Managers manage all trips in Trip Management."}
+              ? "Ưu tiên chuyến theo ca OnBoard trên tàu. Quét vé dành cho nhân viên trên tàu, không dùng nhân viên bến làm chính."
+              : "Trips prefer your OnBoard boat duty. Ticket scan is for boat crew, not primarily station staff."}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -217,8 +221,7 @@ export function StaffMyTripsPage() {
             <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block mb-1">
               {lang === "VN" ? "Ngày chuyến" : "Trip date"}
             </span>
-            <input
-              type="date"
+            <AppDateInput
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-white"

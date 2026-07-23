@@ -1,4 +1,4 @@
-import { isBoatUnderMaintenance, resolveBoatLiveStatus } from "./boatTracking";
+import { isBoatUnderMaintenance, resolveBoatLiveStatus, formatDwellCountdownNotice } from "./boatTracking";
 import { getMovementStatusLabel } from "../services/operationsService";
 
 const DOCK_METERS = 150;
@@ -268,7 +268,7 @@ const formatEtaInNotice = (eta, isVn) => {
  * 6. Arriving → Tàu chuẩn bị cập {nextStationName}
  * 7. Moving + ETA → đang di chuyển tới …, còn n phút
  */
-export const buildMovementNotice = (boat, lang = "VN") => {
+export const buildMovementNotice = (boat, lang = "VN", now = Date.now()) => {
   const isVn = lang === "VN";
   const key = normalizeMovementKey(boat?.movementStatus);
   const stopEvent = normalizeMovementKey(
@@ -287,6 +287,26 @@ export const buildMovementNotice = (boat, lang = "VN") => {
     || stopEvent === "arriving"
     || (Number.isFinite(Number(boat?.speed)) && Number(boat.speed) >= MOVING_KMH)
     || String(boat?.status || "").toLowerCase() === "moving";
+
+  // 0) BE dwellCountdown khi đang dừng tại bến (Arrived chưa Departed)
+  const dwellNotice = formatDwellCountdownNotice(boat?.dwellCountdown, lang, now, {
+    stops: boat?.tripStops || boat?.stops,
+  });
+  // Ưu tiên notice đã tính sẵn (Live Tracking đã biết stops của trip).
+  const dwellText = String(boat?.dwellNotice || "").trim() || dwellNotice;
+  if (
+    dwellText
+    && !enRouteNow
+    && (
+      stopEvent === "arrived"
+      || key === "atstation"
+      || key === "arrived"
+      || key === "boarding"
+      || isBoatAtStationNow(boat, { movementKey: key, meters: metersAway, enRoute: false })
+    )
+  ) {
+    return dwellText;
+  }
 
   // 1) Đã cập bến
   if (

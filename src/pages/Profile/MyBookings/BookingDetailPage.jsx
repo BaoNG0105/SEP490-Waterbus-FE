@@ -5,7 +5,14 @@ import { QRCodeSVG } from "qrcode.react";
 import { useApp } from "../../../context/AppContext";
 import { fetchMyBookingDetail } from "../../../services/bookingService";
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
+import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
 import { getBookingServiceConfig } from "../../../utils/bookingServiceType";
+import {
+  getBookingInsurancePackageId,
+  normalizeInsuranceFromBooking,
+  resolveInsuranceSelected,
+} from "../../../utils/insurancePreview";
+import { INSURANCE_BOOKING_TYPES } from "../../../services/insuranceService";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -118,6 +125,9 @@ const normalizeBookingDetail = (data) => ({
   bookingQrToken: pick(data, ["bookingQrToken"], ""),
   holdExpiresAt: pick(data, ["holdExpiresAt"], ""),
   returnTripCode: pick(data, ["returnTripCode"], ""),
+  insuranceSelected: resolveInsuranceSelected(data),
+  insurancePackageId: getBookingInsurancePackageId(data),
+  insurance: normalizeInsuranceFromBooking(data),
   items: Array.isArray(data?.items) ? data.items.map(normalizeItem) : [],
   payments: Array.isArray(data?.payments) ? data.payments.map(normalizePayment) : [],
 });
@@ -454,6 +464,12 @@ export function BookingDetailPage({ serviceType }) {
                     <span>{lang === "VN" ? "Giảm giá" : "Discount"}</span>
                     <span className="font-bold">{booking.discountAmount > 0 ? `-${currencyFormatter.format(booking.discountAmount)}` : currencyFormatter.format(0)}</span>
                   </div>
+                  {Number(booking.insurance?.totalAmount) > 0 && (
+                    <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                      <span>{lang === "VN" ? "Bảo hiểm" : "Insurance"}</span>
+                      <span className="font-bold">{currencyFormatter.format(booking.insurance.totalAmount)}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
                     <span>{lang === "VN" ? "Mã ưu đãi" : "Promotion code"}</span>
                     <span className={booking.promotionCode ? "font-mono font-bold text-[#124757] dark:text-yellow-400" : "font-bold"}>
@@ -496,6 +512,15 @@ export function BookingDetailPage({ serviceType }) {
                 )}
               </div>
             </section>
+
+            {(booking.insuranceSelected === true || booking.insurance || booking.insuranceSelected === false) && (
+              <CharterInsuranceInfo
+                booking={booking}
+                lang={lang}
+                currencyFormatter={currencyFormatter}
+                bookingType={INSURANCE_BOOKING_TYPES.SEAT}
+              />
+            )}
 
             {/* LỊCH SỬ THANH TOÁN */}
             {booking.payments.length > 0 && (

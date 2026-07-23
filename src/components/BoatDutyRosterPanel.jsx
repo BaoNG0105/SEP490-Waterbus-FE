@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { StaffAssignmentCalendar } from "./StaffAssignmentCalendar";
+import { AppDateInput } from "./AppDateInput";
 import {
   ASSIGNMENT_STATUS,
   ASSIGNMENT_TYPE,
@@ -211,18 +212,17 @@ export function BoatDutyRosterPanel({ boatId, boatCode }) {
           <>
             <div className="w-[148px]">
               <label className={labelStyle}>{lang === "VN" ? "Từ ngày" : "From"}</label>
-              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputStyle} />
+              <AppDateInput value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputStyle} />
             </div>
             <div className="w-[148px]">
               <label className={labelStyle}>{lang === "VN" ? "Đến ngày" : "To"}</label>
-              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={inputStyle} />
+              <AppDateInput value={toDate} onChange={(e) => setToDate(e.target.value)} className={inputStyle} />
             </div>
           </>
         ) : (
           <div className="w-[148px]">
             <label className={labelStyle}>{lang === "VN" ? "Ngày" : "Date"}</label>
-            <input
-              type="date"
+            <AppDateInput
               value={toDateKey(anchorDate)}
               onChange={(e) =>
                 setAnchorDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : new Date())
