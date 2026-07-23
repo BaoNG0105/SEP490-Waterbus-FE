@@ -16,12 +16,17 @@ import {
   reportIncident,
 } from "../../../services/incidentService";
 import { fetchAllTrips, pickActiveTripForBoat, toDdMmYyyy } from "../../../services/tripService";
+import { trackingHub } from "../../../services/trackingHubClient";
 import { getBoatImageUrl } from "../../../utils/charterBookingAdmin";
 import { isBoatEligibleForLiveMap, isBoatUnderMaintenance, resolveBoatNumberOfDecks, resolveBoatServiceType, formatDwellCountdownNotice } from "../../../utils/boatTracking";
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
 import { buildBoatSituations, getBoatStatusTag, NOTICE_FLASH_MS_EXPORT, resolveEtaMinutesToNext } from "../../../utils/boatSituation";
 import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { notify, showToast } from "../../../utils/swalToast";
+import {
+  formatActiveDelayLine,
+  isDelayActive,
+} from "../../../utils/tripDelay";
 
 const formatRelative = (value, lang) => {
   if (!value) return "—";
@@ -700,6 +705,8 @@ export function LiveTracking({ viewTabs = null } = {}) {
             return Number.isFinite(n) ? n : null;
           })(),
           delayReason: schedule?.delayReason || boat.delayReason || null,
+          isDelayActive: Boolean(schedule?.isDelayActive ?? boat.isDelayActive),
+          delayStartedAt: schedule?.delayStartedAt || boat.delayStartedAt || null,
           adjustedStartAt: schedule?.adjustedStartAt || boat.adjustedStartAt || null,
           adjustedEndAt: schedule?.adjustedEndAt || boat.adjustedEndAt || null,
           operationStatus: schedule?.operationStatus || boat.operationStatus || null,
@@ -859,6 +866,16 @@ export function LiveTracking({ viewTabs = null } = {}) {
     const stillVisible = enrichedBoats.some((boat) => boat.boatId === selectedBoatId);
     if (!stillVisible) setSelectedBoatId("");
   }, [enrichedBoats, selectedBoatId]);
+
+  // BE: mở live tracking / focus tàu → JoinBoat để nhận tripDelayUpdated.
+  useEffect(() => {
+    const boatId = String(selectedBoatId || "").trim();
+    if (!boatId) return undefined;
+    trackingHub.joinBoat(boatId).catch(() => {});
+    return () => {
+      trackingHub.leaveBoat(boatId).catch(() => {});
+    };
+  }, [selectedBoatId]);
 
   const selectedBoat = useMemo(
     () => enrichedBoats.find((boat) => boat.boatId === selectedBoatId) || null,
@@ -1146,22 +1163,28 @@ export function LiveTracking({ viewTabs = null } = {}) {
                       ? (lang === "VN" ? `${boat.rescuedByBoatCode} đang kéo` : `${boat.rescuedByBoatCode} towing`)
                       : null;
                   const delayMin = Number(boat.delayMinutes);
-                  const delayLine = Number.isFinite(delayMin) && delayMin > 0
-                    ? (lang === "VN"
-                      ? `Trễ ${delayMin}p${boat.delayReason ? ` · ${boat.delayReason}` : ""}`
-                      : `Delay ${delayMin}m${boat.delayReason ? ` · ${boat.delayReason}` : ""}`)
+                  const activeDelayLine = isDelayActive(boat)
+                    ? formatActiveDelayLine(boat, { lang })
                     : null;
+                  const delayLine = activeDelayLine
+                    || (Number.isFinite(delayMin) && delayMin > 0
+                      ? (lang === "VN"
+                        ? `Trễ ${delayMin}p${boat.delayReason ? ` · ${boat.delayReason}` : ""}`
+                        : `Delay ${delayMin}m${boat.delayReason ? ` · ${boat.delayReason}` : ""}`)
+                      : null);
                   const statusTag = boat.rescuingBoatCode
                     ? {
                       label: lang === "VN" ? `CỨU ${boat.rescuingBoatCode}` : `TOW ${boat.rescuingBoatCode}`,
                       tone: "rescue",
                       detail: missionLine,
                     }
-                    : (Number.isFinite(delayMin) && delayMin > 0 && !isIncident
+                    : ((isDelayActive(boat) || (Number.isFinite(delayMin) && delayMin > 0)) && !isIncident
                       ? {
                         ...tag,
                         tone: "delayed",
-                        label: lang === "VN" ? `TRỄ ${delayMin}P` : `DELAY ${delayMin}M`,
+                        label: isDelayActive(boat)
+                          ? (lang === "VN" ? "ĐANG DELAY" : "DELAYING")
+                          : (lang === "VN" ? `TRỄ ${delayMin}P` : `DELAY ${delayMin}M`),
                         detail: delayLine || tag.detail,
                       }
                       : tag);

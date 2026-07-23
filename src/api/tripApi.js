@@ -35,3 +35,11 @@ export const holdTripSeats = (id, seatNumbers, fromStationCode, toStationCode) =
 // API: Nhả ghế đang tạm giữ (chỉ nhả được ghế do chính user đang giữ)
 export const releaseTripSeats = (id, seatNumbers, fromStationCode, toStationCode) =>
     api.post(`/trips/${id}/seats/release`, { seatNumbers, fromStationCode, toStationCode }).then(response => response.data);
+
+// API: Bắt đầu delay chuyến (staff trên tàu) — body: { reason, startStopOrder }
+export const startTripDelay = (id, payload) =>
+    api.post(`/trips/${id}/delay/start`, payload).then(response => response.data);
+
+// API: Tiếp tục sau delay — body: { note } — BE tự tính lan delay nếu > 15 phút
+export const resumeTripDelay = (id, payload) =>
+    api.post(`/trips/${id}/delay/resume`, payload).then(response => response.data);

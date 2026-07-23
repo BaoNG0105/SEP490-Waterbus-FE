@@ -3,10 +3,23 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllTrips, toDdMmYyyy, getTripStatusLabel, normalizeTripStatusKey, isTripRunningStatus, sortTripsForOpsList } from "../../../services/tripService";
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
+import { trackingHub } from "../../../services/trackingHubClient";
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { getRouteShortLabel } from "../../../utils/routeTypes";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../../../utils/charterBookingAdmin";
+import {
+  applyDelayPayloadToTrip,
+  formatActiveDelayLine,
+  formatAffectedTripLine,
+  formatPostResumeDelayLine,
+  isDelayActive,
+  mergeAffectedTripsIntoList,
+  pickAffectedTrips,
+  pickDelayMinutes,
+  pickDisplayArrival,
+  pickDisplayDeparture,
+} from "../../../utils/tripDelay";
 
 const todayInputValue = () => {
     const now = new Date();
@@ -320,6 +333,39 @@ export function TripManagement() {
         getTripsData();
     }, [lang, operatingDate, statusFilter]);
 
+    const boatIdsKey = useMemo(
+      () => [...new Set(
+        trips.map((t) => String(t?.boatId || t?.boat?.boatId || "").trim()).filter(Boolean),
+      )].sort().join("|"),
+      [trips],
+    );
+
+    // JoinBoat theo danh sách + merge tripDelayUpdated / affectedTrips (không tự tính lan delay).
+    useEffect(() => {
+      const boatIds = boatIdsKey ? boatIdsKey.split("|") : [];
+      if (!boatIds.length) return undefined;
+
+      boatIds.forEach((boatId) => {
+        trackingHub.joinBoat(boatId).catch(() => {});
+      });
+
+      const unsub = trackingHub.subscribeTripDelayUpdated((payload) => {
+        if (!payload) return;
+        setTrips((prev) => {
+          let next = prev.map((trip) => applyDelayPayloadToTrip(trip, payload));
+          next = mergeAffectedTripsIntoList(next, pickAffectedTrips(payload));
+          return next;
+        });
+      });
+
+      return () => {
+        unsub();
+        boatIds.forEach((boatId) => {
+          trackingHub.leaveBoat(boatId).catch(() => {});
+        });
+      };
+    }, [boatIdsKey]);
+
     // Enrich tuyến (kèm stops) để hiện hành trình khi list trip không trả from/to.
     useEffect(() => {
         const codes = [...new Set(
@@ -583,10 +629,37 @@ export function TripManagement() {
 
                                             <td className="py-3.5 px-3 align-middle whitespace-nowrap">
                                                 <span className="font-bold tabular-nums text-slate-600 dark:text-slate-300">
-                                                    {formatTime(trip.departureTime)}
+                                                    {formatTime(pickDisplayDeparture(trip))}
                                                     <span className="mx-1 text-slate-300">→</span>
-                                                    {formatTime(trip.arrivalTime)}
+                                                    {formatTime(pickDisplayArrival(trip))}
                                                 </span>
+                                                {(() => {
+                                                    const active = isDelayActive(trip);
+                                                    const mins = pickDelayMinutes(trip);
+                                                    const affectedLine = formatAffectedTripLine(trip, lang);
+                                                    if (active) {
+                                                        return (
+                                                            <p className="mt-1 max-w-[11rem] text-[10px] font-bold leading-snug text-amber-700 dark:text-amber-300">
+                                                                {formatActiveDelayLine(trip, { lang })}
+                                                            </p>
+                                                        );
+                                                    }
+                                                    if (affectedLine) {
+                                                        return (
+                                                            <p className="mt-1 max-w-[11rem] text-[10px] font-bold leading-snug text-orange-700 dark:text-orange-300">
+                                                                {affectedLine}
+                                                            </p>
+                                                        );
+                                                    }
+                                                    if (mins > 0) {
+                                                        return (
+                                                            <p className="mt-1 text-[10px] font-bold text-orange-700 dark:text-orange-300">
+                                                                {formatPostResumeDelayLine(trip, lang)}
+                                                            </p>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
                                             </td>
 
                                             <td className="py-3.5 px-3 align-middle">
@@ -603,13 +676,20 @@ export function TripManagement() {
                                             </td>
 
                                             <td className="py-3.5 px-3 align-middle">
-                                                <span
-                                                    title={trip.statusNote || ""}
-                                                    className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${tripStatusBadgeClass(trip.tripStatus)}`}
-                                                >
-                                                    <span className={`h-1.5 w-1.5 rounded-full ${tripStatusDotClass(trip.tripStatus)}`} />
-                                                    {getTripStatusLabel(trip.tripStatus, lang)}
-                                                </span>
+                                                <div className="flex flex-col items-start gap-1">
+                                                    <span
+                                                        title={trip.statusNote || ""}
+                                                        className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${tripStatusBadgeClass(trip.tripStatus)}`}
+                                                    >
+                                                        <span className={`h-1.5 w-1.5 rounded-full ${tripStatusDotClass(trip.tripStatus)}`} />
+                                                        {getTripStatusLabel(trip.tripStatus, lang)}
+                                                    </span>
+                                                    {isDelayActive(trip) ? (
+                                                        <span className="inline-flex rounded-lg border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wide text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
+                                                            {lang === "VN" ? "Đang dừng / Delay" : "Stopped / Delay"}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
                                             </td>
 
                                             <td className="py-3.5 px-3 align-middle">

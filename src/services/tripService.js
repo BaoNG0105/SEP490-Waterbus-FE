@@ -7,6 +7,8 @@ import {
     getTripSeats as apiGetTripSeats,
     holdTripSeats as apiHoldTripSeats,
     releaseTripSeats as apiReleaseTripSeats,
+    startTripDelay as apiStartTripDelay,
+    resumeTripDelay as apiResumeTripDelay,
 } from '../api/tripApi';
 
 export const TRIP_STATUS_OPTIONS = [
@@ -335,6 +337,40 @@ export const releaseSeats = async (tripId, seatNumbers, fromStationCode, toStati
         return await apiReleaseTripSeats(tripId, seatNumbers, fromStationCode, toStationCode);
     } catch (error) {
         console.error(`Lỗi khi nhả ghế cho chuyến ${tripId}:`, error);
+        throw error;
+    }
+};
+
+const unwrapDelayResponse = (data) => {
+    if (data?.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+        return data.data;
+    }
+    return data;
+};
+
+/** POST /trips/{id}/delay/start — FE không tự tính lan delay. */
+export const startTripDelay = async (tripId, { reason, startStopOrder } = {}) => {
+    try {
+        const data = await apiStartTripDelay(tripId, {
+            reason: String(reason || '').trim(),
+            startStopOrder: Number(startStopOrder) || 1,
+        });
+        return unwrapDelayResponse(data);
+    } catch (error) {
+        console.error(`Lỗi khi start delay chuyến ${tripId}:`, error);
+        throw error;
+    }
+};
+
+/** POST /trips/{id}/delay/resume — BE trả affectedTrips nếu lan delay. */
+export const resumeTripDelay = async (tripId, { note } = {}) => {
+    try {
+        const data = await apiResumeTripDelay(tripId, {
+            note: String(note || '').trim() || 'Tàu tiếp tục hành trình',
+        });
+        return unwrapDelayResponse(data);
+    } catch (error) {
+        console.error(`Lỗi khi resume delay chuyến ${tripId}:`, error);
         throw error;
     }
 };

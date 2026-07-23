@@ -141,6 +141,48 @@ export function useOperationsSchedule({ enabled = true } = {}) {
       load({ silent: true }).catch(() => {});
     });
 
+    const unsubTripDelay = trackingHub.subscribeTripDelayUpdated((payload) => {
+      if (!activeRef.current || !payload) return;
+      // BE tính delay — FE chỉ patch field rồi refetch schedule.
+      setEntries((prev) => {
+        if (!Array.isArray(prev) || !prev.length) return prev;
+        const tripId = String(payload.tripId || payload.TripId || "").trim();
+        const boatId = String(payload.boatId || payload.BoatId || "").trim();
+        const boatCode = String(payload.boatCode || payload.BoatCode || "").trim();
+        const delayInfo = payload.delayInfo || payload.DelayInfo;
+        const delayMinutes = Number(
+          payload.totalDelayMinutes
+          ?? payload.delayMinutes
+          ?? delayInfo?.delayMinutes,
+        );
+        let changed = false;
+        const next = prev.map((row) => {
+          const sameTrip = tripId && String(row.tripId || "") === tripId;
+          const sameBoat = (boatId && String(row.boatId || "") === boatId)
+            || (boatCode && String(row.boatCode || "").toUpperCase() === boatCode.toUpperCase());
+          if (!sameTrip && !sameBoat) return row;
+          changed = true;
+          return {
+            ...row,
+            delayMinutes: Number.isFinite(delayMinutes) ? delayMinutes : row.delayMinutes,
+            delayReason: delayInfo?.reason || payload.reason || row.delayReason,
+            adjustedStartAt: payload.adjustedDepartureTime
+              || payload.adjustedStartAt
+              || row.adjustedStartAt,
+            adjustedEndAt: payload.adjustedArrivalTime
+              || payload.adjustedEndAt
+              || row.adjustedEndAt,
+            isDelayActive: Boolean(delayInfo?.isDelayActive ?? payload.isDelayActive),
+            delayStartedAt: delayInfo?.delayStartedAt
+              || payload.delayStartedAt
+              || row.delayStartedAt,
+          };
+        });
+        return changed ? next : prev;
+      });
+      load({ silent: true }).catch(() => {});
+    });
+
     trackingHub.acquire().catch(() => {});
 
     return () => {
@@ -148,6 +190,7 @@ export function useOperationsSchedule({ enabled = true } = {}) {
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
       unsubTripStop();
+      unsubTripDelay();
       trackingHub.release();
     };
   }, [enabled, load, applyTripStopPayload]);

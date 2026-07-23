@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { WaterwayMap } from "../../../components/WaterwayMap";
-import { fetchTripDetail, getTripStatusLabel, normalizeTripStatusKey } from "../../../services/tripService";
+import {
+  fetchTripDetail,
+  getTripStatusLabel,
+  normalizeTripStatusKey,
+  resumeTripDelay,
+  startTripDelay,
+} from "../../../services/tripService";
+import { trackingHub } from "../../../services/trackingHubClient";
 import { fetchLatestTripTracking } from "../../../services/trackingService";
 import { fetchBoatDetail } from "../../../services/boatService";
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
@@ -19,19 +26,23 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { formatDwellCountdownNotice, isDwellAtTerminalStop } from "../../../utils/boatTracking";
 import { geometryToCoordinates as parseRouteGeometry } from "../../../utils/charterRouteMap";
 import { assignmentCoversDay, toDateKey } from "../../../utils/staffAssignmentCalendarUtils";
-
-const formatDateTime = (value, lang) => {
-  if (value == null || value === "") return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString(lang === "VN" ? "vi-VN" : "en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+import { notify, showToast } from "../../../utils/swalToast";
+import {
+  applyDelayPayloadToTrip,
+  canResumeTripDelay,
+  canStartTripDelay,
+  formatActiveDelayLine,
+  formatAffectedTripLine,
+  formatPostResumeDelayLine,
+  isDelayActive,
+  pickAffectedTrips,
+  pickDelayInfo,
+  pickDelayMinutes,
+  pickDisplayArrival,
+  pickDisplayDeparture,
+  pickStationNameForStopOrder,
+  resolveDelayStartStopOrder,
+} from "../../../utils/tripDelay";
 
 const formatTime = (value) => {
   if (value == null || value === "") return "—";
@@ -284,6 +295,14 @@ const resolveBoat = (trip, boatCatalog) => {
   };
 };
 
+const ScheduleDelayBadge = ({ delayMin, delayLabel }) => (
+  delayLabel ? (
+    <span className={`mt-1 inline-flex rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase ${delayToneClass(delayMin)}`}>
+      {delayLabel}
+    </span>
+  ) : null
+);
+
 /** Grid cố định: nhãn | Đến | Đi — mọi bến cùng khung để thẳng hàng.
  * Bến đầu: cột Đến = — · Bến cuối: cột Đi = — (không ẩn cột). */
 const ScheduleCompare = ({
@@ -307,13 +326,6 @@ const ScheduleCompare = ({
   };
 
   const timeText = (time) => formatTime(time);
-
-  const DelayBadge = ({ delayMin, delayLabel }) =>
-    delayLabel ? (
-      <span className={`mt-1 inline-flex rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase ${delayToneClass(delayMin)}`}>
-        {delayLabel}
-      </span>
-    ) : null;
 
   const gridClass = "grid grid-cols-[6.5rem_minmax(0,1fr)_minmax(0,1fr)] items-start gap-x-2";
 
@@ -345,13 +357,13 @@ const ScheduleCompare = ({
           <span className={`text-sm font-black tabular-nums ${actualClass(arriveDelayMin)}`}>
             {timeText(isFirst ? null : actualArr)}
           </span>
-          <DelayBadge delayMin={arriveDelayMin} delayLabel={arriveDelayLabel} />
+          <ScheduleDelayBadge delayMin={arriveDelayMin} delayLabel={arriveDelayLabel} />
         </div>
         <div className="flex min-h-[2.5rem] flex-col items-center text-center">
           <span className={`text-sm font-black tabular-nums ${actualClass(departDelayMin)}`}>
             {timeText(isLast ? null : actualDep)}
           </span>
-          <DelayBadge delayMin={departDelayMin} delayLabel={departDelayLabel} />
+          <ScheduleDelayBadge delayMin={departDelayMin} delayLabel={departDelayLabel} />
         </div>
       </div>
     </div>
@@ -383,21 +395,6 @@ const readStationCoords = (source) => {
     ?? source.station?.longitude ?? source.station?.lng;
   if (!isValidCoord(lat, lng)) return null;
   return { latitude: Number(lat), longitude: Number(lng) };
-};
-
-/** Bến kế tiếp: bến đầu tiên chưa có actualDeparture (hoặc bến cuối chưa actualArrival). */
-const resolveNextStop = (stops = []) => {
-  if (!stops.length) return null;
-  for (let i = 0; i < stops.length; i += 1) {
-    const stop = stops[i];
-    const isLast = i === stops.length - 1;
-    if (isLast) {
-      if (!stop.actualArrival) return stop;
-    } else if (!stop.actualDeparture) {
-      return stop;
-    }
-  }
-  return stops[stops.length - 1];
 };
 
 const TRACKING_POLL_MS = 15000;
@@ -714,6 +711,8 @@ export function TripDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [dwellTick, setDwellTick] = useState(() => Date.now());
+  const [isDelayBusy, setIsDelayBusy] = useState(false);
+  const [affectedNotice, setAffectedNotice] = useState([]);
 
   const refreshTracking = async (tripId, _boatCode, { silent = false } = {}) => {
     if (!tripId) return;
@@ -993,6 +992,159 @@ export function TripDetail() {
     return () => window.clearInterval(timer);
   }, [tracking?.latestLocation?.dwellCountdown]);
 
+  const delayInfo = useMemo(() => pickDelayInfo(trip), [trip]);
+  const delayActive = isDelayActive(delayInfo);
+  const delayMinutes = pickDelayMinutes(trip);
+  const showDelayStart = canStartTripDelay(trip);
+  const showDelayResume = canResumeTripDelay(trip);
+
+  // JoinBoat + lắng nghe tripDelayUpdated khi mở chi tiết.
+  useEffect(() => {
+    const boatId = String(
+      boat.id || trip?.boatId || trip?.boat?.boatId || "",
+    ).trim();
+    if (!boatId) return undefined;
+
+    let cancelled = false;
+    trackingHub.joinBoat(boatId).catch(() => {});
+
+    const unsub = trackingHub.subscribeTripDelayUpdated((payload) => {
+      if (cancelled || !payload) return;
+      setTrip((prev) => {
+        if (!prev) return prev;
+        const next = applyDelayPayloadToTrip(prev, payload);
+        return next === prev ? prev : next;
+      });
+      const affected = pickAffectedTrips(payload);
+      if (affected.length) {
+        setAffectedNotice(affected);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsub();
+      trackingHub.leaveBoat(boatId).catch(() => {});
+    };
+  }, [boat.id, trip?.boatId, trip?.boat?.boatId]);
+
+  const handleStartDelay = async () => {
+    if (!trip?.tripId && !id) return;
+    if (!showDelayStart || isDelayBusy) return;
+
+    const stopOrder = resolveDelayStartStopOrder(stops);
+    const stationName = pickStationNameForStopOrder(stops, stopOrder);
+    const defaultReason = stationName
+      ? (lang === "VN"
+        ? `Tàu đang dừng tại bến ${stationName}`
+        : `Boat stopped at ${stationName}`)
+      : (lang === "VN" ? "Tàu đang dừng" : "Boat is delayed");
+
+    const result = await notify({
+      dialog: true,
+      icon: "question",
+      title: lang === "VN" ? "Bắt đầu Delay" : "Start Delay",
+      input: "text",
+      inputValue: defaultReason,
+      inputPlaceholder: lang === "VN" ? "Lý do dừng…" : "Delay reason…",
+      showCancelButton: true,
+      confirmButtonText: lang === "VN" ? "Delay" : "Delay",
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
+      inputValidator: (value) => {
+        if (!String(value || "").trim()) {
+          return lang === "VN" ? "Nhập lý do delay." : "Enter a delay reason.";
+        }
+        return null;
+      },
+    });
+    if (!result?.isConfirmed) return;
+
+    setIsDelayBusy(true);
+    try {
+      const tripId = trip?.tripId || id;
+      const response = await startTripDelay(tripId, {
+        reason: String(result.value || defaultReason).trim(),
+        startStopOrder: stopOrder,
+      });
+      setTrip((prev) => applyDelayPayloadToTrip(prev || trip, {
+        ...response,
+        tripId,
+        delayInfo: pickDelayInfo(response) || {
+          isDelayActive: true,
+          delayStartedAt: response?.delayStartedAt || new Date().toISOString(),
+          reason: String(result.value || defaultReason).trim(),
+          stationName,
+          startStopOrder: stopOrder,
+        },
+      }));
+      showToast({
+        icon: "success",
+        title: lang === "VN" ? "Đã bắt đầu delay" : "Delay started",
+      });
+    } catch (error) {
+      showToast({
+        icon: "error",
+        title: lang === "VN" ? "Không start được delay" : "Unable to start delay",
+        text: getApiErrorMessage(error),
+      });
+    } finally {
+      setIsDelayBusy(false);
+    }
+  };
+
+  const handleResumeDelay = async () => {
+    if (!trip?.tripId && !id) return;
+    if (!showDelayResume || isDelayBusy) return;
+
+    const result = await notify({
+      dialog: true,
+      icon: "question",
+      title: lang === "VN" ? "Tiếp tục hành trình" : "Resume trip",
+      input: "text",
+      inputValue: lang === "VN" ? "Tàu tiếp tục hành trình" : "Boat continues journey",
+      showCancelButton: true,
+      confirmButtonText: lang === "VN" ? "Tiếp tục" : "Resume",
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
+    });
+    if (!result?.isConfirmed) return;
+
+    setIsDelayBusy(true);
+    try {
+      const tripId = trip?.tripId || id;
+      const response = await resumeTripDelay(tripId, {
+        note: String(result.value || "Tàu tiếp tục hành trình").trim(),
+      });
+      setTrip((prev) => applyDelayPayloadToTrip(prev || trip, {
+        ...response,
+        tripId,
+        delayInfo: pickDelayInfo(response) || {
+          ...(pickDelayInfo(prev) || {}),
+          isDelayActive: false,
+          delayMinutes: pickDelayMinutes(response) || pickDelayMinutes(prev),
+        },
+      }));
+      const affected = pickAffectedTrips(response);
+      setAffectedNotice(affected);
+      showToast({
+        icon: "success",
+        title: lang === "VN" ? "Đã tiếp tục chuyến" : "Trip resumed",
+        text: affected.length
+          ? (lang === "VN"
+            ? `${affected.length} chuyến sau bị ảnh hưởng (BE tính lan delay).`
+            : `${affected.length} later trip(s) affected (BE cascade).`)
+          : undefined,
+      });
+    } catch (error) {
+      showToast({
+        icon: "error",
+        title: lang === "VN" ? "Không resume được" : "Unable to resume",
+        text: getApiErrorMessage(error),
+      });
+    } finally {
+      setIsDelayBusy(false);
+    }
+  };
+
   const liveLocation = useMemo(() => {
     const tripLoc = tracking?.latestLocation;
     if (tripLoc && isValidCoord(tripLoc.latitude, tripLoc.longitude)) {
@@ -1000,8 +1152,6 @@ export function TripDetail() {
     }
     return null;
   }, [tracking]);
-
-  const nextStop = useMemo(() => resolveNextStop(stops), [stops]);
 
   const routeProgress = useMemo(
     () => resolveRouteProgress(stops, liveLocation, statusKey, routeLine),
@@ -1043,34 +1193,96 @@ export function TripDetail() {
                 {getTripStatusLabel(trip.tripStatus || trip.status, lang)}
               </span>
             ) : null}
+            {delayActive ? (
+              <span className="inline-flex rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
+                {lang === "VN" ? "Đang dừng / Delay" : "Stopped / Delay"}
+              </span>
+            ) : null}
+            {!delayActive && delayMinutes > 0 ? (
+              <span className="inline-flex rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">
+                {lang === "VN" ? `Trễ ${delayMinutes} phút` : `Late ${delayMinutes} min`}
+              </span>
+            ) : null}
           </div>
           <p className="mt-0.5 truncate text-xs text-slate-400">
             {[trip?.routeCode, trip?.routeName].filter(Boolean).join(" · ") || (lang === "VN" ? "Chi tiết chuyến" : "Trip detail")}
           </p>
+          {delayActive ? (
+            <p className="mt-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+              {formatActiveDelayLine(delayInfo, { lang })}
+            </p>
+          ) : delayMinutes > 0 ? (
+            <p className="mt-1 text-[11px] font-bold text-orange-700 dark:text-orange-300">
+              {formatPostResumeDelayLine(trip, lang)}
+            </p>
+          ) : null}
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            const params = new URLSearchParams();
-            const boatId = boat.id || trip?.boatId || "";
-            const boatCode = boat.code || trip?.boatCode || "";
-            const routeId = routeMeta.routeId || trip?.routeId || trip?.route?.routeId || "";
-            const routeCode = routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "";
-            if (boatId) params.set("boatId", String(boatId));
-            if (boatCode) params.set("boatCode", String(boatCode));
-            if (routeId) params.set("routeId", String(routeId));
-            if (routeCode) params.set("routeCode", String(routeCode));
-            if (trip?.tripId || id) params.set("tripId", String(trip?.tripId || id));
-            if (trip?.tripCode) params.set("tripCode", String(trip.tripCode));
-            params.set("focus", "1");
-            navigate(`/admin/live-tracking?${params.toString()}`);
-          }}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-[#124757]/15 bg-[#124757]/5 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition hover:bg-[#124757]/10 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
-        >
-          <span className="material-symbols-outlined text-[16px]">my_location</span>
-          Live map
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {showDelayStart ? (
+            <button
+              type="button"
+              onClick={handleStartDelay}
+              disabled={isDelayBusy || isLoading}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200"
+            >
+              <span className="material-symbols-outlined text-[16px]">pause_circle</span>
+              Delay
+            </button>
+          ) : null}
+          {showDelayResume ? (
+            <button
+              type="button"
+              onClick={handleResumeDelay}
+              disabled={isDelayBusy || isLoading}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
+            >
+              <span className="material-symbols-outlined text-[16px]">play_circle</span>
+              {lang === "VN" ? "Tiếp tục" : "Resume"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              const params = new URLSearchParams();
+              const boatId = boat.id || trip?.boatId || "";
+              const boatCode = boat.code || trip?.boatCode || "";
+              const routeId = routeMeta.routeId || trip?.routeId || trip?.route?.routeId || "";
+              const routeCode = routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "";
+              if (boatId) params.set("boatId", String(boatId));
+              if (boatCode) params.set("boatCode", String(boatCode));
+              if (routeId) params.set("routeId", String(routeId));
+              if (routeCode) params.set("routeCode", String(routeCode));
+              if (trip?.tripId || id) params.set("tripId", String(trip?.tripId || id));
+              if (trip?.tripCode) params.set("tripCode", String(trip.tripCode));
+              params.set("focus", "1");
+              navigate(`/admin/live-tracking?${params.toString()}`);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[#124757]/15 bg-[#124757]/5 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition hover:bg-[#124757]/10 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
+          >
+            <span className="material-symbols-outlined text-[16px]">my_location</span>
+            Live map
+          </button>
+        </div>
       </div>
+
+      {affectedNotice.length > 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs dark:border-amber-500/30 dark:bg-amber-500/10">
+          <p className="font-headline font-black uppercase tracking-wider text-amber-800 dark:text-amber-200">
+            {lang === "VN" ? "Chuyến sau bị ảnh hưởng" : "Affected later trips"}
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {affectedNotice.map((row) => {
+              const code = row.tripCode || row.TripCode || row.tripId || row.TripId || "—";
+              const line = formatAffectedTripLine(row, lang);
+              return (
+                <li key={String(row.tripId || row.TripId || code)} className="font-bold text-amber-900 dark:text-amber-100">
+                  {code}{line ? ` — ${line}` : ""}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="rounded-3xl border border-slate-100 bg-white p-16 text-center dark:border-slate-700 dark:bg-slate-800">
@@ -1127,10 +1339,16 @@ export function TripDetail() {
                       {lang === "VN" ? "Giờ chạy" : "Schedule"}
                     </p>
                     <p className="mt-1.5 text-sm font-black tabular-nums text-slate-800 dark:text-slate-100">
-                      {formatTime(trip.departureTime)}
+                      {formatTime(pickDisplayDeparture(trip))}
                       <span className="mx-1.5 text-slate-300">→</span>
-                      {formatTime(trip.arrivalTime)}
+                      {formatTime(pickDisplayArrival(trip))}
                     </p>
+                    {(trip.adjustedDepartureTime || trip.adjustedArrivalTime) ? (
+                      <p className="mt-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                        {lang === "VN" ? "Đã điều chỉnh giờ" : "Adjusted times"}
+                        {delayMinutes > 0 ? ` · ${lang === "VN" ? `trễ ${delayMinutes}p` : `late ${delayMinutes}m`}` : ""}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-3.5 py-3 dark:bg-slate-900/60">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
