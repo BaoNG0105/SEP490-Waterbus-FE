@@ -139,7 +139,13 @@ export const filterAttachableTripsForBoat = (trips, boatLike = {}) => {
     const status = trip?.tripStatus ?? trip?.status ?? trip?.TripStatus;
     if (!isTripAttachableStatus(status)) return false;
 
-    const tripBoatId = String(trip?.boatId || trip?.boat?.boatId || trip?.BoatId || '').trim();
+    const tripBoatId = String(
+      trip?.boatId
+      || trip?.boat?.vesselId
+      || trip?.boat?.boatId
+      || trip?.BoatId
+      || '',
+    ).trim();
     const tripBoatCode = String(
       trip?.boatCode || trip?.boat?.boatCode || trip?.BoatCode || '',
     ).trim().toLowerCase();
@@ -182,6 +188,12 @@ export const toDdMmYyyy = (yyyyMmDd) => {
     const [y, m, d] = String(yyyyMmDd).split('-');
     if (!y || !m || !d) return null;
     return `${d}/${m}/${y}`;
+};
+
+/** Query GET: ưu tiên dd-MM-yyyy (Swagger chấp nhận; tránh `/` trong URL bị proxy/parse lệch). */
+export const toOperatingDateQuery = (yyyyMmDd) => {
+    const slash = toDdMmYyyy(yyyyMmDd);
+    return slash ? slash.replaceAll('/', '-') : null;
 };
 
 // input[type=datetime-local] "YYYY-MM-DDTHH:mm" -> ISO kèm offset +07:00 (định dạng departureTime BE yêu cầu)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats } from "../../../services/boatService";
@@ -26,7 +26,7 @@ import {
   resolveShiftState,
   validateBulkAssignmentForm,
 } from "../../../services/staffAssignmentService";
-import { fetchAllTrips, fetchTripDetail, toDdMmYyyy } from "../../../services/tripService";
+import { fetchAllTrips, fetchTripDetail, toOperatingDateQuery } from "../../../services/tripService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getUserId, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
@@ -210,11 +210,12 @@ export function StaffAssignmentManagement() {
   const [isLoadingGateTrips, setIsLoadingGateTrips] = useState(false);
   const [isLoadingGateStops, setIsLoadingGateStops] = useState(false);
 
-  // list | schedule — Ngày/Tuần/Tháng gộp trong StaffAssignmentCalendar
-  const [displayMode, setDisplayMode] = useState("list");
-  const [calendarMode, setCalendarMode] = useState("month"); // day | week | month
-  const [calendarLayout, setCalendarLayout] = useState("calendar");
+  // list | schedule — mặc định Lịch (Tuần; Admin xem theo tàu)
+  const [displayMode, setDisplayMode] = useState("schedule");
+  const [calendarMode, setCalendarMode] = useState("week"); // day | week | month
+  const [calendarLayout, setCalendarLayout] = useState(canCreateBoat ? "byBoat" : "calendar");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const [expandedListGroups, setExpandedListGroups] = useState(() => new Set());
 
   // Gate scan: tải chuyến theo fromDate khi chọn bến.
   useEffect(() => {
@@ -226,7 +227,7 @@ export function StaffAssignmentManagement() {
     const load = async () => {
       try {
         setIsLoadingGateTrips(true);
-        const list = await fetchAllTrips({ operatingDate: toDdMmYyyy(createForm.fromDate) });
+        const list = await fetchAllTrips({ operatingDate: toOperatingDateQuery(createForm.fromDate) });
         if (!active) return;
         setGateTrips(Array.isArray(list) ? list : []);
       } catch (error) {
@@ -499,6 +500,73 @@ export function StaffAssignmentManagement() {
     });
   }, [assignments, searchQuery, lang]);
 
+  /** Gộp cùng NV + tàu/bến + trạng thái → 1 nhóm (tránh list dài sau khi tạo bulk). */
+  const assignmentGroups = useMemo(() => {
+    const map = new Map();
+    visibleAssignments.forEach((row) => {
+      const scopeKey =
+        row.assignmentType === ASSIGNMENT_TYPE.BOAT
+          ? `boat:${row.boat?.boatId || row.boat?.boatCode || ""}`
+          : `station:${row.station?.stationId || row.station?.stationCode || ""}`;
+      const key = [
+        row.staffUserId || row.staffName || "",
+        row.assignmentType || "",
+        scopeKey,
+        row.status || "",
+      ].join("|");
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          staffName: row.staffName,
+          staffType: row.staffType,
+          assignmentType: row.assignmentType,
+          status: row.status,
+          boat: row.boat,
+          station: row.station,
+          items: [],
+        });
+      }
+      map.get(key).items.push(row);
+    });
+    return [...map.values()]
+      .map((group) => {
+        const items = [...group.items].sort(
+          (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
+        );
+        const activeCount = items.filter((r) => resolveShiftState(r) === SHIFT_STATE.ACTIVE).length;
+        const upcomingCount = items.filter((r) => resolveShiftState(r) === SHIFT_STATE.UPCOMING).length;
+        return {
+          ...group,
+          items,
+          firstStart: items[0]?.startAt,
+          lastEnd: items[items.length - 1]?.endAt,
+          activeCount,
+          upcomingCount,
+        };
+      })
+      .sort((a, b) => String(a.staffName || "").localeCompare(String(b.staffName || "")));
+  }, [visibleAssignments]);
+
+  const toggleListGroup = (key) => {
+    setExpandedListGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const formatDateShort = (value) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleDateString(lang === "VN" ? "vi-VN" : "en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
   useEffect(() => {
     if (canAccess) loadAssignments();
   }, [canAccess, loadAssignments]);
@@ -603,6 +671,8 @@ export function StaffAssignmentManagement() {
 
       await addStaffAssignmentsBulk(buildBulkAssignmentPayload(formForSubmit));
       setIsCreateOpen(false);
+      setDisplayMode("schedule");
+      setAnchorDate(new Date());
       notify({
         toast: true,
         position: "top-end",
@@ -734,7 +804,7 @@ export function StaffAssignmentManagement() {
   // Admin: phân theo tàu — không filter bến. Manager: filter bến.
   const showStationFilter = !isMineView && canCreateStation && !isAdmin;
   const isAdminBoatManage = !isMineView && isAdmin;
-  const tableColSpan = isAdminBoatManage ? 8 : 9;
+  const tableColSpan = isAdminBoatManage ? 7 : 8;
 
   const pageTitle = isMineView
     ? lang === "VN"
@@ -817,25 +887,25 @@ export function StaffAssignmentManagement() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: lang === "VN" ? "Tổng" : "Total", value: stats.total, icon: "assignment_ind" },
+          { label: lang === "VN" ? "Tổng ca" : "Shifts", value: stats.total, icon: "event" },
           { label: lang === "VN" ? "Đã xếp lịch" : "Scheduled", value: stats.scheduled, icon: "schedule" },
           { label: lang === "VN" ? "Đang diễn ra" : "Active now", value: stats.active, icon: "play_circle" },
           { label: lang === "VN" ? "Đã hủy" : "Cancelled", value: stats.cancelled, icon: "cancel" },
         ].map((card) => (
           <div
             key={card.label}
-            className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4"
+            className="bg-white dark:bg-slate-800 px-4 py-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-3"
           >
-            <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400">
-              <span className="material-symbols-outlined text-2xl">{card.icon}</span>
+            <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400">
+              <span className="material-symbols-outlined text-xl">{card.icon}</span>
             </div>
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                 {card.label}
               </span>
-              <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">
+              <h3 className="text-lg font-black font-headline text-[#124757] dark:text-white leading-tight">
                 {card.value}
               </h3>
             </div>
@@ -844,33 +914,48 @@ export function StaffAssignmentManagement() {
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-3 sm:p-3.5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-2.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {[
-            { id: "list", icon: "table_rows", vn: "Danh sách", en: "List" },
-            { id: "schedule", icon: "calendar_month", vn: "Lịch", en: "Calendar" },
-          ].map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => {
-                setDisplayMode(opt.id);
-                if (opt.id === "schedule") setAnchorDate(new Date());
-                if (opt.id === "list") {
-                  const next = defaultDateRange();
-                  setFromDate(next.fromDate);
-                  setToDate(next.toDate);
-                }
-              }}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider inline-flex items-center gap-1 transition-all ${
-                displayMode === opt.id
-                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
-                  : "bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700"
-              }`}
-            >
-              <span className="material-symbols-outlined text-sm">{opt.icon}</span>
-              {lang === "VN" ? opt.vn : opt.en}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-1">
+            {[
+              { id: "schedule", icon: "calendar_month", vn: "Lịch", en: "Calendar" },
+              { id: "list", icon: "table_rows", vn: "Chi tiết ca", en: "Shift list" },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => {
+                  setDisplayMode(opt.id);
+                  if (opt.id === "schedule") setAnchorDate(new Date());
+                  if (opt.id === "list") {
+                    const next = defaultDateRange();
+                    setFromDate(next.fromDate);
+                    setToDate(next.toDate);
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider inline-flex items-center gap-1 transition-all ${
+                  displayMode === opt.id
+                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">{opt.icon}</span>
+                {lang === "VN" ? opt.vn : opt.en}
+              </button>
+            ))}
+          </div>
+          {displayMode === "schedule" ? (
+            <p className="text-[11px] font-semibold text-slate-400">
+              {lang === "VN"
+                ? "Xem ai làm ngày nào · bấm ngày để xem chi tiết"
+                : "See who works which day · click a day for details"}
+            </p>
+          ) : (
+            <p className="text-[11px] font-semibold text-slate-400">
+              {lang === "VN"
+                ? "Cùng NV + tàu được gộp · bấm để mở từng ca"
+                : "Same staff + boat are grouped · expand for each shift"}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-end gap-2">
@@ -983,7 +1068,7 @@ export function StaffAssignmentManagement() {
           <table className="w-full text-left border-collapse min-w-[880px]">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-900/50 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60">
-                <th className="py-4 px-5">{lang === "VN" ? "Nhân viên" : "Staff"}</th>
+                <th className="py-4 px-5">{lang === "VN" ? "Nhân viên / lịch" : "Staff / schedule"}</th>
                 <th className="py-4 px-4">{lang === "VN" ? "Loại NV" : "Staff type"}</th>
                 {!isAdminBoatManage ? (
                   <th className="py-4 px-4">{lang === "VN" ? "Phạm vi" : "Scope"}</th>
@@ -993,10 +1078,9 @@ export function StaffAssignmentManagement() {
                     ? (lang === "VN" ? "Tàu" : "Boat")
                     : (lang === "VN" ? "Bến" : "Station")}
                 </th>
-                <th className="py-4 px-4">{lang === "VN" ? "Bắt đầu" : "Start"}</th>
-                <th className="py-4 px-4">{lang === "VN" ? "Kết thúc" : "End"}</th>
+                <th className="py-4 px-4">{lang === "VN" ? "Khoảng ngày" : "Date range"}</th>
+                <th className="py-4 px-4 text-center">{lang === "VN" ? "Số ca" : "Shifts"}</th>
                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
-                <th className="py-4 px-4 text-center">{lang === "VN" ? "Tiến độ ca" : "Shift"}</th>
                 <th className="py-4 px-5 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
               </tr>
             </thead>
@@ -1007,7 +1091,7 @@ export function StaffAssignmentManagement() {
                     <div className="inline-block w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />
                   </td>
                 </tr>
-              ) : visibleAssignments.length === 0 ? (
+              ) : assignmentGroups.length === 0 ? (
                 <tr>
                   <td colSpan={tableColSpan} className="py-14 text-center text-slate-400 font-bold">
                     {isMineView
@@ -1020,86 +1104,155 @@ export function StaffAssignmentManagement() {
                   </td>
                 </tr>
               ) : (
-                visibleAssignments.map((row) => {
+                assignmentGroups.map((group) => {
                   const targetLabel =
-                    row.assignmentType === ASSIGNMENT_TYPE.BOAT
-                      ? row.boat
-                        ? `${row.boat.boatCode || ""} · ${row.boat.boatName || ""}`.trim()
+                    group.assignmentType === ASSIGNMENT_TYPE.BOAT
+                      ? group.boat
+                        ? `${group.boat.boatCode || ""} · ${group.boat.boatName || ""}`.trim()
                         : "—"
-                      : row.station
-                        ? `${row.station.stationCode || ""} · ${row.station.stationName || ""}`.trim()
+                      : group.station
+                        ? `${group.station.stationCode || ""} · ${group.station.stationName || ""}`.trim()
                         : "—";
-                  const busy = processingId === row.assignmentId;
-                  const canMutate = canMutateAssignment(row);
-                  const shift = resolveShiftState(row);
+                  const expanded = expandedListGroups.has(group.key);
+                  const canMutateAny = group.items.some((row) => canMutateAssignment(row) && !isAssignmentInactive(row.status));
                   return (
-                    <tr key={row.assignmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20">
-                      <td className="py-3.5 px-5">
-                        <p className="font-bold text-slate-800 dark:text-white">{row.staffName}</p>
-                      </td>
-                      <td className="py-3.5 px-4">{row.staffType || "—"}</td>
-                      {!isAdminBoatManage ? (
-                        <td className="py-3.5 px-4">
-                          <span className="font-headline font-black text-[10px] uppercase tracking-wide">
-                            {labelAssignmentType(row.assignmentType, lang)}
+                    <Fragment key={group.key}>
+                      <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20">
+                        <td className="py-3.5 px-5">
+                          <button
+                            type="button"
+                            onClick={() => toggleListGroup(group.key)}
+                            className="flex items-center gap-2 text-left"
+                          >
+                            <span className="material-symbols-outlined text-base text-slate-400">
+                              {expanded ? "expand_more" : "chevron_right"}
+                            </span>
+                            <span>
+                              <p className="font-bold text-slate-800 dark:text-white">{group.staffName}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                {lang === "VN" ? "Bấm để xem từng ngày" : "Click to see each day"}
+                              </p>
+                            </span>
+                          </button>
+                        </td>
+                        <td className="py-3.5 px-4">{group.staffType || "—"}</td>
+                        {!isAdminBoatManage ? (
+                          <td className="py-3.5 px-4">
+                            <span className="font-headline font-black text-[10px] uppercase tracking-wide">
+                              {labelAssignmentType(group.assignmentType, lang)}
+                            </span>
+                          </td>
+                        ) : null}
+                        <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-200">
+                          {targetLabel || "—"}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap font-semibold">
+                          {formatDateShort(group.firstStart)}
+                          <span className="mx-1 text-slate-300">→</span>
+                          {formatDateShort(group.lastEnd)}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-headline font-black text-[#124757] dark:text-yellow-400">
+                            {group.items.length}
+                          </span>
+                          {(group.activeCount > 0 || group.upcomingCount > 0) && (
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              {group.activeCount > 0
+                                ? `${group.activeCount} ${lang === "VN" ? "đang diễn ra" : "active"}`
+                                : `${group.upcomingCount} ${lang === "VN" ? "sắp tới" : "upcoming"}`}
+                            </p>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span
+                            className={`inline-flex px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusTone(group.status)}`}
+                          >
+                            {labelAssignmentStatus(group.status, lang)}
                           </span>
                         </td>
-                      ) : null}
-                      <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-200">
-                        {targetLabel || "—"}
-                      </td>
-                      <td className="py-3.5 px-4 whitespace-nowrap">{formatDateTime(row.startAt, lang)}</td>
-                      <td className="py-3.5 px-4 whitespace-nowrap">{formatDateTime(row.endAt, lang)}</td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span
-                          className={`inline-flex px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusTone(row.status)}`}
-                        >
-                          {labelAssignmentStatus(row.status, lang)}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        {shift ? (
-                          <span
-                            className={`inline-flex px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${shiftStateTone(shift)}`}
+                        <td className="py-3.5 px-5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => toggleListGroup(group.key)}
+                            className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
                           >
-                            {labelShiftState(shift, lang)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-5">
-                        <div className="flex flex-wrap items-center justify-center gap-1.5">
-                          {canMutate && !isAssignmentInactive(row.status) && (
-                            <>
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => openReplace(row)}
-                                className="px-3 py-1.5 rounded-xl border border-sky-200 text-sky-700 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-sky-600 hover:text-white disabled:opacity-50 dark:border-sky-500/30 dark:text-sky-300"
-                                title={lang === "VN" ? "Thay nhân viên" : "Replace staff"}
-                              >
-                                {lang === "VN" ? "Thay NV" : "Replace"}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => handleCancel(row)}
-                                className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-500 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-rose-500 hover:text-white disabled:opacity-50 dark:border-rose-500/30"
-                                title={lang === "VN" ? "Hủy ca" : "Cancel shift"}
-                              >
-                                {busy ? "…" : lang === "VN" ? "Hủy ca" : "Cancel"}
-                              </button>
-                            </>
-                          )}
-                          {(!canMutate || isAssignmentInactive(row.status)) && (
-                            <span className="text-[10px] font-bold uppercase text-slate-300 dark:text-slate-600 tracking-wider">
+                            {expanded
+                              ? (lang === "VN" ? "Thu gọn" : "Collapse")
+                              : (lang === "VN" ? "Xem ca" : "View shifts")}
+                          </button>
+                          {!canMutateAny && (
+                            <p className="mt-1 text-[10px] font-bold uppercase text-slate-300 tracking-wider">
                               {lang === "VN" ? "Chỉ xem" : "View only"}
-                            </span>
+                            </p>
                           )}
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {expanded
+                        ? group.items.map((row) => {
+                            const busy = processingId === row.assignmentId;
+                            const canMutate = canMutateAssignment(row);
+                            const shift = resolveShiftState(row);
+                            return (
+                              <tr
+                                key={row.assignmentId}
+                                className="bg-slate-50/70 dark:bg-slate-900/30"
+                              >
+                                <td className="py-2.5 pl-14 pr-5" colSpan={isAdminBoatManage ? 3 : 4}>
+                                  <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                    {formatDateShort(row.startAt)}
+                                    <span className="mx-1.5 font-medium text-slate-400">
+                                      {formatDateTime(row.startAt, lang).split(", ").pop()
+                                        || formatDateTime(row.startAt, lang).split(" ").slice(-1)[0]}
+                                      {" → "}
+                                      {formatDateTime(row.endAt, lang).split(", ").pop()
+                                        || formatDateTime(row.endAt, lang).split(" ").slice(-1)[0]}
+                                    </span>
+                                  </p>
+                                </td>
+                                <td className="py-2.5 px-4 text-center" colSpan={2}>
+                                  {shift ? (
+                                    <span
+                                      className={`inline-flex px-2 py-0.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wide border ${shiftStateTone(shift)}`}
+                                    >
+                                      {labelShiftState(shift, lang)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300">—</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-5">
+                                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                    {canMutate && !isAssignmentInactive(row.status) ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={busy}
+                                          onClick={() => openReplace(row)}
+                                          className="px-3 py-1.5 rounded-xl border border-sky-200 text-sky-700 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-sky-600 hover:text-white disabled:opacity-50 dark:border-sky-500/30 dark:text-sky-300"
+                                        >
+                                          {lang === "VN" ? "Thay NV" : "Replace"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={busy}
+                                          onClick={() => handleCancel(row)}
+                                          className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-500 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-rose-500 hover:text-white disabled:opacity-50 dark:border-rose-500/30"
+                                        >
+                                          {busy ? "…" : lang === "VN" ? "Hủy ca" : "Cancel"}
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <span className="text-[10px] font-bold uppercase text-slate-300 dark:text-slate-600 tracking-wider">
+                                        {lang === "VN" ? "Chỉ xem" : "View only"}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        : null}
+                    </Fragment>
                   );
                 })
               )}
@@ -1110,22 +1263,23 @@ export function StaffAssignmentManagement() {
       )}
 
       {isCreateOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-4xl border border-slate-100 dark:border-slate-700 shadow-2xl max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-700">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 w-full max-w-lg max-h-[min(92vh,720px)] rounded-4xl border border-slate-100 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-700">
               <h3 className="font-headline font-black text-sm uppercase tracking-wider text-[#124757] dark:text-yellow-400">
                 {lang === "VN" ? "Tạo phân công" : "Create assignment"}
               </h3>
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(false)}
-                className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700"
+                className="w-9 h-9 shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-700"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleCreateSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-5 py-4">
               {createError && (
                 <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-3 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20">
                   {createError}
@@ -1180,11 +1334,6 @@ export function StaffAssignmentManagement() {
                 </p>
                 <p className="mt-1 text-sm font-bold text-sky-800 dark:text-sky-200">
                   {FULL_DAY_START_TIME} → {FULL_DAY_END_TIME}
-                </p>
-                <p className="mt-1 text-[10px] font-medium text-sky-600/80 dark:text-sky-200/80">
-                  {lang === "VN"
-                    ? "Tạo lịch bulk theo từng ngày trong khoảng. Có thể chọn thứ trong tuần."
-                    : "Creates a daily bulk schedule in the date range. Weekdays optional."}
                 </p>
               </div>
 
@@ -1360,17 +1509,20 @@ export function StaffAssignmentManagement() {
                   className={inputStyle}
                 />
               </div>
+              </div>
 
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isSaving && (
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                )}
-                {lang === "VN" ? "Tạo lịch phân công" : "Create schedule"}
-              </button>
+              <div className="shrink-0 border-t border-slate-100 px-5 py-4 dark:border-slate-700">
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSaving && (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  )}
+                  {lang === "VN" ? "Tạo lịch phân công" : "Create schedule"}
+                </button>
+              </div>
             </form>
           </div>
         </div>

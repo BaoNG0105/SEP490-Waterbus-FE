@@ -27,6 +27,8 @@ export function WaterbusBooking() {
             toWharf: "",
             fromWharfName: "",
             toWharfName: "",
+            fromWharfCode: "",
+            toWharfCode: "",
             departureDate: getTodayDateString(),
             returnDate: "",
             departureTripOptions: [],

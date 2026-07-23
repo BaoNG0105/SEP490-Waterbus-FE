@@ -20,7 +20,7 @@ const TABS = [
   { id: "surcharge", icon: "event", vn: "Phụ thu ngày", en: "Day surcharges" },
 ];
 
-const ROUNDING_STEPS = [1, 100, 500, 1000];
+const ROUNDING_DISPLAY = 1000;
 
 const formatVnd = (value) => {
   const n = Number(value);
@@ -285,7 +285,6 @@ function DistanceFareTab({ lang }) {
   const [form, setForm] = useState({
     baseFare: 5000,
     pricePerKm: 1500,
-    roundingStep: 1000,
     minFare: "",
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -300,7 +299,6 @@ function DistanceFareTab({ lang }) {
       setForm({
         baseFare: policy.baseFare,
         pricePerKm: policy.pricePerKm,
-        roundingStep: policy.roundingStep || 1000,
         minFare: policy.minFare == null ? "" : policy.minFare,
       });
     } catch (error) {
@@ -328,7 +326,6 @@ function DistanceFareTab({ lang }) {
       setForm({
         baseFare: saved.baseFare,
         pricePerKm: saved.pricePerKm,
-        roundingStep: saved.roundingStep,
         minFare: saved.minFare == null ? "" : saved.minFare,
       });
       notify({
@@ -353,8 +350,8 @@ function DistanceFareTab({ lang }) {
     <div className="space-y-4">
       <p className="text-xs text-slate-400">
         {lang === "VN"
-          ? "Regular (STANDARD): RoundUp(baseFare + pricePerKm × km, roundingStep), tối thiểu minFare nếu có. Sightseeing vẫn theo giá loại ghế."
-          : "Regular (STANDARD): RoundUp(baseFare + pricePerKm × km, roundingStep), at least minFare if set. Sightseeing still uses seat-type prices."}
+          ? "Regular (STANDARD): baseFare + pricePerKm × km, làm tròn lên 1.000đ, tối thiểu minFare nếu có. Sightseeing vẫn theo giá loại ghế."
+          : "Regular (STANDARD): baseFare + pricePerKm × km, round up to 1,000 VND, at least minFare if set. Sightseeing still uses seat-type prices."}
       </p>
 
       {errorMsg ? (
@@ -397,18 +394,6 @@ function DistanceFareTab({ lang }) {
                 />
               </div>
               <div>
-                <label className={labelStyle}>{lang === "VN" ? "Bước làm tròn" : "Rounding step"}</label>
-                <select
-                  value={form.roundingStep}
-                  onChange={(e) => setForm((prev) => ({ ...prev, roundingStep: Number(e.target.value) }))}
-                  className={inputStyle}
-                >
-                  {ROUNDING_STEPS.map((step) => (
-                    <option key={step} value={step}>{step.toLocaleString("vi-VN")}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
                 <label className={labelStyle}>{lang === "VN" ? "Giá tối thiểu (minFare)" : "Minimum fare"}</label>
                 <input
                   type="number"
@@ -421,6 +406,11 @@ function DistanceFareTab({ lang }) {
                 />
               </div>
             </div>
+            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+              {lang === "VN"
+                ? `Làm tròn lên ${ROUNDING_DISPLAY.toLocaleString("vi-VN")}đ (cấu hình BE, không chỉnh trên FE).`
+                : `Round up to ${ROUNDING_DISPLAY.toLocaleString("en-US")} VND (BE setting, not editable on FE).`}
+            </p>
             <div className="flex flex-wrap gap-2 pt-1">
               <button
                 type="submit"
@@ -601,8 +591,8 @@ function SurchargeTab({ lang }) {
     <div className="space-y-5">
       <p className="text-xs text-slate-400">
         {lang === "VN"
-          ? "Phụ thu chỉ cần nhập % — BE tự làm tròn % và tiền. roundingStep chỉ dùng ở tab Giá theo km."
-          : "Surcharge only needs %. BE rounds % and money. roundingStep stays on the Distance fare tab only."}
+          ? "Phụ thu chỉ nhập % — BE tự làm tròn % và tiền. Không có bước làm tròn trên FE."
+          : "Surcharge only needs %. BE rounds % and money. No rounding step on FE."}
       </p>
 
       {apiMissing ? (

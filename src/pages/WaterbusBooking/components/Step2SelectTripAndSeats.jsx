@@ -171,8 +171,7 @@ const findSegmentStops = (stops, fromStationId, toStationId, preferredDepartureI
   return open || candidates[0];
 };
 
-// Tìm mã bến (stationCode) từ danh sách stops của chuyến, khớp theo stationId đã chọn ở Bước 1
-const findStationCode = (stops, stationId) => findStop(stops, stationId)?.stationCode || "";
+// Stop trên trip không còn stationCode — mã bến lấy từ catalog Step1 (fromWharfCode/toWharfCode).
 
 /** Khóa sơ đồ ghế: ưu tiên đúng field BE isBookingClosed; chỉ fallback local khi BE không gửi. */
 const resolveSeatMapBookingClosed = (seatMapResponse, trip) => {
@@ -184,7 +183,14 @@ const resolveSeatMapBookingClosed = (seatMapResponse, trip) => {
   }
   return isSegmentBookingClosed(trip);
 };
-export default function Step2SelectTripAndSeats({ bookingData, updateData, onNext, onBack }) {
+export default function Step2SelectTripAndSeats({
+  bookingData,
+  updateData,
+  onNext,
+  onBack,
+  /** "search" = về bước 1; "home" = thoát về trang chủ (Sightseeing). */
+  leaveTarget = "search",
+}) {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { isAuthenticated } = useSelector((state) => state.auth);
@@ -192,6 +198,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
     isRoundTrip,
     fromWharf, toWharf,
     fromWharfName, toWharfName,
+    fromWharfCode, toWharfCode,
     routeType,
     departureTripOptions, returnTripOptions,
     selectedDepartureTrip, selectedReturnTrip,
@@ -204,20 +211,14 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
   const isLoopRoute = routeType === "SightseeingLoop";
   const tripCardImage = isLoopRoute ? SIGHTSEEING_TRIP_IMAGE : WATERBUS_TRIP_IMAGE;
 
-  // Mã bến đi/đến của từng chặng — chặng về đi ngược chiều (toWharf -> fromWharf).
-  // Tuyến vòng: lấy đúng lần xuất hiện theo giờ search (không lấy bến đầu tiên trùng mã).
-  const getLegStationCodes = (leg, trip) => {
+  // Mã bến đi/đến của từng chặng — lấy từ catalog Step1 (fromWharfCode/toWharfCode).
+  // Chặng về đi ngược chiều (toWharf -> fromWharf).
+  const getLegStationCodes = (leg) => {
     if (isLoopRoute) return { fromStationCode: undefined, toStationCode: undefined };
-    const fromId = leg === "departure" ? fromWharf : toWharf;
-    const toId = leg === "departure" ? toWharf : fromWharf;
-    const preferredDep = leg === "departure"
-      ? (trip?.fromStopScheduledDeparture || trip?.departureTime)
-      : (trip?.fromStopScheduledDeparture || trip?.departureTime);
-    const { boarding, alighting } = findSegmentStops(trip?.stops, fromId, toId, preferredDep);
-    return {
-      fromStationCode: boarding?.stationCode || findStationCode(trip?.stops, fromId),
-      toStationCode: alighting?.stationCode || findStationCode(trip?.stops, toId),
-    };
+    if (leg === "departure") {
+      return { fromStationCode: fromWharfCode || "", toStationCode: toWharfCode || "" };
+    }
+    return { fromStationCode: toWharfCode || "", toStationCode: fromWharfCode || "" };
   };
 
   // Quản lý tab nội bộ của bước 2 nếu là khứ hồi: 'departure' (chiều đi) hoặc 'return' (chiều về)
@@ -257,7 +258,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       setIsLoadingSeats(true);
       try {
         await Promise.all(legsToHydrate.map(async ([leg, trip]) => {
-          const { fromStationCode, toStationCode } = getLegStationCodes(leg, trip);
+          const { fromStationCode, toStationCode } = getLegStationCodes(leg);
           if (!isLoopRoute && (!fromStationCode || !toStationCode)) return;
           const seatMapResponse = await fetchTripSeatMap(trip.tripId, { fromStationCode, toStationCode });
           if (cancelled) return;
@@ -311,7 +312,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromWharf, toWharf]);
+  }, [fromWharf, toWharf, fromWharfCode, toWharfCode]);
 
   const tripOptions = activeLeg === "departure" ? departureTripOptions : returnTripOptions;
   const currentTrip = activeLeg === "departure" ? selectedDepartureTrip : selectedReturnTrip;
@@ -410,7 +411,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
         fromStopScheduledDeparture: boardingStop?.scheduledDeparture || trip.fromStopScheduledDeparture || trip.departureTime,
         toStopScheduledArrival: alightingStop?.scheduledArrival || trip.toStopScheduledArrival || trip.arrivalTime,
       };
-      const { fromStationCode, toStationCode } = getLegStationCodes(activeLeg, mergedTrip);
+      const { fromStationCode, toStationCode } = getLegStationCodes(activeLeg);
 
       if (!isLoopRoute && (!fromStationCode || !toStationCode)) {
         setSeatMapError(
@@ -592,7 +593,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       return;
     }
 
-    const ok = await confirmLeaveSeatSelection(lang);
+    const ok = await confirmLeaveSeatSelection(lang, { leaveTarget });
     if (!ok) return;
 
     updateData(clearSeatSelectionFields());
@@ -606,7 +607,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
     setSeatMapError("");
     setIsConfirmingSeats(true);
     try {
-      const departureCodes = getLegStationCodes("departure", selectedDepartureTrip);
+      const departureCodes = getLegStationCodes("departure");
       const departureHold = await holdSeats(
         selectedDepartureTrip.tripId,
         selectedSeatsDeparture.map((s) => s.seatNumber),
@@ -630,7 +631,7 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
 
       let returnExpiresAt = null;
       if (isRoundTrip) {
-        const returnCodes = getLegStationCodes("return", selectedReturnTrip);
+        const returnCodes = getLegStationCodes("return");
         const returnHold = await holdSeats(
           selectedReturnTrip.tripId,
           selectedSeatsReturn.map((s) => s.seatNumber),
@@ -1063,7 +1064,9 @@ export default function Step2SelectTripAndSeats({ bookingData, updateData, onNex
       {/* --- NÚT ĐIỀU HƯỚNG CHUYỂN BƯỚC DƯỚI CÙNG --- */}
       <div className="pt-6 border-t flex justify-between">
         <button type="button" onClick={handleBack} className="border px-6 py-3 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800">
-          {lang === "VN" ? "Quay lại" : "Back"}
+          {leaveTarget === "home"
+            ? (lang === "VN" ? "Thoát" : "Leave")
+            : (lang === "VN" ? "Quay lại" : "Back")}
         </button>
 
         {/* Nút hỗ trợ chuyển tab phụ thông minh cho vé khứ hồi trước khi cho bấm sang bước checkout */}

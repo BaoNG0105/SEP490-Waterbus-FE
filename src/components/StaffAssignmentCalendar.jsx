@@ -110,6 +110,15 @@ export function StaffAssignmentCalendar({
   const displayDays = mode === "month" ? monthGridDays : days;
   const weekdayLabels = lang === "VN" ? WEEKDAY_LABELS_VN : WEEKDAY_LABELS_EN;
 
+  /** Theo tàu: ngày hiện tại luôn ở cột đầu (bỏ các ngày trước hôm nay nếu đang xem khoảng có hôm nay). */
+  const byBoatDays = useMemo(() => {
+    if (layout !== "byBoat") return displayDays;
+    const todayKey = toDateKey(new Date());
+    const todayIndex = displayDays.findIndex((day) => toDateKey(day) === todayKey);
+    if (todayIndex <= 0) return displayDays;
+    return displayDays.slice(todayIndex);
+  }, [layout, displayDays]);
+
   const shiftAnchor = (delta) => {
     if (!onAnchorChange) return;
     if (mode === "month") {
@@ -139,8 +148,8 @@ export function StaffAssignmentCalendar({
       });
     }
     return lang === "VN"
-      ? `Tuần ${toDateKey(range.from)} → ${toDateKey(range.to)}`
-      : `Week ${toDateKey(range.from)} → ${toDateKey(range.to)}`;
+      ? `${range.from.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })} → ${range.to.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}`
+      : `${toDateKey(range.from)} → ${toDateKey(range.to)}`;
   }, [mode, anchor, range, lang]);
 
   const boatRows = useMemo(() => {
@@ -162,22 +171,45 @@ export function StaffAssignmentCalendar({
     assignments.filter((row) => !isAssignmentInactive(row.status) && assignmentCoversDay(row, dayKey));
 
   const renderChip = (row, keySuffix = "") => {
-    const label =
-      layout === "byBoat"
-        ? row.staffName
-        : `${row.staffName}${
-            row.assignmentType === ASSIGNMENT_TYPE.BOAT
-              ? ` · ${row.boat?.boatCode || ""}`
-              : ` · ${row.station?.stationCode || ""}`
-          }`;
+    const shift = resolveShiftState(row);
+    const boatOrStation =
+      row.assignmentType === ASSIGNMENT_TYPE.BOAT
+        ? (row.boat?.boatCode || row.boat?.boatName || "")
+        : (row.station?.stationCode || row.station?.stationName || "");
+    const title = [
+      row.staffName,
+      getTargetLabel(row),
+      shift ? labelShiftState(shift, lang) : labelAssignmentStatus(row.status, lang),
+    ].filter(Boolean).join(" · ");
+
+    if (layout === "byBoat") {
+      return (
+        <div
+          key={`${row.assignmentId}${keySuffix}`}
+          title={title}
+          className={`rounded-lg border px-1.5 py-1 ${statusChip(row)}`}
+        >
+          <p className="truncate text-[10px] font-black leading-tight">{row.staffName}</p>
+          {shift ? (
+            <p className="mt-0.5 truncate text-[8px] font-bold uppercase tracking-wide opacity-80">
+              {labelShiftState(shift, lang)}
+            </p>
+          ) : null}
+        </div>
+      );
+    }
+
     return (
       <div
         key={`${row.assignmentId}${keySuffix}`}
-        title={`${row.staffName} · ${getTargetLabel(row)} · ${labelAssignmentStatus(row.status, lang)}`}
-        className={`rounded-lg border px-1.5 py-1 text-[9px] font-bold leading-tight truncate ${statusChip(row)}`}
+        title={title}
+        className={`rounded-lg border px-1.5 py-1 ${statusChip(row)}`}
       >
-        {label}
-        {resolveShiftState(row) ? ` · ${labelShiftState(resolveShiftState(row), lang)}` : ""}
+        <p className="truncate text-[10px] font-black leading-tight">{row.staffName}</p>
+        <p className="mt-0.5 truncate text-[8px] font-bold opacity-75">
+          {boatOrStation}
+          {shift ? ` · ${labelShiftState(shift, lang)}` : ""}
+        </p>
       </div>
     );
   };
@@ -373,27 +405,31 @@ export function StaffAssignmentCalendar({
             <table className="w-full min-w-[720px] border-collapse text-left">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/50">
-                  <th className="sticky left-0 z-10 bg-slate-50 dark:bg-slate-900/50 py-3 px-4 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60 min-w-[140px]">
+                  <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-900/50 py-3 px-4 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60 min-w-[140px]">
                     {lang === "VN" ? "Tàu" : "Boat"}
                   </th>
-                  {displayDays.map((day) => {
+                  {byBoatDays.map((day) => {
                     const key = toDateKey(day);
                     const weekend = isWeekend(day);
+                    const today = isToday(day);
                     return (
                       <th
                         key={key}
-                        className={`py-3 px-1.5 text-center text-[10px] font-headline font-black uppercase tracking-wide border-b border-slate-100 dark:border-slate-700/60 min-w-[88px] ${
-                          isToday(day)
-                            ? "text-[#124757] dark:text-yellow-400"
+                        className={`py-3 px-1.5 text-center text-[10px] font-headline font-black uppercase tracking-wide border-b border-slate-100 dark:border-slate-700/60 min-w-[96px] ${
+                          today
+                            ? "sticky left-[140px] z-10 bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400 shadow-[2px_0_0_0_rgba(18,71,87,0.12)]"
                             : weekend
-                              ? "text-slate-500 dark:text-slate-400"
-                              : "text-slate-400"
-                        } ${isOutsideMonth(day) ? "opacity-40" : ""} ${
-                          weekend ? "bg-slate-100/80 dark:bg-slate-800/50" : ""
-                        }`}
+                              ? "text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800/50"
+                              : "text-slate-400 bg-slate-50 dark:bg-slate-900/50"
+                        } ${isOutsideMonth(day) && !today ? "opacity-40" : ""}`}
                       >
                         <div>{weekdayLabels[(day.getDay() + 6) % 7]}</div>
                         <div className="text-[11px] mt-0.5">{pad2(day.getDate())}</div>
+                        {today ? (
+                          <div className="mt-0.5 text-[8px] font-black uppercase tracking-wider opacity-80">
+                            {lang === "VN" ? "Hôm nay" : "Today"}
+                          </div>
+                        ) : null}
                       </th>
                     );
                   })}
@@ -402,24 +438,25 @@ export function StaffAssignmentCalendar({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
                 {boatRows.map((boat) => (
                   <tr key={boat.key}>
-                    <td className="sticky left-0 z-10 bg-white dark:bg-slate-800 py-2.5 px-4 text-xs font-bold text-slate-800 dark:text-white border-r border-slate-100 dark:border-slate-700/60">
+                    <td className="sticky left-0 z-20 bg-white dark:bg-slate-800 py-2.5 px-4 text-xs font-bold text-slate-800 dark:text-white border-r border-slate-100 dark:border-slate-700/60">
                       {boat.label}
                     </td>
-                    {displayDays.map((day) => {
+                    {byBoatDays.map((day) => {
                       const key = toDateKey(day);
                       const rows = cellsForDay(key).filter((row) => getBoatKey(row) === boat.key);
                       const weekend = isWeekend(day);
+                      const today = isToday(day);
                       return (
                         <td
                           key={`${boat.key}-${key}`}
                           className={`align-top p-1.5 ${
-                            isOutsideMonth(day) ? "opacity-40" : ""
+                            isOutsideMonth(day) && !today ? "opacity-40" : ""
                           } ${
-                            isToday(day)
-                              ? "bg-[#124757]/5 dark:bg-yellow-400/5"
+                            today
+                              ? "sticky left-[140px] z-10 bg-[#124757]/8 dark:bg-yellow-400/10 shadow-[2px_0_0_0_rgba(18,71,87,0.08)]"
                               : weekend
                                 ? "bg-slate-100/70 dark:bg-slate-800/40"
-                                : ""
+                                : "bg-white dark:bg-slate-800"
                           }`}
                         >
                           <div className="space-y-1 min-h-[42px]">{rows.map((r) => renderChip(r, key))}</div>
@@ -464,10 +501,19 @@ export function StaffAssignmentCalendar({
               return (
                 <div
                   key={key}
-                  className={dayShellClass(day, { tall: mode === "week" })}
-                  onDoubleClick={() => {
+                  role="button"
+                  tabIndex={0}
+                  className={`${dayShellClass(day, { tall: mode === "week" })} cursor-pointer hover:ring-1 hover:ring-[#124757]/25 dark:hover:ring-yellow-400/30`}
+                  onClick={() => {
                     onModeChange?.("day");
                     onAnchorChange?.(day);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onModeChange?.("day");
+                      onAnchorChange?.(day);
+                    }
                   }}
                 >
                   <div className="flex items-center justify-between mb-1 px-0.5">
@@ -518,8 +564,12 @@ export function StaffAssignmentCalendar({
         </span>
         <span className="text-slate-300 dark:text-slate-600">
           {lang === "VN"
-            ? "Tiến độ ca tự động · ca đã hủy không hiện"
-            : "Auto shift progress · cancelled hidden"}
+            ? layout === "byBoat"
+              ? "Theo tàu: hôm nay luôn ở cột đầu · ca đã hủy không hiện"
+              : "Bấm ngày để xem chi tiết · ca đã hủy không hiện"
+            : layout === "byBoat"
+              ? "By boat: today stays in the first column · cancelled hidden"
+              : "Click a day for details · cancelled hidden"}
         </span>
       </div>
     </div>

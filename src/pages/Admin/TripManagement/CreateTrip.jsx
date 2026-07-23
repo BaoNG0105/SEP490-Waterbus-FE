@@ -325,11 +325,6 @@ export function CreateTrip() {
             <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
               {lang === "VN" ? "Phút dừng bến giữa tuyến" : "Intermediate stop dwell"}
             </h3>
-            <p className="text-[10px] text-slate-400 mt-1">
-              {lang === "VN"
-                ? "Bắt buộc gửi đầy đủ stops[] cho mọi bến giữa (kể cả 0 phút). Không nhập bến đầu/cuối."
-                : "Must send full stops[] for every intermediate stop (0 minutes allowed). First/last stops are excluded."}
-            </p>
           </div>
 
           {isLoadingStops ? (

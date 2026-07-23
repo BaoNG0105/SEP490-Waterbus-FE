@@ -37,20 +37,52 @@ const safeMapAction = (map, action) => {
   }
 };
 
-// Tự động căn chỉnh góc nhìn — không animate để tránh _leaflet_pos khi remount.
+// Tự động căn chỉnh góc nhìn — preferFocus = luôn khóa camera theo tàu.
 const MapController = ({ positions, centerPoint, multiMarkers, focusView, fitKey, onMapInteract, preferFocus = false }) => {
   const map = useMap();
   const isInitialized = useRef(false);
   const lastFitKey = useRef("");
+  const focusRef = useRef(focusView);
+  const preferFocusRef = useRef(preferFocus);
 
   const lat = centerPoint ? centerPoint[0] : undefined;
   const lng = centerPoint ? centerPoint[1] : undefined;
   const focusLat = focusView?.[0];
   const focusLng = focusView?.[1];
 
+  useEffect(() => {
+    focusRef.current = focusView;
+  }, [focusView]);
+
+  useEffect(() => {
+    preferFocusRef.current = preferFocus;
+  }, [preferFocus]);
+
+  const lockToFocus = (activeMap, { animate = false } = {}) => {
+    const point = focusRef.current;
+    if (!point || !isValidLatLng(point[0], point[1])) return false;
+    const zoom = Math.max(Number(activeMap.getZoom()) || 16, 16);
+    activeMap.setView([Number(point[0]), Number(point[1])], zoom, { animate });
+    isInitialized.current = true;
+    return true;
+  };
+
   useMapEvents({
     dragstart: () => {
       if (typeof onMapInteract === "function") onMapInteract("drag");
+    },
+    dragend: () => {
+      // Đang bám tàu → kéo map xong vẫn kéo camera về tàu.
+      if (!preferFocusRef.current) return;
+      safeMapAction(map, (activeMap) => {
+        lockToFocus(activeMap, { animate: true });
+      });
+    },
+    zoomend: () => {
+      if (!preferFocusRef.current) return;
+      safeMapAction(map, (activeMap) => {
+        lockToFocus(activeMap, { animate: false });
+      });
     },
   });
 
@@ -63,9 +95,7 @@ const MapController = ({ positions, centerPoint, multiMarkers, focusView, fitKey
     safeMapAction(map, (activeMap) => {
       // Trip / live follow: chỉ mở theo tàu — KHÔNG fitBounds cả tuyến (tránh zoom ra xa).
       if (preferFocus) {
-        if (focusLat !== undefined && focusLng !== undefined && isValidLatLng(focusLat, focusLng)) {
-          activeMap.setView([focusLat, focusLng], Math.max(activeMap.getZoom() || 16, 16), { animate: false });
-          isInitialized.current = true;
+        if (lockToFocus(activeMap, { animate: false })) {
           lastFitKey.current = key;
         }
         return;
@@ -115,20 +145,48 @@ const MapController = ({ positions, centerPoint, multiMarkers, focusView, fitKey
     if (focusLat === undefined || focusLng === undefined || !isValidLatLng(focusLat, focusLng)) return;
     safeMapAction(map, (activeMap) => {
       if (preferFocus) {
-        // Luôn bám tàu: giữ zoom gần (≥16), pan theo GPS mỗi lần cập nhật.
-        const zoom = Math.max(activeMap.getZoom() || 16, 16);
-        activeMap.setView([focusLat, focusLng], zoom, { animate: true });
-        isInitialized.current = true;
+        // Luôn bám tàu: zoom gần (≥16), setView theo GPS mỗi lần cập nhật.
+        lockToFocus(activeMap, { animate: false });
+        lastFitKey.current = String(fitKey || lastFitKey.current);
       } else if (isInitialized.current) {
         activeMap.panTo([focusLat, focusLng], { animate: true, duration: 0.35 });
       }
     });
-  }, [focusLat, focusLng, map, preferFocus]);
+  }, [focusLat, focusLng, map, preferFocus, fitKey]);
+
+  // preferFocus: định kỳ kéo về tàu nếu camera bị lệch (resize / tile load / thao tác map).
+  useEffect(() => {
+    if (!preferFocus) return undefined;
+    const tick = () => {
+      safeMapAction(map, (activeMap) => {
+        const point = focusRef.current;
+        if (!point || !isValidLatLng(point[0], point[1])) return;
+        const center = activeMap.getCenter?.();
+        if (!center) {
+          lockToFocus(activeMap, { animate: false });
+          return;
+        }
+        const dLat = Math.abs(center.lat - Number(point[0]));
+        const dLng = Math.abs(center.lng - Number(point[1]));
+        // Lệch ~30m trở lên thì kéo lại.
+        if (dLat > 0.0003 || dLng > 0.0003 || (activeMap.getZoom() || 0) < 16) {
+          lockToFocus(activeMap, { animate: false });
+        }
+      });
+    };
+    const timer = window.setInterval(tick, 1200);
+    const boot = window.setTimeout(tick, 80);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(boot);
+    };
+  }, [map, preferFocus]);
 
   useEffect(() => {
     const onResize = () => {
       safeMapAction(map, (activeMap) => {
         activeMap.invalidateSize({ animate: false });
+        if (preferFocusRef.current) lockToFocus(activeMap, { animate: false });
       });
     };
     window.addEventListener("resize", onResize);
@@ -508,7 +566,12 @@ export const WaterwayMap = ({
         </div>
       )}
 
-      <MapContainer center={centerPoint} zoom={13} className="w-full h-full" zoomControl={false}>
+      <MapContainer
+        center={focusPoint || centerPoint}
+        zoom={preferFocus && focusPoint ? 16 : 13}
+        className="w-full h-full"
+        zoomControl={false}
+      >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
