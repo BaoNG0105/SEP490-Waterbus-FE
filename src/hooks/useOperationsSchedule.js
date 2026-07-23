@@ -5,6 +5,7 @@ import {
   toOperationsScheduleDate,
 } from "../services/operationsService";
 import { trackingHub } from "../services/trackingHubClient";
+import { normalizeDwellCountdown } from "../utils/boatTracking";
 
 const POLL_MS = 4000;
 
@@ -60,6 +61,8 @@ export function useOperationsSchedule({ enabled = true } = {}) {
     const stationName = String(payload.stationName || payload.StationName || "").trim();
     const stationCode = String(payload.stationCode || payload.StationCode || "").trim();
     const movementStatus = movementFromStopEvent(event);
+    const dwellCountdown = normalizeDwellCountdown(payload);
+    const eventKey = String(event).toLowerCase();
 
     setLastTripStop({
       event,
@@ -72,6 +75,7 @@ export function useOperationsSchedule({ enabled = true } = {}) {
       occurredAt: payload.occurredAt || payload.OccurredAt || Date.now(),
       lat: payload.lat ?? payload.Lat ?? null,
       lng: payload.lng ?? payload.Lng ?? null,
+      dwellCountdown: eventKey === "departed" ? null : dwellCountdown,
     });
 
     setEntries((prev) => {
@@ -82,8 +86,8 @@ export function useOperationsSchedule({ enabled = true } = {}) {
           || (boatId && String(row.boatId || "") === boatId);
         if (!sameBoat) return row;
         changed = true;
-        const arrived = String(event).toLowerCase() === "arrived";
-        const departed = String(event).toLowerCase() === "departed";
+        const arrived = eventKey === "arrived";
+        const departed = eventKey === "departed";
         return {
           ...row,
           lastStopEvent: event,
@@ -94,14 +98,17 @@ export function useOperationsSchedule({ enabled = true } = {}) {
           currentStationCode: arrived || departed
             ? (stationCode || row.currentStationCode)
             : row.currentStationCode,
-          nextStationName: String(event).toLowerCase() === "arriving"
+          nextStationName: eventKey === "arriving"
             ? (stationName || row.nextStationName)
             : row.nextStationName,
-          nextStationCode: String(event).toLowerCase() === "arriving"
+          nextStationCode: eventKey === "arriving"
             ? (stationCode || row.nextStationCode)
             : row.nextStationCode,
           tripId: payload.tripId || payload.TripId || row.tripId,
           tripCode: payload.tripCode || payload.TripCode || row.tripCode,
+          dwellCountdown: departed
+            ? null
+            : (dwellCountdown ?? row.dwellCountdown),
         };
       });
       return changed ? next : prev;
@@ -134,6 +141,48 @@ export function useOperationsSchedule({ enabled = true } = {}) {
       load({ silent: true }).catch(() => {});
     });
 
+    const unsubTripDelay = trackingHub.subscribeTripDelayUpdated((payload) => {
+      if (!activeRef.current || !payload) return;
+      // BE tính delay — FE chỉ patch field rồi refetch schedule.
+      setEntries((prev) => {
+        if (!Array.isArray(prev) || !prev.length) return prev;
+        const tripId = String(payload.tripId || payload.TripId || "").trim();
+        const boatId = String(payload.boatId || payload.BoatId || "").trim();
+        const boatCode = String(payload.boatCode || payload.BoatCode || "").trim();
+        const delayInfo = payload.delayInfo || payload.DelayInfo;
+        const delayMinutes = Number(
+          payload.totalDelayMinutes
+          ?? payload.delayMinutes
+          ?? delayInfo?.delayMinutes,
+        );
+        let changed = false;
+        const next = prev.map((row) => {
+          const sameTrip = tripId && String(row.tripId || "") === tripId;
+          const sameBoat = (boatId && String(row.boatId || "") === boatId)
+            || (boatCode && String(row.boatCode || "").toUpperCase() === boatCode.toUpperCase());
+          if (!sameTrip && !sameBoat) return row;
+          changed = true;
+          return {
+            ...row,
+            delayMinutes: Number.isFinite(delayMinutes) ? delayMinutes : row.delayMinutes,
+            delayReason: delayInfo?.reason || payload.reason || row.delayReason,
+            adjustedStartAt: payload.adjustedDepartureTime
+              || payload.adjustedStartAt
+              || row.adjustedStartAt,
+            adjustedEndAt: payload.adjustedArrivalTime
+              || payload.adjustedEndAt
+              || row.adjustedEndAt,
+            isDelayActive: Boolean(delayInfo?.isDelayActive ?? payload.isDelayActive),
+            delayStartedAt: delayInfo?.delayStartedAt
+              || payload.delayStartedAt
+              || row.delayStartedAt,
+          };
+        });
+        return changed ? next : prev;
+      });
+      load({ silent: true }).catch(() => {});
+    });
+
     trackingHub.acquire().catch(() => {});
 
     return () => {
@@ -141,6 +190,7 @@ export function useOperationsSchedule({ enabled = true } = {}) {
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
       unsubTripStop();
+      unsubTripDelay();
       trackingHub.release();
     };
   }, [enabled, load, applyTripStopPayload]);

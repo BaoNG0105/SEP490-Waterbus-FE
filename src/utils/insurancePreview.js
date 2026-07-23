@@ -126,11 +126,13 @@ export const normalizeInsuranceFromBooking = (booking) => {
     if (selected === true) {
       return {
         packageId,
+        packageCode: "",
         packageName: "",
         providerName: "",
         providerLogoUrl: "",
         quantity: 0,
         unitPremiumAmount: 0,
+        coverageAmount: 0,
         totalAmount: 0,
         terms: "",
         selected: true,
@@ -142,6 +144,8 @@ export const normalizeInsuranceFromBooking = (booking) => {
   const quantity = Number(insurance.quantity ?? insurance.seatCount) || 0;
   const totalAmount = Number(insurance.totalAmount ?? insurance.amount ?? insurance.premiumAmount) || 0;
   const unitPremiumAmount = Number(insurance.unitPremiumAmount ?? insurance.unitAmount) || 0;
+  const coverageAmount = Number(insurance.coverageAmount ?? insurance.coverage) || 0;
+  const packageCode = insurance.code ?? insurance.packageCode ?? "";
   const packageName = insurance.packageName ?? insurance.name ?? "";
   const providerName = insurance.providerName ?? "";
   const providerLogoUrl = insurance.providerLogoUrl
@@ -157,11 +161,13 @@ export const normalizeInsuranceFromBooking = (booking) => {
 
   return {
     packageId,
+    packageCode,
     packageName,
     providerName,
     providerLogoUrl,
     quantity,
     unitPremiumAmount,
+    coverageAmount,
     // Only invent total from unit × qty when BE already provided a seat quantity (after quote).
     totalAmount: quantity > 0 ? (totalAmount || unitPremiumAmount * quantity) : totalAmount,
     terms,

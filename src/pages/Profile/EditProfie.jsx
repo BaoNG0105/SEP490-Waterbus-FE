@@ -9,6 +9,7 @@ import {
 } from "../../services/authService";
 import "flag-icons/css/flag-icons.min.css";
 import { notify, showValidationMessage } from "../../utils/swalToast";
+import { AppDateInput } from "../../components/AppDateInput";
 import Swal from "sweetalert2";
 
 import countries from "i18n-iso-countries";
@@ -408,7 +409,7 @@ export const EditProfile = () => {
 
                         <div className="space-y-1">
                             <label className={labelClasses}>{lang === "VN" ? "Ngày tháng năm sinh" : "Date of Birth"}</label>
-                            <input name="dob" type="date" value={profileData.dob} onChange={handleProfileDataChange} className={inputClasses} />
+                            <AppDateInput name="dob" value={profileData.dob} onChange={handleProfileDataChange} className={inputClasses} />
                         </div>
 
                         <div className="space-y-1">

@@ -4,7 +4,8 @@ import api from './axios';
 export const getTrips = (params) =>
     api.get('/trips', { params }).then(response => response.data);
 
-// API: Tạo chuyến tàu mới (routeCode, boatCode, operatingDate, departureTime bắt buộc; seatTypePrices optional)
+// API: Tạo chuyến tàu mới (routeCode, boatCode, operatingDate, departureTime bắt buộc).
+// Giá lấy từ seat-types / fare-policy — không gửi seatTypePrices.
 export const createTrip = (data) =>
     api.post('/trips', data).then(response => response.data);
 
@@ -34,3 +35,11 @@ export const holdTripSeats = (id, seatNumbers, fromStationCode, toStationCode) =
 // API: Nhả ghế đang tạm giữ (chỉ nhả được ghế do chính user đang giữ)
 export const releaseTripSeats = (id, seatNumbers, fromStationCode, toStationCode) =>
     api.post(`/trips/${id}/seats/release`, { seatNumbers, fromStationCode, toStationCode }).then(response => response.data);
+
+// API: Bắt đầu delay chuyến (staff trên tàu) — body: { reason, startStopOrder }
+export const startTripDelay = (id, payload) =>
+    api.post(`/trips/${id}/delay/start`, payload).then(response => response.data);
+
+// API: Tiếp tục sau delay — body: { note } — BE tự tính lan delay nếu > 15 phút
+export const resumeTripDelay = (id, payload) =>
+    api.post(`/trips/${id}/delay/resume`, payload).then(response => response.data);

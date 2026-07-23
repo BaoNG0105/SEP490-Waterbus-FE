@@ -38,7 +38,7 @@ const safeMapAction = (map, action) => {
 };
 
 // Tự động căn chỉnh góc nhìn — không animate để tránh _leaflet_pos khi remount.
-const MapController = ({ positions, centerPoint, multiMarkers, focusView, fitKey }) => {
+const MapController = ({ positions, centerPoint, multiMarkers, focusView, fitKey, onMapInteract, preferFocus = false }) => {
   const map = useMap();
   const isInitialized = useRef(false);
   const lastFitKey = useRef("");
@@ -48,6 +48,12 @@ const MapController = ({ positions, centerPoint, multiMarkers, focusView, fitKey
   const focusLat = focusView?.[0];
   const focusLng = focusView?.[1];
 
+  useMapEvents({
+    dragstart: () => {
+      if (typeof onMapInteract === "function") onMapInteract("drag");
+    },
+  });
+
   useEffect(() => {
     const key = String(fitKey || "");
     // Chỉ fit lại khi tập marker "sẵn sàng" lần đầu (số lượng đổi từ 0 → N), không phải mỗi GPS tick.
@@ -55,6 +61,15 @@ const MapController = ({ positions, centerPoint, multiMarkers, focusView, fitKey
     if (!key || key.endsWith("-s0") && key.startsWith("b0")) return;
 
     safeMapAction(map, (activeMap) => {
+      // Trip / live follow: chỉ mở theo tàu — KHÔNG fitBounds cả tuyến (tránh zoom ra xa).
+      if (preferFocus) {
+        if (focusLat !== undefined && focusLng !== undefined && isValidLatLng(focusLat, focusLng)) {
+          activeMap.setView([focusLat, focusLng], Math.max(activeMap.getZoom() || 16, 16), { animate: false });
+          isInitialized.current = true;
+          lastFitKey.current = key;
+        }
+        return;
+      }
       if (positions && positions.length > 0) {
         const bounds = L.latLngBounds(positions);
         if (bounds.isValid()) {
@@ -84,23 +99,31 @@ const MapController = ({ positions, centerPoint, multiMarkers, focusView, fitKey
         lastFitKey.current = key;
       }
     });
-  }, [positions, multiMarkers, fitKey, lat, lng, map]);
+  }, [positions, multiMarkers, fitKey, lat, lng, map, preferFocus, focusLat, focusLng]);
 
   useEffect(() => {
     if (!isInitialized.current) return;
     if (lat === undefined || lng === undefined || !isValidLatLng(lat, lng)) return;
+    // Khi đang khóa theo focus (tàu), không để stationPoint kéo camera đi.
+    if (preferFocus && focusLat !== undefined && focusLng !== undefined) return;
     safeMapAction(map, (activeMap) => {
       activeMap.setView([lat, lng], activeMap.getZoom() || 16, { animate: false });
     });
-  }, [lat, lng, map]);
+  }, [lat, lng, map, preferFocus, focusLat, focusLng]);
 
   useEffect(() => {
-    if (!isInitialized.current) return;
     if (focusLat === undefined || focusLng === undefined || !isValidLatLng(focusLat, focusLng)) return;
     safeMapAction(map, (activeMap) => {
-      activeMap.panTo([focusLat, focusLng], { animate: true, duration: 0.35 });
+      if (preferFocus) {
+        // Luôn bám tàu: giữ zoom gần (≥16), pan theo GPS mỗi lần cập nhật.
+        const zoom = Math.max(activeMap.getZoom() || 16, 16);
+        activeMap.setView([focusLat, focusLng], zoom, { animate: true });
+        isInitialized.current = true;
+      } else if (isInitialized.current) {
+        activeMap.panTo([focusLat, focusLng], { animate: true, duration: 0.35 });
+      }
     });
-  }, [focusLat, focusLng, map]);
+  }, [focusLat, focusLng, map, preferFocus]);
 
   useEffect(() => {
     const onResize = () => {
@@ -393,6 +416,8 @@ const getStationNameFlagIcon = (name) => {
 
 export const WaterwayMap = ({
   coordinates = [],
+  /** Đoạn đã đi (highlight vàng) — dùng cho trip GPS. */
+  highlightCoordinates = [],
   waterwayName = "",
   overlayEyebrow = "Đang hiển thị tuyến",
   stationPoint = null,
@@ -401,6 +426,9 @@ export const WaterwayMap = ({
   selectedBoatId = "",
   focusView = null,
   onLocationSelect,
+  onMapInteract,
+  /** true = luôn khóa camera theo focusView (trip GPS bám tàu). */
+  preferFocus = false,
   hideStationLink = false,
   lineWeight = 5,
   lineOpacity = 0.85,
@@ -419,6 +447,9 @@ export const WaterwayMap = ({
   const navigate = useNavigate();
   const { lang } = useApp();
   const polylinePositions = (coordinates || [])
+    .filter((point) => isValidLatLng(point?.latitude, point?.longitude))
+    .map((point) => [point.latitude, point.longitude]);
+  const highlightPositions = (highlightCoordinates || [])
     .filter((point) => isValidLatLng(point?.latitude, point?.longitude))
     .map((point) => [point.latitude, point.longitude]);
   const centerPoint = stationPoint && isValidLatLng(stationPoint.latitude, stationPoint.longitude)
@@ -441,17 +472,24 @@ export const WaterwayMap = ({
         .filter((point) => Array.isArray(point) && isValidLatLng(point[0], point[1]))
         .map((point) => [Number(point[0]), Number(point[1])]);
       if (positions.length < 2) return null;
+      const emphasis = String(route.emphasis || route.style || "muted").toLowerCase();
+      if (emphasis === "hidden") return null;
       return {
         id: route.id || route.routeId || route.routeCode || JSON.stringify(positions[0]),
         label: route.label || route.routeCode || route.routeName || "",
         positions,
+        emphasis: emphasis === "active" || emphasis === "highlight" ? "active" : "muted",
       };
     })
     .filter(Boolean);
   // Chỉ dùng id list cho fit lần đầu — tránh remount MapController mỗi tick GPS.
-  const fitMarkerKey = fitBoatMarkers
-    ? `b${visibleBoats.length}-s${visibleStations.length}`
-    : `s${visibleStations.length}`;
+  // Thêm rN để khi geometry tuyến load xong vẫn fit đúng (trip GPS).
+  // Thêm f1 khi preferFocus + có tàu để khóa camera theo tàu (không kẹt fit tuyến trước).
+  const fitMarkerKey = `${
+    fitBoatMarkers
+      ? `b${visibleBoats.length}-s${visibleStations.length}-r${polylinePositions.length > 0 ? 1 : 0}`
+      : `s${visibleStations.length}-r${polylinePositions.length > 0 ? 1 : 0}`
+  }-f${preferFocus && focusPoint ? 1 : 0}`;
   const fitMarkers = fitBoatMarkers
     ? (visibleBoats.length > 0 ? visibleBoats : visibleStations)
     : visibleStations;
@@ -476,19 +514,29 @@ export const WaterwayMap = ({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* Tuyến nền mờ — chỉ xem, không tương tác / không sửa FID */}
+        {/* Tuyến nền / tuyến đang xem — active = xanh nổi */}
         {visibleRouteOverlays.map((route) => (
           <Polyline
             key={`overlay-${route.id}`}
             positions={route.positions}
             interactive={false}
-            pathOptions={{
-              color: "#5b8a9a",
-              weight: 3,
-              opacity: 0.28,
-              lineJoin: "round",
-              lineCap: "round",
-            }}
+            pathOptions={
+              route.emphasis === "active"
+                ? {
+                    color: "#0EA5E9",
+                    weight: 7,
+                    opacity: 0.95,
+                    lineJoin: "round",
+                    lineCap: "round",
+                  }
+                : {
+                    color: "#5b8a9a",
+                    weight: 3,
+                    opacity: 0.28,
+                    lineJoin: "round",
+                    lineCap: "round",
+                  }
+            }
           />
         ))}
 
@@ -500,6 +548,20 @@ export const WaterwayMap = ({
               weight: lineWeight,
               opacity: lineOpacity,
               lineJoin: "round",
+            }}
+          />
+        )}
+
+        {highlightPositions.length > 1 && (
+          <Polyline
+            positions={highlightPositions}
+            interactive={false}
+            pathOptions={{
+              color: "#FFD100",
+              weight: Math.max(lineWeight + 1, 6),
+              opacity: 0.95,
+              lineJoin: "round",
+              lineCap: "round",
             }}
           />
         )}
@@ -581,10 +643,20 @@ export const WaterwayMap = ({
           const underMaintenance = isBoatUnderMaintenance(boat);
           const dimmed = boat.isOnline === false;
           const imageSrc = getBoatImageUrl(boat, DEFAULT_BOAT_IMAGE);
-          const seatCount = Number(boat.seatCount);
-          const passengerCount = Number(boat.passengerCount);
-          const hasSeats = Number.isFinite(seatCount) && seatCount > 0;
-          const hasPassengers = Number.isFinite(passengerCount) && passengerCount >= 0;
+          const seatCount = (() => {
+            const n = Number(boat.seatCount);
+            return Number.isFinite(n) && n > 0 ? n : null;
+          })();
+          // Number(null)===0 nên phải check null/undefined tường minh — tránh hiện giả "0/ghế".
+          const passengerCount = (() => {
+            if (boat.passengerCount === null || boat.passengerCount === undefined || boat.passengerCount === "") {
+              return null;
+            }
+            const n = Number(boat.passengerCount);
+            return Number.isFinite(n) && n >= 0 ? n : null;
+          })();
+          const hasSeats = seatCount != null;
+          const hasPassengers = passengerCount != null;
           const occupancyValue = hasSeats
             ? (hasPassengers ? `${passengerCount}/${seatCount}` : String(seatCount))
             : null;
@@ -708,6 +780,8 @@ export const WaterwayMap = ({
           focusView={focusPoint}
           multiMarkers={fitMarkers}
           fitKey={fitMarkerKey}
+          onMapInteract={onMapInteract}
+          preferFocus={preferFocus}
         />
         <MapClickHandler onLocationSelect={onLocationSelect} />
       </MapContainer>

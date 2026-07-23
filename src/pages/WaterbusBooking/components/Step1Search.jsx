@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import { FormSelect } from "../../../components/FormSelect";
+import { AppDateInput } from "../../../components/AppDateInput";
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchTripSearch } from "../../../services/tripService";
 import { getTodayDateString } from "../../../utils/dateOnly";
@@ -66,8 +67,8 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
       if (!departureTripOptions.length) {
         setSearchError(
           lang === "VN"
-            ? "Không có chuyến phù hợp ngày/chặng này. Cần tạo trip Regular trước (vd. TEST-BOOKING: Bạch Đằng → Thủ Thiêm → Ba Son), giờ còn > 10 phút."
-            : "No matching trips for this date/segment. Create a Regular trip first (e.g. TEST-BOOKING), with departure still > 10 minutes away."
+            ? "Hiện chưa có chuyến phù hợp cho ngày và chặng bạn chọn. Vui lòng thử ngày khác hoặc đổi bến đi/đến."
+            : "No trips are available for this date and route. Please try another date or change your stations."
         );
         return;
       }
@@ -187,12 +188,22 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Ngày đi" : "Departure Date"}</label>
-          <input type="date" value={departureDate} min={getTodayDateString()} onChange={(e) => updateData({ departureDate: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+          <AppDateInput
+            value={departureDate}
+            min={getTodayDateString()}
+            onChange={(e) => updateData({ departureDate: e.target.value })}
+            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
+          />
         </div>
         {isRoundTrip && (
           <div className="space-y-2 animate-fade-in">
             <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Ngày về" : "Return Date"}</label>
-            <input type="date" value={returnDate} min={departureDate || getTodayDateString()} onChange={(e) => updateData({ returnDate: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+            <AppDateInput
+              value={returnDate}
+              min={departureDate || getTodayDateString()}
+              onChange={(e) => updateData({ returnDate: e.target.value })}
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
+            />
           </div>
         )}
       </div>

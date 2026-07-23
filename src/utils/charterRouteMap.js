@@ -10,8 +10,45 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
+/** Điểm → { latitude, longitude }. Hỗ trợ GeoJSON [lng,lat], [lat,lng] (VN), và object. */
+const toLatLngPoint = (point) => {
+  if (!point) return null;
+
+  if (Array.isArray(point) && point.length >= 2) {
+    const a = Number(point[0]);
+    const b = Number(point[1]);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    // VN: lat ~8–24, lng ~102–110. GeoJSON chuẩn là [lng, lat].
+    const looksLikeLatLng = Math.abs(a) <= 60 && Math.abs(b) > 60;
+    if (looksLikeLatLng) return { latitude: a, longitude: b };
+    return { latitude: b, longitude: a };
+  }
+
+  if (typeof point === "object") {
+    const lat = Number(point.latitude ?? point.lat ?? point.Latitude);
+    const lng = Number(point.longitude ?? point.lng ?? point.lon ?? point.Longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { latitude: lat, longitude: lng };
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Parse routeGeometry đã vẽ (GPS) — KHÔNG dùng để nối thẳng các bến.
+ * Hỗ trợ LineString / MultiLineString / Feature / mảng điểm / {lat,lng}.
+ */
 export const geometryToCoordinates = (geometry) => {
   if (!geometry) return [];
+
+  if (typeof geometry === "string") {
+    try {
+      return geometryToCoordinates(JSON.parse(geometry));
+    } catch {
+      return [];
+    }
+  }
 
   if (typeof geometry === "object" && !Array.isArray(geometry)) {
     if (geometry.type === "Feature" && geometry.geometry) {
@@ -23,20 +60,31 @@ export const geometryToCoordinates = (geometry) => {
     if (geometry.type === "LineString" && Array.isArray(geometry.coordinates)) {
       return geometryToCoordinates(geometry.coordinates);
     }
+    if (geometry.type === "MultiLineString" && Array.isArray(geometry.coordinates)) {
+      return geometry.coordinates.flatMap((line) => geometryToCoordinates(line));
+    }
     if (Array.isArray(geometry.coordinates)) {
       return geometryToCoordinates(geometry.coordinates);
     }
     if (Array.isArray(geometry.routeGeometry)) {
       return geometryToCoordinates(geometry.routeGeometry);
     }
+    if (Array.isArray(geometry.points)) {
+      return geometryToCoordinates(geometry.points);
+    }
+    if (Array.isArray(geometry.path)) {
+      return geometryToCoordinates(geometry.path);
+    }
   }
 
   if (!Array.isArray(geometry)) return [];
 
-  return geometry
-    .filter((point) => Array.isArray(point) && point.length >= 2)
-    .map(([lng, lat]) => ({ latitude: Number(lat), longitude: Number(lng) }))
-    .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude));
+  // Mảng các LineString lồng nhau
+  if (geometry.length > 0 && Array.isArray(geometry[0]) && Array.isArray(geometry[0][0])) {
+    return geometry.flatMap((line) => geometryToCoordinates(line));
+  }
+
+  return geometry.map(toLatLngPoint).filter(Boolean);
 };
 
 export const spliceStationsIntoRouteLine = (linePositions, orderedStations) => {

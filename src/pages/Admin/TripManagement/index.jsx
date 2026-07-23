@@ -1,10 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllTrips, toDdMmYyyy, getTripStatusLabel, normalizeTripStatusKey, isTripRunningStatus } from "../../../services/tripService";
-import { fetchAllRoutes } from "../../../services/routeService";
+import { fetchAllTrips, toDdMmYyyy, getTripStatusLabel, normalizeTripStatusKey, isTripRunningStatus, sortTripsForOpsList } from "../../../services/tripService";
+import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
+import { trackingHub } from "../../../services/trackingHubClient";
 import { FormSelect } from "../../../components/FormSelect";
+import { AppDateInput } from "../../../components/AppDateInput";
 import { getRouteShortLabel } from "../../../utils/routeTypes";
+import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../../../utils/charterBookingAdmin";
+import {
+  applyDelayPayloadToTrip,
+  formatActiveDelayLine,
+  formatAffectedTripLine,
+  formatPostResumeDelayLine,
+  isDelayActive,
+  mergeAffectedTripsIntoList,
+  pickAffectedTrips,
+  pickDelayMinutes,
+  pickDisplayArrival,
+  pickDisplayDeparture,
+} from "../../../utils/tripDelay";
 
 const todayInputValue = () => {
     const now = new Date();
@@ -66,6 +81,211 @@ const formatTime = (iso) => {
     return `${pad2(time.getHours())}:${pad2(time.getMinutes())}`;
 };
 
+const isUuid = (value) => /^[0-9a-f-]{36}$/i.test(String(value || "").trim());
+
+const cleanLabel = (value) => {
+    const text = String(value ?? "").trim();
+    if (!text || isUuid(text)) return "";
+    return text;
+};
+
+/** Lấy nhãn bến từ object / string / stop list — không hiện UUID. */
+const labelFromStationLike = (station) => {
+    if (station == null || station === "") return "";
+    if (typeof station === "string") return cleanLabel(station);
+    return cleanLabel(
+        station.stationName
+        || station.name
+        || station.StationName
+        || station.stationCode
+        || station.code
+        || station.StationCode,
+    );
+};
+
+const labelFromStop = (stop) => {
+    if (!stop) return "";
+    return labelFromStationLike(stop)
+        || labelFromStationLike(stop.station)
+        || labelFromStationLike(stop.Station)
+        || cleanLabel(stop.stationName)
+        || cleanLabel(stop.stationCode);
+};
+
+/** Mã tuyến kiểu WB-BD-LB / RS-TT-BD → [BD, LB] */
+const codesFromRouteCode = (routeCode) => {
+    const parts = String(routeCode || "")
+        .trim()
+        .toUpperCase()
+        .split("-")
+        .map((p) => p.trim())
+        .filter(Boolean);
+    if (parts.length < 3) return null;
+    // Bỏ prefix dịch vụ (WB, RS, CH, SOS…)
+    const stations = parts.slice(1);
+    if (stations.length < 2) return null;
+    return { from: stations[0], to: stations[stations.length - 1] };
+};
+
+/** "WATERBUS - BACH DANG - LINH DONG" → BACH DANG / LINH DONG */
+const namesFromRouteName = (routeName) => {
+    const parts = String(routeName || "")
+        .split(/\s[-–—]\s/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+    if (parts.length < 2) return null;
+    const skip = /^(waterbus|bus|sightseeing|charter|tuyến)$/i;
+    const stations = skip.test(parts[0]) ? parts.slice(1) : parts;
+    if (stations.length < 2) return null;
+    return { from: stations[0], to: stations[stations.length - 1] };
+};
+
+const resolveStationLabel = (trip, edge = "from", routeMeta = null) => {
+    const station = edge === "to"
+        ? (trip?.toStation ?? trip?.ToStation)
+        : (trip?.fromStation ?? trip?.FromStation);
+    const fallbackName = edge === "to"
+        ? (trip?.toStationName ?? trip?.ToStationName ?? trip?.endStationName ?? trip?.destinationName)
+        : (trip?.fromStationName ?? trip?.FromStationName ?? trip?.startStationName ?? trip?.originName);
+    const fallbackCode = edge === "to"
+        ? (trip?.toStationCode ?? trip?.ToStationCode ?? trip?.endStationCode)
+        : (trip?.fromStationCode ?? trip?.FromStationCode ?? trip?.startStationCode);
+
+    const direct = labelFromStationLike(station) || cleanLabel(fallbackName) || cleanLabel(fallbackCode);
+    if (direct) return direct;
+
+    const list = Array.isArray(trip?.stops)
+        ? [...trip.stops].sort((a, b) => Number(a?.stopOrder ?? 0) - Number(b?.stopOrder ?? 0))
+        : [];
+    if (list.length) {
+        const stop = edge === "to" ? list[list.length - 1] : list[0];
+        const fromStop = labelFromStop(stop);
+        if (fromStop) return fromStop;
+    }
+
+    const routeStops = Array.isArray(routeMeta?.stops)
+        ? [...routeMeta.stops].sort((a, b) => Number(a?.stopOrder ?? 0) - Number(b?.stopOrder ?? 0))
+        : [];
+    if (routeStops.length) {
+        const stop = edge === "to" ? routeStops[routeStops.length - 1] : routeStops[0];
+        const fromRouteStop = labelFromStop(stop);
+        if (fromRouteStop) return fromRouteStop;
+    }
+
+    const fromRouteName = namesFromRouteName(trip?.routeName || routeMeta?.routeName);
+    if (fromRouteName) return edge === "to" ? fromRouteName.to : fromRouteName.from;
+
+    const fromCode = codesFromRouteCode(trip?.routeCode || routeMeta?.routeCode);
+    if (fromCode) return edge === "to" ? fromCode.to : fromCode.from;
+
+    return "—";
+};
+
+const resolveBoatLabel = (trip, lang) => {
+    const boat = trip?.boat || trip?.Boat || trip?.vessel || trip?.Vessel || {};
+    const code = cleanLabel(
+        trip?.boatCode
+        || trip?.BoatCode
+        || trip?.vesselCode
+        || boat.boatCode
+        || boat.vesselCode
+        || boat.code
+        || boat.BoatCode,
+    );
+    const name = cleanLabel(
+        trip?.boatName
+        || trip?.BoatName
+        || trip?.vesselName
+        || boat.boatName
+        || boat.vesselName
+        || boat.name
+        || boat.BoatName,
+    );
+    if (code || name) return [code, name].filter(Boolean).join(" · ");
+
+    const boatId = trip?.boatId || trip?.BoatId || boat.boatId || boat.vesselId || boat.id;
+    const hasCapacity = trip?.capacitySnapshot != null || boat.capacity != null || boat.seatCount != null;
+    if (boatId || hasCapacity) {
+        return lang === "VN" ? "Đã gán tàu" : "Boat assigned";
+    }
+    return lang === "VN" ? "Chưa gán tàu" : "No boat";
+};
+
+const resolvePaxLabel = (trip) => {
+    const pax = trip?.totalPassengerCount
+        ?? trip?.uniquePassengerCount
+        ?? trip?.onboardPassengerCount
+        ?? trip?.TotalPassengerCount
+        ?? trip?.passengerCount;
+    const cap = trip?.capacitySnapshot
+        ?? trip?.CapacitySnapshot
+        ?? trip?.boat?.capacity
+        ?? trip?.boat?.seatCount
+        ?? trip?.Boat?.capacity;
+    const paxN = pax === null || pax === undefined || pax === "" ? null : Number(pax);
+    const capN = cap === null || cap === undefined || cap === "" ? null : Number(cap);
+    if (Number.isFinite(capN)) {
+        return `${Number.isFinite(paxN) ? paxN : 0}/${capN}`;
+    }
+    if (Number.isFinite(paxN)) return String(paxN);
+    return "—";
+};
+
+const resolveRemainingSeats = (trip) => {
+    const rem = trip?.remainingSeats ?? trip?.availableSeats ?? trip?.AvailableSeats;
+    const n = Number(rem);
+    return Number.isFinite(n) ? n : null;
+};
+
+const resolveTripThumb = (trip) => {
+    const boat = trip?.boat || trip?.Boat || {};
+    const candidates = [
+        trip?.boatImageUrl,
+        boat.imageUrl,
+        Array.isArray(boat.imageUrls) ? boat.imageUrls[0] : "",
+        trip?.fromStation?.imageUrl,
+        trip?.fromStation?.stationImageUrl,
+        Array.isArray(trip?.stops) ? trip.stops[0]?.stationImageUrl : "",
+    ].filter(Boolean);
+    const first = candidates.find((url) => {
+        const s = String(url).trim();
+        return s && !/image\s*not\s*available/i.test(s);
+    });
+    if (first) return first;
+    return getBoatImageUrl(boat, DEFAULT_BOAT_IMAGE);
+};
+
+const formatFareAdjustment = (trip, lang) => {
+    const adj = trip?.fareAdjustment || trip?.FareAdjustment || trip?.effectiveFareAdjustment;
+    if (!adj) return null;
+    if (typeof adj === "string") return adj;
+    const label = adj.name || adj.label || adj.type || adj.adjustmentType || adj.code;
+    const pct = adj.percent ?? adj.percentage ?? adj.surchargePercent;
+    const amount = adj.amount ?? adj.surchargeAmount ?? adj.extraAmount;
+    const parts = [];
+    if (label) parts.push(String(label));
+    if (pct != null && Number.isFinite(Number(pct))) parts.push(`+${Number(pct)}%`);
+    else if (amount != null && Number.isFinite(Number(amount))) {
+        parts.push(`+${Number(amount).toLocaleString("vi-VN")}đ`);
+    }
+    if (parts.length) return parts.join(" · ");
+    return lang === "VN" ? "Có phụ thu" : "Surcharge";
+};
+
+const formatStopTimesBrief = (trip) => {
+    const list = Array.isArray(trip?.stops)
+        ? [...trip.stops].sort((a, b) => Number(a?.stopOrder ?? 0) - Number(b?.stopOrder ?? 0))
+        : [];
+    if (list.length < 2) return null;
+    return list
+        .map((stop) => {
+            const name = labelFromStop(stop) || cleanLabel(stop.stationCode) || `#${stop.stopOrder}`;
+            const t = formatTime(stop.scheduledDeparture || stop.scheduledArrival || stop.plannedDepartureTime);
+            return `${name} ${t}`;
+        })
+        .join(" → ");
+};
+
 export function TripManagement() {
     const { lang } = useApp();
     const navigate = useNavigate();
@@ -75,13 +295,16 @@ export function TripManagement() {
     const [errorMsg, setErrorMsg] = useState("");
 
     const [routes, setRoutes] = useState([]);
+    const [routeDetailsByCode, setRouteDetailsByCode] = useState({});
     const [operatingDate, setOperatingDate] = useState(todayInputValue());
-    const [routeCode, setRouteCode] = useState("All");
     const [statusFilter, setStatusFilter] = useState("All");
 
     useEffect(() => {
         fetchAllRoutes()
-            .then((data) => setRoutes(data || []))
+            .then((data) => {
+                const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+                setRoutes(list);
+            })
             .catch((error) => console.error("Lỗi tải danh sách tuyến cho bộ lọc:", error));
     }, []);
 
@@ -92,10 +315,10 @@ export function TripManagement() {
                 setErrorMsg("");
                 const params = {};
                 if (operatingDate) params.operatingDate = toDdMmYyyy(operatingDate);
-                if (routeCode !== "All") params.routeCode = routeCode;
                 if (statusFilter !== "All") params.status = statusFilter;
                 const data = await fetchAllTrips(params);
-                setTrips(data || []);
+                const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+                setTrips(sortTripsForOpsList(list));
             } catch (error) {
                 console.error("Lỗi giao diện tải danh sách chuyến tàu:", error);
                 setErrorMsg(
@@ -108,7 +331,88 @@ export function TripManagement() {
             }
         };
         getTripsData();
-    }, [lang, operatingDate, routeCode, statusFilter]);
+    }, [lang, operatingDate, statusFilter]);
+
+    const boatIdsKey = useMemo(
+      () => [...new Set(
+        trips.map((t) => String(t?.boatId || t?.boat?.boatId || "").trim()).filter(Boolean),
+      )].sort().join("|"),
+      [trips],
+    );
+
+    // JoinBoat theo danh sách + merge tripDelayUpdated / affectedTrips (không tự tính lan delay).
+    useEffect(() => {
+      const boatIds = boatIdsKey ? boatIdsKey.split("|") : [];
+      if (!boatIds.length) return undefined;
+
+      boatIds.forEach((boatId) => {
+        trackingHub.joinBoat(boatId).catch(() => {});
+      });
+
+      const unsub = trackingHub.subscribeTripDelayUpdated((payload) => {
+        if (!payload) return;
+        setTrips((prev) => {
+          let next = prev.map((trip) => applyDelayPayloadToTrip(trip, payload));
+          next = mergeAffectedTripsIntoList(next, pickAffectedTrips(payload));
+          return next;
+        });
+      });
+
+      return () => {
+        unsub();
+        boatIds.forEach((boatId) => {
+          trackingHub.leaveBoat(boatId).catch(() => {});
+        });
+      };
+    }, [boatIdsKey]);
+
+    // Enrich tuyến (kèm stops) để hiện hành trình khi list trip không trả from/to.
+    useEffect(() => {
+        const codes = [...new Set(
+            trips.map((t) => String(t?.routeCode || "").trim()).filter(Boolean),
+        )];
+        if (!codes.length || !routes.length) return undefined;
+
+        let active = true;
+        const enrich = async () => {
+            const next = { ...routeDetailsByCode };
+            await Promise.all(codes.map(async (code) => {
+                if (next[code]?.stops?.length) return;
+                const summary = routes.find((r) => String(r.routeCode || "").toUpperCase() === code.toUpperCase());
+                if (summary?.stops?.length) {
+                    next[code] = summary;
+                    return;
+                }
+                const routeId = summary?.routeId || summary?.id;
+                if (!routeId) {
+                    next[code] = summary || { routeCode: code, routeName: summary?.routeName };
+                    return;
+                }
+                try {
+                    const detail = await fetchRouteDetail(routeId);
+                    const unwrapped = detail?.data && typeof detail.data === "object" ? detail.data : detail;
+                    if (unwrapped) next[code] = unwrapped;
+                } catch {
+                    next[code] = summary || { routeCode: code };
+                }
+            }));
+            if (active) setRouteDetailsByCode(next);
+        };
+        enrich();
+        return () => { active = false; };
+    // Chỉ chạy khi trips/routes đổi — không phụ thuộc routeDetailsByCode để tránh loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [trips, routes]);
+
+    const routeByCode = useMemo(() => {
+        const map = { ...routeDetailsByCode };
+        routes.forEach((route) => {
+            const code = String(route?.routeCode || "").trim();
+            if (!code) return;
+            if (!map[code]) map[code] = route;
+        });
+        return map;
+    }, [routes, routeDetailsByCode]);
 
     const stats = {
         total: trips.length,
@@ -116,11 +420,6 @@ export function TripManagement() {
         running: trips.filter((t) => isTripRunningStatus(t.tripStatus)).length,
         cancelled: trips.filter((t) => normalizeTripStatusKey(t.tripStatus) === "Cancelled").length,
     };
-
-    const routeOptions = [
-        { value: "All", label: lang === "VN" ? "Tất cả tuyến" : "All routes" },
-        ...routes.map((route) => ({ value: route.routeCode, label: `${route.routeCode} — ${route.routeName}` })),
-    ];
 
     const statusOptions = [
         { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All status" },
@@ -142,7 +441,9 @@ export function TripManagement() {
                         {lang === "VN" ? "Quản lý Chuyến tàu" : "Trip Management"}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN" ? "Danh sách chuyến tàu vận hành theo tuyến, ngày và trạng thái." : "Manage operating trips by route, date and status."}
+                        {lang === "VN"
+                            ? "Chuyến đang chuẩn bị / đang chạy xếp trước — lọc theo ngày và trạng thái."
+                            : "Preparing / running trips first — filter by date and status."}
                     </p>
                 </div>
                 <button
@@ -193,148 +494,217 @@ export function TripManagement() {
             </div>
 
             {/* THANH BỘ LỌC */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-stretch xl:items-center overflow-visible relative z-20">
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col sm:flex-row gap-3 items-stretch sm:items-center overflow-visible relative z-20">
                 <div className="flex items-center gap-2 min-w-0">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">
                         {lang === "VN" ? "Ngày vận hành" : "Operating date"}
                     </span>
-                    <input
-                        type="date"
+                    <AppDateInput
                         value={operatingDate}
                         onChange={(e) => setOperatingDate(e.target.value)}
                         className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                     />
                 </div>
 
-                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 w-full xl:w-auto justify-end overflow-visible">
-                    <div className="relative z-30 flex items-center gap-2 min-w-0">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap hidden sm:inline">
-                            {lang === "VN" ? "Tuyến" : "Route"}
-                        </span>
-                        <FormSelect
-                            value={routeCode}
-                            onChange={setRouteCode}
-                            options={routeOptions}
-                            searchable
-                            className="min-w-55 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
-                        />
-                    </div>
-
-                    <div className="relative z-20 flex items-center gap-2 min-w-0">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap hidden sm:inline">
-                            {lang === "VN" ? "Trạng thái" : "Status"}
-                        </span>
-                        <FormSelect
-                            value={statusFilter}
-                            onChange={setStatusFilter}
-                            menuAlign="right"
-                            options={statusOptions}
-                            className="min-w-42.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
-                        />
-                    </div>
+                <div className="relative z-20 flex items-center gap-2 min-w-0 sm:ml-auto">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">
+                        {lang === "VN" ? "Trạng thái" : "Status"}
+                    </span>
+                    <FormSelect
+                        value={statusFilter}
+                        onChange={setStatusFilter}
+                        menuAlign="right"
+                        options={statusOptions}
+                        className="min-w-48 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                    />
                 </div>
             </div>
 
             {/* BẢNG DANH SÁCH CHUYẾN TÀU */}
             <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full table-fixed text-left border-collapse">
+                        <colgroup>
+                            <col className="w-[28%]" />
+                            <col className="w-[22%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[10%]" />
+                        </colgroup>
                         <thead>
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
-                                <th className="py-4 px-6">{lang === "VN" ? "Chuyến tàu" : "Trip"}</th>
-                                <th className="py-4 px-4">{lang === "VN" ? "Tuyến" : "Route"}</th>
-                                <th className="py-4 px-4 text-center">{lang === "VN" ? "Ngày vận hành" : "Operating Date"}</th>
-                                <th className="py-4 px-4 text-center">{lang === "VN" ? "Giờ chạy" : "Departure → Arrival"}</th>
-                                <th className="py-4 px-4 text-center">{lang === "VN" ? "Sức chứa" : "Capacity"}</th>
-                                <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
-                                <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
+                                <th className="py-3.5 px-5 text-left">{lang === "VN" ? "Chuyến / Tàu" : "Trip / Boat"}</th>
+                                <th className="py-3.5 px-4 text-left">{lang === "VN" ? "Hành trình" : "Stations"}</th>
+                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Giờ chạy" : "Time"}</th>
+                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "HK / Ghế còn" : "Pax / Left"}</th>
+                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Hành động" : "Actions"}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={7} className="text-center py-16 text-slate-400 font-medium">
+                                    <td colSpan={6} className="text-center py-16 text-slate-400 font-medium">
                                         <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] rounded-full animate-spin mx-auto mb-2"></div>
                                         <p className="text-xs tracking-wider animate-pulse">{lang === "VN" ? "Đang tải danh sách chuyến tàu..." : "Loading trip list..."}</p>
                                     </td>
                                 </tr>
                             ) : trips.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={6} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         {lang === "VN" ? "Không có chuyến tàu nào phù hợp với bộ lọc." : "No trips found matching filters."}
                                     </td>
                                 </tr>
                             ) : (
-                                trips.map((trip) => (
-                                    <tr key={trip.tripId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
+                                trips.map((trip) => {
+                                    const boatLabel = resolveBoatLabel(trip, lang);
+                                    const routeMeta = routeByCode[String(trip.routeCode || "").trim()] || null;
+                                    const fromLabel = resolveStationLabel(trip, "from", routeMeta);
+                                    const toLabel = resolveStationLabel(trip, "to", routeMeta);
+                                    const stopCount = trip.stopCount
+                                        ?? (Array.isArray(trip.stops) ? trip.stops.length : null)
+                                        ?? (Array.isArray(routeMeta?.stops) ? routeMeta.stops.length : null);
+                                    const thumb = resolveTripThumb(trip);
+                                    const remaining = resolveRemainingSeats(trip);
+                                    const fareAdj = formatFareAdjustment(trip, lang);
+                                    const stopTimes = formatStopTimesBrief(trip);
 
-                                        {/* Cột 1: Mã chuyến + loại (Bus / Sightseeing / Charter) theo routeType */}
-                                        <td className="py-4 px-6">
-                                            <div className="flex items-center gap-4">
-                                                <div className="space-y-1">
-                                                    <h4 className="font-headline font-black text-slate-800 dark:text-white text-xs tracking-wide">
-                                                        {trip.tripCode}
-                                                    </h4>
-                                                    <span className={`inline-flex text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${routeKindBadgeClass(trip.tripType === "Charter" ? "Charter" : trip.routeType)}`}>
-                                                        {trip.tripType === "Charter"
-                                                            ? "Charter"
-                                                            : getRouteShortLabel(trip.routeType, lang)}
-                                                    </span>
+                                    return (
+                                        <tr key={trip.tripId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
+                                            <td className="py-3.5 px-5 align-middle">
+                                                <div className="flex min-w-0 items-start gap-3">
+                                                    <img
+                                                        src={thumb}
+                                                        alt=""
+                                                        className="h-12 w-12 shrink-0 rounded-xl object-cover bg-slate-100"
+                                                        onError={(e) => { e.currentTarget.src = DEFAULT_BOAT_IMAGE; }}
+                                                    />
+                                                    <div className="min-w-0 space-y-1">
+                                                        <h4 className="truncate font-headline text-xs font-black tracking-wide text-slate-800 dark:text-white">
+                                                            {trip.tripCode}
+                                                        </h4>
+                                                        <p className="truncate text-[11px] font-bold text-slate-500">
+                                                            {boatLabel}
+                                                        </p>
+                                                        <div className="flex flex-wrap items-center gap-1.5">
+                                                            <span className={`inline-flex rounded-md px-2 py-0.5 text-[9px] font-bold uppercase ${routeKindBadgeClass(trip.tripType === "Charter" ? "Charter" : trip.routeType)}`}>
+                                                                {trip.tripType === "Charter"
+                                                                    ? "Charter"
+                                                                    : getRouteShortLabel(trip.routeType, lang)}
+                                                            </span>
+                                                            {trip.operatingDate ? (
+                                                                <span className="text-[10px] font-medium text-slate-400">
+                                                                    {trip.operatingDate}
+                                                                </span>
+                                                            ) : null}
+                                                            {fareAdj ? (
+                                                                <span className="inline-flex rounded-md bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" title={fareAdj}>
+                                                                    {fareAdj}
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
+                                            </td>
 
-                                        {/* Cột 2: Tuyến — tên + mã (loại đã ở cột 1) */}
-                                        <td className="py-4 px-4 max-w-[16rem]">
-                                            <p className="font-bold text-slate-800 dark:text-white truncate">{trip.routeName}</p>
-                                            <span className="text-[10px] text-slate-400 mt-1 block">{trip.routeCode}</span>
-                                        </td>
+                                            <td className="py-3.5 px-4 align-middle">
+                                                <div className="flex min-w-0 items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
+                                                    <span className="max-w-[7.5rem] truncate" title={fromLabel}>{fromLabel}</span>
+                                                    <span className="material-symbols-outlined shrink-0 text-[14px] text-[#FFD100]">arrow_forward</span>
+                                                    <span className="max-w-[7.5rem] truncate" title={toLabel}>{toLabel}</span>
+                                                </div>
+                                                {stopCount != null ? (
+                                                    <p className="mt-1 text-[10px] font-medium text-slate-400">
+                                                        {stopCount} {lang === "VN" ? "bến" : "stops"}
+                                                        {trip.routeName ? ` · ${trip.routeName}` : ""}
+                                                    </p>
+                                                ) : null}
+                                                {stopTimes ? (
+                                                    <p className="mt-1 line-clamp-2 text-[10px] font-medium leading-relaxed text-slate-400" title={stopTimes}>
+                                                        {stopTimes}
+                                                    </p>
+                                                ) : null}
+                                            </td>
 
-                                        {/* Cột 3: Ngày vận hành */}
-                                        <td className="py-4 px-4 text-center">
-                                            <span className="font-bold text-slate-600 dark:text-slate-300">{trip.operatingDate}</span>
-                                        </td>
+                                            <td className="py-3.5 px-3 align-middle whitespace-nowrap">
+                                                <span className="font-bold tabular-nums text-slate-600 dark:text-slate-300">
+                                                    {formatTime(pickDisplayDeparture(trip))}
+                                                    <span className="mx-1 text-slate-300">→</span>
+                                                    {formatTime(pickDisplayArrival(trip))}
+                                                </span>
+                                                {(() => {
+                                                    const active = isDelayActive(trip);
+                                                    const mins = pickDelayMinutes(trip);
+                                                    const affectedLine = formatAffectedTripLine(trip, lang);
+                                                    if (active) {
+                                                        return (
+                                                            <p className="mt-1 max-w-[11rem] text-[10px] font-bold leading-snug text-amber-700 dark:text-amber-300">
+                                                                {formatActiveDelayLine(trip, { lang })}
+                                                            </p>
+                                                        );
+                                                    }
+                                                    if (affectedLine) {
+                                                        return (
+                                                            <p className="mt-1 max-w-[11rem] text-[10px] font-bold leading-snug text-orange-700 dark:text-orange-300">
+                                                                {affectedLine}
+                                                            </p>
+                                                        );
+                                                    }
+                                                    if (mins > 0) {
+                                                        return (
+                                                            <p className="mt-1 text-[10px] font-bold text-orange-700 dark:text-orange-300">
+                                                                {formatPostResumeDelayLine(trip, lang)}
+                                                            </p>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+                                            </td>
 
-                                        {/* Cột 4: Giờ chạy */}
-                                        <td className="py-4 px-4 text-center">
-                                            <span className="font-bold text-slate-600 dark:text-slate-300">
-                                                {formatTime(trip.departureTime)} → {formatTime(trip.arrivalTime)}
-                                            </span>
-                                        </td>
+                                            <td className="py-3.5 px-3 align-middle">
+                                                <div className="space-y-1">
+                                                    <span className="inline-flex rounded-lg border bg-slate-100 px-2.5 py-1 text-xs font-black text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400">
+                                                        {resolvePaxLabel(trip)}
+                                                    </span>
+                                                    {remaining != null ? (
+                                                        <p className="text-[10px] font-bold text-slate-400">
+                                                            {lang === "VN" ? `Còn ${remaining} ghế` : `${remaining} seats left`}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+                                            </td>
 
-                                        {/* Cột 5: Sức chứa */}
-                                        <td className="py-4 px-4 text-center">
-                                            <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border dark:border-slate-700 text-slate-600 dark:text-slate-300">
-                                                {trip.capacitySnapshot ?? "—"}
-                                            </span>
-                                        </td>
+                                            <td className="py-3.5 px-3 align-middle">
+                                                <div className="flex flex-col items-start gap-1">
+                                                    <span
+                                                        title={trip.statusNote || ""}
+                                                        className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${tripStatusBadgeClass(trip.tripStatus)}`}
+                                                    >
+                                                        <span className={`h-1.5 w-1.5 rounded-full ${tripStatusDotClass(trip.tripStatus)}`} />
+                                                        {getTripStatusLabel(trip.tripStatus, lang)}
+                                                    </span>
+                                                    {isDelayActive(trip) ? (
+                                                        <span className="inline-flex rounded-lg border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wide text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
+                                                            {lang === "VN" ? "Đang dừng / Delay" : "Stopped / Delay"}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                            </td>
 
-                                        {/* Cột 6: Trạng thái */}
-                                        <td className="py-4 px-4 text-center">
-                                            <span
-                                                title={trip.statusNote || ""}
-                                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${tripStatusBadgeClass(trip.tripStatus)}`}
-                                            >
-                                                <span className={`w-1.5 h-1.5 rounded-full ${tripStatusDotClass(trip.tripStatus)}`}></span>
-                                                {getTripStatusLabel(trip.tripStatus, lang)}
-                                            </span>
-                                        </td>
-
-                                        {/* Cột 7: Hành động */}
-                                        <td className="py-4 px-6 text-center">
-                                            <div className="flex items-center justify-center gap-2">
+                                            <td className="py-3.5 px-3 align-middle">
                                                 <button
                                                     type="button"
                                                     onClick={() => navigate(`/admin/trips-management/${trip.tripId}`)}
-                                                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-[#124757] dark:hover:text-yellow-400 shadow-sm transition-colors"
+                                                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:text-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:hover:text-yellow-400"
                                                     title={lang === "VN" ? "Xem chi tiết chuyến" : "View trip detail"}
                                                 >
                                                     <span className="material-symbols-outlined text-[18px]">visibility</span>
                                                 </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

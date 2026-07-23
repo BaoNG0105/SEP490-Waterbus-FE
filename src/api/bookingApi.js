@@ -1,6 +1,7 @@
 import api from './axios';
 
-// API: Tạo booking vé lẻ (Waterbus). Hỗ trợ khứ hồi qua returnTripCode/returnItems trong cùng 1 booking.
+// API: Tạo booking vé lẻ (Waterbus/Sightseeing). Hỗ trợ khứ hồi qua returnTripCode/returnItems.
+// Có thể kèm insuranceSelected + insurancePackageId (bookingType SeatBooking).
 export const createBooking = (data) =>
     api.post('/bookings', data).then(response => response.data);
 

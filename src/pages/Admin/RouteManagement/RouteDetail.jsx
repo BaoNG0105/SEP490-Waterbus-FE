@@ -9,6 +9,7 @@ import {
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchWaterwayDetail } from "../../../services/waterwayService";
 import { WaterwayMap } from "../../../components/WaterwayMap";
+import { geometryToCoordinates } from "../../../utils/charterRouteMap";
 import { getRouteKindLabel, getRouteShortLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
 
@@ -26,14 +27,6 @@ const routeKindBadgeClass = (route) => {
         default:
             return "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600";
     }
-};
-
-// routeGeometry trả về dạng GeoJSON [lng, lat] -> quy đổi sang {latitude, longitude} cho WaterwayMap
-const geometryToCoordinates = (geometry) => {
-    if (!Array.isArray(geometry)) return [];
-    return geometry
-        .filter(point => Array.isArray(point) && point.length >= 2)
-        .map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
 };
 
 export function RouteDetail() {

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { logout } from "../../redux/authSlice";
 import { fetchCurrentUserProfile } from "../../services/authService";
-import { fetchMyPoints } from "../../services/pointService";
+import { fetchMyPoints, getPointTransactionLabel } from "../../services/pointService";
 import { notify } from "../../utils/swalToast";
 
 export const Profile = () => {
@@ -13,7 +13,7 @@ export const Profile = () => {
   const dispatch = useDispatch();
 
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-  const [pointsData, setPointsData] = useState({ pointBalance: 0, totalCount: 0, page: 1, pageSize: 10, transactions: [] });
+  const [pointsData, setPointsData] = useState({ pointBalance: 0, totalCount: 0, page: 1, pageSize: 20, transactions: [] });
   const [isLoadingPoints, setIsLoadingPoints] = useState(false);
   const [showPointsModal, setShowPointsModal] = useState(false);
   const [profileData, setProfileData] = useState({
@@ -54,12 +54,12 @@ export const Profile = () => {
   const loadPoints = async (page = 1) => {
     try {
       setIsLoadingPoints(true);
-      const data = await fetchMyPoints({ page, pageSize: 10 });
+      const data = await fetchMyPoints({ page, pageSize: 20 });
       setPointsData({
         pointBalance: data.pointBalance || 0,
         totalCount: data.totalCount || 0,
         page: data.page || page,
-        pageSize: data.pageSize || 10,
+        pageSize: data.pageSize || 20,
         transactions: data.transactions || [],
       });
     } catch (error) {
@@ -74,11 +74,11 @@ export const Profile = () => {
   }, []);
 
   const transactionTypeMeta = {
-    Earn: { label: lang === "VN" ? "Tích điểm" : "Earned", color: "emerald" },
-    Redeem: { label: lang === "VN" ? "Dùng điểm" : "Redeemed", color: "rose" },
-    RedeemCancelled: { label: lang === "VN" ? "Hủy dùng điểm" : "Redeem Cancelled", color: "amber" },
-    RedeemReturned: { label: lang === "VN" ? "Hoàn điểm" : "Redeem Returned", color: "sky" },
-    EarnRevoked: { label: lang === "VN" ? "Thu hồi điểm" : "Earn Revoked", color: "slate" },
+    Earn: { color: "emerald" },
+    Redeem: { color: "rose" },
+    RedeemCancelled: { color: "amber" },
+    RedeemReturned: { color: "sky" },
+    EarnRevoked: { color: "slate" },
   };
 
   const totalPointsPages = Math.max(1, Math.ceil(pointsData.totalCount / pointsData.pageSize));
@@ -271,13 +271,14 @@ export const Profile = () => {
               ) : (
                 <div className="space-y-3">
                   {pointsData.transactions.map((tx) => {
-                    const meta = transactionTypeMeta[tx.transactionType] || { label: tx.transactionType, color: "slate" };
+                    const meta = transactionTypeMeta[tx.transactionType] || { color: "slate" };
+                    const typeLabel = getPointTransactionLabel(tx.transactionType, lang);
                     return (
                       <div key={tx.id} className="p-4 rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${badgeClassMap[meta.color]}`}>
-                              {meta.label}
+                              {typeLabel}
                             </span>
                             <p className="text-sm text-slate-700 dark:text-slate-200 font-medium mt-2">{tx.description}</p>
                             {tx.bookingCode && (

@@ -5,6 +5,7 @@ import { fetchUserRoles, createUser } from "../../../services/userService";
 import { getRoleSystemName } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
+import { AppDateInput } from "../../../components/AppDateInput";
 import { NationalitySelect } from "../../../components/NationalitySelect";
 import { StationAssignField } from "../../../components/StationAssignField";
 import { notify } from "../../../utils/swalToast";
@@ -178,7 +179,7 @@ export function CreateManager() {
                         </div>
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Ngày sinh" : "Date of Birth"}</label>
-                            <input type="date" value={formData.dateOfBirth} onChange={(e) => handleInputChange("dateOfBirth", e.target.value)} className={inputStyle} />
+                            <AppDateInput value={formData.dateOfBirth} onChange={(e) => handleInputChange("dateOfBirth", e.target.value)} className={inputStyle} />
                         </div>
                     </div>
 

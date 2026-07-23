@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../context/AppContext";
 import { syncBookingPaymentByOrderCode } from "../../services/paymentService";
+import { fetchMyPoints } from "../../services/pointService";
 
 const pickOrderCode = (params) =>
   String(
@@ -115,6 +116,8 @@ export function PaymentResult() {
         syncedRef.current = orderCode;
         try {
           await syncBookingPaymentByOrderCode(orderCode);
+          // Thanh toán xong (Redeem điểm nếu có) → làm mới số dư/lịch sử điểm.
+          fetchMyPoints({ page: 1, pageSize: 1 }).catch(() => {});
         } catch (error) {
           console.error("PayOS orderCode sync failed:", error);
           const status = error?.response?.status;

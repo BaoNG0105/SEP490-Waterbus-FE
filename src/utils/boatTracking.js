@@ -247,6 +247,154 @@ export const loadStickyBoatLocationMap = () => {
 };
 
 /**
+ * BE dwellCountdown: tàu đã Arrived chưa Departed — đếm ngược thời gian dừng tại bến.
+ * Có trong tracking/latest, BoatLocationUpdated, TripStopUpdated, operations/schedule.
+ */
+export const normalizeDwellCountdown = (raw) => {
+  if (!raw || typeof raw !== "object") return null;
+  const src = raw.dwellCountdown ?? raw.DwellCountdown
+    ?? ((raw.endsAt || raw.EndsAt || raw.remainingSeconds != null || raw.RemainingSeconds != null)
+      ? raw
+      : null);
+  if (!src || typeof src !== "object") return null;
+
+  const endsAt = src.endsAt ?? src.EndsAt ?? null;
+  const startedAt = src.startedAt ?? src.StartedAt ?? null;
+  const remainingSecondsRaw = Number(src.remainingSeconds ?? src.RemainingSeconds);
+  const remainingMinutesRaw = Number(src.remainingMinutes ?? src.RemainingMinutes);
+  const stayDurationMinutes = Number(src.stayDurationMinutes ?? src.StayDurationMinutes);
+  const stopOrder = Number(src.stopOrder ?? src.StopOrder);
+  const isOverdueRaw = src.isOverdue ?? src.IsOverdue;
+
+  // Cần ít nhất endsAt hoặc remainingSeconds để FE đếm ngược.
+  if (!endsAt && !Number.isFinite(remainingSecondsRaw) && !Number.isFinite(remainingMinutesRaw)) {
+    return null;
+  }
+
+  return {
+    tripStopId: src.tripStopId ?? src.TripStopId ?? null,
+    stationId: src.stationId ?? src.StationId ?? null,
+    stationCode: String(src.stationCode ?? src.StationCode ?? "").trim() || null,
+    stationName: String(src.stationName ?? src.StationName ?? "").trim() || null,
+    stopOrder: Number.isFinite(stopOrder) ? stopOrder : null,
+    stayDurationMinutes: Number.isFinite(stayDurationMinutes) ? stayDurationMinutes : null,
+    startedAt: startedAt ? String(startedAt) : null,
+    endsAt: endsAt ? String(endsAt) : null,
+    remainingSeconds: Number.isFinite(remainingSecondsRaw) ? remainingSecondsRaw : null,
+    remainingMinutes: Number.isFinite(remainingMinutesRaw) ? remainingMinutesRaw : null,
+    isOverdue: isOverdueRaw === true || String(isOverdueRaw || "").toLowerCase() === "true",
+  };
+};
+
+/** Tính remaining realtime từ endsAt (ưu tiên) hoặc remainingSeconds snapshot từ BE. */
+export const resolveDwellRemaining = (dwell, now = Date.now()) => {
+  if (!dwell || typeof dwell !== "object") return null;
+  const endsMs = dwell.endsAt ? Date.parse(String(dwell.endsAt)) : NaN;
+  let remainingSeconds;
+  if (!Number.isNaN(endsMs)) {
+    remainingSeconds = Math.floor((endsMs - now) / 1000);
+  } else if (Number.isFinite(Number(dwell.remainingSeconds))) {
+    remainingSeconds = Math.floor(Number(dwell.remainingSeconds));
+  } else if (Number.isFinite(Number(dwell.remainingMinutes))) {
+    remainingSeconds = Math.floor(Number(dwell.remainingMinutes) * 60);
+  } else {
+    return null;
+  }
+  const isOverdue = dwell.isOverdue === true || remainingSeconds < 0;
+  const clamped = Math.max(0, remainingSeconds);
+  return {
+    remainingSeconds: clamped,
+    remainingMinutes: Math.ceil(clamped / 60),
+    isOverdue,
+  };
+};
+
+/** Format còn lại dạng m:ss (vd. 5:00, 1:09). */
+export const formatDwellClock = (remainingSeconds) => {
+  const total = Math.max(0, Math.floor(Number(remainingSeconds) || 0));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+};
+
+/** Bỏ prefix “Bến ” trùng khi ghép câu “tại bến …”. */
+const formatStationLabelForDwell = (nameOrCode) => {
+  const raw = String(nameOrCode || "").trim();
+  if (!raw) return "";
+  return raw.replace(/^Bến\s+/i, "").trim() || raw;
+};
+
+/**
+ * Dwell đang ở bến cuối (điểm đến) — không còn “giờ dừng để đi tiếp”.
+ * stayDurationMinutes = 0 ở terminal là bình thường; không báo quá giờ dừng.
+ */
+export const isDwellAtTerminalStop = (dwell, stops = []) => {
+  if (!dwell || typeof dwell !== "object") return false;
+  if (dwell.isLastStop === true || dwell.isTerminal === true || dwell.isDestination === true) {
+    return true;
+  }
+
+  const list = Array.isArray(stops)
+    ? [...stops].sort((a, b) => Number(a?.stopOrder ?? 0) - Number(b?.stopOrder ?? 0))
+    : [];
+  if (list.length === 0) return false;
+
+  const last = list[list.length - 1];
+  const lastOrder = Number(last?.stopOrder);
+  const lastStopId = String(last?.tripStopId || last?.TripStopId || "").trim();
+  const lastStationId = String(last?.stationId || last?.station?.stationId || "").trim();
+  const lastCode = String(last?.stationCode || last?.station?.stationCode || "").trim().toUpperCase();
+  const lastName = String(last?.stationName || last?.station?.stationName || "").trim().toLowerCase();
+
+  if (dwell.tripStopId && lastStopId && String(dwell.tripStopId) === lastStopId) return true;
+  if (dwell.stationId && lastStationId && String(dwell.stationId) === lastStationId) return true;
+  if (dwell.stationCode && lastCode && String(dwell.stationCode).trim().toUpperCase() === lastCode) {
+    return true;
+  }
+  if (
+    Number.isFinite(Number(dwell.stopOrder))
+    && Number.isFinite(lastOrder)
+    && Number(dwell.stopOrder) === lastOrder
+  ) {
+    return true;
+  }
+  const dwellName = String(dwell.stationName || "").trim().toLowerCase();
+  if (dwellName && lastName && (dwellName === lastName || dwellName.includes(lastName) || lastName.includes(dwellName))) {
+    return true;
+  }
+  return false;
+};
+
+/** Copy UI: dừng giữa tuyến → đếm ngược; bến cuối → đến điểm cuối (không “quá giờ dừng”). */
+export const formatDwellCountdownNotice = (dwell, lang = "VN", now = Date.now(), options = {}) => {
+  if (!dwell || typeof dwell !== "object") return "";
+
+  const isVn = lang === "VN";
+  const station = formatStationLabelForDwell(dwell?.stationName || dwell?.stationCode);
+  const isTerminal = options.isTerminalStop === true
+    || isDwellAtTerminalStop(dwell, options.stops);
+
+  // Điểm cuối: không còn lịch dừng để đi tiếp → không báo quá giờ dừng.
+  if (isTerminal) {
+    return station
+      ? (isVn ? `Đã đến điểm cuối ${station}` : `Arrived at destination ${station}`)
+      : (isVn ? "Đã đến điểm cuối" : "Arrived at destination");
+  }
+
+  const resolved = resolveDwellRemaining(dwell, now);
+  if (!resolved) return "";
+
+  const at = station
+    ? (isVn ? `Đang dừng tại bến ${station}` : `Stopping at ${station}`)
+    : (isVn ? "Đang dừng tại bến" : "Stopping at station");
+  if (resolved.isOverdue || resolved.remainingSeconds <= 0) {
+    return isVn ? `${at} - quá giờ dừng` : `${at} - overdue`;
+  }
+  const clock = formatDwellClock(resolved.remainingSeconds);
+  return isVn ? `${at} - còn ${clock}` : `${at} - ${clock} left`;
+};
+
+/**
  * Chuẩn hóa payload BE/GPS/SignalR → marker.
  */
 export const normalizeBoatLocation = (raw) => {
@@ -273,16 +421,23 @@ export const normalizeBoatLocation = (raw) => {
   const seatRaw = Number(
     raw.seatCount ?? raw.SeatCount ?? raw.totalSeats ?? raw.TotalSeats ?? raw.capacity ?? raw.Capacity,
   );
-  const passengerRaw = Number(
-    raw.passengerCount
+  // Đừng Number(null) → 0: thiếu field thì để null để map không hiện "0/ghế".
+  const passengerSource = raw.passengerCount
     ?? raw.PassengerCount
+    ?? raw.onboardPassengerCount
+    ?? raw.OnboardPassengerCount
+    ?? raw.totalPassengerCount
+    ?? raw.TotalPassengerCount
     ?? raw.occupiedSeats
     ?? raw.OccupiedSeats
     ?? raw.bookedSeats
     ?? raw.BookedSeats
     ?? raw.currentPassengers
-    ?? raw.CurrentPassengers,
-  );
+    ?? raw.CurrentPassengers;
+  const passengerRaw = passengerSource === null || passengerSource === undefined || passengerSource === ""
+    ? NaN
+    : Number(passengerSource);
+  const dwellCountdown = normalizeDwellCountdown(raw);
 
   const accuracyRaw = Number(raw.accuracyMeters ?? raw.AccuracyMeters ?? raw.accuracy ?? raw.Accuracy);
 
@@ -372,6 +527,7 @@ export const normalizeBoatLocation = (raw) => {
         ?? raw.tripStopEvent ?? raw.TripStopEvent ?? null;
       return v != null && String(v).trim() ? String(v).trim() : null;
     })(),
+    dwellCountdown,
   };
 };
 
@@ -579,7 +735,11 @@ export const upsertBoatLocationMap = (prevMap, location) => {
       && String(prev.nextStationCode ?? "") === String(normalized.nextStationCode ?? "")
       && String(prev.currentStationName ?? "") === String(normalized.currentStationName ?? "")
       && String(prev.lastStopEvent ?? "") === String(normalized.lastStopEvent ?? "")
-      && String(prev.status ?? "") === String(normalized.status ?? "");
+      && String(prev.status ?? "") === String(normalized.status ?? "")
+      && String(prev.dwellCountdown?.endsAt ?? "") === String(normalized.dwellCountdown?.endsAt ?? "")
+      && Number(prev.dwellCountdown?.remainingSeconds ?? NaN)
+        === Number(normalized.dwellCountdown?.remainingSeconds ?? NaN)
+      && Number(prev.passengerCount ?? NaN) === Number(normalized.passengerCount ?? NaN);
 
     if (samePos) return prevMap;
   }
@@ -672,6 +832,20 @@ export const upsertBoatLocationMap = (prevMap, location) => {
     movementStatus: keepStr(stabilized.movementStatus, prevLive?.movementStatus),
     remainingDistanceKmToNextStation,
     remainingMinutesToNextStation,
+    // dwellCountdown: packet mới có thì dùng; departed thì xóa; thiếu field thì giữ bản cũ khi còn AtStation.
+    dwellCountdown: (() => {
+      if (tripCleared) return null;
+      if (stabilized.dwellCountdown) return stabilized.dwellCountdown;
+      const stopKey = String(stabilized.lastStopEvent || "").toLowerCase();
+      const moveKey = String(stabilized.movementStatus || "").toLowerCase().replace(/[_\s-]/g, "");
+      if (stopKey === "departed" || moveKey === "departed" || moveKey === "moving" || moveKey === "arriving") {
+        return null;
+      }
+      return prevLive?.dwellCountdown ?? null;
+    })(),
+    passengerCount: Number.isFinite(Number(stabilized.passengerCount))
+      ? Number(stabilized.passengerCount)
+      : (tripCleared ? null : (prevLive?.passengerCount ?? null)),
     fromSticky: false,
   };
   saveStickyBoatPosition(merged);

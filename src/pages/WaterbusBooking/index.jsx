@@ -1,9 +1,16 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { guidelines } from "../../data/homeData";
 import { getTodayDateString } from "../../utils/dateOnly";
 import { useBookingWizardStep } from "../../hooks/useBookingWizardStep";
+import {
+  bookingHasSeatSelection,
+  clearSeatSelectionFields,
+  confirmLeaveCheckout,
+  confirmLeaveSeatSelection,
+  releaseHeldBookingSeats,
+} from "../../utils/bookingWizardGuard";
 
 import Step1Search from "./components/Step1Search";
 import Step2SelectTripAndSeats from "./components/Step2SelectTripAndSeats";
@@ -12,9 +19,6 @@ import Step3Checkout from "./components/Step3Checkout";
 export function WaterbusBooking() {
     const { lang } = useApp();
     const location = useLocation();
-    const { currentStep, goToStep } = useBookingWizardStep({
-        initialStep: location.state?.step || 1,
-    });
 
     const [bookingData, setBookingData] = useState(
         location.state?.bookingData || {
@@ -38,6 +42,33 @@ export function WaterbusBooking() {
     const updateBookingData = (fields) => {
         setBookingData((prev) => ({ ...prev, ...fields }));
     };
+
+    const confirmLeaveStep = useCallback(async (fromStep, toStep) => {
+        if (toStep >= fromStep) return true;
+
+        if (fromStep === 2) {
+            if (!bookingHasSeatSelection(bookingData)) return true;
+            const ok = await confirmLeaveSeatSelection(lang);
+            if (!ok) return false;
+            updateBookingData(clearSeatSelectionFields());
+            return true;
+        }
+
+        if (fromStep === 3) {
+            const ok = await confirmLeaveCheckout(lang);
+            if (!ok) return false;
+            releaseHeldBookingSeats(bookingData);
+            updateBookingData({ seatHoldExpiresAt: null });
+            return true;
+        }
+
+        return true;
+    }, [bookingData, lang]);
+
+    const { currentStep, goToStep } = useBookingWizardStep({
+        initialStep: location.state?.step || 1,
+        confirmLeaveStep,
+    });
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-body transition-colors duration-300">

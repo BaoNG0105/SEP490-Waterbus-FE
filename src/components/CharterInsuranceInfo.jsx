@@ -15,11 +15,16 @@ export function CharterInsuranceInfo({
   lang = "VN",
   currencyFormatter,
   className = "",
+  bookingType = "CharterBooking",
 }) {
   const selected = resolveInsuranceSelected(booking);
   const insurance = normalizeInsuranceFromBooking(booking);
   const [resolvedLogoUrl, setResolvedLogoUrl] = useState(insurance?.providerLogoUrl || "");
   const isVn = lang === "VN";
+  const isSeatBooking = bookingType === "SeatBooking" || bookingType === "TicketBooking";
+  const unitNoun = isSeatBooking
+    ? (isVn ? "khách" : "passenger")
+    : (isVn ? "ghế" : "seat");
 
   let statusLabel = isVn ? "Chưa rõ" : "Unknown";
   let statusTone = "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20";
@@ -39,7 +44,7 @@ export function CharterInsuranceInfo({
     let cancelled = false;
     (async () => {
       try {
-        const packages = await fetchActiveInsurancePackages("CharterBooking");
+        const packages = await fetchActiveInsurancePackages(bookingType);
         if (cancelled) return;
         const matched = findInsurancePackageById(packages, insurance.packageId);
         const logo = matched?.providerLogoUrl || "";
@@ -52,7 +57,7 @@ export function CharterInsuranceInfo({
     return () => {
       cancelled = true;
     };
-  }, [insurance?.packageId, insurance?.providerLogoUrl, selected]);
+  }, [bookingType, insurance?.packageId, insurance?.providerLogoUrl, selected]);
 
   const formatMoney = (value) => {
     if (!currencyFormatter) return String(value ?? 0);
@@ -85,14 +90,22 @@ export function CharterInsuranceInfo({
   const feeFormula = (() => {
     if (!hasQuotedFee) return "";
     const unit = insurance?.unitPremiumAmount > 0
-      ? `${formatMoney(insurance.unitPremiumAmount)}${isVn ? "/ghế" : "/seat"}`
+      ? `${formatMoney(insurance.unitPremiumAmount)}/${unitNoun}`
       : "";
-    const qty = `${insurance.quantity} ${isVn ? "ghế" : (insurance.quantity === 1 ? "seat" : "seats")}`;
+    const qtyNoun = insurance.quantity === 1
+      ? unitNoun
+      : (isSeatBooking
+        ? (isVn ? "khách" : "passengers")
+        : (isVn ? "ghế" : "seats"));
+    const qty = `${insurance.quantity} ${qtyNoun}`;
     if (unit) return `${unit} × ${qty}`;
     return qty;
   })();
   const totalLabel = hasQuotedFee && insurance?.totalAmount > 0
     ? formatMoney(insurance.totalAmount)
+    : "";
+  const coverageLabel = selected === true && Number(insurance?.coverageAmount) > 0
+    ? formatMoney(insurance.coverageAmount)
     : "";
   const hasTerms = selected === true && Boolean(insurance?.terms);
 
@@ -144,24 +157,36 @@ export function CharterInsuranceInfo({
           </div>
 
           {hasQuotedFee ? (
-            <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1 rounded-2xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/80">
-              <div className="min-w-0">
-                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                  {isVn ? "Phí bảo hiểm" : "Insurance fee"}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1 rounded-2xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/80">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                    {isVn ? "Phí bảo hiểm" : "Insurance fee"}
+                  </p>
+                  {feeFormula ? (
+                    <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">{feeFormula}</p>
+                  ) : null}
+                </div>
+                <p className="shrink-0 text-sm font-headline font-black tabular-nums text-[#124757] dark:text-yellow-400">
+                  {totalLabel || "—"}
                 </p>
-                {feeFormula ? (
-                  <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">{feeFormula}</p>
-                ) : null}
               </div>
-              <p className="shrink-0 text-sm font-headline font-black tabular-nums text-[#124757] dark:text-yellow-400">
-                {totalLabel || "—"}
-              </p>
+              {coverageLabel ? (
+                <p className="px-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                  {isVn ? "Mức bảo hiểm" : "Coverage"}:{" "}
+                  <span className="font-bold text-slate-700 dark:text-slate-200">{coverageLabel}</span>
+                </p>
+              ) : null}
             </div>
           ) : (
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {isVn
-                ? "Đã chọn gói — phí tính theo tổng ghế tàu khi admin chốt giá."
-                : "Package selected — fee is calculated from boat seats when the quote is finalized."}
+              {isSeatBooking
+                ? (isVn
+                  ? "Đã chọn gói bảo hiểm cho booking này."
+                  : "Insurance package selected for this booking.")
+                : (isVn
+                  ? "Đã chọn gói — phí tính theo tổng ghế tàu khi admin chốt giá."
+                  : "Package selected — fee is calculated from boat seats when the quote is finalized.")}
             </p>
           )}
         </div>

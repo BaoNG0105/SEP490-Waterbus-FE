@@ -7,6 +7,8 @@ import {
     getTripSeats as apiGetTripSeats,
     holdTripSeats as apiHoldTripSeats,
     releaseTripSeats as apiReleaseTripSeats,
+    startTripDelay as apiStartTripDelay,
+    resumeTripDelay as apiResumeTripDelay,
 } from '../api/tripApi';
 
 export const TRIP_STATUS_OPTIONS = [
@@ -44,7 +46,7 @@ export const getTripStatusLabel = (status, lang = 'VN') => {
     Boarding: { vn: 'Đang lên tàu', en: 'Boarding' },
     InProgress: { vn: 'Đang chạy', en: 'In progress' },
     Delayed: { vn: 'Trễ', en: 'Delayed' },
-    Completed: { vn: 'Đã tới / Hoàn tất', en: 'Completed' },
+    Completed: { vn: 'Hoàn thành', en: 'Completed' },
     Cancelled: { vn: 'Đã hủy', en: 'Cancelled' },
   };
   const row = map[key];
@@ -75,6 +77,18 @@ const tripStatusRank = (status) => {
   return 9;
 };
 
+/** Ưu tiên list ops: đang lên tàu → đang chạy → trễ → sắp chạy → còn lại. */
+const tripListStatusRank = (status) => {
+  const key = normalizeTripStatusKey(status);
+  if (key === 'Boarding') return 0;
+  if (key === 'InProgress') return 1;
+  if (key === 'Delayed') return 2;
+  if (key === 'Scheduled') return 3;
+  if (key === 'Completed') return 8;
+  if (key === 'Cancelled') return 9;
+  return 7;
+};
+
 const tripDepartureMs = (trip) => {
   const raw = trip?.departureTime
     || trip?.scheduledDepartureAt
@@ -82,6 +96,29 @@ const tripDepartureMs = (trip) => {
     || trip?.operatingDate;
   const ms = Date.parse(String(raw || ''));
   return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
+};
+
+/** Sắp xếp list quản lý chuyến: chuẩn bị/đang chạy lên đầu, Scheduled gần giờ trước. */
+export const sortTripsForOpsList = (trips = []) => {
+  const list = unwrapTripList(trips);
+  const now = Date.now();
+  return [...list].sort((a, b) => {
+    const ra = tripListStatusRank(a?.tripStatus ?? a?.status);
+    const rb = tripListStatusRank(b?.tripStatus ?? b?.status);
+    if (ra !== rb) return ra - rb;
+
+    const da = tripDepartureMs(a);
+    const db = tripDepartureMs(b);
+    // Scheduled: gần giờ chạy nhất lên trước (sắp tới trước, quá giờ sau cùng trong nhóm).
+    if (ra === 3) {
+      const aUpcoming = da >= now ? 0 : 1;
+      const bUpcoming = db >= now ? 0 : 1;
+      if (aUpcoming !== bUpcoming) return aUpcoming - bUpcoming;
+      if (aUpcoming === 0) return da - db;
+      return db - da;
+    }
+    return da - db;
+  });
 };
 
 const unwrapTripList = (data) => {
@@ -172,7 +209,7 @@ export const combineOperatingDateAndTime = (operatingDate, timeHHmm) => {
 export const fetchAllTrips = async (params = {}) => {
     try {
         const data = await apiGetTrips(params);
-        return data || [];
+        return unwrapTripList(data);
     } catch (error) {
         console.error('Lỗi khi lấy danh sách chuyến tàu từ Service:', error);
         throw error;
@@ -193,9 +230,6 @@ export const buildTripPayload = (form) => {
         boatCode: String(form.boatCode || '').trim(),
         operatingDate: toDdMmYyyy(form.operatingDate),
         departureTime: combineOperatingDateAndTime(form.operatingDate, form.departureTime),
-        seatTypePrices: (form.seatTypePrices || [])
-            .filter((p) => p.seatTypeCode && p.price !== '' && p.price !== null && p.price !== undefined)
-            .map((p) => ({ seatTypeCode: p.seatTypeCode, price: Number(p.price) })),
         ...(stops.length > 0 ? { stops } : {}),
     };
 };
@@ -263,7 +297,12 @@ export const fetchSightseeingTripSearch = async ({ departureDate }) => {
 // Service: Lấy chi tiết 1 chuyến tàu (kèm các bến dừng trip_stops)
 export const fetchTripDetail = async (tripId) => {
     try {
-        return await apiGetTripById(tripId);
+        const data = await apiGetTripById(tripId);
+        // Một số response BE bọc { data: {...} }
+        if (data?.data && typeof data.data === "object" && !Array.isArray(data.data) && (data.data.tripId || data.data.tripCode || data.data.stops)) {
+            return data.data;
+        }
+        return data;
     } catch (error) {
         console.error(`Lỗi khi lấy chi tiết chuyến tàu ${tripId}:`, error);
         throw error;
@@ -298,6 +337,40 @@ export const releaseSeats = async (tripId, seatNumbers, fromStationCode, toStati
         return await apiReleaseTripSeats(tripId, seatNumbers, fromStationCode, toStationCode);
     } catch (error) {
         console.error(`Lỗi khi nhả ghế cho chuyến ${tripId}:`, error);
+        throw error;
+    }
+};
+
+const unwrapDelayResponse = (data) => {
+    if (data?.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+        return data.data;
+    }
+    return data;
+};
+
+/** POST /trips/{id}/delay/start — FE không tự tính lan delay. */
+export const startTripDelay = async (tripId, { reason, startStopOrder } = {}) => {
+    try {
+        const data = await apiStartTripDelay(tripId, {
+            reason: String(reason || '').trim(),
+            startStopOrder: Number(startStopOrder) || 1,
+        });
+        return unwrapDelayResponse(data);
+    } catch (error) {
+        console.error(`Lỗi khi start delay chuyến ${tripId}:`, error);
+        throw error;
+    }
+};
+
+/** POST /trips/{id}/delay/resume — BE trả affectedTrips nếu lan delay. */
+export const resumeTripDelay = async (tripId, { note } = {}) => {
+    try {
+        const data = await apiResumeTripDelay(tripId, {
+            note: String(note || '').trim() || 'Tàu tiếp tục hành trình',
+        });
+        return unwrapDelayResponse(data);
+    } catch (error) {
+        console.error(`Lỗi khi resume delay chuyến ${tripId}:`, error);
         throw error;
     }
 };

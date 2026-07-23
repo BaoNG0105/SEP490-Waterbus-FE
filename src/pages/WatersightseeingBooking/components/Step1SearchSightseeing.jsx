@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../../../context/AppContext";
+import { AppDateInput } from "../../../components/AppDateInput";
 import { fetchSightseeingTripSearch } from "../../../services/tripService";
 import { getTodayDateString } from "../../../utils/dateOnly";
 
@@ -86,8 +87,7 @@ export default function Step1SearchSightseeing({ bookingData, updateData, onNext
         </div>
         <div className="sm:w-56 space-y-1.5">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Ngày tham quan" : "Date"}</label>
-          <input
-            type="date"
+          <AppDateInput
             value={departureDate}
             min={getTodayDateString()}
             onChange={(e) => updateData({ departureDate: e.target.value })}

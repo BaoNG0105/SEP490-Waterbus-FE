@@ -16,6 +16,7 @@ import {
   normalizeDeckCount,
 } from "../utils/charterRequestForm";
 import { getCharterInsuranceNote, getInsurancePendingMessage } from "../utils/insurancePreview";
+import { AppDateInput } from "./AppDateInput";
 import { notify } from "../utils/swalToast";
 
 const deckOptionImages = {
@@ -907,7 +908,13 @@ export function CharterRequestForm({
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="flex flex-col gap-2.5">
                 <label className={contactLabelClass}>{lang === "VN" ? "Ngày khởi hành" : "Departure Date"}{requiredMark}</label>
-                <input type="date" min={getMinDepartureDate()} value={formData.departureDate} onChange={(e) => handleFieldChange("departureDate", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                <AppDateInput
+                  min={getMinDepartureDate()}
+                  value={formData.departureDate}
+                  onChange={(e) => handleFieldChange("departureDate", e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
+                />
               </div>
               <div className="flex flex-col gap-2.5">
                 <label className={contactLabelClass}>{lang === "VN" ? "Giờ đi" : "Start Time"}{requiredMark}</label>

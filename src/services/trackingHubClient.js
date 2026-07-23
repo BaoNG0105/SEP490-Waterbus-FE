@@ -1,6 +1,6 @@
-import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
+import { HubConnectionState } from "@microsoft/signalr";
 import { getTrackingHubUrl } from "../utils/hubBaseUrl";
-import { buildHubConnectionOptions } from "../utils/hubConnectionOptions";
+import { createHubConnection } from "../utils/createHubConnection";
 
 const RELEASE_DEBOUNCE_MS = 800;
 
@@ -12,7 +12,10 @@ class TrackingHubClient {
     this.releaseTimer = null;
     this.locationListeners = new Set();
     this.tripStopListeners = new Set();
+    this.tripDelayListeners = new Set();
     this.statusListeners = new Set();
+    /** boatId → refCount (JoinBoat) */
+    this.boatJoins = new Map();
   }
 
   getAccessToken() {
@@ -50,6 +53,16 @@ class TrackingHubClient {
       });
     };
 
+    const forwardTripDelay = (payload) => {
+      this.tripDelayListeners.forEach((listener) => {
+        try {
+          listener(payload);
+        } catch (error) {
+          console.warn("Tracking hub tripDelayUpdated listener error:", error);
+        }
+      });
+    };
+
     connection.on("boatLocation", forward);
     connection.on("BoatLocation", forward);
     connection.on("boatlocation", forward);
@@ -58,8 +71,16 @@ class TrackingHubClient {
     connection.on("tripStopUpdated", forwardTripStop);
     connection.on("TripStopUpdated", forwardTripStop);
 
+    connection.on("tripDelayUpdated", forwardTripDelay);
+    connection.on("TripDelayUpdated", forwardTripDelay);
+
     connection.onreconnecting(() => this.notifyStatus("reconnecting"));
-    connection.onreconnected(() => this.notifyStatus("live"));
+    connection.onreconnected(() => {
+      this.notifyStatus("live");
+      this.rejoinActiveBoats().catch((error) => {
+        console.warn("Tracking hub rejoin boats failed:", error);
+      });
+    });
     connection.onclose(() => {
       this.notifyStatus("offline");
       // Vite proxy → Azure hay ECONNRESET; auto-reconnect hết retry thì tự nối lại nếu vẫn còn subscriber.
@@ -72,6 +93,18 @@ class TrackingHubClient {
         this.ensureConnection().catch(() => {});
       }, 1500);
     });
+  }
+
+  async rejoinActiveBoats() {
+    if (!this.connection || this.connection.state !== HubConnectionState.Connected) return;
+    const boatIds = [...this.boatJoins.keys()];
+    await Promise.all(
+      boatIds.map((boatId) => (
+        this.connection.invoke("JoinBoat", boatId).catch((error) => {
+          console.warn(`Tracking hub rejoin JoinBoat ${boatId} failed:`, error);
+        })
+      )),
+    );
   }
 
   async ensureConnection() {
@@ -99,10 +132,7 @@ class TrackingHubClient {
       this.connection = null;
     }
 
-    const connection = new HubConnectionBuilder()
-      .withUrl(getTrackingHubUrl(), buildHubConnectionOptions(() => this.getAccessToken()))
-      .withAutomaticReconnect([0, 1000, 2000, 5000, 10000])
-      .build();
+    const connection = createHubConnection(getTrackingHubUrl(), () => this.getAccessToken());
 
     this.connection = connection;
     this.attachLifecycleHandlers(connection);
@@ -132,6 +162,7 @@ class TrackingHubClient {
       err.name = "AbortError";
       throw err;
     }
+    await this.rejoinActiveBoats();
     return connection;
   }
 
@@ -162,6 +193,42 @@ class TrackingHubClient {
     }, RELEASE_DEBOUNCE_MS);
   }
 
+  /**
+   * Join group theo boatId khi mở trip detail / live tracking.
+   * Ref-count để nhiều màn hình cùng boat không leave sớm.
+   */
+  async joinBoat(boatId) {
+    const key = String(boatId || "").trim();
+    if (!key) return;
+
+    await this.acquire();
+    const nextCount = (this.boatJoins.get(key) || 0) + 1;
+    this.boatJoins.set(key, nextCount);
+    if (nextCount === 1 && this.connection?.state === HubConnectionState.Connected) {
+      try {
+        await this.connection.invoke("JoinBoat", key);
+      } catch (error) {
+        console.warn(`JoinBoat ${key} failed:`, error);
+      }
+    }
+  }
+
+  async leaveBoat(boatId) {
+    const key = String(boatId || "").trim();
+    if (!key) return;
+
+    const current = this.boatJoins.get(key) || 0;
+    if (current <= 1) {
+      this.boatJoins.delete(key);
+      if (this.connection?.state === HubConnectionState.Connected) {
+        await this.connection.invoke("LeaveBoat", key).catch(() => {});
+      }
+    } else {
+      this.boatJoins.set(key, current - 1);
+    }
+    this.release();
+  }
+
   subscribeBoatLocation(listener) {
     this.locationListeners.add(listener);
     return () => this.locationListeners.delete(listener);
@@ -170,6 +237,11 @@ class TrackingHubClient {
   subscribeTripStopUpdated(listener) {
     this.tripStopListeners.add(listener);
     return () => this.tripStopListeners.delete(listener);
+  }
+
+  subscribeTripDelayUpdated(listener) {
+    this.tripDelayListeners.add(listener);
+    return () => this.tripDelayListeners.delete(listener);
   }
 
   subscribeStatus(listener) {
@@ -185,6 +257,7 @@ class TrackingHubClient {
     const connection = this.connection;
     this.connection = null;
     this.startPromise = null;
+    this.boatJoins.clear();
     if (!connection) return;
     try {
       await connection.stop();

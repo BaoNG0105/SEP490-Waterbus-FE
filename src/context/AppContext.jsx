@@ -23,9 +23,10 @@ export const AppProvider = ({ children }) => {
     }
   }, [isDarkMode]);
 
-  // Lưu ngôn ngữ vào máy để khi F5 không bị mất
+  // Lưu ngôn ngữ + đồng bộ <html lang> (a11y / format hệ thống)
   useEffect(() => {
     localStorage.setItem("lang", lang);
+    document.documentElement.lang = lang === "VN" ? "vi" : "en";
   }, [lang]);
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
