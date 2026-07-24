@@ -358,8 +358,7 @@ export function PromotionManagement() {
                             {currentPromotions.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
-                                        <span className="material-symbols-outlined text-4xl block mb-2">sell</span>
-                                        {lang === "VN" ? "Không có khuyến mãi nào phù hợp bộ lọc." : "No records found matching filters."}
+                                        {lang === "VN" ? "Không có khuyến mãi nào." : "No records found."}
                                     </td>
                                 </tr>
                             ) : (

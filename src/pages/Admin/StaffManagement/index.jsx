@@ -280,8 +280,7 @@ export function StaffManagement() {
                             {currentUsers.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
-                                        <span className="material-symbols-outlined text-4xl block mb-2">person_off</span>
-                                        {lang === "VN" ? "Không có nhân viên nào phù hợp bộ lọc." : "No records found matching filters."}
+                                        {lang === "VN" ? "Không có nhân viên nào." : "No records found."}
                                     </td>
                                 </tr>
                             ) : (

@@ -271,9 +271,6 @@ export function RouteDetail() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">straighten</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Khoảng cách" : "Base Distance"}</span>
                         <h3 className="text-xl font-black font-headline text-blue-600 dark:text-blue-400 mt-0.5">{route.baseDistanceKm != null ? `${route.baseDistanceKm} km` : "—"}</h3>
@@ -281,9 +278,6 @@ export function RouteDetail() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">schedule</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Thời gian di chuyển ước tính" : "Estimated Duration"}</span>
                         <h3 className="text-xl font-black font-headline text-emerald-600 dark:text-emerald-400 mt-0.5">{route.estimatedDurationMin != null ? `${route.estimatedDurationMin} ${lang === "VN" ? "phút" : "min"}` : "—"}</h3>
@@ -291,9 +285,6 @@ export function RouteDetail() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">pin_drop</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số bến dừng" : "Total Stops"}</span>
                         <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">{sortedStops.length}</h3>

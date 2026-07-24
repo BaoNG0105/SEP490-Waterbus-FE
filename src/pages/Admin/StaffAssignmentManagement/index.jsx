@@ -820,8 +820,8 @@ export function StaffAssignmentManagement() {
       : "Shifts assigned to you — Active / Completed follow shift times."
     : isAdmin
       ? (lang === "VN"
-        ? "Admin phân nhân viên theo tàu (OnBoard). Không gắn theo chuyến."
-        : "Admin assigns staff by boat (OnBoard). Not by trip.")
+        ? "Admin phân nhân viên theo tàu."
+        : "Admin assigns staff by boat.")
       : (lang === "VN"
         ? "Tạo · xem · hủy ca bến. Trạng thái / tiến độ ca tính tự động."
         : "Create · view · cancel station shifts. Status / progress are automatic.");
@@ -889,18 +889,15 @@ export function StaffAssignmentManagement() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: lang === "VN" ? "Tổng ca" : "Shifts", value: stats.total, icon: "event" },
-          { label: lang === "VN" ? "Đã xếp lịch" : "Scheduled", value: stats.scheduled, icon: "schedule" },
-          { label: lang === "VN" ? "Đang diễn ra" : "Active now", value: stats.active, icon: "play_circle" },
-          { label: lang === "VN" ? "Đã hủy" : "Cancelled", value: stats.cancelled, icon: "cancel" },
+          { label: lang === "VN" ? "Tổng ca" : "Shifts", value: stats.total},
+          { label: lang === "VN" ? "Đã xếp lịch" : "Scheduled", value: stats.scheduled},
+          { label: lang === "VN" ? "Đang diễn ra" : "Active now", value: stats.active},
+          { label: lang === "VN" ? "Đã hủy" : "Cancelled", value: stats.cancelled},
         ].map((card) => (
           <div
             key={card.label}
             className="bg-white dark:bg-slate-800 px-4 py-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-3"
           >
-            <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400">
-              <span className="material-symbols-outlined text-xl">{card.icon}</span>
-            </div>
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                 {card.label}
@@ -917,8 +914,8 @@ export function StaffAssignmentManagement() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-1">
             {[
-              { id: "schedule", icon: "calendar_month", vn: "Lịch", en: "Calendar" },
-              { id: "list", icon: "table_rows", vn: "Chi tiết ca", en: "Shift list" },
+              { id: "schedule", vn: "Lịch", en: "Calendar" },
+              { id: "list", vn: "Chi tiết ca", en: "Shift list" },
             ].map((opt) => (
               <button
                 key={opt.id}
@@ -961,11 +958,11 @@ export function StaffAssignmentManagement() {
         <div className="flex flex-wrap items-end gap-2">
           {displayMode === "list" ? (
             <>
-              <div className="w-[148px]">
+              <div className="w-37">
                 <label className={labelStyle}>{lang === "VN" ? "Từ ngày" : "From"}</label>
                 <AppDateInput value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={filterInputStyle} />
               </div>
-              <div className="w-[148px]">
+              <div className="w-37">
                 <label className={labelStyle}>{lang === "VN" ? "Đến ngày" : "To"}</label>
                 <AppDateInput value={toDate} onChange={(e) => setToDate(e.target.value)} className={filterInputStyle} />
               </div>
@@ -982,7 +979,7 @@ export function StaffAssignmentManagement() {
               ) : null}
             </>
           ) : (
-            <div className="w-[148px]">
+            <div className="w-37">
               <label className={labelStyle}>{lang === "VN" ? "Ngày" : "Date"}</label>
               <AppDateInput
                 value={toDateKey(anchorDate)}
@@ -991,7 +988,7 @@ export function StaffAssignmentManagement() {
               />
             </div>
           )}
-          <div className="w-[128px]">
+          <div className="w-32">
             <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={filterInputStyle}>
               <option value="All">{lang === "VN" ? "Tất cả" : "All"}</option>
@@ -1006,7 +1003,7 @@ export function StaffAssignmentManagement() {
               </option>
             </select>
           </div>
-          <div className="w-[140px]">
+          <div className="w-35">
             <label className={labelStyle}>{lang === "VN" ? "Tiến độ ca" : "Shift"}</label>
             <select value={shiftStateFilter} onChange={(e) => setShiftStateFilter(e.target.value)} className={filterInputStyle}>
               <option value="All">{lang === "VN" ? "Tất cả" : "All"}</option>
@@ -1018,7 +1015,7 @@ export function StaffAssignmentManagement() {
             </select>
           </div>
           {showStationFilter ? (
-            <div className="min-w-[200px] w-[220px]">
+            <div className="min-w-50 w-55">
               <label className={labelStyle}>{lang === "VN" ? "Bến" : "Station"}</label>
               <FormSelect
                 value={stationFilter}
@@ -1032,7 +1029,7 @@ export function StaffAssignmentManagement() {
               />
             </div>
           ) : null}
-          <div className="min-w-[180px] flex-1 max-w-xs">
+          <div className="min-w-45 flex-1 max-w-xs">
             <label className={labelStyle}>{lang === "VN" ? "Tìm kiếm" : "Search"}</label>
             <input
               type="search"
@@ -1065,7 +1062,7 @@ export function StaffAssignmentManagement() {
       ) : (
       <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[880px]">
+          <table className="w-full text-left border-collapse min-w-220">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-900/50 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60">
                 <th className="py-4 px-5">{lang === "VN" ? "Nhân viên / lịch" : "Staff / schedule"}</th>
@@ -1152,7 +1149,7 @@ export function StaffAssignmentManagement() {
                           {formatDateShort(group.lastEnd)}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-headline font-black text-[#124757] dark:text-yellow-400">
+                          <span className="inline-flex items-center justify-center min-w-8 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-headline font-black text-[#124757] dark:text-yellow-400">
                             {group.items.length}
                           </span>
                           {(group.activeCount > 0 || group.upcomingCount > 0) && (
@@ -1263,7 +1260,7 @@ export function StaffAssignmentManagement() {
       )}
 
       {isCreateOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-120 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 w-full max-w-lg max-h-[min(92vh,720px)] rounded-4xl border border-slate-100 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden">
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-700">
               <h3 className="font-headline font-black text-sm uppercase tracking-wider text-[#124757] dark:text-yellow-400">
@@ -1529,7 +1526,7 @@ export function StaffAssignmentManagement() {
       )}
 
       {replaceForm.assignmentId ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-120 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <form
             onSubmit={handleReplaceSubmit}
             className="bg-white dark:bg-slate-800 w-full max-w-md rounded-4xl border border-slate-100 dark:border-slate-700 shadow-2xl p-5 space-y-4"

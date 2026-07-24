@@ -135,9 +135,6 @@ export function StationManagement() {
             {/* SECTION 1: KHỐI CARD THỐNG KÊ SỐ LIỆU */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 group-hover:bg-[#124757] group-hover:text-white dark:group-hover:bg-yellow-400 dark:group-hover:text-slate-900 transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">home_storage</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số nhà ga" : "Total Stations"}</span>
                         <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">{stats.total}</h3>
@@ -145,9 +142,6 @@ export function StationManagement() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">gpp_good</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đang hoạt động" : "Active Piers"}</span>
                         <h3 className="text-xl font-black font-headline text-emerald-600 dark:text-emerald-400 mt-0.5">{stats.active}</h3>
@@ -155,9 +149,6 @@ export function StationManagement() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 flex items-center justify-center text-rose-500 dark:text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">wrong_location</span>
-                    </div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Ngưng hoạt động" : "Inactive / Closed"}</span>
                         <h3 className="text-xl font-black font-headline text-rose-500 mt-0.5">{stats.inactive}</h3>

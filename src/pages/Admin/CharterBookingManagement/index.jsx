@@ -223,20 +223,17 @@ export function CharterBookingManagement() {
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { key: "all", icon: "map", labelVn: "Tổng yêu cầu", labelEn: "Total Requests", value: isLoading ? "..." : stats.total, color: "text-[#124757] dark:text-yellow-400", bg: "bg-slate-500/10 dark:bg-slate-900" },
-          { key: "needsAction", icon: "priority_high", labelVn: "Cần xử lý", labelEn: "Needs Action", value: isLoading ? "..." : stats.needsAction, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
-          { key: "waitingQuote", icon: "pending_actions", labelVn: "Chờ báo giá", labelEn: "Pending Quote", value: isLoading ? "..." : stats.pendingQuote, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
-          { key: "toPay", icon: "request_quote", labelVn: "Đã báo giá", labelEn: "Quoted", value: isLoading ? "..." : stats.quoted, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
-          { key: "active", icon: "event_available", labelVn: "Đã xác nhận", labelEn: "Confirmed", value: isLoading ? "..." : stats.confirmed, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-500/10" },
+          { key: "all", labelVn: "Tổng yêu cầu", labelEn: "Total Requests", value: isLoading ? "..." : stats.total, color: "text-[#124757] dark:text-yellow-400", bg: "bg-slate-500/10 dark:bg-slate-900" },
+          { key: "needsAction", labelVn: "Cần xử lý", labelEn: "Needs Action", value: isLoading ? "..." : stats.needsAction, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10" },
+          { key: "waitingQuote", labelVn: "Chờ báo giá", labelEn: "Pending Quote", value: isLoading ? "..." : stats.pendingQuote, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10" },
+          { key: "toPay", labelVn: "Đã báo giá", labelEn: "Quoted", value: isLoading ? "..." : stats.quoted, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-500/10" },
+          { key: "active", labelVn: "Đã xác nhận", labelEn: "Confirmed", value: isLoading ? "..." : stats.confirmed, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-500/10" },
         ].map((item) => (
           <div
             key={item.key}
             className="rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-slate-800"
           >
             <div className="flex items-center gap-3.5">
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.bg} ${item.color}`}>
-                <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
-              </div>
               <div className="min-w-0">
                 <p className="truncate text-[11px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? item.labelVn : item.labelEn}</p>
                 <h3 className={`mt-0.5 truncate font-headline text-lg font-black ${item.color}`}>{item.value}</h3>

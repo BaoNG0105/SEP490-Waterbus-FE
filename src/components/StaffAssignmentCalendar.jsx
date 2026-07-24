@@ -242,9 +242,9 @@ export function StaffAssignmentCalendar({
   };
 
   const periodOptions = [
-    { id: "day", icon: "today", vn: "Ngày", en: "Day" },
-    { id: "week", icon: "view_week", vn: "Tuần", en: "Week" },
-    { id: "month", icon: "calendar_month", vn: "Tháng", en: "Month" },
+    { id: "day", vn: "Ngày", en: "Day" },
+    { id: "week", vn: "Tuần", en: "Week" },
+    { id: "month", vn: "Tháng", en: "Month" },
   ];
 
   const dayRows = mode === "day" ? cellsForDay(toDateKey(anchor)) : [];
@@ -321,7 +321,6 @@ export function StaffAssignmentCalendar({
                     : "border border-slate-200 dark:border-slate-700 text-slate-500"
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">grid_view</span>
                 {lang === "VN" ? "Lưới ngày" : "Day grid"}
               </button>
               <button
@@ -333,7 +332,6 @@ export function StaffAssignmentCalendar({
                     : "border border-slate-200 dark:border-slate-700 text-slate-500"
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">directions_boat</span>
                 {lang === "VN" ? "Theo tàu" : "By boat"}
               </button>
             </>
@@ -402,10 +400,10 @@ export function StaffAssignmentCalendar({
                 : "No boat shifts (excluding cancelled) in this range."}
             </p>
           ) : (
-            <table className="w-full min-w-[720px] border-collapse text-left">
+            <table className="w-full min-w-180 border-collapse text-left">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/50">
-                  <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-900/50 py-3 px-4 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60 min-w-[140px]">
+                  <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-900/50 py-3 px-4 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60 min-w-35">
                     {lang === "VN" ? "Tàu" : "Boat"}
                   </th>
                   {byBoatDays.map((day) => {
@@ -415,9 +413,9 @@ export function StaffAssignmentCalendar({
                     return (
                       <th
                         key={key}
-                        className={`py-3 px-1.5 text-center text-[10px] font-headline font-black uppercase tracking-wide border-b border-slate-100 dark:border-slate-700/60 min-w-[96px] ${
+                        className={`py-3 px-1.5 text-center text-[10px] font-headline font-black uppercase tracking-wide border-b border-slate-100 dark:border-slate-700/60 min-w-24 ${
                           today
-                            ? "sticky left-[140px] z-10 bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400 shadow-[2px_0_0_0_rgba(18,71,87,0.12)]"
+                            ? "sticky left-35 z-10 bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400 shadow-[2px_0_0_0_rgba(18,71,87,0.12)]"
                             : weekend
                               ? "text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800/50"
                               : "text-slate-400 bg-slate-50 dark:bg-slate-900/50"
@@ -453,13 +451,13 @@ export function StaffAssignmentCalendar({
                             isOutsideMonth(day) && !today ? "opacity-40" : ""
                           } ${
                             today
-                              ? "sticky left-[140px] z-10 bg-[#124757]/8 dark:bg-yellow-400/10 shadow-[2px_0_0_0_rgba(18,71,87,0.08)]"
+                              ? "sticky left-35 z-10 bg-[#124757]/8 dark:bg-yellow-400/10 shadow-[2px_0_0_0_rgba(18,71,87,0.08)]"
                               : weekend
                                 ? "bg-slate-100/70 dark:bg-slate-800/40"
                                 : "bg-white dark:bg-slate-800"
                           }`}
                         >
-                          <div className="space-y-1 min-h-[42px]">{rows.map((r) => renderChip(r, key))}</div>
+                          <div className="space-y-1 min-h-10.5">{rows.map((r) => renderChip(r, key))}</div>
                         </td>
                       );
                     })}
@@ -532,7 +530,7 @@ export function StaffAssignmentCalendar({
                       <span className="text-[9px] font-bold text-slate-400">{rows.length}</span>
                     )}
                   </div>
-                  <div className="space-y-1 max-h-[130px] overflow-y-auto no-scrollbar">
+                  <div className="space-y-1 max-h-32.5 overflow-y-auto no-scrollbar">
                     {rows.slice(0, limit).map((r) => renderChip(r, key))}
                     {rows.length > limit && (
                       <p className="text-[9px] font-bold text-slate-400 px-0.5">+{rows.length - limit}</p>

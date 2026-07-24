@@ -160,15 +160,9 @@ export function BoatDutyRosterPanel({ boatId, boatCode }) {
               {lang === "VN" ? "Lịch ca trên tàu" : "Boat duty schedule"}
               {boatCode ? `: ${boatCode}` : ""}
             </h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-xl">
-              {lang === "VN"
-                ? "Chỉ xem — dữ liệu lấy từ bảng tổng Phân công Staff (Boat). Tạo / sửa ca tại màn Phân công."
-                : "View only — data from the Staff Assignments master table (Boat). Create / edit shifts there."}
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <span className="material-symbols-outlined text-sm">groups</span>
               {assignments.length} {lang === "VN" ? "ca" : "shifts"}
               {activeNowCount > 0 ? ` · ${activeNowCount} Active` : ""}
             </span>
@@ -184,8 +178,8 @@ export function BoatDutyRosterPanel({ boatId, boatCode }) {
 
         <div className="flex flex-wrap gap-2 mt-4">
           {[
-            { id: "list", icon: "table_rows", vn: "Danh sách", en: "List" },
-            { id: "schedule", icon: "calendar_month", vn: "Lịch", en: "Calendar" },
+            { id: "list", vn: "Danh sách", en: "List" },
+            { id: "schedule", vn: "Lịch", en: "Calendar" },
           ].map((opt) => (
             <button
               key={opt.id}
@@ -210,17 +204,17 @@ export function BoatDutyRosterPanel({ boatId, boatCode }) {
       <div className="bg-white dark:bg-slate-800 p-3 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-wrap items-end gap-2">
         {displayMode === "list" ? (
           <>
-            <div className="w-[148px]">
+            <div className="w-37">
               <label className={labelStyle}>{lang === "VN" ? "Từ ngày" : "From"}</label>
               <AppDateInput value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputStyle} />
             </div>
-            <div className="w-[148px]">
+            <div className="w-37">
               <label className={labelStyle}>{lang === "VN" ? "Đến ngày" : "To"}</label>
               <AppDateInput value={toDate} onChange={(e) => setToDate(e.target.value)} className={inputStyle} />
             </div>
           </>
         ) : (
-          <div className="w-[148px]">
+          <div className="w-37">
             <label className={labelStyle}>{lang === "VN" ? "Ngày" : "Date"}</label>
             <AppDateInput
               value={toDateKey(anchorDate)}
@@ -231,7 +225,7 @@ export function BoatDutyRosterPanel({ boatId, boatCode }) {
             />
           </div>
         )}
-        <div className="w-[128px]">
+        <div className="w-37">
           <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={inputStyle}>
             <option value="All">{lang === "VN" ? "Tất cả" : "All"}</option>
@@ -285,7 +279,7 @@ export function BoatDutyRosterPanel({ boatId, boatCode }) {
       ) : (
         <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[720px]">
+            <table className="w-full text-left border-collapse min-w-180">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/50 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60">
                   <th className="py-3.5 px-5">{lang === "VN" ? "Nhân viên" : "Staff"}</th>
