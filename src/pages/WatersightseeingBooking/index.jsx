@@ -87,7 +87,7 @@ export function WatersightseeingBooking() {
             {/* ===== SECTION 1: HERO ===== */}
             <section
                 className="relative bg-[#124757] dark:bg-slate-950 overflow-hidden pt-32 pb-20 bg-cover bg-center"
-                style={{ backgroundImage: "url('https://res.cloudinary.com/dygipvoal/image/upload/v1783792723/qozuixs81skui0fwokvm.webp')" }}
+                style={{ backgroundImage: "url('https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg')" }}
             >
                 <div className="absolute inset-0 bg-[#124757]/70 dark:bg-slate-950/70 pointer-events-none"></div>
                 <div className="absolute inset-0 opacity-10 pointer-events-none">
@@ -95,12 +95,12 @@ export function WatersightseeingBooking() {
                 </div>
                 <div className="relative max-w-5xl mx-auto px-6 md:px-12 text-center space-y-6">
                     <h1 className="text-4xl md:text-6xl font-headline font-black text-white leading-tight">
-                        {lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
+                        {lang === "VN" ? "Tour tham quan trên sông" : "River sightseeing tour"}
                     </h1>
                     <p className="text-white/70 max-w-2xl mx-auto text-sm md:text-base leading-relaxed">
                         {lang === "VN"
-                            ? "Di chuyển nhanh chóng theo lịch trình cố định giữa các bến tàu. Tìm chuyến, chọn ghế và thanh toán trực tuyến chỉ trong vài bước đơn giản."
-                            : "Travel quickly along fixed schedules between wharves. Search a trip, choose your seat, and pay online in just a few simple steps."}
+                            ? "Thư giãn trên tàu, ngắm cảnh sông Sài Gòn theo lịch trình vòng quanh các bến. Chọn ngày, chọn ghế và thanh toán trực tuyến chỉ trong vài bước."
+                            : "Relax on board and enjoy Saigon’s river views on a scheduled loop tour. Pick a date, choose your seat, and pay online in a few simple steps."}
                     </p>
                 </div>
             </section>

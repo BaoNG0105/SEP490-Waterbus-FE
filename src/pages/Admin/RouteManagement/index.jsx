@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, removeRoute } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
-import { getRouteKindLabel, getRouteShortLabel } from "../../../utils/routeTypes";
+import { getRouteKindLabel, getRouteShortLabel, resolveRouteLabelKey } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
 
 const routeKindBadgeClass = (route) => {
@@ -70,13 +70,23 @@ export function RouteManagement() {
         setCurrentPage(1);
     }, [searchTerm, sortBy, typeFilter, statusFilter]);
 
-    const stats = {
-        total: routes.length,
-        totalDistance: routes.reduce((sum, r) => sum + (Number(r.baseDistanceKm) || 0), 0),
-        avgDuration: routes.length > 0
-            ? Math.round(routes.reduce((sum, r) => sum + (Number(r.estimatedDurationMin) || 0), 0) / routes.length)
-            : 0
-    };
+    const stats = useMemo(() => {
+        let sightseeing = 0;
+        let charter = 0;
+        let bus = 0;
+        routes.forEach((route) => {
+            const key = resolveRouteLabelKey(route);
+            if (key === "Sightseeing") sightseeing += 1;
+            else if (key === "Charter" || key === "GPS") charter += 1;
+            else if (key === "Bus") bus += 1;
+        });
+        return {
+            total: routes.length,
+            sightseeing,
+            charter,
+            bus,
+        };
+    }, [routes]);
 
     const filteredRoutes = useMemo(() => {
         const term = searchTerm.toLowerCase().trim();
@@ -207,35 +217,25 @@ export function RouteManagement() {
             )}
 
             {/* SECTION 1: KHỐI CARD THỐNG KÊ SỐ LIỆU */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 group-hover:bg-[#124757] group-hover:text-white dark:group-hover:bg-yellow-400 dark:group-hover:text-slate-900 transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">alt_route</span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số tuyến" : "Total Routes"}</span>
-                        <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">{stats.total}</h3>
-                    </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số tuyến" : "Total Routes"}</span>
+                    <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">{isLoading ? "..." : stats.total}</h3>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">straighten</span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng chiều dài" : "Total Distance"}</span>
-                        <h3 className="text-xl font-black font-headline text-blue-600 dark:text-blue-400 mt-0.5">{stats.totalDistance.toFixed(1)} km</h3>
-                    </div>
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Sightseeing</span>
+                    <h3 className="text-xl font-black font-headline text-violet-600 dark:text-violet-400 mt-0.5">{isLoading ? "..." : stats.sightseeing}</h3>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-inner">
-                        <span className="material-symbols-outlined text-2xl">schedule</span>
-                    </div>
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Thời gian TB / tuyến" : "Avg Duration / Route"}</span>
-                        <h3 className="text-xl font-black font-headline text-emerald-600 dark:text-emerald-400 mt-0.5">{stats.avgDuration} {lang === "VN" ? "phút" : "min"}</h3>
-                    </div>
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Request (Charter)</span>
+                    <h3 className="text-xl font-black font-headline text-amber-600 dark:text-amber-400 mt-0.5">{isLoading ? "..." : stats.charter}</h3>
+                </div>
+
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Bus</span>
+                    <h3 className="text-xl font-black font-headline text-teal-600 dark:text-teal-400 mt-0.5">{isLoading ? "..." : stats.bus}</h3>
                 </div>
             </div>
 

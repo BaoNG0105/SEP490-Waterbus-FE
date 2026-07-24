@@ -435,8 +435,8 @@ export function BookingDetailPage({ serviceType }) {
                     const sameDay = formatDateOnly(item.scheduledArrival) === formatDateOnly(item.scheduledDeparture);
                     const routeTitle = isLoopTour
                       ? (lang === "VN"
-                        ? `Tour vòng quanh ${item.fromStationName}`
-                        : `Loop tour around ${item.fromStationName}`)
+                        ? `Tour tham quan ${item.fromStationName}`
+                        : `Sightseeing tour · ${item.fromStationName}`)
                       : `${item.fromStationName} → ${item.toStationName}`;
                     const timeLine = `${formatDateOnly(item.scheduledDeparture)} · ${formatTime(item.scheduledDeparture)} → ${sameDay ? "" : `${formatDateOnly(item.scheduledArrival)} `}${formatTime(item.scheduledArrival)}`;
 

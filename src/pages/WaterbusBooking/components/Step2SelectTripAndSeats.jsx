@@ -14,6 +14,7 @@ import {
 } from "../../../utils/bookingWizardGuard";
 import {
   formatBookingClosedMessage,
+  formatTripUnavailableShortLabel,
   formatFareAdjustmentLabel,
   formatMinPriceLabel,
   formatSegmentDistanceLabel,
@@ -26,7 +27,8 @@ const MAX_SEATS_PER_LEG = 10;
 const LOCKED_STATUSES = ["Held", "Booked", "Blocked"];
 
 const WATERBUS_TRIP_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1783792724/cqi2n26pl7etht4ad5q3.webp";
-const SIGHTSEEING_TRIP_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1783792723/qozuixs81skui0fwokvm.webp";
+// Ảnh ngữ cảnh tour tham quan (sông / trải nghiệm) — khác ảnh đặt vé Waterbus thường.
+const SIGHTSEEING_TRIP_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg";
 
 const TIME_FILTER_OPTIONS_VN = [
   { value: "all", label: "Tất cả khung giờ" },
@@ -93,6 +95,7 @@ const isTripSelectable = (trip) => {
 };
 
 const getTripUnavailableLabel = (trip, lang) => formatBookingClosedMessage(trip, lang);
+const getTripUnavailableShortLabel = (trip, lang) => formatTripUnavailableShortLabel(trip, lang);
 
 // Chuyển ký tự hàng ghế (A, B, C...) thành số thứ tự hàng cho CSS grid
 const rowLetterToIndex = (row) => {
@@ -200,6 +203,7 @@ export default function Step2SelectTripAndSeats({
     fromWharfName, toWharfName,
     fromWharfCode, toWharfCode,
     routeType,
+    departureDate, returnDate,
     departureTripOptions, returnTripOptions,
     selectedDepartureTrip, selectedReturnTrip,
     selectedSeatsDeparture, selectedSeatsReturn
@@ -718,11 +722,46 @@ export default function Step2SelectTripAndSeats({
 
       {(fromWharfName || toWharfName) && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm font-bold text-slate-500 dark:border-slate-700/50 dark:bg-slate-800 dark:text-slate-300">
-          <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400">search</span>
-          {lang === "VN" ? "Tìm kiếm từ bến" : "Searching from"}
-          <span className="text-[#124757] dark:text-yellow-400">{fromWharfName || "--"}</span>
-          {lang === "VN" ? "đến bến" : "to"}
-          <span className="text-[#124757] dark:text-yellow-400">{toWharfName || "--"}</span>
+          <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400">
+            {isLoopRoute ? "tour" : "search"}
+          </span>
+          {isLoopRoute ? (
+            <>
+              {lang === "VN" ? "Tour tham quan tại" : "Sightseeing tour at"}
+              <span className="text-[#124757] dark:text-yellow-400">{fromWharfName || toWharfName || "--"}</span>
+            </>
+          ) : (
+            <>
+              {lang === "VN" ? "Tìm kiếm từ bến" : "Searching from"}
+              <span className="text-[#124757] dark:text-yellow-400">{fromWharfName || "--"}</span>
+              {lang === "VN" ? "đến bến" : "to"}
+              <span className="text-[#124757] dark:text-yellow-400">{toWharfName || "--"}</span>
+            </>
+          )}
+          {(activeLeg === "departure" ? departureDate : returnDate) && (
+            <>
+              <span className="text-slate-300 dark:text-slate-600">·</span>
+              <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400">calendar_month</span>
+              <span className="text-[#124757] dark:text-yellow-400">
+                {(() => {
+                  const raw = activeLeg === "departure" ? departureDate : returnDate;
+                  const m = String(raw || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                  if (!m) return raw;
+                  return lang === "VN" ? `${m[3]}/${m[2]}/${m[1]}` : `${m[2]}/${m[3]}/${m[1]}`;
+                })()}
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
+      {filteredTripOptions.length > 0
+        && filteredTripOptions.every((trip) => !isTripSelectable(trip))
+        && filteredTripOptions.some((trip) => isMissingKmBookingBlock(trip)) && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          {lang === "VN"
+            ? "Các chuyến ngày này tạm chưa mở bán vì hệ thống chưa tính được giá. Bạn có thể thử ngày khác, hoặc liên hệ hỗ trợ để được cập nhật."
+            : "Trips on this date are not on sale yet because pricing is incomplete. Try another date, or contact support."}
         </div>
       )}
 
@@ -784,9 +823,18 @@ export default function Step2SelectTripAndSeats({
                           <span className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(getSegmentArrival(trip))}</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                          <span>{legFromWharfName || "--"}</span>
-                          <span className="material-symbols-outlined text-xs">arrow_forward</span>
-                          <span>{legToWharfName || "--"}</span>
+                          {isLoopRoute ? (
+                            <span>
+                              {lang === "VN" ? "Tour tham quan · " : "Sightseeing · "}
+                              {legFromWharfName || "--"}
+                            </span>
+                          ) : (
+                            <>
+                              <span>{legFromWharfName || "--"}</span>
+                              <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                              <span>{legToWharfName || "--"}</span>
+                            </>
+                          )}
                         </div>
                         {fareAdjLabel ? (
                           <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
@@ -812,10 +860,12 @@ export default function Step2SelectTripAndSeats({
                             formatMinPriceLabel(trip.minPrice, lang)
                           )}
                         </div>
-                        <div className="text-xs text-slate-500 whitespace-nowrap">
+                        <div className={`text-xs max-w-[11rem] sm:max-w-[13rem] ${
+                          selectable ? "text-slate-500 whitespace-nowrap" : "text-rose-600 dark:text-rose-300 font-semibold leading-snug"
+                        }`}>
                           {selectable
                             ? (lang === "VN" ? `Còn trống ${trip.availableSeats}/${trip.totalSeats} chỗ` : `${trip.availableSeats}/${trip.totalSeats} left`)
-                            : getTripUnavailableLabel(trip, lang)}
+                            : getTripUnavailableShortLabel(trip, lang)}
                         </div>
                       </div>
                       <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${

@@ -195,7 +195,15 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
           <AppDateInput
             value={departureDate}
             min={getTodayDateString()}
-            onChange={(e) => updateData({ departureDate: e.target.value })}
+            onChange={(e) => {
+              const next = e.target.value;
+              const patch = { departureDate: next };
+              // Khứ hồi: nếu ngày đi đẩy quá ngày về → kéo ngày về theo
+              if (isRoundTrip && next && returnDate && returnDate < next) {
+                patch.returnDate = next;
+              }
+              updateData(patch);
+            }}
             className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
           />
         </div>

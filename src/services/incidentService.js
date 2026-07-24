@@ -62,9 +62,14 @@ export const normalizeIncident = (raw) => {
     managerUserId: pick(raw, ["managerUserId", "assignedManagerId", "manager.id"], ""),
     managerName: pick(raw, ["managerName", "assignedManagerName", "manager.fullName"], ""),
     activeTicketCount: Number(pick(raw, ["activeTicketCount", "ActiveTicketCount"], 0)) || 0,
-    onboardPassengerCount: Number(pick(raw, [
-      "onboardPassengerCount", "OnboardPassengerCount", "onBoardPassengerCount",
-    ], 0)) || 0,
+    onboardPassengerCount: (() => {
+      const n = Number(pick(raw, [
+        "onboardPassengerCount", "OnboardPassengerCount", "onBoardPassengerCount",
+        "OnBoardPassengerCount", "passengersOnboard", "PassengersOnboard",
+        "currentPassengerCount", "CurrentPassengerCount", "passengerCount", "PassengerCount",
+      ], null));
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    })(),
     futurePassengerCount: Number(pick(raw, [
       "futurePassengerCount", "FuturePassengerCount",
     ], 0)) || 0,
@@ -151,13 +156,36 @@ export const normalizeReplacementMissionType = (value) => {
   return String(value || "None").trim() || "None";
 };
 
+/** Số khách trên tàu để hiển thị / quyết định cứu hộ.
+ * BE đôi khi gửi onboardPassengerCount=0 dù còn activeTicketCount (vé đã bán trên chuyến).
+ * Khi onboard=0 và còn vé: suy ra max(0, active − future); nếu future cũng 0 → dùng active.
+ */
+export const resolveIncidentOnboardCount = (incident) => {
+  const onboard = Number(incident?.onboardPassengerCount);
+  const tickets = Number(incident?.activeTicketCount);
+  const future = Number(incident?.futurePassengerCount);
+  if (Number.isFinite(onboard) && onboard > 0) return Math.trunc(onboard);
+
+  const ticketsN = Number.isFinite(tickets) && tickets > 0 ? Math.trunc(tickets) : 0;
+  if (ticketsN > 0) {
+    const futureN = Number.isFinite(future) && future > 0 ? Math.trunc(future) : 0;
+    const inferred = Math.max(0, ticketsN - futureN);
+    return inferred > 0 ? inferred : ticketsN;
+  }
+
+  if (Number.isFinite(onboard) && onboard >= 0) return Math.trunc(onboard);
+  return 0;
+};
+
 /** Cần tàu thay thế (chở khách) theo mission BE — không chỉ nhìn activeTicketCount. */
 export const incidentNeedsReplacementBoat = (incident) => {
   const mission = normalizeReplacementMissionType(incident?.replacementMissionType);
   if (mission === "TransferAtIncidentLocation" || mission === "ContinueFromStation") return true;
-  if (mission === "None") return false;
   if (mission === "PassengerRecoveryRequired") return false; // Manager tự quyết sau khi kiểm tra
-  return Number(incident?.activeTicketCount) > 0;
+  const onboard = resolveIncidentOnboardCount(incident);
+  const tickets = Number(incident?.activeTicketCount) || 0;
+  // None + còn vé/khách: vẫn cần thay thế (tránh BE gửi onboard=0 / mission=None nhầm).
+  return onboard > 0 || tickets > 0;
 };
 
 /** Hiện ô chọn tàu thay thế (bắt buộc hoặc tuỳ chọn). */
@@ -165,8 +193,7 @@ export const incidentShowsReplacementBoatField = (incident) => {
   const mission = normalizeReplacementMissionType(incident?.replacementMissionType);
   if (mission === "TransferAtIncidentLocation" || mission === "ContinueFromStation") return true;
   if (mission === "PassengerRecoveryRequired") return true;
-  if (mission === "None") return false;
-  return Number(incident?.activeTicketCount) > 0;
+  return incidentNeedsReplacementBoat(incident);
 };
 
 /** Copy hiển thị theo replacementMissionType (spec FE). */
@@ -174,6 +201,8 @@ export const getReplacementMissionCopy = (incident, lang = "VN") => {
   const mission = normalizeReplacementMissionType(incident?.replacementMissionType);
   const station = String(incident?.replacementTargetStationName || "").trim();
   const isVn = lang === "VN";
+  const onboard = resolveIncidentOnboardCount(incident);
+  const tickets = Number(incident?.activeTicketCount) || 0;
 
   switch (mission) {
     case "TransferAtIncidentLocation":
@@ -194,6 +223,11 @@ export const getReplacementMissionCopy = (incident, lang = "VN") => {
         : "Insufficient passenger location/segment data. Manager must verify manually.";
     case "None":
     default:
+      if (onboard > 0 || tickets > 0) {
+        return isVn
+          ? `Còn ${onboard > 0 ? onboard : tickets} khách/vé trên chuyến — cần tàu thay thế (không chỉ cứu hộ).`
+          : `${onboard > 0 ? onboard : tickets} passenger(s)/ticket(s) on the trip — replacement boat is needed.`;
+      }
       return isVn
         ? "Không có khách bị ảnh hưởng. Chỉ cần tàu cứu hộ."
         : "No passengers affected. Rescue boat only.";

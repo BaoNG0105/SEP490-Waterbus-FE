@@ -266,6 +266,7 @@ export function AppDateInput({
         role="dialog"
         aria-label={isVn ? "Chọn ngày" : "Choose date"}
         style={{ top: panelPos.top, left: panelPos.left }}
+        onMouseDown={(event) => event.stopPropagation()}
         className="fixed z-[200] w-[18.5rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-600 dark:bg-slate-900"
       >
         <div className="mb-2 flex items-center justify-between gap-2">
@@ -313,6 +314,7 @@ export function AppDateInput({
                 key={key}
                 type="button"
                 disabled={disabledDay}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => handleSelect(day)}
                 className={`h-9 rounded-lg text-xs font-bold transition ${
                   isSelected
@@ -321,7 +323,7 @@ export function AppDateInput({
                       ? "ring-1 ring-[#124757]/30 text-[#124757] dark:ring-yellow-400/40 dark:text-yellow-400"
                       : inMonth
                         ? "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                        : "text-slate-300 dark:text-slate-600"
+                        : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                 } ${disabledDay ? "cursor-not-allowed opacity-35 hover:bg-transparent" : ""}`}
               >
                 {day.getDate()}

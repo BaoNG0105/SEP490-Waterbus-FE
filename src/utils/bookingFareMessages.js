@@ -20,7 +20,21 @@ export const isMissingKmBookingBlock = (tripOrMap) => {
   return false;
 };
 
-/** Thông báo cho khách (và gợi ý admin nhập km). */
+/** Thông báo ngắn trên thẻ chuyến (tránh tràn layout). */
+export const formatTripUnavailableShortLabel = (tripOrMap, lang = "VN") => {
+  if (isMissingKmBookingBlock(tripOrMap)) {
+    return lang === "VN" ? "Chưa mở bán — thiếu giá" : "Not on sale — price N/A";
+  }
+  if (Number(tripOrMap?.availableSeats) <= 0) {
+    return lang === "VN" ? "Hết chỗ" : "Sold out";
+  }
+  if (tripOrMap?.isBookable === false || tripOrMap?.isBookingClosed === true) {
+    return lang === "VN" ? "Đã khóa đặt" : "Booking closed";
+  }
+  return lang === "VN" ? "Không thể chọn" : "Unavailable";
+};
+
+/** Thông báo cho khách — không lộ jargon/admin field. */
 export const formatBookingClosedMessage = (tripOrMap, lang = "VN") => {
   const reason = String(
     tripOrMap?.bookingClosedReason
@@ -30,17 +44,15 @@ export const formatBookingClosedMessage = (tripOrMap, lang = "VN") => {
   ).trim();
 
   if (isMissingKmBookingBlock(tripOrMap)) {
-    if (lang === "VN") {
-      return reason
-        ? `Chưa tính được giá vì thiếu km chặng. Admin cần nhập distanceFromPreviousKm trên tuyến. (${reason})`
-        : "Chưa tính được giá vì thiếu km chặng. Admin cần nhập distanceFromPreviousKm trên tuyến/bến dừng.";
-    }
-    return reason
-      ? `Price unavailable — missing segment km. Admin must set distanceFromPreviousKm on the route. (${reason})`
-      : "Price unavailable — missing segment km. Admin must set distanceFromPreviousKm on route stops.";
+    return lang === "VN"
+      ? "Chuyến này tạm chưa mở bán vì hệ thống chưa có đủ thông tin để tính giá. Vui lòng thử ngày/chặng khác hoặc liên hệ hỗ trợ."
+      : "This trip is not on sale yet — pricing data is incomplete. Please try another date/route or contact support.";
   }
 
-  if (reason) return reason;
+  // Ẩn lý do kỹ thuật BE (tên field, hướng dẫn admin) khỏi UI khách
+  if (reason && !looksLikeMissingKm(reason) && !/distanceFromPreviousKm|admin/i.test(reason)) {
+    return reason;
+  }
 
   if (Number(tripOrMap?.availableSeats) <= 0) {
     return lang === "VN" ? "Hết chỗ" : "Sold out";

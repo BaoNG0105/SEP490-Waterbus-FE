@@ -78,12 +78,24 @@ export const normalizeOperationsScheduleEntry = (raw) => {
   const lng = toFiniteNumber(pick(raw, [
     "latestLongitude", "LatestLongitude", "longitude", "lng", "Longitude",
   ], null));
-  const remainingKm = toFiniteNumber(pick(raw, [
-    "remainingDistanceKmToNextStation",
-    "RemainingDistanceKmToNextStation",
-    "remainingDistanceKm",
-    "distanceKmToNextStation",
-  ], null));
+  const remainingKm = (() => {
+    const km = toFiniteNumber(pick(raw, [
+      "remainingDistanceKmToNextStation",
+      "RemainingDistanceKmToNextStation",
+      "remainingDistanceKm",
+      "distanceKmToNextStation",
+    ], null));
+    if (km != null && km >= 0) return km;
+    const meters = toFiniteNumber(pick(raw, [
+      "remainingDistanceMetersToNextStation",
+      "RemainingDistanceMetersToNextStation",
+      "remainingDistanceM",
+      "distanceMetersToNextStation",
+      "DistanceToNextStationMeters",
+    ], null));
+    if (meters != null && meters >= 0) return meters / 1000;
+    return null;
+  })();
   const remainingMin = toFiniteNumber(pick(raw, [
     "remainingMinutesToNextStation",
     "RemainingMinutesToNextStation",

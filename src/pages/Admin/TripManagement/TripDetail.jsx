@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { WaterwayMap } from "../../../components/WaterwayMap";
+import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
 import {
   fetchTripDetail,
   getTripStatusLabel,
@@ -21,9 +22,14 @@ import {
   fetchStaffAssignments,
   isAssignmentInactive,
 } from "../../../services/staffAssignmentService";
+import {
+  getIncidentTypeLabel,
+  getSeverityLabel,
+} from "../../../services/incidentService";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../../../utils/charterBookingAdmin";
+import { formatCustomerRouteTitle } from "../../../utils/routeTypes";
 import { getApiErrorMessage } from "../../../utils/apiError";
-import { formatDwellCountdownNotice, isDwellAtTerminalStop } from "../../../utils/boatTracking";
+import { formatDwellCountdownNotice, shouldSuppressDwellCountdown } from "../../../utils/boatTracking";
 import { geometryToCoordinates as parseRouteGeometry } from "../../../utils/charterRouteMap";
 import { assignmentCoversDay, toDateKey } from "../../../utils/staffAssignmentCalendarUtils";
 import { notify, showToast } from "../../../utils/swalToast";
@@ -522,6 +528,7 @@ const TripRealRouteMap = ({
   routeCode = "",
   isMoving = false,
   showBoat = true,
+  hasOpenIncident = false,
   lang = "VN",
 }) => {
   const pathPoints = useMemo(() => {
@@ -613,15 +620,17 @@ const TripRealRouteMap = ({
       passengerCount: boat?.passengerCount,
       isOnline: Boolean(liveLocation) || isMoving,
       speed: liveLocation?.speed,
+      hasOpenIncident: Boolean(hasOpenIncident),
+      activeIncident: Boolean(hasOpenIncident),
     }];
-  }, [showBoat, boat, boatId, boatLatLng, liveLocation, isMoving]);
+  }, [showBoat, boat, boatId, boatLatLng, liveLocation, isMoving, hasOpenIncident]);
 
   const endStation = stations[stations.length - 1];
-  const displayRoute = routeLabel
-    || [routeCode, shortStationName(stations[0]?.stationName), shortStationName(endStation?.stationName)]
+  const displayRoute = formatCustomerRouteTitle(routeLabel, routeCode, lang)
+    || [shortStationName(stations[0]?.stationName), shortStationName(endStation?.stationName)]
       .filter(Boolean)
       .join(" · ")
-    || (lang === "VN" ? "Tuyến chuyến" : "Trip route");
+    || (lang === "VN" ? "Hành trình" : "Trip route");
 
   if (pathPoints.length < 2 && !boatLatLng) {
     return (
@@ -652,9 +661,11 @@ const TripRealRouteMap = ({
         boatMarkerStyle="hull"
         waterwayName={displayRoute}
         overlayEyebrow={
-          showBoat
-            ? (lang === "VN" ? "Đang bám theo tàu" : "Following boat")
-            : (lang === "VN" ? "Tuyến đã kết thúc" : "Trip finished")
+          hasOpenIncident
+            ? (lang === "VN" ? "Tàu đang sự cố" : "Boat incident")
+            : showBoat
+              ? (lang === "VN" ? "Theo dõi chuyến" : "Tracking your trip")
+              : (lang === "VN" ? "Chuyến đã hoàn tất" : "Trip completed")
         }
         className="h-full min-h-0"
       />
@@ -666,6 +677,7 @@ export function TripDetail() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { id } = useParams();
+  const { incidents: openIncidents } = useLiveIncidents({ enabled: true, toast: true });
   const [trip, setTrip] = useState(null);
   const [boatCatalog, setBoatCatalog] = useState(null);
   const [stationCatalogById, setStationCatalogById] = useState(() => new Map());
@@ -1213,11 +1225,41 @@ export function TripDetail() {
   const dwellNotice = useMemo(
     () => formatDwellCountdownNotice(liveLocation?.dwellCountdown, lang, dwellTick, {
       stops,
-      isTerminalStop: statusKey === "Completed"
-        || isDwellAtTerminalStop(liveLocation?.dwellCountdown, stops),
+      // Chỉ ép “điểm cuối” khi chuyến Completed — không đoán sớm theo trùng tên bến vòng.
+      isTerminalStop: statusKey === "Completed",
+      boat: liveLocation,
+      suppress: shouldSuppressDwellCountdown(liveLocation),
     }),
-    [liveLocation?.dwellCountdown, lang, dwellTick, stops, statusKey],
+    [liveLocation, lang, dwellTick, stops, statusKey],
   );
+
+  // Open incident của tàu/chuyến này (REST + SignalR) — cùng nguồn với Live Tracking.
+  const openIncident = useMemo(() => {
+    if (!Array.isArray(openIncidents) || openIncidents.length === 0) return null;
+    const tripId = String(trip?.tripId || id || "").trim();
+    const boatId = String(boat?.id || trip?.boatId || "").trim();
+    const boatCode = String(boat?.code || trip?.boatCode || "").trim().toUpperCase();
+
+    const byTrip = tripId
+      ? openIncidents.find((inc) => String(inc.tripId || "").trim() === tripId)
+      : null;
+    if (byTrip) return byTrip;
+
+    return openIncidents.find((inc) => {
+      if (boatId && String(inc.boatId || "").trim() === boatId) return true;
+      if (boatCode && String(inc.boatCode || "").trim().toUpperCase() === boatCode) return true;
+      return false;
+    }) || null;
+  }, [openIncidents, trip, boat, id]);
+
+  const trackingIncidentFlag = Boolean(
+    liveLocation?.activeIncident === true
+    || tracking?.latestLocation?.activeIncident === true
+    || tracking?.boat?.activeIncident === true
+    || tracking?.raw?.activeIncident === true
+    || tracking?.raw?.ActiveIncident === true,
+  );
+  const hasOpenIncident = Boolean(openIncident) || trackingIncidentFlag;
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-2 pb-10 font-body animate-fade-in sm:px-4">
@@ -1249,9 +1291,17 @@ export function TripDetail() {
                 {lang === "VN" ? `Trễ ${delayMinutes} phút` : `Late ${delayMinutes} min`}
               </span>
             ) : null}
+            {hasOpenIncident ? (
+              <span className="inline-flex rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/15 dark:text-rose-300">
+                {lang === "VN" ? "Sự cố" : "Incident"}
+              </span>
+            ) : null}
           </div>
           <p className="mt-0.5 truncate text-xs text-slate-400">
-            {[trip?.routeCode, trip?.routeName].filter(Boolean).join(" · ") || (lang === "VN" ? "Chi tiết chuyến" : "Trip detail")}
+            {[
+              trip?.routeCode,
+              formatCustomerRouteTitle(trip?.routeName || trip?.route?.routeName, "", lang),
+            ].filter(Boolean).join(" · ") || (lang === "VN" ? "Chi tiết chuyến" : "Trip detail")}
           </p>
           {delayActive ? (
             <p className="mt-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
@@ -1321,6 +1371,44 @@ export function TripDetail() {
           </button>
         </div>
       </div>
+
+      {hasOpenIncident ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs dark:border-rose-500/30 dark:bg-rose-500/10">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 space-y-1">
+              <p className="font-headline font-black uppercase tracking-wider text-rose-800 dark:text-rose-200">
+                {lang === "VN" ? "Tàu đang có sự cố" : "Boat has an open incident"}
+              </p>
+              <p className="font-bold text-rose-900 dark:text-rose-100">
+                {[
+                  openIncident
+                    ? getIncidentTypeLabel(openIncident.incidentType, lang)
+                    : (lang === "VN" ? "Sự cố đang mở" : "Open incident"),
+                  openIncident ? getSeverityLabel(openIncident.severity, lang) : null,
+                  openIncident?.boatCode || boat?.code || trip?.boatCode || null,
+                ].filter(Boolean).join(" · ")}
+              </p>
+              {openIncident?.description ? (
+                <p className="text-[11px] font-medium text-rose-800/80 dark:text-rose-200/80 line-clamp-2">
+                  {openIncident.description}
+                </p>
+              ) : null}
+              {openIncident?.rescueBoatCode ? (
+                <p className="text-[11px] font-bold text-rose-800 dark:text-rose-200">
+                  {lang === "VN" ? "Tàu cứu hộ: " : "Rescue boat: "}
+                  {openIncident.rescueBoatCode}
+                </p>
+              ) : null}
+            </div>
+            <Link
+              to="/admin/incidents"
+              className="shrink-0 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 underline dark:text-rose-300"
+            >
+              {lang === "VN" ? "Xem sự cố" : "View incidents"}
+            </Link>
+          </div>
+        </div>
+      ) : null}
 
       {affectedNotice.length > 0 ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs dark:border-amber-500/30 dark:bg-amber-500/10">
@@ -1445,7 +1533,7 @@ export function TripDetail() {
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-3.5 py-3 dark:bg-slate-900/60">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      {lang === "VN" ? "Hành khách (unique)" : "Passengers (unique)"}
+                      {lang === "VN" ? "Hành khách" : "Passengers"}
                     </p>
                     <p className="mt-1.5 text-sm font-black tabular-nums text-slate-800 dark:text-slate-100">
                       {formatCount(passengerCount)}
@@ -1471,9 +1559,6 @@ export function TripDetail() {
                     </p>
                     <p className="mt-1.5 text-sm font-black text-slate-800 dark:text-slate-100">
                       {operatingDateLabel}
-                    </p>
-                    <p className="mt-0.5 text-[11px] font-bold text-slate-400">
-                      {trip.routeType || trip.tripType || "—"}
                     </p>
                     {fareAdjustment ? (
                       <p className="mt-1 text-[11px] font-black text-amber-700 dark:text-amber-300">
@@ -1531,16 +1616,23 @@ export function TripDetail() {
                 passengerCount,
               }}
               routeCode={routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || ""}
-              routeLabel={
-                [
-                  routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode,
-                  routeMeta.routeName || trip?.routeName || trip?.route?.routeName,
-                ].filter(Boolean).join(" · ")
-                || `${fromName} → ${toName}`
-              }
+              routeLabel={formatCustomerRouteTitle(
+                routeMeta.routeName || trip?.routeName || trip?.route?.routeName || "",
+                routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "",
+                lang,
+              ) || `${fromName} → ${toName}`}
               isMoving={isBoatMoving || (Boolean(liveLocation) && (statusKey === "InProgress" || statusKey === "Delayed"))}
+              hasOpenIncident={hasOpenIncident}
               lang={lang}
             />
+
+            {hasOpenIncident ? (
+              <p className="border-t border-rose-100 bg-rose-50 px-4 py-2.5 text-[11px] font-bold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200 sm:px-5">
+                {lang === "VN"
+                  ? "Marker đỏ — tàu của chuyến đang có sự cố mở."
+                  : "Red marker — this trip’s boat has an open incident."}
+              </p>
+            ) : null}
 
             {dwellNotice ? (
               <p className="border-t border-amber-100 bg-amber-50 px-4 py-2.5 text-[11px] font-bold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 sm:px-5">
@@ -1635,13 +1727,13 @@ export function TripDetail() {
           <section className="rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5 dark:border-slate-700">
               <h3 className="font-headline text-xs font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                {lang === "VN" ? `Bến dừng (${stops.length})` : `Stops (${stops.length})`}
+                {lang === "VN" ? `Lịch trình (${stops.length} bến)` : `Itinerary (${stops.length} stations)`}
               </h3>
             </div>
 
             {stops.length === 0 ? (
               <p className="p-8 text-center text-xs font-medium text-slate-400">
-                {lang === "VN" ? "Không có stops[]." : "No stops[]."}
+                {lang === "VN" ? "Chuyến chưa có lịch trình bến." : "This trip has no station itinerary yet."}
               </p>
             ) : (
               <ol className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -1656,8 +1748,6 @@ export function TripDetail() {
                     || catalog?.stationName
                     || catalog?.name
                     || "—";
-                  const code = catalog?.stationCode || catalog?.code || "";
-                  const address = catalog?.address || catalog?.stationAddress || "";
                   const stopOpsBadge = resolveStopOpsBadge(stop, {
                     isFirst,
                     isLast,
@@ -1679,10 +1769,9 @@ export function TripDetail() {
                   const onboard = toCount(stop.onboardPassengerCount);
                   const boarding = toCount(stop.boardingPassengerCount) ?? 0;
                   const alighting = toCount(stop.alightingPassengerCount);
-                  const segment = toCount(stop.segmentPassengerCount);
 
                   return (
-                    <li key={stop.tripStopId || `${stop.stopOrder}-${code}-${index}`} className="grid gap-4 p-4 sm:grid-cols-[auto_1fr] sm:p-5">
+                    <li key={stop.tripStopId || `${stop.stopOrder}-${stop.stationId || index}`} className="grid gap-4 p-4 sm:grid-cols-[auto_1fr] sm:p-5">
                       <div className="flex items-start gap-3 sm:block">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#124757] text-[12px] font-headline font-black text-white dark:bg-yellow-400 dark:text-[#124757]">
                           {stop.stopOrder ?? index + 1}
@@ -1694,11 +1783,7 @@ export function TripDetail() {
                           <div className="min-w-0">
                             <p className="font-headline text-sm font-black text-slate-800 dark:text-white">
                               {name}
-                              {code ? <span className="ml-2 text-[11px] font-bold text-slate-400">{code}</span> : null}
                             </p>
-                            {address ? (
-                              <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-400">{address}</p>
-                            ) : null}
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5">
                             {stopOpsBadge ? (
@@ -1738,9 +1823,6 @@ export function TripDetail() {
                             {onboard != null && capacity != null
                               ? `${onboard}/${capacity}`
                               : (onboard == null ? "—" : onboard)}
-                          </span>
-                          <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-bold text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                            {lang === "VN" ? "Chặng" : "Segment"} {segment == null ? "—" : segment}
                           </span>
                         </div>
                       </div>

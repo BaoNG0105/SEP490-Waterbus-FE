@@ -29,7 +29,7 @@ export const getRouteKindLabel = (routeTypeOrRoute, lang = "VN") => {
     case "GPS":
       return isVn ? "Route nguồn GPS" : "GPS source route";
     case "Sightseeing":
-      return isVn ? "Route vòng tham quan" : "Sightseeing route";
+      return isVn ? "Tour tham quan" : "Sightseeing tour";
     case "Charter":
       return isVn ? "Route charter" : "Charter route";
     default:
@@ -62,6 +62,31 @@ export const isSightseeingLoopRoute = (routeOrType) => {
   if (key === "Sightseeing") return true;
   const type = typeof routeOrType === "string" ? routeOrType : routeOrType?.routeType;
   return String(type || "") === "SightseeingLoop";
+};
+
+/**
+ * Nhãn tuyến hiển thị cho khách — bỏ jargon BE (SightseeingLoop, "Vòng sightseeing").
+ * VD: "Bến Bạch Đằng · Vòng sightseeing" → "Bến Bạch Đằng"
+ */
+export const formatCustomerRouteTitle = (routeName, routeCode = "", lang = "VN") => {
+  let name = String(routeName || "").trim();
+  name = name
+    .replace(/\s*[·•|/]\s*Vòng\s*sightseeing\s*$/i, "")
+    .replace(/\s*[·•|/]\s*Sightseeing\s*Loop\s*$/i, "")
+    .replace(/\s*[·•|/]\s*SightseeingLoop\s*$/i, "")
+    .replace(/\bSightseeingLoop\b/gi, "")
+    .replace(/\bVòng\s*sightseeing\b/gi, "")
+    .replace(/\bSightseeing\s*Loop\b/gi, "")
+    .replace(/\s*[·•|/]\s*$/g, "")
+    .replace(/^\s*[·•|/]\s*/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (name) return name;
+
+  const code = String(routeCode || "").trim();
+  if (code && !/sightseeing|loop/i.test(code)) return code;
+  return lang === "VN" ? "Tour tham quan" : "Sightseeing tour";
 };
 
 export const isGeneratedBookingRoute = (route) => {
