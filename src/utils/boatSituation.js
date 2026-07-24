@@ -1,9 +1,14 @@
 import { isBoatUnderMaintenance, resolveBoatLiveStatus, formatDwellCountdownNotice } from "./boatTracking";
 import { getMovementStatusLabel } from "../services/operationsService";
 
-const DOCK_METERS = 150;
 const APPROACH_METERS = 400;
 const MOVING_KMH = 1.2;
+const DOCK_METERS = 150;
+/** ≤1 phút mới coi “chuẩn bị cập / sắp cập” — ~2p với ~1km vẫn là đang chạy (khớp panel GPS). */
+const DOCKING_SOON_MIN = 1;
+const APPROACHING_SOON_MIN = 5; // <=5: sắp đến trong n phút
+/** Sát bến mới gọi “sắp cập” khi tàu vẫn còn tốc độ. */
+const DOCKING_NEAR_METERS = 250;
 /** Thông báo cập/rời bến hiện ngắn rồi ẩn; có event mới thì hiện lại. */
 const ARRIVED_HIDE_MS = 12_000;
 const NOTICE_FLASH_MS = 12_000;
@@ -57,9 +62,6 @@ const resolveMinutesUntilDeparture = (boat) => {
   if (!Number.isNaN(ts)) return Math.round((ts - Date.now()) / 60000);
   return null;
 };
-
-const APPROACHING_SOON_MIN = 5; // <=5: sắp đến trong n phút
-const DOCKING_SOON_MIN = 2; // <=2: chuẩn bị cập / sắp cập
 
 const isMovingBoat = (boat, movementKey = "") => {
   if (["boarding", "scheduled", "atstation"].includes(movementKey)) return false;
@@ -206,9 +208,9 @@ const resolveOpsNav = (boat, stations = []) => {
 
 /**
  * ETA từ API tracking/schedule.
- * - Có remainingMinutes → dùng (kể cả 0), trừ khi =0 mà còn xa (km lớn) → ước lại từ km/tốc độ.
- * - Không có phút → ước từ remainingDistanceKm + speed (cùng công thức panel GPS).
- * - Không ước từ “bến gần nhất” đường chim bay.
+ * - Ưu tiên khớp panel GPS: có km + tốc độ → ước phút từ km/speed.
+ * - Phút API chỉ dùng khi hợp lý; 0p / <1p trong khi còn xa hoặc đang chạy → ước từ tốc độ.
+ * - F5/reload: cùng công thức — không phụ thuộc sticky state trước đó.
  */
 export const resolveEtaMinutesToNext = (boat, metersHint = null) => {
   const speed = Number(boat?.speed);
@@ -224,19 +226,39 @@ export const resolveEtaMinutesToNext = (boat, metersHint = null) => {
 
   let fromSpeed = null;
   const kmForEta = km ?? kmFromHint;
-  if (Number.isFinite(kmForEta) && kmForEta >= 0 && Number.isFinite(speed) && speed >= MOVING_KMH) {
+  if (Number.isFinite(kmForEta) && kmForEta > 0 && Number.isFinite(speed) && speed >= MOVING_KMH) {
+    // 1.1km / 31kmh ≈ 2.13 → 2 (khớp ~2p trên panel GPS)
     fromSpeed = Math.max(0, Math.round((kmForEta / speed) * 60));
+    // Còn ≥150m mà round ra 0 → tối thiểu 1p (tránh <1p khi đang chạy)
+    if (fromSpeed <= 0 && kmForEta * 1000 > DOCK_METERS) fromSpeed = 1;
   }
 
   const direct = Number(boat?.remainingMinutesToNextStation);
   if (Number.isFinite(direct) && direct >= 0) {
     const rounded = Math.max(0, Math.round(direct));
-    // API/GPS gửi 0p nhưng còn xa (vd 1.2km) → tin km+tốc độ như panel GPS
+    // API gửi 0/<1p hoặc thấp hơn ước km+tốc độ trong khi còn xa → tin GPS như panel simulator
     if (
       fromSpeed != null
       && fromSpeed > rounded
       && Number.isFinite(kmForEta)
-      && kmForEta * 1000 > APPROACH_METERS
+      && (kmForEta * 1000 > DOCK_METERS || rounded <= 0)
+    ) {
+      return fromSpeed;
+    }
+    // Đang chạy rõ + API 0p mà thiếu/zero km → không hiện <1p
+    if (
+      rounded <= 0
+      && Number.isFinite(speed) && speed >= MOVING_KMH
+      && (!Number.isFinite(kmForEta) || kmForEta <= 0)
+    ) {
+      return null;
+    }
+    if (
+      fromSpeed != null
+      && Number.isFinite(speed) && speed >= MOVING_KMH
+      && Number.isFinite(kmForEta) && kmForEta > 0.15
+      && Math.abs(fromSpeed - rounded) >= 1
+      && fromSpeed > rounded
     ) {
       return fromSpeed;
     }
@@ -259,13 +281,45 @@ const formatEtaInNotice = (eta, isVn) => {
 };
 
 /**
+ * Chỉ “sắp cập / chuẩn bị cập” khi thật sự gần bến.
+ * BE hay sticky Arriving trong lúc tàu còn chạy xa → không tin status suông.
+ */
+export const isDockingSoonNow = (boat, { eta = null, meters = null } = {}) => {
+  const speed = Number(boat?.speed);
+  const km = Number(boat?.remainingDistanceKmToNextStation);
+  const m = Number.isFinite(Number(meters))
+    ? Number(meters)
+    : (Number.isFinite(km) && km >= 0 ? km * 1000 : NaN);
+  const etaN = Number.isFinite(Number(eta))
+    ? Number(eta)
+    : resolveEtaMinutesToNext(boat, Number.isFinite(m) ? m : null);
+  const moving = Number.isFinite(speed) && speed >= MOVING_KMH;
+
+  // Còn xa theo km/ETA → đang di chuyển, không “sắp cập”
+  if (Number.isFinite(m) && m > APPROACH_METERS) return false;
+  if (Number.isFinite(etaN) && etaN > DOCKING_SOON_MIN) return false;
+
+  // Đang chạy: chỉ sắp cập khi sát bến (≤250m)
+  if (moving) {
+    return Number.isFinite(m) && m <= DOCKING_NEAR_METERS
+      && (etaN == null || etaN <= DOCKING_SOON_MIN);
+  }
+
+  // Chậm/đứng: ETA ≤1 + không còn xa
+  if (etaN != null && etaN <= DOCKING_SOON_MIN) {
+    return !Number.isFinite(m) || m <= APPROACH_METERS;
+  }
+  return Number.isFinite(m) && m <= APPROACH_METERS;
+};
+
+/**
  * Copy theo contract BE (priority):
  * 1. Arrived / AtStation → Đã cập bến {currentStationName}
  * 2. Departed (flash) → Đã rời bến
  * 3. minutesUntilDeparture + Boarding → Chờ xuất bến, còn n phút
- * 4. remainingMinutes <= 2 → Tàu chuẩn bị cập {nextStationName}
+ * 4. remainingMinutes <= 1 + sát bến → Tàu chuẩn bị cập {nextStationName}
  * 5. remainingMinutes <= 5 → Tàu sắp đến … trong n phút
- * 6. Arriving → Tàu chuẩn bị cập {nextStationName}
+ * 6. Arriving (sát bến) → Tàu chuẩn bị cập {nextStationName}
  * 7. Moving + ETA → đang di chuyển tới …, còn n phút
  */
 export const buildMovementNotice = (boat, lang = "VN", now = Date.now()) => {
@@ -283,14 +337,19 @@ export const buildMovementNotice = (boat, lang = "VN", now = Date.now()) => {
   const metersAway = Number.isFinite(remainKm) && remainKm >= 0 ? remainKm * 1000 : null;
   const remainMin = resolveEtaMinutesToNext(boat, metersAway);
   const untilDep = resolveMinutesUntilDeparture(boat);
-  const enRouteNow = key === "moving" || key === "delayed" || key === "arriving"
-    || stopEvent === "arriving"
-    || (Number.isFinite(Number(boat?.speed)) && Number(boat.speed) >= MOVING_KMH)
-    || String(boat?.status || "").toLowerCase() === "moving";
+  const speedNum = Number(boat?.speed);
+  const enRouteNow = key === "moving" || key === "delayed"
+    || (Number.isFinite(speedNum) && speedNum >= MOVING_KMH)
+    || String(boat?.status || "").toLowerCase() === "moving"
+    || (
+      (key === "arriving" || stopEvent === "arriving")
+      && !isDockingSoonNow(boat, { eta: remainMin, meters: metersAway })
+    );
 
   // 0) BE dwellCountdown khi đang dừng tại bến (Arrived chưa Departed)
   const dwellNotice = formatDwellCountdownNotice(boat?.dwellCountdown, lang, now, {
     stops: boat?.tripStops || boat?.stops,
+    boat,
   });
   // Ưu tiên notice đã tính sẵn (Live Tracking đã biết stops của trip).
   const dwellText = String(boat?.dwellNotice || "").trim() || dwellNotice;
@@ -345,12 +404,12 @@ export const buildMovementNotice = (boat, lang = "VN", now = Date.now()) => {
     return isVn ? "Chờ xuất bến" : "Waiting to depart";
   }
 
-  // 4–5) Theo remainingMinutesToNextStation (ưu tiên hơn bare Arriving)
+  // 4–5) Theo remainingMinutesToNextStation
   if (
     Number.isFinite(remainMin)
-    && (key === "moving" || key === "delayed" || key === "arriving" || stopEvent === "arriving" || !key)
+    && (key === "moving" || key === "delayed" || key === "arriving" || stopEvent === "arriving" || !key || enRouteNow)
   ) {
-    if (remainMin <= DOCKING_SOON_MIN) {
+    if (isDockingSoonNow(boat, { eta: remainMin, meters: metersAway })) {
       return nextName
         ? (isVn ? `Tàu chuẩn bị cập ${nextName}` : `Preparing to dock at ${nextName}`)
         : (isVn ? "Tàu chuẩn bị cập bến" : "Preparing to dock");
@@ -365,15 +424,20 @@ export const buildMovementNotice = (boat, lang = "VN", now = Date.now()) => {
       : (isVn ? `Tàu đang di chuyển, còn ${remainMin} phút` : `Moving, ${remainMin} min left`);
   }
 
-  // 6) Arriving (không có phút)
+  // 6) Arriving — chỉ khi sát bến; còn không → đang di chuyển
   if (key === "arriving" || stopEvent === "arriving") {
+    if (isDockingSoonNow(boat, { eta: remainMin, meters: metersAway })) {
+      return nextName
+        ? (isVn ? `Tàu chuẩn bị cập ${nextName}` : `Preparing to dock at ${nextName}`)
+        : (isVn ? "Tàu chuẩn bị cập bến" : "Preparing to dock");
+    }
     return nextName
-      ? (isVn ? `Tàu chuẩn bị cập ${nextName}` : `Preparing to dock at ${nextName}`)
-      : (isVn ? "Tàu chuẩn bị cập bến" : "Preparing to dock");
+      ? (isVn ? `Tàu đang di chuyển tới ${nextName}` : `Moving to ${nextName}`)
+      : (isVn ? "Tàu đang di chuyển" : "Boat moving");
   }
 
   // 7) Moving
-  if (key === "moving" || key === "delayed") {
+  if (key === "moving" || key === "delayed" || enRouteNow) {
     return nextName
       ? (isVn ? `Tàu đang di chuyển tới ${nextName}` : `Moving to ${nextName}`)
       : (isVn ? "Tàu đang di chuyển" : "Boat moving");
@@ -493,17 +557,11 @@ export const getBoatStatusTag = (boat, stations = [], lang = "VN") => {
         ? Number(boat.remainingDistanceKmToNextStation) * 1000
         : null);
       const etaTag = formatEtaTag(eta, isVn);
-      const hasBeKm = Number.isFinite(Number(boat?.remainingDistanceKmToNextStation));
-      // Không có km/phút từ API → ĐANG DI CHUYỂN, không bịa SẮP CẬP
-      if (eta == null && !hasBeKm) {
-        return {
-          key: "moving",
-          tone: "active",
-          label: isVn ? "ĐANG DI CHUYỂN" : "MOVING",
-          detail: notice,
-        };
-      }
-      if (eta != null && eta > DOCKING_SOON_MIN) {
+      const meters = Number.isFinite(Number(boat?.remainingDistanceKmToNextStation))
+        ? Number(boat.remainingDistanceKmToNextStation) * 1000
+        : nav.meters;
+      // Arriving sticky / còn chạy xa → ĐANG DI CHUYỂN, không “SẮP CẬP”
+      if (!isDockingSoonNow(boat, { eta, meters })) {
         return {
           key: "moving",
           tone: "active",
@@ -722,20 +780,9 @@ export const deriveBoatSituation = (boat, stations = [], arrivedAtByBoatId = new
   const eta = remainingMinutes;
   const etaTagVn = formatEtaTag(eta, true);
   const etaTagEn = formatEtaTag(eta, false);
-  // Chỉ "sắp cập" khi có ETA thật ≤2, hoặc BE Arriving + có khoảng cách BE ≤400m.
-  // Không bịa từ nearest khi tracking chưa gửi remainingDistance.
-  const hasBeDistance = Number.isFinite(Number(boat?.remainingDistanceKmToNextStation));
-  const arrivingByEta = eta != null && eta <= DOCKING_SOON_MIN && (
-    hasBeDistance || (Number.isFinite(meters) && meters <= APPROACH_METERS)
-  );
-  const arrivingByStatus = (nav.movementKey === "arriving" || normalizeMovementKey(boat?.lastStopEvent) === "arriving")
-    && eta == null
-    && hasBeDistance
-    && Number.isFinite(meters)
-    && meters <= APPROACH_METERS;
-
-  // Đã cập rồi thì không còn phase sắp cập
-  const arriving = !isBoatAtStationNow(boat, nav) && (arrivingByEta || arrivingByStatus);
+  // Chỉ "sắp cập" khi sát bến thật (không tin Arriving sticky khi còn chạy xa).
+  const arriving = !isBoatAtStationNow(boat, nav)
+    && isDockingSoonNow(boat, { eta, meters });
 
   const noticeVn = noticeVnRaw;
   const noticeEn = noticeEnRaw;
@@ -769,14 +816,16 @@ export const deriveBoatSituation = (boat, stations = [], arrivedAtByBoatId = new
   }
 
   if (moving || nav.enRoute || nav.movementKey === "moving" || nav.movementKey === "delayed" || nav.movementKey === "arriving") {
-    const moveDetailVn = noticeVn
-      || (stationName
+    const moveDetailVn = (noticeVn && !/chuẩn bị cập|preparing to dock/i.test(noticeVn))
+      ? noticeVn
+      : (stationName
         ? (eta != null
           ? `Tàu đang di chuyển tới ${stationName}, còn ${eta} phút`
           : `Tàu đang di chuyển tới ${stationName}`)
         : "Tàu đang di chuyển");
-    const moveDetailEn = noticeEn
-      || (stationName
+    const moveDetailEn = (noticeEn && !/preparing to dock|chuẩn bị cập/i.test(noticeEn))
+      ? noticeEn
+      : (stationName
         ? (eta != null
           ? `Moving to ${stationName}, ${eta} min left`
           : `Moving to ${stationName}`)

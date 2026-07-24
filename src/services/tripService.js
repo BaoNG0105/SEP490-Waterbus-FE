@@ -282,7 +282,8 @@ export const fetchTripSearch = async ({ fromStationId, toStationId, departureDat
         const data = await apiSearchTrips({
             fromStationId,
             toStationId,
-            operatingDate: toDdMmYyyy(departureDate),
+            // dd-MM-yyyy: tránh `/` trong query bị proxy/parse lệch
+            operatingDate: toOperatingDateQuery(departureDate),
             routeType,
         });
         return data || [];
@@ -297,7 +298,7 @@ export const fetchTripSearch = async ({ fromStationId, toStationId, departureDat
 export const fetchSightseeingTripSearch = async ({ departureDate }) => {
     try {
         const data = await apiSearchSightseeingTrips({
-            operatingDate: toDdMmYyyy(departureDate),
+            operatingDate: toOperatingDateQuery(departureDate),
         });
         return data || [];
     } catch (error) {

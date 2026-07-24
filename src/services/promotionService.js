@@ -157,7 +157,7 @@ export const getPromotionRouteKindLabel = (routeType, lang = 'VN') => {
         case 'Regular':
             return lang === 'VN' ? 'Tuyến booking' : 'Booking route';
         case 'SightseeingLoop':
-            return lang === 'VN' ? 'Vòng tham quan' : 'Sightseeing loop';
+            return lang === 'VN' ? 'Tour tham quan' : 'Sightseeing tour';
         case 'CharterReference':
             return lang === 'VN'
                 ? 'Route nguồn GPS (không chọn)'

@@ -24,8 +24,23 @@ import {
   INCIDENT_TYPES,
   normalizeReplacementMissionType,
   reportIncident,
+  resolveIncidentOnboardCount,
 } from "../../../services/incidentService";
 import { notify, showToast } from "../../../utils/swalToast";
+
+const pickTripPassengerHint = (trip) => {
+  if (!trip || typeof trip !== "object") return null;
+  const keys = [
+    "onboardPassengerCount", "OnboardPassengerCount",
+    "passengerCount", "PassengerCount",
+    "activeTicketCount", "ActiveTicketCount",
+  ];
+  for (const key of keys) {
+    const n = Number(trip[key]);
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return null;
+};
 
 const EMPTY_RESCUE_FORM = {
   incidentId: "",
@@ -225,14 +240,21 @@ export function IncidentManagement({
   const needsReplacementBoat = incidentNeedsReplacementBoat({
     replacementMissionType: rescueForm.replacementMissionType,
     activeTicketCount: rescueForm.activeTicketCount,
+    onboardPassengerCount: rescueForm.onboardPassengerCount,
+    futurePassengerCount: rescueForm.futurePassengerCount,
   });
   const showReplacementField = incidentShowsReplacementBoatField({
     replacementMissionType: rescueForm.replacementMissionType,
     activeTicketCount: rescueForm.activeTicketCount,
+    onboardPassengerCount: rescueForm.onboardPassengerCount,
+    futurePassengerCount: rescueForm.futurePassengerCount,
   });
   const missionCopy = getReplacementMissionCopy({
     replacementMissionType: rescueForm.replacementMissionType,
     replacementTargetStationName: rescueForm.replacementTargetStationName,
+    activeTicketCount: rescueForm.activeTicketCount,
+    onboardPassengerCount: rescueForm.onboardPassengerCount,
+    futurePassengerCount: rescueForm.futurePassengerCount,
   }, lang);
   const delaySpreads = delayAffectsFollowingTrips(rescueForm.delayMinutes);
 
@@ -460,9 +482,6 @@ export function IncidentManagement({
     setBusyId(rescueForm.incidentId);
     try {
       const delayRaw = Number(rescueForm.delayMinutes);
-      const delayMinutes = rescueHasTrip && Number.isFinite(delayRaw)
-        ? Math.max(0, Math.trunc(delayRaw))
-        : 0;
       await dispatchReplacementBoat(rescueForm.incidentId, {
         rescueBoatId: rescueForm.rescueBoatId,
         replacementBoatId: (needsReplacementBoat || rescueForm.replacementBoatId)
@@ -728,7 +747,7 @@ export function IncidentManagement({
                           <p className="mt-1 text-[11px] font-semibold text-slate-500">
                             {lang === "VN" ? "Vé active" : "Active tickets"}: {item.activeTicketCount ?? 0}
                             {" · "}
-                            {lang === "VN" ? "Trên tàu" : "Onboard"}: {item.onboardPassengerCount ?? 0}
+                            {lang === "VN" ? "Trên tàu" : "Onboard"}: {resolveIncidentOnboardCount(item)}
                             {" · "}
                             {lang === "VN" ? "Chặng sau" : "Future"}: {item.futurePassengerCount ?? 0}
                           </p>
@@ -797,8 +816,22 @@ export function IncidentManagement({
                             disabled={busyId === item.incidentId}
                             onClick={() => {
                               const ticketCount = Number(item.activeTicketCount) || 0;
+                              const tripHint = item.tripId
+                                ? pickTripPassengerHint(
+                                  trips.find((t) => String(t.tripId || t.id) === String(item.tripId)),
+                                )
+                                : null;
+                              const onboardCount = Math.max(
+                                resolveIncidentOnboardCount(item),
+                                tripHint || 0,
+                              );
+                              const enriched = {
+                                ...item,
+                                onboardPassengerCount: onboardCount,
+                                activeTicketCount: Math.max(ticketCount, tripHint || 0),
+                              };
                               const mission = normalizeReplacementMissionType(item.replacementMissionType);
-                              const needsReplace = incidentNeedsReplacementBoat(item);
+                              const needsReplace = incidentNeedsReplacementBoat(enriched);
                               const suggestedDelay = Number.isFinite(Number(item.replacementDelayMinutes))
                                 ? Number(item.replacementDelayMinutes)
                                 : (needsReplace ? 30 : 0);
@@ -808,8 +841,8 @@ export function IncidentManagement({
                                 incidentBoatCode: item.boatCode || "",
                                 incidentDescription: item.description || "",
                                 tripId: item.tripId || "",
-                                activeTicketCount: ticketCount,
-                                onboardPassengerCount: Number(item.onboardPassengerCount) || 0,
+                                activeTicketCount: enriched.activeTicketCount,
+                                onboardPassengerCount: onboardCount,
                                 futurePassengerCount: Number(item.futurePassengerCount) || 0,
                                 replacementMissionType: mission,
                                 replacementTargetStationName: item.replacementTargetStationName || "",
@@ -829,7 +862,7 @@ export function IncidentManagement({
                               fetchActiveBoatsByServiceType("Rescue")
                                 .then((data) => setRescueBoats(Array.isArray(data) ? data : []))
                                 .catch(() => {});
-                              if (needsReplace || incidentShowsReplacementBoatField(item)) {
+                              if (needsReplace || incidentShowsReplacementBoatField(enriched)) {
                                 fetchActiveBoatsByServiceType("Passenger")
                                   .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
                                   .catch(() => {});
@@ -1058,7 +1091,7 @@ export function IncidentManagement({
               {" · "}
               {lang === "VN" ? "Vé active" : "Active tickets"}: {rescueForm.activeTicketCount}
               {" · "}
-              {lang === "VN" ? "Trên tàu" : "Onboard"}: {rescueForm.onboardPassengerCount}
+              {lang === "VN" ? "Trên tàu" : "Onboard"}: {resolveIncidentOnboardCount(rescueForm)}
               {" · "}
               {lang === "VN" ? "Chặng sau" : "Future"}: {rescueForm.futurePassengerCount}
             </p>

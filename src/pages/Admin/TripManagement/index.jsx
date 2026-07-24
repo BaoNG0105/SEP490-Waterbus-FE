@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllTrips, toOperatingDateQuery, getTripStatusLabel, normalizeTripStatusKey, isTripRunningStatus, sortTripsForOpsList } from "../../../services/tripService";
+import { fetchAllTrips, toOperatingDateQuery, getTripStatusLabel, normalizeTripStatusKey, sortTripsForOpsList } from "../../../services/tripService";
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
 import { trackingHub } from "../../../services/trackingHubClient";
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
-import { getRouteShortLabel } from "../../../utils/routeTypes";
+import { resolveRouteLabelKey } from "../../../utils/routeTypes";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import {
   applyDelayPayloadToTrip,
@@ -25,21 +25,6 @@ const todayInputValue = () => {
     const now = new Date();
     const pad2 = (n) => String(n).padStart(2, "0");
     return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-};
-
-const routeKindBadgeClass = (routeType) => {
-    switch (routeType) {
-        case "CharterReference":
-            return "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300";
-        case "Charter":
-            return "bg-[#EAF3F5] text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400";
-        case "SightseeingLoop":
-            return "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300";
-        case "Regular":
-            return "bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300";
-        default:
-            return "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400";
-    }
 };
 
 const tripStatusBadgeClass = (status) => {
@@ -203,60 +188,16 @@ const resolveBoatLabel = (trip, lang) => {
 };
 
 const resolvePaxLabel = (trip) => {
-    const pax = trip?.totalPassengerCount
-        ?? trip?.uniquePassengerCount
-        ?? trip?.onboardPassengerCount
+    // Tổng số khách của chuyến — không dùng ghế còn / sức chứa.
+    const pax = trip?.uniquePassengerCount
+        ?? trip?.totalPassengerCount
         ?? trip?.TotalPassengerCount
-        ?? trip?.passengerCount;
-    const cap = trip?.capacitySnapshot
-        ?? trip?.CapacitySnapshot
-        ?? trip?.boat?.capacity
-        ?? trip?.boat?.seatCount
-        ?? trip?.Boat?.capacity;
+        ?? trip?.onboardPassengerCount
+        ?? trip?.passengerCount
+        ?? trip?.boardingPassengerCount;
     const paxN = pax === null || pax === undefined || pax === "" ? null : Number(pax);
-    const capN = cap === null || cap === undefined || cap === "" ? null : Number(cap);
-    if (Number.isFinite(capN)) {
-        return `${Number.isFinite(paxN) ? paxN : 0}/${capN}`;
-    }
     if (Number.isFinite(paxN)) return String(paxN);
     return "—";
-};
-
-const resolveRemainingSeats = (trip) => {
-    const rem = trip?.remainingSeats ?? trip?.availableSeats ?? trip?.AvailableSeats;
-    const n = Number(rem);
-    return Number.isFinite(n) ? n : null;
-};
-
-const formatFareAdjustment = (trip, lang) => {
-    const adj = trip?.fareAdjustment || trip?.FareAdjustment || trip?.effectiveFareAdjustment;
-    if (!adj) return null;
-    if (typeof adj === "string") return adj;
-    const label = adj.name || adj.label || adj.type || adj.adjustmentType || adj.code;
-    const pct = adj.percent ?? adj.percentage ?? adj.surchargePercent;
-    const amount = adj.amount ?? adj.surchargeAmount ?? adj.extraAmount;
-    const parts = [];
-    if (label) parts.push(String(label));
-    if (pct != null && Number.isFinite(Number(pct))) parts.push(`+${Number(pct)}%`);
-    else if (amount != null && Number.isFinite(Number(amount))) {
-        parts.push(`+${Number(amount).toLocaleString("vi-VN")}đ`);
-    }
-    if (parts.length) return parts.join(" · ");
-    return lang === "VN" ? "Có phụ thu" : "Surcharge";
-};
-
-const formatStopTimesBrief = (trip) => {
-    const list = Array.isArray(trip?.stops)
-        ? [...trip.stops].sort((a, b) => Number(a?.stopOrder ?? 0) - Number(b?.stopOrder ?? 0))
-        : [];
-    if (list.length < 2) return null;
-    return list
-        .map((stop) => {
-            const name = labelFromStop(stop) || `#${stop.stopOrder}`;
-            const t = formatTime(stop.scheduledDeparture || stop.scheduledArrival || stop.plannedDepartureTime);
-            return `${name} ${t}`;
-        })
-        .join(" → ");
 };
 
 export function TripManagement() {
@@ -388,12 +329,25 @@ export function TripManagement() {
         return map;
     }, [routes, routeDetailsByCode]);
 
-    const stats = {
-        total: trips.length,
-        scheduled: trips.filter((t) => normalizeTripStatusKey(t.tripStatus) === "Scheduled").length,
-        running: trips.filter((t) => isTripRunningStatus(t.tripStatus)).length,
-        cancelled: trips.filter((t) => normalizeTripStatusKey(t.tripStatus) === "Cancelled").length,
-    };
+    const stats = useMemo(() => {
+        let sightseeing = 0;
+        let charter = 0;
+        let bus = 0;
+        trips.forEach((trip) => {
+            const key = resolveRouteLabelKey(
+                trip?.routeLabel || trip?.routeType || (trip?.tripType === "Charter" ? "Charter" : ""),
+            );
+            if (key === "Sightseeing") sightseeing += 1;
+            else if (key === "Charter" || key === "GPS" || trip?.tripType === "Charter") charter += 1;
+            else if (key === "Bus") bus += 1;
+        });
+        return {
+            total: trips.length,
+            sightseeing,
+            charter,
+            bus,
+        };
+    }, [trips]);
 
     const statusOptions = [
         { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All status" },
@@ -447,22 +401,22 @@ export function TripManagement() {
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đã lên lịch" : "Scheduled"}</span>
-                        <h3 className="text-xl font-black font-headline text-blue-600 dark:text-blue-400 mt-0.5">{isLoading ? "..." : stats.scheduled}</h3>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Sightseeing</span>
+                        <h3 className="text-xl font-black font-headline text-violet-600 dark:text-violet-400 mt-0.5">{isLoading ? "..." : stats.sightseeing}</h3>
                     </div>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đang vận hành" : "Running"}</span>
-                        <h3 className="text-xl font-black font-headline text-indigo-600 dark:text-indigo-400 mt-0.5">{isLoading ? "..." : stats.running}</h3>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Request (Charter)</span>
+                        <h3 className="text-xl font-black font-headline text-amber-600 dark:text-amber-400 mt-0.5">{isLoading ? "..." : stats.charter}</h3>
                     </div>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đã hủy" : "Cancelled"}</span>
-                        <h3 className="text-xl font-black font-headline text-rose-600 dark:text-rose-400 mt-0.5">{isLoading ? "..." : stats.cancelled}</h3>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Bus</span>
+                        <h3 className="text-xl font-black font-headline text-teal-600 dark:text-teal-400 mt-0.5">{isLoading ? "..." : stats.bus}</h3>
                     </div>
                 </div>
             </div>
@@ -511,7 +465,7 @@ export function TripManagement() {
                                 <th className="py-3.5 px-5 text-left">{lang === "VN" ? "Chuyến / Tàu" : "Trip / Boat"}</th>
                                 <th className="py-3.5 px-4 text-left">{lang === "VN" ? "Hành trình" : "Stations"}</th>
                                 <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Giờ chạy" : "Time"}</th>
-                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "HK / Ghế còn" : "Pax / Left"}</th>
+                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Hành khách" : "Passengers"}</th>
                                 <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                                 <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Hành động" : "Actions"}</th>
                             </tr>
@@ -536,12 +490,6 @@ export function TripManagement() {
                                     const routeMeta = routeByCode[String(trip.routeCode || "").trim()] || null;
                                     const fromLabel = resolveStationLabel(trip, "from", routeMeta);
                                     const toLabel = resolveStationLabel(trip, "to", routeMeta);
-                                    const stopCount = trip.stopCount
-                                        ?? (Array.isArray(trip.stops) ? trip.stops.length : null)
-                                        ?? (Array.isArray(routeMeta?.stops) ? routeMeta.stops.length : null);
-                                    const remaining = resolveRemainingSeats(trip);
-                                    const fareAdj = formatFareAdjustment(trip, lang);
-                                    const stopTimes = formatStopTimesBrief(trip);
 
                                     return (
                                         <tr key={trip.tripId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
@@ -553,23 +501,6 @@ export function TripManagement() {
                                                     <p className="truncate text-[11px] font-bold text-slate-500">
                                                         {boatLabel}
                                                     </p>
-                                                    <div className="flex flex-wrap items-center gap-1.5">
-                                                        <span className={`inline-flex rounded-md px-2 py-0.5 text-[9px] font-bold uppercase ${routeKindBadgeClass(trip.tripType === "Charter" ? "Charter" : trip.routeType)}`}>
-                                                            {trip.tripType === "Charter"
-                                                                ? "Charter"
-                                                                : getRouteShortLabel(trip.routeType, lang)}
-                                                        </span>
-                                                        {trip.operatingDate ? (
-                                                            <span className="text-[10px] font-medium text-slate-400">
-                                                                {trip.operatingDate}
-                                                            </span>
-                                                        ) : null}
-                                                        {fareAdj ? (
-                                                            <span className="inline-flex rounded-md bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" title={fareAdj}>
-                                                                {fareAdj}
-                                                            </span>
-                                                        ) : null}
-                                                    </div>
                                                 </div>
                                             </td>
 
@@ -579,17 +510,6 @@ export function TripManagement() {
                                                     <span className="material-symbols-outlined shrink-0 text-[14px] text-[#FFD100]">arrow_forward</span>
                                                     <span className="max-w-[7.5rem] truncate" title={toLabel}>{toLabel}</span>
                                                 </div>
-                                                {stopCount != null ? (
-                                                    <p className="mt-1 text-[10px] font-medium text-slate-400">
-                                                        {stopCount} {lang === "VN" ? "bến" : "stops"}
-                                                        {trip.routeName ? ` · ${trip.routeName}` : ""}
-                                                    </p>
-                                                ) : null}
-                                                {stopTimes ? (
-                                                    <p className="mt-1 line-clamp-2 text-[10px] font-medium leading-relaxed text-slate-400" title={stopTimes}>
-                                                        {stopTimes}
-                                                    </p>
-                                                ) : null}
                                             </td>
 
                                             <td className="py-3.5 px-3 align-middle whitespace-nowrap">
@@ -628,16 +548,9 @@ export function TripManagement() {
                                             </td>
 
                                             <td className="py-3.5 px-3 align-middle">
-                                                <div className="space-y-1">
-                                                    <span className="inline-flex rounded-lg border bg-slate-100 px-2.5 py-1 text-xs font-black text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400">
-                                                        {resolvePaxLabel(trip)}
-                                                    </span>
-                                                    {remaining != null ? (
-                                                        <p className="text-[10px] font-bold text-slate-400">
-                                                            {lang === "VN" ? `Còn ${remaining} ghế` : `${remaining} seats left`}
-                                                        </p>
-                                                    ) : null}
-                                                </div>
+                                                <span className="inline-flex rounded-lg border bg-slate-100 px-2.5 py-1 text-xs font-black tabular-nums text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400">
+                                                    {resolvePaxLabel(trip)}
+                                                </span>
                                             </td>
 
                                             <td className="py-3.5 px-3 align-middle">
