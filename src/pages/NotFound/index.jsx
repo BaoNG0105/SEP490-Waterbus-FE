@@ -10,7 +10,7 @@ export const NotFound = () => {
       
       {/* Icon trang trí chủ đề sông nước */}
       <div className="text-[#124757] dark:text-[#FFD100] mb-6">
-        <span className="material-symbols-outlined text-8xl md:text-[120px] drop-shadow-sm animate-bounce">
+        <span className="material-symbols-outlined text-8xl md:text-[120px] drop-shadow-sm animate-bounce" aria-hidden>
           sailing
         </span>
       </div>
@@ -38,7 +38,7 @@ export const NotFound = () => {
           onClick={() => navigate(-1)}
           className="w-full sm:w-auto px-8 py-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2"
         >
-          <span className="material-symbols-outlined text-base">arrow_back</span>
+          <span className="material-symbols-outlined text-base" aria-hidden>arrow_back</span>
           {lang === "VN" ? "Quay lại" : "Go Back"}
         </button>
 
@@ -47,7 +47,7 @@ export const NotFound = () => {
           to="/"
           className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-[#124757] dark:bg-[#FFD100] text-white dark:text-slate-900 font-headline font-black uppercase text-sm tracking-wider shadow-md hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2"
         >
-          <span className="material-symbols-outlined text-base">home</span>
+          <span className="material-symbols-outlined text-base" aria-hidden>home</span>
           {lang === "VN" ? "Về Trang Chủ" : "Back to Home"}
         </Link>
         

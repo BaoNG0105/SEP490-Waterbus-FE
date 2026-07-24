@@ -121,6 +121,7 @@ export function IncidentManagement({
   const [historyIncidents, setHistoryIncidents] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [busyId, setBusyId] = useState("");
   const [showReport, setShowReport] = useState(false);
   const [reportForm, setReportForm] = useState({
@@ -605,7 +606,10 @@ export function IncidentManagement({
       <div className="inline-flex rounded-2xl bg-slate-100 p-1 dark:bg-slate-900">
         <button
           type="button"
-          onClick={() => setListTab("open")}
+          onClick={() => {
+            setListTab("open");
+            setExpandedIds(new Set());
+          }}
           className={`rounded-xl px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${
             listTab === "open"
               ? "bg-white text-[#124757] shadow-sm dark:bg-slate-800 dark:text-yellow-400"
@@ -616,7 +620,10 @@ export function IncidentManagement({
         </button>
         <button
           type="button"
-          onClick={() => setListTab("history")}
+          onClick={() => {
+            setListTab("history");
+            setExpandedIds(new Set());
+          }}
           className={`rounded-xl px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${
             listTab === "history"
               ? "bg-white text-[#124757] shadow-sm dark:bg-slate-800 dark:text-yellow-400"
@@ -700,102 +707,128 @@ export function IncidentManagement({
               : (lang === "VN" ? "Không có sự cố đang Open." : "No open incidents.")}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 dark:border-slate-700 dark:bg-slate-900/40">
-                  <th className="px-4 py-3">{lang === "VN" ? "Tàu" : "Boat"}</th>
-                  <th className="px-4 py-3">{lang === "VN" ? "Loại" : "Type"}</th>
-                  <th className="px-4 py-3">Severity</th>
-                  <th className="px-4 py-3">{lang === "VN" ? "Mô tả / Cứu hộ" : "Description / Rescue"}</th>
-                  <th className="px-4 py-3">{lang === "VN" ? "Manager" : "Manager"}</th>
-                  <th className="px-4 py-3">
-                    {listTab === "history"
-                      ? (lang === "VN" ? "Đóng lúc" : "Resolved")
-                      : (lang === "VN" ? "Thời điểm" : "When")}
-                  </th>
-                  {listTab === "open" ? (
-                    <th className="px-4 py-3 text-right">{lang === "VN" ? "Thao tác" : "Actions"}</th>
-                  ) : (
-                    <th className="px-4 py-3">{lang === "VN" ? "Ghi chú đóng" : "Resolution note"}</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((item) => (
-                  <tr key={item.incidentId} className="border-b border-slate-50 dark:border-slate-700/60">
-                    <td className="px-4 py-3">
-                      <p className="font-headline text-sm font-black text-[#124757] dark:text-yellow-400">
-                        {item.boatCode || "—"}
-                      </p>
-                      <p className="text-[11px] font-medium text-slate-400">
-                        {item.tripCode || (item.tripId ? `trip ${String(item.tripId).slice(0, 8)}…` : (lang === "VN" ? "Chưa gắn chuyến" : "No trip"))}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                      {getIncidentTypeLabel(item.incidentType, lang)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ring-1 ${severityClass(item.severity)}`}>
-                        {getSeverityLabel(item.severity, lang)}
+          <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
+            {filtered.map((item) => {
+              const id = String(item.incidentId || "");
+              const open = expandedIds.has(id);
+              const rescueLabel = item.rescueBoatName || item.rescueBoatCode
+                || (item.rescueBoatId ? String(item.rescueBoatId).slice(0, 8) : "");
+              const replaceLabel = item.replacementBoatName || item.replacementBoatCode
+                || (item.replacementBoatId ? String(item.replacementBoatId).slice(0, 8) : "");
+              const whenLabel = listTab === "history"
+                ? formatWhen(item.resolvedAt || item.occurredAt)
+                : formatWhen(item.occurredAt);
+
+              const toggleExpand = () => {
+                setExpandedIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(id)) next.delete(id);
+                  else next.add(id);
+                  return next;
+                });
+              };
+
+              const openRescueModal = () => {
+                const ticketCount = Number(item.activeTicketCount) || 0;
+                const tripHint = item.tripId
+                  ? pickTripPassengerHint(
+                    trips.find((t) => String(t.tripId || t.id) === String(item.tripId)),
+                  )
+                  : null;
+                const onboardCount = Math.max(
+                  resolveIncidentOnboardCount(item),
+                  tripHint || 0,
+                );
+                const enriched = {
+                  ...item,
+                  onboardPassengerCount: onboardCount,
+                  activeTicketCount: Math.max(ticketCount, tripHint || 0),
+                };
+                const mission = normalizeReplacementMissionType(item.replacementMissionType);
+                const needsReplace = incidentNeedsReplacementBoat(enriched);
+                const suggestedDelay = Number.isFinite(Number(item.replacementDelayMinutes))
+                  ? Number(item.replacementDelayMinutes)
+                  : (needsReplace ? 30 : 0);
+                setRescueForm({
+                  incidentId: item.incidentId,
+                  incidentBoatId: item.boatId || "",
+                  incidentBoatCode: item.boatCode || "",
+                  incidentDescription: item.description || "",
+                  tripId: item.tripId || "",
+                  activeTicketCount: enriched.activeTicketCount,
+                  onboardPassengerCount: onboardCount,
+                  futurePassengerCount: Number(item.futurePassengerCount) || 0,
+                  replacementMissionType: mission,
+                  replacementTargetStationName: item.replacementTargetStationName || "",
+                  replacementDelayMinutes: item.replacementDelayMinutes ?? null,
+                  replacementEstimatedResumeAt: item.replacementEstimatedResumeAt || null,
+                  rescueBoatId: "",
+                  replacementBoatId: "",
+                  delayMinutes: suggestedDelay,
+                  note: lang === "VN"
+                    ? (needsReplace
+                      ? `Điều tàu cứu hộ và tàu thay thế cho ${item.boatCode || ""}`
+                      : `Điều tàu cứu hộ cho ${item.boatCode || ""}`)
+                    : (needsReplace
+                      ? `Dispatch rescue and replacement for ${item.boatCode || ""}`
+                      : `Dispatch rescue for ${item.boatCode || ""}`),
+                });
+                fetchActiveBoatsByServiceType("Rescue")
+                  .then((data) => setRescueBoats(Array.isArray(data) ? data : []))
+                  .catch(() => {});
+                if (needsReplace || incidentShowsReplacementBoatField(enriched)) {
+                  fetchActiveBoatsByServiceType("Passenger")
+                    .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
+                    .catch(() => {});
+                }
+              };
+
+              return (
+                <div key={id} className="bg-white dark:bg-slate-800">
+                  <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={toggleExpand}
+                      aria-expanded={open}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900"
+                      title={open
+                        ? (lang === "VN" ? "Thu gọn" : "Collapse")
+                        : (lang === "VN" ? "Xem chi tiết" : "Show details")}
+                    >
+                      <span className={`material-symbols-outlined text-[20px] transition-transform ${open ? "rotate-90" : ""}`}>
+                        chevron_right
                       </span>
-                    </td>
-                    <td className="max-w-xs px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
-                      <p className="line-clamp-2">{item.description || "—"}</p>
-                      {listTab === "open" ? (
-                        <>
-                          <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                            {lang === "VN" ? "Vé active" : "Active tickets"}: {item.activeTicketCount ?? 0}
-                            {" · "}
-                            {lang === "VN" ? "Trên tàu" : "Onboard"}: {resolveIncidentOnboardCount(item)}
-                            {" · "}
-                            {lang === "VN" ? "Chặng sau" : "Future"}: {item.futurePassengerCount ?? 0}
-                          </p>
-                          <p className="mt-1 text-[11px] font-semibold text-[#124757] dark:text-yellow-400/90">
-                            {getReplacementMissionCopy(item, lang)}
-                          </p>
-                          {item.replacementEstimatedResumeAt ? (
-                            <p className="mt-0.5 text-[11px] font-medium text-slate-400">
-                              ETA resume: {formatWhen(item.replacementEstimatedResumeAt)}
-                              {Number.isFinite(Number(item.replacementDelayMinutes))
-                                ? ` · delay ${item.replacementDelayMinutes}p`
-                                : ""}
-                            </p>
-                          ) : null}
-                        </>
-                      ) : null}
-                      {item.rescueBoatName || item.rescueBoatCode || item.rescueBoatId ? (
-                        <p className="mt-0.5 text-[11px] font-semibold text-rose-600 dark:text-rose-300">
-                          {lang === "VN" ? "Cứu hộ" : "Rescue"}: {item.rescueBoatName || item.rescueBoatCode || String(item.rescueBoatId).slice(0, 8)}
-                          {item.rescueDispatchedAt ? ` · ${formatWhen(item.rescueDispatchedAt)}` : ""}
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-bold text-slate-800 dark:text-white">
+                          {item.boatCode || "—"}
                         </p>
-                      ) : (
-                        listTab === "history" ? (
-                          <p className="mt-0.5 text-[11px] font-medium text-slate-400">
-                            {lang === "VN" ? "Không điều cứu hộ" : "No rescue dispatched"}
-                          </p>
-                        ) : null
-                      )}
-                      {item.replacementBoatName || item.replacementBoatCode || item.replacementBoatId ? (
-                        <p className="mt-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-300">
-                          {lang === "VN" ? "Thay thế" : "Replacement"}: {item.replacementBoatName || item.replacementBoatCode || String(item.replacementBoatId).slice(0, 8)}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      {item.managerName || (item.managerUserId ? String(item.managerUserId).slice(0, 8) : "—")}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-medium text-slate-400">
-                      {listTab === "history"
-                        ? formatWhen(item.resolvedAt || item.occurredAt)
-                        : formatWhen(item.occurredAt)}
-                    </td>
-                    {listTab === "history" ? (
-                      <td className="max-w-[14rem] px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        <p className="line-clamp-3">{item.resolutionNote || "—"}</p>
-                      </td>
-                    ) : (
-                    <td className="px-4 py-3">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          {getIncidentTypeLabel(item.incidentType, lang)}
+                        </span>
+                        <span className={`inline-flex rounded-lg px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider ring-1 ${severityClass(item.severity)}`}>
+                          {getSeverityLabel(item.severity, lang)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
+                        {item.description || "—"}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {listTab === "history"
+                          ? (lang === "VN" ? "Đóng lúc" : "Resolved")
+                          : (lang === "VN" ? "Thời điểm" : "When")}
+                      </p>
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        {whenLabel}
+                      </p>
+                    </div>
+
+                    {listTab === "open" ? (
                       <div className="flex flex-wrap justify-end gap-1.5">
                         {canAssignManager ? (
                           <button
@@ -814,60 +847,7 @@ export function IncidentManagement({
                           <button
                             type="button"
                             disabled={busyId === item.incidentId}
-                            onClick={() => {
-                              const ticketCount = Number(item.activeTicketCount) || 0;
-                              const tripHint = item.tripId
-                                ? pickTripPassengerHint(
-                                  trips.find((t) => String(t.tripId || t.id) === String(item.tripId)),
-                                )
-                                : null;
-                              const onboardCount = Math.max(
-                                resolveIncidentOnboardCount(item),
-                                tripHint || 0,
-                              );
-                              const enriched = {
-                                ...item,
-                                onboardPassengerCount: onboardCount,
-                                activeTicketCount: Math.max(ticketCount, tripHint || 0),
-                              };
-                              const mission = normalizeReplacementMissionType(item.replacementMissionType);
-                              const needsReplace = incidentNeedsReplacementBoat(enriched);
-                              const suggestedDelay = Number.isFinite(Number(item.replacementDelayMinutes))
-                                ? Number(item.replacementDelayMinutes)
-                                : (needsReplace ? 30 : 0);
-                              setRescueForm({
-                                incidentId: item.incidentId,
-                                incidentBoatId: item.boatId || "",
-                                incidentBoatCode: item.boatCode || "",
-                                incidentDescription: item.description || "",
-                                tripId: item.tripId || "",
-                                activeTicketCount: enriched.activeTicketCount,
-                                onboardPassengerCount: onboardCount,
-                                futurePassengerCount: Number(item.futurePassengerCount) || 0,
-                                replacementMissionType: mission,
-                                replacementTargetStationName: item.replacementTargetStationName || "",
-                                replacementDelayMinutes: item.replacementDelayMinutes ?? null,
-                                replacementEstimatedResumeAt: item.replacementEstimatedResumeAt || null,
-                                rescueBoatId: "",
-                                replacementBoatId: "",
-                                delayMinutes: suggestedDelay,
-                                note: lang === "VN"
-                                  ? (needsReplace
-                                    ? `Điều tàu cứu hộ và tàu thay thế cho ${item.boatCode || ""}`
-                                    : `Điều tàu cứu hộ cho ${item.boatCode || ""}`)
-                                  : (needsReplace
-                                    ? `Dispatch rescue and replacement for ${item.boatCode || ""}`
-                                    : `Dispatch rescue for ${item.boatCode || ""}`),
-                              });
-                              fetchActiveBoatsByServiceType("Rescue")
-                                .then((data) => setRescueBoats(Array.isArray(data) ? data : []))
-                                .catch(() => {});
-                              if (needsReplace || incidentShowsReplacementBoatField(enriched)) {
-                                fetchActiveBoatsByServiceType("Passenger")
-                                  .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
-                                  .catch(() => {});
-                              }
-                            }}
+                            onClick={openRescueModal}
                             className="rounded-xl bg-sky-50 px-2.5 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 ring-1 ring-sky-200 transition hover:bg-sky-100 disabled:opacity-50 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/30"
                           >
                             {lang === "VN" ? "Cứu hộ" : "Rescue"}
@@ -892,12 +872,86 @@ export function IncidentManagement({
                           </button>
                         ) : null}
                       </div>
-                    </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    ) : null}
+                  </div>
+
+                  {open ? (
+                    <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-3 dark:border-slate-700/60 dark:bg-slate-900/40">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            {lang === "VN" ? "Chuyến" : "Trip"}
+                          </p>
+                          <p className="mt-1 break-all text-xs font-semibold text-slate-700 dark:text-slate-200">
+                            {item.tripCode || (item.tripId ? String(item.tripId) : "—")}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            {lang === "VN" ? "Cứu hộ" : "Rescue"}
+                          </p>
+                          <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                            {rescueLabel || "—"}
+                          </p>
+                          {item.rescueDispatchedAt ? (
+                            <p className="mt-0.5 text-[10px] font-medium text-slate-400">
+                              {formatWhen(item.rescueDispatchedAt)}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            {lang === "VN" ? "Thay thế" : "Replacement"}
+                          </p>
+                          <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                            {replaceLabel || "—"}
+                          </p>
+                          {item.replacementEstimatedResumeAt ? (
+                            <p className="mt-0.5 text-[10px] font-medium text-slate-400">
+                              ETA {formatWhen(item.replacementEstimatedResumeAt)}
+                              {Number.isFinite(Number(item.replacementDelayMinutes))
+                                ? ` · ${item.replacementDelayMinutes}p`
+                                : ""}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Manager
+                          </p>
+                          <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                            {item.managerName || (item.managerUserId ? String(item.managerUserId).slice(0, 8) : "—")}
+                          </p>
+                        </div>
+                        {listTab === "open" ? (
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              {lang === "VN" ? "Khách ảnh hưởng" : "Passengers"}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                              {(lang === "VN" ? "Vé" : "Tickets")}: {item.activeTicketCount ?? 0}
+                              {" · "}
+                              {(lang === "VN" ? "Trên tàu" : "Onboard")}: {resolveIncidentOnboardCount(item)}
+                              {" · "}
+                              {(lang === "VN" ? "Chặng sau" : "Later")}: {item.futurePassengerCount ?? 0}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:col-span-2 dark:border-slate-700 dark:bg-slate-800">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              {lang === "VN" ? "Ghi chú đóng" : "Resolution note"}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                              {item.resolutionNote || "—"}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

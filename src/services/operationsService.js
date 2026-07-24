@@ -1,5 +1,6 @@
 import { getOperationsSchedule as apiGetOperationsSchedule } from "../api/operationsApi";
 import { normalizeDwellCountdown } from "../utils/boatTracking";
+import { normalizeTripStops } from "../utils/tripStopTimes";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -70,7 +71,10 @@ export const normalizeOperationsScheduleEntry = (raw) => {
 
   const boatCode = String(pick(raw, ["boatCode", "BoatCode", "boat.boatCode", "boat.code"], "")).trim();
   const boatId = String(pick(raw, ["boatId", "BoatId", "boat.boatId", "boat.id"], "")).trim();
-  if (!boatCode && !boatId) return null;
+  const tripIdEarly = pick(raw, ["tripId", "TripId"], null) || null;
+  const tripCodeEarly = String(pick(raw, ["tripCode", "TripCode"], "")).trim();
+  // Customer schedule có thể trả trip chưa gán tàu — vẫn giữ entry.
+  if (!boatCode && !boatId && !tripIdEarly && !tripCodeEarly) return null;
 
   const lat = toFiniteNumber(pick(raw, [
     "latestLatitude", "LatestLatitude", "latitude", "lat", "Latitude",
@@ -180,21 +184,68 @@ export const normalizeOperationsScheduleEntry = (raw) => {
   ], "")).trim() || null;
 
   const dwellCountdown = normalizeDwellCountdown(raw);
+  // Ưu tiên tổng khách chuyến (totalPassengerCount), không dùng ghế còn.
   const passengerSource = pick(raw, [
+    "totalPassengerCount", "TotalPassengerCount",
     "onboardPassengerCount", "OnboardPassengerCount",
     "passengerCount", "PassengerCount",
-    "totalPassengerCount", "TotalPassengerCount",
   ], null);
   const passengerCount = toFiniteNumber(passengerSource);
+  const capacitySnapshot = toFiniteNumber(pick(raw, [
+    "capacitySnapshot", "CapacitySnapshot", "capacity", "seatCount",
+  ], null));
+
+  const startAt = pick(raw, [
+    "startAt", "StartAt", "scheduledDepartureAt", "ScheduledDepartureAt",
+    "departureTime", "DepartureTime",
+  ], null) || scheduledDepartureAt;
+  const endAt = pick(raw, [
+    "endAt", "EndAt", "scheduledArrivalAt", "ScheduledArrivalAt",
+    "arrivalTime", "ArrivalTime",
+  ], null) || null;
+  const displayStartAt = adjustedStartAt || startAt || null;
+  const displayEndAt = adjustedEndAt || endAt || null;
+
+  const serviceType = String(pick(raw, [
+    "serviceType", "ServiceType",
+  ], "")).trim() || null;
+  const routeType = String(pick(raw, [
+    "routeType", "RouteType",
+  ], "")).trim() || null;
+  const tripType = String(pick(raw, [
+    "tripType", "TripType",
+  ], "")).trim() || null;
+  const sellsBySegmentRaw = pick(raw, ["sellsBySegment", "SellsBySegment"], null);
+  const sellsBySegment = sellsBySegmentRaw === true || sellsBySegmentRaw === false
+    ? Boolean(sellsBySegmentRaw)
+    : sellsBySegmentRaw == null
+      ? null
+      : String(sellsBySegmentRaw).toLowerCase() === "true";
+
+  const stops = normalizeTripStops(raw.stops || raw.Stops || []);
+  const fromLocation = String(pick(raw, [
+    "fromLocation", "FromLocation", "fromStationName", "fromStation.stationName",
+  ], "")).trim() || (stops[0]?.stationName || null);
+  const toLocation = String(pick(raw, [
+    "toLocation", "ToLocation", "toStationName", "toStation.stationName",
+  ], "")).trim() || (stops.length ? (stops[stops.length - 1]?.stationName || null) : null);
 
   return {
-    boatId: boatId || boatCode,
-    boatCode: boatCode || boatId,
+    boatId: boatId || boatCode || String(tripIdEarly || ""),
+    boatCode: boatCode || boatId || "",
     boatName: pick(raw, ["boatName", "BoatName", "boat.boatName"], "") || null,
-    tripId: pick(raw, ["tripId", "TripId"], null) || null,
-    tripCode: pick(raw, ["tripCode", "TripCode"], "") || null,
+    tripId: tripIdEarly,
+    tripCode: tripCodeEarly || pick(raw, ["tripCode", "TripCode"], "") || null,
     routeName: pick(raw, ["routeName", "RouteName"], "") || null,
     routeCode: pick(raw, ["routeCode", "RouteCode"], "") || null,
+    routeType,
+    tripType,
+    serviceType,
+    sellsBySegment,
+    capacitySnapshot,
+    fromLocation,
+    toLocation,
+    stops,
     movementStatus,
     currentStationName,
     currentStationCode,
@@ -204,6 +255,8 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     remainingDistanceKmToNextStation: remainingKm,
     remainingMinutesToNextStation: remainingMin,
     scheduledDepartureAt,
+    startAt,
+    endAt,
     minutesUntilDeparture,
     latestLatitude: lat,
     latestLongitude: lng,
@@ -213,9 +266,14 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     delayReason,
     adjustedStartAt,
     adjustedEndAt,
+    displayStartAt,
+    displayEndAt,
     operationStatus,
     dwellCountdown,
     passengerCount,
+    totalPassengerCount: toFiniteNumber(pick(raw, [
+      "totalPassengerCount", "TotalPassengerCount",
+    ], null)),
     lastStopEvent: String(pick(raw, [
       "lastStopEvent", "LastStopEvent", "stopEvent", "StopEvent",
       "tripStopEvent", "TripStopEvent", "latestStopEvent",
@@ -258,12 +316,23 @@ export const fetchOperationsSchedule = async ({
   fromDate = toIsoDate(),
   toDate = fromDate,
   includeCancelled = false,
+  /** booking | bus | sightseeing | charter | all — theo contract BE. */
+  serviceType,
+  stationId,
 } = {}) => {
-  const data = await apiGetOperationsSchedule({
+  const params = {
     fromDate,
     toDate,
     includeCancelled,
-  });
+  };
+  const st = String(serviceType || "").trim().toLowerCase();
+  if (st && st !== "all") {
+    params.serviceType = st;
+  }
+  const sid = String(stationId || "").trim();
+  if (sid) params.stationId = sid;
+
+  const data = await apiGetOperationsSchedule(params);
   return normalizeOperationsScheduleList(data);
 };
 

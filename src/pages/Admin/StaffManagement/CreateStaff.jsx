@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserRoles, createUser } from "../../../services/userService";
-import { getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
+import { getRoleSystemName, isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
@@ -25,6 +25,9 @@ export function CreateStaff() {
     const navigate = useNavigate();
     const { user: currentUser } = useSelector((state) => state.auth);
     const canCreateOnBoard = isAdminUser(currentUser);
+    const canCreateGround = isManagerUser(currentUser) && !isAdminUser(currentUser);
+    const canAccess = canCreateOnBoard || canCreateGround;
+    const defaultStaffType = canCreateOnBoard ? "OnBoard" : "Ground";
 
     const [roles, setRoles] = useState([]);
     const [isLoadingRoles, setIsLoadingRoles] = useState(true);
@@ -38,9 +41,15 @@ export function CreateStaff() {
         nationality: "Vietnam",
         phoneNumber: "",
         email: "",
-        staffType: "Ground",
+        staffType: defaultStaffType,
         stationIds: [],
     });
+
+    useEffect(() => {
+        if (!canAccess) {
+            navigate("/admin/staffs-management", { replace: true });
+        }
+    }, [canAccess, navigate]);
 
     useEffect(() => {
         const loadRoles = async () => {
@@ -93,10 +102,7 @@ export function CreateStaff() {
                 return;
             }
 
-            if (!formData.staffType) {
-                setErrorMsg(lang === "VN" ? "Chọn loại nhân viên (mặt đất / trên tàu)." : "Select staff type (Ground / OnBoard).");
-                return;
-            }
+            const staffType = canCreateOnBoard ? "OnBoard" : "Ground";
 
             if (!isAllowedEmail(formData.email)) {
                 setErrorMsg(
@@ -115,12 +121,11 @@ export function CreateStaff() {
                 phoneNumber: formData.phoneNumber.trim(),
                 email: formData.email.trim(),
                 roleId: staffRole.id,
-                staffType: formData.staffType,
-                ...(showStationAssign ? { stationIds: formData.stationIds.map(String) } : {}),
+                staffType,
+                ...(staffType === "Ground" ? { stationIds: formData.stationIds.map(String) } : {}),
             };
 
             const result = await createUser(payload);
-
             const generatedPassword = result?.generatedPassword;
 
             await notify({
@@ -157,15 +162,11 @@ export function CreateStaff() {
         { value: "Female", label: lang === "VN" ? "Nữ" : "Female" },
         { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
     ];
-    const staffTypeOptions = [
-        { value: "Ground", label: lang === "VN" ? "Mặt đất (bến)" : "Ground (station)" },
-        ...(canCreateOnBoard ? [{ value: "OnBoard", label: lang === "VN" ? "Trên tàu" : "Onboard" }] : []),
-    ];
+
+    if (!canAccess) return null;
 
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-3xl mx-auto">
-
-            {/* KHỐI TIÊU ĐỀ HEADER */}
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
                 <button
                     type="button"
@@ -176,10 +177,18 @@ export function CreateStaff() {
                 </button>
                 <div>
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-                        {lang === "VN" ? "Thêm nhân viên mới" : "Add New Staff"}
+                        {canCreateOnBoard
+                            ? (lang === "VN" ? "Thêm nhân viên trên tàu" : "Add boat crew")
+                            : (lang === "VN" ? "Thêm nhân viên bến" : "Add station staff")}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN" ? "Khai báo hồ sơ và gán loại nhân viên cho tài khoản mới." : "Register profile details and assign the staff type for the new account."}
+                        {canCreateOnBoard
+                            ? (lang === "VN"
+                                ? "Tạo tài khoản nhân viên đi tàu. Xếp ca trên tab Phân công."
+                                : "Create an onboard crew account. Schedule shifts under Assignments.")
+                            : (lang === "VN"
+                                ? "Tạo tài khoản nhân viên mặt đất và gắn bến phụ trách."
+                                : "Create ground staff and assign their stations.")}
                     </p>
                 </div>
             </div>
@@ -261,21 +270,12 @@ export function CreateStaff() {
                     </div>
 
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
-                        {staffTypeOptions.length <= 1 ? (
-                            <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
-                                {staffTypeOptions[0]?.label ||
-                                    (lang === "VN" ? "Mặt đất (bến)" : "Ground (station)")}
-                            </div>
-                        ) : (
-                            <FormSelect
-                                required
-                                value={formData.staffType || "Ground"}
-                                onChange={(v) => handleInputChange("staffType", v)}
-                                options={staffTypeOptions}
-                                className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
-                            />
-                        )}
+                        <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên" : "Staff type"}</label>
+                        <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
+                            {canCreateOnBoard
+                                ? (lang === "VN" ? "Trên tàu" : "Onboard")
+                                : (lang === "VN" ? "Mặt đất (bến)" : "Ground (station)")}
+                        </div>
                     </div>
 
                     {showStationAssign && (
@@ -292,7 +292,9 @@ export function CreateStaff() {
                     className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                     {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
-                    {lang === "VN" ? "Tạo nhân viên" : "Create Staff"}
+                    {canCreateOnBoard
+                        ? (lang === "VN" ? "Tạo nhân viên trên tàu" : "Create boat crew")
+                        : (lang === "VN" ? "Tạo nhân viên bến" : "Create station staff")}
                 </button>
             </form>
         </div>

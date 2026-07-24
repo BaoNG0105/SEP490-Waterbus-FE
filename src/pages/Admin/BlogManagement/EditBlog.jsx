@@ -5,6 +5,8 @@ import { useApp } from "../../../context/AppContext";
 import {
     fetchBlogPostManagementDetail,
     modifyBlogPost,
+    collectBlogImageUrls,
+    getBlogEditableContent,
     BLOG_CATEGORY,
     BLOG_STATUS,
 } from "../../../services/blogService";
@@ -12,6 +14,11 @@ import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 
 const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
+
+const sanitizeImageUrls = (urls) =>
+    (Array.isArray(urls) ? urls : [])
+        .map((u) => String(u || "").trim())
+        .filter(Boolean);
 
 export function EditBlog() {
     const { lang } = useApp();
@@ -27,24 +34,23 @@ export function EditBlog() {
 
     const [formData, setFormData] = useState({
         title: "",
-        slug: "",
         summary: "",
         category: BLOG_CATEGORY.NEWS,
-        imageUrl: "",
+        imageUrls: [""],
         imageAltText: "",
         content: "",
         status: BLOG_STATUS.DRAFT,
     });
 
     const applyBlogData = (blog) => {
+        const urls = collectBlogImageUrls(blog);
         setFormData({
             title: blog.title || "",
-            slug: blog.slug || "",
             summary: blog.summary || "",
             category: blog.category || BLOG_CATEGORY.NEWS,
-            imageUrl: blog.imageUrl || "",
+            imageUrls: urls.length ? urls : [""],
             imageAltText: blog.imageAltText || "",
-            content: blog.content || "",
+            content: getBlogEditableContent(blog),
             status: blog.status || BLOG_STATUS.DRAFT,
         });
     };
@@ -56,7 +62,7 @@ export function EditBlog() {
                 setErrorMsg("");
 
                 const preloaded = location.state?.blog;
-                if (preloaded && String(preloaded.id) === String(id) && preloaded.content !== undefined) {
+                if (preloaded && String(preloaded.id) === String(id) && (preloaded.content !== undefined || preloaded.contentText !== undefined)) {
                     applyBlogData(preloaded);
                     setIsLoading(false);
                     return;
@@ -89,6 +95,25 @@ export function EditBlog() {
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
+    const handleImageUrlChange = (index, value) => {
+        setFormData((prev) => {
+            const next = [...prev.imageUrls];
+            next[index] = value;
+            return { ...prev, imageUrls: next };
+        });
+    };
+
+    const addImageUrlField = () => {
+        setFormData((prev) => ({ ...prev, imageUrls: [...prev.imageUrls, ""] }));
+    };
+
+    const removeImageUrlField = (index) => {
+        setFormData((prev) => {
+            const next = prev.imageUrls.filter((_, i) => i !== index);
+            return { ...prev, imageUrls: next.length ? next : [""] };
+        });
+    };
+
     const handleFormSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -99,20 +124,25 @@ export function EditBlog() {
                 ? formData.status
                 : BLOG_STATUS.DRAFT;
 
-            if (nextStatus === BLOG_STATUS.PUBLISHED && !formData.imageUrl.trim()) {
-                setErrorMsg(lang === "VN" ? "Bài viết Published bắt buộc phải có ảnh bìa (Image URL)." : "Published posts must have a cover image (Image URL).");
+            const imageUrls = sanitizeImageUrls(formData.imageUrls);
+
+            if (nextStatus === BLOG_STATUS.PUBLISHED && imageUrls.length === 0) {
+                setErrorMsg(
+                    lang === "VN"
+                        ? "Bài viết Published bắt buộc phải có ảnh bìa."
+                        : "Published posts must have at least one cover image.",
+                );
                 setIsSubmitting(false);
                 return;
             }
 
             const payload = {
                 title: formData.title.trim(),
-                slug: formData.slug.trim() || undefined,
                 summary: formData.summary.trim(),
                 category: formData.category,
-                imageUrl: formData.imageUrl.trim(),
+                imageUrls,
                 imageAltText: formData.imageAltText.trim(),
-                content: formData.content,
+                content: String(formData.content || "").trim(),
                 status: nextStatus,
             };
 
@@ -136,6 +166,7 @@ export function EditBlog() {
         }
     };
 
+    const coverPreview = sanitizeImageUrls(formData.imageUrls)[0] || "";
     const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
 
@@ -149,8 +180,6 @@ export function EditBlog() {
 
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-3xl mx-auto animate-fade-in">
-
-            {/* KHỐI TIÊU ĐỀ HEADER */}
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
                 <button
                     type="button"
@@ -164,7 +193,9 @@ export function EditBlog() {
                         {lang === "VN" ? `Chỉnh sửa bài viết: ${formData.title}` : `Edit Post: ${formData.title}`}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN" ? "Cập nhật nội dung, ảnh bìa và trạng thái xuất bản của bài viết." : "Update the post content, cover image and publish status."}
+                        {lang === "VN"
+                            ? "Cập nhật nội dung (text), ảnh bìa và trạng thái. Slug do BE tự tạo từ tiêu đề."
+                            : "Update plain-text content, cover images and status. Slug is generated by the backend."}
                     </p>
                 </div>
             </div>
@@ -190,17 +221,6 @@ export function EditBlog() {
                             onChange={(e) => handleFieldChange("title", e.target.value)}
                             className={inputStyle}
                         />
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Đường dẫn (Slug)" : "Slug"}</label>
-                        <input
-                            type="text"
-                            value={formData.slug}
-                            onChange={(e) => handleFieldChange("slug", e.target.value)}
-                            className={inputStyle}
-                        />
-                        <p className="text-[10px] text-slate-400 mt-1">{lang === "VN" ? "Để trống nếu muốn hệ thống tự sinh lại từ tiêu đề." : "Leave blank to let the system regenerate it from the title."}</p>
                     </div>
 
                     <div>
@@ -242,29 +262,51 @@ export function EditBlog() {
 
                 <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Ảnh bìa" : "Cover Image"}
+                        {lang === "VN" ? "Ảnh bìa" : "Cover Images"}
                     </h3>
 
                     <div className="flex flex-col sm:flex-row gap-5 items-start">
                         <div className="w-full sm:w-40 aspect-video rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shrink-0">
                             <img
-                                src={formData.imageUrl || DEFAULT_BLOG_IMAGE}
+                                src={coverPreview || DEFAULT_BLOG_IMAGE}
                                 alt={formData.imageAltText || "preview"}
                                 className="w-full h-full object-cover"
                                 onError={(e) => { e.target.src = DEFAULT_BLOG_IMAGE; }}
                             />
                         </div>
-                        <div className="flex-1 w-full space-y-4">
-                            <div>
-                                <label className={labelStyle}>{lang === "VN" ? `Image URL ${formData.status === BLOG_STATUS.PUBLISHED ? "(*)" : ""}` : `Image URL ${formData.status === BLOG_STATUS.PUBLISHED ? "(*)" : ""}`}</label>
-                                <input
-                                    type="text"
-                                    placeholder="https://res.cloudinary.com/.../blog-cover.webp"
-                                    value={formData.imageUrl}
-                                    onChange={(e) => handleFieldChange("imageUrl", e.target.value)}
-                                    className={inputStyle}
-                                />
-                            </div>
+                        <div className="flex-1 w-full space-y-3">
+                            <label className={labelStyle}>
+                                {lang === "VN"
+                                    ? `URL ảnh ${formData.status === BLOG_STATUS.PUBLISHED ? "(*)" : ""}`
+                                    : `Image URLs ${formData.status === BLOG_STATUS.PUBLISHED ? "(*)" : ""}`}
+                            </label>
+                            {formData.imageUrls.map((url, index) => (
+                                <div key={index} className="flex gap-2">
+                                    <input
+                                        type="url"
+                                        placeholder="https://..."
+                                        value={url}
+                                        onChange={(e) => handleImageUrlChange(index, e.target.value)}
+                                        className={inputStyle}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => removeImageUrlField(index)}
+                                        className="shrink-0 w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+                                        aria-label={lang === "VN" ? "Xóa URL" : "Remove URL"}
+                                    >
+                                        <span className="material-symbols-outlined text-lg">close</span>
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={addImageUrlField}
+                                className="text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 flex items-center gap-1"
+                            >
+                                <span className="material-symbols-outlined text-sm">add</span>
+                                {lang === "VN" ? "Thêm URL ảnh" : "Add image URL"}
+                            </button>
                             <div>
                                 <label className={labelStyle}>{lang === "VN" ? "Mô tả ảnh (Alt Text)" : "Image Alt Text"}</label>
                                 <input
@@ -283,12 +325,13 @@ export function EditBlog() {
                         {lang === "VN" ? "Nội dung bài viết" : "Post Content"}
                     </h3>
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Nội dung (HTML)" : "Content (HTML)"}</label>
+                        <label className={labelStyle}>{lang === "VN" ? "Nội dung bài viết" : "Article content"}</label>
                         <textarea
                             rows={12}
+                            placeholder={lang === "VN" ? "Nhập nội dung dạng văn bản thường (không HTML)..." : "Enter plain text content (not HTML)..."}
                             value={formData.content}
                             onChange={(e) => handleFieldChange("content", e.target.value)}
-                            className={`${inputStyle} font-mono text-[11px] leading-relaxed`}
+                            className={`${inputStyle} leading-relaxed`}
                         />
                     </div>
                 </div>
@@ -323,7 +366,7 @@ export function EditBlog() {
                             </div>
                             {formData.status === BLOG_STATUS.PUBLISHED && (
                                 <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                                    {lang === "VN" ? "Bài viết Published bắt buộc phải có ảnh bìa." : "Published posts must have a cover image."}
+                                    {lang === "VN" ? "Bài viết Published bắt buộc phải có ít nhất 1 ảnh bìa." : "Published posts must have at least one cover image."}
                                 </p>
                             )}
                         </>

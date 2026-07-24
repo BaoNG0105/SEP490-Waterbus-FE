@@ -65,7 +65,7 @@ export function BlogList() {
                                 {/* Khung chứa ảnh thu nhỏ */}
                                 <div className="relative aspect-16/10 overflow-hidden bg-slate-100 dark:bg-slate-900 shrink-0">
                                     <img
-                                        src={blog.imageUrl || DEFAULT_BLOG_IMAGE}
+                                        src={blog.imageUrl || blog.imageUrls?.[0] || DEFAULT_BLOG_IMAGE}
                                         alt={blog.imageAltText || blog.title}
                                         className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
                                         onError={(e) => { e.target.src = DEFAULT_BLOG_IMAGE; }}

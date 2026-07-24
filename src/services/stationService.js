@@ -1,6 +1,7 @@
 import { 
     getStations as apiGetStations,
     getStationById as apiGetStationById,
+    createStation as apiCreateStation,
     updateStation as apiUpdateStation    
 } from '../api/stationApi';
 
@@ -77,6 +78,16 @@ export const fetchStationManagers = async (stationId) => {
         stationName: station?.stationName || station?.name || "",
         stationId: String(station?.stationId || station?.id || stationId),
     };
+};
+
+/** Tạo nhà ga mới (JSON hoặc FormData kèm ảnh `images`). */
+export const addNewStation = async (stationPayload) => {
+    try {
+        return await apiCreateStation(stationPayload);
+    } catch (error) {
+        console.error("Lỗi khi tạo nhà ga mới:", error);
+        throw error;
+    }
 };
 
 // Service cập nhật dữ liệu nhà ga bến tàu

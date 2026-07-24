@@ -584,12 +584,13 @@ export function LiveTracking({ viewTabs = null } = {}) {
           }
           return null;
         })();
-        const passengerCount = toPassengerCount(boat.passengerCount)
+        const passengerCount = toPassengerCount(schedule?.totalPassengerCount)
+          ?? toPassengerCount(boat.passengerCount)
           ?? toPassengerCount(schedule?.passengerCount)
           ?? toPassengerCount(schedule?.onboardPassengerCount)
           ?? lastStopOnboard
-          ?? toPassengerCount(resolvedTrip?.onboardPassengerCount)
           ?? toPassengerCount(resolvedTrip?.totalPassengerCount)
+          ?? toPassengerCount(resolvedTrip?.onboardPassengerCount)
           ?? toPassengerCount(resolvedTrip?.boardingPassengerCount);
 
         const dwellNotice = formatDwellCountdownNotice(dwellCountdown, lang, tick, {
@@ -777,6 +778,27 @@ export function LiveTracking({ viewTabs = null } = {}) {
           delayStartedAt: schedule?.delayStartedAt || boat.delayStartedAt || null,
           adjustedStartAt: schedule?.adjustedStartAt || boat.adjustedStartAt || null,
           adjustedEndAt: schedule?.adjustedEndAt || boat.adjustedEndAt || null,
+          displayStartAt: schedule?.displayStartAt
+            || schedule?.adjustedStartAt
+            || schedule?.startAt
+            || schedule?.scheduledDepartureAt
+            || boat.adjustedStartAt
+            || boat.scheduledDepartureAt
+            || null,
+          displayEndAt: schedule?.displayEndAt
+            || schedule?.adjustedEndAt
+            || schedule?.endAt
+            || boat.adjustedEndAt
+            || null,
+          serviceType: schedule?.serviceType || boat.serviceType || null,
+          sellsBySegment: schedule?.sellsBySegment ?? boat.sellsBySegment ?? null,
+          capacitySnapshot: schedule?.capacitySnapshot
+            ?? boat.capacitySnapshot
+            ?? resolvedTrip?.capacitySnapshot
+            ?? null,
+          totalPassengerCount: schedule?.totalPassengerCount
+            ?? resolvedTrip?.totalPassengerCount
+            ?? null,
           operationStatus: schedule?.operationStatus || boat.operationStatus || null,
           hasOpenIncident,
           activeIncident: hasOpenIncident || boat.activeIncident === true,

@@ -124,13 +124,14 @@ export function BlogManagement() {
     };
 
     const handlePublish = async (blog) => {
-        if (!blog.imageUrl) {
+        const hasCover = Boolean(blog.imageUrl || (Array.isArray(blog.imageUrls) && blog.imageUrls.length > 0));
+        if (!hasCover) {
             notify({
                 icon: "warning",
                 title: lang === "VN" ? "Thiếu ảnh bìa" : "Missing cover image",
                 text: lang === "VN"
-                    ? "Bài viết cần có ảnh bìa (imageUrl) trước khi có thể xuất bản."
-                    : "This post needs a cover image (imageUrl) before it can be published.",
+                    ? "Bài viết Published bắt buộc phải có ảnh bìa."
+                    : "Published posts must have at least one cover image.",
                 confirmButtonColor: "#124757",
             });
             return;
@@ -367,7 +368,7 @@ export function BlogManagement() {
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shrink-0">
                                                         <img
-                                                            src={blog.imageUrl || DEFAULT_BLOG_IMAGE}
+                                                            src={blog.imageUrl || blog.imageUrls?.[0] || DEFAULT_BLOG_IMAGE}
                                                             alt={blog.imageAltText || blog.title}
                                                             className="w-full h-full object-cover"
                                                             onError={(e) => { e.target.src = DEFAULT_BLOG_IMAGE; }}

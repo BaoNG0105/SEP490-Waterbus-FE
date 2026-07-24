@@ -28,6 +28,14 @@ import {
 } from "../../../services/incidentService";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../../../utils/charterBookingAdmin";
 import { formatCustomerRouteTitle } from "../../../utils/routeTypes";
+import {
+  pickStopActualArrival,
+  pickStopActualDeparture,
+  pickStopAdjustedArrival,
+  pickStopAdjustedDeparture,
+  pickStopScheduledArrival,
+  pickStopScheduledDeparture,
+} from "../../../utils/tripStopTimes";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { formatDwellCountdownNotice, shouldSuppressDwellCountdown } from "../../../utils/boatTracking";
 import { geometryToCoordinates as parseRouteGeometry } from "../../../utils/charterRouteMap";
@@ -118,8 +126,8 @@ const formatCount = (value) => {
 
 /** Trạng thái vận hành tại bến: đang lên tàu / đang dừng / đã rời. */
 const resolveStopOpsBadge = (stop, { isFirst, isLast, tripStatusKey, lang }) => {
-  const hasArr = Boolean(stop?.actualArrival);
-  const hasDep = Boolean(stop?.actualDeparture);
+  const hasArr = Boolean(pickStopActualArrival(stop));
+  const hasDep = Boolean(pickStopActualDeparture(stop));
 
   if (isLast) {
     if (hasArr || tripStatusKey === "Completed") {
@@ -187,8 +195,8 @@ const sortStops = (stops) =>
   );
 
 const resolvePassengerCount = (trip, stops) => {
-  const direct = toCount(trip?.uniquePassengerCount)
-    ?? toCount(trip?.totalPassengerCount)
+  const direct = toCount(trip?.totalPassengerCount)
+    ?? toCount(trip?.uniquePassengerCount)
     ?? toCount(trip?.onboardPassengerCount)
     ?? toCount(trip?.passengerCount)
     ?? toCount(trip?.boardingPassengerCount);
@@ -215,9 +223,13 @@ const resolveOperatingDate = (trip, lang) => {
   return "—";
 };
 
-const resolveHeroImage = (_trip, boatCatalog) => {
-  // Ảnh chỉ lấy từ GET /boats/{id} — không đọc trip.boat.imageUrl / boatImageUrl.
+const resolveHeroImage = (trip, boatCatalog) => {
+  // Ưu tiên ảnh từ GET trip (boat.imageUrl / imageUrls), rồi catalog boat.
+  const boat = trip?.boat || trip?.Boat || {};
   const candidates = [
+    boat.imageUrl,
+    Array.isArray(boat.imageUrls) ? boat.imageUrls[0] : "",
+    trip?.boatImageUrl,
     boatCatalog?.imageUrl,
     Array.isArray(boatCatalog?.imageUrls) ? boatCatalog.imageUrls[0] : "",
   ].filter(Boolean);
@@ -226,7 +238,7 @@ const resolveHeroImage = (_trip, boatCatalog) => {
     return s && !/image\s*not\s*available/i.test(s);
   });
   if (first) return first;
-  return getBoatImageUrl(boatCatalog, DEFAULT_BOAT_IMAGE);
+  return getBoatImageUrl(boatCatalog || boat, DEFAULT_BOAT_IMAGE);
 };
 
 /** Trip chỉ còn reference: boatId / boatName hoặc boat.vesselId / vesselName. */
@@ -453,8 +465,8 @@ const resolveRouteProgress = (stops = [], liveLocation = null, statusKey = "", r
     const stop = stops[i];
     const isLast = i === n - 1;
     const done = isLast
-      ? Boolean(stop.actualArrival)
-      : Boolean(stop.actualDeparture || (i > 0 && stop.actualArrival));
+      ? Boolean(pickStopActualArrival(stop))
+      : Boolean(pickStopActualDeparture(stop) || (i > 0 && pickStopActualArrival(stop)));
     if (done) reached = i + (isLast ? 1 : 0);
     else break;
   }
@@ -920,17 +932,35 @@ export function TripDetail() {
   const stops = useMemo(() => sortStops(trip?.stops), [trip]);
   const boat = useMemo(() => resolveBoat(trip, boatCatalog), [trip, boatCatalog]);
   const onBoardCrewDisplay = useMemo(() => {
-    // Chỉ hiện ca OnBoard đúng ngày chuyến (boatCrewNames đã lọc).
-    // Không dùng trip.onBoardStaff — BE có thể trả crew lịch sử của tàu.
+    // Ưu tiên onBoardStaff từ GET trip; fallback ca OnBoard đúng ngày.
+    const fromTrip = Array.isArray(trip?.onBoardStaff) ? trip.onBoardStaff : [];
+    const namesFromTrip = [];
+    const seen = new Set();
+    fromTrip.forEach((row) => {
+      const name = String(
+        row?.staffName
+        || row?.fullName
+        || row?.name
+        || row?.userName
+        || "",
+      ).trim();
+      const key = String(row?.staffUserId || row?.userId || name).trim();
+      if (!name || !key || seen.has(key)) return;
+      seen.add(key);
+      namesFromTrip.push(name);
+    });
+    if (namesFromTrip.length) return namesFromTrip;
     return boatCrewNames;
-  }, [boatCrewNames]);
+  }, [trip?.onBoardStaff, boatCrewNames]);
 
   const fromName = stationLabel(trip?.fromStation)
+    || trip?.fromLocation
     || trip?.fromStationName
     || stationLabel(stops[0])
     || stops[0]?.stationName
     || "—";
   const toName = stationLabel(trip?.toStation)
+    || trip?.toLocation
     || trip?.toStationName
     || stationLabel(stops[stops.length - 1])
     || stops[stops.length - 1]?.stationName
@@ -1260,6 +1290,15 @@ export function TripDetail() {
     || tracking?.raw?.ActiveIncident === true,
   );
   const hasOpenIncident = Boolean(openIncident) || trackingIncidentFlag;
+  const incidentInfo = trip?.incidentInfo || trip?.IncidentInfo || null;
+  const hasTripIncidentInfo = Boolean(incidentInfo && typeof incidentInfo === "object");
+
+  const boatLabelFromIncident = (code, name) => {
+    const c = String(code || "").trim();
+    const n = String(name || "").trim();
+    if (c && n && c !== n) return `${c} · ${n}`;
+    return c || n || "";
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-2 pb-10 font-body animate-fade-in sm:px-4">
@@ -1305,7 +1344,7 @@ export function TripDetail() {
           </p>
           {delayActive ? (
             <p className="mt-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
-              {formatActiveDelayLine(delayInfo, { lang })}
+              {formatActiveDelayLine(delayInfo, { lang, stops })}
             </p>
           ) : delayMinutes > 0 ? (
             <p className="mt-1 text-[11px] font-bold text-orange-700 dark:text-orange-300">
@@ -1372,14 +1411,123 @@ export function TripDetail() {
         </div>
       </div>
 
-      {hasOpenIncident ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs dark:border-rose-500/30 dark:bg-rose-500/10">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0 space-y-1">
-              <p className="font-headline font-black uppercase tracking-wider text-rose-800 dark:text-rose-200">
-                {lang === "VN" ? "Tàu đang có sự cố" : "Boat has an open incident"}
+      {hasTripIncidentInfo ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/30 dark:bg-rose-500/10">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-200/70 pb-3 dark:border-rose-500/20">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="font-headline text-[11px] font-black uppercase tracking-wider text-rose-800 dark:text-rose-200">
+                {lang === "VN" ? "Thông tin sự cố chuyến" : "Trip incident info"}
               </p>
-              <p className="font-bold text-rose-900 dark:text-rose-100">
+              {(incidentInfo.resolutionStatus || incidentInfo.ResolutionStatus) ? (
+                <span className="inline-flex items-center rounded-lg border border-rose-300/80 bg-white/80 px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200">
+                  {(() => {
+                    const raw = String(incidentInfo.resolutionStatus || incidentInfo.ResolutionStatus || "");
+                    const key = raw.toLowerCase();
+                    if (key === "resolved") return lang === "VN" ? "Đã xử lý" : "Resolved";
+                    if (key === "open") return lang === "VN" ? "Đang mở" : "Open";
+                    return raw;
+                  })()}
+                </span>
+              ) : null}
+            </div>
+            <Link
+              to="/admin/live-tracking?view=incidents"
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-rose-300 bg-white px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30"
+            >
+              <span className="material-symbols-outlined text-[14px]">emergency</span>
+              {lang === "VN" ? "Xem sự cố" : "View incidents"}
+            </Link>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              {
+                label: lang === "VN" ? "Tàu sự cố" : "Vessel with problem",
+                value: boatLabelFromIncident(
+                  incidentInfo.originalBoatCode || incidentInfo.OriginalBoatCode,
+                  incidentInfo.originalBoatName || incidentInfo.OriginalBoatName,
+                ),
+              },
+              {
+                label: lang === "VN" ? "Tàu cứu hộ" : "Rescue boat",
+                value: boatLabelFromIncident(
+                  incidentInfo.rescueBoatCode || incidentInfo.RescueBoatCode,
+                  incidentInfo.rescueBoatName || incidentInfo.RescueBoatName,
+                ),
+              },
+              {
+                label: lang === "VN" ? "Tàu thay thế" : "Replacement boat",
+                value: boatLabelFromIncident(
+                  incidentInfo.replacementBoatCode || incidentInfo.ReplacementBoatCode,
+                  incidentInfo.replacementBoatName || incidentInfo.ReplacementBoatName,
+                ),
+              },
+            ]
+              .filter((row) => row.value)
+              .map((row) => (
+                <div
+                  key={row.label}
+                  className="rounded-xl border border-rose-200/80 bg-white/70 px-3 py-2.5 dark:border-rose-500/25 dark:bg-rose-950/20"
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-rose-500 dark:text-rose-300/80">
+                    {row.label}
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-rose-950 dark:text-rose-50">{row.value}</p>
+                </div>
+              ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {Number.isFinite(Number(incidentInfo.replacementDelayMinutes ?? incidentInfo.ReplacementDelayMinutes)) ? (
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white/70 px-3 py-1.5 text-[11px] font-bold text-rose-900 dark:border-rose-500/25 dark:bg-rose-950/20 dark:text-rose-100">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 dark:text-rose-300/80">
+                  {lang === "VN" ? "Trễ thay thế" : "Delay"}
+                </span>
+                {Number(incidentInfo.replacementDelayMinutes ?? incidentInfo.ReplacementDelayMinutes)}
+                {lang === "VN" ? " phút" : " min"}
+              </span>
+            ) : null}
+            {[
+              {
+                label: lang === "VN" ? "Vé active" : "Active tickets",
+                value: incidentInfo.activeTicketCountSnapshot ?? incidentInfo.ActiveTicketCountSnapshot,
+              },
+              {
+                label: lang === "VN" ? "Đang trên tàu" : "Onboard",
+                value: incidentInfo.onboardPassengerCountSnapshot ?? incidentInfo.OnboardPassengerCountSnapshot,
+              },
+              {
+                label: lang === "VN" ? "Chặng sau" : "Future",
+                value: incidentInfo.futurePassengerCountSnapshot ?? incidentInfo.FuturePassengerCountSnapshot,
+              },
+            ]
+              .filter((row) => row.value != null && row.value !== "")
+              .map((row) => (
+                <span
+                  key={row.label}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white/70 px-3 py-1.5 text-[11px] font-bold text-rose-900 dark:border-rose-500/25 dark:bg-rose-950/20 dark:text-rose-100"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 dark:text-rose-300/80">
+                    {row.label}
+                  </span>
+                  {row.value}
+                </span>
+              ))}
+          </div>
+        </div>
+      ) : hasOpenIncident ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/30 dark:bg-rose-500/10">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-headline text-[11px] font-black uppercase tracking-wider text-rose-800 dark:text-rose-200">
+                  {lang === "VN" ? "Tàu đang có sự cố" : "Boat has an open incident"}
+                </p>
+                <span className="inline-flex items-center rounded-lg border border-rose-300/80 bg-white/80 px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200">
+                  {lang === "VN" ? "Đang mở" : "Open"}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-rose-950 dark:text-rose-50">
                 {[
                   openIncident
                     ? getIncidentTypeLabel(openIncident.incidentType, lang)
@@ -1394,16 +1542,19 @@ export function TripDetail() {
                 </p>
               ) : null}
               {openIncident?.rescueBoatCode ? (
-                <p className="text-[11px] font-bold text-rose-800 dark:text-rose-200">
-                  {lang === "VN" ? "Tàu cứu hộ: " : "Rescue boat: "}
+                <p className="text-[11px] font-bold text-rose-900 dark:text-rose-100">
+                  <span className="font-bold uppercase tracking-wider text-rose-500 dark:text-rose-300/80">
+                    {lang === "VN" ? "Tàu cứu hộ · " : "Rescue · "}
+                  </span>
                   {openIncident.rescueBoatCode}
                 </p>
               ) : null}
             </div>
             <Link
-              to="/admin/incidents"
-              className="shrink-0 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 underline dark:text-rose-300"
+              to="/admin/live-tracking?view=incidents"
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-rose-300 bg-white px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30"
             >
+              <span className="material-symbols-outlined text-[14px]">emergency</span>
               {lang === "VN" ? "Xem sự cố" : "View incidents"}
             </Link>
           </div>
@@ -1647,7 +1798,7 @@ export function TripDetail() {
                 {lang === "VN" ? "Thông tin tàu" : "Boat details"}
               </h3>
               <Link
-                to="/admin/staff-assignments"
+                to="/admin/staffs-management?view=assignments"
                 className="text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] underline dark:text-yellow-400"
               >
                 {lang === "VN" ? "Phân công OnBoard" : "Assign OnBoard"}
@@ -1754,18 +1905,14 @@ export function TripDetail() {
                     tripStatusKey: statusKey,
                     lang,
                   });
-                  const scheduledArr = isFirst ? null : (stop.scheduledArrival ?? null);
-                  const scheduledDep = isLast ? null : (stop.scheduledDeparture ?? null);
-                  const adjustedArr = isFirst
-                    ? null
-                    : (stop.adjustedArrival ?? stop.adjustedArrivalTime ?? null);
-                  const adjustedDep = isLast
-                    ? null
-                    : (stop.adjustedDeparture ?? stop.adjustedDepartureTime ?? null);
+                  const scheduledArr = isFirst ? null : pickStopScheduledArrival(stop);
+                  const scheduledDep = isLast ? null : pickStopScheduledDeparture(stop);
+                  const adjustedArr = isFirst ? null : pickStopAdjustedArrival(stop);
+                  const adjustedDep = isLast ? null : pickStopAdjustedDeparture(stop);
                   // Bến đầu không dùng giờ đến (kể cả actualArrival BE gửi nhầm).
                   // Bến cuối không dùng giờ đi.
-                  const actualArr = isFirst ? null : (stop.actualArrival ?? null);
-                  const actualDep = isLast ? null : (stop.actualDeparture ?? null);
+                  const actualArr = isFirst ? null : pickStopActualArrival(stop);
+                  const actualDep = isLast ? null : pickStopActualDeparture(stop);
                   const onboard = toCount(stop.onboardPassengerCount);
                   const boarding = toCount(stop.boardingPassengerCount) ?? 0;
                   const alighting = toCount(stop.alightingPassengerCount);
@@ -1794,6 +1941,11 @@ export function TripDetail() {
                             {stop.stayDurationMinutes != null ? (
                               <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:bg-slate-900">
                                 {lang === "VN" ? `Dừng ${stop.stayDurationMinutes} phút` : `${stop.stayDurationMinutes} min stay`}
+                              </span>
+                            ) : null}
+                            {stop.stopStatus ? (
+                              <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                                {String(stop.stopStatus)}
                               </span>
                             ) : null}
                           </div>

@@ -19,6 +19,42 @@ export const resolveRouteLabelKey = (routeOrTypeOrLabel) => {
   return resolveRouteLabelKey(routeOrTypeOrLabel.routeType || "");
 };
 
+/**
+ * Loại chuyến: ưu tiên serviceType BE (Bus | Sightseeing | Charter),
+ * rồi routeLabel / routeType / tripType.
+ * Prefix BB/BS/BR trên tripCode chỉ dùng fallback im lặng (không hiện badge).
+ */
+export const resolveTripKindKey = (tripOrCode) => {
+  if (tripOrCode && typeof tripOrCode === "object") {
+    const fromService = resolveRouteLabelKey(
+      tripOrCode.serviceType || tripOrCode.ServiceType || "",
+    );
+    if (["Bus", "Sightseeing", "Charter"].includes(fromService)) return fromService;
+
+    if (String(tripOrCode.tripType || "") === "Charter") return "Charter";
+
+    const fromRoute = resolveRouteLabelKey(tripOrCode);
+    if (fromRoute === "GPS") return "Charter";
+    if (["Bus", "Sightseeing", "Charter"].includes(fromRoute)) return fromRoute;
+  }
+
+  const code = typeof tripOrCode === "string"
+    ? tripOrCode
+    : (tripOrCode?.tripCode || tripOrCode?.TripCode || "");
+  const prefix = String(code).trim().toUpperCase().slice(0, 2);
+  if (prefix === "BB") return "Bus";
+  if (prefix === "BS") return "Sightseeing";
+  if (prefix === "BR") return "Charter";
+  return "";
+};
+
+/** Nhãn ngắn: Bus | Sightseeing | Request (Charter). */
+export const getTripKindShortLabel = (tripOrCode) => {
+  const key = resolveTripKindKey(tripOrCode);
+  if (key === "Charter") return "Request (Charter)";
+  return key || "";
+};
+
 /** Nhãn hiển thị đầy đủ theo routeLabel / routeType. */
 export const getRouteKindLabel = (routeTypeOrRoute, lang = "VN") => {
   const key = resolveRouteLabelKey(routeTypeOrRoute);

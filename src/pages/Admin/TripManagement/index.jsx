@@ -6,7 +6,7 @@ import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService
 import { trackingHub } from "../../../services/trackingHubClient";
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
-import { resolveRouteLabelKey } from "../../../utils/routeTypes";
+import { resolveTripKindKey } from "../../../utils/routeTypes";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import {
   applyDelayPayloadToTrip,
@@ -189,9 +189,9 @@ const resolveBoatLabel = (trip, lang) => {
 
 const resolvePaxLabel = (trip) => {
     // Tổng số khách của chuyến — không dùng ghế còn / sức chứa.
-    const pax = trip?.uniquePassengerCount
-        ?? trip?.totalPassengerCount
+    const pax = trip?.totalPassengerCount
         ?? trip?.TotalPassengerCount
+        ?? trip?.uniquePassengerCount
         ?? trip?.onboardPassengerCount
         ?? trip?.passengerCount
         ?? trip?.boardingPassengerCount;
@@ -250,7 +250,13 @@ export function TripManagement() {
 
     const boatIdsKey = useMemo(
       () => [...new Set(
-        trips.map((t) => String(t?.boatId || t?.boat?.boatId || "").trim()).filter(Boolean),
+        trips.map((t) => String(
+          t?.boatId
+          || t?.boat?.vesselId
+          || t?.boat?.boatId
+          || t?.BoatId
+          || "",
+        ).trim()).filter(Boolean),
       )].sort().join("|"),
       [trips],
     );
@@ -334,11 +340,9 @@ export function TripManagement() {
         let charter = 0;
         let bus = 0;
         trips.forEach((trip) => {
-            const key = resolveRouteLabelKey(
-                trip?.routeLabel || trip?.routeType || (trip?.tripType === "Charter" ? "Charter" : ""),
-            );
+            const key = resolveTripKindKey(trip);
             if (key === "Sightseeing") sightseeing += 1;
-            else if (key === "Charter" || key === "GPS" || trip?.tripType === "Charter") charter += 1;
+            else if (key === "Charter") charter += 1;
             else if (key === "Bus") bus += 1;
         });
         return {
@@ -525,7 +529,7 @@ export function TripManagement() {
                                                     if (active) {
                                                         return (
                                                             <p className="mt-1 max-w-[11rem] text-[10px] font-bold leading-snug text-amber-700 dark:text-amber-300">
-                                                                {formatActiveDelayLine(trip, { lang })}
+                                                                {formatActiveDelayLine(trip, { lang, stops: trip.stops })}
                                                             </p>
                                                         );
                                                     }

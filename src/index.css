@@ -1,4 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Inter:wght@300..900&family=Plus+Jakarta+Sans:wght@300..800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap");
+/* Text UI fonts — Material Symbols load riêng trong index.html (display=block). */
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Inter:wght@300..900&family=Plus+Jakarta+Sans:wght@300..800&display=swap");
 
 /* Import thư viện leaflet của OSM */
 @import 'leaflet/dist/leaflet.css';
@@ -54,8 +55,8 @@
   }
 
   /*
-   * Material Symbols: text trong span là tên icon (admin_panel_settings…).
-   * Chrome hay hiện tooltip overflow từ chuỗi đó — không để hiện cho khách.
+   * Material Symbols: text trong span là tên icon (arrow_back, home…).
+   * Ẩn đến khi font sẵn sàng — tránh lộ ligature khi load chậm.
    */
   .material-symbols-outlined {
     font-family: "Material Symbols Outlined", sans-serif;
@@ -72,8 +73,18 @@
     user-select: none;
     -webkit-user-select: none;
     pointer-events: none;
-    overflow: visible;
+    overflow: hidden;
     text-overflow: clip;
+    /* Ô theo font-size — cắt chữ ligature nếu font chưa kịp */
+    width: 1em;
+    height: 1em;
+    max-width: 1.25em;
+    vertical-align: middle;
+    visibility: hidden;
+  }
+
+  html.material-icons-ready .material-symbols-outlined {
+    visibility: visible;
   }
 
   /* Ẩn nút hiện mật khẩu native (Edge/Chrome) — tránh chồng icon eye custom */

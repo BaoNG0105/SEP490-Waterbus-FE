@@ -46,8 +46,8 @@ export const Dashboard = () => {
       icon: "badge",
       titleVn: "Quản lý Nhân viên",
       titleEn: "Staff Management",
-      descVn: "Quản lý tài khoản Nhân viên mặt đất / trên tàu.",
-      descEn: "Manage ground and onboard staff accounts.",
+      descVn: "Tài khoản nhân viên và xếp lịch phân công.",
+      descEn: "Staff accounts and shift scheduling.",
       color: "from-sky-500/10 to-blue-500/10 text-sky-600 dark:text-sky-400",
       roles: ["ADMIN", "MANAGER"],
     },
@@ -112,8 +112,8 @@ export const Dashboard = () => {
       roles: ["ADMIN", "MANAGER", "STAFF"],
     },
     {
-      path: "/admin/staff-assignments",
-      icon: "badge",
+      path: "/admin/staffs-management?view=assignments",
+      icon: "event_available",
       titleVn: "Phân công Nhân viên",
       titleEn: "Staff Assignments",
       titleVnStaff: "Lịch làm việc của tôi",
@@ -123,7 +123,7 @@ export const Dashboard = () => {
       descVnStaff: "Xem lịch trực và phân công của bạn.",
       descEnStaff: "View your assigned shifts and routes.",
       color: "from-purple-500/10 to-violet-500/10 text-purple-600 dark:text-purple-400",
-      roles: ["ADMIN", "MANAGER", "STAFF"],
+      roles: ["STAFF"],
     },
     {
       path: "/admin/staff/my-trips",
@@ -220,7 +220,7 @@ export const Dashboard = () => {
   // Staff thuần chỉ thấy các mục vận hành cá nhân, không thấy các trang quản lý cấp cao.
   const staffDashboardPaths = new Set([
     "/admin/incidents",
-    "/admin/staff-assignments",
+    "/admin/staffs-management?view=assignments",
     "/admin/staff/my-trips",
     "/admin/staff/ticket-scan",
     "/admin/staff/scan-history",

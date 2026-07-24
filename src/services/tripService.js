@@ -10,6 +10,7 @@ import {
     startTripDelay as apiStartTripDelay,
     resumeTripDelay as apiResumeTripDelay,
 } from '../api/tripApi';
+import { normalizeTripStops } from '../utils/tripStopTimes';
 
 export const TRIP_STATUS_OPTIONS = [
   'Scheduled',
@@ -122,11 +123,30 @@ export const sortTripsForOpsList = (trips = []) => {
 };
 
 const unwrapTripList = (data) => {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.trips)) return data.trips;
-  return [];
+  let list = [];
+  if (Array.isArray(data)) list = data;
+  else if (Array.isArray(data?.items)) list = data.items;
+  else if (Array.isArray(data?.data)) list = data.data;
+  else if (Array.isArray(data?.trips)) list = data.trips;
+  return list.map(normalizeTripPayload).filter(Boolean);
+};
+
+/** Chuẩn hoá trip + stops[] (*At aliases, fromLocation/toLocation, serviceType). */
+export const normalizeTripPayload = (trip) => {
+  if (!trip || typeof trip !== "object") return trip;
+  const stops = normalizeTripStops(trip.stops || trip.Stops || []);
+  return {
+    ...trip,
+    stops,
+    fromLocation: trip.fromLocation ?? trip.FromLocation ?? trip.fromStation ?? trip.fromStationName ?? null,
+    toLocation: trip.toLocation ?? trip.ToLocation ?? trip.toStation ?? trip.toStationName ?? null,
+    startAt: trip.startAt ?? trip.StartAt ?? trip.departureTime ?? trip.scheduledDepartureAt ?? null,
+    endAt: trip.endAt ?? trip.EndAt ?? trip.arrivalTime ?? trip.scheduledArrivalAt ?? null,
+    serviceType: trip.serviceType ?? trip.ServiceType ?? null,
+    sellsBySegment: trip.sellsBySegment ?? trip.SellsBySegment ?? null,
+    capacitySnapshot: trip.capacitySnapshot ?? trip.CapacitySnapshot ?? null,
+    totalPassengerCount: trip.totalPassengerCount ?? trip.TotalPassengerCount ?? null,
+  };
 };
 
 /** Lọc chuyến đang gắn được với 1 tàu (theo boatId / boatCode). */
@@ -312,10 +332,11 @@ export const fetchTripDetail = async (tripId) => {
     try {
         const data = await apiGetTripById(tripId);
         // Một số response BE bọc { data: {...} }
+        let trip = data;
         if (data?.data && typeof data.data === "object" && !Array.isArray(data.data) && (data.data.tripId || data.data.tripCode || data.data.stops)) {
-            return data.data;
+            trip = data.data;
         }
-        return data;
+        return normalizeTripPayload(trip);
     } catch (error) {
         console.error(`Lỗi khi lấy chi tiết chuyến tàu ${tripId}:`, error);
         throw error;
