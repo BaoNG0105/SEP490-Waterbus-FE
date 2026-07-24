@@ -1412,92 +1412,122 @@ export function TripDetail() {
       </div>
 
       {hasTripIncidentInfo ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs dark:border-rose-500/30 dark:bg-rose-500/10">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0 space-y-1.5">
-              <p className="font-headline font-black uppercase tracking-wider text-rose-800 dark:text-rose-200">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/30 dark:bg-rose-500/10">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-200/70 pb-3 dark:border-rose-500/20">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="font-headline text-[11px] font-black uppercase tracking-wider text-rose-800 dark:text-rose-200">
                 {lang === "VN" ? "Thông tin sự cố chuyến" : "Trip incident info"}
               </p>
-              {boatLabelFromIncident(
-                incidentInfo.originalBoatCode || incidentInfo.OriginalBoatCode,
-                incidentInfo.originalBoatName || incidentInfo.OriginalBoatName,
-              ) ? (
-                <p className="font-bold text-rose-900 dark:text-rose-100">
-                  {lang === "VN" ? "Tàu sự cố: " : "Vessel with problem: "}
-                  {boatLabelFromIncident(
-                    incidentInfo.originalBoatCode || incidentInfo.OriginalBoatCode,
-                    incidentInfo.originalBoatName || incidentInfo.OriginalBoatName,
-                  )}
-                </p>
-              ) : null}
-              {boatLabelFromIncident(
-                incidentInfo.rescueBoatCode || incidentInfo.RescueBoatCode,
-                incidentInfo.rescueBoatName || incidentInfo.RescueBoatName,
-              ) ? (
-                <p className="font-bold text-rose-900 dark:text-rose-100">
-                  {lang === "VN" ? "Tàu cứu hộ: " : "Rescue boat: "}
-                  {boatLabelFromIncident(
-                    incidentInfo.rescueBoatCode || incidentInfo.RescueBoatCode,
-                    incidentInfo.rescueBoatName || incidentInfo.RescueBoatName,
-                  )}
-                </p>
-              ) : null}
-              {boatLabelFromIncident(
-                incidentInfo.replacementBoatCode || incidentInfo.ReplacementBoatCode,
-                incidentInfo.replacementBoatName || incidentInfo.ReplacementBoatName,
-              ) ? (
-                <p className="font-bold text-rose-900 dark:text-rose-100">
-                  {lang === "VN" ? "Tàu thay thế: " : "Replacement boat: "}
-                  {boatLabelFromIncident(
-                    incidentInfo.replacementBoatCode || incidentInfo.ReplacementBoatCode,
-                    incidentInfo.replacementBoatName || incidentInfo.ReplacementBoatName,
-                  )}
-                </p>
-              ) : null}
-              {Number.isFinite(Number(incidentInfo.replacementDelayMinutes ?? incidentInfo.ReplacementDelayMinutes)) ? (
-                <p className="font-bold text-rose-900 dark:text-rose-100">
-                  {lang === "VN" ? "Trễ thay thế: " : "Replacement delay: "}
-                  {Number(incidentInfo.replacementDelayMinutes ?? incidentInfo.ReplacementDelayMinutes)}
-                  {lang === "VN" ? " phút" : " min"}
-                </p>
-              ) : null}
-              <p className="text-[11px] font-medium text-rose-800/90 dark:text-rose-200/90">
-                {lang === "VN" ? "Khách ảnh hưởng: " : "Affected passengers: "}
-                {[
-                  incidentInfo.activeTicketCountSnapshot ?? incidentInfo.ActiveTicketCountSnapshot,
-                  incidentInfo.onboardPassengerCountSnapshot ?? incidentInfo.OnboardPassengerCountSnapshot,
-                  incidentInfo.futurePassengerCountSnapshot ?? incidentInfo.FuturePassengerCountSnapshot,
-                ].map((v, i) => {
-                  const labels = lang === "VN"
-                    ? ["vé active", "đang trên tàu", "chặng sau"]
-                    : ["active tickets", "onboard", "future"];
-                  if (v == null || v === "") return null;
-                  return `${labels[i]} ${v}`;
-                }).filter(Boolean).join(" · ") || "—"}
-              </p>
               {(incidentInfo.resolutionStatus || incidentInfo.ResolutionStatus) ? (
-                <p className="text-[11px] font-bold uppercase tracking-wide text-rose-800 dark:text-rose-200">
-                  {lang === "VN" ? "Trạng thái xử lý: " : "Resolution: "}
-                  {incidentInfo.resolutionStatus || incidentInfo.ResolutionStatus}
-                </p>
+                <span className="inline-flex items-center rounded-lg border border-rose-300/80 bg-white/80 px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200">
+                  {(() => {
+                    const raw = String(incidentInfo.resolutionStatus || incidentInfo.ResolutionStatus || "");
+                    const key = raw.toLowerCase();
+                    if (key === "resolved") return lang === "VN" ? "Đã xử lý" : "Resolved";
+                    if (key === "open") return lang === "VN" ? "Đang mở" : "Open";
+                    return raw;
+                  })()}
+                </span>
               ) : null}
             </div>
             <Link
-              to="/admin/incidents"
-              className="shrink-0 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 underline dark:text-rose-300"
+              to="/admin/live-tracking?view=incidents"
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-rose-300 bg-white px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30"
             >
+              <span className="material-symbols-outlined text-[14px]">emergency</span>
               {lang === "VN" ? "Xem sự cố" : "View incidents"}
             </Link>
           </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              {
+                label: lang === "VN" ? "Tàu sự cố" : "Vessel with problem",
+                value: boatLabelFromIncident(
+                  incidentInfo.originalBoatCode || incidentInfo.OriginalBoatCode,
+                  incidentInfo.originalBoatName || incidentInfo.OriginalBoatName,
+                ),
+              },
+              {
+                label: lang === "VN" ? "Tàu cứu hộ" : "Rescue boat",
+                value: boatLabelFromIncident(
+                  incidentInfo.rescueBoatCode || incidentInfo.RescueBoatCode,
+                  incidentInfo.rescueBoatName || incidentInfo.RescueBoatName,
+                ),
+              },
+              {
+                label: lang === "VN" ? "Tàu thay thế" : "Replacement boat",
+                value: boatLabelFromIncident(
+                  incidentInfo.replacementBoatCode || incidentInfo.ReplacementBoatCode,
+                  incidentInfo.replacementBoatName || incidentInfo.ReplacementBoatName,
+                ),
+              },
+            ]
+              .filter((row) => row.value)
+              .map((row) => (
+                <div
+                  key={row.label}
+                  className="rounded-xl border border-rose-200/80 bg-white/70 px-3 py-2.5 dark:border-rose-500/25 dark:bg-rose-950/20"
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-rose-500 dark:text-rose-300/80">
+                    {row.label}
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-rose-950 dark:text-rose-50">{row.value}</p>
+                </div>
+              ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {Number.isFinite(Number(incidentInfo.replacementDelayMinutes ?? incidentInfo.ReplacementDelayMinutes)) ? (
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white/70 px-3 py-1.5 text-[11px] font-bold text-rose-900 dark:border-rose-500/25 dark:bg-rose-950/20 dark:text-rose-100">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 dark:text-rose-300/80">
+                  {lang === "VN" ? "Trễ thay thế" : "Delay"}
+                </span>
+                {Number(incidentInfo.replacementDelayMinutes ?? incidentInfo.ReplacementDelayMinutes)}
+                {lang === "VN" ? " phút" : " min"}
+              </span>
+            ) : null}
+            {[
+              {
+                label: lang === "VN" ? "Vé active" : "Active tickets",
+                value: incidentInfo.activeTicketCountSnapshot ?? incidentInfo.ActiveTicketCountSnapshot,
+              },
+              {
+                label: lang === "VN" ? "Đang trên tàu" : "Onboard",
+                value: incidentInfo.onboardPassengerCountSnapshot ?? incidentInfo.OnboardPassengerCountSnapshot,
+              },
+              {
+                label: lang === "VN" ? "Chặng sau" : "Future",
+                value: incidentInfo.futurePassengerCountSnapshot ?? incidentInfo.FuturePassengerCountSnapshot,
+              },
+            ]
+              .filter((row) => row.value != null && row.value !== "")
+              .map((row) => (
+                <span
+                  key={row.label}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white/70 px-3 py-1.5 text-[11px] font-bold text-rose-900 dark:border-rose-500/25 dark:bg-rose-950/20 dark:text-rose-100"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 dark:text-rose-300/80">
+                    {row.label}
+                  </span>
+                  {row.value}
+                </span>
+              ))}
+          </div>
         </div>
       ) : hasOpenIncident ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs dark:border-rose-500/30 dark:bg-rose-500/10">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0 space-y-1">
-              <p className="font-headline font-black uppercase tracking-wider text-rose-800 dark:text-rose-200">
-                {lang === "VN" ? "Tàu đang có sự cố" : "Boat has an open incident"}
-              </p>
-              <p className="font-bold text-rose-900 dark:text-rose-100">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/30 dark:bg-rose-500/10">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-headline text-[11px] font-black uppercase tracking-wider text-rose-800 dark:text-rose-200">
+                  {lang === "VN" ? "Tàu đang có sự cố" : "Boat has an open incident"}
+                </p>
+                <span className="inline-flex items-center rounded-lg border border-rose-300/80 bg-white/80 px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200">
+                  {lang === "VN" ? "Đang mở" : "Open"}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-rose-950 dark:text-rose-50">
                 {[
                   openIncident
                     ? getIncidentTypeLabel(openIncident.incidentType, lang)
@@ -1512,16 +1542,19 @@ export function TripDetail() {
                 </p>
               ) : null}
               {openIncident?.rescueBoatCode ? (
-                <p className="text-[11px] font-bold text-rose-800 dark:text-rose-200">
-                  {lang === "VN" ? "Tàu cứu hộ: " : "Rescue boat: "}
+                <p className="text-[11px] font-bold text-rose-900 dark:text-rose-100">
+                  <span className="font-bold uppercase tracking-wider text-rose-500 dark:text-rose-300/80">
+                    {lang === "VN" ? "Tàu cứu hộ · " : "Rescue · "}
+                  </span>
                   {openIncident.rescueBoatCode}
                 </p>
               ) : null}
             </div>
             <Link
-              to="/admin/incidents"
-              className="shrink-0 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 underline dark:text-rose-300"
+              to="/admin/live-tracking?view=incidents"
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-rose-300 bg-white px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30"
             >
+              <span className="material-symbols-outlined text-[14px]">emergency</span>
               {lang === "VN" ? "Xem sự cố" : "View incidents"}
             </Link>
           </div>
