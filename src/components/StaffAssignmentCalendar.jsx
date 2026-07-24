@@ -37,12 +37,12 @@ const statusChip = (row) => {
   const state = resolveShiftState(row);
   switch (state) {
     case SHIFT_STATE.ACTIVE:
-      return "border-emerald-200/80 bg-emerald-50/90 text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300";
+      return "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300";
     case SHIFT_STATE.COMPLETED:
       return "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300";
     case SHIFT_STATE.UPCOMING:
     default:
-      return "border-[#124757]/20 bg-[#124757]/5 text-[#124757] dark:border-yellow-400/25 dark:bg-yellow-400/10 dark:text-yellow-200";
+      return "border-[#124757]/25 bg-slate-50 text-[#124757] dark:border-yellow-400/30 dark:bg-slate-800 dark:text-yellow-200";
   }
 };
 
@@ -229,9 +229,9 @@ export function StaffAssignmentCalendar({
     if (today) {
       cls += "border-[#124757]/50 bg-[#124757]/8 dark:border-yellow-400/50 dark:bg-yellow-400/10 ";
     } else if (weekend) {
-      // Cuối tuần: xám ấm nhẹ — không cam / không cyan
+      // Cuối tuần: xanh nhạt nhẹ để phân biệt T7/CN
       cls +=
-        "border-slate-200/90 bg-slate-100/80 dark:border-slate-600 dark:bg-slate-800/50 ";
+        "border-sky-200/80 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-500/10 ";
     } else {
       cls += "border-slate-100 dark:border-slate-700/60 bg-white dark:bg-slate-900/25 ";
     }
@@ -297,45 +297,16 @@ export function StaffAssignmentCalendar({
                 key={opt.id}
                 type="button"
                 onClick={() => onModeChange?.(opt.id)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider inline-flex items-center gap-1 transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
                   mode === opt.id
                     ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
                     : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">{opt.icon}</span>
                 {lang === "VN" ? opt.vn : opt.en}
               </button>
             ))}
           </div>
-
-          {showLayoutToggle && onLayoutChange && mode !== "day" && (
-            <>
-              <span className="w-px h-6 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
-              <button
-                type="button"
-                onClick={() => onLayoutChange("calendar")}
-                className={`px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider inline-flex items-center gap-1 ${
-                  layout === "calendar"
-                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
-                    : "border border-slate-200 dark:border-slate-700 text-slate-500"
-                }`}
-              >
-                {lang === "VN" ? "Lưới ngày" : "Day grid"}
-              </button>
-              <button
-                type="button"
-                onClick={() => onLayoutChange("byBoat")}
-                className={`px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider inline-flex items-center gap-1 ${
-                  layout === "byBoat"
-                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
-                    : "border border-slate-200 dark:border-slate-700 text-slate-500"
-                }`}
-              >
-                {lang === "VN" ? "Theo tàu" : "By boat"}
-              </button>
-            </>
-          )}
         </div>
       </div>
 
@@ -348,7 +319,7 @@ export function StaffAssignmentCalendar({
           <div
             className={`rounded-3xl border px-4 py-3 ${
               isWeekend(anchor)
-                ? "border-slate-200 bg-slate-100/90 dark:border-slate-600 dark:bg-slate-800/60"
+                ? "border-sky-200 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-500/10"
                 : "border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40"
             }`}
           >
@@ -403,7 +374,7 @@ export function StaffAssignmentCalendar({
             <table className="w-full min-w-180 border-collapse text-left">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/50">
-                  <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-900/50 py-3 px-4 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60 min-w-35">
+                  <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-900 py-3 px-4 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60 w-35 min-w-35 max-w-35">
                     {lang === "VN" ? "Tàu" : "Boat"}
                   </th>
                   {byBoatDays.map((day) => {
@@ -415,9 +386,9 @@ export function StaffAssignmentCalendar({
                         key={key}
                         className={`py-3 px-1.5 text-center text-[10px] font-headline font-black uppercase tracking-wide border-b border-slate-100 dark:border-slate-700/60 min-w-24 ${
                           today
-                            ? "sticky left-35 z-10 bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400 shadow-[2px_0_0_0_rgba(18,71,87,0.12)]"
+                            ? "bg-slate-200 text-[#124757] dark:bg-slate-700 dark:text-yellow-400"
                             : weekend
-                              ? "text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800/50"
+                              ? "text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10"
                               : "text-slate-400 bg-slate-50 dark:bg-slate-900/50"
                         } ${isOutsideMonth(day) && !today ? "opacity-40" : ""}`}
                       >
@@ -436,7 +407,7 @@ export function StaffAssignmentCalendar({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
                 {boatRows.map((boat) => (
                   <tr key={boat.key}>
-                    <td className="sticky left-0 z-20 bg-white dark:bg-slate-800 py-2.5 px-4 text-xs font-bold text-slate-800 dark:text-white border-r border-slate-100 dark:border-slate-700/60">
+                    <td className="sticky left-0 z-20 bg-white dark:bg-slate-800 py-2.5 px-4 text-xs font-bold text-slate-800 dark:text-white border-r border-slate-100 dark:border-slate-700/60 w-35 min-w-35 max-w-35 truncate">
                       {boat.label}
                     </td>
                     {byBoatDays.map((day) => {
@@ -451,9 +422,9 @@ export function StaffAssignmentCalendar({
                             isOutsideMonth(day) && !today ? "opacity-40" : ""
                           } ${
                             today
-                              ? "sticky left-35 z-10 bg-[#124757]/8 dark:bg-yellow-400/10 shadow-[2px_0_0_0_rgba(18,71,87,0.08)]"
+                              ? "bg-slate-100 dark:bg-slate-700/80"
                               : weekend
-                                ? "bg-slate-100/70 dark:bg-slate-800/40"
+                                ? "bg-sky-50 dark:bg-sky-500/10"
                                 : "bg-white dark:bg-slate-800"
                           }`}
                         >
@@ -477,7 +448,7 @@ export function StaffAssignmentCalendar({
                   key={label}
                   className={`text-center text-[10px] font-headline font-black uppercase tracking-widest py-1 rounded-lg ${
                     weekend
-                      ? "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60"
+                      ? "text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10"
                       : "text-slate-400"
                   }`}
                 >
@@ -520,7 +491,7 @@ export function StaffAssignmentCalendar({
                         isToday(day)
                           ? "text-[#124757] dark:text-yellow-400"
                           : isWeekend(day)
-                            ? "text-slate-500 dark:text-slate-400"
+                            ? "text-sky-700 dark:text-sky-300"
                             : "text-slate-600 dark:text-slate-300"
                       }`}
                     >
@@ -556,18 +527,9 @@ export function StaffAssignmentCalendar({
           <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />{" "}
           {labelShiftState(SHIFT_STATE.COMPLETED, lang)}
         </span>
-        <span className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-          <span className="w-2.5 h-2.5 rounded-sm bg-slate-300 dark:bg-slate-600" />
+        <span className="inline-flex items-center gap-1.5 text-sky-700 dark:text-sky-300">
+          <span className="w-2.5 h-2.5 rounded-sm bg-sky-300 dark:bg-sky-500/60" />
           {lang === "VN" ? "Cuối tuần (T7/CN)" : "Weekend"}
-        </span>
-        <span className="text-slate-300 dark:text-slate-600">
-          {lang === "VN"
-            ? layout === "byBoat"
-              ? "Theo tàu: hôm nay luôn ở cột đầu · ca đã hủy không hiện"
-              : "Bấm ngày để xem chi tiết · ca đã hủy không hiện"
-            : layout === "byBoat"
-              ? "By boat: today stays in the first column · cancelled hidden"
-              : "Click a day for details · cancelled hidden"}
         </span>
       </div>
     </div>

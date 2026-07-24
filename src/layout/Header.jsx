@@ -27,6 +27,7 @@ export const Header = ({ isNoticeVisible }) => {
 
   // Xác định trạng thái Active chuẩn tông màu theo đường dẫn URL
   const isHomeActive = currentPath === "/";
+  const isScheduleActive = currentPath.startsWith("/schedule");
   const isPromotionsActive = currentPath.startsWith("/promotions");
   const isBlogActive = currentPath.startsWith("/blog");
   const isContactActive = currentPath === "/contact";
@@ -131,7 +132,7 @@ export const Header = ({ isNoticeVisible }) => {
           </Link>
 
           {/* Lịch khởi hành */}
-          <Link className={linkBaseClasses} to="/schedule">
+          <Link className={isScheduleActive ? linkActiveClasses : linkBaseClasses} to="/schedule">
             {lang === "VN" ? "Lịch khởi hành" : "Schedule"}
           </Link>
 
@@ -291,7 +292,7 @@ export const Header = ({ isNoticeVisible }) => {
 
           <Link
             to="/schedule"
-            className="font-bold text-white text-base hover:text-yellow-400"
+            className={`font-bold text-base transition-colors ${isScheduleActive ? "text-yellow-400" : "text-white"}`}
             onClick={closeMobileMenu}
           >
             {lang === "VN" ? "Lịch khởi hành" : "Schedule"}

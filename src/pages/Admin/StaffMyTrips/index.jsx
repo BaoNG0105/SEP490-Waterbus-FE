@@ -462,7 +462,7 @@ export function StaffMyTripsPage() {
                       </p>
                       {active ? (
                         <p className="mt-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                          {formatActiveDelayLine(trip, { lang })}
+                          {formatActiveDelayLine(trip, { lang, stops: trip.stops })}
                         </p>
                       ) : mins > 0 ? (
                         <p className="mt-1.5 text-[11px] font-bold text-orange-700 dark:text-orange-300">

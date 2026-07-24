@@ -19,6 +19,7 @@ import { StationDetail } from "./pages/Station/StationDetail";
 import { Promotions } from "./pages/Promotions";
 import { PromotionDetail } from "./pages/Promotions/PromotionDetail";
 import { Contact } from "./pages/Contact";
+import { Schedule } from "./pages/Schedule";
 import { Profile } from "./pages/Profile";
 import { Notifications } from "./pages/Notifications";
 import { EditProfile } from "./pages/Profile/EditProfie";
@@ -43,14 +44,15 @@ import { TripManagement, CreateTrip, TripDetail } from "./pages/Admin/TripManage
 import { SeatTypeManagement } from "./pages/Admin/SeatTypeManagement";
 import { StationManagement } from "./pages/Admin/StationManagement";
 import { InsuranceManagement } from "./pages/Admin/InsuranceManagement";
+import { CreateStation } from "./pages/Admin/StationManagement/CreateStation";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { UserManagement } from "./pages/Admin/UserManagement";
 import { ManagerManagement } from "./pages/Admin/ManagerManagement";
 import { CreateManager } from "./pages/Admin/ManagerManagement/CreateManager";
 import { EditManager } from "./pages/Admin/ManagerManagement/EditManager";
-import { StaffManagement } from "./pages/Admin/StaffManagement";
 import { CreateStaff } from "./pages/Admin/StaffManagement/CreateStaff";
 import { EditStaff } from "./pages/Admin/StaffManagement/EditStaff";
+import { StaffHub } from "./pages/Admin/StaffHub";
 import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 import { RouteManagement } from "./pages/Admin/RouteManagement";
 import { RouteDetail } from "./pages/Admin/RouteManagement/RouteDetail";
@@ -61,7 +63,6 @@ import { PromotionManagement } from "./pages/Admin/PromotionManagement";
 import { CreatePromotion } from "./pages/Admin/PromotionManagement/CreatePromotion";
 import { EditPromotion } from "./pages/Admin/PromotionManagement/EditPromotion";
 import { ViewPromotion } from "./pages/Admin/PromotionManagement/ViewPromotion";
-import { StaffAssignmentManagement } from "./pages/Admin/StaffAssignmentManagement";
 import { StaffTicketScanPage } from "./pages/Admin/StaffTicketScan";
 import { StaffMyTripsPage } from "./pages/Admin/StaffMyTrips";
 import { StaffScanHistoryPage } from "./pages/Admin/StaffScanHistory";
@@ -120,6 +121,16 @@ function App() {
           element={
             <MainLayout>
               <Promotions />
+            </MainLayout>
+          }
+        />
+
+        {/* Lịch khởi hành (customer) — GET /operations/schedule?serviceType=booking */}
+        <Route
+          path="/schedule"
+          element={
+            <MainLayout>
+              <Schedule />
             </MainLayout>
           }
         />
@@ -393,12 +404,12 @@ function App() {
             }
           />
 
-          {/* ******* Staff Management Page ******* */}
+          {/* ******* Staff Management Page (accounts + assignments) ******* */}
           <Route
             path="/admin/staffs-management"
             element={
               <AdminLayout title="Staff Management">
-                <StaffManagement />
+                <StaffHub />
               </AdminLayout>
             }
           />
@@ -533,6 +544,15 @@ function App() {
             }
           />
 
+          <Route
+            path="/admin/stations-management/create"
+            element={
+              <AdminLayout title="Create Station">
+                <CreateStation />
+              </AdminLayout>
+            }
+          />
+
           {/* Edit Station Page */}
           <Route
             path="/admin/stations-management/edit/:id"
@@ -662,14 +682,10 @@ function App() {
             }
           />
 
-          {/* ******* Staff Assignment Management ******* */}
+          {/* ******* Staff Assignment → gộp vào Nhân viên ******* */}
           <Route
             path="/admin/staff-assignments"
-            element={
-              <AdminLayout title="Staff Assignments">
-                <StaffAssignmentManagement />
-              </AdminLayout>
-            }
+            element={<Navigate to="/admin/staffs-management?view=assignments" replace />}
           />
 
           <Route

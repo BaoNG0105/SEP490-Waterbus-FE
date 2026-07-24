@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
-import { fetchBlogPostDetail } from "../../services/blogService";
+import { fetchBlogPostDetail, getBlogCoverUrl, getBlogDisplayHtml } from "../../services/blogService";
 
 export function BlogDetail() {
     const { lang } = useApp();
@@ -48,11 +48,14 @@ export function BlogDetail() {
         );
     }
 
+    const coverUrl = getBlogCoverUrl(blog);
+    const gallery = Array.isArray(blog.imageUrls) ? blog.imageUrls : (coverUrl ? [coverUrl] : []);
+    const contentHtml = getBlogDisplayHtml(blog);
+
     return (
         <div className="w-full bg-white dark:bg-slate-900 transition-colors duration-300 min-h-screen pt-28 md:pt-32 pb-24">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 space-y-8 animate-fade-in">
                 
-                {/* THANH ĐIỀU HƯỚNG QUAY LẠI DANH MỤC BLOG */}
                 <div className="flex items-center justify-between">
                     <Link 
                         to="/blog" 
@@ -63,7 +66,6 @@ export function BlogDetail() {
                     </Link>
                 </div>
 
-                {/* KHỐI HEADER: TIÊU ĐỀ CHỮ LỚN & THÔNG TIN TÁC GIẢ */}
                 <div className="space-y-4">
                     <h1 className="text-2xl sm:text-3xl md:text-4xl font-headline font-black text-[#124757] dark:text-white leading-tight tracking-tight">
                         {blog.title}
@@ -77,35 +79,48 @@ export function BlogDetail() {
                         <span>•</span>
                         <span className="flex items-center gap-1">
                             <span className="material-symbols-outlined text-base">calendar_today</span>
-                            {new Date(blog.publishedAt).toLocaleDateString(lang === "VN" ? "vi-VN" : "en-US")}
+                            {blog.publishedAt
+                                ? new Date(blog.publishedAt).toLocaleDateString(lang === "VN" ? "vi-VN" : "en-US")
+                                : "—"}
                         </span>
                     </div>
                 </div>
 
-                {/* KHỐI ẢNH BANNER CHÍNH TRÀN KHUNG NGHỆ THUẬT */}
-                {blog.imageUrl && (
+                {coverUrl ? (
                     <div className="w-full aspect-video overflow-hidden shadow-sm bg-slate-50 dark:bg-slate-800">
                         <img 
-                            src={blog.imageUrl} 
+                            src={coverUrl} 
                             alt={blog.imageAltText || blog.title} 
                             className="w-full h-full object-cover"
                         />
                     </div>
-                )}
+                ) : null}
 
-                {/* KHỐI NỘI DUNG VĂN BẢN (TYPOGRAPHY) */}
+                {gallery.length > 1 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {gallery.slice(1).map((url) => (
+                            <div key={url} className="aspect-video overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
+                                <img src={url} alt={blog.imageAltText || blog.title} className="w-full h-full object-cover" />
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
+
                 <div className="prose prose-slate dark:prose-invert max-w-none font-body text-slate-600 dark:text-slate-300 text-sm md:text-base leading-relaxed space-y-6">
-                    {/* Đoạn tóm tắt in nghiêng, đậm tạo điểm nhấn mở đầu bài viết */}
-                    <p className="font-bold italic text-slate-800 dark:text-slate-200 text-base border-l-4 border-yellow-400 pl-4 py-1 bg-slate-50/50 dark:bg-slate-800/20 rounded-r-xl">
-                        {blog.summary}
-                    </p>
+                    {blog.summary ? (
+                        <p className="font-bold italic text-slate-800 dark:text-slate-200 text-base border-l-4 border-yellow-400 pl-4 py-1 bg-slate-50/50 dark:bg-slate-800/20 rounded-r-xl">
+                            {blog.summary}
+                        </p>
+                    ) : null}
                     
-                    {/* Nội dung chính. Nếu Backend lưu HTML chuỗi, ta dùng dangerouslySetInnerHTML, nếu lưu text thường ta render chuỗi */}
-                    {blog.content ? (
-                        <div dangerouslySetInnerHTML={{ __html: blog.content }} className="space-y-4" />
+                    {contentHtml ? (
+                        <div dangerouslySetInnerHTML={{ __html: contentHtml }} className="space-y-4" />
+                    ) : blog.contentText || blog.content ? (
+                        <div className="whitespace-pre-line space-y-4">
+                            {blog.contentText || blog.content}
+                        </div>
                     ) : (
                         <div className="whitespace-pre-line space-y-4">
-                            {/* Dự phòng trường hợp DB của bạn chỉ lưu chuỗi text thô dài */}
                             {blog.description || blog.summary}
                         </div>
                     )}

@@ -20,8 +20,10 @@ const movementFromStopEvent = (event) => {
 /**
  * Lịch vận hành trong ngày (movementStatus + remainingDistance + latest lat/lng).
  * Poll operations/schedule; tripStopUpdated → patch ngay + refetch.
+ * @param {{ enabled?: boolean, serviceType?: string }} options
+ *   serviceType: booking | bus | sightseeing | charter | all
  */
-export function useOperationsSchedule({ enabled = true } = {}) {
+export function useOperationsSchedule({ enabled = true, serviceType } = {}) {
   const [entries, setEntries] = useState([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -34,7 +36,11 @@ export function useOperationsSchedule({ enabled = true } = {}) {
     inFlightRef.current = true;
     try {
       const day = toOperationsScheduleDate();
-      const list = await fetchOperationsSchedule({ fromDate: day, toDate: day });
+      const list = await fetchOperationsSchedule({
+        fromDate: day,
+        toDate: day,
+        serviceType,
+      });
       if (!activeRef.current) return list;
       setEntries(list);
       if (!silent) setErrorMsg("");
@@ -49,7 +55,7 @@ export function useOperationsSchedule({ enabled = true } = {}) {
       inFlightRef.current = false;
       if (activeRef.current) setIsLoading(false);
     }
-  }, []);
+  }, [serviceType]);
 
   const applyTripStopPayload = useCallback((payload) => {
     if (!payload || typeof payload !== "object") return;

@@ -149,7 +149,7 @@ const getStaffName = (staff) => staff?.fullName || staff?.name || staff?.raw?.fu
 const getBoatId = (boat) => String(boat?.boatId || boat?.id || "");
 const getStationId = (station) => String(station?.stationId || station?.id || "");
 
-export function StaffAssignmentManagement() {
+export function StaffAssignmentManagement({ viewTabs = null }) {
   const { lang } = useApp();
   const { user: currentUser } = useSelector((state) => state.auth);
   const myUserId = getUserId(currentUser);
@@ -213,7 +213,7 @@ export function StaffAssignmentManagement() {
   // list | schedule — mặc định Lịch (Tuần; Admin xem theo tàu)
   const [displayMode, setDisplayMode] = useState("schedule");
   const [calendarMode, setCalendarMode] = useState("week"); // day | week | month
-  const [calendarLayout, setCalendarLayout] = useState(canCreateBoat ? "byBoat" : "calendar");
+  const [calendarLayout] = useState(canCreateBoat ? "byBoat" : "calendar");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [expandedListGroups, setExpandedListGroups] = useState(() => new Set());
 
@@ -632,14 +632,14 @@ export function StaffAssignmentManagement() {
       setCreateError("");
 
       if (createForm.assignmentType === ASSIGNMENT_TYPE.BOAT && !canCreateBoat) {
-        setCreateError(lang === "VN" ? "Admin mới được tạo phân công tàu." : "Only Admin can create Boat assignments.");
+        setCreateError(lang === "VN" ? "Chỉ quản trị viên mới xếp lịch trên tàu." : "Only admins can schedule boat shifts.");
         return;
       }
       if (createForm.assignmentType === ASSIGNMENT_TYPE.STATION && !canCreateStation) {
         setCreateError(
           lang === "VN"
-            ? "Admin chỉ xem phân công bến — Manager mới được tạo."
-            : "Admin can only view Station — Manager creates them."
+            ? "Chỉ quản lý bến mới xếp lịch tại bến."
+            : "Only station managers can schedule station shifts."
         );
         return;
       }
@@ -647,7 +647,7 @@ export function StaffAssignmentManagement() {
       if (createForm.assignmentType === ASSIGNMENT_TYPE.STATION && isManager) {
         const allowed = new Set(managerStationIds.map(String));
         if (allowed.size && !allowed.has(String(createForm.stationId))) {
-          setCreateError(lang === "VN" ? "Chỉ phân công bến bạn quản lý." : "Only stations you manage are allowed.");
+          setCreateError(lang === "VN" ? "Chỉ xếp lịch cho bến bạn quản lý." : "You can only schedule stations you manage.");
           return;
         }
       }
@@ -677,14 +677,14 @@ export function StaffAssignmentManagement() {
         toast: true,
         position: "top-end",
         icon: "success",
-        title: lang === "VN" ? "Đã tạo lịch phân công" : "Schedule created",
+        title: lang === "VN" ? "Đã xếp lịch làm việc" : "Shift scheduled",
         showConfirmButton: false,
         timer: 1800,
       });
       await loadAssignments();
     } catch (error) {
       setCreateError(
-        getApiErrorMessage(error, lang === "VN" ? "Tạo phân công thất bại." : "Failed to create assignment.")
+        getApiErrorMessage(error, lang === "VN" ? "Không xếp được lịch. Vui lòng thử lại." : "Could not save the schedule. Please try again.")
       );
     } finally {
       setIsSaving(false);
@@ -819,9 +819,7 @@ export function StaffAssignmentManagement() {
       ? "Các ca Admin/Manager đã gán cho bạn — Đang diễn ra / Đã kết thúc tính theo giờ ca."
       : "Shifts assigned to you — Active / Completed follow shift times."
     : isAdmin
-      ? (lang === "VN"
-        ? "Admin phân nhân viên theo tàu."
-        : "Admin assigns staff by boat.")
+      ? ""
       : (lang === "VN"
         ? "Tạo · xem · hủy ca bến. Trạng thái / tiến độ ca tính tự động."
         : "Create · view · cancel station shifts. Status / progress are automatic.");
@@ -833,9 +831,10 @@ export function StaffAssignmentManagement() {
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
             {pageTitle}
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">{pageHint}</p>
+          {pageHint ? <p className="text-xs text-slate-400 mt-0.5">{pageHint}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {viewTabs}
           {canViewManage && canReceive && (
             <div className="flex rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-1">
               <button
@@ -871,11 +870,11 @@ export function StaffAssignmentManagement() {
               <span className="material-symbols-outlined text-sm font-bold">add_circle</span>
               {lang === "VN"
                 ? canCreateBoat
-                  ? "Phân công tàu"
-                  : "Phân công bến"
+                  ? "Xếp lịch tàu"
+                  : "Xếp lịch bến"
                 : canCreateBoat
-                  ? "Assign boat"
-                  : "Assign station"}
+                  ? "Schedule boat"
+                  : "Schedule station"}
             </button>
           )}
         </div>
@@ -929,30 +928,23 @@ export function StaffAssignmentManagement() {
                     setToDate(next.toDate);
                   }
                 }}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider inline-flex items-center gap-1 transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
                   displayMode === opt.id
                     ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
                     : "text-slate-500 hover:text-slate-700"
                 }`}
               >
-                <span className="material-symbols-outlined text-sm">{opt.icon}</span>
                 {lang === "VN" ? opt.vn : opt.en}
               </button>
             ))}
           </div>
-          {displayMode === "schedule" ? (
-            <p className="text-[11px] font-semibold text-slate-400">
-              {lang === "VN"
-                ? "Xem ai làm ngày nào · bấm ngày để xem chi tiết"
-                : "See who works which day · click a day for details"}
-            </p>
-          ) : (
+          {displayMode === "list" ? (
             <p className="text-[11px] font-semibold text-slate-400">
               {lang === "VN"
                 ? "Cùng NV + tàu được gộp · bấm để mở từng ca"
                 : "Same staff + boat are grouped · expand for each shift"}
             </p>
-          )}
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-end gap-2">
@@ -1053,8 +1045,7 @@ export function StaffAssignmentManagement() {
           mode={calendarMode}
           onModeChange={setCalendarMode}
           layout={calendarLayout}
-          onLayoutChange={setCalendarLayout}
-          showLayoutToggle={isAdmin || canCreateBoat}
+          showLayoutToggle={false}
           anchorDate={anchorDate}
           onAnchorChange={setAnchorDate}
           isLoading={isLoading}
@@ -1264,7 +1255,7 @@ export function StaffAssignmentManagement() {
           <div className="bg-white dark:bg-slate-800 w-full max-w-lg max-h-[min(92vh,720px)] rounded-4xl border border-slate-100 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden">
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-700">
               <h3 className="font-headline font-black text-sm uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                {lang === "VN" ? "Tạo phân công" : "Create assignment"}
+                {lang === "VN" ? "Xếp lịch làm việc" : "Schedule a shift"}
               </h3>
               <button
                 type="button"
@@ -1284,14 +1275,22 @@ export function StaffAssignmentManagement() {
               )}
 
               <div>
-                <label className={labelStyle}>{lang === "VN" ? "Loại phân công (*)" : "Assignment type (*)"}</label>
+                <label className={labelStyle}>
+                  {lang === "VN" ? "Làm việc ở đâu (*)" : "Work location (*)"}
+                </label>
                 {(() => {
                   const createTypeOptions = [
                     ...(canCreateBoat
-                      ? [{ value: ASSIGNMENT_TYPE.BOAT, label: labelAssignmentType(ASSIGNMENT_TYPE.BOAT, lang) }]
+                      ? [{
+                          value: ASSIGNMENT_TYPE.BOAT,
+                          label: lang === "VN" ? "Trên tàu" : "On boat",
+                        }]
                       : []),
                     ...(canCreateStation
-                      ? [{ value: ASSIGNMENT_TYPE.STATION, label: labelAssignmentType(ASSIGNMENT_TYPE.STATION, lang) }]
+                      ? [{
+                          value: ASSIGNMENT_TYPE.STATION,
+                          label: lang === "VN" ? "Tại bến" : "At station",
+                        }]
                       : []),
                   ];
                   if (createTypeOptions.length <= 1) {
@@ -1327,7 +1326,7 @@ export function StaffAssignmentManagement() {
 
               <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 dark:border-sky-500/20 dark:bg-sky-500/10">
                 <p className="text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">
-                  {lang === "VN" ? "Ca full ngày (cố định)" : "Full-day shift (fixed)"}
+                  {lang === "VN" ? "Giờ làm việc (cả ngày)" : "Working hours (full day)"}
                 </p>
                 <p className="mt-1 text-sm font-bold text-sky-800 dark:text-sky-200">
                   {FULL_DAY_START_TIME} → {FULL_DAY_END_TIME}
@@ -1338,48 +1337,56 @@ export function StaffAssignmentManagement() {
                 <label className={labelStyle}>
                   {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT
                     ? lang === "VN"
-                      ? "Nhân viên tàu (OnBoard) (*)"
-                      : "Boat staff (OnBoard) (*)"
+                      ? "Nhân viên đi tàu (*)"
+                      : "Boat crew (*)"
                     : lang === "VN"
-                      ? "Nhân viên bến (Ground) (*)"
-                      : "Station staff (Ground) (*)"}
+                      ? "Nhân viên làm bến (*)"
+                      : "Station staff (*)"}
                 </label>
-                <select
+                <FormSelect
                   required
                   value={createForm.staffUserId}
-                  onChange={(e) => handleCreateField("staffUserId", e.target.value)}
+                  onChange={(value) => handleCreateField("staffUserId", String(value ?? ""))}
+                  options={staffOptionsForCreate
+                    .map((s) => ({
+                      value: getStaffId(s),
+                      label: getStaffName(s),
+                    }))
+                    .filter((o) => o.value)}
+                  searchable
+                  placeholder={lang === "VN" ? "-- Chọn nhân viên --" : "-- Select staff --"}
+                  searchPlaceholder={lang === "VN" ? "Tìm tên nhân viên..." : "Search staff..."}
+                  emptyLabel={lang === "VN" ? "Không có nhân viên" : "No staff"}
                   className={inputStyle}
-                >
-                  <option value="">{lang === "VN" ? "-- Chọn staff --" : "-- Select staff --"}</option>
-                  {staffOptionsForCreate.map((s) => (
-                    <option key={getStaffId(s)} value={getStaffId(s)}>
-                      {getStaffName(s)}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT ? (
                 <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Tàu (*)" : "Boat (*)"}</label>
-                  <select
+                  <label className={labelStyle}>
+                    {lang === "VN" ? "Tàu được gán (*)" : "Assigned boat (*)"}
+                  </label>
+                  <FormSelect
                     required
                     value={createForm.boatId}
-                    onChange={(e) => handleCreateField("boatId", e.target.value)}
+                    onChange={(value) => handleCreateField("boatId", String(value ?? ""))}
+                    options={boats
+                      .map((b) => ({
+                        value: getBoatId(b),
+                        label: `${b.boatCode || b.code} · ${b.boatName || b.name}`,
+                      }))
+                      .filter((o) => o.value)}
+                    searchable
+                    placeholder={lang === "VN" ? "-- Chọn tàu --" : "-- Select boat --"}
+                    searchPlaceholder={lang === "VN" ? "Tìm mã / tên tàu..." : "Search boat..."}
+                    emptyLabel={lang === "VN" ? "Không có tàu" : "No boats"}
                     className={inputStyle}
-                  >
-                    <option value="">{lang === "VN" ? "-- Chọn tàu --" : "-- Select boat --"}</option>
-                    {boats.map((b) => (
-                      <option key={getBoatId(b)} value={getBoatId(b)}>
-                        {b.boatCode || b.code} · {b.boatName || b.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
               ) : (
                 <>
                   <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Bến (*)" : "Station (*)"}</label>
+                    <label className={labelStyle}>{lang === "VN" ? "Bến làm việc (*)" : "Work station (*)"}</label>
                     <FormSelect
                       required
                       value={createForm.stationId}
@@ -1393,7 +1400,7 @@ export function StaffAssignmentManagement() {
                     />
                   </div>
                   <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Chuyến (để chọn tripStop) (*)" : "Trip (for tripStop) (*)"}</label>
+                    <label className={labelStyle}>{lang === "VN" ? "Chuyến (*)" : "Trip (*)"}</label>
                     <FormSelect
                       required
                       value={createForm.tripId}
@@ -1410,7 +1417,9 @@ export function StaffAssignmentManagement() {
                     />
                   </div>
                   <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Trip stop (quét vé bến) (*)" : "Trip stop (gate scan) (*)"}</label>
+                    <label className={labelStyle}>
+                      {lang === "VN" ? "Điểm dừng quét vé (*)" : "Ticket scan stop (*)"}
+                    </label>
                     <FormSelect
                       required
                       value={createForm.tripStopId}
@@ -1426,14 +1435,14 @@ export function StaffAssignmentManagement() {
                       }).filter((o) => o.value)}
                       searchable
                       disabled={isLoadingGateStops || !createForm.tripId}
-                      placeholder={lang === "VN" ? "-- Chọn tripStopId --" : "-- Select tripStopId --"}
-                      emptyLabel={lang === "VN" ? "Không có stop" : "No stops"}
+                      placeholder={lang === "VN" ? "-- Chọn điểm dừng --" : "-- Select stop --"}
+                      emptyLabel={lang === "VN" ? "Không có điểm dừng" : "No stops"}
                       className={inputStyle}
                     />
                     <p className="mt-1 text-[10px] text-slate-400">
                       {lang === "VN"
-                        ? "BE yêu cầu tripStopId khi phân công quét vé bến — không đủ chỉ stationId."
-                        : "BE requires tripStopId for station scan assignment — stationId alone is not enough."}
+                        ? "Chọn điểm dừng nhân viên sẽ đứng quét vé cho khách."
+                        : "Pick the stop where staff will scan passenger tickets."}
                     </p>
                   </div>
                 </>
@@ -1441,7 +1450,7 @@ export function StaffAssignmentManagement() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
+                  <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "Start date (*)"}</label>
                   <AppDateInput
                     required
                     value={createForm.fromDate}
@@ -1450,7 +1459,7 @@ export function StaffAssignmentManagement() {
                   />
                 </div>
                 <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "To date (*)"}</label>
+                  <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "End date (*)"}</label>
                   <AppDateInput
                     required
                     value={createForm.toDate}
@@ -1462,7 +1471,7 @@ export function StaffAssignmentManagement() {
 
               <div>
                 <label className={labelStyle}>
-                  {lang === "VN" ? "Ngày trong tuần" : "Days of week"}
+                  {lang === "VN" ? "Làm những thứ nào" : "Which weekdays"}
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {DAYS_OF_WEEK.map((day) => {
@@ -1491,8 +1500,8 @@ export function StaffAssignmentManagement() {
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">
                   {lang === "VN"
-                    ? "Mặc định cả tuần (T2–CN). Admin có thể bỏ bớt thứ."
-                    : "Defaults to every day (Mon–Sun). Admin can deselect days."}
+                    ? "Mặc định chọn cả tuần. Bấm để bỏ ngày không cần làm."
+                    : "All days selected by default. Tap to turn days off."}
                 </p>
               </div>
 
@@ -1502,7 +1511,7 @@ export function StaffAssignmentManagement() {
                   type="text"
                   value={createForm.note}
                   onChange={(e) => handleCreateField("note", e.target.value)}
-                  placeholder={lang === "VN" ? "Ca full ngày" : "Full-day shift"}
+                  placeholder={lang === "VN" ? "Ví dụ: Ca ngày thường" : "e.g. Regular day shift"}
                   className={inputStyle}
                 />
               </div>
@@ -1517,7 +1526,7 @@ export function StaffAssignmentManagement() {
                   {isSaving && (
                     <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                   )}
-                  {lang === "VN" ? "Tạo lịch phân công" : "Create schedule"}
+                  {lang === "VN" ? "Xác nhận xếp lịch" : "Confirm schedule"}
                 </button>
               </div>
             </form>
@@ -1558,19 +1567,22 @@ export function StaffAssignmentManagement() {
             </p>
             <label className="block space-y-1.5">
               <span className={labelStyle}>{lang === "VN" ? "Nhân viên mới (*)" : "New staff (*)"}</span>
-              <select
+              <FormSelect
                 required
                 value={replaceForm.staffUserId}
-                onChange={(e) => setReplaceForm((prev) => ({ ...prev, staffUserId: e.target.value }))}
+                onChange={(value) => setReplaceForm((prev) => ({ ...prev, staffUserId: String(value ?? "") }))}
+                options={staffOptionsForCreate
+                  .map((s) => ({
+                    value: getStaffId(s),
+                    label: getStaffName(s),
+                  }))
+                  .filter((o) => o.value)}
+                searchable
+                placeholder={lang === "VN" ? "-- Chọn nhân viên --" : "-- Select staff --"}
+                searchPlaceholder={lang === "VN" ? "Tìm tên nhân viên..." : "Search staff..."}
+                emptyLabel={lang === "VN" ? "Không có nhân viên" : "No staff"}
                 className={inputStyle}
-              >
-                <option value="">{lang === "VN" ? "-- Chọn staff --" : "-- Select staff --"}</option>
-                {staffOptionsForCreate.map((s) => (
-                  <option key={getStaffId(s)} value={getStaffId(s)}>
-                    {getStaffName(s)}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
             <label className="block space-y-1.5">
               <span className={labelStyle}>{lang === "VN" ? "Lý do thay (*)" : "Reason (*)"}</span>

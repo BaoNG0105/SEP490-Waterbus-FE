@@ -23,7 +23,16 @@ export const pickDelayInfo = (source) => {
       delayMinutes: source.delayMinutes ?? source.DelayMinutes ?? source.totalDelayMinutes ?? null,
       reason: source.reason ?? source.delayReason ?? source.DelayReason ?? null,
       stationName: source.stationName ?? source.StationName ?? null,
-      startStopOrder: source.startStopOrder ?? source.StartStopOrder ?? null,
+      startStopOrder: source.startStopOrder
+        ?? source.StartStopOrder
+        ?? source.delayStartStopOrder
+        ?? source.DelayStartStopOrder
+        ?? null,
+      delayStartStopOrder: source.delayStartStopOrder
+        ?? source.DelayStartStopOrder
+        ?? source.startStopOrder
+        ?? source.StartStopOrder
+        ?? null,
     };
   }
   return null;
@@ -36,40 +45,6 @@ export const isDelayActive = (tripOrInfo) => {
   if (!info) return false;
   return Boolean(info.isDelayActive ?? info.IsDelayActive);
 };
-
-/** Số phút delay do BE/GPS chốt — FE không tự tính now - delayStartedAt. */
-export const pickDelayMinutes = (tripOrInfo) => {
-  const info = pickDelayInfo(tripOrInfo) || tripOrInfo;
-  const n = Number(
-    info?.delayMinutes
-    ?? info?.DelayMinutes
-    ?? info?.elapsedMinutes
-    ?? tripOrInfo?.totalDelayMinutes
-    ?? tripOrInfo?.delayMinutes
-    ?? tripOrInfo?.elapsedMinutes,
-  );
-  return Number.isFinite(n) && n > 0 ? n : 0;
-};
-
-export const pickDisplayDeparture = (trip) => (
-  trip?.adjustedDepartureTime
-  ?? trip?.adjustedDeparture
-  ?? trip?.adjustedStartAt
-  ?? trip?.departureTime
-  ?? trip?.plannedDeparture
-  ?? trip?.scheduledDepartureAt
-  ?? null
-);
-
-export const pickDisplayArrival = (trip) => (
-  trip?.adjustedArrivalTime
-  ?? trip?.adjustedArrival
-  ?? trip?.adjustedEndAt
-  ?? trip?.arrivalTime
-  ?? trip?.plannedArrival
-  ?? trip?.scheduledArrivalAt
-  ?? null
-);
 
 /** Parse datetime trip — thiếu timezone thì mặc định +07 (VN). */
 const parseTripDateTime = (raw) => {
@@ -91,6 +66,51 @@ const parseTripDateTime = (raw) => {
   const d = new Date(`${withSeconds}+07:00`);
   return Number.isNaN(d.getTime()) ? null : d;
 };
+
+/** Số phút delay: ưu tiên BE; nếu đang delay mà chưa có phút thì đếm từ delayStartedAt. */
+export const pickDelayMinutes = (tripOrInfo) => {
+  const info = pickDelayInfo(tripOrInfo) || tripOrInfo;
+  const n = Number(
+    info?.delayMinutes
+    ?? info?.DelayMinutes
+    ?? info?.elapsedMinutes
+    ?? tripOrInfo?.totalDelayMinutes
+    ?? tripOrInfo?.delayMinutes
+    ?? tripOrInfo?.elapsedMinutes,
+  );
+  if (Number.isFinite(n) && n > 0) return n;
+
+  if (isDelayActive(tripOrInfo)) {
+    const started = parseTripDateTime(
+      info?.delayStartedAt ?? info?.DelayStartedAt ?? tripOrInfo?.delayStartedAt,
+    );
+    if (started) {
+      const mins = Math.floor((Date.now() - started.getTime()) / 60000);
+      return mins > 0 ? mins : 0;
+    }
+  }
+  return 0;
+};
+
+export const pickDisplayDeparture = (trip) => (
+  trip?.adjustedDepartureTime
+  ?? trip?.adjustedDeparture
+  ?? trip?.adjustedStartAt
+  ?? trip?.departureTime
+  ?? trip?.plannedDeparture
+  ?? trip?.scheduledDepartureAt
+  ?? null
+);
+
+export const pickDisplayArrival = (trip) => (
+  trip?.adjustedArrivalTime
+  ?? trip?.adjustedArrival
+  ?? trip?.adjustedEndAt
+  ?? trip?.arrivalTime
+  ?? trip?.plannedArrival
+  ?? trip?.scheduledArrivalAt
+  ?? null
+);
 
 /**
  * Giờ xuất phát theo lịch gốc (KHÔNG dùng adjusted — adjusted đã cộng delay).
@@ -116,7 +136,11 @@ export const resolveTripDepartureDate = (trip) => {
 /** Tàu đã rời ít nhất 1 bến (bắt đầu chạy thật). Chỉ actualArrival ở bến đầu ≠ đã xuất phát. */
 export const hasTripLeftAStop = (trip) => {
   const stops = Array.isArray(trip?.stops) ? trip.stops : [];
-  return stops.some((stop) => Boolean(stop?.actualDeparture));
+  return stops.some((stop) => Boolean(
+    stop?.actualDeparture
+    || stop?.actualDepartureAt
+    || stop?.ActualDepartureAt
+  ));
 };
 
 /** @deprecated dùng hasTripLeftAStop */
@@ -181,10 +205,12 @@ export const resolveDelayStartStopOrder = (stops = []) => {
   for (let i = 0; i < list.length; i += 1) {
     const stop = list[i];
     const isLast = i === list.length - 1;
-    if (stop?.actualArrival && !stop?.actualDeparture) {
+    const arrived = Boolean(stop?.actualArrival || stop?.actualArrivalAt);
+    const departed = Boolean(stop?.actualDeparture || stop?.actualDepartureAt);
+    if (arrived && !departed) {
       return Number(stop.stopOrder) || i + 1;
     }
-    if (isLast && stop?.actualArrival) {
+    if (isLast && arrived) {
       return Number(stop.stopOrder) || i + 1;
     }
   }
@@ -192,9 +218,11 @@ export const resolveDelayStartStopOrder = (stops = []) => {
   for (let i = 0; i < list.length; i += 1) {
     const stop = list[i];
     const isLast = i === list.length - 1;
+    const arrived = Boolean(stop?.actualArrival || stop?.actualArrivalAt);
+    const departed = Boolean(stop?.actualDeparture || stop?.actualDepartureAt);
     if (isLast) {
-      if (!stop.actualArrival) return Number(stop.stopOrder) || i + 1;
-    } else if (!stop.actualDeparture) {
+      if (!arrived) return Number(stop.stopOrder) || i + 1;
+    } else if (!departed) {
       return Number(stop.stopOrder) || i + 1;
     }
   }
@@ -215,13 +243,23 @@ export const pickStationNameForStopOrder = (stops = [], stopOrder) => {
 };
 
 /**
- * Text UI khi đang delay — phút lấy từ BE (GPS → BE → SignalR/API).
- * FE không tự đếm now - delayStartedAt.
+ * Text UI khi đang delay.
+ * Bến: stationName → resolve từ delayStartStopOrder / startStopOrder.
+ * Phút: BE delayMinutes, fallback đếm từ delayStartedAt.
  */
-export const formatActiveDelayLine = (delayInfo, { lang = "VN" } = {}) => {
+export const formatActiveDelayLine = (delayInfo, { lang = "VN", stops = [] } = {}) => {
   if (!isDelayActive(delayInfo)) return "";
   const info = pickDelayInfo(delayInfo) || delayInfo;
-  const station = String(info?.stationName || info?.StationName || "").trim();
+  const stopOrder = info?.delayStartStopOrder
+    ?? info?.DelayStartStopOrder
+    ?? info?.startStopOrder
+    ?? info?.StartStopOrder;
+  const station = String(
+    info?.stationName
+    || info?.StationName
+    || pickStationNameForStopOrder(stops, stopOrder)
+    || "",
+  ).trim();
   const reason = String(info?.reason || info?.delayReason || "").trim();
   const mins = pickDelayMinutes(delayInfo);
   if (lang === "VN") {

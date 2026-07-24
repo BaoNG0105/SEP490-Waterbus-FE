@@ -8,6 +8,18 @@ export const getStations = () =>
 export const getStationById = (id) =>
     api.get(`/stations/${id}`).then(response => response.data);
 
+/** POST /stations — JSON hoặc multipart/form-data (field `images` khi upload file). */
+export const createStation = (data) => {
+    const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
+    return api
+        .post("/stations", data, isFormData ? { headers: { "Content-Type": "multipart/form-data" } } : undefined)
+        .then((response) => response.data);
+};
+
 // API cập nhật thông tin nhà ga bến tàu
-export const updateStation = (id, data) =>
-    api.put(`/stations/${id}`, data).then(response => response.data);
+export const updateStation = (id, data) => {
+    const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
+    return api
+        .put(`/stations/${id}`, data, isFormData ? { headers: { "Content-Type": "multipart/form-data" } } : undefined)
+        .then((response) => response.data);
+};

@@ -22,6 +22,12 @@ import {
   isMissingKmBookingBlock,
   pickSegmentDistanceKm,
 } from "../../../utils/bookingFareMessages";
+import {
+  pickStopDisplayArrival,
+  pickStopDisplayDeparture,
+  pickStopScheduledArrival,
+  pickStopScheduledDeparture,
+} from "../../../utils/tripStopTimes";
 
 const MAX_SEATS_PER_LEG = 10;
 const LOCKED_STATUSES = ["Held", "Booked", "Blocked"];
@@ -160,7 +166,7 @@ const findSegmentStops = (stops, fromStationId, toStationId, preferredDepartureI
     const prefMs = Date.parse(preferredDepartureIso);
     if (!Number.isNaN(prefMs)) {
       const matched = candidates.find((pair) => {
-        const dep = pair.boarding?.scheduledDeparture || pair.boarding?.plannedDepartureTime;
+        const dep = pickStopScheduledDeparture(pair.boarding) || pair.boarding?.plannedDepartureTime;
         const ms = Date.parse(dep || "");
         return !Number.isNaN(ms) && Math.abs(ms - prefMs) <= 60_000;
       });
@@ -169,7 +175,7 @@ const findSegmentStops = (stops, fromStationId, toStationId, preferredDepartureI
   }
   // Ưu tiên cặp còn mở đặt (> 10 phút); không thì cặp đầu còn lại.
   const open = candidates.find((pair) => !isSegmentBookingClosed({
-    fromStopScheduledDeparture: pair.boarding?.scheduledDeparture || pair.boarding?.plannedDepartureTime,
+    fromStopScheduledDeparture: pickStopScheduledDeparture(pair.boarding) || pair.boarding?.plannedDepartureTime,
   }));
   return open || candidates[0];
 };
@@ -412,8 +418,14 @@ export default function Step2SelectTripAndSeats({
       const mergedTrip = {
         ...trip,
         stops,
-        fromStopScheduledDeparture: boardingStop?.scheduledDeparture || trip.fromStopScheduledDeparture || trip.departureTime,
-        toStopScheduledArrival: alightingStop?.scheduledArrival || trip.toStopScheduledArrival || trip.arrivalTime,
+        fromStopScheduledDeparture: pickStopDisplayDeparture(boardingStop)
+          || pickStopScheduledDeparture(boardingStop)
+          || trip.fromStopScheduledDeparture
+          || trip.departureTime,
+        toStopScheduledArrival: pickStopDisplayArrival(alightingStop)
+          || pickStopScheduledArrival(alightingStop)
+          || trip.toStopScheduledArrival
+          || trip.arrivalTime,
       };
       const { fromStationCode, toStationCode } = getLegStationCodes(activeLeg);
 

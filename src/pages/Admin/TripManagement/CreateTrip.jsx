@@ -236,11 +236,6 @@ export function CreateTrip() {
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
             {lang === "VN" ? "Tạo chuyến tàu mới" : "Create New Trip"}
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {lang === "VN"
-              ? `Chuyến phải tạo trước giờ khởi hành ≥ 20 phút. Tàu cần ≥ ${MIN_ONBOARD_STAFF} nhân viên OnBoard đủ ngày chuyến. Bến giữa tuyến cần nhập phút dừng (có thể 0).`
-              : `Trip must be created ≥ 20 minutes before departure. Boat needs ≥ ${MIN_ONBOARD_STAFF} OnBoard staff covering the trip day. Intermediate stops need dwell minutes (0 allowed).`}
-          </p>
         </div>
       </div>
 
@@ -284,11 +279,6 @@ export function CreateTrip() {
                 emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
                 className={selectStyle}
               />
-              <p className="mt-1.5 text-[10px] text-slate-400">
-                {lang === "VN"
-                  ? `Cần ≥ ${MIN_ONBOARD_STAFF} ca OnBoard (Boat) trong ngày vận hành.`
-                  : `Requires ≥ ${MIN_ONBOARD_STAFF} OnBoard (Boat) shifts on the operating day.`}
-              </p>
             </div>
           </div>
 
@@ -311,74 +301,63 @@ export function CreateTrip() {
                 onChange={(e) => handleInputChange("departureTime", e.target.value)}
                 className={inputStyle}
               />
-              <p className="mt-1 text-[10px] text-slate-400">
-                {lang === "VN"
-                  ? "Giờ theo ngày vận hành (VN +07). Phải cách hiện tại ≥ 20 phút."
-                  : "Time on the operating date (VN +07). Must be ≥ 20 minutes from now."}
-              </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-          <div className="border-b border-slate-100 dark:border-slate-700 pb-3">
-            <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-              {lang === "VN" ? "Phút dừng bến giữa tuyến" : "Intermediate stop dwell"}
-            </h3>
-          </div>
+        {(isLoadingStops || formData.stops.length > 0) && (
+          <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+            <div className="border-b border-slate-100 dark:border-slate-700 pb-3">
+              <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                {lang === "VN" ? "Phút dừng bến giữa tuyến" : "Intermediate stop dwell"}
+              </h3>
+            </div>
 
-          {isLoadingStops ? (
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-              <div className="w-4 h-4 border-2 border-slate-300 border-t-[#124757] rounded-full animate-spin" />
-              {lang === "VN" ? "Đang tải bến dừng…" : "Loading stops…"}
-            </div>
-          ) : !formData.routeCode ? (
-            <p className="text-xs text-slate-400 font-medium">
-              {lang === "VN" ? "Chọn tuyến để hiện các bến giữa." : "Select a route to load intermediate stops."}
-            </p>
-          ) : formData.stops.length === 0 ? (
-            <p className="text-xs text-slate-400 font-medium">
-              {lang === "VN" ? "Tuyến này không có bến giữa — không cần gửi stops[]." : "This route has no intermediate stops — stops[] not required."}
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {formData.stops.map((stop) => (
-                <div
-                  key={stop.stopOrder}
-                  className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-end rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
-                >
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      {lang === "VN" ? `Bến #${stop.stopOrder}` : `Stop #${stop.stopOrder}`}
-                    </p>
-                    <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{stop.stationLabel}</p>
+            {isLoadingStops ? (
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                <div className="w-4 h-4 border-2 border-slate-300 border-t-[#124757] rounded-full animate-spin" />
+                {lang === "VN" ? "Đang tải bến dừng…" : "Loading stops…"}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {formData.stops.map((stop) => (
+                  <div
+                    key={stop.stopOrder}
+                    className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-end rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
+                  >
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {lang === "VN" ? `Bến #${stop.stopOrder}` : `Stop #${stop.stopOrder}`}
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{stop.stationLabel}</p>
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">
+                        {lang === "VN" ? "Phút dừng" : "Stay (min)"}
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={stop.stayDurationMinutes}
+                        onChange={(e) => handleStopMinutesChange(stop.stopOrder, e.target.value)}
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">
-                      {lang === "VN" ? "Phút dừng" : "Stay (min)"}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={stop.stayDurationMinutes}
-                      onChange={(e) => handleStopMinutesChange(stop.stopOrder, e.target.value)}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
           <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-            {lang === "VN" ? "Giá vé" : "Pricing"}
+            {lang === "VN" ? "Giá vé" : "Ticket price"}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
             {lang === "VN"
-              ? "Giá được tính tự động từ Chính sách giá (giá gốc loại ghế / giá theo km + phụ thu cuối tuần / ngày lễ). Không nhập giá riêng khi tạo chuyến."
-              : "Prices are computed from Fare Policy (seat-type base / distance fare + weekend/holiday surcharges). No per-trip seat prices on create."}
+              ? "Giá vé được áp dụng tự động theo chính sách giá hiện hành (loại ghế, quãng đường và ngày cuối tuần/ngày lễ)."
+              : "Ticket prices are applied automatically from the current fare policy (seat type, distance, and weekend/holiday rates)."}
           </p>
           <button
             type="button"
@@ -386,7 +365,7 @@ export function CreateTrip() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[#124757] transition hover:border-[#124757]/30 dark:border-slate-600 dark:bg-slate-900 dark:text-yellow-400"
           >
             <span className="material-symbols-outlined text-[16px]">sell</span>
-            {lang === "VN" ? "Mở chính sách giá" : "Open fare policy"}
+            {lang === "VN" ? "Xem chính sách giá" : "View fare policy"}
           </button>
         </div>
 

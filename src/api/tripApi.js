@@ -40,6 +40,6 @@ export const releaseTripSeats = (id, seatNumbers, fromStationCode, toStationCode
 export const startTripDelay = (id, payload) =>
     api.post(`/trips/${id}/delay/start`, payload).then(response => response.data);
 
-// API: Tiếp tục sau delay — body: { note } — BE tự tính lan delay nếu > 15 phút
+// API: Tiếp tục sau delay — body: { note }. BE tính lan delay theo lịch tàu thật (không còn rule cứng 15 phút).
 export const resumeTripDelay = (id, payload) =>
     api.post(`/trips/${id}/delay/resume`, payload).then(response => response.data);

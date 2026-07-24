@@ -228,7 +228,9 @@ export function EditStation() {
                         {lang === "VN" ? `Cấu hình nhà ga: ${formData.stationCode}` : `Configure Pier: ${formData.stationCode}`}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN" ? "Thay đổi hồ sơ kỹ thuật, hình ảnh, cập nhật vị trí tọa độ trực quan và tiện ích hạ tầng." : "Update pier specifications, re-locate GIS global coordinates and facilities."}
+                        {lang === "VN"
+                            ? "Cập nhật thông tin bến, ảnh và vị trí trên bản đồ."
+                            : "Update pier details, photos, and map location."}
                     </p>
                 </div>
             </div>
@@ -310,24 +312,6 @@ export function EditStation() {
                         </div>
                     </div>
 
-                    {/* THÔNG TIN TỌA ĐỘ TRỰC QUAN KHÔNG GIAN */}
-                    <div className="p-3 bg-blue-50/50 dark:bg-slate-900/50 border border-blue-100 dark:border-slate-700 rounded-xl space-y-3">
-                        <label className="text-[10px] font-black uppercase text-blue-800 dark:text-yellow-400 tracking-wider flex items-center gap-1">
-                            <span className="material-symbols-outlined text-sm">location_on</span>
-                            {lang === "VN" ? "Tọa độ không gian (GIS)" : "GIS Coordinates"}
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Vĩ độ (Lat) *</label>
-                                <input type="number" step="any" required value={formData.latitude} onChange={(e) => handleFieldChange("latitude", e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]" />
-                            </div>
-                            <div>
-                                <label className="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Kinh độ (Lng) *</label>
-                                <input type="number" step="any" required value={formData.longitude} onChange={(e) => handleFieldChange("longitude", e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]" />
-                            </div>
-                        </div>
-                    </div>
-
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Mô tả chi tiết" : "General Description"}</label>
                         <textarea rows={2} value={formData.description} onChange={(e) => handleFieldChange("description", e.target.value)} className={`${inputStyle} resize-none font-medium`} />
@@ -391,24 +375,32 @@ export function EditStation() {
                 <div className="lg:col-span-3 space-y-6 flex flex-col">             
                     {/* BẢN ĐỒ SỐ GIS TOÀN KHUNG */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col h-145">
-                        <div>
-                            <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider">{lang === "VN" ? "Vị trí thực địa (GIS Map)" : "GIS Mapping"}</h3>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-0.5 mb-4">
-                                {lang === "VN" ? "Click trực tiếp lên bản đồ nền địa cầu để tự động ghim lấy cặp số tọa độ." : "Click on the globe mapping grid to fetch geo values."}
+                        <div className="mb-4 flex shrink-0 flex-wrap items-end justify-between gap-2">
+                            <div>
+                                <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                                    {lang === "VN" ? "Vị trí trên bản đồ" : "Map location"}
+                                </h3>
+                                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">
+                                    {lang === "VN" ? "Click bản đồ để đánh dấu vị trí bến." : "Click the map to mark the pier location."}
+                                </p>
+                            </div>
+                            <p className="rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold tabular-nums text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                                {Number(formData.latitude).toFixed(5)}, {Number(formData.longitude).toFixed(5)}
                             </p>
                         </div>
-                        {/* Wrapper bọc bản đồ cố định chiều cao bệ đỡ cho Leaflet */}
-                        <div className="flex-1 w-full relative min-h-75">
-                            <WaterwayMap 
-                                stationPoint={{
-                                    name: formData.stationName || "Vị trí bến trạm",
-                                    latitude: Number(formData.latitude) || 10.7719,
-                                    longitude: Number(formData.longitude) || 106.7067
-                                }}
-                                onLocationSelect={(lat, lng) => {
-                                    setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }));
-                                }}
-                            />
+                        <div className="relative min-h-75 w-full flex-1">
+                            <div className="absolute inset-0">
+                                <WaterwayMap 
+                                    stationPoint={{
+                                        name: formData.stationName || "Vị trí bến trạm",
+                                        latitude: Number(formData.latitude) || 10.7719,
+                                        longitude: Number(formData.longitude) || 106.7067
+                                    }}
+                                    onLocationSelect={(lat, lng) => {
+                                        setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }));
+                                    }}
+                                />
+                            </div>
                         </div>
                     </div>
                     

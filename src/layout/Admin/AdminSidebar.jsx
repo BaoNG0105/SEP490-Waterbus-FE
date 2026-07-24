@@ -24,8 +24,15 @@ const MENU_GROUPS = [
     items: [
       { path: "/admin/users-management", icon: "manage_accounts", labelVn: "Khách hàng", labelEn: "Customers", roles: ["ADMIN", "MANAGER"] },
       { path: "/admin/managers-management", icon: "supervisor_account", labelVn: "Manager", labelEn: "Managers", roles: ["ADMIN"] },
-      { path: "/admin/staffs-management", icon: "badge", labelVn: "Nhân viên", labelEn: "Staff", roles: ["ADMIN", "MANAGER"] },
-      { path: "/admin/staff-assignments", icon: "event_available", labelVn: "Phân công Staff", labelEn: "Staff Assignments", labelVnStaff: "Lịch của tôi", labelEnStaff: "My schedule", roles: ["ADMIN", "MANAGER", "STAFF"] },
+      {
+        path: "/admin/staffs-management",
+        icon: "badge",
+        labelVn: "Nhân viên",
+        labelEn: "Staff",
+        labelVnStaff: "Lịch của tôi",
+        labelEnStaff: "My schedule",
+        roles: ["ADMIN", "MANAGER", "STAFF"],
+      },
     ],
   },
   {
@@ -33,7 +40,7 @@ const MENU_GROUPS = [
     labelVn: "Vận hành",
     labelEn: "Operations",
     items: [
-      { path: "/admin/trips-management", icon: "sailing", labelVn: "Chuyến tàu", labelEn: "Trips", roles: ["ADMIN", "MANAGER"] },
+      { path: "/admin/trips-management", icon: "sailing", labelVn: "Chuyến tàu", labelEn: "Trips", roles: ["ADMIN"] },
       { path: "/admin/routes-management", icon: "alt_route", labelVn: "Tuyến", labelEn: "Routes", roles: ["ADMIN"] },
       { path: "/admin/stations-management", icon: "storefront", labelVn: "Nhà ga", labelEn: "Stations", roles: ["ADMIN", "MANAGER"] },
       { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN", "MANAGER"] },
@@ -77,7 +84,7 @@ const MENU_GROUPS = [
 const STAFF_MENU_PATHS = new Set([
   "/admin",
   "/admin/live-tracking",
-  "/admin/staff-assignments",
+  "/admin/staffs-management",
   "/admin/staff/my-trips",
   "/admin/staff/ticket-scan",
   "/admin/staff/scan-history",
