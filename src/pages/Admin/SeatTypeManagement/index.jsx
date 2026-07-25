@@ -15,9 +15,9 @@ import { getTodayDateString } from "../../../utils/dateOnly";
 import { notify } from "../../../utils/swalToast";
 
 const TABS = [
-  { id: "seats", icon: "airline_seat_recline_extra", vn: "Giá loại ghế", en: "Seat types" },
-  { id: "distance", icon: "straighten", vn: "Giá theo km", en: "Distance fare" },
-  { id: "surcharge", icon: "event", vn: "Phụ thu ngày", en: "Day surcharges" },
+  { id: "seats", vn: "Giá loại ghế", en: "Seat types" },
+  { id: "distance", vn: "Giá theo km", en: "Distance fare" },
+  { id: "surcharge", vn: "Phụ thu", en: "Surcharges" },
 ];
 
 const ROUNDING_DISPLAY = 1000;
@@ -32,7 +32,7 @@ const inputStyle =
   "w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-600 dark:bg-slate-900 dark:text-white";
 const labelStyle = "mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400";
 
-function SeatTypesTab({ lang }) {
+function SeatTypesTab({ lang, onGoToDistanceTab }) {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -128,12 +128,6 @@ function SeatTypesTab({ lang }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-slate-400">
-        {lang === "VN"
-          ? "Chỉ chỉnh CABIN / RIVER / SKY / custom (sightseeing). STANDARD (DistanceFareForRegular) khóa tại đây — dùng tab Giá theo km."
-          : "Edit CABIN / RIVER / SKY / custom (sightseeing) only. STANDARD (DistanceFareForRegular) is locked here — use the Distance fare tab."}
-      </p>
-
       {errorMsg ? (
         <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-xs font-bold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
           {errorMsg}
@@ -142,7 +136,7 @@ function SeatTypesTab({ lang }) {
 
       <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700 sm:px-5">
-          <div className="relative min-w-[12rem] flex-1">
+          <div className="relative min-w-48 flex-1">
             <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-slate-400">
               search
             </span>
@@ -150,7 +144,7 @@ function SeatTypesTab({ lang }) {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={lang === "VN" ? "Tìm STANDARD, CABIN…" : "Search STANDARD, CABIN…"}
+              placeholder={lang === "VN" ? "Tìm loại ghế…" : "Search seat type…"}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
             />
           </div>
@@ -181,7 +175,6 @@ function SeatTypesTab({ lang }) {
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 dark:border-slate-700 dark:bg-slate-900/40">
                   <th className="px-5 py-3">{lang === "VN" ? "Mã" : "Code"}</th>
                   <th className="px-4 py-3">{lang === "VN" ? "Tên" : "Name"}</th>
-                  <th className="px-4 py-3">{lang === "VN" ? "Cách tính" : "Pricing"}</th>
                   <th className="px-4 py-3">{lang === "VN" ? "Giá gốc" : "Base price"}</th>
                   <th className="px-4 py-3 text-right">{lang === "VN" ? "Hành động" : "Actions"}</th>
                 </tr>
@@ -199,17 +192,6 @@ function SeatTypesTab({ lang }) {
                       </td>
                       <td className="px-4 py-3.5 font-bold text-slate-700 dark:text-slate-200">{row.name}</td>
                       <td className="px-4 py-3.5">
-                        {locked ? (
-                          <span className="rounded-md bg-teal-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">
-                            Distance fare
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-                            {row.pricingMode || "Fixed"}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5">
                         {editing ? (
                           <input
                             type="number"
@@ -222,7 +204,7 @@ function SeatTypesTab({ lang }) {
                           />
                         ) : locked ? (
                           <span className="text-[11px] font-bold text-slate-400">
-                            {lang === "VN" ? "Theo km (fare-policy)" : "Per km (fare-policy)"}
+                            {lang === "VN" ? "Theo km" : "Per km"}
                           </span>
                         ) : (
                           <span className="font-black tabular-nums text-slate-800 dark:text-slate-100">
@@ -251,13 +233,15 @@ function SeatTypesTab({ lang }) {
                             </button>
                           </div>
                         ) : locked ? (
-                          <span
-                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-100 px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-700"
+                          <button
+                            type="button"
+                            onClick={onGoToDistanceTab}
+                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 transition hover:border-[#124757]/30 hover:text-[#124757] dark:border-slate-600 dark:hover:text-yellow-400"
                             title={lang === "VN" ? "Chỉnh ở tab Giá theo km" : "Edit in Distance fare tab"}
                           >
-                            <span className="material-symbols-outlined text-[14px]">lock</span>
-                            {lang === "VN" ? "Khóa" : "Locked"}
-                          </span>
+                            <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                            {lang === "VN" ? "Chỉnh giá theo km" : "Edit distance fare"}
+                          </button>
                         ) : (
                           <button
                             type="button"
@@ -350,8 +334,8 @@ function DistanceFareTab({ lang }) {
     <div className="space-y-4">
       <p className="text-xs text-slate-400">
         {lang === "VN"
-          ? "Regular (STANDARD): baseFare + pricePerKm × km, làm tròn lên 1.000đ, tối thiểu minFare nếu có. Sightseeing vẫn theo giá loại ghế."
-          : "Regular (STANDARD): baseFare + pricePerKm × km, round up to 1,000 VND, at least minFare if set. Sightseeing still uses seat-type prices."}
+          ? "Giá ghế STANDARD: Giá cơ bản + Giá theo km/km, làm tròn lên 1.000đ, giá tối thiểu nếu có."
+          : "Seat price of STANDARD: Base fare + Price per Km/km, round up to 1,000 VND, at least minimum fare if set."}
       </p>
 
       {errorMsg ? (
@@ -370,7 +354,7 @@ function DistanceFareTab({ lang }) {
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className={labelStyle}>{lang === "VN" ? "Giá cơ bản (baseFare)" : "Base fare"}</label>
+                <label className={labelStyle}>{lang === "VN" ? "Giá cơ bản" : "Base fare"}</label>
                 <input
                   type="number"
                   min={0}
@@ -382,7 +366,7 @@ function DistanceFareTab({ lang }) {
                 />
               </div>
               <div>
-                <label className={labelStyle}>{lang === "VN" ? "Giá / km (pricePerKm)" : "Price per km"}</label>
+                <label className={labelStyle}>{lang === "VN" ? "Giá / km" : "Price per km"}</label>
                 <input
                   type="number"
                   min={0}
@@ -394,7 +378,7 @@ function DistanceFareTab({ lang }) {
                 />
               </div>
               <div>
-                <label className={labelStyle}>{lang === "VN" ? "Giá tối thiểu (minFare)" : "Minimum fare"}</label>
+                <label className={labelStyle}>{lang === "VN" ? "Giá tối thiểu" : "Minimum fare"}</label>
                 <input
                   type="number"
                   min={0}
@@ -406,11 +390,6 @@ function DistanceFareTab({ lang }) {
                 />
               </div>
             </div>
-            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-              {lang === "VN"
-                ? `Làm tròn lên ${ROUNDING_DISPLAY.toLocaleString("vi-VN")}đ (cấu hình BE, không chỉnh trên FE).`
-                : `Round up to ${ROUNDING_DISPLAY.toLocaleString("en-US")} VND (BE setting, not editable on FE).`}
-            </p>
             <div className="flex flex-wrap gap-2 pt-1">
               <button
                 type="submit"
@@ -589,11 +568,6 @@ function SurchargeTab({ lang }) {
 
   return (
     <div className="space-y-5">
-      <p className="text-xs text-slate-400">
-        {lang === "VN"
-          ? "Phụ thu chỉ nhập % — BE tự làm tròn % và tiền. Không có bước làm tròn trên FE."
-          : "Surcharge only needs %. BE rounds % and money. No rounding step on FE."}
-      </p>
 
       {apiMissing ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
@@ -641,7 +615,7 @@ function SurchargeTab({ lang }) {
           >
             {savingWeekend
               ? (lang === "VN" ? "Đang lưu…" : "Saving…")
-              : (lang === "VN" ? "Lưu cuối tuần" : "Save weekend")}
+              : (lang === "VN" ? "Lưu" : "Save")}
           </button>
         </form>
 
@@ -695,7 +669,7 @@ function SurchargeTab({ lang }) {
           >
             {savingHoliday
               ? (lang === "VN" ? "Đang lưu…" : "Saving…")
-              : (lang === "VN" ? "Lưu ngày đặc biệt" : "Save special day")}
+              : (lang === "VN" ? "Lưu" : "Save")}
           </button>
         </form>
       </div>
@@ -705,7 +679,7 @@ function SurchargeTab({ lang }) {
           {lang === "VN" ? "Kiểm tra phụ thu theo ngày" : "Check effective surcharge"}
         </h3>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[12rem] flex-1">
+          <div className="min-w-48 flex-1">
             <label className={labelStyle}>{lang === "VN" ? "Ngày" : "Date"}</label>
             <AppDateInput
               value={effectiveDate}
@@ -774,11 +748,10 @@ function SurchargeTab({ lang }) {
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.name || "—"}</td>
                     <td className="px-4 py-3 font-black text-[#124757] dark:text-yellow-400">+{row.surchargePercent}%</td>
                     <td className="px-4 py-3">
-                      <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase ${
-                        row.isActive
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-                          : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-                      }`}>
+                      <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase ${row.isActive
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                        : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+                        }`}>
                         {row.isActive ? (lang === "VN" ? "Bật" : "On") : (lang === "VN" ? "Tắt" : "Off")}
                       </span>
                     </td>
@@ -805,8 +778,8 @@ export function SeatTypeManagement() {
         </h2>
         <p className="mt-1 text-xs text-slate-400">
           {lang === "VN"
-            ? "Giá gốc loại ghế · công thức theo km · phụ thu cuối tuần / ngày lễ — tăng giá tự động, không sửa hàng loạt chuyến."
-            : "Seat base prices · distance formula · weekend/holiday surcharges — automatic uplift, no mass trip edits."}
+            ? "Giá loại ghế · công thức theo km · phụ thu cuối tuần / ngày lễ."
+            : "Seat prices · distance formula · weekend/holiday surcharges."}
         </p>
 
         <div className="mt-4 flex flex-wrap gap-1.5">
@@ -817,13 +790,11 @@ export function SeatTypeManagement() {
                 key={item.id}
                 type="button"
                 onClick={() => setTab(item.id)}
-                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${
-                  active
-                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
-                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-400"
-                }`}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${active
+                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
+                  : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-400"
+                  }`}
               >
-                <span className="material-symbols-outlined text-[16px]">{item.icon}</span>
                 {lang === "VN" ? item.vn : item.en}
               </button>
             );
@@ -831,7 +802,7 @@ export function SeatTypeManagement() {
         </div>
       </div>
 
-      {tab === "seats" ? <SeatTypesTab lang={lang} /> : null}
+      {tab === "seats" ? <SeatTypesTab lang={lang} onGoToDistanceTab={() => setTab("distance")} /> : null}
       {tab === "distance" ? <DistanceFareTab lang={lang} /> : null}
       {tab === "surcharge" ? <SurchargeTab lang={lang} /> : null}
     </div>

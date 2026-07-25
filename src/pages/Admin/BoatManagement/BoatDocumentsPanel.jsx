@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../../../context/AppContext";
 import {
   fetchBoatDocuments,
   removeBoatDocument,
   uploadBoatDocument,
-} from "../services/boatService";
+} from "../../../services/boatService";
 import {
   BOAT_DOCUMENT_ACCEPT,
   BOAT_DOCUMENT_MAX_SIZE,
@@ -12,8 +12,8 @@ import {
   BOAT_DOCUMENT_MIME_TYPES,
   areDocumentsFreshAfterMaintenance,
   normalizeBoatDocuments,
-} from "../utils/boatDocuments";
-import { notify } from "../utils/swalToast";
+} from "../../../utils/boatDocuments";
+import { notify } from "../../../utils/swalToast";
 
 const formatDateTime = (value, lang) => {
   if (!value) return "—";
@@ -236,11 +236,6 @@ export function BoatDocumentsPanel({
             <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
               {lang === "VN" ? "Hồ sơ pháp lý tàu" : "Boat Legal Documents"}
             </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              {lang === "VN"
-                ? "Chọn file cho các mục cần cập nhật rồi bấm Lưu tất cả một lần."
-                : "Pick files for the slots you want, then click Save all once."}
-            </p>
           </div>
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300">
             <span className="material-symbols-outlined text-sm">folder_open</span>

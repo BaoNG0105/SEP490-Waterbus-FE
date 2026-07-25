@@ -49,9 +49,6 @@ export function StaffHub() {
             : "text-slate-500 hover:text-slate-700"
         }`}
       >
-        <span className="material-symbols-outlined text-[15px]" aria-hidden>
-          badge
-        </span>
         {lang === "VN" ? "Tài khoản" : "Accounts"}
       </button>
       <button
@@ -63,9 +60,6 @@ export function StaffHub() {
             : "text-slate-500 hover:text-slate-700"
         }`}
       >
-        <span className="material-symbols-outlined text-[15px]" aria-hidden>
-          event_available
-        </span>
         {lang === "VN" ? "Phân công" : "Schedule"}
       </button>
     </div>

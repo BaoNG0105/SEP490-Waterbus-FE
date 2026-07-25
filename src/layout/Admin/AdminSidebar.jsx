@@ -112,6 +112,10 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
   const displayRole = primaryRole?.displayName || primaryRole?.name || (
     lang === "VN" ? "Quản trị viên" : "Admin"
   );
+  const stationAssignments = user?.stationAssignments || [];
+  const primaryStation = stationAssignments.find((s) => s?.isPrimary) || stationAssignments[0];
+  const displayStationName = primaryStation?.stationName || "";
+  const extraStationCount = stationAssignments.length > 1 ? stationAssignments.length - 1 : 0;
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -124,6 +128,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
           fullName: data.fullName || "",
           avatarUrl: data.avatarUrl || "",
           roles: data.roles || [],
+          stationAssignments: data.stationAssignments || [],
         }));
       } catch (error) {
         console.error("Lỗi tải thông tin admin sidebar:", error);
@@ -201,6 +206,12 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
                 {displayRole}
               </span>
             </div>
+            {displayStationName ? (
+              <p className="flex items-center justify-center gap-1 text-[11px] font-bold text-white/60">
+                <span className="truncate max-w-44">{displayStationName}</span>
+                {extraStationCount > 0 ? ` +${extraStationCount}` : ""}
+              </p>
+            ) : null}
           </div>
         </div>
 

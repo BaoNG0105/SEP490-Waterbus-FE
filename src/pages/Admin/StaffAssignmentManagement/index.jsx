@@ -101,7 +101,6 @@ const emptyCreateForm = (assignmentType = ASSIGNMENT_TYPE.STATION) => {
     startTime: FULL_DAY_START_TIME,
     endTime: FULL_DAY_END_TIME,
     daysOfWeek: [...FULL_DAY_DAYS_OF_WEEK],
-    note: "",
   };
 };
 
@@ -196,6 +195,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
   );
   const [createError, setCreateError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingStaffStation, setIsLoadingStaffStation] = useState(false);
   const [replaceForm, setReplaceForm] = useState({
     assignmentId: "",
     staffName: "",
@@ -318,6 +318,12 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
     });
   }, [usableStations]);
 
+  const stationLabelById = useMemo(() => {
+    const map = new Map();
+    stationSelectOptions.forEach((o) => map.set(String(o.value), o.label));
+    return map;
+  }, [stationSelectOptions]);
+
   const stationFilterOptions = useMemo(
     () => [
       { value: "", label: lang === "VN" ? "Tất cả bến" : "All stations" },
@@ -330,6 +336,32 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
     if (createForm.assignmentType === ASSIGNMENT_TYPE.BOAT) return onBoardStaff;
     return groundStaff;
   }, [createForm.assignmentType, onBoardStaff, groundStaff]);
+
+  // Nhân viên bến đã có sẵn bến làm việc cố định → tự lấy bến đó, không cho chọn tay.
+  useEffect(() => {
+    if (createForm.assignmentType !== ASSIGNMENT_TYPE.STATION || !createForm.staffUserId) {
+      return;
+    }
+    let cancelled = false;
+    const loadStaffStation = async () => {
+      try {
+        setIsLoadingStaffStation(true);
+        const ids = await fetchUserStations(createForm.staffUserId).catch(() => []);
+        if (cancelled) return;
+        setCreateForm((prev) => (
+          prev.staffUserId === createForm.staffUserId
+            ? { ...prev, stationId: ids?.[0] ? String(ids[0]) : "" }
+            : prev
+        ));
+      } finally {
+        if (!cancelled) setIsLoadingStaffStation(false);
+      }
+    };
+    loadStaffStation();
+    return () => {
+      cancelled = true;
+    };
+  }, [createForm.assignmentType, createForm.staffUserId]);
 
   useEffect(() => {
     const loadLookups = async () => {
@@ -614,6 +646,10 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
         next.endTime = FULL_DAY_END_TIME;
         next.daysOfWeek = [...FULL_DAY_DAYS_OF_WEEK];
       }
+      if (field === "staffUserId" && prev.assignmentType === ASSIGNMENT_TYPE.STATION) {
+        // Bến sẽ được tự nạp lại theo nhân viên vừa chọn (xem effect loadStaffStation).
+        next.stationId = "";
+      }
       if (field === "stationId" || field === "fromDate") {
         next.tripId = "";
         next.tripStopId = "";
@@ -811,7 +847,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
       ? "Lịch làm việc của tôi"
       : "My work schedule"
     : lang === "VN"
-      ? "Phân công Staff"
+      ? "Phân công nhân viên"
       : "Staff Assignments";
 
   const pageHint = isMineView
@@ -821,8 +857,8 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
     : isAdmin
       ? ""
       : (lang === "VN"
-        ? "Tạo · xem · hủy ca bến. Trạng thái / tiến độ ca tính tự động."
-        : "Create · view · cancel station shifts. Status / progress are automatic.");
+        ? "Tạo · xem · hủy ca bến."
+        : "Create · view · cancel station shifts.");
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
@@ -840,22 +876,20 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
               <button
                 type="button"
                 onClick={() => setViewMode("manage")}
-                className={`px-3 py-2 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
-                  !isMineView
-                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
+                className={`px-3 py-2 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${!isMineView
+                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                  : "text-slate-500 hover:text-slate-700"
+                  }`}
               >
                 {lang === "VN" ? "Bảng tổng" : "Master"}
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode("mine")}
-                className={`px-3 py-2 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
-                  isMineView
-                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
+                className={`px-3 py-2 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${isMineView
+                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                  : "text-slate-500 hover:text-slate-700"
+                  }`}
               >
                 {lang === "VN" ? "Ca của tôi" : "My shifts"}
               </button>
@@ -888,10 +922,10 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: lang === "VN" ? "Tổng ca" : "Shifts", value: stats.total},
-          { label: lang === "VN" ? "Đã xếp lịch" : "Scheduled", value: stats.scheduled},
-          { label: lang === "VN" ? "Đang diễn ra" : "Active now", value: stats.active},
-          { label: lang === "VN" ? "Đã hủy" : "Cancelled", value: stats.cancelled},
+          { label: lang === "VN" ? "Tổng ca" : "Shifts", value: stats.total },
+          { label: lang === "VN" ? "Đã xếp lịch" : "Scheduled", value: stats.scheduled },
+          { label: lang === "VN" ? "Đang diễn ra" : "Active now", value: stats.active },
+          { label: lang === "VN" ? "Đã hủy" : "Cancelled", value: stats.cancelled },
         ].map((card) => (
           <div
             key={card.label}
@@ -928,23 +962,15 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                     setToDate(next.toDate);
                   }
                 }}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
-                  displayMode === opt.id
-                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${displayMode === opt.id
+                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                  : "text-slate-500 hover:text-slate-700"
+                  }`}
               >
                 {lang === "VN" ? opt.vn : opt.en}
               </button>
             ))}
           </div>
-          {displayMode === "list" ? (
-            <p className="text-[11px] font-semibold text-slate-400">
-              {lang === "VN"
-                ? "Cùng NV + tàu được gộp · bấm để mở từng ca"
-                : "Same staff + boat are grouped · expand for each shift"}
-            </p>
-          ) : null}
         </div>
 
         <div className="flex flex-wrap items-end gap-2">
@@ -1051,132 +1077,132 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
           isLoading={isLoading}
         />
       ) : (
-      <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-220">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-900/50 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60">
-                <th className="py-4 px-5">{lang === "VN" ? "Nhân viên / lịch" : "Staff / schedule"}</th>
-                <th className="py-4 px-4">{lang === "VN" ? "Loại NV" : "Staff type"}</th>
-                {!isAdminBoatManage ? (
-                  <th className="py-4 px-4">{lang === "VN" ? "Phạm vi" : "Scope"}</th>
-                ) : null}
-                <th className="py-4 px-4">
-                  {isAdminBoatManage
-                    ? (lang === "VN" ? "Tàu" : "Boat")
-                    : (lang === "VN" ? "Bến" : "Station")}
-                </th>
-                <th className="py-4 px-4">{lang === "VN" ? "Khoảng ngày" : "Date range"}</th>
-                <th className="py-4 px-4 text-center">{lang === "VN" ? "Số ca" : "Shifts"}</th>
-                <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
-                <th className="py-4 px-5 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={tableColSpan} className="py-16 text-center">
-                    <div className="inline-block w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />
-                  </td>
+        <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-220">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-900/50 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-700/60">
+                  <th className="py-4 px-5">{lang === "VN" ? "Nhân viên / lịch" : "Staff / schedule"}</th>
+                  <th className="py-4 px-4">{lang === "VN" ? "Loại NV" : "Staff type"}</th>
+                  {!isAdminBoatManage ? (
+                    <th className="py-4 px-4">{lang === "VN" ? "Phạm vi" : "Scope"}</th>
+                  ) : null}
+                  <th className="py-4 px-4">
+                    {isAdminBoatManage
+                      ? (lang === "VN" ? "Tàu" : "Boat")
+                      : (lang === "VN" ? "Bến" : "Station")}
+                  </th>
+                  <th className="py-4 px-4">{lang === "VN" ? "Khoảng ngày" : "Date range"}</th>
+                  <th className="py-4 px-4 text-center">{lang === "VN" ? "Số ca" : "Shifts"}</th>
+                  <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                  <th className="py-4 px-5 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
                 </tr>
-              ) : assignmentGroups.length === 0 ? (
-                <tr>
-                  <td colSpan={tableColSpan} className="py-14 text-center text-slate-400 font-bold">
-                    {isMineView
-                      ? lang === "VN"
-                        ? "Chưa có ca được gán cho bạn."
-                        : "No shifts assigned to you yet."
-                      : lang === "VN"
-                        ? "Không có phân công phù hợp."
-                        : "No assignments found."}
-                  </td>
-                </tr>
-              ) : (
-                assignmentGroups.map((group) => {
-                  const targetLabel =
-                    group.assignmentType === ASSIGNMENT_TYPE.BOAT
-                      ? group.boat
-                        ? `${group.boat.boatCode || ""} · ${group.boat.boatName || ""}`.trim()
-                        : "—"
-                      : group.station
-                        ? `${group.station.stationCode || ""} · ${group.station.stationName || ""}`.trim()
-                        : "—";
-                  const expanded = expandedListGroups.has(group.key);
-                  const canMutateAny = group.items.some((row) => canMutateAssignment(row) && !isAssignmentInactive(row.status));
-                  return (
-                    <Fragment key={group.key}>
-                      <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20">
-                        <td className="py-3.5 px-5">
-                          <button
-                            type="button"
-                            onClick={() => toggleListGroup(group.key)}
-                            className="flex items-center gap-2 text-left"
-                          >
-                            <span className="material-symbols-outlined text-base text-slate-400">
-                              {expanded ? "expand_more" : "chevron_right"}
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={tableColSpan} className="py-16 text-center">
+                      <div className="inline-block w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />
+                    </td>
+                  </tr>
+                ) : assignmentGroups.length === 0 ? (
+                  <tr>
+                    <td colSpan={tableColSpan} className="py-14 text-center text-slate-400 font-bold">
+                      {isMineView
+                        ? lang === "VN"
+                          ? "Chưa có ca được gán cho bạn."
+                          : "No shifts assigned to you yet."
+                        : lang === "VN"
+                          ? "Không có phân công phù hợp."
+                          : "No assignments found."}
+                    </td>
+                  </tr>
+                ) : (
+                  assignmentGroups.map((group) => {
+                    const targetLabel =
+                      group.assignmentType === ASSIGNMENT_TYPE.BOAT
+                        ? group.boat
+                          ? `${group.boat.boatCode || ""} · ${group.boat.boatName || ""}`.trim()
+                          : "—"
+                        : group.station
+                          ? `${group.station.stationCode || ""} · ${group.station.stationName || ""}`.trim()
+                          : "—";
+                    const expanded = expandedListGroups.has(group.key);
+                    const canMutateAny = group.items.some((row) => canMutateAssignment(row) && !isAssignmentInactive(row.status));
+                    return (
+                      <Fragment key={group.key}>
+                        <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20">
+                          <td className="py-3.5 px-5">
+                            <button
+                              type="button"
+                              onClick={() => toggleListGroup(group.key)}
+                              className="flex items-center gap-2 text-left"
+                            >
+                              <span className="material-symbols-outlined text-base text-slate-400">
+                                {expanded ? "expand_more" : "chevron_right"}
+                              </span>
+                              <span>
+                                <p className="font-bold text-slate-800 dark:text-white">{group.staffName}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                  {lang === "VN" ? "Bấm để xem từng ngày" : "Click to see each day"}
+                                </p>
+                              </span>
+                            </button>
+                          </td>
+                          <td className="py-3.5 px-4">{group.staffType || "—"}</td>
+                          {!isAdminBoatManage ? (
+                            <td className="py-3.5 px-4">
+                              <span className="font-headline font-black text-[10px] uppercase tracking-wide">
+                                {labelAssignmentType(group.assignmentType, lang)}
+                              </span>
+                            </td>
+                          ) : null}
+                          <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-200">
+                            {targetLabel || "—"}
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap font-semibold">
+                            {formatDateShort(group.firstStart)}
+                            <span className="mx-1 text-slate-300">→</span>
+                            {formatDateShort(group.lastEnd)}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <span className="inline-flex items-center justify-center min-w-8 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-headline font-black text-[#124757] dark:text-yellow-400">
+                              {group.items.length}
                             </span>
-                            <span>
-                              <p className="font-bold text-slate-800 dark:text-white">{group.staffName}</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5">
-                                {lang === "VN" ? "Bấm để xem từng ngày" : "Click to see each day"}
+                            {(group.activeCount > 0 || group.upcomingCount > 0) && (
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                {group.activeCount > 0
+                                  ? `${group.activeCount} ${lang === "VN" ? "đang diễn ra" : "active"}`
+                                  : `${group.upcomingCount} ${lang === "VN" ? "sắp tới" : "upcoming"}`}
                               </p>
-                            </span>
-                          </button>
-                        </td>
-                        <td className="py-3.5 px-4">{group.staffType || "—"}</td>
-                        {!isAdminBoatManage ? (
-                          <td className="py-3.5 px-4">
-                            <span className="font-headline font-black text-[10px] uppercase tracking-wide">
-                              {labelAssignmentType(group.assignmentType, lang)}
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <span
+                              className={`inline-flex px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusTone(group.status)}`}
+                            >
+                              {labelAssignmentStatus(group.status, lang)}
                             </span>
                           </td>
-                        ) : null}
-                        <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-200">
-                          {targetLabel || "—"}
-                        </td>
-                        <td className="py-3.5 px-4 whitespace-nowrap font-semibold">
-                          {formatDateShort(group.firstStart)}
-                          <span className="mx-1 text-slate-300">→</span>
-                          {formatDateShort(group.lastEnd)}
-                        </td>
-                        <td className="py-3.5 px-4 text-center">
-                          <span className="inline-flex items-center justify-center min-w-8 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-headline font-black text-[#124757] dark:text-yellow-400">
-                            {group.items.length}
-                          </span>
-                          {(group.activeCount > 0 || group.upcomingCount > 0) && (
-                            <p className="text-[10px] text-slate-400 mt-1">
-                              {group.activeCount > 0
-                                ? `${group.activeCount} ${lang === "VN" ? "đang diễn ra" : "active"}`
-                                : `${group.upcomingCount} ${lang === "VN" ? "sắp tới" : "upcoming"}`}
-                            </p>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 text-center">
-                          <span
-                            className={`inline-flex px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusTone(group.status)}`}
-                          >
-                            {labelAssignmentStatus(group.status, lang)}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => toggleListGroup(group.key)}
-                            className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
-                          >
-                            {expanded
-                              ? (lang === "VN" ? "Thu gọn" : "Collapse")
-                              : (lang === "VN" ? "Xem ca" : "View shifts")}
-                          </button>
-                          {!canMutateAny && (
-                            <p className="mt-1 text-[10px] font-bold uppercase text-slate-300 tracking-wider">
-                              {lang === "VN" ? "Chỉ xem" : "View only"}
-                            </p>
-                          )}
-                        </td>
-                      </tr>
-                      {expanded
-                        ? group.items.map((row) => {
+                          <td className="py-3.5 px-5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleListGroup(group.key)}
+                              className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 text-[10px] font-headline font-black uppercase tracking-wider hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+                            >
+                              {expanded
+                                ? (lang === "VN" ? "Thu gọn" : "Collapse")
+                                : (lang === "VN" ? "Xem ca" : "View shifts")}
+                            </button>
+                            {!canMutateAny && (
+                              <p className="mt-1 text-[10px] font-bold uppercase text-slate-300 tracking-wider">
+                                {lang === "VN" ? "Chỉ xem" : "View only"}
+                              </p>
+                            )}
+                          </td>
+                        </tr>
+                        {expanded
+                          ? group.items.map((row) => {
                             const busy = processingId === row.assignmentId;
                             const canMutate = canMutateAssignment(row);
                             const shift = resolveShiftState(row);
@@ -1239,15 +1265,15 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                               </tr>
                             );
                           })
-                        : null}
-                    </Fragment>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                          : null}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       )}
 
       {isCreateOpen && (
@@ -1268,253 +1294,233 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
 
             <form onSubmit={handleCreateSubmit} className="flex min-h-0 flex-1 flex-col">
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-5 py-4">
-              {createError && (
-                <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-3 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20">
-                  {createError}
-                </div>
-              )}
+                {createError && (
+                  <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-3 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20">
+                    {createError}
+                  </div>
+                )}
 
-              <div>
-                <label className={labelStyle}>
-                  {lang === "VN" ? "Làm việc ở đâu (*)" : "Work location (*)"}
-                </label>
-                {(() => {
-                  const createTypeOptions = [
-                    ...(canCreateBoat
-                      ? [{
+                <div>
+                  <label className={labelStyle}>
+                    {lang === "VN" ? "Vị trí công việc (*)" : "Work location (*)"}
+                  </label>
+                  {(() => {
+                    const createTypeOptions = [
+                      ...(canCreateBoat
+                        ? [{
                           value: ASSIGNMENT_TYPE.BOAT,
                           label: lang === "VN" ? "Trên tàu" : "On boat",
                         }]
-                      : []),
-                    ...(canCreateStation
-                      ? [{
+                        : []),
+                      ...(canCreateStation
+                        ? [{
                           value: ASSIGNMENT_TYPE.STATION,
                           label: lang === "VN" ? "Tại bến" : "At station",
                         }]
-                      : []),
-                  ];
-                  if (createTypeOptions.length <= 1) {
+                        : []),
+                    ];
+                    if (createTypeOptions.length <= 1) {
+                      return (
+                        <div className={`${inputStyle} flex items-center font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400`}>
+                          {createTypeOptions[0]?.label || "—"}
+                        </div>
+                      );
+                    }
                     return (
-                      <div className={`${inputStyle} flex items-center font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400`}>
-                        {createTypeOptions[0]?.label || "—"}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="grid grid-cols-1 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                      {createTypeOptions.map((opt) => {
-                        const selected = createForm.assignmentType === opt.value;
-                        return (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => handleCreateField("assignmentType", opt.value)}
-                            className={`h-10 rounded-lg text-[11px] font-headline font-black uppercase tracking-wider transition-all ${
-                              selected
+                      <div className="grid grid-cols-1 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                        {createTypeOptions.map((opt) => {
+                          const selected = createForm.assignmentType === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => handleCreateField("assignmentType", opt.value)}
+                              className={`h-10 rounded-lg text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
                                 ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
                                 : "text-slate-500 hover:bg-white dark:hover:bg-slate-800"
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
-              </div>
+                                }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
 
-              <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 dark:border-sky-500/20 dark:bg-sky-500/10">
-                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">
-                  {lang === "VN" ? "Giờ làm việc (cả ngày)" : "Working hours (full day)"}
-                </p>
-                <p className="mt-1 text-sm font-bold text-sky-800 dark:text-sky-200">
-                  {FULL_DAY_START_TIME} → {FULL_DAY_END_TIME}
-                </p>
-              </div>
+                <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 dark:border-sky-500/20 dark:bg-sky-500/10">
+                  <p className="text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">
+                    {lang === "VN" ? "Giờ làm việc" : "Working hours"}
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-sky-800 dark:text-sky-200">
+                    {FULL_DAY_START_TIME} → {FULL_DAY_END_TIME}
+                  </p>
+                </div>
 
-              <div>
-                <label className={labelStyle}>
-                  {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT
-                    ? lang === "VN"
-                      ? "Nhân viên đi tàu (*)"
-                      : "Boat crew (*)"
-                    : lang === "VN"
-                      ? "Nhân viên làm bến (*)"
-                      : "Station staff (*)"}
-                </label>
-                <FormSelect
-                  required
-                  value={createForm.staffUserId}
-                  onChange={(value) => handleCreateField("staffUserId", String(value ?? ""))}
-                  options={staffOptionsForCreate
-                    .map((s) => ({
-                      value: getStaffId(s),
-                      label: getStaffName(s),
-                    }))
-                    .filter((o) => o.value)}
-                  searchable
-                  placeholder={lang === "VN" ? "-- Chọn nhân viên --" : "-- Select staff --"}
-                  searchPlaceholder={lang === "VN" ? "Tìm tên nhân viên..." : "Search staff..."}
-                  emptyLabel={lang === "VN" ? "Không có nhân viên" : "No staff"}
-                  className={inputStyle}
-                />
-              </div>
-
-              {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT ? (
                 <div>
                   <label className={labelStyle}>
-                    {lang === "VN" ? "Tàu được gán (*)" : "Assigned boat (*)"}
+                    {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT
+                      ? lang === "VN"
+                        ? "Nhân viên tàu (*)"
+                        : "Boat crew (*)"
+                      : lang === "VN"
+                        ? "Nhân viên bến (*)"
+                        : "Station staff (*)"}
                   </label>
                   <FormSelect
                     required
-                    value={createForm.boatId}
-                    onChange={(value) => handleCreateField("boatId", String(value ?? ""))}
-                    options={boats
-                      .map((b) => ({
-                        value: getBoatId(b),
-                        label: `${b.boatCode || b.code} · ${b.boatName || b.name}`,
+                    value={createForm.staffUserId}
+                    onChange={(value) => handleCreateField("staffUserId", String(value ?? ""))}
+                    options={staffOptionsForCreate
+                      .map((s) => ({
+                        value: getStaffId(s),
+                        label: getStaffName(s),
                       }))
                       .filter((o) => o.value)}
                     searchable
-                    placeholder={lang === "VN" ? "-- Chọn tàu --" : "-- Select boat --"}
-                    searchPlaceholder={lang === "VN" ? "Tìm mã / tên tàu..." : "Search boat..."}
-                    emptyLabel={lang === "VN" ? "Không có tàu" : "No boats"}
+                    placeholder={lang === "VN" ? "-- Chọn nhân viên --" : "-- Select staff --"}
+                    searchPlaceholder={lang === "VN" ? "Tìm tên nhân viên..." : "Search staff..."}
+                    emptyLabel={lang === "VN" ? "Không có nhân viên" : "No staff"}
                     className={inputStyle}
                   />
                 </div>
-              ) : (
-                <>
-                  <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Bến làm việc (*)" : "Work station (*)"}</label>
-                    <FormSelect
-                      required
-                      value={createForm.stationId}
-                      onChange={(value) => handleCreateField("stationId", String(value ?? ""))}
-                      options={stationSelectOptions}
-                      searchable
-                      placeholder={lang === "VN" ? "-- Chọn bến --" : "-- Select station --"}
-                      searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
-                      emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
-                      className={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Chuyến (*)" : "Trip (*)"}</label>
-                    <FormSelect
-                      required
-                      value={createForm.tripId}
-                      onChange={(value) => handleCreateField("tripId", String(value ?? ""))}
-                      options={gateTrips.map((t) => ({
-                        value: String(t.tripId || t.id || ""),
-                        label: `${t.tripCode || t.tripId} · ${t.routeName || t.routeCode || ""}`.trim(),
-                      })).filter((o) => o.value)}
-                      searchable
-                      disabled={isLoadingGateTrips || !createForm.fromDate}
-                      placeholder={lang === "VN" ? "-- Chọn chuyến --" : "-- Select trip --"}
-                      emptyLabel={lang === "VN" ? "Không có chuyến" : "No trips"}
-                      className={inputStyle}
-                    />
-                  </div>
+
+                {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT ? (
                   <div>
                     <label className={labelStyle}>
-                      {lang === "VN" ? "Điểm dừng quét vé (*)" : "Ticket scan stop (*)"}
+                      {lang === "VN" ? "Tàu được gán (*)" : "Assigned boat (*)"}
                     </label>
                     <FormSelect
                       required
-                      value={createForm.tripStopId}
-                      onChange={(value) => handleCreateField("tripStopId", String(value ?? ""))}
-                      options={gateStops.map((s) => {
-                        const id = String(s.tripStopId || s.id || s.stopId || "");
-                        const order = s.stopOrder ?? s.order ?? "";
-                        const name = s.stationName || s.station?.stationName || s.stationCode || "";
-                        return {
-                          value: id,
-                          label: `#${order} · ${name}`.trim(),
-                        };
-                      }).filter((o) => o.value)}
+                      value={createForm.boatId}
+                      onChange={(value) => handleCreateField("boatId", String(value ?? ""))}
+                      options={boats
+                        .map((b) => ({
+                          value: getBoatId(b),
+                          label: `${b.boatCode || b.code} · ${b.boatName || b.name}`,
+                        }))
+                        .filter((o) => o.value)}
                       searchable
-                      disabled={isLoadingGateStops || !createForm.tripId}
-                      placeholder={lang === "VN" ? "-- Chọn điểm dừng --" : "-- Select stop --"}
-                      emptyLabel={lang === "VN" ? "Không có điểm dừng" : "No stops"}
+                      placeholder={lang === "VN" ? "-- Chọn tàu --" : "-- Select boat --"}
+                      searchPlaceholder={lang === "VN" ? "Tìm mã / tên tàu..." : "Search boat..."}
+                      emptyLabel={lang === "VN" ? "Không có tàu" : "No boats"}
                       className={inputStyle}
                     />
-                    <p className="mt-1 text-[10px] text-slate-400">
-                      {lang === "VN"
-                        ? "Chọn điểm dừng nhân viên sẽ đứng quét vé cho khách."
-                        : "Pick the stop where staff will scan passenger tickets."}
-                    </p>
                   </div>
-                </>
-              )}
+                ) : (
+                  <>
+                    <div>
+                      <label className={labelStyle}>{lang === "VN" ? "Bến làm việc (*)" : "Work station (*)"}</label>
+                      <div className={`${inputStyle} flex items-center gap-2 font-bold text-[#124757] dark:text-yellow-400`}>
+                        {!createForm.staffUserId
+                          ? (lang === "VN" ? "-- Chọn nhân viên trước --" : "-- Select staff first --")
+                          : isLoadingStaffStation
+                            ? (lang === "VN" ? "Đang tải..." : "Loading...")
+                            : createForm.stationId
+                              ? stationLabelById.get(String(createForm.stationId)) || createForm.stationId
+                              : (lang === "VN" ? "Nhân viên chưa được gắn bến." : "Staff has no station assigned.")}
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelStyle}>{lang === "VN" ? "Chuyến (*)" : "Trip (*)"}</label>
+                      <FormSelect
+                        required
+                        value={createForm.tripId}
+                        onChange={(value) => handleCreateField("tripId", String(value ?? ""))}
+                        options={gateTrips.map((t) => ({
+                          value: String(t.tripId || t.id || ""),
+                          label: `${t.tripCode || t.tripId} · ${t.routeName || t.routeCode || ""}`.trim(),
+                        })).filter((o) => o.value)}
+                        searchable
+                        disabled={isLoadingGateTrips || !createForm.fromDate}
+                        placeholder={lang === "VN" ? "-- Chọn chuyến --" : "-- Select trip --"}
+                        emptyLabel={lang === "VN" ? "Không có chuyến" : "No trips"}
+                        className={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelStyle}>
+                        {lang === "VN" ? "Điểm dừng quét vé (*)" : "Ticket scan stop (*)"}
+                      </label>
+                      <FormSelect
+                        required
+                        value={createForm.tripStopId}
+                        onChange={(value) => handleCreateField("tripStopId", String(value ?? ""))}
+                        options={gateStops.map((s) => {
+                          const id = String(s.tripStopId || s.id || s.stopId || "");
+                          const order = s.stopOrder ?? s.order ?? "";
+                          const name = s.stationName || s.station?.stationName || s.stationCode || "";
+                          return {
+                            value: id,
+                            label: `#${order} · ${name}`.trim(),
+                          };
+                        }).filter((o) => o.value)}
+                        searchable
+                        disabled={isLoadingGateStops || !createForm.tripId}
+                        placeholder={lang === "VN" ? "-- Chọn điểm dừng --" : "-- Select stop --"}
+                        emptyLabel={lang === "VN" ? "Không có điểm dừng" : "No stops"}
+                        className={inputStyle}
+                      />
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        {lang === "VN"
+                          ? "Chọn điểm dừng nhân viên sẽ đứng quét vé cho khách."
+                          : "Pick the stop where staff will scan passenger tickets."}
+                      </p>
+                    </div>
+                  </>
+                )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "Start date (*)"}</label>
-                  <AppDateInput
-                    required
-                    value={createForm.fromDate}
-                    onChange={(e) => handleCreateField("fromDate", e.target.value)}
-                    className={inputStyle}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "Start date (*)"}</label>
+                    <AppDateInput
+                      required
+                      value={createForm.fromDate}
+                      onChange={(e) => handleCreateField("fromDate", e.target.value)}
+                      className={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "End date (*)"}</label>
+                    <AppDateInput
+                      required
+                      value={createForm.toDate}
+                      onChange={(e) => handleCreateField("toDate", e.target.value)}
+                      className={inputStyle}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "End date (*)"}</label>
-                  <AppDateInput
-                    required
-                    value={createForm.toDate}
-                    onChange={(e) => handleCreateField("toDate", e.target.value)}
-                    className={inputStyle}
-                  />
-                </div>
-              </div>
 
-              <div>
-                <label className={labelStyle}>
-                  {lang === "VN" ? "Làm những thứ nào" : "Which weekdays"}
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {DAYS_OF_WEEK.map((day) => {
-                    const selected = (createForm.daysOfWeek || []).includes(day.value);
-                    return (
-                      <button
-                        key={day.value}
-                        type="button"
-                        onClick={() => {
-                          const prev = Array.isArray(createForm.daysOfWeek) ? createForm.daysOfWeek : [];
-                          const next = selected
-                            ? prev.filter((d) => d !== day.value)
-                            : [...prev, day.value].sort((a, b) => a - b);
-                          handleCreateField("daysOfWeek", next);
-                        }}
-                        className={`min-w-[2.4rem] h-9 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider border transition ${
-                          selected
+                <div>
+                  <label className={labelStyle}>
+                    {lang === "VN" ? "Làm những thứ nào" : "Which weekdays"}
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DAYS_OF_WEEK.map((day) => {
+                      const selected = (createForm.daysOfWeek || []).includes(day.value);
+                      return (
+                        <button
+                          key={day.value}
+                          type="button"
+                          onClick={() => {
+                            const prev = Array.isArray(createForm.daysOfWeek) ? createForm.daysOfWeek : [];
+                            const next = selected
+                              ? prev.filter((d) => d !== day.value)
+                              : [...prev, day.value].sort((a, b) => a - b);
+                            handleCreateField("daysOfWeek", next);
+                          }}
+                          className={`min-w-[2.4rem] h-9 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider border transition ${selected
                             ? "bg-[#124757] text-white border-[#124757] dark:bg-yellow-400 dark:text-slate-900 dark:border-yellow-400"
                             : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900 dark:border-slate-700"
-                        }`}
-                      >
-                        {lang === "VN" ? day.labelVn : day.labelEn}
-                      </button>
-                    );
-                  })}
+                            }`}
+                        >
+                          {lang === "VN" ? day.labelVn : day.labelEn}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  {lang === "VN"
-                    ? "Mặc định chọn cả tuần. Bấm để bỏ ngày không cần làm."
-                    : "All days selected by default. Tap to turn days off."}
-                </p>
-              </div>
-
-              <div>
-                <label className={labelStyle}>{lang === "VN" ? "Ghi chú" : "Note"}</label>
-                <input
-                  type="text"
-                  value={createForm.note}
-                  onChange={(e) => handleCreateField("note", e.target.value)}
-                  placeholder={lang === "VN" ? "Ví dụ: Ca ngày thường" : "e.g. Regular day shift"}
-                  className={inputStyle}
-                />
-              </div>
               </div>
 
               <div className="shrink-0 border-t border-slate-100 px-5 py-4 dark:border-slate-700">

@@ -3,12 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserDetail, fetchUserRoles, updateUser, fetchUserStations, assignUserStations } from "../../../services/userService";
-import { canManageUserRow, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
+import { fetchAllStations } from "../../../services/stationService";
+import { canManageUserRow, getRoleSystemName } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { NationalitySelect } from "../../../components/NationalitySelect";
-import { StationAssignField, canAssignStations } from "../../../components/StationAssignField";
+import { canAssignStations } from "../../../components/StationAssignField";
 import { notify } from "../../../utils/swalToast";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
@@ -44,13 +45,13 @@ export function EditStaff() {
     const navigate = useNavigate();
     const { id } = useParams();
     const { user: currentUser } = useSelector((state) => state.auth);
-    const canEditOnBoard = isAdminUser(currentUser);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
     const [roles, setRoles] = useState([]);
     const [userInfo, setUserInfo] = useState(null);
+    const [stations, setStations] = useState([]);
 
     const [formData, setFormData] = useState({
         fullName: "",
@@ -160,6 +161,12 @@ export function EditStaff() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
+    useEffect(() => {
+        fetchAllStations()
+            .then((data) => setStations(Array.isArray(data) ? data : []))
+            .catch((error) => console.warn("Không tải được danh sách bến:", error));
+    }, []);
+
     const staffRole = useMemo(
         () => roles.find((role) => getRoleSystemName(role) === "STAFF"),
         [roles]
@@ -168,6 +175,15 @@ export function EditStaff() {
         roleSystemName: "STAFF",
         staffType: formData.staffType,
     });
+
+    const stationNameById = useMemo(() => {
+        const map = new Map();
+        stations.forEach((s) => {
+            const sid = String(s?.stationId || s?.id || "");
+            if (sid) map.set(sid, s.stationName || s.name || s.stationCode || sid);
+        });
+        return map;
+    }, [stations]);
 
     const handleInputChange = (field, value) => {
         setFormData((prev) => {
@@ -186,7 +202,7 @@ export function EditStaff() {
             setErrorMsg("");
 
             if (!formData.staffType) {
-                setErrorMsg(lang === "VN" ? "Chọn loại nhân viên (mặt đất / trên tàu)." : "Select staff type (Ground / OnBoard).");
+                setErrorMsg(lang === "VN" ? "Chọn loại nhân viên (bến tàu / trên tàu)." : "Select staff type (Station / OnBoard).");
                 return;
             }
 
@@ -253,18 +269,16 @@ export function EditStaff() {
     const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
     const selectStyle = `${inputStyle} cursor-pointer`;
+    const readOnlyStyle = "w-full bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-400 dark:text-slate-500 shadow-inner opacity-70 cursor-not-allowed";
 
     const genderOptions = [
         { value: "Male", label: lang === "VN" ? "Nam" : "Male" },
         { value: "Female", label: lang === "VN" ? "Nữ" : "Female" },
         { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
     ];
-    const staffTypeOptions = [
-        { value: "Ground", label: lang === "VN" ? "Mặt đất (bến)" : "Ground (station)" },
-        ...((canEditOnBoard || formData.staffType === "OnBoard")
-            ? [{ value: "OnBoard", label: lang === "VN" ? "Trên tàu" : "Onboard" }]
-            : []),
-    ];
+    const staffTypeLabel = formData.staffType === "OnBoard"
+        ? (lang === "VN" ? "Trên tàu" : "Onboard")
+        : (lang === "VN" ? "Bến tàu" : "Station");
 
     if (isLoading) {
         return (
@@ -370,34 +384,29 @@ export function EditStaff() {
 
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán" : "Assigned Role"}</label>
-                        <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
+                        <div className={readOnlyStyle}>
                             {staffRole?.displayName || staffRole?.systemName || "Staff"}
                         </div>
                     </div>
 
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
-                        {staffTypeOptions.length <= 1 ? (
-                            <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
-                                {staffTypeOptions[0]?.label ||
-                                    (lang === "VN" ? "Mặt đất (bến)" : "Ground (station)")}
-                            </div>
-                        ) : (
-                            <FormSelect
-                                required
-                                value={formData.staffType || "Ground"}
-                                onChange={(v) => handleInputChange("staffType", v)}
-                                options={staffTypeOptions}
-                                className={`${selectStyle} font-bold text-[#124757] dark:text-yellow-400`}
-                            />
-                        )}
+                        <div className={readOnlyStyle}>
+                            {staffTypeLabel}
+                        </div>
                     </div>
 
                     {showStationAssign && (
-                        <StationAssignField
-                            value={formData.stationIds}
-                            onChange={(ids) => handleInputChange("stationIds", ids)}
-                        />
+                        <div>
+                            <label className={labelStyle}>{lang === "VN" ? "Gắn bến làm việc" : "Assigned stations"}</label>
+                            <div className={readOnlyStyle}>
+                                {formData.stationIds.length > 0
+                                    ? formData.stationIds
+                                        .map((sid) => stationNameById.get(String(sid)) || sid)
+                                        .join(", ")
+                                    : (lang === "VN" ? "Chưa gắn bến." : "No station assigned.")}
+                            </div>
+                        </div>
                     )}
                 </div>
 

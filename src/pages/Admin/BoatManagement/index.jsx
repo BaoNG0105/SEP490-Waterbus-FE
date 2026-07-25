@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats, modifyBoatStatus, deleteBoat, fetchBoatDetail, fetchBoatDocuments } from "../../../services/boatService";
 import { getActivateBoatBlockReason } from "../../../utils/boatDocuments";
-import { BoatSeatLayoutPreviewModal } from "../../../components/BoatSeatLayoutPreview";
+import { BoatSeatLayoutPreviewModal } from "../../../components/BoatLayoutPreview";
 import { FormSelect } from "../../../components/FormSelect";
 import { notify } from "../../../utils/swalToast";
 
@@ -14,6 +14,8 @@ const BOAT_STATUS_OPTIONS = [
     { value: "Inactive", labelVn: "Chưa hoạt động", labelEn: "Inactive", hintVn: "Không đưa vào lịch chạy", hintEn: "Not scheduled for trips", tone: "text-slate-500 dark:text-slate-300", bg: "bg-slate-50 dark:bg-slate-800", ring: "border-slate-200 dark:border-slate-600" },
     { value: "Retired", labelVn: "Dừng hoạt động", labelEn: "Retired", hintVn: "Ngừng sử dụng vĩnh viễn", hintEn: "Permanently out of service", tone: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-500/10", ring: "border-rose-200 dark:border-rose-500/30" },
 ];
+
+const ITEMS_PER_PAGE = 6;
 
 export function BoatManagement() {
     const { lang } = useApp();
@@ -36,6 +38,7 @@ export function BoatManagement() {
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
     const [isSavingStatus, setIsSavingStatus] = useState(false);
     const [seatPreviewBoat, setSeatPreviewBoat] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
 
     // EFFECT: GỌI API KHI TRANG VỪA LOAD
     useEffect(() => {
@@ -205,6 +208,31 @@ export function BoatManagement() {
 
         return matchesSearch && matchesStatus && matchesDeck;
     });
+
+    // Reset về trang 1 mỗi khi bộ lọc/tìm kiếm thay đổi
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, statusFilter, deckFilter]);
+
+    // Phân trang: mỗi trang chỉ hiển thị ITEMS_PER_PAGE tàu
+    const totalPages = Math.ceil(filteredBoats.length / ITEMS_PER_PAGE);
+    const paginatedBoats = filteredBoats.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    const startIndex = filteredBoats.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+    const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, filteredBoats.length);
+
+    const getPaginationGroup = () => {
+        let pages = [];
+        if (totalPages <= 5) {
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
+        } else if (currentPage <= 3) {
+            pages = [1, 2, 3, 4, "...", totalPages];
+        } else if (currentPage >= totalPages - 2) {
+            pages = [1, "...", totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        } else {
+            pages = [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
+        }
+        return pages;
+    };
 
     // Helper map tên trạng thái hiển thị
     const getStatusInfo = (statusValue) => {
@@ -432,8 +460,8 @@ export function BoatManagement() {
                                         {errorMsg}
                                     </td>
                                 </tr>
-                            ) : filteredBoats.length > 0 ? (
-                                filteredBoats.map((boat) => {
+                            ) : paginatedBoats.length > 0 ? (
+                                paginatedBoats.map((boat) => {
                                     const statusConfig = getStatusInfo(boat.status);
                                     return (
                                         <tr key={boat.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors group">
@@ -499,7 +527,7 @@ export function BoatManagement() {
                                                             className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-[#124757] hover:text-[#124757] dark:hover:border-yellow-400 dark:hover:text-yellow-400 flex items-center justify-center transition-colors shadow-sm"
                                                             title={lang === "VN" ? "Xem sơ đồ ghế" : "View seat layout"}
                                                         >
-                                                            <span className="material-symbols-outlined text-base">grid_view</span>
+                                                            <span className="material-symbols-outlined text-base">visibility</span>
                                                         </button>
                                                     )}
                                                     {/* NÚT CẤU HÌNH GHẾ — chỉ khi chưa cấu hình */}
@@ -570,28 +598,63 @@ export function BoatManagement() {
             </div>
 
             {/* --- KHỐI ĐIỀU HƯỚNG PHÂN TRANG --- */}
-            <div className="flex items-center justify-between px-2 text-xs font-bold text-slate-400">
-                <div>
-                    {lang === "VN"
-                        ? `Hiển thị ${filteredBoats.length}/${totalBoats} phương tiện`
-                        : `Showing ${filteredBoats.length} of ${totalBoats} boats`}
-                </div>
+            {totalPages > 0 && (
+                <div className="flex bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between flex-col sm:flex-row gap-4">
+                    <span className="text-xs font-bold text-slate-400">
+                        {lang === "VN"
+                            ? `Hiển thị ${startIndex}-${endIndex} trong số ${filteredBoats.length} kết quả`
+                            : `Showing ${startIndex}-${endIndex} of ${filteredBoats.length} entries`}
+                    </span>
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                        <button
+                            type="button"
+                            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === 1
+                                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                }`}
+                        >
+                            <span className="material-symbols-outlined text-base">chevron_left</span>
+                        </button>
 
-                <div className="flex items-center gap-1.5">
-                    <button type="button" disabled className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-slate-300 cursor-not-allowed">
-                        <span className="material-symbols-outlined text-base">chevron_left</span>
-                    </button>
-                    <button type="button" className="w-8 h-8 rounded-xl bg-[#124757] text-white dark:bg-[#FFD100] dark:text-slate-900 shadow-sm border border-transparent flex items-center justify-center font-black font-headline">
-                        1
-                    </button>
-                    <button type="button" className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:border-slate-400">
-                        2
-                    </button>
-                    <button type="button" className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:border-slate-400">
-                        <span className="material-symbols-outlined text-base">chevron_right</span>
-                    </button>
+                        {getPaginationGroup().map((item, index) => {
+                            if (item === "...") {
+                                return (
+                                    <span key={`ellipsis-${index}`} className="w-8 h-8 flex items-center justify-center text-slate-400 font-bold tracking-widest shrink-0">
+                                        ...
+                                    </span>
+                                );
+                            }
+                            return (
+                                <button
+                                    key={item}
+                                    type="button"
+                                    onClick={() => setCurrentPage(item)}
+                                    className={`w-8 h-8 shrink-0 rounded-xl text-[11px] font-headline font-black transition-all ${currentPage === item
+                                        ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md"
+                                        : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                        }`}
+                                >
+                                    {item}
+                                </button>
+                            );
+                        })}
+
+                        <button
+                            type="button"
+                            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === totalPages
+                                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                }`}
+                        >
+                            <span className="material-symbols-outlined text-base">chevron_right</span>
+                        </button>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {statusModalBoat ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

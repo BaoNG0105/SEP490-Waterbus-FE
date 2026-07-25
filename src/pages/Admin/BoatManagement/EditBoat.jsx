@@ -6,8 +6,8 @@ import { useApp } from "../../../context/AppContext";
 import { fetchBoatDetail, modifyBoat } from "../../../services/boatService";
 import { fetchSeatLayout, deleteSeats, changeSeatStatus } from "../../../services/seatService";
 //component
-import { BoatDocumentsPanel } from "../../../components/BoatDocumentsPanel";
-import { BoatDutyRosterPanel } from "../../../components/BoatDutyRosterPanel";
+import { BoatDocumentsPanel } from "./BoatDocumentsPanel";
+import { BoatDutyRosterPanel } from "./BoatCrewSchedule";
 import { FormSelect } from "../../../components/FormSelect";
 import { SeatMapIcon, seatToneFromCode, resolveSeatTypeCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
@@ -353,9 +353,6 @@ export function EditBoat() {
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
             {lang === "VN" ? `Hồ sơ tàu: ${formData.name}` : `Boat File: ${formData.name}`}
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {lang === "VN" ? "Thay đổi thông số cơ bản, cập nhật bộ sưu tập ảnh đại diện và theo dõi sơ đồ phân bổ ghế." : "Modify hardware blueprints, attach media collections and monitor seating grids."}
-          </p>
           <div className="flex flex-wrap gap-2 mt-4">
             <button
               type="button"
@@ -409,7 +406,7 @@ export function EditBoat() {
           documentsRequireRefresh={documentsRequireRefresh}
         />
       ) : activeTab === "crew" ? (
-        <BoatDutyRosterPanel boatId={id} boatCode={formData.code} />
+        <BoatDutyRosterPanel boatId={id} />
       ) : (
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         

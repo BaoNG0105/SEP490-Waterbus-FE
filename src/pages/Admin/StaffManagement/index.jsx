@@ -338,8 +338,8 @@ export function StaffManagement({ viewTabs = null }) {
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
-              ? "Xem nhân viên theo bến / tàu / tất cả. Admin tạo nhân viên trên tàu."
-              : "Browse staff by station / boat / all. Admin creates onboard staff."}
+              ? "Quản lý danh sách nhân viên theo bến / tàu."
+              : "Manage staff list by station / boat."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">

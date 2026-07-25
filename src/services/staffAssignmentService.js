@@ -203,7 +203,6 @@ export const buildBulkAssignmentPayload = (form) => {
         endTime: toApiTime(form.endTime),
         daysOfWeek: days,
         dutyRole: isBoat ? DUTY_ROLE.ON_BOARD : DUTY_ROLE.GATE,
-        note: String(form.note || '').trim() || null,
     };
 
     if (isBoat) {

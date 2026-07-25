@@ -28,7 +28,7 @@ import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
 import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
 import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
 import { CharterQuotePreviewTable } from "../../../components/CharterQuotePreviewTable";
-import { BoatSeatLayoutPreviewButton } from "../../../components/BoatSeatLayoutPreview";
+import { BoatSeatLayoutPreviewButton } from "../../../components/BoatLayoutPreview";
 import { MyCharterPaymentPanel, MyCharterPaymentStickyBar } from "./MyCharterPaymentPanel";
 import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
 import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";

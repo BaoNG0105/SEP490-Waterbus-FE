@@ -7,13 +7,6 @@ import { BoatBowLabel } from "./ShipWheelIcon";
 
 const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
-const LEGEND_LABELS = {
-  STANDARD: "Standard",
-  CABIN: "Cabin",
-  RIVER: "River",
-  SKY: "Sky",
-};
-
 function collectBoatImages(boat, fallbackUrl = "") {
   const urls = [];
   const push = (url) => {
@@ -315,7 +308,7 @@ export function BoatSeatLayoutPreviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/50 px-3 pb-6 pt-20 sm:items-center sm:px-6 sm:pb-8 sm:pt-28"
+      className="fixed inset-0 z-120 flex items-start justify-center overflow-y-auto bg-slate-900/50 px-3 pb-6 pt-20 sm:items-center sm:px-6 sm:pb-8 sm:pt-28"
       onClick={onClose}
     >
       <div
@@ -483,18 +476,6 @@ export function BoatSeatLayoutPreviewModal({
                 ) : null}
               </div>
 
-              {summary.seatTypes.length > 0 ? (
-                <div className="flex flex-wrap justify-center gap-3 text-[10px] font-bold text-slate-400">
-                  {summary.seatTypes.map((type) => (
-                    <span key={type.code} className="inline-flex items-center gap-1.5">
-                      <span className="inline-block h-6 w-5">
-                        <SeatMapIcon tone={seatToneFromCode(type.code)} showLabel={false} />
-                      </span>
-                      {LEGEND_LABELS[String(type.code).toUpperCase()] || type.code}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
                 </>
               )}
             </div>
@@ -504,7 +485,7 @@ export function BoatSeatLayoutPreviewModal({
 
       {isLightboxOpen ? (
         <div
-          className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/90 p-4 pt-20 sm:pt-24"
+          className="fixed inset-0 z-130 flex items-center justify-center bg-slate-950/90 p-4 pt-20 sm:pt-24"
           onClick={() => setIsLightboxOpen(false)}
         >
           <button

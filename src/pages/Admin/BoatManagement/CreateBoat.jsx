@@ -156,8 +156,8 @@ export function CreateBoat() {
     { value: "StandardAndVip", label: "Water Sightseeing" },
   ];
   const serviceTypeOptions = [
-    { value: "Passenger", label: lang === "VN" ? "Passenger — chở khách" : "Passenger" },
-    { value: "Rescue", label: lang === "VN" ? "Rescue — cứu hộ / kéo tàu" : "Rescue — tow / rescue" },
+    { value: "Passenger", label: lang === "VN" ? "Chở khách" : "Passenger" },
+    { value: "Rescue", label: lang === "VN" ? "Cứu hộ / kéo tàu" : "Rescue" },
   ];
 
   return (

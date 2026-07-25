@@ -8,7 +8,7 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { NationalitySelect } from "../../../components/NationalitySelect";
-import { StationAssignField, canAssignStations } from "../../../components/StationAssignField";
+import { canAssignStations } from "../../../components/StationAssignField";
 import { notify } from "../../../utils/swalToast";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
@@ -81,6 +81,26 @@ export function CreateStaff() {
         staffType: formData.staffType,
     });
 
+    // Manager chỉ được gắn nhân viên bến vào (các) bến mà chính họ phụ trách — không tự chọn bến khác.
+    const managerStations = useMemo(
+        () => (currentUser?.stationAssignments || []).filter((s) => s?.isActive !== false),
+        [currentUser]
+    );
+
+    // Manager chỉ có đúng 1 bến → tự động gắn, không cần tick. Từ 2 bến trở lên → cho tick chọn.
+    useEffect(() => {
+        if (!canCreateGround) return;
+        if (managerStations.length <= 1) {
+            const ids = managerStations.map((s) => String(s.stationId)).filter(Boolean);
+            setFormData((prev) => ({ ...prev, stationIds: ids }));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canCreateGround, managerStations.length]);
+
+    const selectManagerStation = (stationId) => {
+        setFormData((prev) => ({ ...prev, stationIds: [String(stationId)] }));
+    };
+
     const handleInputChange = (field, value) => {
         setFormData((prev) => {
             const next = { ...prev, [field]: value };
@@ -99,6 +119,24 @@ export function CreateStaff() {
 
             if (!staffRole) {
                 setErrorMsg(lang === "VN" ? "Không tìm thấy vai trò Nhân viên." : "Staff role not found.");
+                return;
+            }
+
+            if (canCreateGround && managerStations.length === 0) {
+                setErrorMsg(
+                    lang === "VN"
+                        ? "Bạn chưa được gắn bến nào nên không thể thêm nhân viên bến."
+                        : "You are not assigned to any station, so you cannot add station staff."
+                );
+                return;
+            }
+
+            if (canCreateGround && managerStations.length > 1 && formData.stationIds.length === 0) {
+                setErrorMsg(
+                    lang === "VN"
+                        ? "Vui lòng chọn ít nhất 1 bến làm việc cho nhân viên."
+                        : "Please select at least one working station for the staff."
+                );
                 return;
             }
 
@@ -184,11 +222,11 @@ export function CreateStaff() {
                     <p className="text-xs text-slate-400 mt-0.5">
                         {canCreateOnBoard
                             ? (lang === "VN"
-                                ? "Tạo tài khoản nhân viên đi tàu. Xếp ca trên tab Phân công."
-                                : "Create an onboard crew account. Schedule shifts under Assignments.")
+                                ? "Tạo tài khoản cho nhân viên tàu."
+                                : "Create an onboard crew account.")
                             : (lang === "VN"
-                                ? "Tạo tài khoản nhân viên mặt đất và gắn bến phụ trách."
-                                : "Create ground staff and assign their stations.")}
+                                ? "Tạo tài khoản cho nhân viên bến."
+                                : "Create station staff account.")}
                     </p>
                 </div>
             </div>
@@ -274,21 +312,66 @@ export function CreateStaff() {
                         <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
                             {canCreateOnBoard
                                 ? (lang === "VN" ? "Trên tàu" : "Onboard")
-                                : (lang === "VN" ? "Mặt đất (bến)" : "Ground (station)")}
+                                : (lang === "VN" ? "Bến tàu" : "station")}
                         </div>
                     </div>
 
                     {showStationAssign && (
-                        <StationAssignField
-                            value={formData.stationIds}
-                            onChange={(ids) => handleInputChange("stationIds", ids)}
-                        />
+                        <div>
+                            <label className={labelStyle}>{lang === "VN" ? "Bến làm việc" : "Working station"}</label>
+                            {managerStations.length > 1 ? (
+                                <>
+                                    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/60 divide-y divide-slate-100 dark:divide-slate-700/60">
+                                        {managerStations.map((s) => {
+                                            const id = String(s.stationId);
+                                            const checked = formData.stationIds.map(String).includes(id);
+                                            return (
+                                                <label
+                                                    key={id}
+                                                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-white/80 dark:hover:bg-slate-800/80 transition-colors"
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="managerStation"
+                                                        checked={checked}
+                                                        onChange={() => selectManagerStation(id)}
+                                                        className="accent-[#124757] dark:accent-yellow-400"
+                                                    />
+                                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                                                        {s.stationName || s.stationCode || id}
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className={`${inputStyle} flex items-center gap-2 font-bold text-[#124757] dark:text-yellow-400`}>
+                                        <span className="material-symbols-outlined text-base">storefront</span>
+                                        {managerStations.length > 0
+                                            ? managerStations.map((s) => s.stationName).filter(Boolean).join(", ")
+                                            : (lang === "VN" ? "Bạn chưa được gắn bến nào." : "You are not assigned to any station.")}
+                                    </div>
+                                    <p className="mt-1 text-[10px] text-slate-400">
+                                        {lang === "VN"
+                                            ? "Nhân viên sẽ tự động được gắn vào bến bạn đang phụ trách."
+                                            : "Staff will automatically be assigned to the station you manage."}
+                                    </p>
+                                </>
+                            )}
+                        </div>
                     )}
                 </div>
 
                 <button
                     type="submit"
-                    disabled={isSubmitting || isLoadingRoles || !staffRole}
+                    disabled={
+                        isSubmitting ||
+                        isLoadingRoles ||
+                        !staffRole ||
+                        (canCreateGround && (managerStations.length === 0 || formData.stationIds.length === 0))
+                    }
                     className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                     {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
