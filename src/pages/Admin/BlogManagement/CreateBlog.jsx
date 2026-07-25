@@ -6,7 +6,7 @@ import { addBlogPost, BLOG_CATEGORY, BLOG_STATUS } from "../../../services/blogS
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 
-const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
+const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
 const sanitizeImageUrls = (urls) =>
     (Array.isArray(urls) ? urls : [])

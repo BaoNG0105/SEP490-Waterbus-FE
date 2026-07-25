@@ -155,30 +155,26 @@ export const Promotions = () => {
             {errorMsg || (lang === "VN" ? "Chưa có ưu đãi." : "No offers available.")}
           </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {promotions.map((promo) => (
               <Link
                 key={promo.promotionCode}
                 to={`/promotions/${promo.promotionCode}`}
-                className="group bg-white dark:bg-slate-800 rounded-4xl shadow-lg p-4 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1.5 border border-slate-100 dark:border-slate-700/50 block"
+                className="group relative aspect-3/4 overflow-hidden shadow-lg block"
               >
-                <div className="relative h-64 rounded-4xl overflow-hidden mb-6">
-                  <img
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                    alt={promo.promotionName}
-                    src={promo.imageUrl || fallbackImg}
-                  />
-                </div>
-                <div className="px-4 pb-4">
-                  <h3 className="text-2xl font-bold font-headline mb-3 tracking-tight text-[#124757] dark:text-white">
+                <img
+                  src={promo.imageUrl || fallbackImg}
+                  alt={promo.promotionName}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/60 transition-colors duration-300 flex flex-col items-center justify-center gap-3 p-8 text-center">
+                  <h3 className="text-xl md:text-2xl font-headline font-bold text-white opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
                     {promo.promotionName}
                   </h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 line-clamp-3 leading-relaxed">
-                    {promo.description || formatDiscount(promo, lang)}
-                  </p>
-                  <div className="w-full py-4 rounded-xl border-2 border-slate-200 dark:border-slate-600 font-bold text-sm text-center text-slate-700 dark:text-white group-hover:bg-[#124757] group-hover:border-[#124757] group-hover:text-white dark:group-hover:bg-yellow-400 dark:group-hover:border-yellow-400 dark:group-hover:text-slate-900 transition-colors">
+                  <span className="inline-flex items-center gap-2 text-xs font-headline font-black uppercase tracking-wider text-yellow-400 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 delay-75">
                     {lang === "VN" ? "Xem chi tiết" : "View Details"}
-                  </div>
+                    <span className="material-symbols-outlined text-lg">arrow_right_alt</span>
+                  </span>
                 </div>
               </Link>
             ))}

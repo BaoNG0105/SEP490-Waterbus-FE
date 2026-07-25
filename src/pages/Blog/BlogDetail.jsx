@@ -73,11 +73,6 @@ export function BlogDetail() {
                     
                     <div className="flex flex-wrap items-center gap-4 text-slate-400 text-xs font-semibold pt-2 border-b border-slate-100 dark:border-slate-800 pb-4">
                         <span className="flex items-center gap-1">
-                            <span className="material-symbols-outlined text-base">account_circle</span>
-                            {blog.authorName}
-                        </span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">
                             <span className="material-symbols-outlined text-base">calendar_today</span>
                             {blog.publishedAt
                                 ? new Date(blog.publishedAt).toLocaleDateString(lang === "VN" ? "vi-VN" : "en-US")

@@ -11,15 +11,6 @@ import { notify } from "../../utils/swalToast";
 const fallbackImg =
   "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
-// const formatDiscount = (promo, lang) => {
-//   if (promo.promotionType === PROMOTION_TYPE.PERCENT) {
-//     return lang === "VN" ? `Giảm ${promo.discountValue}%` : `${promo.discountValue}% off`;
-//   }
-//   return lang === "VN"
-//     ? `Giảm ${(Number(promo.discountValue) || 0).toLocaleString("vi-VN")}đ`
-//     : `${(Number(promo.discountValue) || 0).toLocaleString("en-US")} VND off`;
-// };
-
 const formatCurrency = (value, lang) =>
   (Number(value) || 0).toLocaleString(lang === "VN" ? "vi-VN" : "en-US") + (lang === "VN" ? "đ" : " VND");
 
@@ -134,7 +125,7 @@ export function PromotionDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           {/* CỘT TRÁI: ẢNH BANNER */}
           <div className="lg:col-span-6">
-            <div className="w-full aspect-4/3 rounded-4xl overflow-hidden shadow-xl bg-slate-50 dark:bg-slate-800">
+            <div className="w-full aspect-square overflow-hidden shadow-xl bg-slate-50 dark:bg-slate-800">
               <img
                 src={promo.imageUrl || fallbackImg}
                 alt={promo.promotionName}
@@ -146,9 +137,6 @@ export function PromotionDetail() {
           {/* CỘT PHẢI: NỘI DUNG CHI TIẾT */}
           <div className="lg:col-span-6 space-y-6">
             <div className="space-y-3">
-              {/* <p className="text-xs font-black uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-                {promo.promotionCode} · {formatDiscount(promo, lang)}
-              </p> */}
               <h1 className="text-3xl md:text-4xl font-headline font-black text-[#124757] dark:text-white leading-tight">
                 {promo.promotionName}
               </h1>

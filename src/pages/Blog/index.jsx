@@ -51,7 +51,6 @@ export function BlogList() {
                 {/* LƯỚI KHỐI RENDER DANH SÁCH BÀI VIẾT */}
                 {blogs.length === 0 ? (
                     <div className="text-center py-20 text-slate-400 dark:text-slate-500 font-bold">
-                        <span className="material-symbols-outlined text-5xl block mb-2">article</span>
                         {lang === "VN" ? "Hiện tại hệ thống chưa xuất bản bài viết nào." : "No articles published on the network grid yet."}
                     </div>
                 ) : (
