@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { hasRole, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
+import { getPrimaryRoleLabel, hasRole, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 
 export const Dashboard = () => {
   const { lang } = useApp();
@@ -29,7 +29,7 @@ export const Dashboard = () => {
       descVn: "Xem danh sách tài khoản Khách hàng trong hệ thống.",
       descEn: "View the list of customer accounts.",
       color: "from-indigo-500/10 to-blue-500/10 text-indigo-600 dark:text-indigo-400",
-      roles: ["ADMIN", "MANAGER"],
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/managers-management",
@@ -59,7 +59,7 @@ export const Dashboard = () => {
       descVn: "Điều phối yêu cầu thuê tàu riêng, gán tàu và chốt giá.",
       descEn: "Handle private charter requests, boat assignment, and quotes.",
       color: "from-violet-500/10 to-purple-500/10 text-violet-600 dark:text-violet-400",
-      roles: ["ADMIN", "MANAGER"],
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/bookings",
@@ -89,7 +89,7 @@ export const Dashboard = () => {
       descVn: "Theo dõi trạng thái, bảo trì phương tiện.",
       descEn: "Track watercraft assets and maintenance.",
       color: "from-cyan-500/10 to-sky-500/10 text-cyan-600 dark:text-cyan-400",
-      roles: ["ADMIN", "MANAGER"],
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/live-tracking",
@@ -99,7 +99,7 @@ export const Dashboard = () => {
       descVn: "Giám sát vị trí và hành trình tàu theo thời gian thực.",
       descEn: "Monitor real-time boat positions and routes.",
       color: "from-blue-500/10 to-indigo-500/10 text-blue-600 dark:text-blue-400",
-      roles: ["ADMIN", "MANAGER"],
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/incidents",
@@ -109,7 +109,7 @@ export const Dashboard = () => {
       descVn: "Ghi nhận và xử lý sự cố khẩn cấp trên tuyến.",
       descEn: "Log and resolve on-route emergencies.",
       color: "from-red-500/10 to-rose-500/10 text-red-600 dark:text-red-400",
-      roles: ["ADMIN", "MANAGER", "STAFF"],
+      roles: ["ADMIN", "STAFF"],
     },
     {
       path: "/admin/staffs-management?view=assignments",
@@ -203,7 +203,7 @@ export const Dashboard = () => {
       descVn: "Viết bài thông báo lịch trình, tin sự kiện.",
       descEn: "Publish announcements and holiday news.",
       color: "from-yellow-500/10 to-amber-500/10 text-amber-700 dark:text-amber-400",
-      roles: ["ADMIN", "MANAGER", "STAFF"],
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/ai-data",
@@ -224,7 +224,6 @@ export const Dashboard = () => {
     "/admin/staff/my-trips",
     "/admin/staff/ticket-scan",
     "/admin/staff/scan-history",
-    "/admin/news",
   ]);
 
   const visibleModules = staffOnly
@@ -264,7 +263,9 @@ export const Dashboard = () => {
           {/* Tiêu đề "Xin chào" cùng lời bình luận */}
           <div className="space-y-1">
             <h2 className="text-3xl md:text-4xl font-headline font-black text-[#FFD100] drop-shadow-sm">
-              {lang === "VN" ? "Xin chào, Quản trị viên!" : "Welcome back, Admin!"}
+              {lang === "VN"
+                ? `Xin chào, ${getPrimaryRoleLabel(user, lang)}!`
+                : `Welcome back, ${getPrimaryRoleLabel(user, lang)}!`}
             </h2>
             <p className="text-sm font-medium text-white/70 max-w-xl font-body leading-relaxed">
               {lang === "VN"

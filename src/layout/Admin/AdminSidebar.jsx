@@ -22,8 +22,8 @@ const MENU_GROUPS = [
     labelVn: "Nhân sự",
     labelEn: "People",
     items: [
-      { path: "/admin/users-management", icon: "manage_accounts", labelVn: "Khách hàng", labelEn: "Customers", roles: ["ADMIN", "MANAGER"] },
-      { path: "/admin/managers-management", icon: "supervisor_account", labelVn: "Manager", labelEn: "Managers", roles: ["ADMIN"] },
+      { path: "/admin/users-management", icon: "manage_accounts", labelVn: "Khách hàng", labelEn: "Customers", roles: ["ADMIN"] },
+      { path: "/admin/managers-management", icon: "supervisor_account", labelVn: "Quản lí", labelEn: "Managers", roles: ["ADMIN"] },
       {
         path: "/admin/staffs-management",
         icon: "badge",
@@ -40,12 +40,12 @@ const MENU_GROUPS = [
     labelVn: "Vận hành",
     labelEn: "Operations",
     items: [
-      { path: "/admin/trips-management", icon: "sailing", labelVn: "Chuyến tàu", labelEn: "Trips", roles: ["ADMIN"] },
+      { path: "/admin/trips-management", icon: "sailing", labelVn: "Chuyến tàu", labelEn: "Trips", roles: ["ADMIN","MANAGER"] },
       { path: "/admin/routes-management", icon: "alt_route", labelVn: "Tuyến", labelEn: "Routes", roles: ["ADMIN"] },
       { path: "/admin/stations-management", icon: "storefront", labelVn: "Nhà ga", labelEn: "Stations", roles: ["ADMIN", "MANAGER"] },
-      { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN", "MANAGER"] },
-      { path: "/admin/seat-types", icon: "sell", labelVn: "Chính sách giá", labelEn: "Fare Policy", roles: ["ADMIN", "MANAGER"] },
-      { path: "/admin/live-tracking", icon: "my_location", labelVn: "Theo dõi / Sự cố", labelEn: "Tracking / Incidents", labelVnStaff: "Sự cố / Cứu hộ", labelEnStaff: "Incidents / Rescue", roles: ["ADMIN", "MANAGER", "STAFF"] },
+      { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN"] },
+      { path: "/admin/seat-types", icon: "sell", labelVn: "Chính sách giá", labelEn: "Fare Policy", roles: ["ADMIN"] },
+      { path: "/admin/live-tracking", icon: "my_location", labelVn: "Theo dõi / Sự cố", labelEn: "Tracking / Incidents", labelVnStaff: "Sự cố / Cứu hộ", labelEnStaff: "Incidents / Rescue", roles: ["ADMIN", "STAFF"] },
       { path: "/admin/staff/my-trips", icon: "directions_boat", labelVn: "Chuyến của tôi", labelEn: "My trips", roles: ["STAFF"] },
       { path: "/admin/staff/ticket-scan", icon: "qr_code_scanner", labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
       { path: "/admin/staff/scan-history", icon: "history", labelVn: "Lịch sử quét", labelEn: "Scan history", roles: ["STAFF"] },
@@ -57,7 +57,7 @@ const MENU_GROUPS = [
     labelEn: "Bookings & Insurance",
     items: [
       { path: "/admin/bookings", icon: "receipt_long", labelVn: "Booking vé", labelEn: "Seat bookings", roles: ["ADMIN"] },
-      { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Thuê tàu", labelEn: "Charter", roles: ["ADMIN", "MANAGER"] },
+      { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Thuê tàu", labelEn: "Charter", roles: ["ADMIN"] },
       { path: "/admin/insurance-management", icon: "shield", labelVn: "Bảo hiểm", labelEn: "Insurance", roles: ["ADMIN"] },
     ],
   },
@@ -74,7 +74,7 @@ const MENU_GROUPS = [
         labelEn: "Blog & Articles",
         labelVnStaff: "Blog / Tin tức",
         labelEnStaff: "Blog / News",
-        roles: ["ADMIN", "MANAGER", "STAFF"],
+        roles: ["ADMIN"],
       },
       { path: "/admin/ai-data", icon: "database", labelVn: "AI data", labelEn: "AI Data", roles: ["ADMIN"] },
     ],
@@ -88,7 +88,6 @@ const STAFF_MENU_PATHS = new Set([
   "/admin/staff/my-trips",
   "/admin/staff/ticket-scan",
   "/admin/staff/scan-history",
-  "/admin/news",
 ]);
 
 const isPathActive = (currentPath, itemPath) => {
