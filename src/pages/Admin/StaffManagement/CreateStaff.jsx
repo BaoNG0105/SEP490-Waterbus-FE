@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserRoles, createUser } from "../../../services/userService";
+import { fetchAllStations } from "../../../services/stationService";
 import { getRoleSystemName, isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
@@ -20,14 +21,27 @@ const isAllowedEmail = (email) => {
   return ALLOWED_EMAIL_DOMAINS.includes(trimmed.slice(at + 1));
 };
 
+const getStationId = (station) => String(station?.stationId || station?.id || "");
+
 export function CreateStaff() {
     const { lang } = useApp();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { user: currentUser } = useSelector((state) => state.auth);
-    const canCreateOnBoard = isAdminUser(currentUser);
-    const canCreateGround = isManagerUser(currentUser) && !isAdminUser(currentUser);
-    const canAccess = canCreateOnBoard || canCreateGround;
-    const defaultStaffType = canCreateOnBoard ? "OnBoard" : "Ground";
+
+    const isAdmin = isAdminUser(currentUser);
+    const isManagerOnly = isManagerUser(currentUser) && !isAdmin;
+    const canAccess = isAdmin || isManagerOnly;
+
+    // Admin có quyền tạo cả 2 loại — loại tạo lấy từ query (?type=onboard|ground).
+    // Manager chỉ được tạo nhân viên bến, không phụ thuộc query.
+    const requestedType = searchParams.get("type");
+    const targetStaffType = isManagerOnly
+        ? "Ground"
+        : requestedType === "ground"
+            ? "Ground"
+            : "OnBoard";
+    const isOnBoardSession = targetStaffType === "OnBoard";
 
     const [roles, setRoles] = useState([]);
     const [isLoadingRoles, setIsLoadingRoles] = useState(true);
@@ -41,9 +55,12 @@ export function CreateStaff() {
         nationality: "Vietnam",
         phoneNumber: "",
         email: "",
-        staffType: defaultStaffType,
+        staffType: targetStaffType,
         stationIds: [],
     });
+
+    const [allStations, setAllStations] = useState([]);
+    const [isLoadingStations, setIsLoadingStations] = useState(false);
 
     useEffect(() => {
         if (!canAccess) {
@@ -72,6 +89,34 @@ export function CreateStaff() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Admin tạo nhân viên bến → chọn 1 trong tất cả các bến waterbus hiện có.
+    useEffect(() => {
+        if (!isAdmin || targetStaffType !== "Ground") return;
+        let cancelled = false;
+        const loadStations = async () => {
+            try {
+                setIsLoadingStations(true);
+                const data = await fetchAllStations();
+                if (cancelled) return;
+                const rows = (Array.isArray(data) ? data : [])
+                    .filter((s) => String(s?.status || "Active").toLowerCase() !== "inactive")
+                    .filter((s) => s?.isWaterbusStation === true)
+                    .sort((a, b) =>
+                        String(a.stationName || "").localeCompare(String(b.stationName || ""), "vi")
+                    );
+                setAllStations(rows);
+            } catch (error) {
+                console.error("Lỗi khi tải danh sách bến:", error);
+            } finally {
+                if (!cancelled) setIsLoadingStations(false);
+            }
+        };
+        loadStations();
+        return () => {
+            cancelled = true;
+        };
+    }, [isAdmin, targetStaffType]);
+
     const staffRole = useMemo(
         () => roles.find((role) => getRoleSystemName(role) === "STAFF"),
         [roles]
@@ -81,6 +126,16 @@ export function CreateStaff() {
         staffType: formData.staffType,
     });
 
+    const stationOptions = useMemo(
+        () => allStations.map((s) => {
+            const id = getStationId(s);
+            const code = s.stationCode || s.code || "";
+            const name = s.stationName || s.name || "";
+            return { value: id, label: [code, name].filter(Boolean).join(" · ") || id };
+        }),
+        [allStations]
+    );
+
     // Manager chỉ được gắn nhân viên bến vào (các) bến mà chính họ phụ trách — không tự chọn bến khác.
     const managerStations = useMemo(
         () => (currentUser?.stationAssignments || []).filter((s) => s?.isActive !== false),
@@ -89,13 +144,13 @@ export function CreateStaff() {
 
     // Manager chỉ có đúng 1 bến → tự động gắn, không cần tick. Từ 2 bến trở lên → cho tick chọn.
     useEffect(() => {
-        if (!canCreateGround) return;
+        if (!isManagerOnly) return;
         if (managerStations.length <= 1) {
             const ids = managerStations.map((s) => String(s.stationId)).filter(Boolean);
             setFormData((prev) => ({ ...prev, stationIds: ids }));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canCreateGround, managerStations.length]);
+    }, [isManagerOnly, managerStations.length]);
 
     const selectManagerStation = (stationId) => {
         setFormData((prev) => ({ ...prev, stationIds: [String(stationId)] }));
@@ -122,25 +177,33 @@ export function CreateStaff() {
                 return;
             }
 
-            if (canCreateGround && managerStations.length === 0) {
-                setErrorMsg(
-                    lang === "VN"
-                        ? "Bạn chưa được gắn bến nào nên không thể thêm nhân viên bến."
-                        : "You are not assigned to any station, so you cannot add station staff."
-                );
-                return;
+            if (targetStaffType === "Ground") {
+                if (isManagerOnly) {
+                    if (managerStations.length === 0) {
+                        setErrorMsg(
+                            lang === "VN"
+                                ? "Bạn chưa được gắn bến nào nên không thể thêm nhân viên bến."
+                                : "You are not assigned to any station, so you cannot add station staff."
+                        );
+                        return;
+                    }
+                    if (managerStations.length > 1 && formData.stationIds.length === 0) {
+                        setErrorMsg(
+                            lang === "VN"
+                                ? "Vui lòng chọn ít nhất 1 bến làm việc cho nhân viên."
+                                : "Please select at least one working station for the staff."
+                        );
+                        return;
+                    }
+                } else if (isAdmin && formData.stationIds.length === 0) {
+                    setErrorMsg(
+                        lang === "VN"
+                            ? "Vui lòng chọn bến làm việc cho nhân viên."
+                            : "Please select a working station for the staff."
+                    );
+                    return;
+                }
             }
-
-            if (canCreateGround && managerStations.length > 1 && formData.stationIds.length === 0) {
-                setErrorMsg(
-                    lang === "VN"
-                        ? "Vui lòng chọn ít nhất 1 bến làm việc cho nhân viên."
-                        : "Please select at least one working station for the staff."
-                );
-                return;
-            }
-
-            const staffType = canCreateOnBoard ? "OnBoard" : "Ground";
 
             if (!isAllowedEmail(formData.email)) {
                 setErrorMsg(
@@ -159,8 +222,8 @@ export function CreateStaff() {
                 phoneNumber: formData.phoneNumber.trim(),
                 email: formData.email.trim(),
                 roleId: staffRole.id,
-                staffType,
-                ...(staffType === "Ground" ? { stationIds: formData.stationIds.map(String) } : {}),
+                staffType: targetStaffType,
+                ...(targetStaffType === "Ground" ? { stationIds: formData.stationIds.map(String) } : {}),
             };
 
             const result = await createUser(payload);
@@ -201,6 +264,15 @@ export function CreateStaff() {
         { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
     ];
 
+    const isSubmitDisabled =
+        isSubmitting ||
+        isLoadingRoles ||
+        !staffRole ||
+        (targetStaffType === "Ground" && (
+            (isManagerOnly && (managerStations.length === 0 || formData.stationIds.length === 0)) ||
+            (isAdmin && formData.stationIds.length === 0)
+        ));
+
     if (!canAccess) return null;
 
     return (
@@ -215,18 +287,18 @@ export function CreateStaff() {
                 </button>
                 <div>
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-                        {canCreateOnBoard
+                        {isOnBoardSession
                             ? (lang === "VN" ? "Thêm nhân viên trên tàu" : "Add boat crew")
                             : (lang === "VN" ? "Thêm nhân viên bến" : "Add station staff")}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                        {canCreateOnBoard
+                        {isOnBoardSession
                             ? (lang === "VN"
-                                ? "Tạo tài khoản cho nhân viên tàu."
-                                : "Create an onboard crew account.")
+                                ? "Tạo tài khoản cho nhân viên tàu"
+                                : "Create an onboard crew account")
                             : (lang === "VN"
-                                ? "Tạo tài khoản cho nhân viên bến."
-                                : "Create station staff account.")}
+                                ? "Tạo tài khoản cho nhân viên bến"
+                                : "Create station staff account")}
                     </p>
                 </div>
             </div>
@@ -310,16 +382,35 @@ export function CreateStaff() {
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên" : "Staff type"}</label>
                         <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
-                            {canCreateOnBoard
+                            {isOnBoardSession
                                 ? (lang === "VN" ? "Trên tàu" : "Onboard")
-                                : (lang === "VN" ? "Bến tàu" : "station")}
+                                : (lang === "VN" ? "Bến tàu" : "Station")}
                         </div>
                     </div>
 
                     {showStationAssign && (
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Bến làm việc" : "Working station"}</label>
-                            {managerStations.length > 1 ? (
+                            {isAdmin ? (
+                                <>
+                                    <FormSelect
+                                        required
+                                        value={formData.stationIds[0] || ""}
+                                        onChange={(value) => setFormData((prev) => ({ ...prev, stationIds: value ? [String(value)] : [] }))}
+                                        options={stationOptions}
+                                        searchable
+                                        disabled={isLoadingStations}
+                                        placeholder={
+                                            isLoadingStations
+                                                ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...")
+                                                : (lang === "VN" ? "-- Chọn bến --" : "-- Select station --")
+                                        }
+                                        searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
+                                        emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
+                                        className={selectStyle}
+                                    />
+                                </>
+                            ) : managerStations.length > 1 ? (
                                 <>
                                     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/60 divide-y divide-slate-100 dark:divide-slate-700/60">
                                         {managerStations.map((s) => {
@@ -366,16 +457,11 @@ export function CreateStaff() {
 
                 <button
                     type="submit"
-                    disabled={
-                        isSubmitting ||
-                        isLoadingRoles ||
-                        !staffRole ||
-                        (canCreateGround && (managerStations.length === 0 || formData.stationIds.length === 0))
-                    }
+                    disabled={isSubmitDisabled}
                     className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                     {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
-                    {canCreateOnBoard
+                    {isOnBoardSession
                         ? (lang === "VN" ? "Tạo nhân viên trên tàu" : "Create boat crew")
                         : (lang === "VN" ? "Tạo nhân viên bến" : "Create station staff")}
                 </button>

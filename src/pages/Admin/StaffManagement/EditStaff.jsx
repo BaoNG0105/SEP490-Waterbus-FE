@@ -4,7 +4,7 @@ import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserDetail, fetchUserRoles, updateUser, fetchUserStations, assignUserStations } from "../../../services/userService";
 import { fetchAllStations } from "../../../services/stationService";
-import { canManageUserRow, getRoleSystemName } from "../../../utils/roleHelpers";
+import { canManageUserRow, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
@@ -45,6 +45,7 @@ export function EditStaff() {
     const navigate = useNavigate();
     const { id } = useParams();
     const { user: currentUser } = useSelector((state) => state.auth);
+    const isCurrentUserAdmin = isAdminUser(currentUser);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -163,7 +164,15 @@ export function EditStaff() {
 
     useEffect(() => {
         fetchAllStations()
-            .then((data) => setStations(Array.isArray(data) ? data : []))
+            .then((data) => {
+                const rows = (Array.isArray(data) ? data : [])
+                    .filter((s) => String(s?.status || "Active").toLowerCase() !== "inactive")
+                    .filter((s) => s?.isWaterbusStation === true)
+                    .sort((a, b) =>
+                        String(a.stationName || "").localeCompare(String(b.stationName || ""), "vi")
+                    );
+                setStations(rows);
+            })
             .catch((error) => console.warn("Không tải được danh sách bến:", error));
     }, []);
 
@@ -185,6 +194,16 @@ export function EditStaff() {
         return map;
     }, [stations]);
 
+    const stationOptions = useMemo(
+        () => stations.map((s) => {
+            const sid = String(s?.stationId || s?.id || "");
+            const code = s.stationCode || s.code || "";
+            const name = s.stationName || s.name || "";
+            return { value: sid, label: [code, name].filter(Boolean).join(" · ") || sid };
+        }),
+        [stations]
+    );
+
     const handleInputChange = (field, value) => {
         setFormData((prev) => {
             const next = { ...prev, [field]: value };
@@ -203,6 +222,15 @@ export function EditStaff() {
 
             if (!formData.staffType) {
                 setErrorMsg(lang === "VN" ? "Chọn loại nhân viên (bến tàu / trên tàu)." : "Select staff type (Station / OnBoard).");
+                return;
+            }
+
+            if (isCurrentUserAdmin && showStationAssign && formData.stationIds.length === 0) {
+                setErrorMsg(
+                    lang === "VN"
+                        ? "Vui lòng chọn bến làm việc cho nhân viên."
+                        : "Please select a working station for the staff."
+                );
                 return;
             }
 
@@ -316,7 +344,7 @@ export function EditStaff() {
                             {lang === "VN" ? `Chỉnh sửa: ${userInfo.code}` : `Edit: ${userInfo.code}`}
                         </h2>
                         <p className="text-xs text-slate-400 mt-0.5">
-                            {lang === "VN" ? "Cập nhật hồ sơ cá nhân và loại nhân viên." : "Update the staff's personal profile and staff type."}
+                            {lang === "VN" ? "Cập nhật hồ sơ cá nhân và loại nhân viên" : "Update the staff's personal profile and staff type"}
                         </p>
                     </div>
                 </div>
@@ -399,20 +427,34 @@ export function EditStaff() {
                     {showStationAssign && (
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Gắn bến làm việc" : "Assigned stations"}</label>
-                            <div className={readOnlyStyle}>
-                                {formData.stationIds.length > 0
-                                    ? formData.stationIds
-                                        .map((sid) => stationNameById.get(String(sid)) || sid)
-                                        .join(", ")
-                                    : (lang === "VN" ? "Chưa gắn bến." : "No station assigned.")}
-                            </div>
+                            {isCurrentUserAdmin ? (
+                                <FormSelect
+                                    required
+                                    value={formData.stationIds[0] || ""}
+                                    onChange={(value) => setFormData((prev) => ({ ...prev, stationIds: value ? [String(value)] : [] }))}
+                                    options={stationOptions}
+                                    searchable
+                                    placeholder={lang === "VN" ? "-- Chọn bến --" : "-- Select station --"}
+                                    searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
+                                    emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
+                                    className={selectStyle}
+                                />
+                            ) : (
+                                <div className={readOnlyStyle}>
+                                    {formData.stationIds.length > 0
+                                        ? formData.stationIds
+                                            .map((sid) => stationNameById.get(String(sid)) || sid)
+                                            .join(", ")
+                                        : (lang === "VN" ? "Chưa gắn bến." : "No station assigned.")}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
                 <button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || (isCurrentUserAdmin && showStationAssign && formData.stationIds.length === 0)}
                     className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                     {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}

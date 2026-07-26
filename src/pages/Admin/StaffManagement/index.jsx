@@ -22,7 +22,6 @@ import { notify } from "../../../utils/swalToast";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp";
 
 const SCOPE = {
-  ALL: "All",
   STATION: "Station",
   BOAT: "Boat",
 };
@@ -69,7 +68,7 @@ export function StaffManagement({ viewTabs = null }) {
   const [errorMsg, setErrorMsg] = useState("");
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [scopeFilter, setScopeFilter] = useState(SCOPE.ALL);
+  const [scopeFilter, setScopeFilter] = useState(SCOPE.STATION);
   const [stationFilter, setStationFilter] = useState("");
   const [boatFilter, setBoatFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -77,7 +76,7 @@ export function StaffManagement({ viewTabs = null }) {
 
   const canAccessPage = isAdminUser(currentUser) || isManagerUser(currentUser);
   const canCreateOnBoard = isAdminUser(currentUser);
-  const canCreateGround = isManagerUser(currentUser) && !isAdminUser(currentUser);
+  const canCreateGround = isAdminUser(currentUser) || isManagerUser(currentUser);
 
   const loadUsers = async () => {
     try {
@@ -112,6 +111,16 @@ export function StaffManagement({ viewTabs = null }) {
   const staffUsers = useMemo(
     () => users.filter((u) => (u.roles || []).some((r) => getRoleSystemName(r) === "STAFF")),
     [users]
+  );
+
+  // Manager chỉ được xem nhân viên bến (Ground) thuộc (các) bến mình đang phụ trách.
+  const isManagerOnly = isManagerUser(currentUser) && !isAdminUser(currentUser);
+  const managerStationIds = useMemo(
+    () => (currentUser?.stationAssignments || [])
+      .filter((s) => s?.isActive !== false)
+      .map((s) => String(s.stationId))
+      .filter(Boolean),
+    [currentUser]
   );
 
   // Gắn bến cho NV mặt đất (để lọc theo station).
@@ -195,14 +204,36 @@ export function StaffManagement({ viewTabs = null }) {
     () => [
       { value: "", label: lang === "VN" ? "Tất cả bến" : "All stations" },
       ...stations
+        .filter((s) => !isManagerOnly || managerStationIds.includes(String(s.stationId || s.id || "")))
         .map((s) => ({
           value: String(s.stationId || s.id || ""),
           label: `${s.stationCode || s.code || ""} · ${s.stationName || s.name || ""}`.trim(),
         }))
         .filter((o) => o.value),
     ],
-    [stations, lang]
+    [stations, lang, isManagerOnly, managerStationIds]
   );
+
+  const stationNameById = useMemo(() => {
+    const map = new Map();
+    stations.forEach((s) => {
+      const sid = String(s?.stationId || s?.id || "");
+      if (sid) map.set(sid, s.stationName || s.name || s.stationCode || sid);
+    });
+    return map;
+  }, [stations]);
+
+  // Manager chỉ thấy nhân viên bến (Ground) thuộc (các) bến mình phụ trách.
+  const visibleStaffUsers = useMemo(() => {
+    if (!isManagerOnly) return staffUsers;
+    const allowed = new Set(managerStationIds);
+    return staffUsers.filter((item) => {
+      if (normalizeStaffType(item.staffType) !== "Ground") return false;
+      const userId = String(item.id || "");
+      const ids = stationIdsByUser[userId] || extractStationIdsFromUser(item);
+      return ids.some((sid) => allowed.has(String(sid)));
+    });
+  }, [isManagerOnly, staffUsers, stationIdsByUser, managerStationIds]);
 
   const boatOptions = useMemo(
     () => [
@@ -217,7 +248,7 @@ export function StaffManagement({ viewTabs = null }) {
     [boats, lang]
   );
 
-  const filteredUsers = staffUsers.filter((item) => {
+  const filteredUsers = visibleStaffUsers.filter((item) => {
     const term = searchTerm.trim().toLowerCase();
     const matchesSearch =
       !term ||
@@ -302,9 +333,8 @@ export function StaffManagement({ viewTabs = null }) {
   };
 
   const scopeButtons = [
-    { key: SCOPE.ALL, vn: "Tất cả", en: "All" },
     { key: SCOPE.STATION, vn: "Theo bến", en: "By station" },
-    { key: SCOPE.BOAT, vn: "Theo tàu", en: "By boat" },
+    ...(isManagerOnly ? [] : [{ key: SCOPE.BOAT, vn: "Theo tàu", en: "By boat" }]),
   ];
 
   const filterInputStyle =
@@ -338,8 +368,8 @@ export function StaffManagement({ viewTabs = null }) {
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
-              ? "Quản lý danh sách nhân viên theo bến / tàu."
-              : "Manage staff list by station / boat."}
+              ? "Quản lý danh sách nhân viên theo bến / tàu"
+              : "Manage staff list by station / boat"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -347,7 +377,7 @@ export function StaffManagement({ viewTabs = null }) {
           {canCreateOnBoard && (
             <button
               type="button"
-              onClick={() => navigate("/admin/staffs-management/create")}
+              onClick={() => navigate("/admin/staffs-management/create?type=onboard")}
               className="px-5 py-3 bg-yellow-400 text-slate-900 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 shrink-0"
             >
               <span className="material-symbols-outlined text-sm font-bold">person_add</span>
@@ -357,7 +387,7 @@ export function StaffManagement({ viewTabs = null }) {
           {canCreateGround && (
             <button
               type="button"
-              onClick={() => navigate("/admin/staffs-management/create")}
+              onClick={() => navigate("/admin/staffs-management/create?type=ground")}
               className="px-5 py-3 bg-yellow-400 text-slate-900 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 shrink-0"
             >
               <span className="material-symbols-outlined text-sm font-bold">person_add</span>
@@ -443,6 +473,9 @@ export function StaffManagement({ viewTabs = null }) {
                 <th className="py-4 px-6">{lang === "VN" ? "Thông tin nhân viên" : "Staff Information"}</th>
                 <th className="py-4 px-4">{lang === "VN" ? "Liên hệ" : "Contact"}</th>
                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Loại NV" : "Type"}</th>
+                {scopeFilter !== SCOPE.BOAT && (
+                  <th className="py-4 px-4">{lang === "VN" ? "Nhà ga" : "Station"}</th>
+                )}
                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
               </tr>
@@ -450,7 +483,7 @@ export function StaffManagement({ viewTabs = null }) {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
               {currentUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                  <td colSpan={scopeFilter === SCOPE.BOAT ? 5 : 6} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                     {lang === "VN" ? "Không có nhân viên nào." : "No records found."}
                   </td>
                 </tr>
@@ -494,10 +527,28 @@ export function StaffManagement({ viewTabs = null }) {
                             }`}>
                             {staffType === "OnBoard"
                               ? (lang === "VN" ? "Trên tàu" : "Onboard")
-                              : (lang === "VN" ? "Mặt đất" : "Ground")}
+                              : (lang === "VN" ? "Bến tàu" : "Station")}
                           </span>
                         )}
                       </td>
+                      {scopeFilter !== SCOPE.BOAT && (
+                        <td className="py-4 px-4">
+                          {staffType === "Ground" && (() => {
+                            const userId = String(item.id || "");
+                            const ids = stationIdsByUser[userId] || extractStationIdsFromUser(item);
+                            const names = ids.map((sid) => stationNameById.get(String(sid))).filter(Boolean);
+                            return names.length > 0 ? (
+                              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                {names.join(", ")}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                {lang === "VN" ? "Chưa gắn bến" : "No station"}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                      )}
                       <td className="py-4 px-4 text-center">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${item.status === "Active"
                           ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400"
