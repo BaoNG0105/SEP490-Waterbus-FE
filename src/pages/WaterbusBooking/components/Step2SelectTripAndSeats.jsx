@@ -2,11 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
+//component
 import { FormSelect } from "../../../components/FormSelect";
 import { SeatMapIcon, seatToneFromCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
+//api
 import { fetchTripDetail, fetchTripSeatMap, holdSeats, releaseSeats } from "../../../services/tripService";
+//toast
 import { notify, showToast } from "../../../utils/swalToast";
+//utils
 import {
   bookingHasSeatSelection,
   clearSeatSelectionFields,
@@ -18,7 +22,6 @@ import {
   formatFareAdjustmentLabel,
   formatMinPriceLabel,
   formatSegmentDistanceLabel,
-  formatSegmentLockedSeatHint,
   isMissingKmBookingBlock,
   pickSegmentDistanceKm,
 } from "../../../utils/bookingFareMessages";
@@ -33,7 +36,6 @@ const MAX_SEATS_PER_LEG = 10;
 const LOCKED_STATUSES = ["Held", "Booked", "Blocked"];
 
 const WATERBUS_TRIP_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1783792724/cqi2n26pl7etht4ad5q3.webp";
-// Ảnh ngữ cảnh tour tham quan (sông / trải nghiệm) — khác ảnh đặt vé Waterbus thường.
 const SIGHTSEEING_TRIP_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg";
 
 const TIME_FILTER_OPTIONS_VN = [
@@ -663,7 +665,7 @@ export default function Step2SelectTripAndSeats({
             selectedSeatsDeparture.map((s) => s.seatNumber),
             departureCodes.fromStationCode,
             departureCodes.toStationCode
-          ).catch(() => {});
+          ).catch(() => { });
 
           setActiveLeg("return");
           updateData({ selectedSeatsReturn: selectedSeatsReturn.filter((s) => !returnFailed.includes(s.seatNumber)) });
@@ -705,9 +707,8 @@ export default function Step2SelectTripAndSeats({
           <button
             type="button"
             onClick={() => setActiveLeg("departure")}
-            className={`pb-3 text-sm font-headline font-bold uppercase tracking-wide border-b-2 transition-all flex items-center gap-2 ${
-              activeLeg === "departure" ? "border-[#124757] text-[#124757] dark:border-[#FFD100] dark:text-[#FFD100]" : "border-transparent text-slate-400"
-            }`}
+            className={`pb-3 text-sm font-headline font-bold uppercase tracking-wide border-b-2 transition-all flex items-center gap-2 ${activeLeg === "departure" ? "border-[#124757] text-[#124757] dark:border-[#FFD100] dark:text-[#FFD100]" : "border-transparent text-slate-400"
+              }`}
           >
             {lang === "VN" ? "1. Lựa chọn Chiều Đi" : "1. Departure Leg"}
             {selectedDepartureTrip && <span className="text-xs text-green-500">✓</span>}
@@ -715,9 +716,8 @@ export default function Step2SelectTripAndSeats({
           <button
             type="button"
             onClick={() => setActiveLeg("return")}
-            className={`pb-3 text-sm font-headline font-bold uppercase tracking-wide border-b-2 transition-all flex items-center gap-2 ${
-              activeLeg === "return" ? "border-[#124757] text-[#124757] dark:border-[#FFD100] dark:text-[#FFD100]" : "border-transparent text-slate-400"
-            }`}
+            className={`pb-3 text-sm font-headline font-bold uppercase tracking-wide border-b-2 transition-all flex items-center gap-2 ${activeLeg === "return" ? "border-[#124757] text-[#124757] dark:border-[#FFD100] dark:text-[#FFD100]" : "border-transparent text-slate-400"
+              }`}
           >
             {lang === "VN" ? "2. Lựa chọn Chiều Về" : "2. Return Leg"}
             {selectedReturnTrip && <span className="text-xs text-green-500">✓</span>}
@@ -734,9 +734,6 @@ export default function Step2SelectTripAndSeats({
 
       {(fromWharfName || toWharfName) && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm font-bold text-slate-500 dark:border-slate-700/50 dark:bg-slate-800 dark:text-slate-300">
-          <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400">
-            {isLoopRoute ? "tour" : "search"}
-          </span>
           {isLoopRoute ? (
             <>
               {lang === "VN" ? "Tour tham quan tại" : "Sightseeing tour at"}
@@ -753,7 +750,6 @@ export default function Step2SelectTripAndSeats({
           {(activeLeg === "departure" ? departureDate : returnDate) && (
             <>
               <span className="text-slate-300 dark:text-slate-600">·</span>
-              <span className="material-symbols-outlined text-base text-[#124757] dark:text-yellow-400">calendar_month</span>
               <span className="text-[#124757] dark:text-yellow-400">
                 {(() => {
                   const raw = activeLeg === "departure" ? departureDate : returnDate;
@@ -770,12 +766,12 @@ export default function Step2SelectTripAndSeats({
       {filteredTripOptions.length > 0
         && filteredTripOptions.every((trip) => !isTripSelectable(trip))
         && filteredTripOptions.some((trip) => isMissingKmBookingBlock(trip)) && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-          {lang === "VN"
-            ? "Các chuyến ngày này tạm chưa mở bán vì hệ thống chưa tính được giá. Bạn có thể thử ngày khác, hoặc liên hệ hỗ trợ để được cập nhật."
-            : "Trips on this date are not on sale yet because pricing is incomplete. Try another date, or contact support."}
-        </div>
-      )}
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+            {lang === "VN"
+              ? "Các chuyến ngày này tạm chưa mở bán vì hệ thống chưa tính được giá. Bạn có thể thử ngày khác, hoặc liên hệ hỗ trợ để được cập nhật."
+              : "Trips on this date are not on sale yet because pricing is incomplete. Try another date, or contact support."}
+          </div>
+        )}
 
       {/* --- BỐ CỤC CHÍNH ĐƯỢC CHIA ĐÔI: TRÁI CHỌN TUYẾN - PHẢI CHỌN GHẾ --- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -812,11 +808,10 @@ export default function Step2SelectTripAndSeats({
                 <div
                   key={trip.tripId}
                   onClick={() => handleSelectTrip(trip)}
-                  className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border shadow-sm cursor-pointer transition-all space-y-3 ${
-                    currentTrip?.tripId === trip.tripId
+                  className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border shadow-sm cursor-pointer transition-all space-y-3 ${currentTrip?.tripId === trip.tripId
                       ? "border-[#124757] ring-2 ring-[#124757]/10 bg-teal-50/5"
                       : "border-slate-100 dark:border-slate-700 hover:border-slate-300"
-                  } ${!selectable ? "opacity-50 cursor-not-allowed" : ""}`}
+                    } ${!selectable ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-4">
@@ -837,8 +832,7 @@ export default function Step2SelectTripAndSeats({
                         <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
                           {isLoopRoute ? (
                             <span>
-                              {lang === "VN" ? "Tour tham quan · " : "Sightseeing · "}
-                              {legFromWharfName || "--"}
+                              {lang === "VN" ? "Tour tham quan sông Sài Gòn " : "Saigon River Sightseeing Tour "}
                             </span>
                           ) : (
                             <>
@@ -858,11 +852,10 @@ export default function Step2SelectTripAndSeats({
                     <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto">
                       <div className="text-right">
                         {/* BE: card chuyến show minPrice dạng "từ 9.000đ" — null khi thiếu km */}
-                        <div className={`text-base font-headline font-black ${
-                          trip.minPrice == null
+                        <div className={`text-base font-headline font-black ${trip.minPrice == null
                             ? "text-rose-600 dark:text-rose-300"
                             : "text-[#124757] dark:text-[#FFD100]"
-                        }`}>
+                          }`}>
                           {trip.minPrice != null && Number.isFinite(Number(trip.minPrice)) ? (
                             <>
                               <span className="text-xs font-bold text-slate-400 mr-1">{lang === "VN" ? "từ" : "from"}</span>
@@ -872,17 +865,15 @@ export default function Step2SelectTripAndSeats({
                             formatMinPriceLabel(trip.minPrice, lang)
                           )}
                         </div>
-                        <div className={`text-xs max-w-[11rem] sm:max-w-[13rem] ${
-                          selectable ? "text-slate-500 whitespace-nowrap" : "text-rose-600 dark:text-rose-300 font-semibold leading-snug"
-                        }`}>
+                        <div className={`text-xs max-w-44 sm:max-w-52 ${selectable ? "text-slate-500 whitespace-nowrap" : "text-rose-600 dark:text-rose-300 font-semibold leading-snug"
+                          }`}>
                           {selectable
                             ? (lang === "VN" ? `Còn trống ${trip.availableSeats}/${trip.totalSeats} chỗ` : `${trip.availableSeats}/${trip.totalSeats} left`)
                             : getTripUnavailableShortLabel(trip, lang)}
                         </div>
                       </div>
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                        currentTrip?.tripId === trip.tripId ? "border-[#124757] dark:border-[#FFD100]" : "border-slate-300"
-                      }`}>
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${currentTrip?.tripId === trip.tripId ? "border-[#124757] dark:border-[#FFD100]" : "border-slate-300"
+                        }`}>
                         {currentTrip?.tripId === trip.tripId && <div className="w-2.5 h-2.5 rounded-full bg-[#124757] dark:bg-[#FFD100]"></div>}
                       </div>
                     </div>
@@ -913,11 +904,6 @@ export default function Step2SelectTripAndSeats({
                   <span className="text-amber-700 dark:text-amber-300">{currentFareAdjLabel}</span>
                 ) : null}
               </div>
-            ) : null}
-            {currentTrip ? (
-              <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
-                {formatSegmentLockedSeatHint(lang)}
-              </p>
             ) : null}
           </div>
 
@@ -1011,11 +997,10 @@ export default function Step2SelectTripAndSeats({
                       key={deck.deckNumber}
                       type="button"
                       onClick={() => setActiveDeckByLeg((prev) => ({ ...prev, [activeLeg]: deck.deckNumber }))}
-                      className={`rounded-xl px-4 py-1.5 text-[10px] font-headline font-black uppercase tracking-widest transition ${
-                        activeDeckNumber === deck.deckNumber
+                      className={`rounded-xl px-4 py-1.5 text-[10px] font-headline font-black uppercase tracking-widest transition ${activeDeckNumber === deck.deckNumber
                           ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
                           : "border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                      }`}
+                        }`}
                     >
                       {lang === "VN" ? `Tầng ${deck.deckNumber}` : `Deck ${deck.deckNumber}`}
                     </button>
@@ -1060,11 +1045,10 @@ export default function Step2SelectTripAndSeats({
                               type="button"
                               disabled={seatBlocked}
                               onClick={() => handleSeatClick(seat)}
-                              className={`group relative z-1 flex items-center justify-center rounded-lg transition-all ${
-                                seatBlocked ? "cursor-not-allowed opacity-70" :
-                                isSelected ? "scale-95 ring-2 ring-[#124757]/25 dark:ring-yellow-400/40 rounded-xl" :
-                                "hover:scale-105"
-                              }`}
+                              className={`group relative z-1 flex items-center justify-center rounded-lg transition-all ${seatBlocked ? "cursor-not-allowed opacity-70" :
+                                  isSelected ? "scale-95 ring-2 ring-[#124757]/25 dark:ring-yellow-400/40 rounded-xl" :
+                                    "hover:scale-105"
+                                }`}
                               style={{ gridRow: rowLetterToIndex(seat.row), gridColumn: seat.column }}
                             >
                               {/* Tooltip giá ghế — hiện khi di chuột vào, không cản thao tác click */}

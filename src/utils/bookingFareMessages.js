@@ -76,13 +76,6 @@ export const formatMinPriceLabel = (minPrice, lang = "VN") => {
   return `${n.toLocaleString("vi-VN")} VND`;
 };
 
-/** Ghế bị khóa trên seat-map theo chặng (có thể do chặng giao nhau). */
-export const formatSegmentLockedSeatHint = (lang = "VN") => (
-  lang === "VN"
-    ? "Ghế đã bán/giữ trên chặng giao nhau — cùng ghế vẫn trống nếu chặng không giao."
-    : "Seat sold/held on an overlapping segment — same seat stays free when segments do not overlap."
-);
-
 /** Label phụ thu từ search / seat-map / trip (null → không hiện). */
 export const formatFareAdjustmentLabel = (adj, lang = "VN") => {
   if (adj == null || adj === "") return "";

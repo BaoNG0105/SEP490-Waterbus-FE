@@ -460,9 +460,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       const pointsForPayment = Math.min(pointsToUse, cappedPoints);
 
       const paymentServiceType = isLoopRoute ? "Sightseeing" : "Waterbus";
-      const myTicketsPath = isLoopRoute
-        ? "/profile/my-sightseeing-booking"
-        : "/profile/my-waterbus-booking";
+      const myTicketsPath = `/profile/my-bookings?type=${paymentServiceType}`;
 
       const finishFreeBooking = async () => {
         sessionStorage.setItem("latestWaterbusPaymentBooking", bookingId);
@@ -479,9 +477,9 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           allowOutsideClick: false,
           showCancelButton: false,
         });
-        navigate(`${myTicketsPath}?highlightBookingId=${encodeURIComponent(bookingId)}`, {
+        navigate(`${myTicketsPath}&highlightBookingId=${encodeURIComponent(bookingId)}`, {
           replace: true,
-          state: { highlightBookingId: bookingId, paymentOutcome: "success", freeTicket: true },
+          state: { highlightBookingId: bookingId, paymentOutcome: "success", freeTicket: true, serviceType: paymentServiceType },
         });
       };
 
@@ -922,7 +920,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
             className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm uppercase outline-none tracking-widest font-black text-[#124757] dark:text-white"
           />
           <p className="text-[11px] text-slate-400">
-            {lang === "VN" ? "Mã giảm giá (nếu có) sẽ được áp dụng khi tạo giao dịch thanh toán." : "Any discount code will be applied when the payment is created."}
+            {lang === "VN" ? "Mã giảm giá (nếu có)" : "Discount code (if any)"}
           </p>
         </div>
 
@@ -1008,7 +1006,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                   <span className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${
                     providerLogoUrl
                       ? "bg-white p-1.5 ring-1 ring-slate-200/80 dark:ring-slate-200"
-                      : "bg-gradient-to-br from-[#124757] to-[#0d3541] text-white dark:from-yellow-400 dark:to-yellow-300 dark:text-slate-900"
+                      : "bg-linear-to-br from-[#124757] to-[#0d3541] text-white dark:from-yellow-400 dark:to-yellow-300 dark:text-slate-900"
                   }`}>
                     {providerLogoUrl ? (
                       <img src={providerLogoUrl} alt={providerName || "Insurance"} className="h-full w-full object-contain" />
@@ -1145,8 +1143,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           </div>
           <p className="text-[11px] text-slate-400">
             {lang === "VN"
-              ? `Tối đa ${maxPointsToUse.toLocaleString()} điểm (≤ 50% tạm tính). 1 điểm = 1 VND.`
-              : `Max ${maxPointsToUse.toLocaleString()} points (≤ 50% of estimate). 1 point = 1 VND.`}
+              ? `1 điểm = 1 VND`
+              : `1 point = 1 VND`}
           </p>
         </div>
 
@@ -1190,11 +1188,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           {estimatedEarn > 0 && (
             <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
               {lang === "VN"
-                ? `Ước cộng ~${estimatedEarn.toLocaleString()} điểm sau khi chuyến hoàn tất (1%).`
-                : `Est. ~${estimatedEarn.toLocaleString()} points after trip completion (1%).`}
+                ? `Cộng ${estimatedEarn.toLocaleString()} điểm sau khi chuyến hoàn tất.`
+                : `Est. ${estimatedEarn.toLocaleString()} points after trip completion.`}
             </p>
           )}
-          <p className="text-[11px] text-slate-400">
+          {/* <p className="text-[11px] text-slate-400">
             {isFreeBookingEstimate
               ? (lang === "VN"
                 ? "Số tiền cuối cùng lấy từ booking (subtotalAmount / totalAmount). Vé 0đ sẽ hoàn tất ngay, không qua PayOS."
@@ -1202,7 +1200,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
               : (lang === "VN"
                 ? "Số tiền cuối cùng (kèm bảo hiểm / mã khuyến mãi / điểm nếu có) sẽ hiển thị chính xác trên trang thanh toán PayOS."
                 : "The final amount (with insurance / promo / points if any) will be shown exactly on the PayOS checkout page.")}
-          </p>
+          </p> */}
         </div>
 
         {submitError && (

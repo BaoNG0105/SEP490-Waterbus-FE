@@ -81,7 +81,8 @@ export function PaymentResult() {
         return {
           kind: isSightseeing ? "sightseeing" : "waterbus",
           bookingId: waterbusBookingId,
-          path: isSightseeing ? "/profile/my-sightseeing-booking" : "/profile/my-waterbus-booking",
+          path: "/profile/my-bookings",
+          serviceType: isSightseeing ? "Sightseeing" : "Waterbus",
         };
       }
 
@@ -103,7 +104,7 @@ export function PaymentResult() {
 
     const run = async () => {
       const target = resolveTarget();
-      if (!cancelled) setTargetPath(target.path);
+      if (!cancelled) setTargetPath(target.serviceType ? `${target.path}?type=${target.serviceType}` : target.path);
 
       // Chưa đăng nhập: giữ nguyên /payment/success?... — không đá login mất orderCode.
       if (!isAuthenticated || !localStorage.getItem("accessToken")) {
@@ -145,6 +146,7 @@ export function PaymentResult() {
       query.set("fromPayOs", "1");
       query.set("paymentOutcome", outcome);
       if (orderCode) query.set("orderCode", orderCode);
+      if (target.serviceType) query.set("type", target.serviceType);
 
       const nextSearch = `?${query.toString()}`;
 
@@ -155,6 +157,7 @@ export function PaymentResult() {
             highlightBookingId: target.bookingId,
             paymentOutcome: outcome,
             orderCode,
+            serviceType: target.serviceType,
           },
         });
         return;

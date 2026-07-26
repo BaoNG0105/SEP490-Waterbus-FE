@@ -28,11 +28,9 @@ import { CharterDetail } from "./pages/Profile/MyCharterBooking/MyCharterDetail"
 import { EditCharter } from "./pages/Profile/MyCharterBooking/EditCharter";
 import { CharterList } from "./pages/Profile/MyCharterBooking";
 import { CharterRefund } from "./pages/Profile/MyCharterBooking/CharterRefundRequest";
-import { MyWaterbusBookingList } from "./pages/Profile/MyWaterbusBooking";
+import { BookingListPage } from "./pages/Profile/MyBookings/BookingListPage";
 import { MyWaterbusBookingDetail } from "./pages/Profile/MyWaterbusBooking/MyWaterbusBookingDetail";
-import { MySightseeingBookingList } from "./pages/Profile/MySightseeingBooking";
 import { MySightseeingBookingDetail } from "./pages/Profile/MySightseeingBooking/MySightseeingBookingDetail";
-import { SightseeingRefundRequest } from "./pages/Profile/MySightseeingBooking/SightseeingRefundRequest";
 import { WaterbusBooking } from "./pages/WaterbusBooking";
 import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
 import { CharterBooking } from "./pages/CharterBooking";
@@ -266,12 +264,12 @@ function App() {
           }
         />
 
-        {/* My Waterbus Booking List Page */}
+        {/* My Bookings List Page — gộp chung Waterbus + Sightseeing, phân loại bằng tab */}
         <Route
-          path="/profile/my-waterbus-booking"
+          path="/profile/my-bookings"
           element={
             <MainLayout>
-              <MyWaterbusBookingList />
+              <BookingListPage />
             </MainLayout>
           }
         />
@@ -282,26 +280,6 @@ function App() {
           element={
             <MainLayout>
               <MyWaterbusBookingDetail />
-            </MainLayout>
-          }
-        />
-
-        {/* My Sightseeing Booking List Page */}
-        <Route
-          path="/profile/my-sightseeing-booking"
-          element={
-            <MainLayout>
-              <MySightseeingBookingList />
-            </MainLayout>
-          }
-        />
-
-        {/* My Sightseeing Booking Refund Page */}
-        <Route
-          path="/profile/my-sightseeing-booking/:id/refund"
-          element={
-            <MainLayout>
-              <SightseeingRefundRequest />
             </MainLayout>
           }
         />

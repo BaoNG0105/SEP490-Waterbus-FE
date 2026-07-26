@@ -165,73 +165,69 @@ export const Profile = () => {
                 </div>
               </div>
 
-              {/* Phần Khối Points & Stats giữ nguyên không đổi... */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-10 pt-8 border-t border-slate-100 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setShowPointsModal(true)}
-                  className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border shadow-inner hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all cursor-pointer"
-                >
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">{lang === "VN" ? "Điểm tích lũy" : "Reward Points"}</p>
-                  <h3 className="text-2xl font-black text-[#124757] dark:text-yellow-400">{pointsData.pointBalance.toLocaleString()}</h3>
-                </button>
-                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border shadow-inner">
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">{lang === "VN" ? "Chuyến đi" : "Total Trips"}</p>
-                  <h3 className="text-2xl font-black text-[#124757] dark:text-yellow-400">0</h3>
-                </div>
-                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 flex flex-col items-center justify-center border shadow-inner">
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">{lang === "VN" ? "Voucher hiện có" : "Available Vouchers"}</p>
-                  <h3 className="text-2xl font-black text-[#124757] dark:text-yellow-400">0</h3>
+              <div className="mt-10 pt-8 border-t border-slate-100 dark:border-slate-700">
+                <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-[#124757] to-[#0b323d] dark:from-slate-900 dark:to-slate-950 p-6 sm:p-8 shadow-lg border border-[#124757]/20 dark:border-slate-700">
+                  <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-[140px] text-white/5 select-none">paid</span>
+                  <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6">
+                    <div>
+                      <p className="text-xs text-white/70 font-bold uppercase tracking-widest mb-1">{lang === "VN" ? "Điểm tích lũy hiện có" : "Reward Points Balance"}</p>
+                      <h3 className="text-4xl font-black text-white leading-none">{pointsData.pointBalance.toLocaleString()}</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPointsModal(true)}
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-widest border border-white/20 transition-all"
+                    >
+                      <span className="material-symbols-outlined text-base">history</span>
+                      {lang === "VN" ? "Xem lịch sử" : "View History"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 pb-10">
-            <div className="md:col-span-2 space-y-6">
-              <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100">
+          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 pb-10">
+            <div className="md:col-span-2">
+              <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50 h-full">
                 <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Vé & Dịch vụ của tôi" : "My Tickets & Services"}</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <button onClick={() => navigate("/profile/my-waterbus-booking")} className="flex items-center gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-transparent hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all text-left group">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Vé Waterbus của tôi" : "My Waterbus Booking"}</p>
-                    </div>
-                    <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-0.5 transition-transform">chevron_right</span>
-                  </button>
-                  <button onClick={() => navigate("/profile/my-sightseeing-booking")} className="flex items-center gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-transparent hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all text-left group">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Vé Sightseeing của tôi" : "My Sightseeing Booking"}</p>
-                    </div>
-                    <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-0.5 transition-transform">chevron_right</span>
-                  </button>
-                  <button onClick={() => navigate("/profile/my-charter-booking")} className="flex items-center gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-transparent hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all text-left group">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Yêu cầu thuê tàu" : "Charter Requests"}</p>
-                    </div>
-                    <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-0.5 transition-transform">chevron_right</span>
-                  </button>
+                <div className="space-y-3">
+                  {[
+                    { title: lang === "VN" ? "Lịch sử đặt vé" : "My Bookings", desc: lang === "VN" ? "Vé Waterbus & Sightseeing đã đặt" : "Your Waterbus & Sightseeing bookings", path: "/profile/my-bookings" },
+                    { title: lang === "VN" ? "Yêu cầu thuê tàu" : "Charter Requests", desc: lang === "VN" ? "Theo dõi yêu cầu thuê tàu" : "Track your charter requests", path: "/profile/my-charter-booking" },
+                  ].map((item) => (
+                    <button
+                      key={item.path}
+                      onClick={() => navigate(item.path)}
+                      className="w-full flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-transparent hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all text-left group"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{item.title}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                      </div>
+                      <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-0.5 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-all shrink-0">chevron_right</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
 
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100">
+            <div>
+              <div className="bg-white dark:bg-slate-800 rounded-4xl p-6 sm:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50 h-full flex flex-col">
                 <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Cài đặt tài khoản" : "Account Settings"}</h2>
-                <div className="space-y-3">
-                  <button onClick={() => navigate("/profile/change-password")} className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 border border-transparent hover:border-slate-200 transition-all group">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-500 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors">
-                        <span className="material-symbols-outlined">lock</span>
-                      </div>
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Đổi mật khẩu" : "Change Password"}</span>
+                <div className="space-y-3 flex-1">
+                  <button onClick={() => navigate("/profile/change-password")} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-transparent hover:border-[#124757] dark:hover:border-yellow-400 hover:shadow-md transition-all text-left group">
+                    <div className="w-11 h-11 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-[#124757] dark:text-yellow-400 shadow-sm shrink-0">
+                      <span className="material-symbols-outlined">lock</span>
                     </div>
-                    <span className="material-symbols-outlined text-slate-400">chevron_right</span>
-                  </button>
-                  <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-4 rounded-xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-sm hover:bg-rose-100 transition-all border border-rose-200">
-                    <span className="material-symbols-outlined">logout</span>
-                    {lang === "VN" ? "Đăng xuất" : "Log out"}
+                    <span className="flex-1 text-sm font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Đổi mật khẩu" : "Change Password"}</span>
+                    <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-0.5 group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-all shrink-0">chevron_right</span>
                   </button>
                 </div>
+                <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-4 mt-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-sm hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-all border border-rose-200 dark:border-rose-500/20">
+                  <span className="material-symbols-outlined text-lg">logout</span>
+                  {lang === "VN" ? "Đăng xuất" : "Log out"}
+                </button>
               </div>
             </div>
           </div>

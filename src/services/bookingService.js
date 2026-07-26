@@ -1,4 +1,4 @@
-import { createBooking as apiCreateBooking, getMyBookings as apiGetMyBookings, getBookingById as apiGetBookingById, cancelBooking as apiCancelBooking } from '../api/bookingApi';
+import { createBooking as apiCreateBooking, getMyBookings as apiGetMyBookings, getBookingById as apiGetBookingById } from '../api/bookingApi';
 
 // Service: Tạo booking vé lẻ từ danh sách ghế đã chọn (đơn chiều hoặc khứ hồi)
 export const submitBooking = async (payload) => {
@@ -27,16 +27,6 @@ export const fetchMyBookingDetail = async (id) => {
         return await apiGetBookingById(id);
     } catch (error) {
         console.error(`Lỗi khi lấy chi tiết booking ${id}:`, error);
-        throw error;
-    }
-};
-
-// Service: Hủy booking của tôi (hủy toàn bộ vé bên trong)
-export const cancelMyBooking = async (id) => {
-    try {
-        return await apiCancelBooking(id);
-    } catch (error) {
-        console.error(`Lỗi khi hủy booking ${id}:`, error);
         throw error;
     }
 };

@@ -3,10 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { QRCodeSVG } from "qrcode.react";
 import { useApp } from "../../../context/AppContext";
+//import
 import { fetchMyBookingDetail } from "../../../services/bookingService";
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
-import { getBookingServiceConfig } from "../../../utils/bookingServiceType";
+import { MY_BOOKINGS_PATH, getBookingServiceConfig } from "../../../utils/bookingServiceType";
 import {
   getBookingInsurancePackageId,
   normalizeInsuranceFromBooking,
@@ -119,8 +120,6 @@ const normalizeBookingDetail = (data) => ({
   discountAmount: Number(pick(data, ["discountAmount"], 0)),
   totalAmount: Number(pick(data, ["totalAmount"], 0)),
   pointsUsed: Number(pick(data, ["pointsUsed"], 0)),
-  pointsEarned: Number(pick(data, ["pointsEarned"], 0)),
-  promotionCode: pick(data, ["promotionCode"], ""),
   paymentStatus: pick(data, ["paymentStatus"], ""),
   bookingQrToken: pick(data, ["bookingQrToken"], ""),
   holdExpiresAt: pick(data, ["holdExpiresAt"], ""),
@@ -245,6 +244,8 @@ export function BookingDetailPage({ serviceType }) {
     []
   );
 
+  const listPath = `${MY_BOOKINGS_PATH}?type=${config.serviceType}`;
+
   const loadDetail = useCallback(async ({ silent = false } = {}) => {
     if (!isAuthenticated) {
       navigate("/login");
@@ -350,7 +351,7 @@ export function BookingDetailPage({ serviceType }) {
           </p>
           <button
             type="button"
-            onClick={() => navigate(config.basePath)}
+            onClick={() => navigate(listPath)}
             className="mt-4 rounded-xl bg-[#FFD100] px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-900"
           >
             {lang === "VN" ? "Về danh sách vé" : "Back to bookings"}
@@ -375,7 +376,7 @@ export function BookingDetailPage({ serviceType }) {
       <main className="mx-auto max-w-5xl space-y-5">
         <button
           type="button"
-          onClick={() => navigate(config.basePath)}
+          onClick={() => navigate(listPath)}
           className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-[#124757] dark:text-slate-400 dark:hover:text-yellow-400"
         >
           <span className="material-symbols-outlined text-xl">arrow_back</span>
@@ -534,18 +535,8 @@ export function BookingDetailPage({ serviceType }) {
                     </div>
                   ) : null}
                   <div className="flex justify-between gap-3">
-                    <span>{lang === "VN" ? "Mã ưu đãi" : "Promotion"}</span>
-                    <span className={`font-bold ${booking.promotionCode ? "font-mono text-[#124757] dark:text-yellow-400" : ""}`}>
-                      {booking.promotionCode || "--"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-3">
                     <span>{lang === "VN" ? "Điểm đã dùng" : "Points used"}</span>
                     <span className="font-bold">{booking.pointsUsed > 0 ? `-${booking.pointsUsed}` : 0}</span>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <span>{lang === "VN" ? "Điểm tích được" : "Points earned"}</span>
-                    <span className="font-bold">{booking.pointsEarned > 0 ? `+${booking.pointsEarned}` : 0}</span>
                   </div>
                   <div className="flex justify-between gap-3 border-t border-slate-100 pt-3 dark:border-slate-700">
                     <span className="font-headline font-black text-[#124757] dark:text-white">

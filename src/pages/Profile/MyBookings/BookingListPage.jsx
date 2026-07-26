@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchMyBookings } from "../../../services/bookingService";
-import { getBookingServiceConfig } from "../../../utils/bookingServiceType";
+import { BOOKING_SERVICE_CONFIG, getBookingServiceConfig } from "../../../utils/bookingServiceType";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -57,6 +57,8 @@ const formatDateTime = (value) => {
   return date.toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" });
 };
 
+const SERVICE_TABS = Object.values(BOOKING_SERVICE_CONFIG);
+
 const ListSkeleton = () => (
   <div className="space-y-3">
     {[1, 2, 3].map((item) => (
@@ -73,14 +75,19 @@ const ListSkeleton = () => (
   </div>
 );
 
-export function BookingListPage({ serviceType }) {
-  const config = getBookingServiceConfig(serviceType);
+export function BookingListPage() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated } = useSelector((state) => state.auth);
 
-  const [bookings, setBookings] = useState([]);
+  const activeServiceType = getBookingServiceConfig(
+    location.state?.serviceType || searchParams.get("type") || "Waterbus",
+  ).serviceType;
+  const config = getBookingServiceConfig(activeServiceType);
+
+  const [allBookings, setAllBookings] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [isLoading, setIsLoading] = useState(true);
@@ -112,34 +119,53 @@ export function BookingListPage({ serviceType }) {
       setErrorMsg("");
       const data = await fetchMyBookings();
       const normalized = Array.isArray(data) ? data.map(normalizeBooking) : [];
-      setBookings(normalized.filter((booking) => booking.serviceType === config.serviceType));
+      setAllBookings(normalized);
     } catch (error) {
       console.error("Lỗi tải lịch sử đặt vé:", error);
       setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Không thể tải lịch sử đặt vé." : "Unable to load your booking history."));
     } finally {
       setIsLoading(false);
     }
-  }, [config.serviceType, isAuthenticated, lang, navigate]);
+  }, [isAuthenticated, lang, navigate]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     loadBookings();
   }, [loadBookings]);
 
-  const statusOptions = useMemo(() => {
-    const distinct = [...new Set(bookings.map((b) => b.status).filter(Boolean))];
-    return ["All", ...distinct];
-  }, [bookings]);
+  const handleTabChange = (serviceType) => {
+    setSearchTerm("");
+    setStatusFilter("All");
+    setSearchParams({ type: serviceType }, { replace: true });
+  };
 
-  const filteredBookings = useMemo(() => bookings.filter((booking) => {
+  const bookingsForTab = useMemo(
+    () => allBookings.filter((booking) => booking.serviceType === config.serviceType),
+    [allBookings, config.serviceType],
+  );
+
+  const tabCounts = useMemo(() => {
+    const counts = {};
+    SERVICE_TABS.forEach((tab) => {
+      counts[tab.serviceType] = allBookings.filter((b) => b.serviceType === tab.serviceType).length;
+    });
+    return counts;
+  }, [allBookings]);
+
+  const statusOptions = useMemo(() => {
+    const distinct = [...new Set(bookingsForTab.map((b) => b.status).filter(Boolean))];
+    return ["All", ...distinct];
+  }, [bookingsForTab]);
+
+  const filteredBookings = useMemo(() => bookingsForTab.filter((booking) => {
     const searchValue = searchTerm.toLowerCase();
     const matchesSearch = booking.bookingCode.toLowerCase().includes(searchValue);
     const matchesStatus = statusFilter === "All" || booking.status === statusFilter;
     return matchesSearch && matchesStatus;
-  }), [bookings, searchTerm, statusFilter]);
+  }), [bookingsForTab, searchTerm, statusFilter]);
 
   const hasFilters = searchTerm || statusFilter !== "All";
-  const emptyMessage = bookings.length === 0
+  const emptyMessage = bookingsForTab.length === 0
     ? (lang === "VN" ? config.emptyVn : config.emptyEn)
     : (lang === "VN" ? "Không có vé phù hợp với bộ lọc hiện tại." : "No bookings match your current filters.");
 
@@ -159,6 +185,9 @@ export function BookingListPage({ serviceType }) {
           <div className="bg-linear-to-br from-[#124757] via-[#165a6d] to-[#0e3540] px-6 py-8 text-white md:px-8 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
               <div>
+                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/60">
+                  {lang === "VN" ? "Lịch sử đặt vé" : "Booking history"}
+                </p>
                 <h1 className="mt-1 font-headline text-2xl font-black md:text-3xl">
                   {lang === "VN" ? config.titleVn : config.titleEn}
                 </h1>
@@ -175,6 +204,31 @@ export function BookingListPage({ serviceType }) {
                   {lang === "VN" ? config.newBookingLabelVn : config.newBookingLabelEn}
                 </button>
               </div>
+            </div>
+
+            <div className="mt-6 flex gap-2">
+              {SERVICE_TABS.map((tab) => (
+                <button
+                  key={tab.serviceType}
+                  type="button"
+                  onClick={() => handleTabChange(tab.serviceType)}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-headline font-black uppercase tracking-widest transition-all ${
+                    tab.serviceType === config.serviceType
+                      ? "bg-white text-[#124757] shadow-md dark:bg-yellow-400 dark:text-slate-900"
+                      : "bg-white/10 text-white/70 hover:bg-white/20"
+                  }`}
+                >
+                  {lang === "VN" ? tab.titleVn : tab.titleEn}
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                    tab.serviceType === config.serviceType
+                      ? "bg-[#124757]/10 dark:bg-slate-900/10"
+                      : "bg-white/10"
+                  }`}
+                  >
+                    {tabCounts[tab.serviceType] || 0}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
 

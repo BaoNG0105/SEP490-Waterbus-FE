@@ -1,5 +1,9 @@
 // Cấu hình dùng chung cho 2 loại booking vé lẻ, phân biệt bởi field "serviceType" trả về từ
 // GET /bookings và GET /bookings/{id}: "Waterbus" (chuyến cố định) | "Sightseeing" (tour ngắm cảnh).
+
+// Trang lịch sử đặt vé gộp chung cho Waterbus + Sightseeing, phân loại bằng tab (?type=<serviceType>).
+export const MY_BOOKINGS_PATH = "/profile/my-bookings";
+
 export const BOOKING_SERVICE_CONFIG = {
   Waterbus: {
     serviceType: "Waterbus",

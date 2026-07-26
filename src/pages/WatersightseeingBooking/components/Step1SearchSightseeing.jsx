@@ -82,7 +82,7 @@ export default function Step1SearchSightseeing({ bookingData, updateData, onNext
         <div className="flex-1 space-y-1.5 min-w-0">
           <label className="text-xs font-bold uppercase text-slate-400">{lang === "VN" ? "Hành trình" : "Route"}</label>
           <div className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-bold text-slate-600 dark:text-slate-300 truncate">
-            {lang === "VN" ? "Khám Phá Thành Phố - Tàu 2 Tầng" : "City Discovery Tour - Double Deck Boat"}
+            {lang === "VN" ? "Tour tham quan sông Sài Gòn" : "Saigon River Sightseeing Tour"}
           </div>
         </div>
         <div className="sm:w-56 space-y-1.5">
