@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
-import { fetchPublishedBlogPosts } from "../../services/blogService";
+import { fetchPublishedBlogPosts, labelBlogCategory } from "../../services/blogService";
 
 export function BlogList() {
     const { lang } = useApp();
@@ -70,7 +70,7 @@ export function BlogList() {
                                         onError={(e) => { e.target.src = DEFAULT_BLOG_IMAGE; }}
                                     />
                                     <span className="absolute top-4 left-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur shadow-sm px-3 py-1 rounded-xl text-[10px] font-headline font-black uppercase text-yellow-600 dark:text-yellow-400 tracking-wide">
-                                        {blog.category || (lang === "VN" ? "Tin tức" : "News")}
+                                        {labelBlogCategory(blog.category, lang)}
                                     </span>
                                 </div>
 

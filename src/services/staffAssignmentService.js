@@ -135,9 +135,9 @@ export const normalizeStaffAssignment = (item) => {
         status,
         shiftState: shiftStateRaw,
         dutyRole: pick(item, ['dutyRole'], '') || null,
-        note: pick(item, ['note'], '') || '',
         boat: assignmentType === ASSIGNMENT_TYPE.BOAT ? normalizeNestedBoat(item) : null,
         station: assignmentType === ASSIGNMENT_TYPE.STATION ? normalizeNestedStation(item) : null,
+        tripStop: pick(item, ['tripStop'], null) || null,
         assignedByUserId: String(pick(item, ['assignedByUserId'], '') || ''),
         assignedByName: pick(item, ['assignedByName'], '') || '',
         assignedAt: pick(item, ['assignedAt'], '') || null,
@@ -172,7 +172,6 @@ export const buildCreateAssignmentPayload = (form) => {
         startAt: toIsoWithOffset(form.startAt),
         endAt: toIsoWithOffset(form.endAt),
         dutyRole: isBoat ? DUTY_ROLE.ON_BOARD : DUTY_ROLE.GATE,
-        note: String(form.note || '').trim() || null,
     };
 
     if (isBoat) {
@@ -366,7 +365,6 @@ export const replaceStaffOnAssignment = async (assignmentId, payload) => {
                 || "",
             ).trim(),
             reason: String(payload?.reason || "").trim() || null,
-            note: String(payload?.note || "").trim() || null,
         };
         return await apiReplaceStaffAssignment(assignmentId, body);
     } catch (error) {

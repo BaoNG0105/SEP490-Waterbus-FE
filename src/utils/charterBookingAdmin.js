@@ -866,17 +866,22 @@ export const isRescueBoat = (boat) => {
 /** Active Passenger boat — đủ điều kiện hiện trong dropdown chốt giá charter. */
 export const isCharterSelectableBoat = (boat) => isActiveBoat(boat) && !isRescueBoat(boat);
 
-export const getBoatPrice = (boat, unit) => {
-  const directPrice = Number(
-    pick(boat, unit === "Hour" ? ["hourlyRentalPrice", "hourlyPrice"] : ["dailyRentalPrice", "dailyPrice"], 0),
-  );
-  if (directPrice > 0) return directPrice;
-
-  const rentalPrice = Array.isArray(boat?.rentalPrices)
-    ? boat.rentalPrices.find((price) => price.rentalUnit === unit)
-    : null;
-  return Number(rentalPrice?.unitPrice) || 0;
+/** Giá thuê chung theo số tầng + Hour/Day (policy admin), không còn giá riêng từng tàu. */
+export const findRentalPolicyUnitPrice = (policies, numberOfDecks, rentalUnit) => {
+  const decks = Number(numberOfDecks) || 0;
+  const unit = String(rentalUnit || "Hour");
+  if (decks <= 0) return 0;
+  const list = Array.isArray(policies) ? policies : [];
+  const match = list.find((policy) => (
+    Number(policy.numberOfDecks) === decks
+    && String(policy.rentalUnit) === unit
+    && policy.isActive !== false
+  ));
+  return Number(match?.unitPrice) || 0;
 };
+
+export const getBoatPrice = (boat, unit, policies = []) =>
+  findRentalPolicyUnitPrice(policies, getBoatDeckCount(boat), unit);
 
 export const formatRouteEstimate = (routeEstimate, lang) => {
   if (!routeEstimate) return "";
@@ -1251,6 +1256,35 @@ export const hasEmptyRouteCandidateLegs = (legs) => (
   Array.isArray(legs) && legs.some((leg) => !Array.isArray(leg.candidates) || leg.candidates.length === 0)
 );
 
+/**
+ * FE nhận định "đủ tuyến" bằng mã tuyến (routeCode) đã chọn từng chặng.
+ * Mỗi chặng phải có candidate được chọn và có routeCode (không phải tuyến CH-CB booking).
+ */
+export const hasSelectedRouteCodesForAllLegs = (legs, selections = {}) => {
+  if (!Array.isArray(legs) || legs.length === 0) return false;
+
+  return legs.every((leg) => {
+    const routeId = String(selections[getRouteCandidateLegKey(leg)] || "").trim();
+    if (!routeId) return false;
+
+    const candidate = (Array.isArray(leg.candidates) ? leg.candidates : [])
+      .find((item) => String(item?.routeId || item?.id || "").trim() === routeId);
+
+    if (candidate && isCharterBookingGeneratedRoute(candidate)) return false;
+
+    const code = String(
+      candidate?.routeCode
+      || candidate?.code
+      || "",
+    ).trim();
+
+    // Có mã tuyến → đủ; thiếu mã nhưng có routeId GPS/Sightseeing hợp lệ vẫn chấp nhận.
+    if (code) return !/^CH[-_]?CB-/i.test(code);
+    if (!candidate) return Boolean(routeId);
+    return isUsableRouteCandidateForBooking(candidate);
+  });
+};
+
 /** Lấy stops theo stopOrder từ route catalog / detail. */
 export const getOrderedRouteStops = (route) => (
   (Array.isArray(route?.stops) ? route.stops : Array.isArray(route?.routeStops) ? route.routeStops : [])
@@ -1277,6 +1311,50 @@ export const routeMatchesLegStations = (route, fromStationId, toStationId) => {
   const toIdx = stops.findIndex((stop) => stop.stationId === toId);
   if (fromIdx < 0 || toIdx < 0) return false;
   return fromIdx < toIdx;
+};
+
+/**
+ * Candidate có đủ stops để verify theo bến không.
+ * Ưu tiên stops trên chính candidate, rồi bản catalog/detail cùng routeId.
+ */
+export const resolveCandidateRouteForStationCheck = (candidate, catalogById = null) => {
+  if (!candidate) return null;
+  const stops = getOrderedRouteStops(candidate);
+  if (stops.length >= 2) return candidate;
+  const id = String(candidate.routeId || candidate.id || "").trim();
+  if (!id || !catalogById) return candidate;
+  const fromCatalog = catalogById.get(id);
+  if (!fromCatalog) return candidate;
+  return { ...candidate, ...fromCatalog };
+};
+
+/**
+ * Giữ candidate chỉ khi khớp 2 bến chặng (đúng chiều).
+ * Không có stops để verify → loại (tránh dropdown đầy route lệch bến).
+ */
+export const filterCandidatesByLegStations = (
+  candidates,
+  fromStationId,
+  toStationId,
+  catalogRoutes = [],
+) => {
+  const catalogById = new Map();
+  (Array.isArray(catalogRoutes) ? catalogRoutes : []).forEach((route) => {
+    const id = String(route?.routeId || route?.id || "").trim();
+    if (id) catalogById.set(id, route);
+  });
+
+  return (Array.isArray(candidates) ? candidates : [])
+    .filter((candidate) => isUsableRouteCandidateForBooking(candidate))
+    .filter((candidate) => {
+      const full = resolveCandidateRouteForStationCheck(candidate, catalogById);
+      const stops = getOrderedRouteStops(full);
+      if (stops.length < 2) {
+        // Không verify được: chỉ giữ khi không có catalog để đối chiếu (fallback tin BE).
+        return catalogById.size === 0;
+      }
+      return routeMatchesLegStations(full, fromStationId, toStationId);
+    });
 };
 
 const isSelectableGpsCatalogRoute = (route) => {
@@ -1354,8 +1432,13 @@ export const buildManualGpsCandidatesForLeg = (catalogRoutes, fromStationId, toS
 
 export const enrichCandidateLegsWithManualGpsRoutes = (legs, catalogRoutes) => (
   (Array.isArray(legs) ? legs : []).map((leg) => {
-    const beCandidates = (Array.isArray(leg.candidates) ? leg.candidates : [])
-      .filter((candidate) => isUsableRouteCandidateForBooking(candidate));
+    // BE candidates cũng phải khớp 2 bến — trước đây chỉ lọc loại GPS nên ra nhiều option lệch.
+    const beCandidates = filterCandidatesByLegStations(
+      leg.candidates,
+      leg.fromStationId,
+      leg.toStationId,
+      catalogRoutes,
+    );
     const manual = buildManualGpsCandidatesForLeg(
       catalogRoutes,
       leg.fromStationId,
@@ -1625,6 +1708,8 @@ export const normalizeBooking = (item) => {
     matchedRouteName,
     selectedRoute,
     selectedRouteId: selectedRoute?.routeId || "",
+    charterRouteId: String(pick(item, ["charterRouteId", "charterRoute.routeId", "charterRoute.id"], "") || ""),
+    routeDrawRequest: pick(item, ["routeDrawRequest", "latestRouteDrawRequest", "activeRouteDrawRequest"], null),
     routePlan,
     routeLegs,
     fromStationId: String(pick(item, ["fromStationId", "fromStation.id", "fromStation.stationId"], "")),

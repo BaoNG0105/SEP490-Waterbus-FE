@@ -19,6 +19,22 @@ export const isDistanceFareSeatType = (row) => {
   return code === 'STANDARD';
 };
 
+/** Ghế tàu 1 tầng (Waterbus / FullStandard) — chỉ STANDARD theo km. */
+export const DECK1_SEAT_TYPE_CODES = ['STANDARD'];
+
+/** Ghế tàu 2 tầng (Tham quan / StandardAndVip) — CABIN · RIVER · SKY giá cố định. */
+export const DECK2_SEAT_TYPE_CODES = ['CABIN', 'RIVER', 'SKY'];
+
+export const isDeck1SeatType = (row) => {
+  const code = String(row?.code || '').trim().toUpperCase();
+  return DECK1_SEAT_TYPE_CODES.includes(code) || isDistanceFareSeatType(row);
+};
+
+export const isDeck2SeatType = (row) => {
+  const code = String(row?.code || '').trim().toUpperCase();
+  return DECK2_SEAT_TYPE_CODES.includes(code);
+};
+
 export const normalizeSeatType = (item) => {
   const code = String(item?.code || item?.seatTypeCode || item?.SeatTypeCode || '').trim().toUpperCase();
   const name = String(

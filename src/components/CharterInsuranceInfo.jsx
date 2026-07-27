@@ -15,16 +15,13 @@ export function CharterInsuranceInfo({
   lang = "VN",
   currencyFormatter,
   className = "",
-  bookingType = "CharterBooking",
+  bookingType = "PassengerInsurance",
 }) {
   const selected = resolveInsuranceSelected(booking);
   const insurance = normalizeInsuranceFromBooking(booking);
   const [resolvedLogoUrl, setResolvedLogoUrl] = useState(insurance?.providerLogoUrl || "");
   const isVn = lang === "VN";
-  const isSeatBooking = bookingType === "SeatBooking" || bookingType === "TicketBooking";
-  const unitNoun = isSeatBooking
-    ? (isVn ? "khách" : "passenger")
-    : (isVn ? "ghế" : "seat");
+  const unitNoun = isVn ? "khách" : "passenger";
 
   let statusLabel = isVn ? "Chưa rõ" : "Unknown";
   let statusTone = "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20";
@@ -94,9 +91,7 @@ export function CharterInsuranceInfo({
       : "";
     const qtyNoun = insurance.quantity === 1
       ? unitNoun
-      : (isSeatBooking
-        ? (isVn ? "khách" : "passengers")
-        : (isVn ? "ghế" : "seats"));
+      : (isVn ? "khách" : "passengers");
     const qty = `${insurance.quantity} ${qtyNoun}`;
     if (unit) return `${unit} × ${qty}`;
     return qty;
@@ -180,13 +175,9 @@ export function CharterInsuranceInfo({
             </div>
           ) : (
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {isSeatBooking
-                ? (isVn
-                  ? "Đã chọn gói bảo hiểm cho booking này."
-                  : "Insurance package selected for this booking.")
-                : (isVn
-                  ? "Đã chọn gói — phí tính theo tổng ghế tàu khi admin chốt giá."
-                  : "Package selected — fee is calculated from boat seats when the quote is finalized.")}
+              {isVn
+                ? "Đã chọn gói — phí = đơn giá × số hành khách."
+                : "Package selected — fee = unit price × passenger count."}
             </p>
           )}
         </div>

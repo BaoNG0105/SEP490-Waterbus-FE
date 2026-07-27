@@ -6,14 +6,31 @@ import {
     deleteInsurancePackage as apiDeleteInsurancePackage,
 } from '../api/insuranceApi';
 
+/** BE mới: 1 loại gói dùng chung mọi luồng booking. */
 export const INSURANCE_BOOKING_TYPES = {
+    PASSENGER: 'PassengerInsurance',
+    /** Legacy — BE tạm còn nhận để FE cũ không vỡ. */
     CHARTER: 'CharterBooking',
     SEAT: 'SeatBooking',
 };
 
-const normalizeBookingType = (value) => {
+const LEGACY_BOOKING_TYPES = new Set([
+    INSURANCE_BOOKING_TYPES.SEAT,
+    INSURANCE_BOOKING_TYPES.CHARTER,
+    'TicketBooking',
+]);
+
+export const normalizeBookingType = (value) => {
     const raw = String(value || '').trim();
-    if (!raw) return INSURANCE_BOOKING_TYPES.CHARTER;
+    if (!raw) return INSURANCE_BOOKING_TYPES.PASSENGER;
+    if (
+        raw === INSURANCE_BOOKING_TYPES.PASSENGER
+        || raw === 'Passenger'
+        || raw === 'passenger'
+        || raw === 'passengerInsurance'
+    ) {
+        return INSURANCE_BOOKING_TYPES.PASSENGER;
+    }
     if (['SeatBooking', 'TicketBooking', 'seat', 'ticket'].includes(raw)) {
         return INSURANCE_BOOKING_TYPES.SEAT;
     }
@@ -65,6 +82,20 @@ export const findInsurancePackageById = (packages = [], packageId) => (
     packages.find((pkg) => isSameInsurancePackageId(getInsurancePackageId(pkg), packageId)) || null
 );
 
+const sortActivePackages = (packages) => (
+    packages
+        .filter((pkg) => pkg.isActive !== false)
+        .sort((a, b) => Number(a.displayOrder ?? 0) - Number(b.displayOrder ?? 0))
+);
+
+/** Ưu tiên PassengerInsurance; lúc migrate còn nhận Seat/Charter legacy. */
+const pickPassengerScopedPackages = (packages) => {
+    const list = Array.isArray(packages) ? packages : [];
+    const passenger = list.filter((pkg) => pkg.bookingType === INSURANCE_BOOKING_TYPES.PASSENGER);
+    if (passenger.length) return passenger;
+    return list.filter((pkg) => LEGACY_BOOKING_TYPES.has(pkg.bookingType));
+};
+
 export const fetchInsurancePackages = async (params = {}) => {
     try {
         const query = { ...params };
@@ -84,7 +115,7 @@ export const addInsurancePackage = async (payload) => {
     try {
         return await apiCreateInsurancePackage({
             ...payload,
-            bookingType: normalizeBookingType(payload?.bookingType),
+            bookingType: INSURANCE_BOOKING_TYPES.PASSENGER,
         });
     } catch (error) {
         console.error('Lỗi khi tạo gói bảo hiểm:', error);
@@ -96,7 +127,7 @@ export const modifyInsurancePackage = async (id, payload) => {
     try {
         return await apiUpdateInsurancePackage(id, {
             ...payload,
-            bookingType: normalizeBookingType(payload?.bookingType),
+            bookingType: INSURANCE_BOOKING_TYPES.PASSENGER,
         });
     } catch (error) {
         console.error(`Lỗi khi cập nhật gói bảo hiểm ${id}:`, error);
@@ -122,15 +153,28 @@ export const removeInsurancePackage = async (id) => {
     }
 };
 
-// Lấy tất cả gói bảo hiểm active theo bookingType
-export const fetchActiveInsurancePackages = async (bookingType) => {
-    const packages = await fetchInsurancePackages({
-        bookingType: normalizeBookingType(bookingType),
-        activeOnly: true,
-    });
-    return packages
-        .filter((pkg) => pkg.isActive !== false)
-        .sort((a, b) => Number(a.displayOrder ?? 0) - Number(b.displayOrder ?? 0));
+/**
+ * Gói Active dùng chung mọi booking.
+ * 1) GET ?bookingType=PassengerInsurance
+ * 2) Fallback GET all + lọc PassengerInsurance / legacy Seat|Charter
+ */
+export const fetchActiveInsurancePackages = async (bookingType = INSURANCE_BOOKING_TYPES.PASSENGER) => {
+    const preferred = normalizeBookingType(bookingType) || INSURANCE_BOOKING_TYPES.PASSENGER;
+
+    try {
+        const preferredList = await fetchInsurancePackages({
+            bookingType: preferred,
+            activeOnly: true,
+        });
+        const preferredActive = sortActivePackages(preferredList);
+        if (preferredActive.length) return preferredActive;
+    } catch (error) {
+        // BE chưa nhận PassengerInsurance → fallback list chung.
+        if (preferred !== INSURANCE_BOOKING_TYPES.PASSENGER) throw error;
+    }
+
+    const all = await fetchInsurancePackages({ activeOnly: true });
+    return sortActivePackages(pickPassengerScopedPackages(all));
 };
 
 export const fetchActiveInsurancePackage = async (bookingType) => {

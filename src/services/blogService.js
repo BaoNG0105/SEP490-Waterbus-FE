@@ -21,6 +21,24 @@ export const BLOG_CATEGORY = {
     NEWS: 'News',
 };
 
+export const labelBlogCategory = (category, lang = 'VN') => {
+    const key = String(category || '');
+    const isVn = lang === 'VN';
+    if (key === BLOG_CATEGORY.NEWS) return isVn ? 'Tin tức' : 'News';
+    if (key === BLOG_CATEGORY.EVENT) return isVn ? 'Sự kiện' : 'Event';
+    if (key === BLOG_CATEGORY.ACTIVITY) return isVn ? 'Hoạt động' : 'Activity';
+    return key || '—';
+};
+
+export const labelBlogStatus = (status, lang = 'VN') => {
+    const key = String(status || '');
+    const isVn = lang === 'VN';
+    if (key === BLOG_STATUS.DRAFT) return isVn ? 'Nháp' : 'Draft';
+    if (key === BLOG_STATUS.PUBLISHED) return isVn ? 'Đã xuất bản' : 'Published';
+    if (key === BLOG_STATUS.ARCHIVED) return isVn ? 'Lưu trữ' : 'Archived';
+    return key || '—';
+};
+
 const extractRows = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.items)) return data.items;
@@ -45,10 +63,15 @@ export const getBlogCoverUrl = (item) => collectBlogImageUrls(item)[0] || "";
 /** Nội dung form admin: contentText → content → strip contentHtml. */
 export const getBlogEditableContent = (item) => {
     if (!item) return "";
-    if (item.contentText != null && String(item.contentText).length) return String(item.contentText);
-    if (item.content != null && String(item.content).length) return String(item.content);
-    if (item.contentHtml) {
-        return String(item.contentHtml)
+    const text = item.contentText ?? item.ContentText;
+    if (text != null && String(text).trim().length) return String(text);
+    const plain = item.content ?? item.Content;
+    if (plain != null && String(plain).trim().length && !String(plain).includes("<")) {
+        return String(plain);
+    }
+    // content có thể là HTML legacy
+    if (plain != null && String(plain).trim().length && String(plain).includes("<")) {
+        return String(plain)
             .replace(/<br\s*\/?>/gi, "\n")
             .replace(/<\/p>/gi, "\n\n")
             .replace(/<[^>]+>/g, "")
@@ -58,7 +81,21 @@ export const getBlogEditableContent = (item) => {
             .replace(/&gt;/g, ">")
             .trim();
     }
-    return "";
+    const html = item.contentHtml ?? item.ContentHtml;
+    if (html) {
+        return String(html)
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<\/p>/gi, "\n\n")
+            .replace(/<[^>]+>/g, "")
+            .replace(/&nbsp;/g, " ")
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .trim();
+    }
+    // description / body fallback nếu BE đặt tên khác
+    const fallback = item.description ?? item.body ?? item.Body ?? "";
+    return fallback ? String(fallback) : "";
 };
 
 /** HTML hiển thị public: contentHtml → content (legacy HTML). */
@@ -87,7 +124,7 @@ const normalizeBlogPost = (item) => {
         contentText,
         contentHtml: item.contentHtml || (item.content && String(item.content).includes("<") ? item.content : "") || "",
         status: item.status || BLOG_STATUS.DRAFT,
-        authorName: item.authorName || '',
+        // BE không còn trả authorId / authorName cho FE
         publishedAt: item.publishedAt || null,
         createdAt: item.createdAt || null,
         updatedAt: item.updatedAt || null,
@@ -156,6 +193,36 @@ export const modifyBlogPost = async (id, payload) => {
         console.error(`Lỗi khi cập nhật blog ${id}:`, error);
         throw error;
     }
+};
+
+/**
+ * Build multipart body theo contract BE:
+ * - fields: title, summary, content, category, status, imageAltText
+ * - files: images (không gửi imageUrl/imageUrls)
+ * - update: không chọn ảnh mới → không append images (BE giữ ảnh cũ)
+ */
+export const buildBlogMultipartPayload = ({
+    title,
+    summary = "",
+    content = "",
+    category,
+    status,
+    imageAltText = "",
+    imageFiles = [],
+} = {}) => {
+    const formData = new FormData();
+    formData.append("title", String(title || "").trim());
+    formData.append("summary", String(summary || "").trim());
+    formData.append("content", String(content || "").trim());
+    formData.append("category", String(category || BLOG_CATEGORY.NEWS));
+    formData.append("status", String(status || BLOG_STATUS.DRAFT));
+    formData.append("imageAltText", String(imageAltText || "").trim());
+
+    (Array.isArray(imageFiles) ? imageFiles : []).forEach((file) => {
+        if (file) formData.append("images", file);
+    });
+
+    return formData;
 };
 
 // Service: Lưu trữ bài viết (soft delete, đặt Status = Archived)

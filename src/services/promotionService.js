@@ -375,6 +375,37 @@ export const fetchPublicPromotions = async () => {
     }
 };
 
+/** Scope trống / null = áp mọi loại booking. */
+export const isPromotionForBookingType = (promo, bookingType) => {
+    if (!promo || !bookingType) return false;
+    const types = promo?.scope?.bookingTypes;
+    if (!Array.isArray(types) || types.length === 0) return true;
+    return types.map(String).includes(String(bookingType));
+};
+
+export const formatPromotionDiscountLabel = (promo, lang = 'VN') => {
+    if (!promo) return '';
+    const value = Number(promo.discountValue) || 0;
+    if (promo.promotionType === PROMOTION_TYPE.PERCENT) {
+        return lang === 'VN' ? `Giảm ${value}%` : `${value}% off`;
+    }
+    const formatted = value.toLocaleString(lang === 'VN' ? 'vi-VN' : 'en-US');
+    return lang === 'VN' ? `Giảm ${formatted}đ` : `${formatted} VND off`;
+};
+
+/**
+ * Voucher public khớp loại booking (Seat / Charter).
+ * Endpoint /promotions/public đã lọc Active + Public; không lọc status lần nữa
+ * vì public DTO có thể không trả field status.
+ */
+export const fetchSelectablePublicVouchers = async (bookingType) => {
+    const list = await fetchPublicPromotions();
+    return (list || []).filter((promo) => {
+        if (!promo?.promotionCode) return false;
+        return isPromotionForBookingType(promo, bookingType);
+    });
+};
+
 export const addPromotion = async (payload) => {
     try {
         return await apiCreatePromotion(payload);
