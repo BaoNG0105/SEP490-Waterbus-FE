@@ -20,6 +20,7 @@ import { Promotions } from "./pages/Promotions";
 import { PromotionDetail } from "./pages/Promotions/PromotionDetail";
 import { Contact } from "./pages/Contact";
 import { Schedule } from "./pages/Schedule";
+import { DeparturesBoard } from "./pages/DeparturesBoard";
 import { Profile } from "./pages/Profile";
 import { Notifications } from "./pages/Notifications";
 import { EditProfile } from "./pages/Profile/EditProfie";
@@ -132,6 +133,9 @@ function App() {
             </MainLayout>
           }
         />
+
+        {/* Bảng điện tử khởi hành trong ngày (FIDS) */}
+        <Route path="/departures" element={<DeparturesBoard />} />
 
         {/* Promotion Detail Page */}
         <Route

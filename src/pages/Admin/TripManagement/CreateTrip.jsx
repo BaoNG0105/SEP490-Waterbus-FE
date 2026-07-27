@@ -4,9 +4,14 @@ import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
 import { fetchAllBoats } from "../../../services/boatService";
 import {
-  addNewTrip,
-  buildTripPayload,
+  buildRoundTripPreviewPayload,
+  buildScheduleTripsPayload,
+  filterRoundTripPreviewByTimeWindow,
   getTripCreateLeadTimeError,
+  isSingleTripCreateCase,
+  previewRoundTripScheduleBatch,
+  scheduleRoundTripSelection,
+  scheduleTripsBatch,
 } from "../../../services/tripService";
 import {
   ASSIGNMENT_STATUS,
@@ -21,6 +26,16 @@ import { assignmentCoversDay } from "../../../utils/staffAssignmentCalendarUtils
 import { notify } from "../../../utils/swalToast";
 
 const MIN_ONBOARD_STAFF = 2;
+
+const DAYS_OF_WEEK = [
+  { value: 0, vn: "CN", en: "Sun" },
+  { value: 1, vn: "T2", en: "Mon" },
+  { value: 2, vn: "T3", en: "Tue" },
+  { value: 3, vn: "T4", en: "Wed" },
+  { value: 4, vn: "T5", en: "Thu" },
+  { value: 5, vn: "T6", en: "Fri" },
+  { value: 6, vn: "T7", en: "Sat" },
+];
 
 const unwrapBoats = (data) => {
   if (Array.isArray(data)) return data;
@@ -58,7 +73,70 @@ const pickStationLabel = (stop) =>
   || stop?.name
   || "--";
 
-/** Bến giữa tuyến (bỏ đầu + cuối) — cần gửi full stops[] kể cả stayDurationMinutes = 0. */
+/** Số ngày inclusive trong khoảng YYYY-MM-DD (sai khoảng → 0). */
+const countInclusiveDays = (fromDate, toDate) => {
+  const from = String(fromDate || "").trim();
+  const to = String(toDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return 0;
+  const [y1, m1, d1] = from.split("-").map(Number);
+  const [y2, m2, d2] = to.split("-").map(Number);
+  const a = Date.UTC(y1, m1 - 1, d1);
+  const b = Date.UTC(y2, m2 - 1, d2);
+  return Math.floor((b - a) / 86400000) + 1;
+};
+
+const getAvailableWeekdaysInRange = (fromDate, toDate) => {
+  const totalDays = countInclusiveDays(fromDate, toDate);
+  if (totalDays <= 0) return [];
+
+  const [y1, m1, d1] = String(fromDate).split("-").map(Number);
+  const start = new Date(Date.UTC(y1, m1 - 1, d1));
+  const seen = new Set();
+  const ordered = [];
+
+  for (let i = 0; i < totalDays; i += 1) {
+    const current = new Date(start);
+    current.setUTCDate(start.getUTCDate() + i);
+    const weekday = current.getUTCDay(); // 0=CN ... 6=T7
+    if (!seen.has(weekday)) {
+      seen.add(weekday);
+      ordered.push(weekday);
+    }
+    if (seen.size === 7) break;
+  }
+
+  return ordered;
+};
+
+const toPositiveMinutes = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+const pickRouteTravelMinutes = (route) => (
+  toPositiveMinutes(route?.estimatedDurationMin)
+  || toPositiveMinutes(route?.estimatedDurationMinutes)
+  || toPositiveMinutes(route?.durationMinutes)
+  || toPositiveMinutes(route?.travelMinutes)
+  || 0
+);
+
+const formatMinutesLabel = (totalMinutes, lang) => {
+  const raw = Number(totalMinutes) || 0;
+  const mins = Math.max(0, Math.round(raw)); // làm tròn phút nguyên
+  const hours = Math.floor(mins / 60);
+  const rest = mins % 60;
+  if (lang === "VN") {
+    if (hours <= 0) return `${rest} phút`;
+    if (rest === 0) return `${hours} giờ`;
+    return `${hours} giờ ${rest} phút`;
+  }
+  if (hours <= 0) return `${rest} min`;
+  if (rest === 0) return `${hours} h`;
+  return `${hours} h ${rest} min`;
+};
+
+/** Bến giữa tuyến (bỏ đầu + cuối) — chỉ gửi khi tạo 1 chuyến. */
 const toIntermediateStops = (routeDetail) => {
   const raw = Array.isArray(routeDetail?.stops)
     ? routeDetail.stops
@@ -76,20 +154,72 @@ export function CreateTrip() {
   const { lang } = useApp();
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({
+  const [form, setForm] = useState({
+    createKind: "oneWay", // oneWay | roundTrip
     routeCode: "",
+    outboundRouteCode: "",
+    inboundRouteCode: "",
     boatCode: "",
-    operatingDate: "",
-    departureTime: "",
+    fromDate: "",
+    toDate: "",
+    daysOfWeek: [],
+    mode: "fixed", // fixed | interval (oneWay)
+    startTime: "06:00",
+    endTime: "18:00",
+    intervalMinutes: 30,
+    departureTimes: ["08:00"],
+    draftTime: "10:00",
     stops: [],
+    outboundStops: [],
+    inboundStops: [],
   });
+  const [roundTripPreview, setRoundTripPreview] = useState(null);
+  const [selectedPreviewKeys, setSelectedPreviewKeys] = useState(() => new Set());
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   const [routes, setRoutes] = useState([]);
   const [boats, setBoats] = useState([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [isLoadingStops, setIsLoadingStops] = useState(false);
+  const [isLoadingInboundStops, setIsLoadingInboundStops] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const isRoundTrip = form.createKind === "roundTrip";
+  const isSingleCase = useMemo(
+    () => !isRoundTrip && isSingleTripCreateCase(form),
+    [form, isRoundTrip],
+  );
+  const daySpan = useMemo(
+    () => countInclusiveDays(form.fromDate, form.toDate),
+    [form.fromDate, form.toDate],
+  );
+  const showDaysOfWeek = daySpan >= 3;
+  const availableWeekdays = useMemo(
+    () => getAvailableWeekdaysInRange(form.fromDate, form.toDate),
+    [form.fromDate, form.toDate],
+  );
+  const availableDayOptions = useMemo(
+    () => availableWeekdays
+      .map((value) => DAYS_OF_WEEK.find((day) => day.value === value))
+      .filter(Boolean),
+    [availableWeekdays],
+  );
+
+  useEffect(() => {
+    if (!showDaysOfWeek) {
+      setForm((prev) => (prev.daysOfWeek.length > 0 ? { ...prev, daysOfWeek: [] } : prev));
+    }
+  }, [showDaysOfWeek]);
+
+  useEffect(() => {
+    if (!showDaysOfWeek) return;
+    setForm((prev) => {
+      const nextDays = prev.daysOfWeek.filter((day) => availableWeekdays.includes(day));
+      if (nextDays.length === prev.daysOfWeek.length) return prev;
+      return { ...prev, daysOfWeek: nextDays };
+    });
+  }, [availableWeekdays, showDaysOfWeek]);
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -107,12 +237,18 @@ export function CreateTrip() {
     loadOptions();
   }, []);
 
-  const handleInputChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const updateForm = (patch) => {
+    setForm((prev) => ({ ...prev, ...patch }));
+  };
+
+  const clearPreview = () => {
+    setRoundTripPreview(null);
+    setSelectedPreviewKeys(new Set());
   };
 
   const handleRouteChange = async (routeCode) => {
-    setFormData((prev) => ({ ...prev, routeCode, stops: [] }));
+    updateForm({ routeCode, stops: [] });
+    clearPreview();
     const selected = routes.find((r) => String(r.routeCode) === String(routeCode));
     const routeId = selected?.routeId || selected?.id;
     if (!routeId) return;
@@ -120,8 +256,7 @@ export function CreateTrip() {
     try {
       setIsLoadingStops(true);
       const detail = await fetchRouteDetail(routeId);
-      const intermediates = toIntermediateStops(detail);
-      setFormData((prev) => ({ ...prev, stops: intermediates }));
+      updateForm({ routeCode, stops: toIntermediateStops(detail) });
     } catch (error) {
       console.error("Lỗi tải route stops:", error);
       setErrorMsg(
@@ -134,74 +269,322 @@ export function CreateTrip() {
     }
   };
 
-  const handleStopMinutesChange = (stopOrder, value) => {
+  const handleOutboundRouteChange = async (outboundRouteCode) => {
+    updateForm({ outboundRouteCode, outboundStops: [] });
+    clearPreview();
+    const selected = routes.find((r) => String(r.routeCode) === String(outboundRouteCode));
+    const routeId = selected?.routeId || selected?.id;
+    if (!routeId) return;
+    try {
+      setIsLoadingStops(true);
+      const detail = await fetchRouteDetail(routeId);
+      updateForm({ outboundRouteCode, outboundStops: toIntermediateStops(detail) });
+    } catch (error) {
+      console.error("Lỗi tải outbound stops:", error);
+      setErrorMsg(
+        lang === "VN"
+          ? "Không tải được bến dừng tuyến đi."
+          : "Unable to load outbound route stops.",
+      );
+    } finally {
+      setIsLoadingStops(false);
+    }
+  };
+
+  const handleInboundRouteChange = async (inboundRouteCode) => {
+    updateForm({ inboundRouteCode, inboundStops: [] });
+    clearPreview();
+    const selected = routes.find((r) => String(r.routeCode) === String(inboundRouteCode));
+    const routeId = selected?.routeId || selected?.id;
+    if (!routeId) return;
+    try {
+      setIsLoadingInboundStops(true);
+      const detail = await fetchRouteDetail(routeId);
+      updateForm({ inboundRouteCode, inboundStops: toIntermediateStops(detail) });
+    } catch (error) {
+      console.error("Lỗi tải inbound stops:", error);
+      setErrorMsg(
+        lang === "VN"
+          ? "Không tải được bến dừng tuyến về."
+          : "Unable to load inbound route stops.",
+      );
+    } finally {
+      setIsLoadingInboundStops(false);
+    }
+  };
+
+  const handleStopMinutesChange = (stopOrder, value, stopsKey = "stops") => {
     const minutes = Math.max(0, Number(value) || 0);
-    setFormData((prev) => ({
+    setForm((prev) => ({
       ...prev,
-      stops: prev.stops.map((stop) => (
+      [stopsKey]: (prev[stopsKey] || []).map((stop) => (
         Number(stop.stopOrder) === Number(stopOrder)
           ? { ...stop, stayDurationMinutes: minutes }
           : stop
       )),
     }));
+    if (isRoundTrip) clearPreview();
   };
 
-  const handleFormSubmit = async (e) => {
+  const toggleDayOfWeek = (day) => {
+    setForm((prev) => {
+      const set = new Set(prev.daysOfWeek);
+      if (set.has(day)) set.delete(day);
+      else set.add(day);
+      return { ...prev, daysOfWeek: [...set].sort((a, b) => a - b) };
+    });
+  };
+
+  const addFixedTime = () => {
+    const time = String(form.draftTime || "").trim();
+    if (!/^\d{2}:\d{2}$/.test(time)) return;
+    setForm((prev) => ({
+      ...prev,
+      departureTimes: prev.departureTimes.includes(time)
+        ? prev.departureTimes
+        : [...prev.departureTimes, time].sort(),
+    }));
+  };
+
+  const removeFixedTime = (time) => {
+    setForm((prev) => ({
+      ...prev,
+      departureTimes: prev.departureTimes.filter((item) => item !== time),
+    }));
+  };
+
+  const ensureOnBoardCrew = async (boatCode, dayKey) => {
+    const selectedBoat = boats.find((b) => String(b.code || b.boatCode) === String(boatCode));
+    const boatId = selectedBoat?.id || selectedBoat?.boatId || selectedBoat?.BoatId;
+    try {
+      const assignments = await fetchStaffAssignments({
+        assignmentType: ASSIGNMENT_TYPE.BOAT,
+        boatId: boatId || undefined,
+        fromDate: dayKey,
+        toDate: dayKey,
+        status: ASSIGNMENT_STATUS.SCHEDULED,
+      });
+      const onboardCount = countOnBoardStaffForBoatDay(assignments, boatId, boatCode, dayKey);
+      if (onboardCount < MIN_ONBOARD_STAFF) {
+        return lang === "VN"
+          ? `Tàu cần ít nhất ${MIN_ONBOARD_STAFF} nhân viên OnBoard được phân công đủ ngày chuyến (hiện có ${onboardCount}). Gán ca tại Phân công nhân sự trước khi tạo trip.`
+          : `Boat needs at least ${MIN_ONBOARD_STAFF} OnBoard staff covering the trip day (currently ${onboardCount}). Assign duty in Staff assignments before creating the trip.`;
+      }
+    } catch (crewError) {
+      console.warn("Không kiểm tra được OnBoard crew trước khi tạo trip:", crewError);
+    }
+    return "";
+  };
+
+  const handlePreviewRoundTrip = async () => {
+    try {
+      setIsPreviewing(true);
+      setErrorMsg("");
+
+      if (!form.boatCode || !form.outboundRouteCode || !form.inboundRouteCode || !form.fromDate || !form.toDate) {
+        setErrorMsg(
+          lang === "VN"
+            ? "Chọn đủ tàu, tuyến đi, tuyến về và khoảng ngày."
+            : "Choose boat, outbound/inbound routes and date range.",
+        );
+        return;
+      }
+      if (form.outboundRouteCode === form.inboundRouteCode) {
+        setErrorMsg(
+          lang === "VN"
+            ? "Tuyến đi và tuyến về phải khác nhau."
+            : "Outbound and inbound routes must be different.",
+        );
+        return;
+      }
+      if (form.fromDate > form.toDate) {
+        setErrorMsg(lang === "VN" ? "Từ ngày phải ≤ đến ngày." : "From date must be ≤ to date.");
+        return;
+      }
+      if (!form.startTime || !form.endTime) {
+        setErrorMsg(lang === "VN" ? "Nhập giờ bắt đầu và kết thúc khung chạy." : "Enter start and end time of the window.");
+        return;
+      }
+      if (form.startTime >= form.endTime) {
+        setErrorMsg(lang === "VN" ? "Giờ bắt đầu phải trước giờ kết thúc." : "Start time must be before end time.");
+        return;
+      }
+
+      const preview = filterRoundTripPreviewByTimeWindow(
+        await previewRoundTripScheduleBatch(buildRoundTripPreviewPayload(form)),
+        form.startTime,
+        form.endTime,
+      );
+      setRoundTripPreview(preview);
+      setSelectedPreviewKeys(new Set(
+        preview.items.filter((item) => item.canCreate).map((item) => item.key),
+      ));
+    } catch (error) {
+      console.error("Lỗi preview khứ hồi:", error);
+      clearPreview();
+      setErrorMsg(
+        getApiErrorMessage(
+          error,
+          lang === "VN" ? "Không xem trước được lịch khứ hồi." : "Unable to preview round-trip schedule.",
+        ),
+      );
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
+  const togglePreviewItem = (key, canCreate) => {
+    if (!canCreate) return;
+    setSelectedPreviewKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectAllCreatablePreview = () => {
+    if (!roundTripPreview) return;
+    setSelectedPreviewKeys(new Set(
+      roundTripPreview.items.filter((item) => item.canCreate).map((item) => item.key),
+    ));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isRoundTrip) {
+      try {
+        setIsSubmitting(true);
+        setErrorMsg("");
+
+        if (!roundTripPreview?.items?.length) {
+          setErrorMsg(
+            lang === "VN"
+              ? "Bấm “Xem gợi ý” trước khi tạo chuyến khứ hồi."
+              : "Preview suggestions before creating round-trip trips.",
+          );
+          return;
+        }
+        const selectedItems = roundTripPreview.items.filter(
+          (item) => item.canCreate && selectedPreviewKeys.has(item.key),
+        );
+        if (!selectedItems.length) {
+          setErrorMsg(
+            lang === "VN"
+              ? "Chọn ít nhất một khung giờ có thể tạo."
+              : "Select at least one creatable slot.",
+          );
+          return;
+        }
+
+        const result = await scheduleRoundTripSelection({
+          boatCode: form.boatCode,
+          outboundRouteCode: form.outboundRouteCode,
+          inboundRouteCode: form.inboundRouteCode,
+          outboundStops: form.outboundStops,
+          inboundStops: form.inboundStops,
+          selectedItems,
+        });
+
+        if (result.created >= 1) {
+          notify({
+            icon: "success",
+            title: lang === "VN" ? "Tạo chuyến thành công!" : "Trip created successfully!",
+            confirmButtonColor: "#124757",
+          }).then(() => navigate("/admin/trips-management"));
+          return;
+        }
+
+        const firstSkip = result.skippedItems?.[0];
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
+          text: firstSkip?.reason
+            || (lang === "VN"
+              ? "Các khung giờ đã chọn không tạo được. Đổi lựa chọn rồi thử lại."
+              : "Selected slots could not be created. Change selection and retry."),
+          confirmButtonColor: "#124757",
+        });
+      } catch (error) {
+        console.error("Lỗi tạo chuyến khứ hồi:", error);
+        setErrorMsg(
+          getApiErrorMessage(
+            error,
+            lang === "VN" ? "Tạo chuyến khứ hồi thất bại." : "Failed to create round-trip trips.",
+          ),
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setErrorMsg("");
 
-      const leadError = getTripCreateLeadTimeError(formData.operatingDate, formData.departureTime, lang);
-      if (leadError) {
-        setErrorMsg(leadError);
+      if (!form.routeCode || !form.boatCode || !form.fromDate || !form.toDate) {
+        setErrorMsg(lang === "VN" ? "Vui lòng chọn tuyến, tàu và khoảng ngày." : "Please choose route, boat and date range.");
+        return;
+      }
+      if (form.fromDate > form.toDate) {
+        setErrorMsg(lang === "VN" ? "Từ ngày phải ≤ đến ngày." : "From date must be ≤ to date.");
         return;
       }
 
-      const selectedBoat = boats.find((b) => String(b.code || b.boatCode) === String(formData.boatCode));
-      const boatId = selectedBoat?.id || selectedBoat?.boatId || selectedBoat?.BoatId;
-      try {
-        const assignments = await fetchStaffAssignments({
-          assignmentType: ASSIGNMENT_TYPE.BOAT,
-          boatId: boatId || undefined,
-          fromDate: formData.operatingDate,
-          toDate: formData.operatingDate,
-          status: ASSIGNMENT_STATUS.SCHEDULED,
-        });
-        const onboardCount = countOnBoardStaffForBoatDay(
-          assignments,
-          boatId,
-          formData.boatCode,
-          formData.operatingDate,
-        );
-        if (onboardCount < MIN_ONBOARD_STAFF) {
-          setErrorMsg(
-            lang === "VN"
-              ? `Tàu cần ít nhất ${MIN_ONBOARD_STAFF} nhân viên OnBoard được phân công đủ ngày chuyến (hiện có ${onboardCount}). Gán ca tại Phân công nhân sự trước khi tạo trip.`
-              : `Boat needs at least ${MIN_ONBOARD_STAFF} OnBoard staff covering the trip day (currently ${onboardCount}). Assign duty in Staff assignments before creating the trip.`,
-          );
+      if (form.mode === "interval") {
+        if (!form.startTime || !form.endTime || !form.intervalMinutes) {
+          setErrorMsg(lang === "VN" ? "Nhập đủ giờ bắt đầu, kết thúc và khoảng phút." : "Enter start time, end time and interval.");
           return;
         }
-      } catch (crewError) {
-        console.warn("Không kiểm tra được OnBoard crew trước khi tạo trip:", crewError);
-        // Không chặn cứng nếu API list assignments lỗi — BE vẫn validate khi create.
+      } else if (!form.departureTimes.length) {
+        setErrorMsg(lang === "VN" ? "Thêm ít nhất một giờ khởi hành cố định." : "Add at least one fixed departure time.");
+        return;
       }
 
-      const payload = buildTripPayload(formData);
-      await addNewTrip(payload);
+      // 1 chuyến (cùng ngày + 1 giờ): kiểm tra lead time + crew trước khi gọi schedule
+      if (isSingleTripCreateCase(form)) {
+        const departureTime = form.departureTimes[0];
+        const leadError = getTripCreateLeadTimeError(form.fromDate, departureTime, lang);
+        if (leadError) {
+          setErrorMsg(leadError);
+          return;
+        }
+        const crewError = await ensureOnBoardCrew(form.boatCode, form.fromDate);
+        if (crewError) {
+          setErrorMsg(crewError);
+          return;
+        }
+      }
 
+      const result = await scheduleTripsBatch(buildScheduleTripsPayload(form));
+
+      if (result.created >= 1) {
+        notify({
+          icon: "success",
+          title: lang === "VN" ? "Tạo chuyến thành công!" : "Trip created successfully!",
+          confirmButtonColor: "#124757",
+        }).then(() => navigate("/admin/trips-management"));
+        return;
+      }
+
+      // created = 0 (không có chuyến nào được tạo)
+      const firstSkip = result.skippedItems?.[0];
       notify({
-        icon: "success",
-        title: lang === "VN" ? "Tạo chuyến tàu thành công!" : "Trip created successfully!",
-        text: lang === "VN" ? "Chuyến tàu mới đã được thêm vào lịch chạy." : "The new trip has been added to the schedule.",
+        icon: "warning",
+        title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
+        text: firstSkip?.reason
+          || (lang === "VN"
+          ? `Bỏ qua ${result.skipped} (tàu bận ${result.skippedBoatBusy} · bến bận ${result.skippedStationBusy} · quá giờ ${result.skippedPast} · thiếu crew ${result.skippedMissingOnBoardStaff}). Đổi tàu / giờ / ngày rồi thử lại.`
+          : `Skipped ${result.skipped} (boat busy ${result.skippedBoatBusy} · station busy ${result.skippedStationBusy} · past ${result.skippedPast} · missing crew ${result.skippedMissingOnBoardStaff}). Change boat/time/dates and retry.`),
         confirmButtonColor: "#124757",
-      }).then(() => navigate("/admin/trips-management"));
+      });
     } catch (error) {
-      console.error("Lỗi tạo chuyến tàu mới:", error);
+      console.error("Lỗi tạo chuyến:", error);
       setErrorMsg(
         getApiErrorMessage(
           error,
-          lang === "VN" ? "Tạo chuyến tàu thất bại." : "Failed to create trip.",
+          lang === "VN" ? "Tạo chuyến thất bại." : "Failed to create trip(s).",
         ),
       );
     } finally {
@@ -217,13 +600,57 @@ export function CreateTrip() {
     () => routes.map((r) => ({ value: r.routeCode, label: `${r.routeCode} — ${r.routeName}` })),
     [routes],
   );
+  const inboundRouteOptions = useMemo(
+    () => routeOptions.filter((r) => String(r.value) !== String(form.outboundRouteCode)),
+    [routeOptions, form.outboundRouteCode],
+  );
+  const selectedRoute = useMemo(
+    () => routes.find((r) => String(r.routeCode) === String(form.routeCode)) || null,
+    [routes, form.routeCode],
+  );
+  const routeTravelMinutes = useMemo(
+    () => pickRouteTravelMinutes(selectedRoute),
+    [selectedRoute],
+  );
+  const stopStayMinutes = useMemo(
+    () => (Array.isArray(form.stops) ? form.stops.reduce((sum, stop) => sum + Math.max(0, Number(stop?.stayDurationMinutes) || 0), 0) : 0),
+    [form.stops],
+  );
+  const totalPreviewMinutes = routeTravelMinutes > 0 ? routeTravelMinutes + stopStayMinutes : 0;
   const boatOptions = useMemo(
-    () => boats.map((b) => ({ value: b.code, label: `${b.code} — ${b.name}` })),
+    () => boats.map((b) => ({ value: b.code || b.boatCode, label: `${b.code || b.boatCode} — ${b.name}` })),
     [boats],
   );
+  const creatablePreviewCount = useMemo(
+    () => (roundTripPreview?.items || []).filter((item) => item.canCreate).length,
+    [roundTripPreview],
+  );
+  const selectedCreatableCount = useMemo(
+    () => (roundTripPreview?.items || []).filter(
+      (item) => item.canCreate && selectedPreviewKeys.has(item.key),
+    ).length,
+    [roundTripPreview, selectedPreviewKeys],
+  );
+
+  const formatClock = (hms) => {
+    const raw = String(hms || "").trim();
+    if (/^\d{2}:\d{2}/.test(raw)) return raw.slice(0, 5);
+    return "—";
+  };
+
+  const directionLabel = (direction) => {
+    const key = String(direction || "").toLowerCase();
+    if (key === "outbound" || key === "đi" || key === "out") {
+      return lang === "VN" ? "Lượt đi" : "Outbound";
+    }
+    if (key === "inbound" || key === "về" || key === "in" || key === "return") {
+      return lang === "VN" ? "Lượt về" : "Inbound";
+    }
+    return direction || "—";
+  };
 
   return (
-    <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-4xl mx-auto animate-fade-in">
+    <div className={`space-y-6 font-body pb-10 px-2 sm:px-4 mx-auto animate-fade-in ${isRoundTrip ? "max-w-5xl" : "max-w-4xl"}`}>
       <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
         <button
           type="button"
@@ -232,12 +659,58 @@ export function CreateTrip() {
         >
           <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
         </button>
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-            {lang === "VN" ? "Tạo chuyến tàu mới" : "Create New Trip"}
+            {lang === "VN" ? "Tạo chuyến tàu" : "Create trips"}
           </h2>
+          <p className="mt-0.5 text-xs text-slate-400">
+            {isRoundTrip
+              ? (lang === "VN"
+                ? "Gợi ý lịch khứ hồi 1 tàu, chọn khung rồi tạo. Giá theo chính sách hiện hành."
+                : "Preview one-boat round-trip slots, select, then create. Prices follow fare policy.")
+              : (lang === "VN"
+                ? "Tạo một hoặc nhiều chuyến trên cùng một form. Giá vé áp dụng theo chính sách hiện hành."
+                : "Create one or many trips in the same form. Ticket prices follow the current fare policy.")}
+          </p>
         </div>
       </div>
+
+      <div className="flex gap-1 rounded-2xl bg-slate-100/80 p-1 dark:bg-slate-900/80">
+        {[
+          { id: "oneWay", vn: "Một chiều", en: "One way" },
+          { id: "roundTrip", vn: "Khứ hồi", en: "Round trip" },
+        ].map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => {
+              updateForm({ createKind: item.id });
+              clearPreview();
+              setErrorMsg("");
+            }}
+            className={`flex-1 rounded-xl px-2.5 py-2.5 text-center font-headline text-[11px] font-black uppercase tracking-wider transition ${form.createKind === item.id
+              ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
+              : "text-slate-500 dark:text-slate-400"
+              }`}
+          >
+            {lang === "VN" ? item.vn : item.en}
+          </button>
+        ))}
+      </div>
+
+      {!isRoundTrip && (
+        <div className={`rounded-2xl border px-4 py-3 text-xs font-bold ${isSingleCase
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+          : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-300"
+          }`}
+        >
+          {isSingleCase
+            ? (lang === "VN" ? "Đang tạo 1 chuyến." : "Creating 1 trip.")
+            : (lang === "VN"
+              ? "Đang tạo nhiều chuyến theo khoảng ngày / giờ đã chọn."
+              : "Creating multiple trips for the selected date range and times.")}
+        </div>
+      )}
 
       {errorMsg && (
         <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20 shadow-sm">
@@ -245,109 +718,584 @@ export function CreateTrip() {
         </div>
       )}
 
-      <form onSubmit={handleFormSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 overflow-visible">
           <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-            {lang === "VN" ? "Thông tin chuyến" : "Trip Information"}
+            {isRoundTrip
+              ? (lang === "VN" ? "Tuyến đi · Tuyến về · Tàu · Ngày" : "Outbound · Inbound · Boat · Dates")
+              : (lang === "VN" ? "Tuyến · Tàu · Ngày" : "Route · Boat · Dates")}
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 overflow-visible">
-            <div className="relative z-30">
-              <label className={labelStyle}>{lang === "VN" ? "Tuyến đường (*)" : "Route (*)"}</label>
-              <FormSelect
-                value={formData.routeCode}
-                onChange={handleRouteChange}
-                options={routeOptions}
-                disabled={isLoadingOptions}
-                searchable
-                required
-                placeholder={lang === "VN" ? "Chọn tuyến đường" : "Select a route"}
-                emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
-                className={selectStyle}
-              />
+          {isRoundTrip ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 overflow-visible">
+              <div className="relative z-40">
+                <label className={labelStyle}>{lang === "VN" ? "Tuyến đi (*)" : "Outbound route (*)"}</label>
+                <FormSelect
+                  value={form.outboundRouteCode}
+                  onChange={handleOutboundRouteChange}
+                  options={routeOptions}
+                  disabled={isLoadingOptions}
+                  searchable
+                  required
+                  placeholder={lang === "VN" ? "Chọn tuyến đi" : "Select outbound route"}
+                  emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
+                  className={selectStyle}
+                />
+              </div>
+              <div className="relative z-30">
+                <label className={labelStyle}>{lang === "VN" ? "Tuyến về (*)" : "Inbound route (*)"}</label>
+                <FormSelect
+                  value={form.inboundRouteCode}
+                  onChange={handleInboundRouteChange}
+                  options={inboundRouteOptions}
+                  disabled={isLoadingOptions}
+                  searchable
+                  required
+                  placeholder={lang === "VN" ? "Chọn tuyến về" : "Select inbound route"}
+                  emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
+                  className={selectStyle}
+                />
+              </div>
+              <div className="relative z-20 sm:col-span-2">
+                <label className={labelStyle}>{lang === "VN" ? "Tàu (*)" : "Boat (*)"}</label>
+                <FormSelect
+                  value={form.boatCode}
+                  onChange={(v) => { updateForm({ boatCode: v }); clearPreview(); }}
+                  options={boatOptions}
+                  disabled={isLoadingOptions}
+                  searchable
+                  required
+                  placeholder={lang === "VN" ? "Chọn tàu" : "Select a boat"}
+                  emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
+                  className={selectStyle}
+                />
+              </div>
             </div>
-            <div className="relative z-20">
-              <label className={labelStyle}>{lang === "VN" ? "Tàu vận hành (*)" : "Boat (*)"}</label>
-              <FormSelect
-                value={formData.boatCode}
-                onChange={(v) => handleInputChange("boatCode", v)}
-                options={boatOptions}
-                disabled={isLoadingOptions}
-                searchable
-                required
-                placeholder={lang === "VN" ? "Chọn tàu" : "Select a boat"}
-                emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
-                className={selectStyle}
-              />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 overflow-visible">
+              <div className="relative z-30">
+                <label className={labelStyle}>{lang === "VN" ? "Tuyến đường (*)" : "Route (*)"}</label>
+                <FormSelect
+                  value={form.routeCode}
+                  onChange={handleRouteChange}
+                  options={routeOptions}
+                  disabled={isLoadingOptions}
+                  searchable
+                  required
+                  placeholder={lang === "VN" ? "Chọn tuyến đường" : "Select a route"}
+                  emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
+                  className={selectStyle}
+                />
+              </div>
+              <div className="relative z-20">
+                <label className={labelStyle}>{lang === "VN" ? "Tàu (*)" : "Boat (*)"}</label>
+                <FormSelect
+                  value={form.boatCode}
+                  onChange={(v) => updateForm({ boatCode: v })}
+                  options={boatOptions}
+                  disabled={isLoadingOptions}
+                  searchable
+                  required
+                  placeholder={lang === "VN" ? "Chọn tàu" : "Select a boat"}
+                  emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
+                  className={selectStyle}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Ngày vận hành (*)" : "Operating Date (*)"}</label>
+              <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
               <AppDateInput
                 required
-                value={formData.operatingDate}
-                onChange={(e) => handleInputChange("operatingDate", e.target.value)}
+                value={form.fromDate}
+                onChange={(e) => {
+                  const fromDate = e.target.value;
+                  updateForm({
+                    fromDate,
+                    toDate: !form.toDate || form.toDate < fromDate ? fromDate : form.toDate,
+                  });
+                  if (isRoundTrip) clearPreview();
+                }}
                 className={inputStyle}
               />
             </div>
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Giờ khởi hành (*)" : "Departure Time (*)"}</label>
-              <input
-                type="time"
+              <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "To date (*)"}</label>
+              <AppDateInput
                 required
-                value={formData.departureTime}
-                onChange={(e) => handleInputChange("departureTime", e.target.value)}
+                value={form.toDate}
+                onChange={(e) => {
+                  updateForm({ toDate: e.target.value });
+                  if (isRoundTrip) clearPreview();
+                }}
                 className={inputStyle}
               />
             </div>
           </div>
+          <p className="text-[11px] text-slate-400">
+            {isRoundTrip
+              ? (lang === "VN"
+                ? "Tuyến về phải bắt đầu ở bến cuối tuyến đi và kết thúc ở bến đầu tuyến đi."
+                : "Inbound must start at outbound’s end station and end at outbound’s start station.")
+              : (lang === "VN"
+                ? "Muốn tạo 1 chuyến: đặt Từ ngày = Đến ngày và chỉ 1 giờ cố định."
+                : "For 1 trip: set From = To and keep exactly one fixed departure time.")}
+          </p>
+
+          {showDaysOfWeek && (
+            <div>
+              <label className={labelStyle}>{lang === "VN" ? "Ngày trong tuần" : "Days of week"}</label>
+              <p className="mb-2 text-[11px] text-slate-400">
+                {lang === "VN"
+                  ? "Không chọn = mọi ngày trong khoảng."
+                  : "Leave empty = every day in the range."}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {availableDayOptions.map((day) => {
+                  const active = form.daysOfWeek.includes(day.value);
+                  return (
+                    <button
+                      key={day.value}
+                      type="button"
+                      onClick={() => {
+                        toggleDayOfWeek(day.value);
+                        if (isRoundTrip) clearPreview();
+                      }}
+                      className={`rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-wider transition ${active
+                        ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
+                        : "border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-600 dark:bg-slate-900"
+                        }`}
+                    >
+                      {lang === "VN" ? day.vn : day.en}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
-        {(isLoadingStops || formData.stops.length > 0) && (
-          <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-            <div className="border-b border-slate-100 dark:border-slate-700 pb-3">
-              <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-                {lang === "VN" ? "Phút dừng bến giữa tuyến" : "Intermediate stop dwell"}
-              </h3>
-            </div>
+        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+          <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3">
+            {isRoundTrip
+              ? (lang === "VN" ? "Khung giờ trong ngày" : "Daily time window")
+              : (lang === "VN" ? "Kiểu giờ chạy" : "Schedule mode")}
+          </h3>
 
-            {isLoadingStops ? (
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                <div className="w-4 h-4 border-2 border-slate-300 border-t-[#124757] rounded-full animate-spin" />
-                {lang === "VN" ? "Đang tải bến dừng…" : "Loading stops…"}
+          {isRoundTrip ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Giờ bắt đầu" : "Start time"}</label>
+                <input
+                  type="time"
+                  required
+                  value={form.startTime}
+                  onChange={(e) => { updateForm({ startTime: e.target.value }); clearPreview(); }}
+                  className={inputStyle}
+                />
               </div>
-            ) : (
-              <div className="space-y-3">
-                {formData.stops.map((stop) => (
-                  <div
-                    key={stop.stopOrder}
-                    className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-end rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Giờ kết thúc" : "End time"}</label>
+                <input
+                  type="time"
+                  required
+                  value={form.endTime}
+                  onChange={(e) => { updateForm({ endTime: e.target.value }); clearPreview(); }}
+                  className={inputStyle}
+                />
+              </div>
+              <p className="sm:col-span-2 text-[11px] text-slate-400">
+                {lang === "VN"
+                  ? "BE tự xen chuyến đi/về trong khung giờ. Không dùng khoảng phút hay autoSpacing."
+                  : "BE alternates outbound/inbound inside this window. No interval or autoSpacing."}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-1 rounded-2xl bg-slate-100/80 p-1 dark:bg-slate-900/80">
+                {[
+                  { id: "fixed", vn: "Giờ cố định", en: "Fixed times" },
+                  { id: "interval", vn: "Khoảng phút", en: "Interval" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => updateForm({ mode: item.id })}
+                    className={`flex-1 rounded-xl px-2.5 py-2 text-center font-headline text-[10px] font-black uppercase tracking-wider transition sm:text-[11px] ${form.mode === item.id
+                      ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
+                      : "text-slate-500 dark:text-slate-400"
+                      }`}
                   >
+                    {lang === "VN" ? item.vn : item.en}
+                  </button>
+                ))}
+              </div>
+
+              {form.mode === "interval" ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {lang === "VN" ? `Bến #${stop.stopOrder}` : `Stop #${stop.stopOrder}`}
-                      </p>
-                      <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{stop.stationLabel}</p>
+                      <label className={labelStyle}>{lang === "VN" ? "Giờ bắt đầu" : "Start time"}</label>
+                      <input
+                        type="time"
+                        required
+                        value={form.startTime}
+                        onChange={(e) => updateForm({ startTime: e.target.value })}
+                        className={inputStyle}
+                      />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">
-                        {lang === "VN" ? "Phút dừng" : "Stay (min)"}
-                      </label>
+                      <label className={labelStyle}>{lang === "VN" ? "Giờ kết thúc" : "End time"}</label>
+                      <input
+                        type="time"
+                        required
+                        value={form.endTime}
+                        onChange={(e) => updateForm({ endTime: e.target.value })}
+                        className={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelStyle}>{lang === "VN" ? "Khoảng (phút)" : "Interval (min)"}</label>
                       <input
                         type="number"
-                        min={0}
-                        value={stop.stayDurationMinutes}
-                        onChange={(e) => handleStopMinutesChange(stop.stopOrder, e.target.value)}
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]"
+                        min={1}
+                        required
+                        value={form.intervalMinutes}
+                        onChange={(e) => updateForm({ intervalMinutes: e.target.value })}
+                        className={inputStyle}
                       />
                     </div>
                   </div>
-                ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="w-[140px]">
+                      <label className={labelStyle}>{lang === "VN" ? "Thêm giờ" : "Add time"}</label>
+                      <input
+                        type="time"
+                        value={form.draftTime}
+                        onChange={(e) => updateForm({ draftTime: e.target.value })}
+                        className={inputStyle}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addFixedTime}
+                      className="rounded-xl border border-slate-200 px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-[#124757] dark:border-slate-600 dark:text-yellow-400"
+                    >
+                      {lang === "VN" ? "Thêm" : "Add"}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {form.departureTimes.map((time) => (
+                      <button
+                        key={time}
+                        type="button"
+                        onClick={() => removeFixedTime(time)}
+                        className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                        title={lang === "VN" ? "Bấm để xóa" : "Click to remove"}
+                      >
+                        {time}
+                        <span className="material-symbols-outlined text-[14px] text-slate-400">close</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {isRoundTrip ? (
+          <>
+            {(isLoadingStops || form.outboundStops.length > 0 || form.outboundRouteCode) && (
+              <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+                <div className="border-b border-slate-100 dark:border-slate-700 pb-3">
+                  <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                    {lang === "VN" ? "Phút dừng — tuyến đi" : "Dwell — outbound"}
+                  </h3>
+                </div>
+                {isLoadingStops ? (
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                    <div className="w-4 h-4 border-2 border-slate-300 border-t-[#124757] rounded-full animate-spin" />
+                    {lang === "VN" ? "Đang tải bến dừng…" : "Loading stops…"}
+                  </div>
+                ) : form.outboundStops.length === 0 ? (
+                  <p className="text-xs font-bold text-slate-400">
+                    {form.outboundRouteCode
+                      ? (lang === "VN" ? "Tuyến đi không có bến giữa." : "Outbound has no intermediate stops.")
+                      : (lang === "VN" ? "Chọn tuyến đi để tải bến giữa." : "Select outbound route to load stops.")}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {form.outboundStops.map((stop) => (
+                      <div
+                        key={`out-${stop.stopOrder}`}
+                        className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-end rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
+                      >
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            {lang === "VN" ? `Bến #${stop.stopOrder}` : `Stop #${stop.stopOrder}`}
+                          </p>
+                          <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{stop.stationLabel}</p>
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">
+                            {lang === "VN" ? "Phút dừng" : "Stay (min)"}
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={stop.stayDurationMinutes}
+                            onChange={(e) => handleStopMinutesChange(stop.stopOrder, e.target.value, "outboundStops")}
+                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-          </div>
+
+            {(isLoadingInboundStops || form.inboundStops.length > 0 || form.inboundRouteCode) && (
+              <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+                <div className="border-b border-slate-100 dark:border-slate-700 pb-3">
+                  <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                    {lang === "VN" ? "Phút dừng — tuyến về" : "Dwell — inbound"}
+                  </h3>
+                </div>
+                {isLoadingInboundStops ? (
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                    <div className="w-4 h-4 border-2 border-slate-300 border-t-[#124757] rounded-full animate-spin" />
+                    {lang === "VN" ? "Đang tải bến dừng…" : "Loading stops…"}
+                  </div>
+                ) : form.inboundStops.length === 0 ? (
+                  <p className="text-xs font-bold text-slate-400">
+                    {form.inboundRouteCode
+                      ? (lang === "VN" ? "Tuyến về không có bến giữa." : "Inbound has no intermediate stops.")
+                      : (lang === "VN" ? "Chọn tuyến về để tải bến giữa." : "Select inbound route to load stops.")}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {form.inboundStops.map((stop) => (
+                      <div
+                        key={`in-${stop.stopOrder}`}
+                        className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-end rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
+                      >
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            {lang === "VN" ? `Bến #${stop.stopOrder}` : `Stop #${stop.stopOrder}`}
+                          </p>
+                          <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{stop.stationLabel}</p>
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">
+                            {lang === "VN" ? "Phút dừng" : "Stay (min)"}
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={stop.stayDurationMinutes}
+                            onChange={(e) => handleStopMinutesChange(stop.stopOrder, e.target.value, "inboundStops")}
+                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={handlePreviewRoundTrip}
+                disabled={isPreviewing || isSubmitting || isLoadingOptions || isLoadingStops || isLoadingInboundStops}
+                className="flex-1 bg-white text-[#124757] border border-[#124757]/30 dark:bg-slate-900 dark:text-yellow-400 dark:border-yellow-400/40 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-sm hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                {isPreviewing && (
+                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                )}
+                {lang === "VN" ? "Xem gợi ý lịch" : "Preview schedule"}
+              </button>
+            </div>
+
+            {roundTripPreview && (
+              <div className="bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                      {lang === "VN" ? "Gợi ý khứ hồi" : "Round-trip preview"}
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {lang === "VN"
+                        ? `${roundTripPreview.suggested} khung · chọn được ${creatablePreviewCount} · đang chọn ${selectedCreatableCount}`
+                        : `${roundTripPreview.suggested} slots · creatable ${creatablePreviewCount} · selected ${selectedCreatableCount}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={selectAllCreatablePreview}
+                    className="text-[11px] font-bold text-[#124757] hover:underline dark:text-yellow-400"
+                  >
+                    {lang === "VN" ? "Chọn tất cả hợp lệ" : "Select all creatable"}
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-700">
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-slate-900">
+                      <tr>
+                        <th className="px-3 py-2 font-bold"> </th>
+                        <th className="px-3 py-2 font-bold">{lang === "VN" ? "Ngày" : "Date"}</th>
+                        <th className="px-3 py-2 font-bold">{lang === "VN" ? "Chiều" : "Dir"}</th>
+                        <th className="px-3 py-2 font-bold">{lang === "VN" ? "Tuyến" : "Route"}</th>
+                        <th className="px-3 py-2 font-bold">{lang === "VN" ? "Giờ" : "Time"}</th>
+                        <th className="px-3 py-2 font-bold">{lang === "VN" ? "Bến" : "Stations"}</th>
+                        <th className="px-3 py-2 font-bold">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {roundTripPreview.items.map((item) => {
+                        const checked = selectedPreviewKeys.has(item.key);
+                        return (
+                          <tr
+                            key={item.key}
+                            className={`border-t border-slate-100 dark:border-slate-700 ${item.canCreate ? "" : "bg-slate-50/80 opacity-80 dark:bg-slate-900/40"}`}
+                          >
+                            <td className="px-3 py-2.5">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={!item.canCreate}
+                                onChange={() => togglePreviewItem(item.key, item.canCreate)}
+                                className="h-4 w-4 accent-[#124757]"
+                              />
+                            </td>
+                            <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                              {item.operatingDate || "—"}
+                            </td>
+                            <td className="px-3 py-2.5 font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                              {directionLabel(item.direction)}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                              {item.routeCode || "—"}
+                            </td>
+                            <td className="px-3 py-2.5 font-bold text-slate-800 dark:text-white whitespace-nowrap">
+                              {formatClock(item.departureHms)} → {formatClock(item.arrivalHms)}
+                            </td>
+                            <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">
+                              {item.fromStationName} → {item.toStationName}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              {item.canCreate ? (
+                                <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                  {lang === "VN" ? "Tạo được" : "OK"}
+                                </span>
+                              ) : (
+                                <div className="max-w-[260px] space-y-1">
+                                  <span className="block text-[11px] font-bold text-amber-700 dark:text-amber-300" title={item.reason || ""}>
+                                    {item.reason || (lang === "VN" ? "Không tạo được" : "Cannot create")}
+                                  </span>
+                                  {item.suggestedNextDepartureLabel && (
+                                    <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                      {lang === "VN" ? "Sớm nhất" : "Earliest"}: {item.suggestedNextDepartureLabel}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {(isLoadingStops || form.stops.length > 0 || (form.routeCode && !isLoadingStops)) && (
+              <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+                <div className="border-b border-slate-100 dark:border-slate-700 pb-3">
+                  <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                    {lang === "VN" ? "Phút dừng bến giữa tuyến" : "Intermediate stop dwell"}
+                  </h3>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {lang === "VN"
+                      ? "Chỉ nhập các bến giữa tuyến (không gồm bến đầu/cuối). Phút dừng có thể là 0."
+                      : "Only intermediate stops (not start/end). Stay minutes may be 0."}
+                  </p>
+                </div>
+
+                {isLoadingStops ? (
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                    <div className="w-4 h-4 border-2 border-slate-300 border-t-[#124757] rounded-full animate-spin" />
+                    {lang === "VN" ? "Đang tải bến dừng…" : "Loading stops…"}
+                  </div>
+                ) : form.stops.length === 0 ? (
+                  <p className="text-xs font-bold text-slate-400">
+                    {form.routeCode
+                      ? (lang === "VN" ? "Tuyến này không có bến giữa." : "This route has no intermediate stops.")
+                      : (lang === "VN" ? "Chọn tuyến để tải bến giữa." : "Select a route to load intermediate stops.")}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {form.stops.map((stop) => (
+                      <div
+                        key={stop.stopOrder}
+                        className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-end rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
+                      >
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            {lang === "VN" ? `Bến #${stop.stopOrder}` : `Stop #${stop.stopOrder}`}
+                          </p>
+                          <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">{stop.stationLabel}</p>
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">
+                            {lang === "VN" ? "Phút dừng" : "Stay (min)"}
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={stop.stayDurationMinutes}
+                            onChange={(e) => handleStopMinutesChange(stop.stopOrder, e.target.value)}
+                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {form.routeCode && (
+              <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
+                <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                  {lang === "VN" ? "Tổng thời gian dự kiến" : "Estimated total duration"}
+                </h3>
+                {routeTravelMinutes > 0 ? (
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    {formatMinutesLabel(totalPreviewMinutes, lang)}
+                  </p>
+                ) : (
+                  <p className="text-xs font-bold text-slate-400">
+                    {lang === "VN"
+                      ? "Chưa có dữ liệu thời gian chạy tuyến để tính trước."
+                      : "Route travel duration is unavailable for preview."}
+                  </p>
+                )}
+              </div>
+            )}
+          </>
         )}
 
         <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
@@ -356,8 +1304,8 @@ export function CreateTrip() {
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
             {lang === "VN"
-              ? "Giá vé được áp dụng tự động theo chính sách giá hiện hành (loại ghế, quãng đường và ngày cuối tuần/ngày lễ)."
-              : "Ticket prices are applied automatically from the current fare policy (seat type, distance, and weekend/holiday rates)."}
+              ? "Bạn không cần nhập giá khi tạo chuyến. Hệ thống sẽ tự áp dụng giá ghế, loại vé và phụ thu theo chính sách giá đã cấu hình."
+              : "You don’t need to enter a price when creating trips. Seat fares, ticket types, and surcharges are applied automatically from your configured fare policy."}
           </p>
           <button
             type="button"
@@ -369,18 +1317,28 @@ export function CreateTrip() {
           </button>
         </div>
 
-        <div>
-          <button
-            type="submit"
-            disabled={isSubmitting || isLoadingOptions || isLoadingStops}
-            className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-          >
-            {isSubmitting && (
-              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            )}
-            {lang === "VN" ? "Khởi tạo chuyến" : "Create Trip"}
-          </button>
-        </div>
+        <button
+          type="submit"
+          disabled={
+            isSubmitting
+            || isLoadingOptions
+            || isLoadingStops
+            || isLoadingInboundStops
+            || (isRoundTrip && (!roundTripPreview || selectedCreatableCount < 1))
+          }
+          className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+        >
+          {isSubmitting && (
+            <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          )}
+          {isRoundTrip
+            ? (lang === "VN"
+              ? `Tạo ${selectedCreatableCount || 0} chuyến đã chọn`
+              : `Create ${selectedCreatableCount || 0} selected trip(s)`)
+            : isSingleCase
+              ? (lang === "VN" ? "Tạo 1 chuyến" : "Create 1 trip")
+              : (lang === "VN" ? "Lên lịch chuyến" : "Schedule trips")}
+        </button>
       </form>
     </div>
   );

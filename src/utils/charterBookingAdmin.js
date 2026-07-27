@@ -467,6 +467,7 @@ export const isCharterBoatScheduleConflictError = (errorOrMessage) => {
   if (!message) return false;
   return (
     message.includes("đã có tàu")
+    || message.includes("đã có chuyến")
     || message.includes("đã được đặt")
     || message.includes("đã được giữ")
     || message.includes("giữ cho booking")
@@ -481,6 +482,8 @@ export const isCharterBoatScheduleConflictError = (errorOrMessage) => {
     || message.includes("already held")
     || message.includes("boat conflict")
     || message.includes("schedule conflict")
+    || message.includes("boat busy")
+    || message.includes("insufficient turnaround")
     || (message.includes("boat") && message.includes("conflict"))
     || (message.includes("trip") && (message.includes("conflict") || message.includes("overlap")))
   );
