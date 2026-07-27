@@ -201,7 +201,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
     staffName: "",
     staffUserId: "",
     reason: "",
-    note: "",
   });
   const [replaceError, setReplaceError] = useState("");
   const [isReplacing, setIsReplacing] = useState(false);
@@ -522,7 +521,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
         row.boat?.boatName,
         row.station?.stationCode,
         row.station?.stationName,
-        row.note,
         labelAssignmentType(row.assignmentType, lang),
       ]
         .filter(Boolean)
@@ -734,7 +732,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
       staffName: row.staffName || "",
       staffUserId: "",
       reason: lang === "VN" ? "Nghỉ đột xuất" : "Sudden leave",
-      note: lang === "VN" ? "Ca thay thế" : "Replacement shift",
     });
   };
 
@@ -754,9 +751,8 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
       await replaceStaffOnAssignment(replaceForm.assignmentId, {
         replacementStaffUserId: replaceForm.staffUserId,
         reason: replaceForm.reason.trim(),
-        note: replaceForm.note?.trim() || null,
       });
-      setReplaceForm({ assignmentId: "", staffName: "", staffUserId: "", reason: "", note: "" });
+      setReplaceForm({ assignmentId: "", staffName: "", staffUserId: "", reason: "" });
       notify({
         toast: true,
         position: "top-end",
@@ -1552,7 +1548,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
               </h3>
               <button
                 type="button"
-                onClick={() => setReplaceForm({ assignmentId: "", staffName: "", staffUserId: "", reason: "", note: "" })}
+                onClick={() => setReplaceForm({ assignmentId: "", staffName: "", staffUserId: "", reason: "" })}
                 className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400"
               >
                 <span className="material-symbols-outlined">close</span>
@@ -1599,15 +1595,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                 onChange={(e) => setReplaceForm((prev) => ({ ...prev, reason: e.target.value }))}
                 className={inputStyle}
                 placeholder={lang === "VN" ? "VD: Nghỉ đột xuất" : "e.g. Sudden leave"}
-              />
-            </label>
-            <label className="block space-y-1.5">
-              <span className={labelStyle}>{lang === "VN" ? "Ghi chú" : "Note"}</span>
-              <input
-                type="text"
-                value={replaceForm.note}
-                onChange={(e) => setReplaceForm((prev) => ({ ...prev, note: e.target.value }))}
-                className={inputStyle}
               />
             </label>
             <button

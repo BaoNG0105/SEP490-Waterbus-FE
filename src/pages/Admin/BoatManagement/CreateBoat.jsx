@@ -1,63 +1,55 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { addNewBoat } from "../../../services/boatService";
+import { addNewBoat, fetchAllBoats } from "../../../services/boatService";
 import { FormSelect } from "../../../components/FormSelect";
 import { notify } from "../../../utils/swalToast";
+import { BoatDocumentsPanel } from "./BoatDocumentsPanel";
+
+const unwrapList = (data) => (Array.isArray(data) ? data : (data?.items || data?.data || []));
+
+const pickCreatedBoatId = (response) => {
+  const src = response?.data && typeof response.data === "object" && !Array.isArray(response.data)
+    ? response.data
+    : response;
+  return (
+    src?.id
+    || src?.boatId
+    || src?.BoatId
+    || src?.boatID
+    || null
+  );
+};
 
 export function CreateBoat() {
   const { lang } = useApp();
   const navigate = useNavigate();
 
-  // STATE CẤU HÌNH FORM DỮ LIỆU TÀU
   const [formData, setFormData] = useState({
     code: "",
     name: "",
-    numberOfDecks: 1, // Mặc định 1 tầng
+    numberOfDecks: 1,
     seatSetupType: "FullStandard",
     serviceType: "Passenger",
     registrationNumber: "",
     maxSpeedKmh: 0,
     yearBuilt: new Date().getFullYear(),
     description: "",
-    rentalPrices: [] // Mảng động lưu trữ giá thuê
   });
 
-  const [selectedImages, setSelectedImages] = useState([]); // Mảng lưu các file ảnh thật
-  const [imagePreviews, setImagePreviews] = useState([]);   // Mảng lưu URL blob để preview
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [createdBoat, setCreatedBoat] = useState(null);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // XỬ LÝ: THÊM / XÓA / SỬA GIÁ THUÊ (RENTAL PRICES)
-  const handleAddRentalPrice = () => {
-    setFormData((prev) => ({
-      ...prev,
-      rentalPrices: [...prev.rentalPrices, { rentalUnit: "Day", unitPrice: 0, currency: "VND", note: "" }]
-    }));
-  };
-
-  const handleRentalPriceChange = (index, field, value) => {
-    const updatedPrices = [...formData.rentalPrices];
-    updatedPrices[index][field] = field === "unitPrice" ? Number(value) : value;
-    setFormData((prev) => ({ ...prev, rentalPrices: updatedPrices }));
-  };
-
-  const handleRemoveRentalPrice = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      rentalPrices: prev.rentalPrices.filter((_, i) => i !== index)
-    }));
-  };
-
-  // QUẢN LÝ THƯ VIỆN HÌNH ẢNH UPLOAD (tối đa 3 ảnh)
   const handleImagesChange = (e) => {
     const files = Array.from(e.target.files);
-    
-    // Ràng buộc giới hạn 3 hình ảnh
+
     if (imagePreviews.length + files.length > 3) {
       notify({
         icon: "warning",
@@ -69,11 +61,11 @@ export function CreateBoat() {
     }
 
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const maxSize = 5 * 1024 * 1024;
     const newValidFiles = [];
     const newPreviews = [];
 
-    for (let file of files) {
+    for (const file of files) {
       if (!validTypes.includes(file.type)) continue;
       if (file.size > maxSize) continue;
       newValidFiles.push(file);
@@ -90,7 +82,17 @@ export function CreateBoat() {
     setImagePreviews((prev) => prev.filter((_, i) => i !== indexToRemove));
   };
 
-  // GỬI PAYLOAD LÊN API TẠO TÀU MỚI
+  const resolveBoatId = async (response, code) => {
+    const directId = pickCreatedBoatId(response);
+    if (directId) return String(directId);
+
+    const list = unwrapList(await fetchAllBoats({}));
+    const match = list.find((boat) =>
+      String(boat?.code || boat?.boatCode || "").trim().toLowerCase() === String(code).trim().toLowerCase()
+    );
+    return match?.id || match?.boatId || null;
+  };
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -98,8 +100,6 @@ export function CreateBoat() {
       setErrorMsg("");
 
       const payload = new FormData();
-
-      // Gắn các thông số kỹ thuật cơ bản
       payload.append("code", formData.code.trim());
       payload.append("name", formData.name.trim());
       payload.append("numberOfDecks", String(formData.numberOfDecks));
@@ -109,36 +109,44 @@ export function CreateBoat() {
       payload.append("yearBuilt", String(formData.yearBuilt));
       if (formData.registrationNumber.trim()) payload.append("registrationNumber", formData.registrationNumber.trim());
       if (formData.description.trim()) payload.append("description", formData.description.trim());
-
-      // Gắn danh sách ảnh
       selectedImages.forEach((file) => payload.append("images", file));
 
-      // Định dạng mảng rentalPrices lồng ghép gửi vào FormData
-      if (formData.rentalPrices.length > 0) {
-        formData.rentalPrices.forEach((price, idx) => {
-          payload.append(`rentalPrices[${idx}].rentalUnit`, price.rentalUnit);
-          payload.append(`rentalPrices[${idx}].unitPrice`, String(price.unitPrice));
-          payload.append(`rentalPrices[${idx}].currency`, price.currency || "VND");
-          if (price.note) payload.append(`rentalPrices[${idx}].note`, price.note.trim());
-        });
+      const created = await addNewBoat(payload);
+      const boatId = await resolveBoatId(created, formData.code.trim());
+      if (!boatId) {
+        throw new Error(lang === "VN" ? "Tạo tàu thành công nhưng không lấy được ID để thêm hồ sơ." : "Boat created but ID was missing for documents.");
       }
 
-      await addNewBoat(payload);
+      const src = created?.data && typeof created.data === "object" ? created.data : created;
+      setCreatedBoat({
+        id: String(boatId),
+        code: formData.code.trim(),
+        name: formData.name.trim(),
+        status: src?.status || src?.Status || "Inactive",
+      });
 
       notify({
+        toast: true,
+        position: "top-end",
         icon: "success",
-        title: lang === "VN" ? "Tạo tàu thành công!" : "Successfully Created!",
-        text: lang === "VN" ? "Phương tiện mới đã được thêm vào hệ thống." : "A new vessel has been registered successfully.",
-        confirmButtonColor: "#124757",
-      }).then(() => navigate("/admin/boats-management"));
-
+        title: lang === "VN" ? "Đã tạo tàu" : "Boat created",
+        text: lang === "VN" ? "Tiếp tục tải 4 hồ sơ pháp lý bên dưới." : "Continue with the 4 legal documents below.",
+        showConfirmButton: false,
+        timer: 2200,
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("Lỗi thêm tàu mới:", error);
       let validationError = "";
       if (error.response?.data?.errors) {
         validationError = Object.values(error.response.data.errors).flat().join(" | ");
       }
-      setErrorMsg(validationError || error.response?.data?.message || (lang === "VN" ? "Lưu thông tin thất bại." : "Failed to create vessel."));
+      setErrorMsg(
+        validationError
+        || error.response?.data?.message
+        || error.message
+        || (lang === "VN" ? "Lưu thông tin thất bại." : "Failed to create vessel."),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -162,12 +170,10 @@ export function CreateBoat() {
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-4xl mx-auto animate-fade-in">
-      
-      {/* KHỐI TIÊU ĐỀ HEADER */}
       <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
-        <button 
-          type="button" 
-          onClick={() => navigate("/admin/boats-management")} 
+        <button
+          type="button"
+          onClick={() => navigate("/admin/boats-management")}
           className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-[#124757] hover:text-white transition-all flex items-center justify-center shadow-inner shrink-0"
         >
           <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
@@ -177,7 +183,13 @@ export function CreateBoat() {
             {lang === "VN" ? "Đăng ký phương tiện mới" : "Register New Vessel"}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            {lang === "VN" ? "Khai báo thông số kỹ thuật, giá thuê charter và cấu hình thân vỏ cho tàu thủy mới." : "Initialize hardware profile and rental tariffs for a new boat."}
+            {createdBoat
+              ? (lang === "VN"
+                ? `Bước 2/2 · Tải hồ sơ pháp lý cho ${createdBoat.code}.`
+                : `Step 2/2 · Upload legal documents for ${createdBoat.code}.`)
+              : (lang === "VN"
+                ? "Bước 1/2 · Thông số tàu, sau đó thêm hồ sơ pháp lý."
+                : "Step 1/2 · Vessel specs, then legal documents.")}
           </p>
         </div>
       </div>
@@ -188,189 +200,160 @@ export function CreateBoat() {
         </div>
       )}
 
-      {/* FORM NHẬP THÔNG TIN */}
-      <form onSubmit={handleFormSubmit} className="space-y-6">
-        
-        {/* KHỐI 1: THÔNG SỐ CƠ BẢN */}
-        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-          <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-            {lang === "VN" ? "Thông số chung" : "General Information"}
-          </h3>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div>
-              <label className={labelStyle}>{lang === "VN" ? "Mã hiệu tàu (*)" : "Vessel Code (*)"}</label>
-              <input type="text" required placeholder="VD: WB_001" value={formData.code} onChange={(e) => handleInputChange("code", e.target.value)} className={inputStyle} />
-            </div>
-            <div>
-              <label className={labelStyle}>{lang === "VN" ? "Tên phương tiện (*)" : "Vessel Name (*)"}</label>
-              <input type="text" required placeholder="VD: Waterbus 001" value={formData.name} onChange={(e) => handleInputChange("name", e.target.value)} className={inputStyle} />
-            </div>
-          </div>
+      {!createdBoat ? (
+        <form onSubmit={handleFormSubmit} className="space-y-6">
+          <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+            <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
+              {lang === "VN" ? "Thông số chung" : "General Information"}
+            </h3>
 
-          <div className="relative z-40">
-            <label className={labelStyle}>{lang === "VN" ? "Loại dịch vụ (*)" : "Service type (*)"}</label>
-            <FormSelect
-              value={formData.serviceType}
-              onChange={(v) => handleInputChange("serviceType", v)}
-              options={serviceTypeOptions}
-              className={selectStyle}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div>
-              <label className={labelStyle}>{lang === "VN" ? "Mã số đăng ký" : "Registration Number"}</label>
-              <input type="text" placeholder="VD: VN-001" value={formData.registrationNumber} onChange={(e) => handleInputChange("registrationNumber", e.target.value)} className={inputStyle} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Mã hiệu tàu (*)" : "Vessel Code (*)"}</label>
+                <input type="text" required placeholder="VD: WB_001" value={formData.code} onChange={(e) => handleInputChange("code", e.target.value)} className={inputStyle} />
+              </div>
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Tên phương tiện (*)" : "Vessel Name (*)"}</label>
+                <input type="text" required placeholder="VD: Waterbus 001" value={formData.name} onChange={(e) => handleInputChange("name", e.target.value)} className={inputStyle} />
+              </div>
             </div>
-            <div>
-              <label className={labelStyle}>{lang === "VN" ? "Năm đóng tàu" : "Year Built"}</label>
-              <input type="number" min={1900} max={2100} required value={formData.yearBuilt} onChange={(e) => handleInputChange("yearBuilt", e.target.value)} className={inputStyle} />
-            </div>
-          </div>
-        </div>
 
-        {/* KHỐI 2: CẤU HÌNH HẠ TẦNG */}
-        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 overflow-visible">
-          <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-            {lang === "VN" ? "Cấu trúc hạ tầng" : "Infrastructure"}
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 overflow-visible">
-            <div className="relative z-20">
-              <label className={labelStyle}>{lang === "VN" ? "Số tầng tàu" : "Decks"}</label>
+            <div className="relative z-40">
+              <label className={labelStyle}>{lang === "VN" ? "Loại dịch vụ (*)" : "Service type (*)"}</label>
               <FormSelect
-                value={formData.numberOfDecks}
-                onChange={(v) => handleInputChange("numberOfDecks", Number(v))}
-                options={deckOptions}
+                value={formData.serviceType}
+                onChange={(v) => handleInputChange("serviceType", v)}
+                options={serviceTypeOptions}
                 className={selectStyle}
               />
             </div>
-            <div className="relative z-30">
-              <label className={labelStyle}>{lang === "VN" ? "Kiểu thiết lập ghế" : "Seat Setup Type"}</label>
-              <FormSelect
-                value={formData.seatSetupType}
-                onChange={(v) => handleInputChange("seatSetupType", v)}
-                options={seatSetupOptions}
-                className={`${selectStyle} font-bold text-[#124757]`}
-              />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Mã số đăng ký" : "Registration Number"}</label>
+                <input type="text" placeholder="VD: VN-001" value={formData.registrationNumber} onChange={(e) => handleInputChange("registrationNumber", e.target.value)} className={inputStyle} />
+              </div>
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Năm đóng tàu" : "Year Built"}</label>
+                <input type="number" min={1900} max={2100} required value={formData.yearBuilt} onChange={(e) => handleInputChange("yearBuilt", e.target.value)} className={inputStyle} />
+              </div>
             </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 overflow-visible">
+            <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
+              {lang === "VN" ? "Cấu trúc hạ tầng" : "Infrastructure"}
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 overflow-visible">
+              <div className="relative z-20">
+                <label className={labelStyle}>{lang === "VN" ? "Số tầng tàu" : "Decks"}</label>
+                <FormSelect
+                  value={formData.numberOfDecks}
+                  onChange={(v) => handleInputChange("numberOfDecks", Number(v))}
+                  options={deckOptions}
+                  className={selectStyle}
+                />
+              </div>
+              <div className="relative z-30">
+                <label className={labelStyle}>{lang === "VN" ? "Kiểu thiết lập ghế" : "Seat Setup Type"}</label>
+                <FormSelect
+                  value={formData.seatSetupType}
+                  onChange={(v) => handleInputChange("seatSetupType", v)}
+                  options={seatSetupOptions}
+                  className={`${selectStyle} font-bold text-[#124757]`}
+                />
+              </div>
+              <div>
+                <label className={labelStyle}>{lang === "VN" ? "Vận tốc tối đa (Kmh)" : "Max Speed (Kmh)"}</label>
+                <input type="number" min={0} required value={formData.maxSpeedKmh} onChange={(e) => handleInputChange("maxSpeedKmh", e.target.value)} className={inputStyle} />
+              </div>
+            </div>
+
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Vận tốc tối đa (Kmh)" : "Max Speed (Kmh)"}</label>
-              <input type="number" min={0} required value={formData.maxSpeedKmh} onChange={(e) => handleInputChange("maxSpeedKmh", e.target.value)} className={inputStyle} />
+              <label className={labelStyle}>{lang === "VN" ? "Mô tả ghi chú kỹ thuật" : "Engineering Notes"}</label>
+              <textarea rows={3} placeholder={lang === "VN" ? "Nhập chi tiết về thiết kế, động cơ, đặc quyền..." : "Provide details about engine and perks..."} value={formData.description} onChange={(e) => handleInputChange("description", e.target.value)} className={`${inputStyle} resize-none font-medium`} />
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
+              <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                {lang === "VN" ? "Bộ sưu tập ảnh" : "Gallery"}
+              </h3>
+              <span className={`text-xs font-bold px-3 py-1 rounded-full ${imagePreviews.length === 3 ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500"}`}>
+                {imagePreviews.length} / 3
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {imagePreviews.map((previewUrl, index) => (
+                <div key={index} className="aspect-4/3 relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 group shadow-sm">
+                  <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(index)}
+                    aria-label={lang === "VN" ? "Xóa ảnh" : "Remove image"}
+                    className="absolute right-1.5 top-1.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-white/95 text-slate-600 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-rose-50 hover:text-rose-600 dark:bg-slate-900/90 dark:text-slate-300 dark:ring-slate-600"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+              ))}
+
+              {imagePreviews.length < 3 && (
+                <label className="aspect-4/3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center cursor-pointer transition-all">
+                  <span className="material-symbols-outlined text-2xl text-slate-400 mb-1">add_photo_alternate</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tải ảnh lên</span>
+                  <input type="file" multiple accept="image/jpeg, image/png, image/webp" onChange={handleImagesChange} className="hidden" />
+                </label>
+              )}
             </div>
           </div>
 
           <div>
-            <label className={labelStyle}>{lang === "VN" ? "Mô tả ghi chú kỹ thuật" : "Engineering Notes"}</label>
-            <textarea rows={3} placeholder={lang === "VN" ? "Nhập chi tiết về thiết kế, động cơ, đặc quyền..." : "Provide details about engine and perks..."} value={formData.description} onChange={(e) => handleInputChange("description", e.target.value)} className={`${inputStyle} resize-none font-medium`} />
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <span className="material-symbols-outlined text-lg">arrow_forward</span>
+              )}
+              {lang === "VN" ? "Lưu tàu & thêm hồ sơ" : "Save boat & add documents"}
+            </button>
           </div>
-        </div>
+        </form>
+      ) : (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+            {lang === "VN"
+              ? `Tàu ${createdBoat.code} đã tạo. Tải đủ 4 hồ sơ pháp lý rồi bấm Hoàn tất.`
+              : `Boat ${createdBoat.code} created. Upload all 4 legal documents, then finish.`}
+          </div>
 
-        {/* KHỐI 3: THƯ VIỆN ẢNH (TỐI ĐA 3 ẢNH) */}
-        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
-          <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-            <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-              {lang === "VN" ? "Bộ sưu tập ảnh" : "Gallery"}
+          <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+            <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3">
+              {lang === "VN" ? "Hồ sơ pháp lý" : "Legal documents"}
             </h3>
-            <span className={`text-xs font-bold px-3 py-1 rounded-full ${imagePreviews.length === 3 ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500"}`}>
-              {imagePreviews.length} / 3
-            </span>
+            <BoatDocumentsPanel
+              boatId={createdBoat.id}
+              boatCode={createdBoat.code}
+              boatStatus={createdBoat.status}
+            />
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {imagePreviews.map((previewUrl, index) => (
-              <div key={index} className="aspect-4/3 relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 group shadow-sm">
-                <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => handleRemoveImage(index)}
-                  aria-label={lang === "VN" ? "Xóa ảnh" : "Remove image"}
-                  className="absolute right-1.5 top-1.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-white/95 text-slate-600 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-rose-50 hover:text-rose-600 dark:bg-slate-900/90 dark:text-slate-300 dark:ring-slate-600"
-                >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
-                </button>
-              </div>
-            ))}
-            
-            {imagePreviews.length < 3 && (
-              <label className="aspect-4/3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center cursor-pointer transition-all">
-                <span className="material-symbols-outlined text-2xl text-slate-400 mb-1">add_photo_alternate</span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tải ảnh lên</span>
-                <input type="file" multiple accept="image/jpeg, image/png, image/webp" onChange={handleImagesChange} className="hidden" />
-              </label>
-            )}
-          </div>
-        </div>
-
-        {/* KHỐI 4: BẢNG GIÁ THUÊ TÀU (CHARTER RENTAL) */}
-        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-             <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-               {lang === "VN" ? "Giá cho thuê nguyên chuyến" : "Charter Pricing"}
-             </h3>
-             <button type="button" onClick={handleAddRentalPrice} className="px-3 py-1.5 bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-colors flex items-center gap-1">
-               <span className="material-symbols-outlined text-sm">add</span> {lang === "VN" ? "Thêm gói" : "Add"}
-             </button>
-          </div>
-
-          <div className="space-y-3">
-            {formData.rentalPrices.length === 0 ? (
-              <div className="text-center py-6 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                <p className="text-xs text-slate-400 font-medium">{lang === "VN" ? "Tàu này hiện chưa có cấu hình giá cho thuê Charter." : "No rental tariffs configured for this vessel."}</p>
-              </div>
-            ) : (
-              formData.rentalPrices.map((price, index) => (
-                <div key={index} className="flex flex-col gap-3 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 relative group">
-                  
-                  <button type="button" onClick={() => handleRemoveRentalPrice(index)} className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 transition-colors">
-                    <span className="material-symbols-outlined text-lg">cancel</span>
-                  </button>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pr-6">
-                    <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Đơn vị (Unit)</label>
-                      <FormSelect
-                        value={price.rentalUnit}
-                        onChange={(value) => handleRentalPriceChange(index, "rentalUnit", value)}
-                        options={[
-                          { value: "Day", label: "Theo Ngày (Day)" },
-                          { value: "Hour", label: "Theo Giờ (Hour)" },
-                        ]}
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-[#124757] dark:text-yellow-400 outline-none cursor-pointer"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Giá tiền (Price)</label>
-                      <input type="number" min={0} value={price.unitPrice} onChange={(e) => handleRentalPriceChange(index, "unitPrice", e.target.value)} placeholder="0" className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]" />
-                    </div>
-                    <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Ghi chú (Note)</label>
-                      <input type="text" value={price.note} onChange={(e) => handleRentalPriceChange(index, "note", e.target.value)} placeholder="VD: Gồm VAT" className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-1 focus:ring-[#124757]" />
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* NÚT SUBMIT LƯU THÔNG TIN */}
-        <div>
           <button
-            type="submit" disabled={isSubmitting}
-            className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            type="button"
+            onClick={() => navigate("/admin/boats-management")}
+            className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] transition-all"
           >
-            {isSubmitting ? (
-              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              <span className="material-symbols-outlined text-lg"></span>
-            )}
-            {lang === "VN" ? "Khởi tạo tàu" : "Complete Registration"}
+            {lang === "VN" ? "Hoàn tất" : "Finish"}
           </button>
         </div>
-      </form>
-
+      )}
     </div>
   );
 }

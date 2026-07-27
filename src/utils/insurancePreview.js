@@ -1,38 +1,39 @@
 import { getBoatSeatCount } from "./charterBookingAdmin";
+import { INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
 
 export const CHARTER_INSURANCE_PENDING_MESSAGE = {
-  VN: "Phí tính theo tổng ghế tàu được gán — sẽ có trong báo giá.",
-  EN: "Fee is based on assigned boat seats — shown in the quote.",
+  VN: "Phí = đơn giá × (người lớn + trẻ em) — xem trước trên form / báo giá.",
+  EN: "Fee = unit price × (adults + children) — previewed on the form / quote.",
 };
 
 export const CHARTER_INSURANCE_NOTE = {
   VN: {
-    title: "Phí bảo hiểm không tính theo số khách bạn nhập",
-    body: "Khi thuê nguyên tàu, hệ thống tính theo tổng sức chứa (số ghế) của tàu được gán — không dựa vào số người lớn/trẻ em ở bước trên.",
+    title: "Phí bảo hiểm theo số hành khách",
+    body: "Hệ thống tính unitPremiumAmount × (adultCount + childCount). Không còn tính theo số ghế tàu.",
     formulaLabel: "Cách tính phí",
-    unitLabel: "Đơn giá",
-    quantityLabel: "Tổng ghế tàu",
+    unitLabel: "Đơn giá / khách",
+    quantityLabel: "Số hành khách",
     totalLabel: "Tổng phí",
-    quantityPending: "Có trong báo giá",
+    quantityPending: "Theo số khách đã nhập",
     totalPending: "—",
     referencePrice: "Đơn giá tham khảo",
   },
   EN: {
-    title: "Insurance is not based on the passenger count above",
-    body: "For full-boat charter, the fee is calculated from total seat capacity of assigned boats — not from the adults/children fields.",
+    title: "Insurance is based on passenger count",
+    body: "Fee is unitPremiumAmount × (adultCount + childCount). It is no longer based on boat seat capacity.",
     formulaLabel: "How it is calculated",
-    unitLabel: "Unit price",
-    quantityLabel: "Total boat seats",
+    unitLabel: "Unit / passenger",
+    quantityLabel: "Passengers",
     totalLabel: "Total fee",
-    quantityPending: "In final quote",
+    quantityPending: "From entered passenger count",
     totalPending: "—",
     referencePrice: "Reference unit price",
   },
 };
 
 export const SEAT_INSURANCE_PENDING_MESSAGE = {
-  VN: "Phí bảo hiểm sẽ được tính theo số khách khi thanh toán.",
-  EN: "Insurance fee will be calculated from passenger count at checkout.",
+  VN: "Phí bảo hiểm = đơn giá × tổng dòng vé (kể cả khứ hồi) + em bé.",
+  EN: "Insurance fee = unit price × total ticket items (including return) + infants.",
 };
 
 // Giữ alias cũ để tránh vỡ import
@@ -58,8 +59,22 @@ export const calculateTicketInsurancePreview = ({ unitPremiumAmount, passengerCo
   };
 };
 
-export const calculateCharterInsurancePreview = ({ unitPremiumAmount, selectedBoats = [] }) => {
-  const quantity = getTotalSeatCountOfBoats(selectedBoats);
+/** Charter: quantity = adultCount + childCount (BE PassengerInsurance). */
+export const calculateCharterInsurancePreview = ({
+  unitPremiumAmount,
+  adultCount = 0,
+  childCount = 0,
+  passengerCount,
+  selectedBoats = [],
+}) => {
+  const fromPassengers = passengerCount != null
+    ? Math.max(0, Number(passengerCount) || 0)
+    : Math.max(0, (Number(adultCount) || 0) + (Number(childCount) || 0));
+
+  // Fallback cực hẹp nếu form chưa có số khách (hiếm).
+  const quantity = fromPassengers > 0
+    ? fromPassengers
+    : getTotalSeatCountOfBoats(selectedBoats);
   const unitPremium = Number(unitPremiumAmount) || 0;
 
   return {
@@ -67,28 +82,47 @@ export const calculateCharterInsurancePreview = ({ unitPremiumAmount, selectedBo
     quantity,
     unitPremium,
     total: unitPremium * quantity,
-    quantityLabel: "seat",
+    quantityLabel: "passenger",
   };
 };
 
 export const getInsurancePreview = ({
-  bookingType = "CharterBooking",
+  bookingType = INSURANCE_BOOKING_TYPES.PASSENGER,
   unitPremiumAmount,
   passengerCount = 0,
+  adultCount = 0,
+  childCount = 0,
   selectedBoats = [],
 }) => {
-  if (bookingType === "SeatBooking" || bookingType === "TicketBooking") {
-    return calculateTicketInsurancePreview({ unitPremiumAmount, passengerCount });
+  const fromPassengers = Math.max(
+    0,
+    Number(passengerCount) || ((Number(adultCount) || 0) + (Number(childCount) || 0)),
+  );
+
+  // Mọi bookingType mới đều theo số hành khách; selectedBoats chỉ fallback cũ.
+  if (fromPassengers > 0 || String(bookingType) !== INSURANCE_BOOKING_TYPES.CHARTER) {
+    return calculateTicketInsurancePreview({
+      unitPremiumAmount,
+      passengerCount: fromPassengers,
+    });
   }
 
-  return calculateCharterInsurancePreview({ unitPremiumAmount, selectedBoats });
+  return calculateCharterInsurancePreview({
+    unitPremiumAmount,
+    adultCount,
+    childCount,
+    passengerCount: fromPassengers,
+    selectedBoats,
+  });
 };
 
-export const getInsurancePendingMessage = (bookingType = "CharterBooking", lang = "VN") => {
+export const getInsurancePendingMessage = (bookingType = INSURANCE_BOOKING_TYPES.PASSENGER, lang = "VN") => {
   const language = lang === "VN" ? "VN" : "EN";
-  return bookingType === "SeatBooking" || bookingType === "TicketBooking"
-    ? SEAT_INSURANCE_PENDING_MESSAGE[language]
-    : CHARTER_INSURANCE_PENDING_MESSAGE[language];
+  const type = String(bookingType || "");
+  if (type === INSURANCE_BOOKING_TYPES.CHARTER) {
+    return CHARTER_INSURANCE_PENDING_MESSAGE[language];
+  }
+  return SEAT_INSURANCE_PENDING_MESSAGE[language];
 };
 
 export const getCharterInsuranceNote = (lang = "VN") => (
@@ -168,7 +202,6 @@ export const normalizeInsuranceFromBooking = (booking) => {
     quantity,
     unitPremiumAmount,
     coverageAmount,
-    // Only invent total from unit × qty when BE already provided a seat quantity (after quote).
     totalAmount: quantity > 0 ? (totalAmount || unitPremiumAmount * quantity) : totalAmount,
     terms,
     selected: selected !== false,

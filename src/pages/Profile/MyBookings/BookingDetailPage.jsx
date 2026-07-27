@@ -50,6 +50,16 @@ const STATUS_LABELS = {
 const getStatusKey = (status) => String(status || "").toLowerCase().replace(/[\s_-]/g, "");
 const getStatusClasses = (status) => STATUS_STYLES[getStatusKey(status)]
   || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600";
+
+/** Rule hiển thị vé thật (QR + mã vé): Confirmed + Paid + ticketCode + ticketQrToken + Active. */
+const isTicketIssued = (booking, item) => (
+  getStatusKey(booking?.status || booking?.bookingStatus) === "confirmed"
+  && getStatusKey(booking?.paymentStatus) === "paid"
+  && Boolean(String(item?.ticketCode || "").trim())
+  && Boolean(String(item?.ticketQrToken || "").trim())
+  && getStatusKey(item?.ticketStatus || item?.itemStatus) === "active"
+);
+
 const getStatusLabel = (status, lang = "VN") => {
   const entry = STATUS_LABELS[getStatusKey(status)];
   if (!entry) return status || "--";
@@ -443,7 +453,7 @@ export function BookingDetailPage({ serviceType }) {
 
                     return (
                       <article key={item.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:gap-5 sm:p-6">
-                        {(item.ticketQrToken || item.ticketCode) ? (
+                        {isTicketIssued(booking, item) ? (
                           <div className="flex shrink-0 items-start gap-3">
                             {item.ticketQrToken ? (
                               <QrCodeBlock
@@ -490,13 +500,19 @@ export function BookingDetailPage({ serviceType }) {
                             </div>
                           </dl>
 
-                          {item.ticketCode ? (
+                          {isTicketIssued(booking, item) && item.ticketCode ? (
                             <div>
                               <p className="mb-1 text-[11px] font-bold text-slate-400">
                                 {lang === "VN" ? "Mã vé" : "Ticket code"}
                               </p>
                               <CopyableCode value={item.ticketCode} />
                             </div>
+                          ) : !isTicketIssued(booking, item) ? (
+                            <p className="text-[11px] font-medium text-slate-400">
+                              {lang === "VN"
+                                ? "Vé điện tử sẽ hiện sau khi thanh toán thành công và vé được kích hoạt."
+                                : "The e-ticket appears after successful payment and ticket activation."}
+                            </p>
                           ) : null}
                         </div>
                       </article>
@@ -603,7 +619,7 @@ export function BookingDetailPage({ serviceType }) {
                 booking={booking}
                 lang={lang}
                 currencyFormatter={currencyFormatter}
-                bookingType={INSURANCE_BOOKING_TYPES.SEAT}
+                bookingType={INSURANCE_BOOKING_TYPES.PASSENGER}
               />
             )}
 

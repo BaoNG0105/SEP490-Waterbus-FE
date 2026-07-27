@@ -53,7 +53,6 @@ export function EditBoat() {
         maxSpeedKmh: Number(boatDetail.maxSpeedKmh) || 0,
         yearBuilt: Number(boatDetail.yearBuilt) || new Date().getFullYear(),
         description: boatDetail.description || "",
-        rentalPrices: boatDetail.rentalPrices || []
       });
       setBoatStatus(boatDetail.status || "");
       setDocumentsRequireRefresh(Boolean(boatDetail.documentsRequireRefresh));
@@ -107,26 +106,6 @@ export function EditBoat() {
 
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handlePriceChange = (index, field, value) => {
-    const updatedPrices = [...formData.rentalPrices];
-    updatedPrices[index][field] = field === "unitPrice" ? Number(value) : value;
-    setFormData(prev => ({ ...prev, rentalPrices: updatedPrices }));
-  };
-
-  const handleAddPrice = () => {
-    setFormData(prev => ({
-      ...prev,
-      rentalPrices: [...prev.rentalPrices, { rentalUnit: "Day", unitPrice: 0, currency: "VND", note: "" }]
-    }));
-  };
-
-  const handleRemovePrice = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      rentalPrices: prev.rentalPrices.filter((_, i) => i !== index)
-    }));
   };
 
   // QUẢN LÝ ẢNH (TỐI ĐA 3 ẢNH)
@@ -201,21 +180,11 @@ export function EditBoat() {
           legacyUrls.forEach((url) => payload.append("imageUrls", url));
           payload.append("imageUrl", legacyUrls[0]); 
         }
-
-        if (formData.rentalPrices && formData.rentalPrices.length > 0) {
-          formData.rentalPrices.forEach((price, idx) => {
-            payload.append(`rentalPrices[${idx}].rentalUnit`, price.rentalUnit);
-            payload.append(`rentalPrices[${idx}].unitPrice`, String(price.unitPrice));
-            payload.append(`rentalPrices[${idx}].currency`, price.currency || "VND");
-            if (price.note) payload.append(`rentalPrices[${idx}].note`, price.note.trim());
-          });
-        }
       } else {
         payload = {
           ...commonFields,
           imageUrl: legacyUrls[0] || null,
           imageUrls: legacyUrls,
-          rentalPrices: formData.rentalPrices
         };
       }
 
@@ -497,36 +466,6 @@ export function EditBoat() {
           <div>
             <label className={labelStyle}>{lang === "VN" ? "Mô tả ghi chú kỹ thuật" : "Engineering Logs / Notes"}</label>
             <textarea rows={2} value={formData.description} onChange={(e) => handleFieldChange("description", e.target.value)} className={`${inputStyle} resize-none font-medium`} />
-          </div>
-
-          {/* KHỐI BẢNG GIÁ THUÊ TÀU (RENTAL PRICES) */}
-          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
-             <div className="flex justify-between items-center text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-              <span>{lang === "VN" ? "Bảng giá cho thuê tàu (VND)" : "Rental Tariffs"}</span>
-            </div>
-            {formData.rentalPrices.map((price, idx) => (
-              <div key={idx} className="flex flex-col sm:flex-row gap-2 bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-700">
-                <div className="w-full sm:w-1/3 min-w-0">
-                  <FormSelect
-                    value={price.rentalUnit}
-                    onChange={(value) => handlePriceChange(idx, "rentalUnit", value)}
-                    options={[
-                      { value: "Day", label: "Theo Ngày (Day)" },
-                      { value: "Hour", label: "Theo Giờ (Hour)" },
-                    ]}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none"
-                  />
-                </div>
-                <input type="number" min={0} value={price.unitPrice} onChange={(e) => handlePriceChange(idx, "unitPrice", e.target.value)} placeholder="Giá tiền" className="w-full sm:flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none" />
-                <input type="text" value={price.note || ""} onChange={(e) => handlePriceChange(idx, "note", e.target.value)} placeholder="Ghi chú (VD: Gồm VAT)" className="w-full sm:flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none" />
-                <button type="button" onClick={() => handleRemovePrice(idx)} className="w-full sm:w-auto px-3 py-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors">
-                  <span className="material-symbols-outlined text-[16px] block">delete</span>
-                </button>
-              </div>
-            ))}
-            <button type="button" onClick={handleAddPrice} className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex justify-center items-center gap-1 border border-dashed border-slate-300 dark:border-slate-600">
-               <span className="material-symbols-outlined text-[14px]">add</span> {lang === "VN" ? "Thêm gói giá thuê" : "Add Tariff"}
-            </button>
           </div>
 
           {/* KHỐI THƯ VIỆN HÌNH ẢNH (TỐI ĐA 3 ẢNH) */}

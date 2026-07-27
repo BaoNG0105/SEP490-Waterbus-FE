@@ -279,7 +279,6 @@ export function BoatDutyRosterPanel({ boatId }) {
                   <th className="py-3.5 px-4">{lang === "VN" ? "Kết thúc" : "End"}</th>
                   <th className="py-3.5 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                   <th className="py-3.5 px-4 text-center">{lang === "VN" ? "Tiến độ ca" : "Shift"}</th>
-                  <th className="py-3.5 px-5">{lang === "VN" ? "Ghi chú" : "Note"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs">
@@ -319,7 +318,6 @@ export function BoatDutyRosterPanel({ boatId }) {
                         "—"
                       )}
                     </td>
-                    <td className="py-3 px-5 text-slate-500 dark:text-slate-400">{row.note || "—"}</td>
                   </tr>
                 ))}
               </tbody>

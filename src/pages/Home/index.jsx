@@ -4,7 +4,7 @@ import { useApp } from "../../context/AppContext";
 import 'leaflet/dist/leaflet.css';
 import { fetchAllStations } from "../../services/stationService";
 import { WaterwayMap } from "../../components/WaterwayMap";
-import { fetchPublishedBlogPosts } from "../../services/blogService";
+import { fetchPublishedBlogPosts, labelBlogCategory } from "../../services/blogService";
 import { fetchPublicPromotions } from "../../services/promotionService";
 import { ContactForm } from "../../components/ContactForm";
 
@@ -641,7 +641,7 @@ export const Home = () => {
                   <div className="space-y-3">
                     <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
                       <span className="inline-flex items-center gap-1 bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2.5 py-1 rounded-md uppercase tracking-wider text-[10px]">
-                        {blogs[heroSlide].category}
+                        {labelBlogCategory(blogs[heroSlide].category, lang)}
                       </span>
                       <span>•</span>
                       <span className="flex items-center gap-1">

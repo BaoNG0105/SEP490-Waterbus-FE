@@ -9,15 +9,10 @@ import {
 } from "../../../services/insuranceService";
 import { notify } from "../../../utils/swalToast";
 
-const BOOKING_TYPE_OPTIONS = [
-  { value: INSURANCE_BOOKING_TYPES.CHARTER, labelVn: "Thuê tàu", labelEn: "Charter" },
-  { value: INSURANCE_BOOKING_TYPES.SEAT, labelVn: "Vé lẻ", labelEn: "Seat ticket" },
-];
-
 const emptyForm = () => ({
   code: "",
   name: "",
-  bookingType: INSURANCE_BOOKING_TYPES.CHARTER,
+  bookingType: INSURANCE_BOOKING_TYPES.PASSENGER,
   unitPremiumAmount: 0,
   coverageAmount: 0,
   isRequired: false,
@@ -45,7 +40,6 @@ export function InsuranceManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [search, setSearch] = useState("");
-  const [bookingTypeFilter, setBookingTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -62,7 +56,6 @@ export function InsuranceManagement() {
       setIsLoading(true);
       setErrorMsg("");
       const params = {};
-      if (bookingTypeFilter !== "all") params.bookingType = bookingTypeFilter;
       if (statusFilter === "Active") params.activeOnly = true;
       const data = await fetchInsurancePackages(params);
       setPackages(data || []);
@@ -78,7 +71,7 @@ export function InsuranceManagement() {
 
   useEffect(() => {
     loadPackages();
-  }, [bookingTypeFilter, statusFilter]);
+  }, [statusFilter]);
 
   const filteredPackages = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -107,7 +100,7 @@ export function InsuranceManagement() {
     setForm({
       code: pkg.code || "",
       name: pkg.name || "",
-      bookingType: pkg.bookingType || INSURANCE_BOOKING_TYPES.CHARTER,
+      bookingType: INSURANCE_BOOKING_TYPES.PASSENGER,
       unitPremiumAmount: Number(pkg.unitPremiumAmount) || 0,
       coverageAmount: Number(pkg.coverageAmount) || 0,
       isRequired: Boolean(pkg.isRequired),
@@ -154,7 +147,7 @@ export function InsuranceManagement() {
   const validateForm = () => {
     if (!form.code.trim()) return lang === "VN" ? "Vui lòng nhập mã gói." : "Package code is required.";
     if (!form.name.trim()) return lang === "VN" ? "Vui lòng nhập tên gói." : "Package name is required.";
-    if (Number(form.unitPremiumAmount) < 0) return lang === "VN" ? "Phí mỗi suất không hợp lệ." : "Invalid unit premium.";
+    if (Number(form.unitPremiumAmount) < 0) return lang === "VN" ? "Phí mỗi khách không hợp lệ." : "Invalid per-passenger premium.";
     if (Number(form.coverageAmount) < 0) return lang === "VN" ? "Mức bồi thường không hợp lệ." : "Invalid coverage.";
     return "";
   };
@@ -162,7 +155,7 @@ export function InsuranceManagement() {
   const buildPayload = () => ({
     code: form.code.trim(),
     name: form.name.trim(),
-    bookingType: form.bookingType,
+    bookingType: INSURANCE_BOOKING_TYPES.PASSENGER,
     unitPremiumAmount: Number(form.unitPremiumAmount) || 0,
     coverageAmount: Number(form.coverageAmount) || 0,
     isRequired: false,
@@ -260,9 +253,17 @@ export function InsuranceManagement() {
   };
 
   const getBookingTypeLabel = (value) => {
-    const option = BOOKING_TYPE_OPTIONS.find((o) => o.value === value);
-    if (!option) return value;
-    return lang === "VN" ? option.labelVn : option.labelEn;
+    const type = String(value || "");
+    if (type === INSURANCE_BOOKING_TYPES.PASSENGER || !type) {
+      return lang === "VN" ? "Hành khách (chung)" : "Passenger (shared)";
+    }
+    if (type === INSURANCE_BOOKING_TYPES.SEAT) {
+      return lang === "VN" ? "Vé lẻ (legacy)" : "Seat (legacy)";
+    }
+    if (type === INSURANCE_BOOKING_TYPES.CHARTER) {
+      return lang === "VN" ? "Thuê tàu (legacy)" : "Charter (legacy)";
+    }
+    return type;
   };
 
   return (
@@ -274,8 +275,8 @@ export function InsuranceManagement() {
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
-              ? "Cấu hình phí mỗi suất, mức bồi thường và trạng thái áp dụng cho từng loại booking."
-              : "Configure unit premium, coverage and status for each booking type."}
+              ? "Gói PassengerInsurance dùng chung đặt vé / thuê tàu. Phí = đơn giá × số hành khách."
+              : "Shared PassengerInsurance package for seat & charter. Fee = unit × passenger count."}
           </p>
         </div>
         <button
@@ -289,7 +290,7 @@ export function InsuranceManagement() {
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
           <div className="relative">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
             <input
@@ -300,18 +301,6 @@ export function InsuranceManagement() {
               className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400"
             />
           </div>
-          <select
-            value={bookingTypeFilter}
-            onChange={(e) => setBookingTypeFilter(e.target.value)}
-            className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400"
-          >
-            <option value="all">{lang === "VN" ? "Loại booking: Tất cả" : "Booking type: All"}</option>
-            {BOOKING_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {lang === "VN" ? option.labelVn : option.labelEn}
-              </option>
-            ))}
-          </select>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -381,7 +370,7 @@ export function InsuranceManagement() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 p-3">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      {lang === "VN" ? "Phí / suất" : "Fee / unit"}
+                      {lang === "VN" ? "Phí / khách" : "Fee / passenger"}
                     </p>
                     <p className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400 mt-1">
                       {formatVnd(pkg.unitPremiumAmount)}
@@ -493,40 +482,22 @@ export function InsuranceManagement() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={labelStyle}>{lang === "VN" ? "Mã gói (*)" : "Code (*)"}</label>
-                  <input value={form.code} onChange={(e) => updateField("code", e.target.value)} className={inputStyle} placeholder="CHARTER_PASSENGER_BASIC" />
+                  <input value={form.code} onChange={(e) => updateField("code", e.target.value)} className={inputStyle} placeholder="PASSENGER_BASIC" />
                 </div>
                 <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Loại booking" : "Booking type"}</label>
-                  <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                    {BOOKING_TYPE_OPTIONS.map((option) => {
-                      const selected = form.bookingType === option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => updateField("bookingType", option.value)}
-                          className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${
-                            selected
-                              ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                              : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                          }`}
-                        >
-                          {lang === "VN" ? option.labelVn : option.labelEn}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <label className={labelStyle}>{lang === "VN" ? "Thứ tự hiển thị" : "Display order"}</label>
+                  <input type="number" min={0} value={form.displayOrder} onChange={(e) => updateField("displayOrder", e.target.value)} className={inputStyle} />
                 </div>
               </div>
 
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Tên gói (*)" : "Name (*)"}</label>
-                <input value={form.name} onChange={(e) => updateField("name", e.target.value)} className={inputStyle} placeholder={lang === "VN" ? "Bảo hiểm hành khách thuê tàu" : "Charter passenger insurance"} />
+                <input value={form.name} onChange={(e) => updateField("name", e.target.value)} className={inputStyle} placeholder={lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"} />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Phí mỗi suất (VND)" : "Fee per unit (VND)"}</label>
+                  <label className={labelStyle}>{lang === "VN" ? "Phí mỗi khách (VND)" : "Fee per passenger (VND)"}</label>
                   <input type="number" min={0} value={form.unitPremiumAmount} onChange={(e) => updateField("unitPremiumAmount", e.target.value)} className={inputStyle} />
                 </div>
                 <div>
@@ -535,12 +506,7 @@ export function InsuranceManagement() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Thứ tự hiển thị" : "Display order"}</label>
-                  <input type="number" min={0} value={form.displayOrder} onChange={(e) => updateField("displayOrder", e.target.value)} className={inputStyle} />
-                </div>
-                <div>
+              <div>
                   <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
                   <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
                     {[
@@ -564,7 +530,6 @@ export function InsuranceManagement() {
                       );
                     })}
                   </div>
-                </div>
               </div>
 
               <div>

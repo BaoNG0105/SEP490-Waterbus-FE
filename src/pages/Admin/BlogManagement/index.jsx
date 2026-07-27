@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import {
@@ -8,8 +8,10 @@ import {
     publishBlogPostById,
     BLOG_STATUS,
     BLOG_CATEGORY,
+    labelBlogCategory,
+    labelBlogStatus,
 } from "../../../services/blogService";
-import { isOperationsUser, isAdminUser } from "../../../utils/roleHelpers";
+import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 
 const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
@@ -53,9 +55,7 @@ export function BlogManagement() {
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 8;
 
-    const canManage = isOperationsUser(currentUser);
-    /** Chỉ Admin duyệt / xuất bản / lưu trữ */
-    const canPublish = isAdminUser(currentUser);
+    const canManage = isAdminUser(currentUser);
 
     const loadBlogs = async () => {
         try {
@@ -65,10 +65,13 @@ export function BlogManagement() {
             setBlogs(data || []);
         } catch (error) {
             console.error("Lỗi giao diện tải danh sách blog:", error);
+            const status = error?.response?.status;
             setErrorMsg(
-                lang === "VN"
-                    ? "Không thể kết nối tới máy chủ để tải danh sách bài viết."
-                    : "Failed to connect to server to fetch blog posts."
+                status === 403
+                    ? (lang === "VN" ? "Chỉ Admin được quản lý blog." : "Only Admin can manage blog posts.")
+                    : (lang === "VN"
+                        ? "Không thể kết nối tới máy chủ để tải danh sách bài viết."
+                        : "Failed to connect to server to fetch blog posts.")
             );
         } finally {
             setIsLoading(false);
@@ -76,9 +79,10 @@ export function BlogManagement() {
     };
 
     useEffect(() => {
+        if (!canManage) return;
         loadBlogs();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [lang]);
+    }, [lang, canManage]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -108,6 +112,10 @@ export function BlogManagement() {
     const currentBlogs = filteredBlogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
     const startIndex = filteredBlogs.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
     const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, filteredBlogs.length);
+
+    if (!canManage) {
+        return <Navigate to="/admin" replace />;
+    }
 
     const getPaginationGroup = () => {
         let pages = [];
@@ -235,12 +243,8 @@ export function BlogManagement() {
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
                         {lang === "VN"
-                            ? canPublish
-                                ? "Danh sách bài viết, duyệt xuất bản và nội dung tin tức."
-                                : "Viết bài nháp — Admin sẽ duyệt và xuất bản."
-                            : canPublish
-                                ? "Manage blog posts, publish status and article content."
-                                : "Write draft posts — Admin will review and publish."}
+                            ? "Admin tạo / sửa / xuất bản / lưu trữ. Draft ẩn, Published hiện public, Archived ẩn."
+                            : "Admin create / edit / publish / archive. Draft hidden, Published public, Archived hidden."}
                     </p>
                 </div>
                 {canManage && (
@@ -344,7 +348,6 @@ export function BlogManagement() {
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
                                 <th className="py-4 px-6">{lang === "VN" ? "Bài viết" : "Post"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Chuyên mục" : "Category"}</th>
-                                <th className="py-4 px-4">{lang === "VN" ? "Tác giả" : "Author"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Ngày xuất bản" : "Published"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
@@ -353,7 +356,7 @@ export function BlogManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {currentBlogs.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         {lang === "VN" ? "Không có bài viết nào." : "No posts found."}
                                     </td>
                                 </tr>
@@ -387,86 +390,64 @@ export function BlogManagement() {
                                             {/* Cột 2: Chuyên mục */}
                                             <td className="py-4 px-4">
                                                 <span className="text-[10px] font-headline font-black tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 inline-block uppercase">
-                                                    {blog.category}
+                                                    {labelBlogCategory(blog.category, lang)}
                                                 </span>
                                             </td>
 
-                                            {/* Cột 3: Tác giả */}
-                                            <td className="py-4 px-4">
-                                                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                                                    {blog.authorName || "Admin"}
-                                                </p>
-                                            </td>
-
-                                            {/* Cột 4: Ngày xuất bản */}
+                                            {/* Cột 3: Ngày xuất bản */}
                                             <td className="py-4 px-4">
                                                 <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
                                                     {formatDate(blog.publishedAt)}
                                                 </p>
                                             </td>
 
-                                            {/* Cột 5: Trạng thái */}
+                                            {/* Cột 4: Trạng thái */}
                                             <td className="py-4 px-4 text-center">
                                                 <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusStyle.badge}`}>
                                                     <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`}></span>
-                                                    {blog.status}
+                                                    {labelBlogStatus(blog.status, lang)}
                                                 </span>
                                             </td>
 
-                                            {/* Cột 6: Hành động */}
+                                            {/* Cột 5: Hành động */}
                                             <td className="py-4 px-6 text-center">
-                                                {canManage ? (
-                                                    <div className="flex items-center justify-center gap-2">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button
+                                                        onClick={() => navigate(`/admin/news/edit/${blog.id}`, { state: { blog } })}
+                                                        className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
+                                                        title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
+                                                    >
+                                                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                                                    </button>
+                                                    {blog.status !== BLOG_STATUS.PUBLISHED && (
                                                         <button
-                                                            onClick={() => navigate(`/admin/news/edit/${blog.id}`, { state: { blog } })}
-                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
-                                                            title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
+                                                            onClick={() => handlePublish(blog)}
+                                                            disabled={processingId === blog.id}
+                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-500 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                            title={lang === "VN" ? "Xuất bản" : "Publish"}
                                                         >
-                                                            <span className="material-symbols-outlined text-[18px]">edit</span>
+                                                            {processingId === blog.id ? (
+                                                                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                            ) : (
+                                                                <span className="material-symbols-outlined text-[18px]">publish</span>
+                                                            )}
                                                         </button>
-                                                        {canPublish && blog.status !== BLOG_STATUS.PUBLISHED && (
-                                                            <button
-                                                                onClick={() => handlePublish(blog)}
-                                                                disabled={processingId === blog.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-500 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
-                                                                title={lang === "VN" ? "Xuất bản" : "Publish"}
-                                                            >
-                                                                {processingId === blog.id ? (
-                                                                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                                                ) : (
-                                                                    <span className="material-symbols-outlined text-[18px]">publish</span>
-                                                                )}
-                                                            </button>
-                                                        )}
-                                                        {canPublish && blog.status !== BLOG_STATUS.ARCHIVED && (
-                                                            <button
-                                                                onClick={() => handleArchive(blog)}
-                                                                disabled={processingId === blog.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
-                                                                title={lang === "VN" ? "Lưu trữ" : "Archive"}
-                                                            >
-                                                                {processingId === blog.id ? (
-                                                                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                                                ) : (
-                                                                    <span className="material-symbols-outlined text-[18px]">archive</span>
-                                                                )}
-                                                            </button>
-                                                        )}
-                                                        {!canPublish && blog.status === BLOG_STATUS.DRAFT && (
-                                                            <span
-                                                                className="text-[9px] font-headline font-black uppercase tracking-wide text-amber-600/80 dark:text-amber-400/80 px-1"
-                                                                title={lang === "VN" ? "Chờ Admin duyệt" : "Awaiting Admin approval"}
-                                                            >
-                                                                {lang === "VN" ? "Chờ duyệt" : "Pending"}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-wider flex items-center justify-center gap-1">
-                                                        <span className="material-symbols-outlined text-sm">visibility</span>
-                                                        {lang === "VN" ? "Chỉ xem" : "View only"}
-                                                    </span>
-                                                )}
+                                                    )}
+                                                    {blog.status !== BLOG_STATUS.ARCHIVED && (
+                                                        <button
+                                                            onClick={() => handleArchive(blog)}
+                                                            disabled={processingId === blog.id}
+                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                            title={lang === "VN" ? "Lưu trữ" : "Archive"}
+                                                        >
+                                                            {processingId === blog.id ? (
+                                                                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                            ) : (
+                                                                <span className="material-symbols-outlined text-[18px]">archive</span>
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );

@@ -15,11 +15,15 @@ import {
   fetchAdminCharterBookingDetail,
   fetchAssignedCharterBookingDetail,
   fetchAdminCharterBookingRouteCandidates,
+  fetchAdminRentalPricePolicies,
   modifyAdminCharterBookingStatus,
   previewAdminCharterBookingQuote,
   submitAdminCharterBookingQuote,
   createAdminCharterBookingTrip,
   fetchOccupiedBoatIdsForCharterDate,
+  requestCharterRouteDraw,
+  fetchRouteDrawRequests,
+  fetchRouteDrawRequestDetail,
 } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { buildConfirmBodyHtml, showConfirmDialog, showToast, showValidationMessage } from "../../../utils/swalToast";
@@ -35,6 +39,13 @@ import {
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { getCharterCapabilities, shouldUseAssignedCharterApi, getDefaultCharterTab } from "../../../utils/charterBookingAccess";
 import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
+import {
+  extractRouteDrawRequestList,
+  isActiveRouteDrawStatus,
+  normalizeRouteDrawRequest,
+  bookingNeedsGpsRouteDraw,
+  ROUTE_DRAW_STATUS,
+} from "../../../utils/routeDrawRequest";
 import {
   buildCharterRoutePlan,
   buildInitialRoutePlanSelections,
@@ -54,6 +65,7 @@ import {
   getBoatSeatSetupType,
   getCharterRoutePricingWarning,
   hasEmptyRouteCandidateLegs,
+  hasSelectedRouteCodesForAllLegs,
   isCharterBoatScheduleConflictError,
   isCharterRoutePlanComplete,
   isCharterRoutePricingBlocked,
@@ -100,6 +112,7 @@ export function AdminCharterBookingDetail() {
   const location = useLocation();
   const [booking, setBooking] = useState(null);
   const [boats, setBoats] = useState([]);
+  const [rentalPolicies, setRentalPolicies] = useState([]);
   const [activeTab, setActiveTab] = useState(() => location.state?.tab || "overview");
   const [quoteForm, setQuoteForm] = useState({
     rentalUnit: "Hour",
@@ -122,10 +135,17 @@ export function AdminCharterBookingDetail() {
   const [loadError, setLoadError] = useState("");
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [acknowledgedBadges, setAcknowledgedBadges] = useState(() => readAcknowledgedTabBadges(id));
+  const [routeDrawRequest, setRouteDrawRequest] = useState(null);
+  const [isRouteDrawSubmitting, setIsRouteDrawSubmitting] = useState(false);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }),
     []
+  );
+
+  const resolveBoatPrice = useCallback(
+    (boat, unit) => getBoatPrice(boat, unit, rentalPolicies),
+    [rentalPolicies],
   );
 
   const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
@@ -144,16 +164,22 @@ export function AdminCharterBookingDetail() {
       else setIsLoading(true);
       setLoadError("");
       const fetchDetail = useAssignedApi ? fetchAssignedCharterBookingDetail : fetchAdminCharterBookingDetail;
-      const [detail, boatData] = await Promise.all([
+      const [detail, boatData, rentalPolicyResult] = await Promise.all([
         fetchDetail(id),
         fetchActiveBoatsByServiceType("Passenger").catch(() =>
           fetchAllBoats({ status: "Active" }).catch(() => []),
         ),
+        fetchAdminRentalPricePolicies().catch(() => ({ policies: [] })),
       ]);
       const normalized = normalizeBooking(detail);
       setBooking(normalized);
+      const embeddedDraw = normalizeRouteDrawRequest(
+        normalized.routeDrawRequest || detail?.routeDrawRequest || detail?.latestRouteDrawRequest,
+      );
+      if (embeddedDraw?.requestId) setRouteDrawRequest(embeddedDraw);
       const boatList = Array.isArray(boatData) ? boatData : (boatData?.items || boatData?.data || []);
       setBoats(boatList.filter((boat) => !isRescueBoat(boat)));
+      setRentalPolicies(Array.isArray(rentalPolicyResult?.policies) ? rentalPolicyResult.policies : []);
       setQuoteForm(buildQuoteFormFromBooking(normalized));
       setQuotePreview(null);
       setQuotePreviewError("");
@@ -194,6 +220,118 @@ export function AdminCharterBookingDetail() {
     onRefresh: refreshFromHub,
   });
 
+  const resolveRouteDrawForBooking = useCallback(async (bookingId) => {
+    if (!bookingId) return null;
+    const statuses = [
+      ROUTE_DRAW_STATUS.PENDING,
+      ROUTE_DRAW_STATUS.IN_PROGRESS,
+      ROUTE_DRAW_STATUS.DONE,
+      ROUTE_DRAW_STATUS.CANCELLED,
+    ];
+    for (const status of statuses) {
+      try {
+        const payload = await fetchRouteDrawRequests({ status });
+        const match = extractRouteDrawRequestList(payload)
+          .map((item) => normalizeRouteDrawRequest(item))
+          .find((item) => item && String(item.bookingId) === String(bookingId));
+        if (match) return match;
+      } catch {
+        // status filter có thể không hỗ trợ — bỏ qua
+      }
+    }
+    return null;
+  }, []);
+
+  useEffect(() => {
+    if (!id || useAssignedApi) return undefined;
+    let cancelled = false;
+    (async () => {
+      if (routeDrawRequest?.requestId) return;
+      const found = await resolveRouteDrawForBooking(id);
+      if (!cancelled && found) setRouteDrawRequest(found);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, resolveRouteDrawForBooking, routeDrawRequest?.requestId, useAssignedApi]);
+
+  // Poll request / booking khi GPS đang xử lý.
+  useEffect(() => {
+    if (!id) return undefined;
+    const requestId = routeDrawRequest?.requestId;
+    const status = routeDrawRequest?.status;
+    if (!isActiveRouteDrawStatus(status)) return undefined;
+
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        let next = null;
+        if (requestId) {
+          const raw = await fetchRouteDrawRequestDetail(requestId);
+          next = normalizeRouteDrawRequest(raw);
+          if (!cancelled && next) setRouteDrawRequest(next);
+        } else if (!useAssignedApi) {
+          next = await resolveRouteDrawForBooking(id);
+          if (!cancelled && next) setRouteDrawRequest(next);
+        }
+
+        if (!cancelled && next?.status === ROUTE_DRAW_STATUS.DONE) {
+          await loadDetail({ silent: true });
+        }
+      } catch (error) {
+        console.error("Poll route-draw request failed:", error);
+      }
+    };
+
+    const timer = setInterval(tick, 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [
+    id,
+    loadDetail,
+    resolveRouteDrawForBooking,
+    routeDrawRequest?.requestId,
+    routeDrawRequest?.status,
+    useAssignedApi,
+  ]);
+
+  const handleRequestRouteDraw = useCallback(async () => {
+    if (!id || !bookingNeedsGpsRouteDraw(booking)) return;
+    try {
+      setIsRouteDrawSubmitting(true);
+      const raw = await requestCharterRouteDraw(id, {
+        notes: lang === "VN"
+          ? "Cần GPS vẽ tuyến cho booking này"
+          : "Need GPS to draw a route for this booking",
+      });
+      const normalized = normalizeRouteDrawRequest(raw) || {
+        requestId: String(raw?.requestId || raw?.id || ""),
+        bookingId: String(id),
+        status: ROUTE_DRAW_STATUS.PENDING,
+        notes: "Cần GPS vẽ tuyến cho booking này",
+        stops: [],
+      };
+      setRouteDrawRequest(normalized);
+      showToast({
+        icon: "success",
+        title: lang === "VN" ? "Đã gửi yêu cầu GPS vẽ tuyến." : "GPS route-draw request sent.",
+      });
+      await loadDetail({ silent: true });
+    } catch (error) {
+      showToast({
+        icon: "error",
+        title: getApiErrorMessage(
+          error,
+          lang === "VN" ? "Gửi yêu cầu GPS thất bại." : "Failed to request GPS route draw.",
+        ),
+      });
+    } finally {
+      setIsRouteDrawSubmitting(false);
+    }
+  }, [booking, id, lang, loadDetail]);
+
   useEffect(() => {
     if (location.state?.tab) {
       setActiveTab(location.state.tab);
@@ -227,6 +365,11 @@ export function AdminCharterBookingDetail() {
     [routeCandidateLegs, routePlanSelections],
   );
   const isRoutePlanComplete = isCharterRoutePlanComplete(routePlan, routeCandidateLegs);
+  // Thiếu ứng viên → cần GPS vẽ. Đủ mã tuyến (hoặc đã chọn route cho mọi chặng) → không cần panel.
+  const hasMissingRouteLegs = routeCandidatesLoaded && hasEmptyRouteCandidateLegs(routeCandidateLegs);
+  const hasEnoughRouteCodes = routeCandidatesLoaded
+    && (isRoutePlanComplete
+      || hasSelectedRouteCodesForAllLegs(routeCandidateLegs, routePlanSelections));
   const routeQuoteOptions = useMemo(() => ({
     routeCandidateLegs: routeCandidatesLoaded ? routeCandidateLegs : undefined,
     routePlanComplete: routeCandidatesLoaded && isRoutePlanComplete,
@@ -474,19 +617,31 @@ export function AdminCharterBookingDetail() {
 
       let legs = normalizeRouteCandidateLegs(bePayload, booking);
 
-      // Ưu tiên candidates từ BE. Chỉ fallback catalog khi thiếu / BE lỗi.
-      const needCatalogFallback = !bePayload || hasEmptyRouteCandidateLegs(legs);
-      if (needCatalogFallback) {
-        try {
-          const catalog = await fetchCharterSourceRoutes();
-          const list = Array.isArray(catalog) ? catalog : [];
-          const gpsLike = list.filter((route) => isUsableRouteCandidateForBooking(route));
-          const needDetail = gpsLike.filter((route) => {
-            const stops = Array.isArray(route?.stops) ? route.stops : Array.isArray(route?.routeStops) ? route.routeStops : [];
-            return stops.length === 0;
+      // Luôn tải catalog GPS + detail stops để lọc đúng 2 bến (kể cả khi BE đã trả candidates).
+      try {
+        const catalog = await fetchCharterSourceRoutes();
+        const list = Array.isArray(catalog) ? catalog : [];
+        const gpsLike = list.filter((route) => isUsableRouteCandidateForBooking(route));
+        const needDetail = gpsLike.filter((route) => {
+          const stops = Array.isArray(route?.stops) ? route.stops : Array.isArray(route?.routeStops) ? route.routeStops : [];
+          return stops.length === 0;
+        });
+        // BE candidates thường không kèm stops — tải detail theo routeId để verify bến.
+        const beIdsNeedingDetail = [];
+        legs.forEach((leg) => {
+          (Array.isArray(leg.candidates) ? leg.candidates : []).forEach((candidate) => {
+            const id = String(candidate?.routeId || "").trim();
+            if (!id) return;
+            const inCatalog = gpsLike.some((route) => String(route.routeId || route.id || "") === id);
+            const alreadyQueued = needDetail.some((route) => String(route.routeId || route.id || "") === id)
+              || beIdsNeedingDetail.includes(id);
+            if (!inCatalog && !alreadyQueued) beIdsNeedingDetail.push(id);
           });
-          const details = await Promise.all(
-            needDetail.map(async (route) => {
+        });
+
+        const details = await Promise.all(
+          [
+            ...needDetail.map(async (route) => {
               const id = String(route.routeId || route.id || "");
               if (!id) return null;
               try {
@@ -496,28 +651,41 @@ export function AdminCharterBookingDetail() {
                 return null;
               }
             }),
+            ...beIdsNeedingDetail.map(async (id) => {
+              try {
+                return await fetchRouteDetail(id);
+              } catch (error) {
+                console.error(`Không tải detail route ${id}:`, error);
+                return null;
+              }
+            }),
+          ],
+        );
+        const detailById = new Map(
+          details.filter(Boolean).map((detail) => [String(detail.routeId || detail.id || ""), detail]),
+        );
+        const catalogWithStops = gpsLike.map((route) => {
+          const id = String(route.routeId || route.id || "");
+          const detail = detailById.get(id);
+          return detail ? { ...route, ...detail } : route;
+        });
+        // Thêm các BE candidate detail không nằm trong catalog list.
+        detailById.forEach((detail, id) => {
+          if (catalogWithStops.some((route) => String(route.routeId || route.id || "") === id)) return;
+          catalogWithStops.push(detail);
+        });
+        setGpsCatalogRoutes(catalogWithStops);
+        legs = enrichCandidateLegsWithManualGpsRoutes(legs, catalogWithStops);
+      } catch (error) {
+        console.error("Không tải được catalog charter-source:", error);
+        if (!beErrorMessage) {
+          beErrorMessage = getApiErrorMessage(
+            error,
+            lang === "VN" ? "Không tải được danh sách Route nguồn GPS / Sightseeing." : "Unable to load GPS / Sightseeing source routes.",
           );
-          const detailById = new Map(
-            details.filter(Boolean).map((detail) => [String(detail.routeId || detail.id || ""), detail]),
-          );
-          const catalogWithStops = gpsLike.map((route) => {
-            const id = String(route.routeId || route.id || "");
-            const detail = detailById.get(id);
-            return detail ? { ...route, ...detail } : route;
-          });
-          setGpsCatalogRoutes(catalogWithStops);
-          legs = enrichCandidateLegsWithManualGpsRoutes(legs, catalogWithStops);
-        } catch (error) {
-          console.error("Không tải được catalog charter-source:", error);
-          if (!beErrorMessage) {
-            beErrorMessage = getApiErrorMessage(
-              error,
-              lang === "VN" ? "Không tải được danh sách Route nguồn GPS / Sightseeing." : "Unable to load GPS / Sightseeing source routes.",
-            );
-          }
         }
-      } else {
-        setGpsCatalogRoutes([]);
+        // Không có catalog → vẫn cố lọc bằng stops sẵn có trên candidate (nếu có).
+        legs = enrichCandidateLegsWithManualGpsRoutes(legs, []);
       }
 
       setRouteCandidateLegs(legs);
@@ -1108,7 +1276,7 @@ export function AdminCharterBookingDetail() {
           getBoatSeatSetupType={getBoatSeatSetupType}
           getBoatId={getBoatId}
           getBoatSeatCount={getBoatSeatCount}
-          getBoatPrice={getBoatPrice}
+          getBoatPrice={resolveBoatPrice}
           isActiveBoat={isActiveBoat}
           showBookingHoldCountdown={showBookingHoldCountdown}
           bookingHoldRemainingMs={bookingHoldRemainingMs}
@@ -1133,6 +1301,12 @@ export function AdminCharterBookingDetail() {
           createTripBlockers={charterTripGate.reasons}
           linkedTripIds={linkedTripIds}
           canManageTripCreate={canManageTripCreate}
+          routeDrawRequest={routeDrawRequest}
+          isRouteDrawSubmitting={isRouteDrawSubmitting}
+          canRequestRouteDraw={Boolean(capabilities.canQuote || capabilities.canViewAllCharters)}
+          hasMissingRouteLegs={hasMissingRouteLegs}
+          hasEnoughRouteCodes={hasEnoughRouteCodes}
+          onRequestRouteDraw={handleRequestRouteDraw}
           onNavigateTab={(tabId) => {
             const tab = workspaceTabs.find((item) => item.id === tabId);
             goToTab(tabId, tab?.badge);
@@ -1167,6 +1341,12 @@ export function AdminCharterBookingDetail() {
           selectedBoats={selectedBoats}
           capabilities={capabilities}
           onNavigateTab={(tabId) => goToTab(tabId)}
+          routeDrawRequest={routeDrawRequest}
+          isRouteDrawSubmitting={isRouteDrawSubmitting}
+          canRequestRouteDraw={Boolean(capabilities.canQuote || capabilities.canViewAllCharters)}
+          hasMissingRouteLegs={hasMissingRouteLegs}
+          hasEnoughRouteCodes={hasEnoughRouteCodes}
+          onRequestRouteDraw={handleRequestRouteDraw}
         />
       )}
 

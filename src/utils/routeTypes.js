@@ -1,11 +1,24 @@
 /**
  * Nhãn BE `routeLabel` ngắn: Bus | GPS | Sightseeing | Charter
  * + map từ routeType cũ khi BE chưa trả routeLabel.
+ * + fallback đọc mã tuyến (routeCode): BB / BS / BR / CH-CB / GPS.
  */
+export const resolveRouteLabelKeyFromCode = (routeCode) => {
+  const code = String(routeCode || "").trim().toUpperCase();
+  if (!code) return "";
+  if (/^CH[-_]?CB[-_]/i.test(code) || /^BR[-_]/i.test(code)) return "Charter";
+  if (/^BB[-_]/i.test(code)) return "Bus";
+  if (/^BS[-_]/i.test(code)) return "Sightseeing";
+  if (/^GPS[-_]/i.test(code) || /^CR[-_]/i.test(code)) return "GPS";
+  return "";
+};
+
 export const resolveRouteLabelKey = (routeOrTypeOrLabel) => {
   if (routeOrTypeOrLabel == null) return "";
   if (typeof routeOrTypeOrLabel === "string") {
     const raw = routeOrTypeOrLabel.trim();
+    const fromCode = resolveRouteLabelKeyFromCode(raw);
+    if (fromCode) return fromCode;
     const key = raw.toLowerCase().replace(/[_-\s]/g, "");
     if (["bus", "regular"].includes(key)) return "Bus";
     if (["gps", "charterreference"].includes(key)) return "GPS";
@@ -16,7 +29,12 @@ export const resolveRouteLabelKey = (routeOrTypeOrLabel) => {
 
   const fromLabel = String(routeOrTypeOrLabel.routeLabel || "").trim();
   if (fromLabel) return resolveRouteLabelKey(fromLabel);
-  return resolveRouteLabelKey(routeOrTypeOrLabel.routeType || "");
+
+  const fromType = resolveRouteLabelKey(routeOrTypeOrLabel.routeType || "");
+  if (["Bus", "GPS", "Sightseeing", "Charter"].includes(fromType)) return fromType;
+
+  // FE nhận định loại tuyến qua mã khi BE thiếu routeLabel/routeType.
+  return resolveRouteLabelKeyFromCode(routeOrTypeOrLabel.routeCode || routeOrTypeOrLabel.code);
 };
 
 /**

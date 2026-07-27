@@ -26,7 +26,7 @@ export const getCharterCapabilities = (user, booking = null) => {
   return {
     useAssignedApi: manager || staff,
     canViewAllCharters: admin,
-    canQuote: admin,
+    canQuote: admin || manager,
     canAssignManager: admin,
     canManageStatus: admin,
     canViewPayments: admin,

@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { PayOSLogo, payosButtonLgClassName } from "../../../components/PayOSLogo";
-import { submitBooking } from "../../../services/bookingService";
+import { SelectablePublicVouchers } from "../../../components/SelectablePublicVouchers";
+import { submitBooking, fetchMyBookingDetail } from "../../../services/bookingService";
 import { createBookingPayment } from "../../../services/paymentService";
 import { fetchCurrentUserProfile } from "../../../services/authService";
-import { fetchTicketTypes, DEFAULT_TICKET_TYPES } from "../../../services/ticketTypeService";
+import { fetchTicketTypes, DEFAULT_TICKET_TYPES, resolveTicketPriceModifier } from "../../../services/ticketTypeService";
 import { fetchMyPointBalance, fetchMyPoints, getMaxPointsToUse, estimateEarnPoints } from "../../../services/pointService";
 import {
   fetchActiveInsurancePackages,
@@ -14,6 +15,7 @@ import {
   isSameInsurancePackageId,
   INSURANCE_BOOKING_TYPES,
 } from "../../../services/insuranceService";
+import { PROMOTION_BOOKING_TYPES, checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
 import { calculateTicketInsurancePreview } from "../../../utils/insurancePreview";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify, showToast } from "../../../utils/swalToast";
@@ -35,13 +37,14 @@ const TICKET_TYPE_LABELS = {
   INFANT: { vn: "Em bé dưới 2 tuổi", en: "Infant" },
 };
 
-const getTicketTypeLabel = (ticketType, lang) => {
+const getTicketTypeLabel = (ticketType, lang, routeType) => {
   const base = TICKET_TYPE_LABELS[ticketType.code]?.[lang === "VN" ? "vn" : "en"] || ticketType.name;
-  if (Number(ticketType.priceModifier) === 0) {
+  const modifier = resolveTicketPriceModifier(ticketType, routeType);
+  if (Number(modifier) === 0) {
     return `${base} (${lang === "VN" ? "miễn phí" : "free"})`;
   }
-  if (Number(ticketType.priceModifier) !== 1) {
-    return `${base} (x${ticketType.priceModifier})`;
+  if (Number(modifier) !== 1) {
+    return `${base} (x${modifier})`;
   }
   return base;
 };
@@ -152,7 +155,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     onBack();
   };
 
-  // 0. LOẠI VÉ TỪ BE (GET /api/ticket-types): code + priceModifier để preview giá.
+  // 0. LOẠI VÉ TỪ BE (GET /api/ticket-types): priceModifier / sightseeingPriceModifier theo routeType.
   // INFANT không chiếm ghế nên không đưa vào dropdown hành khách có ghế.
   const [ticketTypes, setTicketTypes] = useState(DEFAULT_TICKET_TYPES);
   useEffect(() => {
@@ -165,7 +168,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
   const seatedTicketTypes = ticketTypes.filter((t) => t.code !== "INFANT");
   const getPriceModifier = (code) => {
     const found = ticketTypes.find((t) => t.code === String(code || "").toUpperCase());
-    return found ? Number(found.priceModifier) : (String(code).toUpperCase() === "ADULT" ? 1 : 0);
+    if (!found) return String(code || "").toUpperCase() === "ADULT" ? 1 : 0;
+    return resolveTicketPriceModifier(found, routeType);
   };
 
   // BE: allowedSeatTypeCodes = ["STANDARD"] nghĩa là loại vé đó chỉ ngồi được ghế Standard
@@ -268,11 +272,15 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
 
   // 4. STATE: MÃ GIẢM GIÁ, ĐIỂM TÍCH LŨY, BẢO HIỂM & SUBMIT
   const [promoCode, setPromoCode] = useState("");
+  const [promoPreview, setPromoPreview] = useState(null);
+  const [promoChecking, setPromoChecking] = useState(false);
+  const promoValidateSeqRef = useRef(0);
   const [pointBalance, setPointBalance] = useState(0);
   const [pointsToUseInput, setPointsToUseInput] = useState("");
   const [insurancePackages, setInsurancePackages] = useState([]);
+  const [isInsuranceLoading, setIsInsuranceLoading] = useState(true);
+  const [insuranceLoadError, setInsuranceLoadError] = useState("");
   const [selectedInsurancePackageId, setSelectedInsurancePackageId] = useState(null);
-  const [isInsuranceDetailsOpen, setIsInsuranceDetailsOpen] = useState(false);
   const lastInsurancePackageIdRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -287,7 +295,9 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchActiveInsurancePackages(INSURANCE_BOOKING_TYPES.SEAT)
+    setIsInsuranceLoading(true);
+    setInsuranceLoadError("");
+    fetchActiveInsurancePackages(INSURANCE_BOOKING_TYPES.PASSENGER)
       .then((packages) => {
         if (cancelled) return;
         setInsurancePackages(packages);
@@ -303,19 +313,32 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           return defaultId;
         });
       })
-      .catch(() => {
-        if (!cancelled) setInsurancePackages([]);
+      .catch((error) => {
+        if (cancelled) return;
+        setInsurancePackages([]);
+        setInsuranceLoadError(
+          getApiErrorMessage(
+            error,
+            lang === "VN" ? "Không tải được gói bảo hiểm." : "Could not load insurance packages.",
+          ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsInsuranceLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [lang]);
 
   // Tổng số lượng ghế = Ghế chiều đi + Ghế chiều về (nếu có)
   const totalSeatsCount = isRoundTrip
     ? (selectedSeatsDeparture.length + selectedSeatsReturn.length)
     : selectedSeatsDeparture.length;
 
-  // Phí BH theo số khách (ghế chiều đi + em bé) — không nhân đôi chiều về.
-  const insurancePassengerCount = selectedSeatsDeparture.length + infants.length;
+  // Phí BH theo tổng passenger items (ghế đi + ghế về nếu khứ hồi + em bé).
+  const insurancePassengerCount =
+    selectedSeatsDeparture.length
+    + (isRoundTrip ? selectedSeatsReturn.length : 0)
+    + infants.length;
   const selectedInsurancePackage = selectedInsurancePackageId
     ? findInsurancePackageById(insurancePackages, selectedInsurancePackageId)
     : null;
@@ -328,14 +351,25 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
   const insuranceFee = selectedInsurancePackageId ? Number(insurancePreview.total) || 0 : 0;
   const insuranceRequired = insurancePackages.some((pkg) => pkg.isRequired);
 
-  // Ước tính giá vé theo contract BE: finalPrice = seat.basePrice * ticketType.priceModifier
-  // (hiện tại ADULT x1, SENIOR/DISABLED/INFANT x0). Giá chuẩn cuối cùng vẫn do BE chốt sau POST /bookings.
+  // Ước tính giá vé: finalPrice = seat.basePrice * modifier (SightseeingLoop → sightseeingPriceModifier).
+  // Giá chuẩn cuối cùng vẫn do BE chốt (subtotalAmount / discountAmount / totalAmount).
   const sumSeatsPrice = (seats) => seats.reduce((sum, seat, i) => {
     const modifier = getPriceModifier(passengers[i]?.ticketType || "ADULT");
     return sum + Number(seat.basePrice || 0) * modifier;
   }, 0);
   const subtotal = sumSeatsPrice(selectedSeatsDeparture) + (isRoundTrip ? sumSeatsPrice(selectedSeatsReturn) : 0);
-  const estimatedOrderAmount = subtotal + insuranceFee;
+  // Tổng đơn hàng trước giảm giá = giá vé + bảo hiểm (giống base BE dùng để validate mã).
+  const orderBeforeDiscount = subtotal + insuranceFee;
+
+  // Giảm giá chỉ tính khi mã đã validate khớp với promoCode hiện tại.
+  const promoApplied =
+    Boolean(promoPreview?.ok)
+    && String(promoPreview?.code || "").trim().toUpperCase() === String(promoCode || "").trim().toUpperCase();
+  const discountAmount = promoApplied
+    ? Math.min(orderBeforeDiscount, Math.max(0, Number(promoPreview.discountAmount) || 0))
+    : 0;
+  const orderAfterDiscount = Math.max(0, orderBeforeDiscount - discountAmount);
+  const estimatedOrderAmount = orderAfterDiscount;
 
   // BE: maxPointsToUse = min(pointBalance, floor(orderAmount * 0.5)); 1 điểm = 1 VND
   const maxPointsToUse = getMaxPointsToUse(pointBalance, estimatedOrderAmount);
@@ -347,6 +381,51 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
   const estimatedPayable = Math.max(0, estimatedOrderAmount - pointsToUse);
   const estimatedEarn = estimateEarnPoints(estimatedPayable);
   const isFreeBookingEstimate = estimatedPayable === 0;
+
+  // Preview giảm giá trước PayOS: validate mã theo tổng đơn (giá vé + bảo hiểm).
+  useEffect(() => {
+    const code = String(promoCode || "").trim();
+    if (!code || code.length < 3) {
+      setPromoPreview(null);
+      setPromoChecking(false);
+      return undefined;
+    }
+    const base = orderBeforeDiscount;
+    if (base <= 0) {
+      setPromoPreview({ ok: false, error: lang === "VN" ? "Chưa có số tiền để áp dụng mã." : "No amount to apply the code." });
+      return undefined;
+    }
+    const seq = ++promoValidateSeqRef.current;
+    setPromoChecking(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const payload = await checkPromotionCode(code, base);
+        if (seq !== promoValidateSeqRef.current) return;
+        const normalized = normalizePromotionValidateResult(payload, base);
+        if (!normalized.ok) {
+          setPromoPreview({ ok: false, error: normalized.message || (lang === "VN" ? "Mã không hợp lệ" : "Invalid code") });
+          return;
+        }
+        setPromoPreview({
+          ok: true,
+          discountAmount: normalized.discountAmount,
+          finalAmount: normalized.finalAmount,
+          baseAmount: normalized.baseAmount,
+          message: normalized.message,
+          code: normalized.code || code,
+        });
+      } catch (error) {
+        if (seq !== promoValidateSeqRef.current) return;
+        setPromoPreview({
+          ok: false,
+          error: getApiErrorMessage(error, lang === "VN" ? "Không kiểm tra được mã khuyến mãi." : "Could not validate promo code."),
+        });
+      } finally {
+        if (seq === promoValidateSeqRef.current) setPromoChecking(false);
+      }
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [promoCode, orderBeforeDiscount, lang]);
 
   const showError = (title, text) => {
     showToast({ icon: "warning", title, text });
@@ -456,11 +535,17 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       const orderAmount = Number.isFinite(bookingTotal)
         ? bookingTotal
         : (Number(bookingSubtotalRaw) || estimatedOrderAmount);
+      const bookingStatus = String(pick(booking, [
+        "bookingStatus", "status",
+        "data.bookingStatus", "data.status",
+      ], "")).trim();
       const cappedPoints = getMaxPointsToUse(pointBalance, orderAmount);
       const pointsForPayment = Math.min(pointsToUse, cappedPoints);
 
       const paymentServiceType = isLoopRoute ? "Sightseeing" : "Waterbus";
-      const myTicketsPath = `/profile/my-bookings?type=${paymentServiceType}`;
+      const myTicketsPath = isLoopRoute
+        ? "/profile/my-sightseeing-booking"
+        : "/profile/my-waterbus-booking";
 
       const finishFreeBooking = async () => {
         sessionStorage.setItem("latestWaterbusPaymentBooking", bookingId);
@@ -477,18 +562,24 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           allowOutsideClick: false,
           showCancelButton: false,
         });
-        navigate(`${myTicketsPath}&highlightBookingId=${encodeURIComponent(bookingId)}`, {
+        navigate(`${myTicketsPath}?highlightBookingId=${encodeURIComponent(bookingId)}`, {
           replace: true,
-          state: { highlightBookingId: bookingId, paymentOutcome: "success", freeTicket: true, serviceType: paymentServiceType },
+          state: { highlightBookingId: bookingId, paymentOutcome: "success", freeTicket: true },
         });
       };
 
-      // totalAmount === 0 sau tạo booking → hoàn tất, không gọi PayOS / create payment.
-      if (orderAmount === 0) {
+      // Vé 0đ: BE chốt Confirmed tự động → GET detail lấy ticketCode/QR rồi vào màn vé (không PayOS).
+      if (orderAmount === 0 && bookingStatus.toLowerCase() === "confirmed") {
+        try {
+          await fetchMyBookingDetail(bookingId);
+        } catch (detailError) {
+          console.warn("Không tải được detail booking 0đ (vẫn điều hướng màn vé):", detailError);
+        }
         await finishFreeBooking();
         return;
       }
 
+      // Vé có tiền: tạo payment PayOS như cũ.
       const payment = await createBookingPayment({
         bookingId,
         paymentOption: "Full",
@@ -523,12 +614,17 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
         "data.amount", "data.totalAmount", "data.payableAmount",
       ], NaN));
 
-      // Điểm/promo về 0đ: Paid + không checkoutUrl → không sang PayOS.
+      // Điểm/promo về 0đ sau create payment: Paid + không checkoutUrl → không sang PayOS.
       const isFreePaid = !checkoutUrl && (
         paymentStatus.toLowerCase() === "paid"
         || paymentAmount === 0
       );
       if (isFreePaid) {
+        try {
+          await fetchMyBookingDetail(bookingId);
+        } catch (detailError) {
+          console.warn("Không tải được detail booking free-paid (vẫn điều hướng màn vé):", detailError);
+        }
         await finishFreeBooking();
         return;
       }
@@ -696,7 +792,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                             value={option.code}
                             disabled={!isTicketTypeAllowedForPassenger(option, index)}
                           >
-                            {getTicketTypeLabel(option, lang)}
+                            {getTicketTypeLabel(option, lang, routeType)}
                           </option>
                         ))}
                       </select>
@@ -794,8 +890,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       </div>
 
       {/* CỘT PHẢI (5/12) - BILL TÍNH HÓA ĐƠN & ĐẶT VÉ */}
-      <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700/50 space-y-6 sticky top-28">
-        <h3 className="text-xl font-headline font-bold text-[#124757] dark:text-white border-b border-slate-100 dark:border-slate-700 pb-3 flex items-center gap-2">
+      <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-5 md:p-6 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700/50 space-y-4 sticky top-28">
+        <h3 className="text-lg font-headline font-bold text-[#124757] dark:text-white">
           {lang === "VN" ? "Chi tiết hóa đơn" : "Invoice Summary"}
         </h3>
 
@@ -829,298 +925,315 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           </div>
         )}
 
-        {/* Khung tóm tắt tuyến đi */}
-        <div className="space-y-4">
-          <div className="bg-slate-50 dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-inner">
-            <div className="flex items-center justify-between mb-2">
-              <span className="bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300 text-[10px] font-bold uppercase px-2 py-1 rounded">
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/90 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="rounded-md bg-[#124757]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
                 {isLoopRoute
-                  ? (lang === "VN" ? "Chuyến tham quan" : "Sightseeing Trip")
-                  : (lang === "VN" ? "Chiều đi" : "Departure")}
+                  ? (lang === "VN" ? "Chuyến tham quan" : "Sightseeing")
+                  : (lang === "VN" ? "Chiều đi" : "Outbound")}
               </span>
+              <span className="text-[11px] font-medium text-slate-400">{departureDate || "—"}</span>
             </div>
             {isLoopRoute ? (
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-xs font-bold uppercase text-slate-400 shrink-0">{lang === "VN" ? "Bến đón:" : "Pickup:"}</span>
-                  <span className="font-headline font-black text-[#124757] dark:text-white">{(fromWharfName || "--").toUpperCase()}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-xs font-bold uppercase text-slate-400 shrink-0">{lang === "VN" ? "Bến trả:" : "Drop-off:"}</span>
-                  <span className="font-headline font-black text-[#124757] dark:text-white">{(toWharfName || "--").toUpperCase()}</span>
-                </div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-[#124757] dark:text-white">
+                  <span className="text-[10px] font-semibold uppercase text-slate-400">{lang === "VN" ? "Đón" : "Pickup"} · </span>
+                  {(fromWharfName || "—").toUpperCase()}
+                </p>
+                <p className="text-sm font-bold text-[#124757] dark:text-white">
+                  <span className="text-[10px] font-semibold uppercase text-slate-400">{lang === "VN" ? "Trả" : "Drop-off"} · </span>
+                  {(toWharfName || "—").toUpperCase()}
+                </p>
               </div>
             ) : (
-              <div className="font-headline font-black text-[#124757] dark:text-white flex items-center gap-2 text-lg">
-                {(fromWharfName || "--").toUpperCase()}
-                <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span>
-                {(toWharfName || "--").toUpperCase()}
-              </div>
+              <p className="font-headline text-base font-black text-[#124757] dark:text-white">
+                {(fromWharfName || "—").toUpperCase()}
+                <span className="material-symbols-outlined mx-1 align-middle text-sm text-[#FFD100]">arrow_forward</span>
+                {(toWharfName || "—").toUpperCase()}
+              </p>
             )}
-            <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span>{lang === "VN" ? "Giờ khởi hành:" : "Departure:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedDepartureTrip))}</span></span>
-              <span>{lang === "VN" ? "Giờ đến:" : "Arrival:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentArrival(selectedDepartureTrip))}</span></span>
-            </div>
-            {!isLoopRoute && (
-              <div className="text-xs font-bold text-slate-500 mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                <span>{formatSegmentDistanceLabel(pickSegmentDistanceKm(selectedDepartureTrip), lang)}</span>
-                {formatFareAdjustmentLabel(selectedDepartureTrip?.fareAdjustment, lang) ? (
-                  <span className="text-amber-700 dark:text-amber-300">
-                    {formatFareAdjustmentLabel(selectedDepartureTrip?.fareAdjustment, lang)}
-                  </span>
-                ) : null}
-              </div>
-            )}
-            <div className="text-xs text-slate-500 font-medium mt-1">{departureDate}</div>
-            <div className="text-xs text-slate-500 font-medium mt-1">
-              Ghế: {selectedSeatsDeparture.map((seat) => seat.seatNumber).join(", ")}
-            </div>
+            <p className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              {formatTripTime(getSegmentDeparture(selectedDepartureTrip))}
+              {" → "}
+              {formatTripTime(getSegmentArrival(selectedDepartureTrip))}
+              {!isLoopRoute ? ` · ${formatSegmentDistanceLabel(pickSegmentDistanceKm(selectedDepartureTrip), lang)}` : ""}
+              {formatFareAdjustmentLabel(selectedDepartureTrip?.fareAdjustment, lang)
+                ? ` · ${formatFareAdjustmentLabel(selectedDepartureTrip?.fareAdjustment, lang)}`
+                : ""}
+            </p>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              {lang === "VN" ? "Ghế" : "Seats"}: {selectedSeatsDeparture.map((seat) => seat.seatNumber).join(", ") || "—"}
+            </p>
           </div>
 
-          {/* Chiều về (nếu có) */}
           {isRoundTrip && (
-            <div className="bg-slate-50 dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-inner">
-              <div className="flex items-center justify-between mb-2">
-                <span className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 text-[10px] font-bold uppercase px-2 py-1 rounded">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/90 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="rounded-md bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
                   {lang === "VN" ? "Chiều về" : "Return"}
                 </span>
+                <span className="text-[11px] font-medium text-slate-400">{returnDate || "—"}</span>
               </div>
-              <div className="font-headline font-black text-[#124757] dark:text-white flex items-center gap-2 text-lg">
-                {(toWharfName || "--").toUpperCase()}
-                <span className="material-symbols-outlined text-sm text-[#FFD100]">arrow_forward</span>
-                {(fromWharfName || "--").toUpperCase()}
-              </div>
-              <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span>{lang === "VN" ? "Giờ khởi hành:" : "Departure:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentDeparture(selectedReturnTrip))}</span></span>
-                <span>{lang === "VN" ? "Giờ đến:" : "Arrival:"} <span className="text-[#124757] dark:text-[#FFD100]">{formatTripTime(getSegmentArrival(selectedReturnTrip))}</span></span>
-              </div>
-              <div className="text-xs font-bold text-slate-500 mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                <span>{formatSegmentDistanceLabel(pickSegmentDistanceKm(selectedReturnTrip), lang)}</span>
-                {formatFareAdjustmentLabel(selectedReturnTrip?.fareAdjustment, lang) ? (
-                  <span className="text-amber-700 dark:text-amber-300">
-                    {formatFareAdjustmentLabel(selectedReturnTrip?.fareAdjustment, lang)}
-                  </span>
-                ) : null}
-              </div>
-              <div className="text-xs text-slate-500 font-medium mt-1">{returnDate}</div>
-              <div className="text-xs text-slate-500 font-medium mt-1">
-                Ghế: {selectedSeatsReturn.map((seat) => seat.seatNumber).join(", ")}
-              </div>
+              <p className="font-headline text-base font-black text-[#124757] dark:text-white">
+                {(toWharfName || "—").toUpperCase()}
+                <span className="material-symbols-outlined mx-1 align-middle text-sm text-[#FFD100]">arrow_forward</span>
+                {(fromWharfName || "—").toUpperCase()}
+              </p>
+              <p className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                {formatTripTime(getSegmentDeparture(selectedReturnTrip))}
+                {" → "}
+                {formatTripTime(getSegmentArrival(selectedReturnTrip))}
+                {` · ${formatSegmentDistanceLabel(pickSegmentDistanceKm(selectedReturnTrip), lang)}`}
+                {formatFareAdjustmentLabel(selectedReturnTrip?.fareAdjustment, lang)
+                  ? ` · ${formatFareAdjustmentLabel(selectedReturnTrip?.fareAdjustment, lang)}`
+                  : ""}
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                {lang === "VN" ? "Ghế" : "Seats"}: {selectedSeatsReturn.map((seat) => seat.seatNumber).join(", ") || "—"}
+              </p>
             </div>
           )}
         </div>
 
-        {/* Nhập mã giảm giá */}
-        <div className="space-y-2">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{lang === "VN" ? "Mã ưu đãi (Promotion Code)" : "Discount Code"}</label>
-          <input
-            type="text"
-            value={promoCode}
-            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm uppercase outline-none tracking-widest font-black text-[#124757] dark:text-white"
-          />
-          <p className="text-[11px] text-slate-400">
-            {lang === "VN" ? "Mã giảm giá (nếu có)" : "Discount code (if any)"}
-          </p>
-        </div>
+        {/* Ưu đãi + bảo hiểm */}
+        <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3.5 dark:border-slate-700 dark:bg-slate-900/40">
+          {(() => {
+            const formatVnd = (value) => `${(Number(value) || 0).toLocaleString("vi-VN")}đ`;
+            const wantsInsurance = selectedInsurancePackageId != null;
+            const displayPackage = selectedInsurancePackage || insurancePackages[0];
+            const providerName = displayPackage?.providerName || "";
+            const providerLogoUrl = displayPackage?.providerLogoUrl || "";
 
-        {/* Bảo hiểm hành khách (SeatBooking) */}
-        {insurancePackages.length > 0 && (() => {
-          const wantsInsurance = selectedInsurancePackageId != null;
-          const displayPackage = selectedInsurancePackage || insurancePackages[0];
-          const providerName = displayPackage?.providerName || "";
-          const providerLogoUrl = displayPackage?.providerLogoUrl || "";
-          const formatVnd = (value) => `${(Number(value) || 0).toLocaleString("vi-VN")}đ`;
+            const handleInsuranceToggle = (enabled) => {
+              if (insuranceRequired && !enabled) return;
+              if (enabled) {
+                const restoreId = lastInsurancePackageIdRef.current || getInsurancePackageId(insurancePackages[0]);
+                setSelectedInsurancePackageId(restoreId);
+                return;
+              }
+              if (selectedInsurancePackageId != null) {
+                lastInsurancePackageIdRef.current = String(selectedInsurancePackageId);
+              }
+              setSelectedInsurancePackageId(null);
+            };
 
-          const handleInsuranceToggle = (enabled) => {
-            if (insuranceRequired && !enabled) return;
-            if (enabled) {
-              const restoreId = lastInsurancePackageIdRef.current || getInsurancePackageId(insurancePackages[0]);
-              setSelectedInsurancePackageId(restoreId);
-              return;
-            }
-            if (selectedInsurancePackageId != null) {
-              lastInsurancePackageIdRef.current = String(selectedInsurancePackageId);
-            }
-            setSelectedInsurancePackageId(null);
-          };
+            const handleSelectPackage = (pkg) => {
+              const packageId = getInsurancePackageId(pkg);
+              lastInsurancePackageIdRef.current = packageId;
+              setSelectedInsurancePackageId(packageId);
+            };
 
-          const handleSelectPackage = (pkg) => {
-            const packageId = getInsurancePackageId(pkg);
-            lastInsurancePackageIdRef.current = packageId;
-            setSelectedInsurancePackageId(packageId);
-          };
+            const handleShowTerms = () => {
+              const pkg = displayPackage;
+              if (!pkg) return;
+              const escapeHtml = (value) => String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#39;");
+              const conditions = (Array.isArray(pkg.conditions) ? pkg.conditions : [])
+                .map((item) => String(item || "").trim())
+                .filter(Boolean);
+              const name = pkg.providerName || (lang === "VN" ? "Nhà cung cấp bảo hiểm" : "Insurance provider");
+              const logoHtml = pkg.providerLogoUrl
+                ? `<img src="${escapeHtml(pkg.providerLogoUrl)}" alt="${escapeHtml(name)}" style="width:72px;height:72px;object-fit:contain;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;margin:0 auto 12px;" />`
+                : "";
+              const conditionsHtml = conditions.length > 0
+                ? `<ul style="text-align:left;margin:12px 0 0;padding-left:18px;color:#64748b;font-size:12px;line-height:1.7;">${conditions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+                : `<p style="margin:12px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có điều kiện chi tiết trên hệ thống." : "No detailed conditions on file."}</p>`;
+              const termsHtml = pkg.termsUrl
+                ? `<a href="${escapeHtml(pkg.termsUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 14px;border-radius:12px;background:#124757;color:#fff;font-weight:800;font-size:12px;text-decoration:none;">${lang === "VN" ? "Mở điều khoản đầy đủ" : "Open full terms"}</a>`
+                : `<p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có link điều khoản." : "No terms link available."}</p>`;
 
-          const handleShowTerms = () => {
-            const pkg = displayPackage;
-            if (!pkg) return;
-            const escapeHtml = (value) => String(value ?? "")
-              .replaceAll("&", "&amp;")
-              .replaceAll("<", "&lt;")
-              .replaceAll(">", "&gt;")
-              .replaceAll('"', "&quot;")
-              .replaceAll("'", "&#39;");
-            const conditions = (Array.isArray(pkg.conditions) ? pkg.conditions : [])
-              .map((item) => String(item || "").trim())
-              .filter(Boolean);
-            const name = pkg.providerName || (lang === "VN" ? "Nhà cung cấp bảo hiểm" : "Insurance provider");
-            const logoHtml = pkg.providerLogoUrl
-              ? `<img src="${escapeHtml(pkg.providerLogoUrl)}" alt="${escapeHtml(name)}" style="width:72px;height:72px;object-fit:contain;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;margin:0 auto 12px;" />`
-              : "";
-            const conditionsHtml = conditions.length > 0
-              ? `<ul style="text-align:left;margin:12px 0 0;padding-left:18px;color:#64748b;font-size:12px;line-height:1.7;">${conditions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-              : `<p style="margin:12px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có điều kiện chi tiết trên hệ thống." : "No detailed conditions on file."}</p>`;
-            const termsHtml = pkg.termsUrl
-              ? `<a href="${escapeHtml(pkg.termsUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 14px;border-radius:12px;background:#124757;color:#fff;font-weight:800;font-size:12px;text-decoration:none;">${lang === "VN" ? "Mở điều khoản đầy đủ" : "Open full terms"}</a>`
-              : `<p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có link điều khoản." : "No terms link available."}</p>`;
+              notify({
+                dialog: true,
+                title: lang === "VN" ? "Điều khoản bảo hiểm" : "Insurance terms",
+                html: `
+                  ${logoHtml}
+                  <p style="margin:0;font-weight:800;color:#124757;font-size:15px;">${escapeHtml(name)}</p>
+                  <p style="margin:4px 0 0;color:#94a3b8;font-size:12px;font-weight:700;">${escapeHtml(pkg.name || "")}</p>
+                  <p style="margin:14px 0 0;text-align:left;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">${lang === "VN" ? "Điều kiện áp dụng" : "Applicable conditions"}</p>
+                  ${conditionsHtml}
+                  ${termsHtml}
+                `,
+                confirmButtonText: lang === "VN" ? "Đóng" : "Close",
+                showCancelButton: false,
+              });
+            };
 
-            notify({
-              dialog: true,
-              title: lang === "VN" ? "Điều khoản bảo hiểm" : "Insurance terms",
-              html: `
-                ${logoHtml}
-                <p style="margin:0;font-weight:800;color:#124757;font-size:15px;">${escapeHtml(name)}</p>
-                <p style="margin:4px 0 0;color:#94a3b8;font-size:12px;font-weight:700;">${escapeHtml(pkg.name || "")}</p>
-                <p style="margin:14px 0 0;text-align:left;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.05em;">${lang === "VN" ? "Điều kiện áp dụng" : "Applicable conditions"}</p>
-                ${conditionsHtml}
-                ${termsHtml}
-              `,
-              confirmButtonText: lang === "VN" ? "Đóng" : "Close",
-              showCancelButton: false,
-            });
-          };
-
-          return (
-            <div className={`rounded-2xl border overflow-hidden transition-colors ${
-              wantsInsurance
-                ? "bg-white dark:bg-slate-900 border-[#124757]/40 dark:border-yellow-400/40"
-                : "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700"
-            }`}>
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <button
-                  type="button"
-                  onClick={() => setIsInsuranceDetailsOpen((open) => !open)}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                  aria-expanded={isInsuranceDetailsOpen}
-                >
-                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${
-                    providerLogoUrl
-                      ? "bg-white p-1.5 ring-1 ring-slate-200/80 dark:ring-slate-200"
-                      : "bg-linear-to-br from-[#124757] to-[#0d3541] text-white dark:from-yellow-400 dark:to-yellow-300 dark:text-slate-900"
-                  }`}>
-                    {providerLogoUrl ? (
-                      <img src={providerLogoUrl} alt={providerName || "Insurance"} className="h-full w-full object-contain" />
-                    ) : (
+            if (isInsuranceLoading) {
+              return (
+                <div className="rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-800">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
                       <span className="material-symbols-outlined text-xl">verified_user</span>
-                    )}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                      {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
                     </span>
-                    <span className="block truncate text-xs font-medium text-slate-500 dark:text-slate-400">
-                      {wantsInsurance && selectedInsurancePackage
-                        ? selectedInsurancePackage.name
-                        : (lang === "VN" ? "Không chọn bảo hiểm" : "No insurance")}
-                    </span>
-                  </span>
-                  <span className={`material-symbols-outlined shrink-0 text-xl text-slate-400 transition-transform ${isInsuranceDetailsOpen ? "rotate-180" : ""}`}>
-                    expand_more
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={wantsInsurance}
-                  disabled={insuranceRequired}
-                  onClick={() => handleInsuranceToggle(!wantsInsurance)}
-                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60 ${
-                    wantsInsurance ? "bg-[#124757] dark:bg-yellow-400" : "bg-slate-300 dark:bg-slate-600"
-                  }`}
-                  title={insuranceRequired
-                    ? (lang === "VN" ? "Gói bắt buộc" : "Required package")
-                    : undefined}
-                >
-                  <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    wantsInsurance ? "translate-x-5" : "translate-x-0"
-                  }`} />
-                </button>
-              </div>
-
-              {isInsuranceDetailsOpen && (
-                <div className="space-y-3 border-t border-slate-100 px-4 py-3 dark:border-slate-700">
-                  {wantsInsurance && insurancePackages.length > 1 && (
-                    <div className="flex flex-wrap gap-2">
-                      {insurancePackages.map((pkg) => {
-                        const packageId = getInsurancePackageId(pkg);
-                        const isSelected = isSameInsurancePackageId(selectedInsurancePackageId, packageId);
-                        return (
-                          <button
-                            key={packageId}
-                            type="button"
-                            onClick={() => handleSelectPackage(pkg)}
-                            className={`rounded-xl border px-3 py-2 text-left text-[11px] font-bold transition ${
-                              isSelected
-                                ? "border-[#124757] bg-[#124757]/8 text-[#124757] dark:border-yellow-400 dark:bg-yellow-400/10 dark:text-yellow-400"
-                                : "border-slate-200 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                            }`}
-                          >
-                            <span className="block font-headline font-black uppercase tracking-wide">{pkg.name || pkg.code}</span>
-                            <span className="mt-0.5 block text-slate-400">{formatVnd(pkg.unitPremiumAmount)}/{lang === "VN" ? "khách" : "pax"}</span>
-                          </button>
-                        );
-                      })}
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">
+                        {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        {lang === "VN" ? "Đang tải gói bảo hiểm…" : "Loading insurance…"}
+                      </p>
                     </div>
-                  )}
+                  </div>
+                </div>
+              );
+            }
 
-                  {wantsInsurance && selectedInsurancePackage ? (
-                    <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-xs dark:bg-slate-800/80">
-                      <div className="flex justify-between gap-3 font-medium text-slate-600 dark:text-slate-300">
-                        <span>
-                          {formatVnd(insurancePreview.unitPremium)}/{lang === "VN" ? "khách" : "pax"}
-                          {" × "}
-                          {insurancePreview.quantity} {lang === "VN" ? "khách" : "passengers"}
-                        </span>
-                        <span className="font-black text-[#124757] dark:text-yellow-400">{formatVnd(insuranceFee)}</span>
-                      </div>
-                      {Number(selectedInsurancePackage.coverageAmount) > 0 && (
-                        <p className="mt-1 text-[11px] text-slate-400">
-                          {lang === "VN" ? "Mức BH" : "Coverage"}: {formatVnd(selectedInsurancePackage.coverageAmount)}
-                        </p>
+            if (!insurancePackages.length) {
+              return (
+                <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/70 p-3.5 dark:border-amber-500/30 dark:bg-amber-500/10">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 dark:bg-slate-900 dark:text-amber-300">
+                      <span className="material-symbols-outlined text-xl">verified_user</span>
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">
+                        {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                      </p>
+                      <p className="mt-1 text-[11px] font-medium leading-5 text-slate-600 dark:text-slate-300">
+                        {insuranceLoadError
+                          || (lang === "VN"
+                            ? "Chưa có gói Active PassengerInsurance. Admin → Bảo hiểm tạo gói (mặc định gửi PassengerInsurance)."
+                            : "No Active PassengerInsurance package yet. Create one in Admin → Insurance.")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl ${
+                      providerLogoUrl
+                        ? "bg-white p-1 ring-1 ring-slate-200 dark:ring-slate-600"
+                        : "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400"
+                    }`}>
+                      {providerLogoUrl ? (
+                        <img src={providerLogoUrl} alt={providerName || "Insurance"} className="h-full w-full object-contain" />
+                      ) : (
+                        <span className="material-symbols-outlined text-xl">verified_user</span>
                       )}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">
+                        {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        {wantsInsurance && selectedInsurancePackage
+                          ? `${selectedInsurancePackage.name || providerName} · ${formatVnd(insuranceFee)}`
+                          : (lang === "VN" ? "Tùy chọn thêm khi thanh toán" : "Optional add-on at checkout")}
+                      </p>
                     </div>
-                  ) : (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {lang === "VN"
-                        ? "Bật bảo hiểm để cộng phí theo số khách khi thanh toán."
-                        : "Enable insurance to add a per-passenger fee at checkout."}
-                    </p>
-                  )}
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={wantsInsurance}
+                    disabled={insuranceRequired || isSubmitting}
+                    onClick={() => handleInsuranceToggle(!wantsInsurance)}
+                    className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60 ${
+                      wantsInsurance ? "bg-[#124757] dark:bg-yellow-400" : "bg-slate-300 dark:bg-slate-600"
+                    }`}
+                    title={insuranceRequired
+                      ? (lang === "VN" ? "Gói bắt buộc" : "Required package")
+                      : undefined}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      wantsInsurance ? "translate-x-5" : "translate-x-0"
+                    }`} />
+                  </button>
+                </div>
 
+                {wantsInsurance ? (
+                  <div className="mt-3 space-y-2.5 border-t border-slate-100 pt-3 dark:border-slate-700">
+                    {insurancePackages.length > 1 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {insurancePackages.map((pkg) => {
+                          const packageId = getInsurancePackageId(pkg);
+                          const isSelected = isSameInsurancePackageId(selectedInsurancePackageId, packageId);
+                          return (
+                            <button
+                              key={packageId}
+                              type="button"
+                              onClick={() => handleSelectPackage(pkg)}
+                              className={`rounded-xl border px-3 py-2 text-left text-[11px] font-bold transition ${
+                                isSelected
+                                  ? "border-[#124757] bg-[#124757]/8 text-[#124757] dark:border-yellow-400 dark:bg-yellow-400/10 dark:text-yellow-400"
+                                  : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                              }`}
+                            >
+                              <span className="block">{pkg.name || pkg.code}</span>
+                              <span className="mt-0.5 block text-slate-400">
+                                {formatVnd(pkg.unitPremiumAmount)}/{lang === "VN" ? "khách" : "pax"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    {selectedInsurancePackage ? (
+                      <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        <span>
+                          {formatVnd(insurancePreview.unitPremium)} × {insurancePreview.quantity}{" "}
+                          {lang === "VN" ? "khách" : "pax"}
+                          {Number(selectedInsurancePackage.coverageAmount) > 0
+                            ? ` · ${lang === "VN" ? "BH" : "Cover"} ${formatVnd(selectedInsurancePackage.coverageAmount)}`
+                            : ""}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleShowTerms}
+                          className="shrink-0 font-bold text-[#124757] hover:underline dark:text-yellow-400"
+                        >
+                          {lang === "VN" ? "Điều khoản" : "Terms"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
                   <button
                     type="button"
                     onClick={handleShowTerms}
-                    className="text-[11px] font-bold uppercase tracking-wider text-[#124757] underline-offset-2 hover:underline dark:text-yellow-400"
+                    className="mt-2 text-[11px] font-bold text-[#124757] hover:underline dark:text-yellow-400"
                   >
-                    {lang === "VN" ? "Xem điều khoản" : "View terms"}
+                    {lang === "VN" ? "Xem điều khoản bảo hiểm" : "View insurance terms"}
                   </button>
-                </div>
-              )}
-            </div>
-          );
-        })()}
+                )}
+              </div>
+            );
+          })()}
 
-        {/* Dùng điểm tích lũy — BE cho tối đa 50% giá trị đơn; 1 điểm = 1 VND */}
-        <div className="space-y-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-800">
+            <SelectablePublicVouchers
+              lang={lang}
+              bookingType={PROMOTION_BOOKING_TYPES.SEAT}
+              selectedCode={promoCode}
+              disabled={isSubmitting}
+              onChangeCode={setPromoCode}
+              onSelect={(code) => setPromoCode(code)}
+              onClear={() => setPromoCode("")}
+            />
+          </div>
+        </div>
+
+        {/* Điểm tích lũy */}
+        <div className="rounded-2xl border border-slate-100 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-800/50">
           <div className="flex items-center justify-between gap-2">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              {lang === "VN" ? "Dùng điểm tích lũy" : "Use loyalty points"}
-            </label>
-            <span className="text-[11px] font-bold text-[#124757] dark:text-yellow-400">
-              {lang === "VN" ? "Số dư:" : "Balance:"} {pointBalance.toLocaleString()}
+            <p className="text-sm font-bold text-slate-800 dark:text-white">
+              {lang === "VN" ? "Điểm tích lũy" : "Loyalty points"}
+            </p>
+            <span className="text-[11px] font-bold text-slate-500">
+              {lang === "VN" ? "Số dư" : "Balance"} {pointBalance.toLocaleString()}
             </span>
           </div>
-          <div className="flex gap-2">
+          <div className="mt-2.5 flex gap-2">
             <input
               type="number"
               min={0}
@@ -1129,78 +1242,119 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
               value={pointsToUseInput}
               onChange={(e) => setPointsToUseInput(e.target.value)}
               placeholder="0"
-              disabled={maxPointsToUse <= 0}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm outline-none font-black text-[#124757] dark:text-white disabled:opacity-50"
+              disabled={maxPointsToUse <= 0 || isSubmitting}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black text-[#124757] outline-none disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             />
             <button
               type="button"
-              disabled={maxPointsToUse <= 0}
+              disabled={maxPointsToUse <= 0 || isSubmitting}
               onClick={() => setPointsToUseInput(String(maxPointsToUse))}
-              className="shrink-0 rounded-xl border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 disabled:opacity-50"
+              className="shrink-0 rounded-xl border border-[#124757]/20 bg-[#124757]/5 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
             >
               {lang === "VN" ? "Tối đa" : "Max"}
             </button>
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="mt-1.5 text-[10px] text-slate-400">
             {lang === "VN"
-              ? `1 điểm = 1 VND`
-              : `1 point = 1 VND`}
+              ? `Tối đa ${maxPointsToUse.toLocaleString()} điểm (≤ 50% tạm tính). 1 điểm = 1 VND.`
+              : `Max ${maxPointsToUse.toLocaleString()} points (≤ 50% of estimate). 1 point = 1 VND.`}
           </p>
         </div>
 
-        {/* Bảng giá chi tiết (ước tính) */}
-        <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-700 text-sm font-medium">
-          <div className="flex justify-between text-slate-600 dark:text-slate-300">
-            <span>{lang === "VN" ? "Tổng số lượng ghế" : "Total Seats Quantity"}</span>
-            <span className="font-bold">x{totalSeatsCount}</span>
+        {/* Tổng tiền */}
+        <div className="space-y-2.5 rounded-2xl border border-slate-100 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+          <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+            <span>{lang === "VN" ? "Giá vé" : "Ticket fare"}</span>
+            <span className="font-bold text-slate-700 dark:text-slate-200">{subtotal.toLocaleString()}đ</span>
           </div>
-          <div className="flex justify-between text-slate-600 dark:text-slate-300">
-            <span>{lang === "VN" ? "Giá vé (ước tính)" : "Ticket fare (est.)"}</span>
-            <span className="font-bold">{subtotal.toLocaleString()}đ</span>
+          <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+            <span>{lang === "VN" ? "Ghế" : "Seats"}</span>
+            <span className="font-bold text-slate-700 dark:text-slate-200">x{totalSeatsCount}</span>
           </div>
           {infants.length > 0 && (
-            <div className="flex justify-between text-slate-600 dark:text-slate-300">
+            <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
               <span>{lang === "VN" ? "Em bé (miễn phí)" : "Infants (free)"}</span>
-              <span className="font-bold">x{infants.length}</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">x{infants.length}</span>
             </div>
           )}
           {insuranceFee > 0 && (
-            <div className="flex justify-between text-slate-600 dark:text-slate-300">
-              <span>{lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}</span>
-              <span className="font-bold">+{insuranceFee.toLocaleString()}đ</span>
+            <div className="flex items-start justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
+              <div>
+                <p>{lang === "VN" ? "Bảo hiểm" : "Insurance"}</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">
+                  {insurancePreview.unitPremium.toLocaleString()}đ × {insurancePreview.quantity}{" "}
+                  {lang === "VN" ? "hành khách" : "passenger(s)"}
+                </p>
+              </div>
+              <span className="font-bold text-slate-700 dark:text-slate-200">+{insuranceFee.toLocaleString()}đ</span>
             </div>
           )}
+          {promoCode.trim() ? (
+            <div className="flex items-start justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
+              <div>
+                <p>{lang === "VN" ? "Mã giảm giá" : "Promo code"}</p>
+                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wide text-[#124757] dark:text-yellow-400">
+                  {promoCode.trim()}
+                </p>
+                {promoApplied && discountAmount > 0 ? (
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    {lang === "VN"
+                      ? `Áp dụng trên ${orderBeforeDiscount.toLocaleString()}đ`
+                      : `Applied on ${orderBeforeDiscount.toLocaleString()}đ`}
+                  </p>
+                ) : null}
+              </div>
+              <span className="shrink-0 text-right">
+                {promoChecking ? (
+                  <span className="text-[11px] font-bold text-slate-400">
+                    {lang === "VN" ? "Đang kiểm tra…" : "Checking…"}
+                  </span>
+                ) : promoApplied && discountAmount > 0 ? (
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                    -{discountAmount.toLocaleString()}đ
+                  </span>
+                ) : promoPreview && !promoPreview.ok ? (
+                  <span className="text-[11px] font-bold text-rose-500">
+                    {promoPreview.error || (lang === "VN" ? "Không hợp lệ" : "Invalid")}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-slate-400">
+                    {lang === "VN" ? "Chờ BE xác nhận" : "Pending"}
+                  </span>
+                )}
+              </span>
+            </div>
+          ) : null}
           {pointsToUse > 0 && (
-            <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-              <span>{lang === "VN" ? "Dùng điểm" : "Points used"}</span>
+            <div className="flex justify-between text-sm text-emerald-600 dark:text-emerald-400">
+              <span>{lang === "VN" ? "Điểm dùng" : "Points used"}</span>
               <span className="font-bold">-{pointsToUse.toLocaleString()}</span>
             </div>
           )}
 
-          <div className="flex justify-between items-end pt-4 border-t border-dashed border-slate-300 dark:border-slate-600">
-            <span className="font-headline font-bold text-base text-[#124757] dark:text-white">
-              {lang === "VN" ? "Tạm tính:" : "Estimated total:"}
-            </span>
-            <span className="text-3xl font-headline font-black text-[#124757] dark:text-[#FFD100]">
-              {estimatedPayable.toLocaleString()} <span className="text-lg">VND</span>
-            </span>
+          <div className="border-t border-dashed border-slate-200 pt-3 dark:border-slate-600">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-medium text-slate-400">
+                  {lang === "VN" ? "Tổng tiền thanh toán" : "Amount to pay"}
+                </p>
+                <p className="text-[10px] text-slate-400">
+                  {lang === "VN" ? "Ước tính trước PayOS" : "Estimate before PayOS"}
+                </p>
+              </div>
+              <p className="font-headline text-2xl font-black tabular-nums text-[#124757] dark:text-yellow-400">
+                {estimatedPayable.toLocaleString()}
+                <span className="ml-1 text-sm font-bold">VND</span>
+              </p>
+            </div>
           </div>
           {estimatedEarn > 0 && (
-            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+            <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
               {lang === "VN"
-                ? `Cộng ${estimatedEarn.toLocaleString()} điểm sau khi chuyến hoàn tất.`
-                : `Est. ${estimatedEarn.toLocaleString()} points after trip completion.`}
+                ? `Ước cộng ~${estimatedEarn.toLocaleString()} điểm sau chuyến (1%).`
+                : `Est. ~${estimatedEarn.toLocaleString()} points after trip (1%).`}
             </p>
           )}
-          {/* <p className="text-[11px] text-slate-400">
-            {isFreeBookingEstimate
-              ? (lang === "VN"
-                ? "Số tiền cuối cùng lấy từ booking (subtotalAmount / totalAmount). Vé 0đ sẽ hoàn tất ngay, không qua PayOS."
-                : "Final amount comes from the booking (subtotalAmount / totalAmount). A 0 VND ticket completes immediately without PayOS.")
-              : (lang === "VN"
-                ? "Số tiền cuối cùng (kèm bảo hiểm / mã khuyến mãi / điểm nếu có) sẽ hiển thị chính xác trên trang thanh toán PayOS."
-                : "The final amount (with insurance / promo / points if any) will be shown exactly on the PayOS checkout page.")}
-          </p> */}
         </div>
 
         {submitError && (
@@ -1210,7 +1364,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
         )}
 
         {/* Hành động */}
-        <div className="pt-2 space-y-4">
+        <div className="space-y-3 pt-1">
           <button
             type="button"
             onClick={handlePayment}

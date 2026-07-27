@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FormSelect } from "./FormSelect";
+import { AdminCharterRouteDrawPanel } from "./AdminCharterRouteDrawPanel";
 import {
   downloadAllCharterBookingTickets,
   downloadCharterBookingTicketsPdf,
@@ -297,18 +298,27 @@ function AdminCharterRouteInfoPanel({
   );
 }
 
-/** Picker charter: "GPS · Bến A → Bến B" — không hiện CH-CB- / Charter CB-... */
+/** Picker charter: ưu tiên mã tuyến + chuỗi bến thật của route (không lấy tên chặng booking). */
 function formatRouteCandidateOptionLabel(candidate, lang, leg = null) {
   if (!candidate) return "";
   const short = getRouteShortLabel(candidate, lang);
+  const code = String(candidate.routeCode || "").trim();
+  const routeName = String(candidate.routeName || "").trim();
+
+  // Ưu tiên mã tuyến để phân biệt (VD: BD-TNC) — tránh mọi option đều giống "GPS · chặng booking".
+  if (code) {
+    const title = routeName && !routeName.includes(code) ? `${code} · ${routeName}` : (code || routeName);
+    return short && short !== "—" ? `${short} · ${title}` : title;
+  }
+
   const fromName = String(
-    leg?.fromStationName
-    || candidate.fromStationName
+    candidate.fromStationName
+    || leg?.fromStationName
     || "",
   ).trim();
   const toName = String(
-    leg?.toStationName
-    || candidate.toStationName
+    candidate.toStationName
+    || leg?.toStationName
     || "",
   ).trim();
   if (fromName && toName) {
@@ -316,6 +326,7 @@ function formatRouteCandidateOptionLabel(candidate, lang, leg = null) {
   }
   const meta = [
     short !== "—" ? short : "",
+    routeName,
     candidate.distanceKm != null ? `${candidate.distanceKm} km` : "",
     candidate.estimatedDurationMin != null
       ? `${candidate.estimatedDurationMin} ${lang === "VN" ? "phút" : "min"}`
@@ -827,6 +838,12 @@ export function AdminBookingOverviewTab({
   selectedBoats,
   capabilities,
   onNavigateTab,
+  routeDrawRequest = null,
+  isRouteDrawSubmitting = false,
+  canRequestRouteDraw = false,
+  hasMissingRouteLegs = false,
+  hasEnoughRouteCodes = false,
+  onRequestRouteDraw,
 }) {
   const boatRows = [];
   const maxBoats = Math.max(requestedBoats.length, selectedBoats.length, 0);
@@ -919,6 +936,16 @@ export function AdminBookingOverviewTab({
                 {lang === "VN" ? "Chuyến đi" : "Trip"}
               </p>
               <AdminCharterRouteInfoPanel lang={lang} booking={booking} formatDate={formatDate} />
+              <AdminCharterRouteDrawPanel
+                lang={lang}
+                booking={booking}
+                routeDrawRequest={routeDrawRequest}
+                canRequest={canRequestRouteDraw}
+                hasMissingRouteLegs={hasMissingRouteLegs}
+                hasEnoughRouteCodes={hasEnoughRouteCodes}
+                isSubmitting={isRouteDrawSubmitting}
+                onRequestDraw={onRequestRouteDraw}
+              />
             </div>
 
             <div className="space-y-3">
@@ -1231,6 +1258,12 @@ export function AdminBookingActionsTab({
   createTripBlockers = [],
   linkedTripIds = [],
   canManageTripCreate = false,
+  routeDrawRequest = null,
+  isRouteDrawSubmitting = false,
+  canRequestRouteDraw = false,
+  hasMissingRouteLegs = false,
+  hasEnoughRouteCodes = false,
+  onRequestRouteDraw,
 }) {
   const routeQuoteOptions = {
     routeCandidateLegs: routeCandidatesLoaded ? routeCandidateLegs : undefined,
@@ -1267,6 +1300,16 @@ export function AdminBookingActionsTab({
           formatDate={formatDate}
           draftRouteCandidateLegs={routeCandidatesLoaded ? routeCandidateLegs : null}
           draftRoutePlanSelections={routePlanSelections}
+        />
+        <AdminCharterRouteDrawPanel
+          lang={lang}
+          booking={booking}
+          routeDrawRequest={routeDrawRequest}
+          canRequest={canRequestRouteDraw}
+          hasMissingRouteLegs={hasMissingRouteLegs}
+          hasEnoughRouteCodes={hasEnoughRouteCodes}
+          isSubmitting={isRouteDrawSubmitting}
+          onRequestDraw={onRequestRouteDraw}
         />
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
@@ -1910,12 +1953,37 @@ export function AdminBookingTicketsTab({
 
     try {
       setReviewingBatchId(batch.requestBatchId);
-      await approveCharterPassengerAddRequest(booking.id, batch.requestBatchId);
+      const beforeInsuranceTotal = Number(booking?.insurance?.totalAmount || 0) || 0;
+      const beforeTotal = Number(booking?.totalAmount || booking?.estimatedPrice || 0) || 0;
+      const response = await approveCharterPassengerAddRequest(booking.id, batch.requestBatchId);
       await onRefresh?.();
+
+      const afterInsuranceTotal = Number(
+        response?.insurance?.totalAmount
+        ?? response?.booking?.insurance?.totalAmount
+        ?? response?.data?.insurance?.totalAmount
+        ?? booking?.insurance?.totalAmount
+        ?? 0,
+      ) || 0;
+      const afterTotal = Number(
+        response?.totalAmount
+        ?? response?.finalAmount
+        ?? response?.booking?.totalAmount
+        ?? response?.data?.totalAmount
+        ?? booking?.totalAmount
+        ?? 0,
+      ) || 0;
+      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal || afterTotal > beforeTotal;
+
       showToast({
         icon: "success",
         title: lang === "VN" ? "Đã duyệt" : "Approved",
-        timer: 1800,
+        text: insuranceGrew
+          ? (lang === "VN"
+            ? "Phí bảo hiểm đã tăng. Khách cần thanh toán phần còn lại qua PayOS."
+            : "Insurance increased. Customer needs to pay the remaining amount via PayOS.")
+          : undefined,
+        timer: insuranceGrew ? 3500 : 1800,
       });
     } catch (error) {
       showToast({

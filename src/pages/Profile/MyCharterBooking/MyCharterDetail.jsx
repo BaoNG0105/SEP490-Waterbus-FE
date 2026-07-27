@@ -34,6 +34,13 @@ import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
 import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
 import { getRefundPaymentId, isPaymentUuid, normalizeSelectedRoute, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
 import { buildConfirmBodyHtml, showAlertDialog, showConfirmDialog, showToast } from "../../../utils/swalToast";
+import {
+  canShowCharterTicketsWithBalance,
+  extractPayOsPaymentFields,
+  getCharterBalanceDue,
+  markCharterTopUpPayOsStarted,
+  rememberCharterPayOsSession,
+} from "../../../utils/charterPayOs";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -563,6 +570,8 @@ export function CharterDetail() {
   const syncedPaymentRef = useRef("");
   const autoSyncPaymentRef = useRef("");
   const refreshedDeadlineRef = useRef("");
+  const prevBalanceDueRef = useRef(null);
+  const insuranceTopUpInFlightRef = useRef(false);
 
   const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 
@@ -928,7 +937,8 @@ export function CharterDetail() {
 
   useEffect(() => {
     const orderCode = booking?.latestPaymentOrderCode || (booking?.id ? sessionStorage.getItem(`charterPaymentOrderCode:${booking.id}`) : "");
-    const isBookingPaid = String(booking?.paymentStatus).toLowerCase() === "paid";
+    const balanceDue = getCharterBalanceDue(booking);
+    const isBookingPaid = String(booking?.paymentStatus).toLowerCase() === "paid" && balanceDue <= 0;
     const latestPaymentExpired = isDeadlineExpired(booking?.latestPaymentExpiresAt);
 
     if (!orderCode || isBookingPaid || latestPaymentExpired) return undefined;
@@ -951,7 +961,170 @@ export function CharterDetail() {
       autoSyncPaymentRef.current = "";
       window.clearInterval(interval);
     };
-  }, [booking?.id, booking?.latestPaymentExpiresAt, booking?.latestPaymentOrderCode, booking?.paymentStatus, loadDetail]);
+  }, [booking?.id, booking?.latestPaymentExpiresAt, booking?.latestPaymentOrderCode, booking?.paymentStatus, booking?.totalAmount, booking?.paidAmount, loadDetail]);
+
+  const applyCreatedPayOsPayment = useCallback((payment, {
+    fallbackAmount = 0,
+    openCheckout = true,
+  } = {}) => {
+    const extracted = extractPayOsPaymentFields(payment) || {};
+    const paymentId = getRefundPaymentId(payment)
+      || getRefundPaymentId(payment?.data)
+      || getRefundPaymentId(payment?.payment)
+      || getRefundPaymentId(payment?.data?.payment)
+      || extracted.paymentId;
+    const orderCode = extracted.orderCode
+      || pick(payment, ["orderCode", "paymentOrderCode", "payosOrderCode", "data.orderCode", "data.paymentOrderCode", "data.payosOrderCode", "payment.orderCode", "data.payment.orderCode"]);
+    const createdPaymentAmount = Number(
+      extracted.amount
+      || pick(payment, ["amount", "paymentAmount", "data.amount", "data.paymentAmount", "payment.amount", "data.payment.amount"], fallbackAmount),
+    ) || fallbackAmount;
+    const checkoutUrl = extracted.checkoutUrl || pick(payment, [
+      "checkoutUrl",
+      "paymentUrl",
+      "paymentLink",
+      "payUrl",
+      "url",
+      "data.checkoutUrl",
+      "data.paymentUrl",
+      "data.paymentLink",
+      "data.payUrl",
+      "data.url",
+      "payment.checkoutUrl",
+      "payment.paymentUrl",
+      "data.payment.checkoutUrl",
+      "data.payment.paymentUrl",
+    ]);
+    const expiresAt = extracted.expiresAt || pick(payment, ["expiresAt", "data.expiresAt", "payment.expiresAt", "data.payment.expiresAt"]);
+    const qrCode = extracted.qrCode || pick(payment, ["qrCode", "data.qrCode", "payment.qrCode", "data.payment.qrCode"]);
+    const bookingHoldExpiresAt = pick(payment, [
+      "bookingHoldExpiresAt",
+      "data.bookingHoldExpiresAt",
+      "payment.bookingHoldExpiresAt",
+      "data.payment.bookingHoldExpiresAt",
+    ]);
+
+    if (booking?.id) {
+      rememberCharterPayOsSession(booking.id, { orderCode, paymentId });
+    }
+
+    setPaymentCheckoutUrl(checkoutUrl || "");
+    setPaymentExpiresAt(expiresAt || "");
+    setPaymentQrCode(qrCode || "");
+    setPaymentBookingHoldExpiresAt(bookingHoldExpiresAt || "");
+    setPaymentAmount(createdPaymentAmount);
+    setPaymentWatcher((current) => ({
+      ...current,
+      isActive: false,
+      orderCode,
+      checkoutUrl,
+      amount: createdPaymentAmount,
+      deadline: expiresAt || current.deadline || "",
+      statusText: lang === "VN" ? "Đang chờ thanh toán trên PayOS" : "Waiting for PayOS payment",
+    }));
+
+    if (openCheckout && checkoutUrl) {
+      openPaymentPage(checkoutUrl, {
+        orderCode,
+        amount: createdPaymentAmount,
+        expiresAt: expiresAt || "",
+      });
+      return { opened: true, checkoutUrl, orderCode, paymentId, amount: createdPaymentAmount };
+    }
+
+    return { opened: false, checkoutUrl, orderCode, paymentId, amount: createdPaymentAmount };
+  }, [booking?.id, lang, openPaymentPage]);
+
+  /** Tạo PayOS phần còn lại khi BH tăng sau thêm hành khách. */
+  const createInsuranceTopUpPayOs = useCallback(async (balanceDue, {
+    openCheckout = true,
+    silent = false,
+  } = {}) => {
+    if (!booking?.id || !(balanceDue > 0)) return null;
+    if (insuranceTopUpInFlightRef.current) return null;
+    if (!markCharterTopUpPayOsStarted(booking.id, balanceDue)) return null;
+
+    insuranceTopUpInFlightRef.current = true;
+    try {
+      if (!silent) setIsSubmitting(true);
+      setPaymentOption("Remaining");
+      const payment = await createBookingPayment({
+        bookingId: booking.id,
+        paymentOption: "Remaining",
+        promotionCode: promoClearedByUserRef.current
+          ? null
+          : (String(paymentPromotionCode || "").trim() || null),
+      });
+      const applied = applyCreatedPayOsPayment(payment, {
+        fallbackAmount: balanceDue,
+        openCheckout,
+      });
+
+      if (!applied.opened && !silent) {
+        showAlertDialog({
+          icon: "success",
+          title: lang === "VN" ? "Cần thanh toán phí bảo hiểm thêm" : "Additional insurance payment due",
+          text: lang === "VN"
+            ? `Đã tạo giao dịch PayOS ${currencyFormatter.format(applied.amount || balanceDue)}. Thanh toán để hoàn tất bảo hiểm cho hành khách mới.`
+            : `PayOS payment of ${currencyFormatter.format(applied.amount || balanceDue)} was created for the extra passenger insurance.`,
+        });
+      }
+      return applied;
+    } catch (error) {
+      if (!silent) {
+        showAlertDialog({
+          icon: "error",
+          title: lang === "VN" ? "Không thể tạo thanh toán bảo hiểm thêm" : "Unable to create insurance top-up payment",
+          text: getApiErrorMessage(
+            error,
+            lang === "VN"
+              ? "Phí bảo hiểm đã tăng sau khi thêm hành khách. Vui lòng thử tạo lại link PayOS."
+              : "Insurance increased after passengers were added. Please try creating the PayOS link again.",
+          ),
+        });
+      }
+      return null;
+    } finally {
+      insuranceTopUpInFlightRef.current = false;
+      if (!silent) setIsSubmitting(false);
+    }
+  }, [applyCreatedPayOsPayment, booking?.id, currencyFormatter, lang, paymentPromotionCode]);
+
+  // Sau khi admin duyệt thêm HK (SignalR refresh): BH tăng → tự tạo PayOS Remaining.
+  useEffect(() => {
+    if (!booking?.id) {
+      prevBalanceDueRef.current = null;
+      return undefined;
+    }
+    const balanceDue = getCharterBalanceDue(booking);
+    const prev = prevBalanceDueRef.current;
+    prevBalanceDueRef.current = balanceDue;
+
+    if (prev === null) return undefined;
+    if (!(balanceDue > 0) || balanceDue <= prev) return undefined;
+    if (booking.insuranceSelected === false) return undefined;
+    if (!["Confirmed", "Completed", "PendingPayment"].includes(booking.status)) return undefined;
+
+    const hasPending = Array.isArray(booking.payments)
+      && booking.payments.some((payment) => {
+        const isPending = String(payment.paymentStatus).toLowerCase() === "pending";
+        const expiresAt = pick(payment, ["expiresAt"], "");
+        return isPending && (!expiresAt || !isDeadlineExpired(expiresAt));
+      });
+    if (hasPending || paymentCheckoutUrl) return undefined;
+
+    createInsuranceTopUpPayOs(balanceDue, { openCheckout: true, silent: false });
+    return undefined;
+  }, [
+    booking?.id,
+    booking?.totalAmount,
+    booking?.paidAmount,
+    booking?.status,
+    booking?.insuranceSelected,
+    booking?.payments,
+    paymentCheckoutUrl,
+    createInsuranceTopUpPayOs,
+  ]);
 
   const handleCreatePayment = async () => {
     if (!booking?.id) return;
@@ -1008,78 +1181,18 @@ export function CharterDetail() {
           : (String(paymentPromotionCode || "").trim() || null),
       };
       const payment = await createBookingPayment(paymentPayload);
-      const paymentId = getRefundPaymentId(payment)
-        || getRefundPaymentId(payment?.data)
-        || getRefundPaymentId(payment?.payment)
-        || getRefundPaymentId(payment?.data?.payment);
-      const orderCode = pick(payment, ["orderCode", "paymentOrderCode", "payosOrderCode", "data.orderCode", "data.paymentOrderCode", "data.payosOrderCode", "payment.orderCode", "data.payment.orderCode"]);
-      const createdPaymentAmount = Number(pick(payment, ["amount", "paymentAmount", "data.amount", "data.paymentAmount", "payment.amount", "data.payment.amount"], selectedPaymentAmount)) || selectedPaymentAmount;
-      const checkoutUrl = pick(payment, [
-        "checkoutUrl",
-        "paymentUrl",
-        "paymentLink",
-        "payUrl",
-        "url",
-        "data.checkoutUrl",
-        "data.paymentUrl",
-        "data.paymentLink",
-        "data.payUrl",
-        "data.url",
-        "payment.checkoutUrl",
-        "payment.paymentUrl",
-        "data.payment.checkoutUrl",
-        "data.payment.paymentUrl",
-      ]);
-      const expiresAt = pick(payment, ["expiresAt", "data.expiresAt", "payment.expiresAt", "data.payment.expiresAt"]);
-      const qrCode = pick(payment, ["qrCode", "data.qrCode", "payment.qrCode", "data.payment.qrCode"]);
-      const bookingHoldExpiresAt = pick(payment, [
-        "bookingHoldExpiresAt",
-        "data.bookingHoldExpiresAt",
-        "payment.bookingHoldExpiresAt",
-        "data.payment.bookingHoldExpiresAt",
-      ]);
-
-      if (orderCode) {
-        sessionStorage.setItem(`charterPaymentOrderCode:${booking.id}`, orderCode);
-        sessionStorage.removeItem(`charterPayment:${booking.id}`);
-      } else if (paymentId) {
-        sessionStorage.setItem(`charterPayment:${booking.id}`, paymentId);
-      }
-      sessionStorage.setItem("latestCharterPaymentBooking", booking.id);
-      if (paymentId) {
-        sessionStorage.setItem(`paymentBooking:${paymentId}`, booking.id);
-      }
-      setPaymentCheckoutUrl(checkoutUrl || "");
-      setPaymentExpiresAt(expiresAt || "");
-      setPaymentQrCode(qrCode || "");
-      setPaymentBookingHoldExpiresAt(bookingHoldExpiresAt || "");
-      setPaymentAmount(createdPaymentAmount);
-      setPaymentWatcher((current) => ({
-        ...current,
-        isActive: false,
-        orderCode,
-        checkoutUrl,
-        amount: createdPaymentAmount,
-        deadline: expiresAt || current.deadline || "",
-        statusText: lang === "VN" ? "Đang chờ thanh toán trên PayOS" : "Waiting for PayOS payment",
-      }));
-
-      if (checkoutUrl) {
-        openPaymentPage(checkoutUrl, {
-          orderCode,
-          amount: createdPaymentAmount,
-          expiresAt: expiresAt || "",
-        });
-        return;
-      }
-
-      setPaymentWatcher((current) => ({ ...current, isActive: false }));
-
-      showAlertDialog({
-        icon: "success",
-        title: lang === "VN" ? "Đã tạo giao dịch" : "Payment created",
-        text: lang === "VN" ? "Hệ thống sẽ tự động đồng bộ trạng thái thanh toán." : "Payment status will be synchronized automatically.",
+      const applied = applyCreatedPayOsPayment(payment, {
+        fallbackAmount: selectedPaymentAmount,
+        openCheckout: true,
       });
+
+      if (!applied.opened) {
+        showAlertDialog({
+          icon: "success",
+          title: lang === "VN" ? "Đã tạo giao dịch" : "Payment created",
+          text: lang === "VN" ? "Hệ thống sẽ tự động đồng bộ trạng thái thanh toán." : "Payment status will be synchronized automatically.",
+        });
+      }
     } catch (error) {
       setPaymentWatcher((current) => ({ ...current, isActive: false }));
       showAlertDialog({
@@ -1436,8 +1549,30 @@ export function CharterDetail() {
 
     try {
       setIsSubmitting(true);
-      await updateMyCharterBookingPassengers(booking.id, { passengers: passengerPayload.passengers });
-      await loadDetail();
+      const beforeBalance = getCharterBalanceDue(booking);
+      const beforeInsuranceTotal = Number(booking.insurance?.totalAmount || 0) || 0;
+      const response = await updateMyCharterBookingPassengers(booking.id, { passengers: passengerPayload.passengers });
+      const embeddedPayment = extractPayOsPaymentFields(response);
+      const refreshed = await loadDetail({ silent: true });
+      const afterBalance = getCharterBalanceDue(refreshed || booking);
+      const afterInsuranceTotal = Number((refreshed || booking)?.insurance?.totalAmount || 0) || 0;
+      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal;
+      const balanceDue = Math.max(afterBalance, embeddedPayment?.amount || 0);
+
+      if (embeddedPayment?.checkoutUrl) {
+        rememberCharterPayOsSession(booking.id, embeddedPayment);
+        applyCreatedPayOsPayment(embeddedPayment, {
+          fallbackAmount: balanceDue || embeddedPayment.amount,
+          openCheckout: true,
+        });
+        return;
+      }
+
+      if ((insuranceGrew || afterBalance > beforeBalance) && balanceDue > 0) {
+        await createInsuranceTopUpPayOs(balanceDue, { openCheckout: true });
+        return;
+      }
+
       showAlertDialog({
         icon: "success",
         title: lang === "VN" ? "Đã lưu danh sách hành khách" : "Passenger list saved",
@@ -1495,8 +1630,30 @@ export function CharterDetail() {
 
     try {
       setIsSubmitting(true);
-      await addMyCharterBookingPassengers(booking.id, { passengers });
-      await loadDetail();
+      const beforeBalance = getCharterBalanceDue(booking);
+      const beforeInsuranceTotal = Number(booking.insurance?.totalAmount || 0) || 0;
+      const response = await addMyCharterBookingPassengers(booking.id, { passengers });
+      const embeddedPayment = extractPayOsPaymentFields(response);
+      const refreshed = await loadDetail({ silent: true });
+      const afterBalance = getCharterBalanceDue(refreshed || booking);
+      const afterInsuranceTotal = Number((refreshed || booking)?.insurance?.totalAmount || 0) || 0;
+      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal;
+      const balanceDue = Math.max(afterBalance, embeddedPayment?.amount || 0);
+
+      if (embeddedPayment?.checkoutUrl) {
+        rememberCharterPayOsSession(booking.id, embeddedPayment);
+        applyCreatedPayOsPayment(response, {
+          fallbackAmount: balanceDue || embeddedPayment.amount,
+          openCheckout: true,
+        });
+        return true;
+      }
+
+      if ((insuranceGrew || afterBalance > beforeBalance) && balanceDue > 0) {
+        await createInsuranceTopUpPayOs(balanceDue, { openCheckout: true });
+        return true;
+      }
+
       showAlertDialog({
         icon: "success",
         title: lang === "VN" ? "Đã gửi yêu cầu thêm" : "Add request submitted",
@@ -1558,9 +1715,11 @@ export function CharterDetail() {
   }
 
   const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
-  const isPaid = String(booking.paymentStatus).toLowerCase() === "paid";
+  const balanceDue = getCharterBalanceDue(booking);
+  const isPaymentStatusPaid = String(booking.paymentStatus).toLowerCase() === "paid";
+  const isPaid = isPaymentStatusPaid && balanceDue <= 0;
   const isTerminalBooking = ["Cancelled", "Expired", "Refunded"].includes(booking.status);
-  const canShowPayOsSection = !isPaid
+  const canShowPayOsSection = balanceDue > 0
     && !isTerminalBooking
     && !["Quoted", "PendingQuote", "Completed"].includes(booking.status);
   const canUseContactAsSinglePassenger = isSinglePassengerWithContact(booking, user) && !hasSavedPassengerManifest(booking);
@@ -1651,8 +1810,11 @@ export function CharterDetail() {
   const isPaymentLinkExpired = hasPaymentDeadline && paymentRemainingMs <= 0;
   const isBookingHoldExpired = isQuotePaymentExpired;
   const hasPendingPayOs = Boolean(pendingPaymentId || effectiveCheckoutUrl);
-  const canCreatePayment = ["PendingPayment", "Confirmed"].includes(booking.status)
-    && !isPaid
+  const canCreatePayment = (
+    ["PendingPayment", "Confirmed"].includes(booking.status)
+    || (balanceDue > 0 && ["Confirmed", "PendingPayment"].includes(booking.status))
+  )
+    && balanceDue > 0
     && !hasPendingPayOs
     && !isQuoteHoldExpired
     && !isBookingHoldExpired
@@ -1672,7 +1834,8 @@ export function CharterDetail() {
   const remainingAmount = promoApplied && booking.hasDepositPaid
     ? Math.max(0, Number(promoPreview.finalAmount) || 0)
     : Math.max(payableQuoteTotal - effectivePaidAmount, 0);
-  const normalizedPaymentOption = booking.hasDepositPaid
+  const needsBalancePayment = remainingAmount > 0 && effectivePaidAmount > 0;
+  const normalizedPaymentOption = (needsBalancePayment || booking.hasDepositPaid)
     ? "Remaining"
     : paymentOption === "Remaining"
       ? "Full"
@@ -1681,28 +1844,28 @@ export function CharterDetail() {
     {
       id: "Deposit",
       label: lang === "VN" ? "Đặt cọc" : "Deposit",
-      disabled: booking.hasDepositPaid || depositPaymentAmount <= 0,
+      disabled: booking.hasDepositPaid || depositPaymentAmount <= 0 || needsBalancePayment,
       amount: depositPaymentAmount,
       originalAmount: promoApplied ? quoteDepositAmount : null,
     },
     {
       id: "Full",
       label: lang === "VN" ? "Thanh toán đủ" : "Full",
-      disabled: false,
-      amount: booking.hasDepositPaid ? remainingAmount : payableQuoteTotal,
-      originalAmount: promoApplied && !booking.hasDepositPaid ? quoteTotal : null,
+      disabled: needsBalancePayment,
+      amount: booking.hasDepositPaid || needsBalancePayment ? remainingAmount : payableQuoteTotal,
+      originalAmount: promoApplied && !booking.hasDepositPaid && !needsBalancePayment ? quoteTotal : null,
     },
     {
       id: "Remaining",
       label: lang === "VN" ? "Phần còn lại" : "Remaining",
-      disabled: !booking.hasDepositPaid,
+      disabled: !(booking.hasDepositPaid || needsBalancePayment),
       amount: remainingAmount,
-      originalAmount: promoApplied && booking.hasDepositPaid
+      originalAmount: promoApplied && (booking.hasDepositPaid || needsBalancePayment)
         ? Math.max(quoteTotal - effectivePaidAmount, 0)
         : null,
     },
   ];
-  const selectablePaymentChoices = booking.hasDepositPaid
+  const selectablePaymentChoices = (needsBalancePayment || booking.hasDepositPaid)
     ? paymentChoices.filter((choice) => choice.id === "Remaining")
     : paymentChoices.filter((choice) => choice.id !== "Remaining");
   const paymentSelectValue = selectablePaymentChoices.some((choice) => choice.id === normalizedPaymentOption)
@@ -2257,11 +2420,11 @@ export function CharterDetail() {
         </section>
 
         {/* ===== SECTION 3: TICKETS & PASSENGERS ===== */}
-        {isPaid && (
+        {(isPaymentStatusPaid || canShowCharterTicketsWithBalance(booking)) && (
           <MyCharterTicketsPanel
             lang={lang}
             booking={booking}
-            isPaid={isPaid}
+            isPaid={isPaid || canShowCharterTicketsWithBalance(booking)}
             isSubmitting={isSubmitting}
             qrImageUrl={qrImageUrl}
             selectedTicketIds={selectedTicketIds}

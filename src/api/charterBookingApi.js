@@ -95,6 +95,14 @@ export const exportCharterBookingTicketsPdfByQrToken = (qrToken) =>
 export const getAdminCharterBookings = () =>
     api.get('/charter-bookings/admin').then(response => response.data);
 
+/** GET /api/charter-bookings/admin/rental-price-policies — giá thuê theo số tầng. */
+export const getAdminRentalPricePolicies = () =>
+    api.get('/charter-bookings/admin/rental-price-policies').then((response) => response.data);
+
+/** PUT /api/charter-bookings/admin/rental-price-policies — upsert 1 policy. */
+export const putAdminRentalPricePolicy = (payload) =>
+    api.put('/charter-bookings/admin/rental-price-policies', payload).then((response) => response.data);
+
 export const getAdminCharterBookingById = (id) =>
     api.get(`/charter-bookings/admin/${id}`).then(response => response.data);
 
@@ -116,6 +124,44 @@ export const assignAdminCharterBookingManager = (id, data) =>
 /** Admin: tạo trip Charter từ booking đã Confirmed (1 trip / tàu đã chốt). */
 export const createAdminCharterBookingTrip = (id) =>
     api.post(`/charter-bookings/admin/${encodeURIComponent(id)}/trip`).then((response) => response.data);
+
+/** Charter FE: gửi yêu cầu GPS vẽ tuyến cho booking chưa có selectedRoute. */
+export const requestAdminCharterRouteDraw = (bookingId, data = {}) =>
+    api
+        .post(
+            `/charter-bookings/admin/${encodeURIComponent(bookingId)}/route-draw-request`,
+            data,
+        )
+        .then((response) => response.data);
+
+/** GPS FE: danh sách yêu cầu vẽ tuyến (?status=Pending|InProgress|Done|Cancelled). */
+export const getAdminRouteDrawRequests = (params = {}) =>
+    api
+        .get('/charter-bookings/admin/route-draw-requests', { params })
+        .then((response) => response.data);
+
+/** GPS FE: chi tiết 1 yêu cầu vẽ tuyến (stops, candidateRoute, …). */
+export const getAdminRouteDrawRequestById = (requestId) =>
+    api
+        .get(`/charter-bookings/admin/route-draw-requests/${encodeURIComponent(requestId)}`)
+        .then((response) => response.data);
+
+/** GPS FE: mở request → chuyển InProgress. */
+export const markAdminRouteDrawRequestInProgress = (requestId) =>
+    api
+        .patch(
+            `/charter-bookings/admin/route-draw-requests/${encodeURIComponent(requestId)}/in-progress`,
+        )
+        .then((response) => response.data);
+
+/** GPS FE: hoàn tất — gắn routeId Active có geometry vào booking. */
+export const completeAdminRouteDrawRequest = (requestId, data) =>
+    api
+        .post(
+            `/charter-bookings/admin/route-draw-requests/${encodeURIComponent(requestId)}/complete`,
+            data,
+        )
+        .then((response) => response.data);
 
 export const getAssignedCharterBookings = () =>
     api.get('/charter-bookings/assigned').then(response => response.data);

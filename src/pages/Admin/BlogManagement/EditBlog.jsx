@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import {
     fetchBlogPostManagementDetail,
     modifyBlogPost,
+    buildBlogMultipartPayload,
     collectBlogImageUrls,
     getBlogEditableContent,
     BLOG_CATEGORY,
@@ -15,28 +16,24 @@ import { notify } from "../../../utils/swalToast";
 
 const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
 
-const sanitizeImageUrls = (urls) =>
-    (Array.isArray(urls) ? urls : [])
-        .map((u) => String(u || "").trim())
-        .filter(Boolean);
-
 export function EditBlog() {
     const { lang } = useApp();
     const navigate = useNavigate();
     const location = useLocation();
     const { id } = useParams();
     const { user: currentUser } = useSelector((state) => state.auth);
-    const canPublish = isAdminUser(currentUser);
+    const canManage = isAdminUser(currentUser);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
+    const [existingImageUrls, setExistingImageUrls] = useState([]);
+    const [imageFiles, setImageFiles] = useState([]);
 
     const [formData, setFormData] = useState({
         title: "",
         summary: "",
         category: BLOG_CATEGORY.NEWS,
-        imageUrls: [""],
         imageAltText: "",
         content: "",
         status: BLOG_STATUS.DRAFT,
@@ -44,11 +41,11 @@ export function EditBlog() {
 
     const applyBlogData = (blog) => {
         const urls = collectBlogImageUrls(blog);
+        setExistingImageUrls(urls);
         setFormData({
             title: blog.title || "",
             summary: blog.summary || "",
             category: blog.category || BLOG_CATEGORY.NEWS,
-            imageUrls: urls.length ? urls : [""],
             imageAltText: blog.imageAltText || "",
             content: getBlogEditableContent(blog),
             status: blog.status || BLOG_STATUS.DRAFT,
@@ -61,11 +58,10 @@ export function EditBlog() {
                 setIsLoading(true);
                 setErrorMsg("");
 
+                // List management thường không kèm body — luôn gọi detail để lấy content staff gửi.
                 const preloaded = location.state?.blog;
-                if (preloaded && String(preloaded.id) === String(id) && (preloaded.content !== undefined || preloaded.contentText !== undefined)) {
+                if (preloaded && String(preloaded.id) === String(id)) {
                     applyBlogData(preloaded);
-                    setIsLoading(false);
-                    return;
                 }
 
                 const found = await fetchBlogPostManagementDetail(id);
@@ -91,28 +87,27 @@ export function EditBlog() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
+    const newCoverPreview = useMemo(() => {
+        if (imageFiles[0]) return URL.createObjectURL(imageFiles[0]);
+        return "";
+    }, [imageFiles]);
+
+    useEffect(() => {
+        if (!newCoverPreview) return undefined;
+        return () => URL.revokeObjectURL(newCoverPreview);
+    }, [newCoverPreview]);
+
     const handleFieldChange = (field, value) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
-    const handleImageUrlChange = (index, value) => {
-        setFormData((prev) => {
-            const next = [...prev.imageUrls];
-            next[index] = value;
-            return { ...prev, imageUrls: next };
-        });
+    const handleImageFilesChange = (e) => {
+        const files = Array.from(e.target.files || []).filter(Boolean);
+        setImageFiles(files);
+        e.target.value = "";
     };
 
-    const addImageUrlField = () => {
-        setFormData((prev) => ({ ...prev, imageUrls: [...prev.imageUrls, ""] }));
-    };
-
-    const removeImageUrlField = (index) => {
-        setFormData((prev) => {
-            const next = prev.imageUrls.filter((_, i) => i !== index);
-            return { ...prev, imageUrls: next.length ? next : [""] };
-        });
-    };
+    const clearImageFiles = () => setImageFiles([]);
 
     const handleFormSubmit = async (e) => {
         e.preventDefault();
@@ -120,13 +115,10 @@ export function EditBlog() {
             setIsSubmitting(true);
             setErrorMsg("");
 
-            const nextStatus = canPublish ? formData.status : formData.status === BLOG_STATUS.PUBLISHED || formData.status === BLOG_STATUS.ARCHIVED
-                ? formData.status
-                : BLOG_STATUS.DRAFT;
+            const nextStatus = formData.status;
 
-            const imageUrls = sanitizeImageUrls(formData.imageUrls);
-
-            if (nextStatus === BLOG_STATUS.PUBLISHED && imageUrls.length === 0) {
+            const hasCover = imageFiles.length > 0 || existingImageUrls.length > 0;
+            if (nextStatus === BLOG_STATUS.PUBLISHED && !hasCover) {
                 setErrorMsg(
                     lang === "VN"
                         ? "Bài viết Published bắt buộc phải có ảnh bìa."
@@ -136,15 +128,16 @@ export function EditBlog() {
                 return;
             }
 
-            const payload = {
-                title: formData.title.trim(),
-                summary: formData.summary.trim(),
+            // Không chọn ảnh mới → không append images (BE giữ ảnh cũ)
+            const payload = buildBlogMultipartPayload({
+                title: formData.title,
+                summary: formData.summary,
+                content: formData.content,
                 category: formData.category,
-                imageUrls,
-                imageAltText: formData.imageAltText.trim(),
-                content: String(formData.content || "").trim(),
                 status: nextStatus,
-            };
+                imageAltText: formData.imageAltText,
+                imageFiles,
+            });
 
             await modifyBlogPost(id, payload);
 
@@ -166,9 +159,13 @@ export function EditBlog() {
         }
     };
 
-    const coverPreview = sanitizeImageUrls(formData.imageUrls)[0] || "";
+    const coverPreview = newCoverPreview || existingImageUrls[0] || "";
     const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
+
+    if (!canManage) {
+        return <Navigate to="/admin" replace />;
+    }
 
     if (isLoading) {
         return (
@@ -179,7 +176,7 @@ export function EditBlog() {
     }
 
     return (
-        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-3xl mx-auto animate-fade-in">
+        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-5xl mx-auto animate-fade-in">
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
                 <button
                     type="button"
@@ -226,10 +223,10 @@ export function EditBlog() {
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Tóm tắt" : "Summary"}</label>
                         <textarea
-                            rows={2}
+                            rows={5}
                             value={formData.summary}
                             onChange={(e) => handleFieldChange("summary", e.target.value)}
-                            className={`${inputStyle} resize-none`}
+                            className={`${inputStyle} min-h-28 resize-y`}
                         />
                     </div>
 
@@ -275,38 +272,61 @@ export function EditBlog() {
                             />
                         </div>
                         <div className="flex-1 w-full space-y-3">
+                            {existingImageUrls.length > 0 && imageFiles.length === 0 && (
+                                <div className="space-y-2">
+                                    <label className={labelStyle}>
+                                        {lang === "VN" ? "Ảnh hiện tại (BE giữ nếu không chọn ảnh mới)" : "Current images (kept if no new files)"}
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {existingImageUrls.map((url) => (
+                                            <div
+                                                key={url}
+                                                className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900"
+                                            >
+                                                <img
+                                                    src={url}
+                                                    alt=""
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => { e.target.src = DEFAULT_BLOG_IMAGE; }}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <label className={labelStyle}>
-                                {lang === "VN"
-                                    ? `URL ảnh ${formData.status === BLOG_STATUS.PUBLISHED ? "(*)" : ""}`
-                                    : `Image URLs ${formData.status === BLOG_STATUS.PUBLISHED ? "(*)" : ""}`}
+                                {lang === "VN" ? "Chọn ảnh mới (tuỳ chọn)" : "Select new images (optional)"}
                             </label>
-                            {formData.imageUrls.map((url, index) => (
-                                <div key={index} className="flex gap-2">
-                                    <input
-                                        type="url"
-                                        placeholder="https://..."
-                                        value={url}
-                                        onChange={(e) => handleImageUrlChange(index, e.target.value)}
-                                        className={inputStyle}
-                                    />
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={handleImageFilesChange}
+                                className={`${inputStyle} file:mr-3 file:rounded-lg file:border-0 file:bg-[#124757] file:px-3 file:py-1.5 file:text-[10px] file:font-black file:uppercase file:tracking-wider file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900`}
+                            />
+                            {imageFiles.length > 0 ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-[11px] font-semibold text-slate-500">
+                                        {lang === "VN"
+                                            ? `Sẽ thay bằng ${imageFiles.length} ảnh mới`
+                                            : `Will replace with ${imageFiles.length} new image(s)`}
+                                    </p>
                                     <button
                                         type="button"
-                                        onClick={() => removeImageUrlField(index)}
-                                        className="shrink-0 w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"
-                                        aria-label={lang === "VN" ? "Xóa URL" : "Remove URL"}
+                                        onClick={clearImageFiles}
+                                        className="text-[10px] font-headline font-black uppercase tracking-wider text-rose-500"
                                     >
-                                        <span className="material-symbols-outlined text-lg">close</span>
+                                        {lang === "VN" ? "Huỷ chọn ảnh mới" : "Cancel new selection"}
                                     </button>
                                 </div>
-                            ))}
-                            <button
-                                type="button"
-                                onClick={addImageUrlField}
-                                className="text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 flex items-center gap-1"
-                            >
-                                <span className="material-symbols-outlined text-sm">add</span>
-                                {lang === "VN" ? "Thêm URL ảnh" : "Add image URL"}
-                            </button>
+                            ) : (
+                                <p className="text-[10px] text-slate-400 font-bold">
+                                    {lang === "VN"
+                                        ? "Không chọn ảnh mới → BE giữ ảnh cũ. Không gửi imageUrl."
+                                        : "No new files → BE keeps existing images. Do not send imageUrl."}
+                                </p>
+                            )}
                             <div>
                                 <label className={labelStyle}>{lang === "VN" ? "Mô tả ảnh (Alt Text)" : "Image Alt Text"}</label>
                                 <input
@@ -340,51 +360,32 @@ export function EditBlog() {
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
                         {lang === "VN" ? "Trạng thái" : "Status"}
                     </h3>
-                    {canPublish ? (
-                        <>
-                            <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                                {[
-                                    { value: BLOG_STATUS.DRAFT, vn: "Nháp", en: "Draft" },
-                                    { value: BLOG_STATUS.PUBLISHED, vn: "Xuất bản", en: "Published" },
-                                    { value: BLOG_STATUS.ARCHIVED, vn: "Lưu trữ", en: "Archived" },
-                                ].map((option) => {
-                                    const selected = formData.status === option.value;
-                                    return (
-                                        <button
-                                            key={option.value}
-                                            type="button"
-                                            onClick={() => handleFieldChange("status", option.value)}
-                                            className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
-                                                    ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                                                    : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                                                }`}
-                                        >
-                                            {lang === "VN" ? option.vn : option.en}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            {formData.status === BLOG_STATUS.PUBLISHED && (
-                                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                                    {lang === "VN" ? "Bài viết Published bắt buộc phải có ít nhất 1 ảnh bìa." : "Published posts must have at least one cover image."}
-                                </p>
-                            )}
-                        </>
-                    ) : (
-                        <div className={`${inputStyle} flex flex-col justify-center gap-1`}>
-                            <span className="font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                                {formData.status === BLOG_STATUS.DRAFT
-                                    ? lang === "VN"
-                                        ? "Nháp"
-                                        : "Draft"
-                                    : formData.status}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-bold">
-                                {lang === "VN"
-                                    ? "Không đổi được trạng thái — chỉ Admin xuất bản / lưu trữ."
-                                    : "Status is locked — only Admin can publish / archive."}
-                            </span>
-                        </div>
+                    <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                        {[
+                            { value: BLOG_STATUS.DRAFT, vn: "Nháp", en: "Draft" },
+                            { value: BLOG_STATUS.PUBLISHED, vn: "Xuất bản", en: "Published" },
+                            { value: BLOG_STATUS.ARCHIVED, vn: "Lưu trữ", en: "Archived" },
+                        ].map((option) => {
+                            const selected = formData.status === option.value;
+                            return (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => handleFieldChange("status", option.value)}
+                                    className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
+                                            ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
+                                            : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
+                                        }`}
+                                >
+                                    {lang === "VN" ? option.vn : option.en}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {formData.status === BLOG_STATUS.PUBLISHED && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                            {lang === "VN" ? "Bài viết Published bắt buộc phải có ít nhất 1 ảnh bìa." : "Published posts must have at least one cover image."}
+                        </p>
                     )}
                 </div>
 

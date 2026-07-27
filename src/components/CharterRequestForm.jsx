@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { fetchAllStations } from "../services/stationService";
-import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId } from "../services/insuranceService";
+import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId, INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
 import { fetchCurrentUserProfile } from "../services/authService";
 import { updateUserProfile } from "../redux/authSlice";
 import {
@@ -227,7 +227,7 @@ export function CharterRequestForm({
 
   useEffect(() => {
     let isMounted = true;
-    fetchActiveInsurancePackages("CharterBooking")
+    fetchActiveInsurancePackages(INSURANCE_BOOKING_TYPES.PASSENGER)
       .then((packages) => {
         if (!isMounted) return;
         setInsurancePackages(packages);
@@ -1167,9 +1167,16 @@ export function CharterRequestForm({
               const selectedPackage = wantsInsurance
                 ? findInsurancePackageById(insurancePackages, selectedInsurancePackageId)
                 : null;
-              const unitPremiumLabel = lang === "VN" ? "ghế" : "seat";
-              const pendingMessage = getInsurancePendingMessage("CharterBooking", lang);
+              const unitPremiumLabel = lang === "VN" ? "khách" : "pax";
+              const pendingMessage = getInsurancePendingMessage(INSURANCE_BOOKING_TYPES.PASSENGER, lang);
               const insuranceNote = getCharterInsuranceNote(lang);
+              const passengerQty = Math.max(
+                0,
+                (Number(formData.adultCount) || 0) + (Number(formData.childCount) || 0),
+              );
+              const insurancePreviewTotal = wantsInsurance && selectedPackage
+                ? (Number(selectedPackage.unitPremiumAmount) || 0) * passengerQty
+                : 0;
 
               const displayPackage = selectedPackage || insurancePackages[0];
               const providerName = displayPackage?.providerName || "";
@@ -1382,11 +1389,11 @@ export function CharterRequestForm({
                             </div>
                             <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
                               <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
-                                {lang === "VN" ? "Quyền lợi" : "Coverage"}
+                                {lang === "VN" ? "Tạm tính" : "Preview"}
                               </p>
                               <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
-                                {Number(selectedPackage.coverageAmount) > 0
-                                  ? formatVnd(selectedPackage.coverageAmount)
+                                {passengerQty > 0
+                                  ? `${formatVnd(insurancePreviewTotal)} · ${passengerQty} ${unitPremiumLabel}`
                                   : "--"}
                               </p>
                             </div>

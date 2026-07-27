@@ -1,5 +1,7 @@
 import { CharterPaymentLedger } from "../../../components/CharterPaymentLedger";
 import { PayOSLogo, payosButtonClassName, payosButtonLgClassName } from "../../../components/PayOSLogo";
+import { SelectablePublicVouchers } from "../../../components/SelectablePublicVouchers";
+import { PROMOTION_BOOKING_TYPES } from "../../../services/promotionService";
 import { shouldShowPaymentDeadlineCountdown } from "../../../utils/charterBookingActions";
 
 const formatCountdown = (milliseconds) => {
@@ -314,45 +316,26 @@ export function MyCharterPaymentPanel({
                   )}
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                    <label className="block">
-                      <span className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                        {lang === "VN" ? "Mã khuyến mãi" : "Promo code"}
-                      </span>
-                      <div className="mt-2 flex gap-2">
-                        <input
-                          value={paymentPromotionCode}
-                          onChange={(event) => setPaymentPromotionCode(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              onApplyPromotionCode?.();
-                            }
-                          }}
-                          maxLength={80}
-                          placeholder={lang === "VN" ? "Nhập mã nếu có" : "Optional"}
-                          className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold uppercase text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => onApplyPromotionCode?.()}
-                          disabled={promoChecking || !String(paymentPromotionCode || "").trim()}
-                          className="shrink-0 rounded-xl border border-[#124757]/20 bg-[#124757]/5 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition hover:bg-[#124757]/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
-                        >
-                          {promoChecking
-                            ? (lang === "VN" ? "…" : "…")
-                            : (lang === "VN" ? "Áp dụng" : "Apply")}
-                        </button>
-                        {(promoPreview?.ok || promoPreview?.error) ? (
-                          <button
-                            type="button"
-                            onClick={() => onClearPromotionCode?.()}
-                            className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                          >
-                            {lang === "VN" ? "Xóa" : "Clear"}
-                          </button>
-                        ) : null}
-                      </div>
-                    </label>
+                    <SelectablePublicVouchers
+                      lang={lang}
+                      bookingType={PROMOTION_BOOKING_TYPES.CHARTER}
+                      selectedCode={paymentPromotionCode}
+                      disabled={isSubmitting || promoChecking}
+                      onChangeCode={(code) => setPaymentPromotionCode?.(code)}
+                      onSelect={(code) => {
+                        setPaymentPromotionCode?.(code);
+                        onApplyPromotionCode?.(code);
+                      }}
+                      onClear={() => onClearPromotionCode?.()}
+                      hint={lang === "VN"
+                        ? "Chọn voucher hoặc nhập mã rồi Enter để áp dụng."
+                        : "Pick a voucher or type a code and press Enter to apply."}
+                    />
+                    {promoChecking ? (
+                      <p className="mt-2 text-xs font-bold text-slate-400">
+                        {lang === "VN" ? "Đang kiểm tra mã…" : "Validating code…"}
+                      </p>
+                    ) : null}
                     {promoPreview?.ok ? (
                       <p className="mt-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
                         {lang === "VN"
