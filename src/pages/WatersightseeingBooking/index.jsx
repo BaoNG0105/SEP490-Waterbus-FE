@@ -4,6 +4,7 @@ import { useApp } from "../../context/AppContext";
 import { guidelines } from "../../data/homeData";
 import { getTodayDateString } from "../../utils/dateOnly";
 import { useBookingWizardStep } from "../../hooks/useBookingWizardStep";
+import { useRequireAuthGate } from "../../hooks/useRequireAuthGate";
 import {
   bookingHasSeatSelection,
   clearSeatSelectionFields,
@@ -20,6 +21,8 @@ export function WatersightseeingBooking() {
     const { lang } = useApp();
     const location = useLocation();
     const navigate = useNavigate();
+
+    useRequireAuthGate();
 
     const [bookingData, setBookingData] = useState(
         location.state?.bookingData || {

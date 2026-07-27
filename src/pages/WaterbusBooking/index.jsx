@@ -4,6 +4,7 @@ import { useApp } from "../../context/AppContext";
 import { guidelines } from "../../data/homeData";
 import { getTodayDateString } from "../../utils/dateOnly";
 import { useBookingWizardStep } from "../../hooks/useBookingWizardStep";
+import { useRequireAuthGate } from "../../hooks/useRequireAuthGate";
 import {
   bookingHasSeatSelection,
   clearSeatSelectionFields,
@@ -19,6 +20,8 @@ import Step3Checkout from "./components/Step3Checkout";
 export function WaterbusBooking() {
     const { lang } = useApp();
     const location = useLocation();
+
+    useRequireAuthGate();
 
     const [bookingData, setBookingData] = useState(
         location.state?.bookingData || {

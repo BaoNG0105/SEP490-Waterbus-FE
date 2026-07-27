@@ -8,11 +8,14 @@ import { handleDuplicateCharterBookingError } from "../../utils/charterDuplicate
 import { createEmptyBoatRequest, getMinDepartureDate } from "../../utils/charterRequestForm";
 import { CharterRequestForm } from "../../components/CharterRequestForm";
 import { notify } from "../../utils/swalToast";
+import { useRequireAuthGate } from "../../hooks/useRequireAuthGate";
 
 export function CharterBooking() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { isAuthenticated } = useSelector((state) => state.auth);
+
+  useRequireAuthGate();
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
