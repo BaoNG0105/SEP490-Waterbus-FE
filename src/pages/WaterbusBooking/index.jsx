@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { guidelines } from "../../data/homeData";
 import { getTodayDateString } from "../../utils/dateOnly";
 import { useBookingWizardStep } from "../../hooks/useBookingWizardStep";
 import { useRequireAuthGate } from "../../hooks/useRequireAuthGate";
+import { readBookingDraft, writeBookingDraft, clearBookingDraft } from "../../utils/bookingDraftStorage";
 import {
   bookingHasSeatSelection,
   clearSeatSelectionFields,
@@ -17,6 +18,8 @@ import Step1Search from "./components/Step1Search";
 import Step2SelectTripAndSeats from "./components/Step2SelectTripAndSeats";
 import Step3Checkout from "./components/Step3Checkout";
 
+const DRAFT_KEY = "waterbusBookingDraft";
+
 export function WaterbusBooking() {
     const { lang } = useApp();
     const location = useLocation();
@@ -24,7 +27,7 @@ export function WaterbusBooking() {
     useRequireAuthGate();
 
     const [bookingData, setBookingData] = useState(
-        location.state?.bookingData || {
+        location.state?.bookingData || readBookingDraft(DRAFT_KEY) || {
             isRoundTrip: false,
             fromWharf: "",
             toWharf: "",
@@ -43,6 +46,10 @@ export function WaterbusBooking() {
             seatHoldExpiresAt: null,
         }
     );
+
+    useEffect(() => {
+        writeBookingDraft(DRAFT_KEY, bookingData);
+    }, [bookingData]);
 
     const updateBookingData = (fields) => {
         setBookingData((prev) => ({ ...prev, ...fields }));
@@ -183,6 +190,7 @@ export function WaterbusBooking() {
                             updateBookingData({ seatHoldExpiresAt: null });
                             goToStep(1, { replace: true });
                         }}
+                        onBookingCreated={() => clearBookingDraft(DRAFT_KEY)}
                     />
                 )}
 

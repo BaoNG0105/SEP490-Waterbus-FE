@@ -50,6 +50,16 @@ const TIME_FILTER_OPTIONS_EN = [
   { value: "afternoon", label: "Afternoon" },
 ];
 
+const SORT_ORDER_OPTIONS_VN = [
+  { value: "earliest", label: "Sớm nhất" },
+  { value: "latest", label: "Muộn nhất" },
+];
+
+const SORT_ORDER_OPTIONS_EN = [
+  { value: "earliest", label: "Earliest first" },
+  { value: "latest", label: "Latest first" },
+];
+
 const timeFilterClassName =
   "bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-lg px-2 py-2 outline-none dark:text-white whitespace-nowrap";
 
@@ -236,6 +246,7 @@ export default function Step2SelectTripAndSeats({
   // Quản lý tab nội bộ của bước 2 nếu là khứ hồi: 'departure' (chiều đi) hoặc 'return' (chiều về)
   const [activeLeg, setActiveLeg] = useState("departure");
   const [filterTime, setFilterTime] = useState("all");
+  const [sortOrder, setSortOrder] = useState("earliest");
 
   // Tên bến hiển thị trên thẻ chuyến — chặng về đi ngược chiều nên phải đảo lại thứ tự tên bến
   const legFromWharfName = activeLeg === "departure" ? fromWharfName : toWharfName;
@@ -347,10 +358,18 @@ export default function Step2SelectTripAndSeats({
   );
   const isCurrentMissingKm = Boolean(currentTrip) && !isLoopRoute && currentSegmentKm == null;
 
-  const filteredTripOptions = (tripOptions || []).filter((trip) => {
-    if (filterTime === "all") return true;
-    return getTripHourBucket(getSegmentDeparture(trip)) === filterTime;
-  });
+  const filteredTripOptions = (tripOptions || [])
+    .filter((trip) => {
+      if (filterTime === "all") return true;
+      return getTripHourBucket(getSegmentDeparture(trip)) === filterTime;
+    })
+    .sort((a, b) => {
+      const aMs = new Date(getSegmentDeparture(a)).getTime();
+      const bMs = new Date(getSegmentDeparture(b)).getTime();
+      const safeA = Number.isFinite(aMs) ? aMs : Infinity;
+      const safeB = Number.isFinite(bMs) ? bMs : Infinity;
+      return sortOrder === "latest" ? safeB - safeA : safeA - safeB;
+    });
 
   const deckLayout = useMemo(() => buildDeckLayout(currentSeatMap), [currentSeatMap]);
   const activeDeckNumber = activeDeckByLeg[activeLeg] || deckLayout[0]?.deckNumber || 1;
@@ -521,12 +540,12 @@ export default function Step2SelectTripAndSeats({
     const firstAvailable = filteredTripOptions.find((trip) => isTripSelectable(trip));
     if (!firstAvailable?.tripId) return;
 
-    const key = `${activeLeg}:${firstAvailable.tripId}:${filterTime}`;
+    const key = `${activeLeg}:${firstAvailable.tripId}:${filterTime}:${sortOrder}`;
     if (autoSelectKeyRef.current === key) return;
     autoSelectKeyRef.current = key;
     handleSelectTrip(firstAvailable, { silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeLeg, filterTime, isAuthenticated, filteredTripOptions.length, currentTrip?.tripId]);
+  }, [activeLeg, filterTime, sortOrder, isAuthenticated, filteredTripOptions.length, currentTrip?.tripId]);
 
   // Chọn/bỏ chọn ghế: chỉ cập nhật state cục bộ, KHÔNG gọi API giữ/nhả ghế ở bước này
   const handleSeatClick = (seat) => {
@@ -737,20 +756,20 @@ export default function Step2SelectTripAndSeats({
           {isLoopRoute ? (
             <>
               {lang === "VN" ? "Tour tham quan tại" : "Sightseeing tour at"}
-              <span className="text-[#124757] dark:text-yellow-400">{fromWharfName || toWharfName || "--"}</span>
+              <span className="uppercase text-[#124757] dark:text-yellow-400">{fromWharfName || toWharfName || "--"}</span>
             </>
           ) : (
             <>
               {lang === "VN" ? "Tìm kiếm từ bến" : "Searching from"}
-              <span className="text-[#124757] dark:text-yellow-400">{fromWharfName || "--"}</span>
+              <span className="uppercase text-yellow-400">{fromWharfName || "--"}</span>
               {lang === "VN" ? "đến bến" : "to"}
-              <span className="text-[#124757] dark:text-yellow-400">{toWharfName || "--"}</span>
+              <span className="uppercase text-yellow-400">{toWharfName || "--"}</span>
             </>
           )}
           {(activeLeg === "departure" ? departureDate : returnDate) && (
             <>
               <span className="text-slate-300 dark:text-slate-600">·</span>
-              <span className="text-[#124757] dark:text-yellow-400">
+              <span className="uppercase text-yellow-400">
                 {(() => {
                   const raw = activeLeg === "departure" ? departureDate : returnDate;
                   const m = String(raw || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -778,7 +797,7 @@ export default function Step2SelectTripAndSeats({
 
         {/* CỘT TRÁI (Tỷ lệ 5/12): DANH SÁCH CHUYẾN TÀU CHẠY TRONG NGÀY (dữ liệu thật từ API tìm chuyến) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border shadow-sm flex justify-between items-center gap-3">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border shadow-sm flex flex-wrap justify-between items-center gap-3">
             <h3 className="shrink-0 text-lg font-headline font-bold text-[#124757] dark:text-white">
               {isLoopRoute
                 ? (lang === "VN" ? "Chuyến tham quan" : "Sightseeing Trip")
@@ -786,13 +805,22 @@ export default function Step2SelectTripAndSeats({
                   ? (lang === "VN" ? "Chuyến đi" : "Departure")
                   : (lang === "VN" ? "Chuyến về" : "Return")}
             </h3>
-            <FormSelect
-              value={filterTime}
-              onChange={setFilterTime}
-              options={lang === "VN" ? TIME_FILTER_OPTIONS_VN : TIME_FILTER_OPTIONS_EN}
-              className={timeFilterClassName}
-              fullWidth={false}
-            />
+            <div className="flex items-center gap-2">
+              <FormSelect
+                value={filterTime}
+                onChange={setFilterTime}
+                options={lang === "VN" ? TIME_FILTER_OPTIONS_VN : TIME_FILTER_OPTIONS_EN}
+                className={timeFilterClassName}
+                fullWidth={false}
+              />
+              <FormSelect
+                value={sortOrder}
+                onChange={setSortOrder}
+                options={lang === "VN" ? SORT_ORDER_OPTIONS_VN : SORT_ORDER_OPTIONS_EN}
+                className={timeFilterClassName}
+                fullWidth={false}
+              />
+            </div>
           </div>
 
           <div className="space-y-3.5">
@@ -904,6 +932,13 @@ export default function Step2SelectTripAndSeats({
                   <span className="text-amber-700 dark:text-amber-300">{currentFareAdjLabel}</span>
                 ) : null}
               </div>
+            ) : null}
+            {currentTrip && !isLoopRoute ? (
+              <p className="mt-2 text-[11px] font-bold italic text-rose-600 dark:text-rose-400">
+                {lang === "VN"
+                  ? "Giá vé sẽ thay đổi tùy thuộc vào bến khởi hành, điểm đến (quãng đường) và thời điểm đặt vé. Vé đặc biệt (trẻ em / người lớn tuổi / người khuyết tật): MIỄN PHÍ."
+                  : "Ticket price varies depending on the departure station, destination (distance) and time of booking. Special tickets (children / seniors / disabled): FREE."}
+              </p>
             ) : null}
           </div>
 

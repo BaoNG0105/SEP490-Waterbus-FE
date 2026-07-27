@@ -16,7 +16,7 @@ const isActiveWaterbusStation = (station) => {
 };
 
 const selectClassName =
-  "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-50";
+  "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-4 px-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-50";
 
 export default function Step1Search({ bookingData, updateData, onNext }) {
   const { lang } = useApp();

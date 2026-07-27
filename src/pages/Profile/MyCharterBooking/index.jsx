@@ -223,7 +223,6 @@ export function CharterList() {
             <ListSkeleton />
           ) : filteredBookings.length === 0 ? (
             <div className="rounded-4xl border border-dashed border-slate-200 bg-white p-16 text-center dark:border-slate-700 dark:bg-slate-800">
-              <span className="material-symbols-outlined mb-3 block text-5xl text-slate-300 dark:text-slate-600">sailing</span>
               <p className="font-headline text-lg font-black text-slate-500 dark:text-slate-300">{emptyMessage}</p>
               {hasFilters ? (
                 <button
@@ -253,16 +252,14 @@ export function CharterList() {
               return (
                 <article
                   key={booking.id || booking.bookingCode}
-                  className={`group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg dark:bg-slate-800 ${
-                    actionInfo.urgent
+                  className={`group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg dark:bg-slate-800 ${actionInfo.urgent
                       ? "border-[#124757]/20 ring-1 ring-[#124757]/10 dark:border-yellow-400/20 dark:ring-yellow-400/10"
                       : "border-slate-100 dark:border-slate-700/50"
-                  }`}
+                    }`}
                 >
                   <div
-                    className={`absolute inset-y-0 left-0 w-1 ${
-                      actionInfo.urgent ? "bg-[#FFD100]" : "bg-slate-200 dark:bg-slate-700"
-                    }`}
+                    className={`absolute inset-y-0 left-0 w-1 ${actionInfo.urgent ? "bg-[#FFD100]" : "bg-slate-200 dark:bg-slate-700"
+                      }`}
                   />
 
                   <div className="flex flex-col gap-4 p-4 pl-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">

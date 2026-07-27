@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { guidelines } from "../../data/homeData";
 import { getTodayDateString } from "../../utils/dateOnly";
 import { useBookingWizardStep } from "../../hooks/useBookingWizardStep";
 import { useRequireAuthGate } from "../../hooks/useRequireAuthGate";
+import { readBookingDraft, writeBookingDraft, clearBookingDraft } from "../../utils/bookingDraftStorage";
 import {
   bookingHasSeatSelection,
   clearSeatSelectionFields,
@@ -17,6 +18,8 @@ import Step1SearchSightseeing from "./components/Step1SearchSightseeing";
 import Step2SelectTripAndSeats from "../WaterbusBooking/components/Step2SelectTripAndSeats";
 import Step3Checkout from "../WaterbusBooking/components/Step3Checkout";
 
+const DRAFT_KEY = "sightseeingBookingDraft";
+
 export function WatersightseeingBooking() {
     const { lang } = useApp();
     const location = useLocation();
@@ -25,7 +28,7 @@ export function WatersightseeingBooking() {
     useRequireAuthGate();
 
     const [bookingData, setBookingData] = useState(
-        location.state?.bookingData || {
+        location.state?.bookingData || readBookingDraft(DRAFT_KEY) || {
             isRoundTrip: false,
             fromWharf: "",
             toWharf: "",
@@ -39,12 +42,17 @@ export function WatersightseeingBooking() {
         }
     );
 
+    useEffect(() => {
+        writeBookingDraft(DRAFT_KEY, bookingData);
+    }, [bookingData]);
+
     const updateBookingData = (fields) => {
         setBookingData((prev) => ({ ...prev, ...fields }));
     };
 
     const exitBookingToHome = useCallback(() => {
         updateBookingData(clearSeatSelectionFields());
+        clearBookingDraft(DRAFT_KEY);
         navigate("/", { replace: true });
     }, [navigate]);
 
@@ -194,6 +202,7 @@ export function WatersightseeingBooking() {
                             updateBookingData({ seatHoldExpiresAt: null });
                             goToStep(1, { replace: true });
                         }}
+                        onBookingCreated={() => clearBookingDraft(DRAFT_KEY)}
                     />
                 )}
 

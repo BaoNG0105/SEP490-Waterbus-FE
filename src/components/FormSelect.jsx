@@ -177,7 +177,7 @@ export function FormSelect({
       >
         <span className={`flex min-w-0 flex-1 items-center gap-2 text-left ${selected ? "" : "text-slate-400"}`}>
           {selected?.icon ? <span className="inline-flex shrink-0 items-center leading-none">{selected.icon}</span> : null}
-          <span className="min-w-0 flex-1 truncate leading-none">
+          <span className="min-w-0 flex-1 truncate leading-5">
             {selected ? selected.label : placeholder}
           </span>
         </span>

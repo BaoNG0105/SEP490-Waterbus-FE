@@ -85,7 +85,7 @@ const formatHoldDeadline = (value) => {
   return date.toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" });
 };
 
-export default function Step3Checkout({ bookingData, onBack, onExpire }) {
+export default function Step3Checkout({ bookingData, onBack, onExpire, onBookingCreated }) {
   const { lang } = useApp();
   const navigate = useNavigate();
   const {
@@ -204,6 +204,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       ticketType: "ADULT",
       phone: "",
       email: "",
+      infant: null,
     }))
   );
 
@@ -255,19 +256,20 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
     )));
   };
 
-  // 3. STATE: HÀNH KHÁCH TRẺ EM DƯỚI 2 TUỔI (INFANT — không chiếm ghế, miễn phí, đi kèm chuyến của người lớn)
-  const [infants, setInfants] = useState([]);
+  // 3. HÀNH KHÁCH TRẺ EM DƯỚI 2 TUỔI (INFANT — không chiếm ghế, miễn phí) giờ gắn liền với hành
+  // khách người lớn đi kèm (passenger.infant), không còn là danh sách rời rạc như trước.
+  const infants = passengers.filter((p) => p.infant).map((p) => p.infant);
 
-  const handleAddInfant = () => {
-    setInfants((prev) => [...prev, { name: "", birthYear: "" }]);
+  const handleToggleInfant = (index) => {
+    setPassengers((prev) => prev.map((p, i) => (
+      i === index ? { ...p, infant: p.infant ? null : { name: "", birthYear: "" } } : p
+    )));
   };
 
   const handleInfantChange = (index, field, value) => {
-    setInfants((prev) => prev.map((inf, i) => (i === index ? { ...inf, [field]: value } : inf)));
-  };
-
-  const handleRemoveInfant = (index) => {
-    setInfants((prev) => prev.filter((_, i) => i !== index));
+    setPassengers((prev) => prev.map((p, i) => (
+      i === index && p.infant ? { ...p, infant: { ...p.infant, [field]: value } } : p
+    )));
   };
 
   // 4. STATE: MÃ GIẢM GIÁ, ĐIỂM TÍCH LŨY, BẢO HIỂM & SUBMIT
@@ -517,6 +519,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       if (!bookingId) {
         throw new Error("Booking created but no booking id was returned.");
       }
+      // Booking đã tồn tại ở BE — dọn draft Step 1-2 lưu tạm cho F5, tránh khôi phục nhầm lần đặt cũ.
+      onBookingCreated?.();
 
       // holdExpiresAt do BE tính (min(+15p, giờ đi - 10p)) — không hardcode trên FE.
       const bookingHoldExpiresAt = pick(booking, [
@@ -543,9 +547,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
       const pointsForPayment = Math.min(pointsToUse, cappedPoints);
 
       const paymentServiceType = isLoopRoute ? "Sightseeing" : "Waterbus";
-      const myTicketsPath = isLoopRoute
-        ? "/profile/my-sightseeing-booking"
-        : "/profile/my-waterbus-booking";
+      const myTicketsPath = `/profile/my-bookings?type=${paymentServiceType}`;
 
       const finishFreeBooking = async () => {
         sessionStorage.setItem("latestWaterbusPaymentBooking", bookingId);
@@ -562,9 +564,9 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           allowOutsideClick: false,
           showCancelButton: false,
         });
-        navigate(`${myTicketsPath}?highlightBookingId=${encodeURIComponent(bookingId)}`, {
+        navigate(`${myTicketsPath}&highlightBookingId=${encodeURIComponent(bookingId)}`, {
           replace: true,
-          state: { highlightBookingId: bookingId, paymentOutcome: "success", freeTicket: true },
+          state: { highlightBookingId: bookingId, paymentOutcome: "success", freeTicket: true, serviceType: paymentServiceType },
         });
       };
 
@@ -821,72 +823,66 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
                     />
                   </div>
                 </div>
+
+                {/* Em bé dưới 2 tuổi đi kèm hành khách này — không chiếm ghế, miễn phí.
+                    BE: vé INFANT chỉ áp dụng waterbus thường, không áp dụng sightseeing → ẩn với tuyến vòng */}
+                {!isLoopRoute && (
+                  <div className="border-t border-slate-200/60 dark:border-slate-700 pt-4">
+                    {!passenger.infant ? (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleInfant(index)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10"
+                      >
+                        <span className="material-symbols-outlined text-sm">add</span>
+                        {lang === "VN" ? "Thêm em bé đi kèm (dưới 2 tuổi)" : "Add accompanying infant (under 2)"}
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-500">
+                            {lang === "VN" ? "Em bé đi kèm (không tính ghế, miễn phí)" : "Accompanying infant (no seat, free)"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleInfant(index)}
+                            className="shrink-0 w-8 h-8 rounded-lg border border-rose-200 dark:border-rose-500/30 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center justify-center"
+                          >
+                            <span className="material-symbols-outlined text-base">delete</span>
+                          </button>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <div className="flex-1 space-y-1.5">
+                            <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên em bé *" : "Infant Full Name *"}</label>
+                            <input
+                              type="text"
+                              value={passenger.infant.name}
+                              onChange={(e) => handleInfantChange(index, "name", e.target.value)}
+                              placeholder={lang === "VN" ? "Nhập tên em bé..." : "Enter infant's name..."}
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                            />
+                          </div>
+                          <div className="w-full sm:w-32 space-y-1.5">
+                            <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh" : "Birth Year"}</label>
+                            <input
+                              type="number"
+                              min="2020"
+                              max={new Date().getFullYear()}
+                              value={passenger.infant.birthYear}
+                              onChange={(e) => handleInfantChange(index, "birthYear", e.target.value)}
+                              placeholder="YYYY"
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
-
-        {/* 3. HÀNH KHÁCH TRẺ EM DƯỚI 2 TUỔI (KHÔNG CHIẾM GHẾ, MIỄN PHÍ)
-            BE: vé INFANT chỉ áp dụng waterbus thường, không áp dụng sightseeing → ẩn với tuyến vòng */}
-        {!isLoopRoute && (
-        <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 space-y-5">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
-            <h3 className="text-xl font-headline font-bold text-[#124757] dark:text-white flex items-center gap-2">
-              {lang === "VN" ? "Em bé dưới 2 tuổi (không tính ghế)" : "Infants under 2 (no seat)"}
-            </h3>
-            <button
-              type="button"
-              onClick={handleAddInfant}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10"
-            >
-              <span className="material-symbols-outlined text-sm">add</span>
-              {lang === "VN" ? "Thêm em bé" : "Add infant"}
-            </button>
-          </div>
-
-          {infants.length === 0 ? (
-            <p className="text-xs text-slate-400">
-              {lang === "VN" ? "Không có em bé đi kèm. Bấm \"Thêm em bé\" nếu có trẻ dưới 2 tuổi ngồi cùng người lớn." : "No infants added. Click \"Add infant\" if a child under 2 will sit with an adult."}
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {infants.map((infant, index) => (
-                <div key={index} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row gap-3 sm:items-end">
-                  <div className="flex-1 space-y-1.5">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên em bé *" : "Infant Full Name *"}</label>
-                    <input
-                      type="text"
-                      value={infant.name}
-                      onChange={(e) => handleInfantChange(index, "name", e.target.value)}
-                      placeholder={lang === "VN" ? "Nhập tên em bé..." : "Enter infant's name..."}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
-                    />
-                  </div>
-                  <div className="w-full sm:w-32 space-y-1.5">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh" : "Birth Year"}</label>
-                    <input
-                      type="number"
-                      min="2020"
-                      max={new Date().getFullYear()}
-                      value={infant.birthYear}
-                      onChange={(e) => handleInfantChange(index, "birthYear", e.target.value)}
-                      placeholder="YYYY"
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveInfant(index)}
-                    className="shrink-0 w-10 h-10 rounded-xl border border-rose-200 dark:border-rose-500/30 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center justify-center"
-                  >
-                    <span className="material-symbols-outlined text-lg">delete</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        )}
       </div>
 
       {/* CỘT PHẢI (5/12) - BILL TÍNH HÓA ĐƠN & ĐẶT VÉ */}
@@ -1256,8 +1252,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           </div>
           <p className="mt-1.5 text-[10px] text-slate-400">
             {lang === "VN"
-              ? `Tối đa ${maxPointsToUse.toLocaleString()} điểm (≤ 50% tạm tính). 1 điểm = 1 VND.`
-              : `Max ${maxPointsToUse.toLocaleString()} points (≤ 50% of estimate). 1 point = 1 VND.`}
+              ? `1 điểm = 1 VND`
+              : `1 point = 1 VND`}
           </p>
         </div>
 
@@ -1351,8 +1347,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire }) {
           {estimatedEarn > 0 && (
             <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
               {lang === "VN"
-                ? `Ước cộng ~${estimatedEarn.toLocaleString()} điểm sau chuyến (1%).`
-                : `Est. ~${estimatedEarn.toLocaleString()} points after trip (1%).`}
+                ? `Cộng ~${estimatedEarn.toLocaleString()} điểm sau chuyến`
+                : `Est. ~${estimatedEarn.toLocaleString()} points after trip`}
             </p>
           )}
         </div>
