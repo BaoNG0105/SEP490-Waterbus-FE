@@ -4,12 +4,13 @@ import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserDetail, fetchUserRoles, updateUser, fetchUserStations, assignUserStations } from "../../../services/userService";
 import { fetchAllStations } from "../../../services/stationService";
-import { canManageUserRow, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
+import { canManageUserRow, canResetManagedUserPassword, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { NationalitySelect } from "../../../components/NationalitySelect";
 import { canAssignStations } from "../../../components/StationAssignField";
+import { promptResetManagedPassword } from "../../../utils/managedPasswordReset";
 import { notify } from "../../../utils/swalToast";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
@@ -330,7 +331,7 @@ export function EditStaff() {
                 >
                     <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
                 </button>
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="w-12 h-12 rounded-full overflow-hidden border bg-slate-100 dark:bg-slate-700 shadow-sm shrink-0">
                         <img
                             src={userInfo.avatarUrl || DEFAULT_AVATAR}
@@ -348,6 +349,19 @@ export function EditStaff() {
                         </p>
                     </div>
                 </div>
+                {canResetManagedUserPassword(currentUser, { ...userInfo, staffType: formData.staffType || userInfo.staffType }) && (
+                    <button
+                        type="button"
+                        onClick={() => promptResetManagedPassword({
+                            user: { ...userInfo, staffType: formData.staffType || userInfo.staffType },
+                            lang,
+                        })}
+                        className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 hover:border-[#124757] hover:text-[#124757] dark:hover:border-yellow-400 dark:hover:text-yellow-400 transition-all"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                        {lang === "VN" ? "Đặt lại mật khẩu" : "Reset password"}
+                    </button>
+                )}
             </div>
 
             {errorMsg && (

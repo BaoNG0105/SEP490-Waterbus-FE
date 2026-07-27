@@ -29,6 +29,37 @@ export const canManageUserRow = (currentUser, rowRoles) => {
   return false;
 };
 
+const normalizeStaffTypeKey = (value) => {
+  const raw = String(value || "").toLowerCase().replace(/[_\s-]/g, "");
+  if (raw === "onboard" || raw === "2") return "OnBoard";
+  if (raw === "ground" || raw === "1") return "Ground";
+  return "";
+};
+
+/** Admin: Manager + Staff. Manager: chỉ Staff mặt đất. Không reset chính mình. */
+export const canResetManagedUserPassword = (currentUser, targetUser) => {
+  if (!currentUser || !targetUser) return false;
+  const targetId = getUserId(targetUser);
+  if (!targetId || targetId === getUserId(currentUser)) return false;
+
+  const roles = Array.isArray(targetUser.roles)
+    ? targetUser.roles
+    : (targetUser.role ? [targetUser.role] : []);
+  const systemNames = roles.map(getRoleSystemName);
+  if (systemNames.includes("ADMIN")) return false;
+
+  if (isAdminUser(currentUser)) {
+    return systemNames.includes("STAFF") || systemNames.includes("MANAGER");
+  }
+
+  if (isManagerUser(currentUser)) {
+    if (!systemNames.includes("STAFF")) return false;
+    return normalizeStaffTypeKey(targetUser.staffType) === "Ground";
+  }
+
+  return false;
+};
+
 export const getPrimaryRoleLabel = (user, lang = "VN") => {
   const role = (user?.roles || []).find((item) => ADMIN_ROLES.includes(getRoleSystemName(item)));
   if (role?.displayName || role?.name) return role.displayName || role.name;

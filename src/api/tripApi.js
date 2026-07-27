@@ -5,9 +5,29 @@ export const getTrips = (params) =>
     api.get('/trips', { params }).then(response => response.data);
 
 // API: Tạo chuyến tàu mới (routeCode, boatCode, operatingDate, departureTime bắt buộc).
-// Giá lấy từ seat-types / fare-policy — không gửi seatTypePrices.
+// Legacy — giữ tương thích; form Admin dùng POST /trips/schedule.
 export const createTrip = (data) =>
     api.post('/trips', data).then(response => response.data);
+
+/** Legacy — giữ tương thích; form Admin dùng POST /trips/schedule. */
+export const generateTrips = (data) =>
+    api.post('/trips/generate', data).then(response => response.data);
+
+/** POST /api/trips/schedule — tạo 1 hoặc nhiều chuyến (cùng payload). Không gửi giá. */
+export const scheduleTrips = (data) =>
+    api.post('/trips/schedule', data).then(response => response.data);
+
+/**
+ * POST /api/trips/schedule/round-trip-preview — gợi ý lịch khứ hồi 1 tàu (không tạo DB).
+ * Body: boatCode, outboundRouteCode, inboundRouteCode, fromDate, toDate, startTime, endTime,
+ * daysOfWeek, outboundStops, inboundStops. Không nhận autoSpacing.
+ */
+export const previewRoundTripSchedule = (data) =>
+    api.post('/trips/schedule/round-trip-preview', data).then(response => response.data);
+
+/** PATCH /api/trips/{tripId}/boat — đổi tàu (Admin/Manager). Body: { boatId }. */
+export const updateTripBoat = (tripId, boatId) =>
+    api.patch(`/trips/${tripId}/boat`, { boatId }).then(response => response.data);
 
 // API: Tìm chuyến tàu bán vé lẻ theo bến đi/bến đến/ngày (params: fromStationId, toStationId, operatingDate dd/MM/yyyy, routeType optional)
 export const searchTrips = (params) =>

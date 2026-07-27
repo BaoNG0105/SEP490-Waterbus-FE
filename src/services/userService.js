@@ -7,6 +7,7 @@ import {
   deleteManagedUser,
   getUserStations,
   updateUserStations,
+  resetManagedUserPassword as apiResetManagedUserPassword,
 } from "../api/userApi";
 import { getRoleSystemName } from "../utils/roleHelpers";
 
@@ -260,6 +261,11 @@ export const updateUser = async (userId, payload) => {
 export const deleteUser = async (userId) => {
   const data = await deleteManagedUser(userId);
   invalidateUserCaches();
+  return data;
+};
+
+export const resetManagedUserPassword = async (userId) => {
+  const data = await apiResetManagedUserPassword(userId);
   return data;
 };
 

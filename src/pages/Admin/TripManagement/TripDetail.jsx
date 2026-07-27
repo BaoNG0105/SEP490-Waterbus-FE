@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { WaterwayMap } from "../../../components/WaterwayMap";
+import { FormSelect } from "../../../components/FormSelect";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
 import {
+  changeTripBoat,
   fetchTripDetail,
   getTripStatusLabel,
   normalizeTripStatusKey,
@@ -12,7 +15,7 @@ import {
 } from "../../../services/tripService";
 import { trackingHub } from "../../../services/trackingHubClient";
 import { fetchLatestTripTracking } from "../../../services/trackingService";
-import { fetchBoatDetail } from "../../../services/boatService";
+import { fetchAllBoats, fetchBoatDetail } from "../../../services/boatService";
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchWaterwayDetail } from "../../../services/waterwayService";
@@ -28,6 +31,7 @@ import {
 } from "../../../services/incidentService";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../../../utils/charterBookingAdmin";
 import { formatCustomerRouteTitle } from "../../../utils/routeTypes";
+import { isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
 import {
   pickStopActualArrival,
   pickStopActualDeparture,
@@ -177,7 +181,7 @@ const statusBadgeClass = (status) => {
     case "Boarding":
       return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300";
     case "InProgress":
-      return "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300";
+      return "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300";
     case "Delayed":
       return "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-300";
     case "Completed":
@@ -689,6 +693,8 @@ export function TripDetail() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user: currentUser } = useSelector((state) => state.auth);
+  const canChangeBoat = isAdminUser(currentUser) || isManagerUser(currentUser);
   const { incidents: openIncidents } = useLiveIncidents({ enabled: true, toast: true });
   const [trip, setTrip] = useState(null);
   const [boatCatalog, setBoatCatalog] = useState(null);
@@ -705,6 +711,9 @@ export function TripDetail() {
   const [dwellTick, setDwellTick] = useState(() => Date.now());
   const [isDelayBusy, setIsDelayBusy] = useState(false);
   const [affectedNotice, setAffectedNotice] = useState([]);
+  const [boatOptions, setBoatOptions] = useState([]);
+  const [selectedBoatId, setSelectedBoatId] = useState("");
+  const [isChangingBoat, setIsChangingBoat] = useState(false);
 
   const refreshTracking = async (tripId, _boatCode, { silent = false } = {}) => {
     if (!tripId) return;
@@ -931,6 +940,89 @@ export function TripDetail() {
 
   const stops = useMemo(() => sortStops(trip?.stops), [trip]);
   const boat = useMemo(() => resolveBoat(trip, boatCatalog), [trip, boatCatalog]);
+  const statusKey = normalizeTripStatusKey(trip?.tripStatus || trip?.status);
+  const showChangeBoat = canChangeBoat
+    && Boolean(trip)
+    && statusKey !== "Completed"
+    && statusKey !== "Cancelled";
+
+  useEffect(() => {
+    const currentId = String(boat?.id || trip?.boatId || "").trim();
+    setSelectedBoatId(currentId);
+  }, [boat?.id, trip?.boatId]);
+
+  useEffect(() => {
+    if (!showChangeBoat) return undefined;
+    let active = true;
+    fetchAllBoats({ status: "Active" })
+      .then((data) => {
+        if (!active) return;
+        const list = Array.isArray(data) ? data : (data?.items || data?.data || []);
+        const options = list
+          .filter((b) => b?.seatsConfigured || b?.SeatsConfigured)
+          .map((b) => {
+            const value = String(b.id || b.boatId || b.BoatId || "").trim();
+            const code = String(b.code || b.boatCode || "").trim();
+            const name = String(b.name || b.boatName || "").trim();
+            return {
+              value,
+              label: code && name && code !== name ? `${code} — ${name}` : (code || name || value),
+            };
+          })
+          .filter((opt) => opt.value);
+        setBoatOptions(options);
+      })
+      .catch(() => {
+        if (active) setBoatOptions([]);
+      });
+    return () => { active = false; };
+  }, [showChangeBoat]);
+
+  const handleChangeBoat = async () => {
+    const nextId = String(selectedBoatId || "").trim();
+    const currentId = String(boat?.id || trip?.boatId || "").trim();
+    if (!nextId || nextId === currentId) {
+      showToast({
+        icon: "info",
+        title: lang === "VN" ? "Chọn tàu khác với tàu hiện tại" : "Pick a different boat",
+        timer: 2500,
+      });
+      return;
+    }
+    try {
+      setIsChangingBoat(true);
+      const updated = await changeTripBoat(id, nextId);
+      const detail = updated?.tripId || updated?.id
+        ? updated
+        : await fetchTripDetail(id);
+      setTrip(detail);
+      const boatId = detail?.boatId || detail?.boat?.boatId || detail?.boat?.id || nextId;
+      if (boatId) {
+        const catalog = await fetchBoatDetail(boatId).catch(() => null);
+        setBoatCatalog(catalog?.data && typeof catalog.data === "object" ? catalog.data : catalog);
+      }
+      showToast({
+        icon: "success",
+        title: lang === "VN" ? "Đã đổi tàu" : "Boat updated",
+        timer: 2200,
+      });
+    } catch (error) {
+      showToast({
+        icon: "error",
+        title: lang === "VN" ? "Không đổi được tàu" : "Could not change boat",
+        text: getApiErrorMessage(
+          error,
+          lang === "VN"
+            ? "Kiểm tra tàu Active, ghế đã setup, trùng lịch, hoặc mã ghế nếu đã bán vé."
+            : "Check Active boat, seats configured, schedule conflict, or seat codes if tickets exist.",
+        ),
+        timer: 5000,
+      });
+    } finally {
+      setIsChangingBoat(false);
+    }
+  };
+
   const onBoardCrewDisplay = useMemo(() => {
     // Ưu tiên onBoardStaff từ GET trip; fallback ca OnBoard đúng ngày.
     const fromTrip = Array.isArray(trip?.onBoardStaff) ? trip.onBoardStaff : [];
@@ -986,7 +1078,6 @@ export function TripDetail() {
   })();
   const operatingDateLabel = resolveOperatingDate(trip, lang);
   const lastStopIndex = stops.length - 1;
-  const statusKey = normalizeTripStatusKey(trip?.tripStatus || trip?.status);
   const shouldPollTracking = ACTIVE_TRACK_STATUSES.has(statusKey);
   const tripGpsFinished = statusKey === "Completed" || statusKey === "Cancelled";
 
@@ -1612,6 +1703,45 @@ export function TripDetail() {
               </div>
 
               <div className="md:col-span-3 flex flex-col justify-center gap-5 p-5">
+                {showChangeBoat ? (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+                    <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      {lang === "VN" ? "Đổi tàu" : "Change boat"}
+                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <div className="min-w-0 flex-1">
+                        <FormSelect
+                          value={selectedBoatId}
+                          onChange={setSelectedBoatId}
+                          options={boatOptions}
+                          searchable
+                          placeholder={lang === "VN" ? "Chọn tàu Active" : "Select Active boat"}
+                          emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#124757] dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isChangingBoat || !selectedBoatId}
+                        onClick={handleChangeBoat}
+                        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#124757] px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-white transition hover:opacity-95 disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
+                      >
+                        {isChangingBoat ? (
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        ) : (
+                          <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
+                        )}
+                        {lang === "VN" ? "Lưu tàu" : "Save boat"}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[10px] font-medium text-slate-400">
+                      {lang === "VN"
+                        ? "Tàu mới phải Active, đã setup ghế, khớp loại tuyến và không trùng lịch."
+                        : "New boat must be Active, seats configured, route-compatible, and not busy."}
+                    </p>
+                  </div>
+                ) : null}
+
                 {/* Hành trình */}
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
