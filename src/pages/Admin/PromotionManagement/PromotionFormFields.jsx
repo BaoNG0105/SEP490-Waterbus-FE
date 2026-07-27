@@ -391,7 +391,7 @@ export function PromotionFormFields({
           <div className="flex flex-wrap gap-2">
             {[
               { value: PROMOTION_BOOKING_TYPES.SEAT, vn: "Đặt ghế", en: "Seat booking" },
-              { value: PROMOTION_BOOKING_TYPES.CHARTER, vn: "Thuê tàu", en: "Charter" },
+              { value: PROMOTION_BOOKING_TYPES.CHARTER, vn: "Thuê tàu", en: "Request Booking" },
             ].map((opt) => {
               const on = formData.bookingTypes.includes(opt.value);
               return (

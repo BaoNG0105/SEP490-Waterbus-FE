@@ -1395,7 +1395,7 @@ export function CharterDetail() {
       const result = await showConfirmDialog({
         tone: "danger",
         icon: "warning",
-        title: lang === "VN" ? "Hủy yêu cầu thuê tàu?" : "Cancel this charter request?",
+        title: lang === "VN" ? "Hủy yêu cầu thuê tàu?" : "Cancel this booking request?",
         html: buildConfirmBodyHtml({
           code: booking.bookingCode,
           text: lang === "VN"

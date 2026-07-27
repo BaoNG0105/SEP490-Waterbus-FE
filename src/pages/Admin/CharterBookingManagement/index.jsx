@@ -90,7 +90,7 @@ export function CharterBookingManagement() {
       if (!silent) {
         setErrorMsg(error.response?.data?.message || (lang === "VN"
           ? "Không thể tải danh sách yêu cầu thuê tàu."
-          : "Unable to load charter booking requests."));
+          : "Unable to load booking requests."));
       }
     } finally {
       if (silent) setIsRefreshing(false);
@@ -201,16 +201,16 @@ export function CharterBookingManagement() {
       <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
         <div className="space-y-1">
           <h2 className="text-2xl md:text-3xl font-headline font-black text-[#124757] dark:text-yellow-400">
-            {lang === "VN" ? "Quản Lý Thuê Tàu" : "Charter Booking Management"}
+            {lang === "VN" ? "Quản Lý Thuê Tàu" : "Request Booking Management"}
           </h2>
           <p className="text-sm font-medium text-slate-400">
             {isAdminUser(user)
               ? (lang === "VN"
               ? "Xử lý yêu cầu thuê tàu, nhập tàu, chốt giá và cập nhật trạng thái booking."
-                : "Handle charter requests, assign boats, submit quotes, and update booking status.")
+                : "Handle booking requests, assign boats, submit quotes, and update booking status.")
               : (lang === "VN"
                 ? "Chỉ hiển thị các chuyến thuê tàu được phân công cho bạn."
-                : "Only shows charter bookings assigned to you.")}
+                : "Only shows booking requests assigned to you.")}
           </p>
         </div>
       </div>
@@ -365,7 +365,7 @@ export function CharterBookingManagement() {
                 <tr>
                   <td colSpan={tableColSpan} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                     <span className="material-symbols-outlined text-4xl block mb-2">event_busy</span>
-                    {lang === "VN" ? "Không có yêu cầu thuê tàu phù hợp." : "No charter requests match your filters."}
+                    {lang === "VN" ? "Không có yêu cầu thuê tàu phù hợp." : "No booking requests match your filters."}
                   </td>
                 </tr>
               ) : (

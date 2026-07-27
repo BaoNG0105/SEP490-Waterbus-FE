@@ -15,10 +15,10 @@ const TEXT = {
     title: "Waterbus AI Assistant",
     subtitle: "Always here to help",
     greeting:
-      "Hi, I'm the Waterbus AI Assistant. How can I help you with schedules, bookings, or boat charters?",
+      "Hi, I'm the Waterbus AI Assistant. How can I help you with schedules, bookings, or boat booking requests?",
     placeholder: "Type a message...",
     autoReply:
-      "Thanks for reaching out! Our support team will reply shortly. Meanwhile, feel free to check the Booking or Charter pages.",
+      "Thanks for reaching out! Our support team will reply shortly. Meanwhile, feel free to check the Booking or Request Booking pages.",
     close: "Close",
   },
 };

@@ -194,7 +194,7 @@ export function AdminCharterBookingDetail() {
       if (!silent) {
         setLoadError(getApiErrorMessage(
           error,
-          lang === "VN" ? "Không thể tải chi tiết thuê tàu." : "Unable to load charter booking detail.",
+          lang === "VN" ? "Không thể tải chi tiết thuê tàu." : "Unable to load booking request detail.",
         ));
       }
     } finally {
@@ -1130,7 +1130,7 @@ export function AdminCharterBookingDetail() {
         <div className="min-w-0">
           <button type="button" onClick={() => navigate("/admin/charter-bookings-management")} className="mb-4 inline-flex items-center gap-2 text-xs font-headline font-black uppercase tracking-wider text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400">
             <span className="material-symbols-outlined text-base">arrow_back</span>
-            {lang === "VN" ? "Danh sách thuê tàu" : "Charter booking list"}
+            {lang === "VN" ? "Danh sách thuê tàu" : "Booking request list"}
           </button>
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 md:text-3xl">{booking.bookingCode}</h2>

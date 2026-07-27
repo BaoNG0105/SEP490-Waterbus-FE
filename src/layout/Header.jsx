@@ -164,7 +164,7 @@ export const Header = ({ isNoticeVisible }) => {
                 className="block px-5 py-2.5 text-xs font-medium text-[#111C2D] dark:text-white/80 hover:text-[#124757] dark:hover:text-yellow-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-t border-slate-50 dark:border-slate-700/50 mt-1"
                 to="/charter-booking"
               >
-                {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
+                {lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
               </Link>
             </div>
           </div>
@@ -333,7 +333,7 @@ export const Header = ({ isNoticeVisible }) => {
                   className="text-white/80 text-sm font-medium hover:text-yellow-400"
                   onClick={closeMobileMenu}
                 >
-                  {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
+                  {lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
                 </Link>
               </div>
             ) : null}

@@ -261,7 +261,7 @@ export function InsuranceManagement() {
       return lang === "VN" ? "Vé lẻ (legacy)" : "Seat (legacy)";
     }
     if (type === INSURANCE_BOOKING_TYPES.CHARTER) {
-      return lang === "VN" ? "Thuê tàu (legacy)" : "Charter (legacy)";
+      return lang === "VN" ? "Thuê tàu (legacy)" : "Request Booking (legacy)";
     }
     return type;
   };
@@ -276,7 +276,7 @@ export function InsuranceManagement() {
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
               ? "Gói PassengerInsurance dùng chung đặt vé / thuê tàu. Phí = đơn giá × số hành khách."
-              : "Shared PassengerInsurance package for seat & charter. Fee = unit × passenger count."}
+              : "Shared PassengerInsurance package for seat & booking request. Fee = unit × passenger count."}
           </p>
         </div>
         <button

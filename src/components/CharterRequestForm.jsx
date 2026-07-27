@@ -791,8 +791,8 @@ export function CharterRequestForm({
           </span>
           <h2 className={`text-2xl md:text-3xl font-headline font-black ${t.headerTitle}`}>
             {mode === "edit"
-              ? (lang === "VN" ? "Chỉnh sửa yêu cầu thuê tàu" : "Edit Charter Request")
-              : (lang === "VN" ? "Tạo yêu cầu thuê tàu" : "Create Charter Request")}
+              ? (lang === "VN" ? "Chỉnh sửa yêu cầu thuê tàu" : "Edit Booking Request")
+              : (lang === "VN" ? "Tạo yêu cầu thuê tàu" : "Create Booking Request")}
           </h2>
           <p className={`text-xs max-w-md mx-auto ${t.headerSubtitle}`}>
             {mode === "edit" && bookingCode && bookingCode !== "--"
@@ -848,7 +848,7 @@ export function CharterRequestForm({
         {!isAuthenticated && (
           <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-4 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-3">
             <span className="material-symbols-outlined text-xl">lock</span>
-            {lang === "VN" ? "Bạn cần đăng nhập trước khi gửi yêu cầu thuê tàu." : "You need to sign in before submitting a charter request."}
+            {lang === "VN" ? "Bạn cần đăng nhập trước khi gửi yêu cầu thuê tàu." : "You need to sign in before submitting a booking request."}
           </div>
         )}
         {/* STEP 1: Thông tin khách hàng */}

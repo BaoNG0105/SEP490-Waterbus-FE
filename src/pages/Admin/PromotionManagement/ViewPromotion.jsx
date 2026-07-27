@@ -34,7 +34,7 @@ const dayLabel = (day, lang) => {
 
 const bookingTypeLabel = (type, lang) => {
   if (type === PROMOTION_BOOKING_TYPES.SEAT) return lang === "VN" ? "Đặt ghế" : "Seat booking";
-  if (type === PROMOTION_BOOKING_TYPES.CHARTER) return lang === "VN" ? "Thuê tàu" : "Charter";
+  if (type === PROMOTION_BOOKING_TYPES.CHARTER) return lang === "VN" ? "Thuê tàu" : "Request Booking";
   return type;
 };
 

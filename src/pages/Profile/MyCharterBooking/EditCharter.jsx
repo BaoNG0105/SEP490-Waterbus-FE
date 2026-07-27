@@ -127,7 +127,7 @@ export function EditCharter() {
 
       await notify({
         icon: "success",
-        title: lang === "VN" ? "Đã cập nhật yêu cầu" : "Charter request updated",
+        title: lang === "VN" ? "Đã cập nhật yêu cầu" : "Booking request updated",
         text: bookingCode !== "--"
           ? (lang === "VN" ? `Mã yêu cầu: ${bookingCode}` : `Request code: ${bookingCode}`)
           : "",

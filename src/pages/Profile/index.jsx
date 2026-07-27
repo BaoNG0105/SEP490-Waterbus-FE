@@ -194,7 +194,7 @@ export const Profile = () => {
                 <div className="space-y-3">
                   {[
                     { title: lang === "VN" ? "Lịch sử đặt vé" : "My Bookings", desc: lang === "VN" ? "Vé Waterbus & Sightseeing đã đặt" : "Your Waterbus & Sightseeing bookings", path: "/profile/my-bookings" },
-                    { title: lang === "VN" ? "Yêu cầu thuê tàu" : "Charter Requests", desc: lang === "VN" ? "Theo dõi yêu cầu thuê tàu" : "Track your charter requests", path: "/profile/my-charter-booking" },
+                    { title: lang === "VN" ? "Yêu cầu thuê tàu" : "Booking Requests", desc: lang === "VN" ? "Theo dõi yêu cầu thuê tàu" : "Track your booking requests", path: "/profile/my-charter-booking" },
                   ].map((item) => (
                     <button
                       key={item.path}

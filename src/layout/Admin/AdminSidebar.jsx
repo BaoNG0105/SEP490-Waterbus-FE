@@ -57,7 +57,7 @@ const MENU_GROUPS = [
     labelEn: "Bookings & Insurance",
     items: [
       { path: "/admin/bookings", icon: "receipt_long", labelVn: "Booking vé", labelEn: "Seat bookings", roles: ["ADMIN"] },
-      { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Thuê tàu", labelEn: "Charter", roles: ["ADMIN"] },
+      { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Thuê tàu", labelEn: "Request Booking", roles: ["ADMIN"] },
       { path: "/admin/insurance-management", icon: "shield", labelVn: "Bảo hiểm", labelEn: "Insurance", roles: ["ADMIN"] },
     ],
   },

@@ -23,7 +23,7 @@ import { notify } from "../../../utils/swalToast";
 
 const MAIN_TABS = [
   { id: "tickets", vn: "Giá mua vé", en: "Ticket prices" },
-  { id: "charter", vn: "Giá thuê tàu", en: "Charter rental" },
+  { id: "charter", vn: "Giá thuê tàu", en: "Request booking prices" },
 ];
 
 const TICKET_SECTIONS = [
@@ -982,17 +982,17 @@ const RENTAL_SERVICE_GROUPS = [
     decks: 1,
     id: "waterbus",
     vn: "Giá thuê tàu Waterbus",
-    en: "Waterbus charter rates",
-    hintVn: "Tàu Waterbus · Giờ / Ngày — dùng khi báo giá charter.",
-    hintEn: "Waterbus boats · Hour / Day — used for charter quotes.",
+    en: "Waterbus request booking rates",
+    hintVn: "Tàu Waterbus · Giờ / Ngày — dùng khi báo giá thuê tàu.",
+    hintEn: "Waterbus boats · Hour / Day — used for booking request quotes.",
   },
   {
     decks: 2,
     id: "sightseeing",
     vn: "Giá thuê tàu Sightseeing",
-    en: "Sightseeing charter rates",
-    hintVn: "Tàu Sightseeing · Giờ / Ngày — dùng khi báo giá charter.",
-    hintEn: "Sightseeing boats · Hour / Day — used for charter quotes.",
+    en: "Sightseeing request booking rates",
+    hintVn: "Tàu Sightseeing · Giờ / Ngày — dùng khi báo giá thuê tàu.",
+    hintEn: "Sightseeing boats · Hour / Day — used for booking request quotes.",
   },
 ];
 
@@ -1311,7 +1311,7 @@ export function SeatTypeManagement() {
           <p className="mt-1 text-xs text-slate-400">
             {mainTab === "tickets"
               ? (lang === "VN" ? "Cấu hình giá vé theo loại tàu và phụ thu." : "Configure ticket prices by boat type and surcharges.")
-              : (lang === "VN" ? "Giá thuê chung theo số tầng · Giờ / Ngày." : "Shared charter rates by decks · Hour / Day.")}
+              : (lang === "VN" ? "Giá thuê chung theo số tầng · Giờ / Ngày." : "Shared request booking rates by decks · Hour / Day.")}
           </p>
         </div>
         <SegmentedControl

@@ -549,7 +549,7 @@ function App() {
           <Route
             path="/admin/charter-bookings-management"
             element={
-              <AdminLayout title="Charter Booking Management">
+              <AdminLayout title="Request Booking Management">
                 <CharterBookingManagement />
               </AdminLayout>
             }
@@ -559,7 +559,7 @@ function App() {
           <Route
             path="/admin/charter-bookings-management/:id"
             element={
-              <AdminLayout title="Charter Booking Detail">
+              <AdminLayout title="Request Booking Detail">
                 <AdminCharterBookingDetail />
               </AdminLayout>
             }

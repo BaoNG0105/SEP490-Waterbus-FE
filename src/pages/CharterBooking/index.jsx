@@ -41,7 +41,7 @@ export function CharterBooking() {
       notify({
         icon: "info",
         title: lang === "VN" ? "Bạn cần đăng nhập" : "Sign in required",
-        text: lang === "VN" ? "Vui lòng đăng nhập để gửi yêu cầu thuê tàu." : "Please sign in before creating a charter request.",
+        text: lang === "VN" ? "Vui lòng đăng nhập để gửi yêu cầu thuê tàu." : "Please sign in before creating a booking request.",
         confirmButtonColor: "#124757",
       }).then(() => navigate("/login"));
   };
@@ -73,7 +73,7 @@ export function CharterBooking() {
 
       await notify({
         icon: "success",
-        title: lang === "VN" ? "Đã gửi yêu cầu thuê tàu" : "Charter request submitted",
+        title: lang === "VN" ? "Đã gửi yêu cầu thuê tàu" : "Booking request submitted",
         html: lang === "VN"
           ? `
             <p style="margin:0 0 8px;color:#64748b;font-size:14px;font-weight:700;text-align:center;">
@@ -137,12 +137,12 @@ export function CharterBooking() {
         </div>
         <div className="relative max-w-5xl mx-auto px-6 md:px-12 text-center space-y-6">
           <h1 className="text-4xl md:text-6xl font-headline font-black text-white leading-tight">
-            {lang === "VN" ? "Dịch vụ thuê tàu WaterBus" : "WaterBus Charter Booking"}
+            {lang === "VN" ? "Dịch vụ thuê tàu WaterBus" : "WaterBus Request Booking"}
           </h1>
           <p className="text-white/70 max-w-2xl mx-auto text-sm md:text-base leading-relaxed">
             {lang === "VN"
               ? "Gửi yêu cầu thuê tàu riêng cho gia đình, doanh nghiệp hay sự kiện đặc biệt. Đội ngũ vận hành sẽ kiểm tra tàu phù hợp và phản hồi báo giá ngay trong hồ sơ của bạn."
-              : "Submit a private charter request for your family, company, or special event. Our team will assign a suitable boat and send a quote directly to your profile."}
+              : "Submit a private booking request for your family, company, or special event. Our team will assign a suitable boat and send a quote directly to your profile."}
           </p>
         </div>
       </section>
@@ -169,7 +169,7 @@ export function CharterBooking() {
               {lang === "VN" ? "Quy trình đơn giản" : "Simple Process"}
             </p>
             <h2 className="text-3xl md:text-4xl font-headline font-bold text-[#124757] dark:text-white max-w-2xl">
-              {lang === "VN" ? "Hướng dẫn các bước thuê tàu" : "How to Book a Charter"}
+              {lang === "VN" ? "Hướng dẫn các bước thuê tàu" : "How to Request a Booking"}
             </h2>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">

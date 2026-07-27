@@ -403,7 +403,7 @@ export const Home = () => {
               <div className="relative aspect-4/3 overflow-hidden shrink-0">
                 <img
                   src="https://res.cloudinary.com/dygipvoal/image/upload/v1784048440/vmxcyra8r6ykzkonjbaz.jpg"
-                  alt={lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
+                  alt={lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
@@ -414,7 +414,7 @@ export const Home = () => {
                     {lang === "VN" ? "Riêng tư & Linh hoạt" : "Private & Flexible"}
                   </span>
                   <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
-                    {lang === "VN" ? "Dịch vụ thuê tàu" : "Charter Booking"}
+                    {lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
                   </h3>
                   <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                     {lang === "VN"

@@ -247,7 +247,7 @@ export function PromotionDetail() {
                   to="/charter-booking"
                   className="bg-white dark:bg-slate-800 text-[#124757] dark:text-yellow-400 border border-slate-200 dark:border-slate-700 px-8 py-3.5 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-md hover:bg-yellow-400 hover:text-[#124757] dark:hover:bg-yellow-400 dark:hover:text-slate-900 hover:border-transparent transition-all duration-300 flex items-center gap-2"
                 >
-                  {lang === "VN" ? "Đặt thuê tàu riêng" : "Charter a Boat"}
+                  {lang === "VN" ? "Đặt thuê tàu riêng" : "Request a Boat"}
                   <span className="material-symbols-outlined text-lg">arrow_forward</span>
                 </Link>
               )}

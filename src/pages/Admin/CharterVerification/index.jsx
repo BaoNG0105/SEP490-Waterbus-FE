@@ -46,7 +46,7 @@ export function CharterVerificationPage() {
         title: lang === "VN" ? "Không đọc được QR" : "Unable to read QR",
         text: getApiErrorMessage(
           error,
-          lang === "VN" ? "Mã QR không hợp lệ hoặc bạn chưa được phân công chuyến này." : "Invalid QR or you are not assigned to this charter.",
+          lang === "VN" ? "Mã QR không hợp lệ hoặc bạn chưa được phân công chuyến này." : "Invalid QR or you are not assigned to this booking.",
         ),
         confirmButtonColor: "#124757",
       });
@@ -86,7 +86,7 @@ export function CharterVerificationPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-              {lang === "VN" ? "Vận hành thuê tàu" : "Charter operations"}
+              {lang === "VN" ? "Vận hành thuê tàu" : "Request booking operations"}
             </p>
             <h2 className="mt-1 text-2xl font-headline font-black text-[#124757] dark:text-yellow-400">
               {lang === "VN" ? "Soát vé / Check-in QR" : "Ticket scan / QR check-in"}
@@ -102,7 +102,7 @@ export function CharterVerificationPage() {
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
           >
             <span className="material-symbols-outlined text-base">directions_boat</span>
-            {lang === "VN" ? "Danh sách thuê tàu" : "Charter list"}
+            {lang === "VN" ? "Danh sách thuê tàu" : "Booking request list"}
           </Link>
         </div>
 

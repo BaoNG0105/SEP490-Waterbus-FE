@@ -195,7 +195,7 @@ export function CharterRefund() {
         shouldCancelBooking || didCancelBooking
           ? (lang === "VN"
             ? "Yêu cầu thuê tàu đã được hủy và yêu cầu hoàn tiền đã gửi. Chúng tôi sẽ xử lý theo chính sách hoàn tiền."
-            : "Your charter request was cancelled and the refund request was submitted. We will process it under our refund policy.")
+            : "Your booking request was cancelled and the refund request was submitted. We will process it under our refund policy.")
           : (lang === "VN"
             ? "Đã gửi yêu cầu hoàn tiền. Chúng tôi sẽ xử lý theo chính sách hoàn tiền của Waterbus."
             : "Refund request submitted. We will process it according to Waterbus refund policy.")
@@ -312,7 +312,7 @@ export function CharterRefund() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                  {lang === "VN" ? "Hoàn tiền thuê tàu" : "Charter refund"}
+                  {lang === "VN" ? "Hoàn tiền thuê tàu" : "Booking request refund"}
                 </p>
                 <h1 className="mt-2 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400 md:text-3xl">
                   {lang === "VN" ? "Tài khoản nhận hoàn tiền" : "Refund receiving account"}

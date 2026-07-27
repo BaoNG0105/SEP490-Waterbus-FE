@@ -19,7 +19,7 @@ export const handleDuplicateCharterBookingError = async (error, { lang, navigate
     text: message,
     confirmButtonText: hasCode
       ? (lang === "VN" ? "Xem yêu cầu hiện có" : "View existing request")
-      : (lang === "VN" ? "Đến danh sách yêu cầu" : "Go to my charter requests"),
+      : (lang === "VN" ? "Đến danh sách yêu cầu" : "Go to my booking requests"),
     showCancelButton: true,
     cancelButtonText: lang === "VN" ? "Đóng" : "Close",
   });

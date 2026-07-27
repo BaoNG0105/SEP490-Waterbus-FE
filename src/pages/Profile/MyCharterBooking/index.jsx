@@ -121,7 +121,7 @@ export function CharterList() {
       setBookings(Array.isArray(data) ? data.map(normalizeBooking) : []);
     } catch (error) {
       console.error("Lỗi tải yêu cầu thuê tàu:", error);
-      setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Không thể tải danh sách yêu cầu thuê tàu." : "Unable to load charter requests."));
+      setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Không thể tải danh sách yêu cầu thuê tàu." : "Unable to load booking requests."));
     } finally {
       setIsLoading(false);
     }
@@ -152,7 +152,7 @@ export function CharterList() {
 
   const hasFilters = searchTerm || statusFilter !== "All";
   const emptyMessage = bookings.length === 0
-    ? (lang === "VN" ? "Bạn chưa có yêu cầu thuê tàu nào." : "You have no charter requests yet.")
+    ? (lang === "VN" ? "Bạn chưa có yêu cầu thuê tàu nào." : "You have no booking requests yet.")
     : (lang === "VN" ? "Không có yêu cầu phù hợp với bộ lọc hiện tại." : "No requests match your current filters.");
 
   return (
@@ -163,10 +163,10 @@ export function CharterList() {
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
               <div>
                 <p className="text-[10px] font-headline font-black uppercase tracking-[0.2em] text-white/60">
-                  Waterbus Charter
+                  Waterbus Request Booking
                 </p>
                 <h1 className="mt-1 font-headline text-2xl font-black md:text-3xl">
-                  {lang === "VN" ? "Yêu cầu thuê tàu" : "My Charter Requests"}
+                  {lang === "VN" ? "Yêu cầu thuê tàu" : "My Booking Requests"}
                 </h1>
                 <p className="mt-2 max-w-lg text-sm font-medium text-white/75">
                   {lang === "VN"
