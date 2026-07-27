@@ -622,6 +622,20 @@
   background: #e2e8f0;
 }
 
+/* Nháy 2 chấm đồng hồ trên bảng khởi hành điện tử */
+.wb-clock-colon {
+  animation: wb-clock-blink 1s steps(1) infinite;
+}
+
+@keyframes wb-clock-blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0.25;
+  }
+}
+
 /* Tag trạng thái kiểu bảng chuyến bay */
 .wb-board-tag {
   font: 800 10px/1.1 "Space Grotesk", system-ui, sans-serif;

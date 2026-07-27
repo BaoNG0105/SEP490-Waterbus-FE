@@ -73,15 +73,28 @@ const tripDayKey = (trip) => {
   return "";
 };
 
+const ROUTE_TYPE_TO_KIND = {
+  Regular: "Bus",
+  SightseeingLoop: "Sightseeing",
+};
+
 const kindBadgeClass = (kind) => {
   if (kind === "Sightseeing") {
-    return "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300";
+    return "bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30";
   }
   if (kind === "Bus") {
-    return "bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300";
+    return "bg-teal-500/15 text-teal-300 ring-1 ring-teal-400/30";
   }
-  return "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300";
+  return "bg-slate-500/15 text-slate-300 ring-1 ring-slate-400/20";
 };
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const formatBoardClock = (date) => ({
+  h: pad2(date.getHours()),
+  m: pad2(date.getMinutes()),
+  s: pad2(date.getSeconds()),
+});
 
 const normalizeText = (value) => String(value || "").trim().toLowerCase();
 
@@ -188,10 +201,17 @@ export function Schedule() {
 
   const [selectedDate, setSelectedDate] = useState(today);
   const [stationId, setStationId] = useState("");
+  const [routeTypeFilter, setRouteTypeFilter] = useState("");
   const [stations, setStations] = useState([]);
   const [entries, setEntries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -254,14 +274,22 @@ export function Schedule() {
     ];
   }, [stations, lang]);
 
+  const routeTypeOptions = useMemo(() => ([
+    { value: "", label: lang === "VN" ? "Tất cả loại" : "All types" },
+    { value: "Regular", label: "Waterbus" },
+    { value: "SightseeingLoop", label: "Sightseeing" },
+  ]), [lang]);
+
   const filteredTrips = useMemo(() => {
     const day = selectedDate || today;
+    const wantedKind = ROUTE_TYPE_TO_KIND[routeTypeFilter] || "";
     // Ngoài cửa sổ 7 ngày (BE/customer) → không có lịch để hiện.
     if (day > maxDate || day < today) return [];
     return entries
       .filter((trip) => {
         const kind = resolveTripKindKey(trip);
         if (kind === "Charter") return false;
+        if (wantedKind && kind !== wantedKind) return false;
         const key = tripDayKey(trip);
         if (key && key !== day) return false;
         return true;
@@ -273,7 +301,7 @@ export function Schedule() {
       })
       .filter(Boolean)
       .sort((a, b) => clockSortMs(a.viewTime) - clockSortMs(b.viewTime));
-  }, [entries, selectedDate, today, maxDate, selectedStation]);
+  }, [entries, selectedDate, today, maxDate, selectedStation, routeTypeFilter]);
 
   const isOutsideScheduleWindow = Boolean(
     selectedDate && (selectedDate > maxDate || selectedDate < today),
@@ -284,16 +312,25 @@ export function Schedule() {
     setSelectedDate(value);
   };
 
+  const clock = formatBoardClock(now);
+
   return (
     <main className="min-h-screen bg-[#F4F7F8] pb-20 pt-28 font-body transition-colors duration-300 dark:bg-slate-950">
-      <div className="mx-auto max-w-5xl space-y-5 px-4 sm:px-6">
+      <div className="mx-auto w-full max-w-440 space-y-5 px-4 sm:px-8 lg:px-12">
         <header className="border-b border-slate-200/80 pb-6 dark:border-slate-800">
-          <h1 className="font-headline text-2xl font-black tracking-tight text-[#124757] dark:text-yellow-400 md:text-3xl">
-            {lang === "VN" ? "Lịch khởi hành" : "Departure Schedule"}
-          </h1>
+          <div className="flex flex-col items-center gap-3 text-center">
+            <h1 className="font-headline text-4xl font-bold text-[#124757] dark:text-white md:text-5xl">
+              {lang === "VN" ? "Lịch khởi hành" : "Departure Schedule"}
+            </h1>
+            <p className="max-w-xl text-sm font-medium text-slate-500 dark:text-slate-400">
+              {lang === "VN"
+                ? "Nắm rõ từng chuyến khởi hành, cập nhật tức thì như bảng điện tử tại nhà ga."
+                : "Every departure at a glance, updated the instant it changes — just like at the terminal."}
+            </p>
+          </div>
 
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="min-w-[11rem]">
+          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-center">
+            <div className="w-full sm:w-44">
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
                 {lang === "VN" ? "Ngày" : "Date"}
               </label>
@@ -301,10 +338,10 @@ export function Schedule() {
                 value={selectedDate}
                 min={today}
                 onChange={(e) => onDateChange(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#124757] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#124757] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
               />
             </div>
-            <div className="min-w-[14rem] flex-1 sm:max-w-xs">
+            <div className="w-full sm:w-56">
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
                 {lang === "VN" ? "Bến đi" : "From station"}
               </label>
@@ -314,7 +351,18 @@ export function Schedule() {
                 options={stationOptions}
                 searchable
                 searchPlaceholder={lang === "VN" ? "Tìm bến…" : "Search station…"}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+              />
+            </div>
+            <div className="w-full sm:w-44">
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                {lang === "VN" ? "Loại chuyến" : "Trip type"}
+              </label>
+              <FormSelect
+                value={routeTypeFilter}
+                onChange={setRouteTypeFilter}
+                options={routeTypeOptions}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
               />
             </div>
           </div>
@@ -328,15 +376,15 @@ export function Schedule() {
 
         <section>
           {isLoading ? (
-            <div className="rounded-3xl bg-white px-6 py-16 text-center text-slate-400 shadow-sm dark:bg-slate-900">
-              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-[#124757]" />
-              <p className="text-xs font-medium tracking-wider">
+            <div className="rounded-3xl bg-[#0a1e26] px-6 py-16 text-center shadow-lg ring-1 ring-white/5">
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-white/10 border-t-[#FFD100]" />
+              <p className="text-xs font-medium tracking-wider text-slate-300">
                 {lang === "VN" ? "Đang tải lịch khởi hành…" : "Loading schedule…"}
               </p>
             </div>
           ) : filteredTrips.length === 0 ? (
-            <div className="rounded-3xl bg-white px-6 py-16 text-center shadow-sm dark:bg-slate-900">
-              <p className="font-headline text-sm font-black text-slate-500 dark:text-slate-300">
+            <div className="rounded-3xl bg-[#0a1e26] px-6 py-16 text-center shadow-lg ring-1 ring-white/5">
+              <p className="font-headline text-sm font-black text-slate-300">
                 {isOutsideScheduleWindow
                   ? (lang === "VN" ? "Chưa có lịch." : "No schedule yet.")
                   : selectedStation
@@ -355,7 +403,7 @@ export function Schedule() {
                   </Link>
                   <Link
                     to="/watersightseeing-booking"
-                    className="rounded-full border border-slate-200 px-5 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-600 dark:text-yellow-400"
+                    className="rounded-full border border-white/15 px-5 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-yellow-300"
                   >
                     {lang === "VN" ? "Đặt Sightseeing" : "Book Sightseeing"}
                   </Link>
@@ -363,79 +411,130 @@ export function Schedule() {
               ) : null}
             </div>
           ) : (
-            <ul className="space-y-3">
-              {filteredTrips.map(({ trip, viewTime, fromLabel, toLabel, endTime }) => {
-                const kind = resolveTripKindKey(trip);
-                const delayMins = Number(trip.delayMinutes);
-                const bookTo = kind === "Sightseeing"
-                  ? "/watersightseeing-booking"
-                  : "/waterbus-booking";
-                const ended = isTripEnded(trip, viewTime);
+            <div className="overflow-hidden rounded-3xl bg-[#0a1e26] shadow-lg ring-1 ring-white/10">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#081820] px-5 py-3 sm:px-6">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                  </span>
+                  <p className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">
+                    {lang === "VN" ? "Trực tiếp" : "Live"}
+                  </p>
+                </div>
+                <p className="font-headline text-xl font-black tabular-nums tracking-wider text-[#FFD100] sm:text-2xl">
+                  {clock.h}
+                  <span className="wb-clock-colon">:</span>
+                  {clock.m}
+                  <span className="wb-clock-colon">:</span>
+                  {clock.s}
+                </p>
+              </div>
 
-                return (
-                  <li
-                    key={String(trip.tripId || trip.tripCode || `${fromLabel}-${viewTime}`)}
-                    className={`rounded-3xl bg-white px-5 py-4 shadow-sm ring-1 ring-slate-100 transition dark:bg-slate-900 dark:ring-slate-800 sm:px-6 ${
-                      ended ? "opacity-70" : "hover:ring-[#124757]/20 dark:hover:ring-yellow-400/30"
-                    }`}
-                  >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex min-w-0 items-center gap-4 sm:gap-5">
-                        <div className="shrink-0">
-                          <p className={`font-headline text-[1.75rem] font-black tabular-nums leading-none tracking-tight ${
-                            ended
-                              ? "text-slate-400 dark:text-slate-500"
-                              : "text-[#124757] dark:text-yellow-400"
-                          }`}>
-                            {formatClock(viewTime)}
-                          </p>
-                        </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-160 border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-white/10 text-xs font-headline font-black uppercase tracking-widest text-slate-400">
+                      <th className="px-6 py-4 font-black sm:px-8">{lang === "VN" ? "Giờ" : "Time"}</th>
+                      <th className="px-4 py-4 font-black">{lang === "VN" ? "Loại" : "Type"}</th>
+                      <th className="px-4 py-4 font-black">
+                        {selectedStation ? (lang === "VN" ? "Điểm đến" : "Destination") : (lang === "VN" ? "Lộ trình" : "Route")}
+                      </th>
+                      <th className="hidden px-4 py-4 font-black sm:table-cell">{lang === "VN" ? "Tàu" : "Boat"}</th>
+                      <th className="px-4 py-4 font-black">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                      <th className="px-6 py-4 sm:px-8" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTrips.map(({ trip, viewTime, fromLabel, toLabel }) => {
+                      const kind = resolveTripKindKey(trip);
+                      const delayMins = Number(trip.delayMinutes);
+                      const bookTo = kind === "Sightseeing"
+                        ? "/watersightseeing-booking"
+                        : "/waterbus-booking";
+                      const ended = isTripEnded(trip, viewTime);
+                      const isDelayed = Number.isFinite(delayMins) && delayMins > 0 && !ended;
+                      const boatLabel = String(trip?.boatName || trip?.boatCode || "").trim() || "—";
+                      const statusLabel = ended
+                        ? (lang === "VN" ? "Đã khởi hành" : "Departed")
+                        : isDelayed
+                          ? (lang === "VN" ? `Trễ ${delayMins} phút` : `Delayed ${delayMins} min`)
+                          : (lang === "VN" ? "Đúng giờ" : "On time");
+                      const statusClass = ended
+                        ? "bg-slate-500/15 text-slate-400 ring-1 ring-slate-400/20"
+                        : isDelayed
+                          ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"
+                          : "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30";
 
-                        <div className="h-10 w-px shrink-0 bg-slate-100 dark:bg-slate-800" aria-hidden />
-
-                        <div className="min-w-0 space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${kindBadgeClass(kind)}`}>
+                      return (
+                        <tr
+                          key={String(trip.tripId || trip.tripCode || `${fromLabel}-${viewTime}`)}
+                          className={`border-b border-white/5 transition last:border-0 ${
+                            ended ? "opacity-50" : "hover:bg-white/3"
+                          }`}
+                        >
+                          <td className="px-6 py-5 sm:px-8">
+                            <span className={`font-headline text-2xl font-black tabular-nums tracking-tight sm:text-3xl ${
+                              ended ? "text-slate-500" : "text-[#FFD100]"
+                            }`}>
+                              {formatClock(viewTime)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-5">
+                            <span className={`inline-flex rounded-md px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide ${kindBadgeClass(kind)}`}>
                               {kind || "—"}
                             </span>
-                            {Number.isFinite(delayMins) && delayMins > 0 && !ended ? (
-                              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-300">
-                                {lang === "VN" ? `Trễ ${delayMins} phút` : `Delayed ${delayMins} min`}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className={`truncate font-headline text-sm font-bold sm:text-base ${
-                            ended ? "text-slate-500 dark:text-slate-400" : "text-slate-800 dark:text-white"
-                          }`} title={`${fromLabel} → ${toLabel}`}>
-                            {fromLabel}
-                            <span className="mx-1.5 text-[#FFD100]">→</span>
-                            {toLabel}
-                          </p>
-                          {endTime ? (
-                            <p className="text-[11px] font-medium text-slate-400">
-                              {lang === "VN" ? "Đến" : "Arrives"} {formatClock(endTime)}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      {ended ? (
-                        <span className="inline-flex shrink-0 self-start rounded-full bg-slate-100 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-400 sm:self-center">
-                          {lang === "VN" ? "Đã kết thúc" : "Ended"}
-                        </span>
-                      ) : (
-                        <Link
-                          to={bookTo}
-                          className="inline-flex shrink-0 self-start rounded-full bg-[#FFD100] px-5 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-900 transition hover:brightness-95 sm:self-center"
-                        >
-                          {lang === "VN" ? "Đặt vé" : "Book"}
-                        </Link>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                          </td>
+                          <td className="px-4 py-5">
+                            {selectedStation ? (
+                              <p
+                                className={`truncate font-headline text-sm font-bold sm:text-base ${
+                                  ended ? "text-slate-500" : "text-white"
+                                }`}
+                                title={toLabel}
+                              >
+                                {toLabel}
+                              </p>
+                            ) : (
+                              <p
+                                className={`truncate font-headline text-sm font-bold sm:text-base ${
+                                  ended ? "text-slate-500" : "text-white"
+                                }`}
+                                title={`${fromLabel} → ${toLabel}`}
+                              >
+                                {fromLabel}
+                                <span className="mx-2 text-[#FFD100]">→</span>
+                                {toLabel}
+                              </p>
+                            )}
+                          </td>
+                          <td className="hidden px-4 py-5 text-sm font-bold tracking-wide text-slate-300 sm:table-cell">
+                            {boatLabel}
+                          </td>
+                          <td className="px-4 py-5">
+                            <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-headline font-black uppercase tracking-wide ${statusClass}`}>
+                              {statusLabel}
+                            </span>
+                          </td>
+                          <td className="px-6 py-5 text-right sm:px-8">
+                            {ended ? (
+                              <span className="text-xs font-bold text-slate-600">—</span>
+                            ) : (
+                              <Link
+                                to={bookTo}
+                                className="inline-flex shrink-0 rounded-full bg-[#FFD100] px-5 py-2 text-xs font-headline font-black uppercase tracking-wider text-slate-900 transition hover:brightness-95"
+                              >
+                                {lang === "VN" ? "Đặt vé" : "Book"}
+                              </Link>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </section>
       </div>
