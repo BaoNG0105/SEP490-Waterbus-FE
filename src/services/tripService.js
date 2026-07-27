@@ -1,6 +1,10 @@
 import {
     getTrips as apiGetTrips,
     createTrip as apiCreateTrip,
+    generateTrips as apiGenerateTrips,
+    scheduleTrips as apiScheduleTrips,
+    previewRoundTripSchedule as apiPreviewRoundTripSchedule,
+    updateTripBoat as apiUpdateTripBoat,
     searchTrips as apiSearchTrips,
     searchSightseeingTrips as apiSearchSightseeingTrips,
     getTripById as apiGetTripById,
@@ -259,11 +263,494 @@ export const buildTripPayload = (form) => {
 
     return {
         routeCode: String(form.routeCode || '').trim(),
+        routeId: null,
         boatCode: String(form.boatCode || '').trim(),
         operatingDate: toDdMmYyyy(form.operatingDate),
         departureTime: combineOperatingDateAndTime(form.operatingDate, form.departureTime),
         ...(stops.length > 0 ? { stops } : {}),
     };
+};
+
+/** HH:mm hoặc HH:mm:ss → HH:mm:ss */
+export const toHms = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) return raw;
+    if (/^\d{2}:\d{2}$/.test(raw)) return `${raw}:00`;
+    return raw;
+};
+
+/**
+ * fromDate === toDate và đúng 1 giờ cố định → BE tạo 1 chuyến qua /trips/schedule.
+ * Còn lại → nhiều chuyến. Cùng payload + stops.
+ */
+export const isSingleTripCreateCase = (form) => {
+    const from = String(form?.fromDate || form?.operatingDate || '').trim();
+    const to = String(form?.toDate || form?.operatingDate || '').trim();
+    if (!from || !to || from !== to) return false;
+    if (form?.mode !== 'fixed') return false;
+    const times = (Array.isArray(form?.departureTimes) ? form.departureTimes : [])
+        .map((t) => String(t || '').trim())
+        .filter(Boolean);
+    if (times.length !== 1) return false;
+
+    const days = Array.isArray(form?.daysOfWeek)
+        ? form.daysOfWeek.map((d) => Number(d)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+        : [];
+    if (days.length === 0) return true;
+    // YYYY-MM-DD → weekday JS (0=CN … 6=T7), khớp daysOfWeek BE
+    const parts = from.split('-').map(Number);
+    if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return days.length <= 1;
+    const weekday = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+    return days.length === 1 && days[0] === weekday;
+};
+
+/**
+ * Payload POST /trips/schedule (1 hoặc nhiều chuyến).
+ * mode=fixed → departureTimes[], start/end/interval=null
+ * mode=interval → start/end/intervalMinutes, departureTimes=null
+ * Không chọn daysOfWeek → null (BE tạo mọi ngày trong khoảng).
+ * stops: chỉ bến giữa tuyến; stayDurationMinutes cho phép 0.
+ */
+export const buildScheduleTripsPayload = (form) => {
+    const days = Array.isArray(form.daysOfWeek)
+        ? form.daysOfWeek.map((d) => Number(d)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+        : [];
+    const stops = (Array.isArray(form.stops) ? form.stops : [])
+        .map((stop) => ({
+            stopOrder: Number(stop.stopOrder),
+            stayDurationMinutes: Math.max(0, Number(stop.stayDurationMinutes) || 0),
+        }))
+        .filter((stop) => Number.isFinite(stop.stopOrder) && stop.stopOrder > 0);
+
+    const base = {
+        routeCode: String(form.routeCode || '').trim(),
+        boatCode: String(form.boatCode || '').trim(),
+        fromDate: String(form.fromDate || '').trim() || null,
+        toDate: String(form.toDate || '').trim() || null,
+        daysOfWeek: days.length > 0 ? days : null,
+        stops,
+    };
+    if (form.mode === 'fixed') {
+        const times = (Array.isArray(form.departureTimes) ? form.departureTimes : [])
+            .map(toHms)
+            .filter(Boolean);
+        return {
+            ...base,
+            departureTimes: times,
+            startTime: null,
+            endTime: null,
+            intervalMinutes: null,
+        };
+    }
+    return {
+        ...base,
+        departureTimes: null,
+        startTime: toHms(form.startTime),
+        endTime: toHms(form.endTime),
+        intervalMinutes: Math.max(1, Number(form.intervalMinutes) || 30),
+    };
+};
+
+/** @deprecated Dùng buildScheduleTripsPayload */
+export const buildGenerateTripsPayload = buildScheduleTripsPayload;
+
+const isoToHms = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    if (/^\d{2}:\d{2}(:\d{2})?$/.test(raw)) return toHms(raw);
+    const matched = raw.match(/T(\d{2}:\d{2}:\d{2})([+-]\d{2}:\d{2}|Z)?/);
+    if (matched && matched[2] === '+07:00') return matched[1];
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return matched ? matched[1] : null;
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    });
+    const parts = Object.fromEntries(fmt.formatToParts(d).map((p) => [p.type, p.value]));
+    if (!parts.hour || !parts.minute) return matched ? matched[1] : null;
+    return `${parts.hour}:${parts.minute}:${parts.second || '00'}`;
+};
+
+const toYmd = (value) => {
+    if (value == null || value === '') return '';
+    // Date object from JSON rarely; handle just in case
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        const fmt = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+        return fmt.format(value);
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) {
+        const d = new Date(raw);
+        if (!Number.isNaN(d.getTime())) {
+            const fmt = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+            });
+            return fmt.format(d);
+        }
+        return raw.slice(0, 10);
+    }
+    // BE hay dùng dd/MM/yyyy hoặc dd-MM-yyyy
+    const dmy = raw.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+    if (dmy) {
+        const day = dmy[1].padStart(2, '0');
+        const month = dmy[2].padStart(2, '0');
+        const year = dmy[3];
+        return `${year}-${month}-${day}`;
+    }
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '';
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    });
+    return fmt.format(d);
+};
+
+/** Lấy ngày vận hành từ item preview (fallback departureTime nếu BE không gửi operatingDate). */
+const pickPreviewOperatingDate = (item) => {
+    const candidates = [
+        item?.operatingDate,
+        item?.OperatingDate,
+        item?.date,
+        item?.Date,
+        item?.departureTime,
+        item?.DepartureTime,
+        item?.requestedDepartureTime,
+    ];
+    for (const candidate of candidates) {
+        const ymd = toYmd(candidate);
+        if (ymd) return ymd;
+    }
+    return '';
+};
+
+/** HH:mm từ ISO / HH:mm:ss — dùng hiển thị skippedItems. */
+export const formatTripClock = (value) => {
+    const hms = isoToHms(value);
+    return hms ? hms.slice(0, 5) : '';
+};
+
+export const normalizeSkippedScheduleItems = (rawItems) => {
+    if (!Array.isArray(rawItems)) return [];
+    return rawItems.map((item, index) => {
+        const requestedDepartureTime = item?.requestedDepartureTime || null;
+        const earliestAllowedDepartureTime = item?.earliestAllowedDepartureTime || null;
+        const operatingDate = toYmd(item?.operatingDate) || String(item?.operatingDate || '').slice(0, 10);
+        const routeCode = String(item?.routeCode || '').trim();
+        return {
+            key: [operatingDate, routeCode, requestedDepartureTime || index].join('|'),
+            operatingDate,
+            routeCode,
+            requestedDepartureTime,
+            requestedArrivalTime: item?.requestedArrivalTime || null,
+            requestedDepartureLabel: formatTripClock(requestedDepartureTime),
+            earliestAllowedDepartureTime,
+            earliestAllowedDepartureLabel: formatTripClock(earliestAllowedDepartureTime),
+            reason: item?.reason ? String(item.reason) : null,
+            conflictTripCode: item?.conflictTripCode ? String(item.conflictTripCode) : null,
+            conflictDepartureTime: item?.conflictDepartureTime || null,
+            conflictArrivalTime: item?.conflictArrivalTime || null,
+            conflictDepartureLabel: formatTripClock(item?.conflictDepartureTime),
+            conflictArrivalLabel: formatTripClock(item?.conflictArrivalTime),
+        };
+    });
+};
+
+export const normalizeScheduleTripsResult = (raw) => {
+    const src = raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? raw.data : raw;
+    const codes = src?.createdTripCodes || src?.CreatedTripCodes || src?.tripCodes || [];
+    const skippedItems = normalizeSkippedScheduleItems(
+        src?.skippedItems ?? src?.SkippedItems ?? [],
+    );
+    const skippedBoatBusy = Number(src?.skippedBoatBusy ?? src?.SkippedBoatBusy) || 0;
+    const skippedStationBusy = Number(src?.skippedStationBusy ?? src?.SkippedStationBusy) || 0;
+    const skippedPast = Number(src?.skippedPast ?? src?.SkippedPast) || 0;
+    const skippedMissingOnBoardStaff = Number(
+        src?.skippedMissingOnBoardStaff ?? src?.SkippedMissingOnBoardStaff,
+    ) || 0;
+    const skippedBreakdown = skippedBoatBusy + skippedStationBusy + skippedPast + skippedMissingOnBoardStaff;
+    const skippedRaw = Number(src?.skipped ?? src?.Skipped);
+    // BE đôi khi trả skipped=0 dù chi tiết bỏ qua > 0 — lấy max với tổng breakdown / skippedItems.
+    const skipped = Math.max(
+        Number.isFinite(skippedRaw) ? skippedRaw : 0,
+        skippedBreakdown,
+        skippedItems.length,
+    );
+    return {
+        created: Number(src?.created ?? src?.Created) || 0,
+        skipped,
+        skippedBoatBusy,
+        skippedStationBusy,
+        skippedPast,
+        skippedMissingOnBoardStaff,
+        skippedItems,
+        createdTripCodes: Array.isArray(codes) ? codes.map(String) : [],
+        raw: src,
+    };
+};
+
+/** @deprecated Dùng normalizeScheduleTripsResult */
+export const normalizeGenerateTripsResult = normalizeScheduleTripsResult;
+
+export const scheduleTripsBatch = async (payload) => {
+    try {
+        return normalizeScheduleTripsResult(await apiScheduleTrips(payload));
+    } catch (error) {
+        console.error('Lỗi khi schedule trips:', error);
+        throw error;
+    }
+};
+
+const mapScheduleStops = (stops) => (Array.isArray(stops) ? stops : [])
+    .map((stop) => ({
+        stopOrder: Number(stop.stopOrder),
+        stayDurationMinutes: Math.max(0, Number(stop.stayDurationMinutes) || 0),
+    }))
+    .filter((stop) => Number.isFinite(stop.stopOrder) && stop.stopOrder > 0);
+
+/** Payload POST /trips/schedule/round-trip-preview */
+export const buildRoundTripPreviewPayload = (form) => {
+    const days = Array.isArray(form.daysOfWeek)
+        ? form.daysOfWeek.map((d) => Number(d)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+        : [];
+    return {
+        boatCode: String(form.boatCode || '').trim(),
+        outboundRouteCode: String(form.outboundRouteCode || '').trim(),
+        inboundRouteCode: String(form.inboundRouteCode || '').trim(),
+        fromDate: String(form.fromDate || '').trim() || null,
+        toDate: String(form.toDate || '').trim() || null,
+        startTime: toHms(form.startTime),
+        endTime: toHms(form.endTime),
+        daysOfWeek: days.length > 0 ? days : null,
+        outboundStops: mapScheduleStops(form.outboundStops),
+        inboundStops: mapScheduleStops(form.inboundStops),
+    };
+};
+
+export const normalizeRoundTripPreviewResult = (raw) => {
+    const src = raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? raw.data : raw;
+    const items = Array.isArray(src?.items) ? src.items : [];
+    const nowMs = Date.now();
+    const leadMs = MIN_TRIP_CREATE_LEAD_MINUTES * 60 * 1000;
+
+    const mapped = items.map((item, index) => {
+        const operatingDate = pickPreviewOperatingDate(item);
+        const departureTime = item?.departureTime || item?.DepartureTime || null;
+        const departureHms = isoToHms(departureTime);
+        const routeCode = String(item?.routeCode || '').trim();
+        const direction = String(item?.direction || '').trim();
+        const canCreate = item?.canCreate !== false;
+        const key = [
+            operatingDate,
+            routeCode,
+            direction,
+            departureTime || departureHms || index,
+        ].join('|');
+
+        let departureMs = Date.parse(String(departureTime || ''));
+        if (Number.isNaN(departureMs) && operatingDate && departureHms) {
+            const iso = combineOperatingDateAndTime(operatingDate, departureHms.slice(0, 5));
+            departureMs = iso ? Date.parse(iso) : NaN;
+        }
+
+        return {
+            key,
+            operatingDate,
+            direction,
+            routeId: item?.routeId || null,
+            routeCode,
+            routeName: item?.routeName || routeCode || '—',
+            departureTime,
+            arrivalTime: item?.arrivalTime || null,
+            departureHms,
+            arrivalHms: isoToHms(item?.arrivalTime),
+            departureMs: Number.isNaN(departureMs) ? null : departureMs,
+            fromStationId: item?.fromStationId || null,
+            toStationId: item?.toStationId || null,
+            fromStationName: item?.fromStationName || '—',
+            toStationName: item?.toStationName || '—',
+            canCreate,
+            reason: item?.reason || null,
+            suggestedNextDepartureTime: item?.suggestedNextDepartureTime || null,
+            suggestedNextDepartureLabel: formatTripClock(item?.suggestedNextDepartureTime),
+            raw: item,
+        };
+    }).filter((item) => {
+        // Không đưa khung đã quá giờ / sát giờ tạo (< lead time) vào danh sách gợi ý.
+        if (item.departureMs == null) return true;
+        return item.departureMs >= nowMs + leadMs;
+    });
+
+    return {
+        suggested: mapped.length,
+        skippedBoatBusy: Number(src?.skippedBoatBusy) || 0,
+        skippedDuplicateRouteTime: Number(src?.skippedDuplicateRouteTime) || 0,
+        skippedMissingOnBoardStaff: Number(src?.skippedMissingOnBoardStaff) || 0,
+        items: mapped,
+        raw: src,
+    };
+};
+
+/** So sánh HH:mm / HH:mm:ss → phút trong ngày. */
+const timeToMinutes = (value) => {
+    const hms = isoToHms(value) || String(value || '').trim();
+    const match = String(hms).match(/^(\d{2}):(\d{2})/);
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+};
+
+/**
+ * Chỉ giữ khung nằm trong [startTime, endTime] admin setup.
+ * Item không tạo được mà "sớm nhất" vượt endTime cũng bị loại.
+ */
+export const filterRoundTripPreviewByTimeWindow = (preview, startTime, endTime) => {
+    if (!preview || typeof preview !== 'object') return preview;
+    const startMin = timeToMinutes(startTime);
+    const endMin = timeToMinutes(endTime);
+    if (startMin == null || endMin == null || startMin > endMin) {
+        return preview;
+    }
+
+    const items = (Array.isArray(preview.items) ? preview.items : []).filter((item) => {
+        const depMin = timeToMinutes(item?.departureHms || item?.departureTime);
+        if (depMin == null) return true;
+        if (depMin < startMin || depMin > endMin) return false;
+
+        if (item?.canCreate === false) {
+            const nextMin = timeToMinutes(
+                item?.suggestedNextDepartureLabel
+                || item?.suggestedNextDepartureTime,
+            );
+            // Gợi ý sớm nhất đã vượt khung setup → không hiện dòng này.
+            if (nextMin != null && nextMin > endMin) return false;
+        }
+        return true;
+    });
+
+    return {
+        ...preview,
+        suggested: items.length,
+        items,
+    };
+};
+
+export const previewRoundTripScheduleBatch = async (payload) => {
+    try {
+        return normalizeRoundTripPreviewResult(await apiPreviewRoundTripSchedule(payload));
+    } catch (error) {
+        console.error('Lỗi khi preview round-trip schedule:', error);
+        throw error;
+    }
+};
+
+/**
+ * Gộp item preview (canCreate) theo routeCode + ngày → payload POST /trips/schedule (fixed times).
+ * Tránh gửi cùng giờ cho mọi ngày khi admin chỉ chọn một phần.
+ */
+export const buildSchedulePayloadsFromRoundTripSelection = ({
+    boatCode,
+    outboundRouteCode,
+    inboundRouteCode,
+    outboundStops,
+    inboundStops,
+    selectedItems = [],
+}) => {
+    const boat = String(boatCode || '').trim();
+    const outCode = String(outboundRouteCode || '').trim();
+    const inCode = String(inboundRouteCode || '').trim();
+    const groups = new Map();
+
+    selectedItems.forEach((item) => {
+        if (!item || item.canCreate === false) return;
+        const routeCode = String(item.routeCode || '').trim();
+        const operatingDate = toYmd(item.operatingDate);
+        const time = item.departureHms || isoToHms(item.departureTime);
+        if (!routeCode || !operatingDate || !time) return;
+        const groupKey = `${routeCode}||${operatingDate}`;
+        if (!groups.has(groupKey)) {
+            groups.set(groupKey, {
+                routeCode,
+                operatingDate,
+                times: new Set(),
+            });
+        }
+        groups.get(groupKey).times.add(time);
+    });
+
+    return [...groups.values()].map((group) => {
+        const isOutbound = group.routeCode === outCode;
+        const isInbound = group.routeCode === inCode;
+        const stops = isOutbound
+            ? mapScheduleStops(outboundStops)
+            : (isInbound ? mapScheduleStops(inboundStops) : []);
+        return {
+            routeCode: group.routeCode,
+            boatCode: boat,
+            fromDate: group.operatingDate,
+            toDate: group.operatingDate,
+            daysOfWeek: null,
+            departureTimes: [...group.times].sort(),
+            startTime: null,
+            endTime: null,
+            intervalMinutes: null,
+            stops,
+        };
+    });
+};
+
+/** Gọi schedule lần lượt cho từng nhóm route/ngày từ preview khứ hồi. */
+export const scheduleRoundTripSelection = async (args) => {
+    const payloads = buildSchedulePayloadsFromRoundTripSelection(args);
+    const totals = {
+        created: 0,
+        skipped: 0,
+        skippedBoatBusy: 0,
+        skippedStationBusy: 0,
+        skippedPast: 0,
+        skippedMissingOnBoardStaff: 0,
+        skippedItems: [],
+        createdTripCodes: [],
+        calls: payloads.length,
+    };
+    for (const payload of payloads) {
+        const result = await scheduleTripsBatch(payload);
+        totals.created += result.created;
+        totals.skipped += result.skipped;
+        totals.skippedBoatBusy += result.skippedBoatBusy;
+        totals.skippedStationBusy += result.skippedStationBusy;
+        totals.skippedPast += result.skippedPast;
+        totals.skippedMissingOnBoardStaff += result.skippedMissingOnBoardStaff;
+        totals.skippedItems.push(...(result.skippedItems || []));
+        totals.createdTripCodes.push(...(result.createdTripCodes || []));
+    }
+    return totals;
+};
+
+/** @deprecated Dùng scheduleTripsBatch */
+export const generateTripsBatch = async (payload) => {
+    try {
+        return normalizeScheduleTripsResult(await apiGenerateTrips(payload));
+    } catch (error) {
+        console.error('Lỗi khi generate trips:', error);
+        throw error;
+    }
 };
 
 /** BE CreateTrip: departureTime phải cách hiện tại ≥ 20 phút (swagger), theo giờ VN +07. */
@@ -292,6 +779,16 @@ export const addNewTrip = async (payload) => {
         return await apiCreateTrip(payload);
     } catch (error) {
         console.error('Lỗi khi tạo chuyến tàu mới:', error);
+        throw error;
+    }
+};
+
+/** Đổi tàu cho trip — PATCH /trips/{id}/boat */
+export const changeTripBoat = async (tripId, boatId) => {
+    try {
+        return await apiUpdateTripBoat(tripId, boatId);
+    } catch (error) {
+        console.error(`Lỗi đổi tàu cho trip ${tripId}:`, error);
         throw error;
     }
 };

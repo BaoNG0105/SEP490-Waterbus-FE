@@ -468,6 +468,7 @@ function SurchargeTab({ lang }) {
   });
   const [savingWeekend, setSavingWeekend] = useState(false);
   const [savingHoliday, setSavingHoliday] = useState(false);
+  const [togglingId, setTogglingId] = useState("");
 
   const labelScope = (scope) => {
     const key = String(scope || "").toLowerCase();
@@ -476,6 +477,8 @@ function SurchargeTab({ lang }) {
     return scope || "—";
   };
 
+  const isWeekendRow = (row) => String(row?.scope || "").toLowerCase() === "weekend" && !row?.date;
+
   const load = async () => {
     try {
       setIsLoading(true);
@@ -483,7 +486,7 @@ function SurchargeTab({ lang }) {
       const list = await fetchFareAdjustments();
       setAdjustments(list);
       setApiMissing(false);
-      const weekendRow = list.find((row) => String(row.scope).toLowerCase() === "weekend" && !row.date);
+      const weekendRow = list.find((row) => isWeekendRow(row));
       if (weekendRow) {
         setWeekend({
           surchargePercent: weekendRow.surchargePercent,
@@ -572,7 +575,7 @@ function SurchargeTab({ lang }) {
         scope: "Holiday",
         name: holidayName,
         surchargePercent: Number(holiday.surchargePercent) || 0,
-        isActive: Boolean(holiday.isActive),
+        isActive: true,
       };
       await saveCalendarDayAdjustment(payload);
       notify({
@@ -591,7 +594,6 @@ function SurchargeTab({ lang }) {
         isActive: true,
       });
       await load();
-      // Nếu BE trả name/isActive lệch, giữ đúng giá trị vừa gửi.
       setAdjustments((prev) => prev.map((row) => {
         if (row.date !== payload.date || String(row.scope).toLowerCase() !== "holiday") return row;
         const beName = String(row.name || "").trim();
@@ -599,7 +601,7 @@ function SurchargeTab({ lang }) {
         return {
           ...row,
           name: beNameIsFallback ? payload.name : beName,
-          isActive: payload.isActive,
+          isActive: true,
           surchargePercent: payload.surchargePercent,
           scope: "Holiday",
         };
@@ -617,6 +619,57 @@ function SurchargeTab({ lang }) {
       });
     } finally {
       setSavingHoliday(false);
+    }
+  };
+
+  const handleToggleActive = async (row) => {
+    const nextActive = !row.isActive;
+    setTogglingId(row.id);
+    try {
+      if (isWeekendRow(row)) {
+        const payload = {
+          surchargePercent: Number(row.surchargePercent) || 0,
+          isActive: nextActive,
+        };
+        await saveWeekendAdjustment(payload);
+        setWeekend(payload);
+      } else {
+        if (!row.date) {
+          notify({
+            icon: "warning",
+            title: lang === "VN" ? "Thiếu ngày" : "Missing date",
+          });
+          return;
+        }
+        await saveCalendarDayAdjustment({
+          date: row.date,
+          scope: "Holiday",
+          name: String(row.name || "").trim(),
+          surchargePercent: Number(row.surchargePercent) || 0,
+          isActive: nextActive,
+        });
+      }
+      setAdjustments((prev) => prev.map((item) => (
+        item.id === row.id ? { ...item, isActive: nextActive } : item
+      )));
+      notify({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: nextActive
+          ? (lang === "VN" ? "Đã bật phụ thu" : "Surcharge enabled")
+          : (lang === "VN" ? "Đã tắt phụ thu" : "Surcharge disabled"),
+        showConfirmButton: false,
+        timer: 1200,
+      });
+    } catch (error) {
+      notify({
+        icon: "error",
+        title: lang === "VN" ? "Không đổi được trạng thái" : "Could not update status",
+        text: getApiErrorMessage(error, lang === "VN" ? "Thử lại sau." : "Please try again."),
+      });
+    } finally {
+      setTogglingId("");
     }
   };
 
@@ -648,32 +701,21 @@ function SurchargeTab({ lang }) {
               </p>
             </div>
             <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="w-[120px]">
-                  <label className={labelStyle}>{lang === "VN" ? "Mức phụ thu" : "Surcharge"}</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={weekend.surchargePercent}
-                      onChange={(e) => setWeekend((prev) => ({ ...prev, surchargePercent: e.target.value }))}
-                      className={`${inputStyle} pr-8 text-right tabular-nums`}
-                    />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">
-                      %
-                    </span>
-                  </div>
-                </div>
-                <label className="flex items-center gap-2 pb-2.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              <div className="w-[120px]">
+                <label className={labelStyle}>{lang === "VN" ? "Mức phụ thu" : "Surcharge"}</label>
+                <div className="relative">
                   <input
-                    type="checkbox"
-                    checked={weekend.isActive}
-                    onChange={(e) => setWeekend((prev) => ({ ...prev, isActive: e.target.checked }))}
-                    className="rounded border-slate-300"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={weekend.surchargePercent}
+                    onChange={(e) => setWeekend((prev) => ({ ...prev, surchargePercent: e.target.value }))}
+                    className={`${inputStyle} pr-8 text-right tabular-nums`}
                   />
-                  {lang === "VN" ? "Bật" : "On"}
-                </label>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">
+                    %
+                  </span>
+                </div>
               </div>
               <button
                 type="submit"
@@ -727,15 +769,6 @@ function SurchargeTab({ lang }) {
                     </span>
                   </div>
                 </div>
-                <label className="flex items-center gap-2 pb-2.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={holiday.isActive}
-                    onChange={(e) => setHoliday((prev) => ({ ...prev, isActive: e.target.checked }))}
-                    className="rounded border-slate-300"
-                  />
-                  {lang === "VN" ? "Bật" : "On"}
-                </label>
                 <button
                   type="submit"
                   disabled={savingHoliday}
@@ -791,12 +824,20 @@ function SurchargeTab({ lang }) {
                         +{row.surchargePercent}%
                       </td>
                       <td className="px-4 py-3 sm:pr-6">
-                        <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase ${row.isActive
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-                          : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-                          }`}>
-                          {row.isActive ? (lang === "VN" ? "Bật" : "On") : (lang === "VN" ? "Tắt" : "Off")}
-                        </span>
+                        <button
+                          type="button"
+                          disabled={togglingId === row.id}
+                          onClick={() => handleToggleActive(row)}
+                          title={lang === "VN" ? "Bấm để bật/tắt" : "Click to toggle"}
+                          className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase transition disabled:opacity-50 ${row.isActive
+                            ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300"
+                            : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-400"
+                            }`}
+                        >
+                          {togglingId === row.id
+                            ? "…"
+                            : (row.isActive ? (lang === "VN" ? "Bật" : "On") : (lang === "VN" ? "Tắt" : "Off"))}
+                        </button>
                       </td>
                     </tr>
                   ))}

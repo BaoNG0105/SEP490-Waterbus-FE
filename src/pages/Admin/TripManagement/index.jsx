@@ -34,7 +34,7 @@ const tripStatusBadgeClass = (status) => {
         case "Boarding":
             return "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400";
         case "InProgress":
-            return "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400";
+            return "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300";
         case "Delayed":
             return "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400";
         case "Completed":
@@ -50,7 +50,7 @@ const tripStatusDotClass = (status) => {
     switch (normalizeTripStatusKey(status)) {
         case "Scheduled": return "bg-blue-500";
         case "Boarding": return "bg-amber-500";
-        case "InProgress": return "bg-indigo-500";
+        case "InProgress": return "bg-teal-500";
         case "Delayed": return "bg-orange-500";
         case "Completed": return "bg-emerald-500";
         case "Cancelled": return "bg-rose-500";
@@ -187,6 +187,30 @@ const resolveBoatLabel = (trip, lang) => {
     return lang === "VN" ? "Chưa gán tàu" : "No boat";
 };
 
+const resolveBoatCode = (trip) => {
+    const boat = trip?.boat || trip?.Boat || trip?.vessel || trip?.Vessel || {};
+    return cleanLabel(
+        trip?.boatCode
+        || trip?.BoatCode
+        || boat.boatCode
+        || boat.code
+        || boat.BoatCode
+        || boat.Code,
+    );
+};
+
+const resolveBoatFilterKey = (trip) => {
+    const boat = trip?.boat || trip?.Boat || trip?.vessel || trip?.Vessel || {};
+    const id = String(
+        trip?.boatId || trip?.BoatId || boat.vesselId || boat.boatId || boat.id || "",
+    ).trim();
+    if (id) return `id:${id}`;
+    const code = resolveBoatCode(trip);
+    if (code) return `code:${code}`;
+    const name = resolveBoatLabel(trip, "VN");
+    return name ? `name:${name}` : "none";
+};
+
 const resolvePaxLabel = (trip) => {
     // Tổng số khách của chuyến — không dùng ghế còn / sức chứa.
     const pax = trip?.totalPassengerCount
@@ -212,6 +236,7 @@ export function TripManagement() {
     const [routeDetailsByCode, setRouteDetailsByCode] = useState({});
     const [operatingDate, setOperatingDate] = useState(todayInputValue());
     const [statusFilter, setStatusFilter] = useState("All");
+    const [boatFilter, setBoatFilter] = useState("All");
 
     useEffect(() => {
         fetchAllRoutes()
@@ -363,6 +388,34 @@ export function TripManagement() {
         { value: "Cancelled", label: getTripStatusLabel("Cancelled", lang) },
     ];
 
+    const boatOptions = useMemo(() => {
+        const map = new Map();
+        trips.forEach((trip) => {
+            const key = resolveBoatFilterKey(trip);
+            if (key === "none" || map.has(key)) return;
+            const code = resolveBoatCode(trip);
+            const name = resolveBoatLabel(trip, lang);
+            map.set(key, {
+                value: key,
+                label: code && name && code !== name ? `${code} — ${name}` : (code || name),
+            });
+        });
+        return [
+            { value: "All", label: lang === "VN" ? "Tất cả tàu" : "All boats" },
+            ...[...map.values()].sort((a, b) => a.label.localeCompare(b.label, lang === "VN" ? "vi" : "en")),
+        ];
+    }, [trips, lang]);
+
+    const displayedTrips = useMemo(() => {
+        if (boatFilter === "All") return trips;
+        return trips.filter((trip) => resolveBoatFilterKey(trip) === boatFilter);
+    }, [trips, boatFilter]);
+
+    // Đổi ngày / trạng thái → reset lọc tàu (danh sách tàu theo ngày).
+    useEffect(() => {
+        setBoatFilter("All");
+    }, [operatingDate, statusFilter]);
+
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
 
@@ -374,8 +427,8 @@ export function TripManagement() {
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
                         {lang === "VN"
-                            ? "Chuyến đang chuẩn bị / đang chạy xếp trước — lọc theo ngày và trạng thái."
-                            : "Preparing / running trips first — filter by date and status."}
+                            ? "Mỗi dòng = 1 chuyến: tàu · giờ · tuyến. Lọc theo tàu để xem lịch của từng tàu."
+                            : "Each row = 1 trip: boat · time · route. Filter by boat to see that boat’s schedule."}
                     </p>
                 </div>
                 <button
@@ -426,7 +479,7 @@ export function TripManagement() {
             </div>
 
             {/* THANH BỘ LỌC */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col sm:flex-row gap-3 items-stretch sm:items-center overflow-visible relative z-20">
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col lg:flex-row gap-3 items-stretch lg:items-center overflow-visible relative z-20">
                 <div className="flex items-center gap-2 min-w-0">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">
                         {lang === "VN" ? "Ngày vận hành" : "Operating date"}
@@ -438,7 +491,20 @@ export function TripManagement() {
                     />
                 </div>
 
-                <div className="relative z-20 flex items-center gap-2 min-w-0 sm:ml-auto">
+                <div className="relative z-20 flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">
+                        {lang === "VN" ? "Tàu" : "Boat"}
+                    </span>
+                    <FormSelect
+                        value={boatFilter}
+                        onChange={setBoatFilter}
+                        options={boatOptions}
+                        searchable
+                        className="min-w-52 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                    />
+                </div>
+
+                <div className="relative z-20 flex items-center gap-2 min-w-0 lg:ml-auto">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">
                         {lang === "VN" ? "Trạng thái" : "Status"}
                     </span>
@@ -457,19 +523,21 @@ export function TripManagement() {
                 <div className="overflow-x-auto custom-scrollbar">
                     <table className="w-full table-fixed text-left border-collapse">
                         <colgroup>
-                            <col className="w-[28%]" />
-                            <col className="w-[22%]" />
+                            <col className="w-[24%]" />
+                            <col className="w-[16%]" />
+                            <col className="w-[20%]" />
                             <col className="w-[12%]" />
-                            <col className="w-[14%]" />
-                            <col className="w-[14%]" />
-                            <col className="w-[10%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[8%]" />
                         </colgroup>
                         <thead>
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
-                                <th className="py-3.5 px-5 text-left">{lang === "VN" ? "Chuyến / Tàu" : "Trip / Boat"}</th>
+                                <th className="py-3.5 px-5 text-left">{lang === "VN" ? "Mã chuyến" : "Trip code"}</th>
+                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Tàu" : "Boat"}</th>
                                 <th className="py-3.5 px-4 text-left">{lang === "VN" ? "Hành trình" : "Stations"}</th>
                                 <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Giờ chạy" : "Time"}</th>
-                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Hành khách" : "Passengers"}</th>
+                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "HK" : "Pax"}</th>
                                 <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                                 <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Hành động" : "Actions"}</th>
                             </tr>
@@ -477,20 +545,21 @@ export function TripManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-16 text-slate-400 font-medium">
+                                    <td colSpan={7} className="text-center py-16 text-slate-400 font-medium">
                                         <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] rounded-full animate-spin mx-auto mb-2"></div>
                                         <p className="text-xs tracking-wider animate-pulse">{lang === "VN" ? "Đang tải danh sách chuyến tàu..." : "Loading trip list..."}</p>
                                     </td>
                                 </tr>
-                            ) : trips.length === 0 ? (
+                            ) : displayedTrips.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         {lang === "VN" ? "Không có chuyến tàu nào phù hợp với bộ lọc." : "No trips found matching filters."}
                                     </td>
                                 </tr>
                             ) : (
-                                trips.map((trip) => {
+                                displayedTrips.map((trip) => {
                                     const boatLabel = resolveBoatLabel(trip, lang);
+                                    const boatCode = resolveBoatCode(trip);
                                     const routeMeta = routeByCode[String(trip.routeCode || "").trim()] || null;
                                     const fromLabel = resolveStationLabel(trip, "from", routeMeta);
                                     const toLabel = resolveStationLabel(trip, "to", routeMeta);
@@ -498,11 +567,19 @@ export function TripManagement() {
                                     return (
                                         <tr key={trip.tripId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
                                             <td className="py-3.5 px-5 align-middle">
-                                                <div className="min-w-0 space-y-1">
-                                                    <h4 className="truncate font-headline text-xs font-black tracking-wide text-slate-800 dark:text-white">
-                                                        {trip.tripCode}
-                                                    </h4>
-                                                    <p className="truncate text-[11px] font-bold text-slate-500">
+                                                <h4 className="truncate font-headline text-xs font-black tracking-wide text-slate-800 dark:text-white" title={trip.tripCode}>
+                                                    {trip.tripCode}
+                                                </h4>
+                                            </td>
+
+                                            <td className="py-3.5 px-3 align-middle">
+                                                <div className="min-w-0">
+                                                    {boatCode ? (
+                                                        <p className="truncate font-mono text-[11px] font-black text-[#124757] dark:text-yellow-400">
+                                                            {boatCode}
+                                                        </p>
+                                                    ) : null}
+                                                    <p className={`truncate text-[11px] font-bold ${boatCode ? "text-slate-500" : "text-slate-700 dark:text-slate-200"}`}>
                                                         {boatLabel}
                                                     </p>
                                                 </div>
@@ -510,9 +587,9 @@ export function TripManagement() {
 
                                             <td className="py-3.5 px-4 align-middle">
                                                 <div className="flex min-w-0 items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
-                                                    <span className="max-w-[7.5rem] truncate" title={fromLabel}>{fromLabel}</span>
+                                                    <span className="max-w-[6.5rem] truncate" title={fromLabel}>{fromLabel}</span>
                                                     <span className="material-symbols-outlined shrink-0 text-[14px] text-[#FFD100]">arrow_forward</span>
-                                                    <span className="max-w-[7.5rem] truncate" title={toLabel}>{toLabel}</span>
+                                                    <span className="max-w-[6.5rem] truncate" title={toLabel}>{toLabel}</span>
                                                 </div>
                                             </td>
 

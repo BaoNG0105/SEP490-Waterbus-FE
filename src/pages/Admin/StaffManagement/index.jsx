@@ -16,7 +16,8 @@ import {
   isAssignmentInactive,
 } from "../../../services/staffAssignmentService";
 import { FormSelect } from "../../../components/FormSelect";
-import { canManageUserRow, getRoleSystemName, isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
+import { canManageUserRow, canResetManagedUserPassword, getRoleSystemName, isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
+import { promptResetManagedPassword } from "../../../utils/managedPasswordReset";
 import { notify } from "../../../utils/swalToast";
 
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp";
@@ -332,6 +333,8 @@ export function StaffManagement({ viewTabs = null }) {
     }
   };
 
+  const handleResetPassword = (item) => promptResetManagedPassword({ user: item, lang });
+
   const scopeButtons = [
     { key: SCOPE.STATION, vn: "Theo bến", en: "By station" },
     ...(isManagerOnly ? [] : [{ key: SCOPE.BOAT, vn: "Theo tàu", en: "By boat" }]),
@@ -491,6 +494,7 @@ export function StaffManagement({ viewTabs = null }) {
                 currentUsers.map((item) => {
                   const staffType = normalizeStaffType(item.staffType);
                   const canManage = canManageUserRow(currentUser, item.roles);
+                  const canResetPassword = canResetManagedUserPassword(currentUser, item);
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
                       <td className="py-4 px-6">
@@ -559,24 +563,38 @@ export function StaffManagement({ viewTabs = null }) {
                         </span>
                       </td>
                       <td className="py-4 px-6 text-center">
-                        {canManage ? (
+                        {canManage || canResetPassword ? (
                           <div className="flex items-center justify-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/admin/staffs-management/edit/${item.id}`)}
-                              className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
-                              title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
-                            >
-                              <span className="material-symbols-outlined text-[18px]">edit</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(item)}
-                              className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm"
-                              title={lang === "VN" ? "Xóa" : "Delete"}
-                            >
-                              <span className="material-symbols-outlined text-[18px]">delete</span>
-                            </button>
+                            {canManage && (
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/admin/staffs-management/edit/${item.id}`)}
+                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
+                                title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                              </button>
+                            )}
+                            {canResetPassword && (
+                              <button
+                                type="button"
+                                onClick={() => handleResetPassword(item)}
+                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#124757] hover:bg-slate-50 dark:hover:bg-yellow-400/15 hover:border-[#124757]/40 dark:hover:text-yellow-400 dark:hover:border-yellow-400/40 transition-all shadow-sm"
+                                title={lang === "VN" ? "Đặt lại mật khẩu" : "Reset password"}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                              </button>
+                            )}
+                            {canManage && (
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(item)}
+                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm"
+                                title={lang === "VN" ? "Xóa" : "Delete"}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-wider flex items-center justify-center gap-1">
