@@ -113,6 +113,90 @@
   scrollbar-width: none;
 }
 
+/* ===== Thanh cuộn (scrollbar) riêng cho toàn trang — đồng bộ màu thương hiệu #124757 / vàng ===== */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #124757 var(--color-surface);
+}
+
+html.dark {
+  scrollbar-color: #ffd100 #0f172a;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #124757;
+  border-radius: 9999px;
+  border: 3px solid var(--color-surface);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #0d3541;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:where(.dark, .dark *)::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+:where(.dark, .dark *)::-webkit-scrollbar-thumb {
+  background-color: #ffd100;
+  border-color: #0f172a;
+}
+
+:where(.dark, .dark *)::-webkit-scrollbar-thumb:hover {
+  background-color: #fde047;
+}
+
+/* Biến thể mảnh dùng cho panel/table cuộn nội bộ (class custom-scrollbar) */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #124757 transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #124757;
+  border-radius: 9999px;
+  border: none;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #0d3541;
+}
+
+:where(.dark, .dark *) .custom-scrollbar {
+  scrollbar-color: #ffd100 transparent;
+}
+
+:where(.dark, .dark *) .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #ffd100;
+}
+
+:where(.dark, .dark *) .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #fde047;
+}
+
 @utility hero-gradient {
   background: linear-gradient(180deg,
       rgba(17, 28, 45, 0.4) 0%,
