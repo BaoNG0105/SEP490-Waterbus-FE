@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { AppDateInput } from "../../components/AppDateInput";
@@ -80,12 +80,21 @@ const ROUTE_TYPE_TO_KIND = {
 
 const kindBadgeClass = (kind) => {
   if (kind === "Sightseeing") {
-    return "bg-violet-500/15 text-violet-300 ring-1 ring-violet-400/30";
+    return "bg-violet-100 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:ring-violet-400/30";
   }
   if (kind === "Bus") {
-    return "bg-teal-500/15 text-teal-300 ring-1 ring-teal-400/30";
+    return "bg-teal-100 text-teal-700 ring-1 ring-teal-200 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-400/30";
   }
-  return "bg-slate-500/15 text-slate-300 ring-1 ring-slate-400/20";
+  return "bg-slate-100 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-400/20";
+};
+
+const formatDurationLabel = (mins, lang) => {
+  if (!Number.isFinite(mins) || mins <= 0) return null;
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  if (h <= 0) return lang === "VN" ? `${m} phút` : `${m} min`;
+  if (m <= 0) return lang === "VN" ? `${h} giờ` : `${h}h`;
+  return lang === "VN" ? `${h} giờ ${m} phút` : `${h}h ${m}m`;
 };
 
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -108,6 +117,11 @@ const sortedStops = (trip) => {
   const stops = Array.isArray(trip?.stops) ? [...trip.stops] : [];
   return stops.sort((a, b) => Number(a?.stopOrder ?? 0) - Number(b?.stopOrder ?? 0));
 };
+
+/** Định danh 1 stop để so khớp boarding/alighting khi hiện lộ trình chi tiết. */
+const legStopKey = (stop) => (
+  stopStationId(stop) || stopStationCode(stop) || normalizeText(stopStationName(stop))
+);
 
 const sameStation = (stop, station) => {
   if (!stop || !station) return false;
@@ -141,6 +155,8 @@ const resolveDepartureLeg = (trip, station) => {
       toLabel: toName || "—",
       viewTime: trip?.displayStartAt || trip?.startAt || trip?.scheduledDepartureAt || null,
       endTime: trip?.displayEndAt || trip?.endAt || null,
+      fromStopKey: stops.length ? legStopKey(stops[0]) : null,
+      toStopKey: stops.length ? legStopKey(stops[stops.length - 1]) : null,
     };
   }
 
@@ -173,6 +189,8 @@ const resolveDepartureLeg = (trip, station) => {
           || pickStopDisplayDeparture(dest)
           || trip?.displayEndAt
           || null,
+        fromStopKey: legStopKey(stops[i]),
+        toStopKey: legStopKey(dest),
       };
     }
     return null;
@@ -191,6 +209,8 @@ const resolveDepartureLeg = (trip, station) => {
     toLabel: toName,
     viewTime: trip?.displayStartAt || trip?.startAt || trip?.scheduledDepartureAt || null,
     endTime: trip?.displayEndAt || trip?.endAt || null,
+    fromStopKey: null,
+    toStopKey: null,
   };
 };
 
@@ -207,6 +227,7 @@ export function Schedule() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [now, setNow] = useState(() => new Date());
+  const [expandedTripKey, setExpandedTripKey] = useState(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -304,6 +325,9 @@ export function Schedule() {
       .sort((a, b) => clockSortMs(a.viewTime) - clockSortMs(b.viewTime));
   }, [entries, selectedDate, today, maxDate, selectedStation, routeTypeFilter]);
 
+  // Chuyến đã khởi hành thì ẩn khỏi bảng — tính lại mỗi lần render (đồng hồ tick mỗi giây).
+  const visibleTrips = filteredTrips.filter(({ trip, viewTime }) => !isTripEnded(trip, viewTime));
+
   const isOutsideScheduleWindow = Boolean(
     selectedDate && (selectedDate > maxDate || selectedDate < today),
   );
@@ -379,15 +403,15 @@ export function Schedule() {
 
         <section>
           {isLoading ? (
-            <div className="rounded-3xl bg-[#0a1e26] px-6 py-16 text-center shadow-lg ring-1 ring-white/5">
-              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-white/10 border-t-[#FFD100]" />
-              <p className="text-xs font-medium tracking-wider text-slate-300">
+            <div className="rounded-3xl bg-white px-6 py-16 text-center shadow-lg ring-1 ring-slate-200 dark:bg-[#0a1e26] dark:ring-white/5">
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-[#124757] dark:border-white/10 dark:border-t-[#FFD100]" />
+              <p className="text-xs font-medium tracking-wider text-slate-500 dark:text-slate-300">
                 {lang === "VN" ? "Đang tải lịch khởi hành…" : "Loading schedule…"}
               </p>
             </div>
-          ) : filteredTrips.length === 0 ? (
-            <div className="rounded-3xl bg-[#0a1e26] px-6 py-16 text-center shadow-lg ring-1 ring-white/5">
-              <p className="font-headline text-sm font-black text-slate-300">
+          ) : visibleTrips.length === 0 ? (
+            <div className="rounded-3xl bg-white px-6 py-16 text-center shadow-lg ring-1 ring-slate-200 dark:bg-[#0a1e26] dark:ring-white/5">
+              <p className="font-headline text-sm font-black text-slate-500 dark:text-slate-300">
                 {isOutsideScheduleWindow
                   ? (lang === "VN" ? "Chưa có lịch." : "No schedule yet.")
                   : selectedStation
@@ -406,7 +430,7 @@ export function Schedule() {
                   </Link>
                   <Link
                     to="/watersightseeing-booking"
-                    className="rounded-full border border-white/15 px-5 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-yellow-300"
+                    className="rounded-full border border-slate-200 px-5 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:border-white/15 dark:text-yellow-300"
                   >
                     {lang === "VN" ? "Đặt Sightseeing" : "Book Sightseeing"}
                   </Link>
@@ -414,18 +438,18 @@ export function Schedule() {
               ) : null}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-3xl bg-[#0a1e26] shadow-lg ring-1 ring-white/10">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#081820] px-5 py-3 sm:px-6">
+            <div className="overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-slate-200 dark:bg-[#0a1e26] dark:ring-white/10">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-white/10 dark:bg-[#081820] sm:px-6">
                 <div className="flex items-center gap-2">
                   <span className="relative flex h-2 w-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
                   </span>
-                  <p className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">
+                  <p className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-300">
                     {lang === "VN" ? "Trực tiếp" : "Live"}
                   </p>
                 </div>
-                <p className="font-headline text-xl font-black tabular-nums tracking-wider text-[#FFD100] sm:text-2xl">
+                <p className="font-headline text-xl font-black tabular-nums tracking-wider text-[#124757] dark:text-[#FFD100] sm:text-2xl">
                   {clock.h}
                   <span className="wb-clock-colon">:</span>
                   {clock.m}
@@ -437,7 +461,8 @@ export function Schedule() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-160 border-collapse text-left">
                   <thead>
-                    <tr className="border-b border-white/10 text-xs font-headline font-black uppercase tracking-widest text-slate-400">
+                    <tr className="border-b border-slate-200 text-xs font-headline font-black uppercase tracking-widest text-slate-500 dark:border-white/10 dark:text-slate-400">
+                      <th className="w-10 px-3 py-4 sm:px-4" />
                       <th className="px-6 py-4 font-black sm:px-8">{lang === "VN" ? "Giờ" : "Time"}</th>
                       <th className="px-4 py-4 font-black">{lang === "VN" ? "Loại" : "Type"}</th>
                       <th className="px-4 py-4 font-black">
@@ -449,89 +474,176 @@ export function Schedule() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredTrips.map(({ trip, viewTime, fromLabel, toLabel }) => {
+                    {visibleTrips.map(({ trip, viewTime, fromLabel, toLabel, fromStopKey, toStopKey }) => {
                       const kind = resolveTripKindKey(trip);
                       const delayMins = Number(trip.delayMinutes);
                       const bookTo = kind === "Sightseeing"
                         ? "/watersightseeing-booking"
                         : "/waterbus-booking";
-                      const ended = isTripEnded(trip, viewTime);
-                      const isDelayed = Number.isFinite(delayMins) && delayMins > 0 && !ended;
+                      const isDelayed = Number.isFinite(delayMins) && delayMins > 0;
                       const boatLabel = String(trip?.boatName || trip?.boatCode || "").trim() || "—";
-                      const statusLabel = ended
-                        ? (lang === "VN" ? "Đã khởi hành" : "Departed")
-                        : isDelayed
-                          ? (lang === "VN" ? `Trễ ${delayMins} phút` : `Delayed ${delayMins} min`)
-                          : (lang === "VN" ? "Đúng giờ" : "On time");
-                      const statusClass = ended
-                        ? "bg-slate-500/15 text-slate-400 ring-1 ring-slate-400/20"
-                        : isDelayed
-                          ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"
-                          : "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30";
+                      const statusLabel = isDelayed
+                        ? (lang === "VN" ? `Trễ ${delayMins} phút` : `Delayed ${delayMins} min`)
+                        : (lang === "VN" ? "Đúng giờ" : "On time");
+                      const statusClass = isDelayed
+                        ? "bg-amber-100 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/30"
+                        : "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30";
+
+                      const tripKey = String(trip.tripId || trip.tripCode || `${fromLabel}-${viewTime}`);
+                      const stops = sortedStops(trip);
+                      const hasStops = stops.length > 0;
+                      const isExpanded = hasStops && expandedTripKey === tripKey;
+
+                      const firstDeparture = hasStops
+                        ? (pickStopDisplayDeparture(stops[0]) || pickStopDisplayArrival(stops[0]))
+                        : null;
+                      const lastArrival = hasStops
+                        ? (pickStopDisplayArrival(stops[stops.length - 1]) || pickStopDisplayDeparture(stops[stops.length - 1]))
+                        : null;
+                      const startMs = Date.parse(String(firstDeparture || trip?.displayStartAt || trip?.startAt || ""));
+                      const endMs = Date.parse(String(lastArrival || trip?.displayEndAt || trip?.endAt || ""));
+                      const durationLabel = (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs)
+                        ? formatDurationLabel(Math.round((endMs - startMs) / 60000), lang)
+                        : null;
 
                       return (
-                        <tr
-                          key={String(trip.tripId || trip.tripCode || `${fromLabel}-${viewTime}`)}
-                          className={`border-b border-white/5 transition last:border-0 ${
-                            ended ? "opacity-50" : "hover:bg-white/3"
-                          }`}
-                        >
-                          <td className="px-6 py-5 sm:px-8">
-                            <span className={`font-headline text-2xl font-black tabular-nums tracking-tight sm:text-3xl ${
-                              ended ? "text-slate-500" : "text-[#FFD100]"
-                            }`}>
-                              {formatClock(viewTime)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-5">
-                            <span className={`inline-flex rounded-md px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide ${kindBadgeClass(kind)}`}>
-                              {kind || "—"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-5">
-                            {selectedStation ? (
-                              <p
-                                className={`truncate font-headline text-sm font-bold sm:text-base ${
-                                  ended ? "text-slate-500" : "text-white"
-                                }`}
-                                title={toLabel}
-                              >
-                                {toLabel}
-                              </p>
-                            ) : (
-                              <p
-                                className={`truncate font-headline text-sm font-bold sm:text-base ${
-                                  ended ? "text-slate-500" : "text-white"
-                                }`}
-                                title={`${fromLabel} → ${toLabel}`}
-                              >
-                                {fromLabel}
-                                <span className="mx-2 text-[#FFD100]">→</span>
-                                {toLabel}
-                              </p>
-                            )}
-                          </td>
-                          <td className="hidden px-4 py-5 text-sm font-bold tracking-wide text-slate-300 sm:table-cell">
-                            {boatLabel}
-                          </td>
-                          <td className="px-4 py-5">
-                            <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-headline font-black uppercase tracking-wide ${statusClass}`}>
-                              {statusLabel}
-                            </span>
-                          </td>
-                          <td className="px-6 py-5 text-right sm:px-8">
-                            {ended ? (
-                              <span className="text-xs font-bold text-slate-600">—</span>
-                            ) : (
+                        <Fragment key={tripKey}>
+                          <tr
+                            onClick={() => hasStops && setExpandedTripKey(isExpanded ? null : tripKey)}
+                            className={`border-b border-slate-100 transition last:border-0 hover:bg-slate-50 dark:border-white/5 dark:hover:bg-white/3 ${
+                              hasStops ? "cursor-pointer" : ""
+                            }`}
+                          >
+                            <td className="px-3 py-5 sm:px-4">
+                              {hasStops ? (
+                                <span
+                                  className={`material-symbols-outlined inline-flex text-[20px] leading-none text-slate-400 transition-transform dark:text-slate-500 ${
+                                    isExpanded ? "rotate-180" : ""
+                                  }`}
+                                  aria-hidden
+                                >
+                                  expand_more
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="px-6 py-5 sm:px-8">
+                              <span className="font-headline text-2xl font-black tabular-nums tracking-tight text-[#124757] sm:text-3xl dark:text-[#FFD100]">
+                                {formatClock(viewTime)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-5">
+                              <span className={`inline-flex rounded-md px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide ${kindBadgeClass(kind)}`}>
+                                {kind || "—"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-5">
+                              {selectedStation ? (
+                                <p
+                                  className="truncate font-headline text-sm font-bold text-slate-800 sm:text-base dark:text-white"
+                                  title={toLabel}
+                                >
+                                  {toLabel}
+                                </p>
+                              ) : (
+                                <p
+                                  className="truncate font-headline text-sm font-bold text-slate-800 sm:text-base dark:text-white"
+                                  title={`${fromLabel} → ${toLabel}`}
+                                >
+                                  {fromLabel}
+                                  <span className="mx-2 text-[#124757] dark:text-[#FFD100]">→</span>
+                                  {toLabel}
+                                </p>
+                              )}
+                            </td>
+                            <td className="hidden px-4 py-5 text-sm font-bold tracking-wide text-slate-500 dark:text-slate-300 sm:table-cell">
+                              {boatLabel}
+                            </td>
+                            <td className="px-4 py-5">
+                              <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-headline font-black uppercase tracking-wide ${statusClass}`}>
+                                {statusLabel}
+                              </span>
+                            </td>
+                            <td className="px-6 py-5 text-right sm:px-8">
                               <Link
                                 to={bookTo}
+                                onClick={(e) => e.stopPropagation()}
                                 className="inline-flex shrink-0 rounded-full bg-[#FFD100] px-5 py-2 text-xs font-headline font-black uppercase tracking-wider text-slate-900 transition hover:brightness-95"
                               >
                                 {lang === "VN" ? "Đặt vé" : "Book"}
                               </Link>
-                            )}
-                          </td>
-                        </tr>
+                            </td>
+                          </tr>
+                          {isExpanded ? (
+                            <tr className="border-b border-slate-100 bg-slate-50/70 dark:border-white/5 dark:bg-black/20">
+                              <td colSpan={7} className="px-4 py-4 sm:px-6">
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#071219] sm:p-5">
+                                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                    <p className="font-headline text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                                      {lang === "VN" ? "Lộ trình chi tiết" : "Full itinerary"}
+                                    </p>
+                                    {durationLabel ? (
+                                      <span className="inline-flex rounded-full bg-teal-50 px-3 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-teal-700 ring-1 ring-teal-200 dark:bg-[#124757]/40 dark:text-teal-200 dark:ring-teal-400/20">
+                                        {lang === "VN" ? `Thời gian hành trình: ${durationLabel}` : `Trip duration: ${durationLabel}`}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full min-w-105 border-collapse text-left text-xs">
+                                      <thead>
+                                        <tr className="border-b border-slate-200 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 dark:border-white/10 dark:text-slate-500">
+                                          <th className="px-3 py-2">STT</th>
+                                          <th className="px-3 py-2">{lang === "VN" ? "Ga/Bến" : "Station"}</th>
+                                          <th className="px-3 py-2">{lang === "VN" ? "Giờ đến" : "Arrival"}</th>
+                                          <th className="px-3 py-2">{lang === "VN" ? "Giờ đi" : "Departure"}</th>
+                                          <th className="hidden px-3 py-2 sm:table-cell">{lang === "VN" ? "Dừng" : "Stop"}</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {stops.map((stop, idx) => {
+                                          const stopKey = legStopKey(stop);
+                                          const isBoarding = Boolean(fromStopKey) && stopKey === fromStopKey;
+                                          const isAlighting = Boolean(toStopKey) && stopKey === toStopKey;
+                                          const highlighted = isBoarding || isAlighting;
+                                          const stay = Number(stop?.stayDurationMinutes);
+                                          return (
+                                            <tr
+                                              key={String(stop.tripStopId || `${tripKey}-${idx}`)}
+                                              className={`border-b border-slate-100 last:border-0 dark:border-white/5 ${highlighted ? "bg-slate-100 dark:bg-white/5" : ""}`}
+                                            >
+                                              <td className="px-3 py-2 text-slate-400">{stop.stopOrder ?? idx + 1}</td>
+                                              <td className={`px-3 py-2 font-bold ${highlighted ? "text-[#124757] dark:text-[#FFD100]" : "text-slate-800 dark:text-white"}`}>
+                                                {stopStationName(stop) || "—"}
+                                                {isBoarding ? (
+                                                  <span className="ml-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30">
+                                                    {lang === "VN" ? "Lên" : "Board"}
+                                                  </span>
+                                                ) : null}
+                                                {isAlighting ? (
+                                                  <span className="ml-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/30">
+                                                    {lang === "VN" ? "Xuống" : "Alight"}
+                                                  </span>
+                                                ) : null}
+                                              </td>
+                                              <td className="px-3 py-2 tabular-nums text-slate-500 dark:text-slate-300">
+                                                {formatClock(pickStopDisplayArrival(stop))}
+                                              </td>
+                                              <td className="px-3 py-2 tabular-nums text-slate-500 dark:text-slate-300">
+                                                {formatClock(pickStopDisplayDeparture(stop))}
+                                              </td>
+                                              <td className="hidden px-3 py-2 tabular-nums text-slate-400 sm:table-cell">
+                                                {Number.isFinite(stay) && stay > 0 ? `${stay}'` : "—"}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
                       );
                     })}
                   </tbody>
