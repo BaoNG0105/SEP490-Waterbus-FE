@@ -15,17 +15,6 @@ export const FloatingActions = () => {
       )}
 
       <div className="flex flex-col gap-4">
-        {/* Nút Zalo */}
-        <a
-          href="https://zalo.me" // Đổi thành link Zalo thật của bạn
-          target="_blank"
-          rel="noopener noreferrer"
-          title={lang === "VN" ? "Hỗ trợ qua Zalo" : "Zalo Support"}
-          className="w-14 h-14 bg-blue-500 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform text-white font-bold text-[10px] pointer-events-auto cursor-pointer"
-        >
-          ZALO
-        </a>
-
         {/* Nút AI Chatbot */}
         <button
           type="button"
