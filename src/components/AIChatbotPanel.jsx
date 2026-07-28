@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { chatWithAssistant } from "../api/assistantApi";
 
 const TEXT = {
   VN: {
@@ -7,8 +8,8 @@ const TEXT = {
     greeting:
       "Xin chào, Mình là trợ lý ảo của Waterbus. Bạn cần hỗ trợ gì về lịch trình, đặt vé hay thuê tàu không?",
     placeholder: "Nhập tin nhắn...",
-    autoReply:
-      "Cảm ơn bạn đã nhắn tin! Đội ngũ CSKH sẽ phản hồi trong ít phút. Trong lúc chờ, bạn có thể xem thêm thông tin tại trang Booking hoặc Thuê tàu.",
+    errorReply:
+      "Xin lỗi, mình đang gặp sự cố kết nối. Bạn vui lòng thử lại sau ít phút nhé.",
     close: "Đóng",
   },
   ENG: {
@@ -17,8 +18,8 @@ const TEXT = {
     greeting:
       "Hi, I'm the Waterbus AI Assistant. How can I help you with schedules, bookings, or boat booking requests?",
     placeholder: "Type a message...",
-    autoReply:
-      "Thanks for reaching out! Our support team will reply shortly. Meanwhile, feel free to check the Booking or Request Booking pages.",
+    errorReply:
+      "Sorry, I'm having connection trouble right now. Please try again in a few minutes.",
     close: "Close",
   },
 };
@@ -36,23 +37,38 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text) return;
+    if (!text || isTyping) return;
 
     const userMessage = { id: `u-${Date.now()}`, from: "user", text };
+    // Lịch sử gửi lên server: bỏ câu chào mặc định (không phải do LLM sinh ra).
+    const history = [...messages, userMessage]
+      .filter((m) => m.id !== "greeting")
+      .map((m) => ({ role: m.from === "user" ? "user" : "assistant", text: m.text }));
+
     setMessages((prev) => [...prev, userMessage]);
     setDraft("");
     setIsTyping(true);
 
-    setTimeout(() => {
-      setIsTyping(false);
+    try {
+      const data = await chatWithAssistant(history);
+      const replyText =
+        (typeof data === "string" ? data : data?.reply ?? data?.text ?? data?.message ?? data?.answer) ||
+        t.errorReply;
       setMessages((prev) => [
         ...prev,
-        { id: `b-${Date.now()}`, from: "bot", text: t.autoReply },
+        { id: `b-${Date.now()}`, from: "bot", text: replyText },
       ]);
-    }, 900);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { id: `b-${Date.now()}`, from: "bot", text: t.errorReply },
+      ]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (
@@ -135,11 +151,12 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t.placeholder}
-          className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-yellow-400"
+          disabled={isTyping}
+          className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-yellow-400"
         />
         <button
           type="submit"
-          disabled={!draft.trim()}
+          disabled={!draft.trim() || isTyping}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#124757] text-white transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-yellow-400 dark:text-slate-900"
         >
           <span className="material-symbols-outlined text-lg">send</span>

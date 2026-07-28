@@ -581,7 +581,7 @@ export const Home = () => {
                 <Link
                   key={promo.promotionCode}
                   to={`/promotions/${promo.promotionCode}`}
-                  className="group relative aspect-3/4 rounded-4xl overflow-hidden shadow-lg block"
+                  className="group relative aspect-3/4 overflow-hidden shadow-lg block"
                 >
                   <img
                     src={promo.imageUrl || fallbackPromoImg}
