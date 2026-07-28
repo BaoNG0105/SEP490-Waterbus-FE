@@ -32,6 +32,34 @@ const TONE = {
     accent: "#124757",
     text: "#124757",
   },
+  /** Ops: khách xuống bến */
+  alighting: {
+    body: "#FEF3C7",
+    stroke: "#D97706",
+    accent: "#D97706",
+    text: "#92400E",
+  },
+  /** Ops: khách mới lên */
+  boarding: {
+    body: "#D1FAE5",
+    stroke: "#059669",
+    accent: "#059669",
+    text: "#065F46",
+  },
+  /** Ops: đi tiếp (không xuống nhầm) */
+  through: {
+    body: "#E0F2FE",
+    stroke: "#0284C7",
+    accent: "#0284C7",
+    text: "#075985",
+  },
+  /** Ops: đang có khách / đã đặt */
+  occupied: {
+    body: "#E2E8F0",
+    stroke: "#334155",
+    accent: "#334155",
+    text: "#0F172A",
+  },
   disabled: {
     body: "#F1F5F9",
     stroke: "#CBD5E1",
@@ -60,6 +88,17 @@ export function seatToneFromCode(seatTypeCode) {
   if (code === "RIVER" || code.includes("RIVER")) return "river";
   if (code === "SKY" || code.includes("SKY") || code.includes("VIP")) return "sky";
   if (code === "STANDARD" || code.includes("STANDARD") || code.includes("STD")) return "standard";
+  return "standard";
+}
+
+/** Tone cho sơ đồ vận hành theo bến (lên / xuống / đi tiếp). */
+export function seatToneFromOccupancyRole(role) {
+  const key = String(role || "").toLowerCase();
+  if (key === "alighting") return "alighting";
+  if (key === "boarding") return "boarding";
+  if (key === "through") return "through";
+  if (key === "occupied") return "occupied";
+  if (key === "blocked") return "disabled";
   return "standard";
 }
 

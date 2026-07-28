@@ -12,19 +12,30 @@ const publicRoutes = [
     '/auth/register',
     '/auth/verify-register-otp',
     '/auth/resend-otp',
-    '/auth/google/login'
+    '/auth/google/login',
 ];
+
+const matchesRouteList = (url = "", routes = []) =>
+    routes.some((route) => String(url || "").toLowerCase().includes(route));
+
+const shouldSkipAuth = (config = {}) =>
+    Boolean(config.skipAuth) || matchesRouteList(config.url, publicRoutes);
 
 // 2. REQUEST INTERCEPTOR
 api.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem("accessToken");
 
-        // Kiểm tra xem URL hiện tại có thuộc danh sách Public không
-        const isPublicRoute = publicRoutes.some(route => config.url.toLowerCase().includes(route));
+        // Public / skipAuth: không gắn Authorization (tránh 401 token cũ → popup session expired).
+        if (shouldSkipAuth(config)) {
+            if (config.headers) {
+                delete config.headers.Authorization;
+                delete config.headers.authorization;
+            }
+            return config;
+        }
 
-        // CHỈ GẮN TOKEN KHI CÓ TOKEN VÀ KHÔNG PHẢI LÀ PUBLIC ROUTE
-        if (token && !isPublicRoute) {
+        if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
 
@@ -52,16 +63,20 @@ api.interceptors.response.use(
         const originalRequest = error.config || {};
         const requestUrl = String(originalRequest.url || "");
 
-        // Tránh bắt lỗi 401 của các API như login (sai mật khẩu)
-        const isPublicRoute = publicRoutes.some(route => requestUrl.toLowerCase().includes(route));
+        // Tránh bắt lỗi 401 của các API như login (sai mật khẩu) / anonymous schedule
+        const isPublicOrSkipAuth =
+            matchesRouteList(requestUrl, publicRoutes)
+            || Boolean(originalRequest.skipAuth);
 
         // PayOS return: sync có thể 401 — KHÔNG đá về /login (mất /payment/success?orderCode=...).
         // Trang PaymentResult tự xử lý (giữ URL + nút đăng nhập quay lại sync).
         const skipForcedLogin =
-            isPaymentSyncUrl(requestUrl) || isOnPaymentReturnPage();
+            isPaymentSyncUrl(requestUrl)
+            || isOnPaymentReturnPage()
+            || isPublicOrSkipAuth;
 
         // CHỈ VĂNG LOGOUT NẾU LỖI 401 XẢY RA Ở CÁC PRIVATE ROUTE (như '/auth/me')
-        if (error.response && error.response.status === 401 && !isPublicRoute && !skipForcedLogin) {
+        if (error.response && error.response.status === 401 && !skipForcedLogin) {
 
             // Tránh vòng lặp vô hạn
             if (!originalRequest._retry) {

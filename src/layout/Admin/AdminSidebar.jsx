@@ -41,11 +41,12 @@ const MENU_GROUPS = [
     labelEn: "Operations",
     items: [
       { path: "/admin/trips-management", icon: "sailing", labelVn: "Chuyến tàu", labelEn: "Trips", roles: ["ADMIN","MANAGER"] },
+      { path: "/admin/operations-schedule", icon: "departure_board", labelVn: "Lịch vận hành", labelEn: "Ops schedule", roles: ["ADMIN", "MANAGER", "STAFF"] },
       { path: "/admin/routes-management", icon: "alt_route", labelVn: "Tuyến", labelEn: "Routes", roles: ["ADMIN"] },
       { path: "/admin/stations-management", icon: "storefront", labelVn: "Nhà ga", labelEn: "Stations", roles: ["ADMIN", "MANAGER"] },
       { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN"] },
       { path: "/admin/seat-types", icon: "sell", labelVn: "Chính sách giá", labelEn: "Fare Policy", roles: ["ADMIN"] },
-      { path: "/admin/live-tracking", icon: "my_location", labelVn: "Theo dõi / Sự cố", labelEn: "Tracking / Incidents", labelVnStaff: "Sự cố / Cứu hộ", labelEnStaff: "Incidents / Rescue", roles: ["ADMIN", "STAFF"] },
+      { path: "/admin/live-tracking", icon: "my_location", labelVn: "Theo dõi / Sự cố", labelEn: "Tracking / Incidents", labelVnStaff: "Theo dõi GPS / Sự cố", labelEnStaff: "GPS / Incidents", roles: ["ADMIN", "MANAGER", "STAFF"] },
       { path: "/admin/staff/my-trips", icon: "directions_boat", labelVn: "Chuyến của tôi", labelEn: "My trips", roles: ["STAFF"] },
       { path: "/admin/staff/ticket-scan", icon: "qr_code_scanner", labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
       { path: "/admin/staff/scan-history", icon: "history", labelVn: "Lịch sử quét", labelEn: "Scan history", roles: ["STAFF"] },
@@ -84,6 +85,7 @@ const MENU_GROUPS = [
 const STAFF_MENU_PATHS = new Set([
   "/admin",
   "/admin/live-tracking",
+  "/admin/operations-schedule",
   "/admin/staffs-management",
   "/admin/staff/my-trips",
   "/admin/staff/ticket-scan",

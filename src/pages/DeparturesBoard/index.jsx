@@ -144,6 +144,7 @@ export function DeparturesBoard() {
   const { entries, isLoading, errorMsg } = useOperationsSchedule({
     enabled: true,
     serviceType: "booking",
+    skipAuth: true,
   });
   const [now, setNow] = useState(() => new Date());
   const [stations, setStations] = useState([]);

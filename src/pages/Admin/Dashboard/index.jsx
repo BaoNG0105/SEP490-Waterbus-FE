@@ -96,10 +96,14 @@ export const Dashboard = () => {
       icon: "my_location",
       titleVn: "Theo dõi tàu trực tiếp",
       titleEn: "Live Fleet Tracking",
+      titleVnStaff: "Theo dõi GPS / Sự cố",
+      titleEnStaff: "GPS Tracking / Incidents",
       descVn: "Giám sát vị trí và hành trình tàu theo thời gian thực.",
       descEn: "Monitor real-time boat positions and routes.",
+      descVnStaff: "Xem vị trí tàu realtime và ghi nhận sự cố trên tuyến.",
+      descEnStaff: "View live boat GPS and log on-route incidents.",
       color: "from-blue-500/10 to-indigo-500/10 text-blue-600 dark:text-blue-400",
-      roles: ["ADMIN"],
+      roles: ["ADMIN", "MANAGER", "STAFF"],
     },
     {
       path: "/admin/incidents",
@@ -109,7 +113,7 @@ export const Dashboard = () => {
       descVn: "Ghi nhận và xử lý sự cố khẩn cấp trên tuyến.",
       descEn: "Log and resolve on-route emergencies.",
       color: "from-red-500/10 to-rose-500/10 text-red-600 dark:text-red-400",
-      roles: ["ADMIN", "STAFF"],
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/staffs-management?view=assignments",
@@ -219,7 +223,7 @@ export const Dashboard = () => {
 
   // Staff thuần chỉ thấy các mục vận hành cá nhân, không thấy các trang quản lý cấp cao.
   const staffDashboardPaths = new Set([
-    "/admin/incidents",
+    "/admin/live-tracking",
     "/admin/staffs-management?view=assignments",
     "/admin/staff/my-trips",
     "/admin/staff/ticket-scan",

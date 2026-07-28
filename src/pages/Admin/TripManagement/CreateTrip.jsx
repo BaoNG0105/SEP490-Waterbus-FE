@@ -7,6 +7,7 @@ import {
   buildRoundTripPreviewPayload,
   buildScheduleTripsPayload,
   filterRoundTripPreviewByTimeWindow,
+  formatSkippedScheduleItemsText,
   getTripCreateLeadTimeError,
   isSingleTripCreateCase,
   previewRoundTripScheduleBatch,
@@ -226,7 +227,11 @@ export function CreateTrip() {
       try {
         setIsLoadingOptions(true);
         const [routeData, boatData] = await Promise.all([fetchAllRoutes(), fetchAllBoats()]);
-        setRoutes((routeData || []).filter((r) => r.routeType === "Regular" || r.routeType === "SightseeingLoop"));
+        setRoutes((routeData || []).filter((r) => {
+          const status = String(r?.status || "Active").toLowerCase();
+          if (status !== "active") return false;
+          return r.routeType === "Regular" || r.routeType === "SightseeingLoop";
+        }));
         setBoats(unwrapBoats(boatData).filter((b) => b.status?.toLowerCase() === "active" && b.seatsConfigured));
       } catch (error) {
         console.error("Lỗi tải dữ liệu tuyến/tàu cho form tạo chuyến:", error);
@@ -487,19 +492,32 @@ export function CreateTrip() {
         });
 
         if (result.created >= 1) {
+          const requested = Number(result.requested) || selectedItems.length;
+          const partial = result.created < requested || (result.skippedItems || []).length > 0;
+          const skipText = formatSkippedScheduleItemsText(result.skippedItems, lang);
           notify({
-            icon: "success",
-            title: lang === "VN" ? "Tạo chuyến thành công!" : "Trip created successfully!",
+            icon: partial ? "warning" : "success",
+            title: partial
+              ? (lang === "VN"
+                ? `Đã tạo ${result.created}/${requested} chuyến`
+                : `Created ${result.created}/${requested} trips`)
+              : (lang === "VN" ? "Tạo chuyến thành công!" : "Trip created successfully!"),
+            text: partial
+              ? (skipText
+                || (lang === "VN"
+                  ? "Một số khung bị bỏ. Xem reason / sớm nhất / chuyến đụng từ BE."
+                  : "Some slots were skipped. See BE reason / earliest / conflict."))
+              : undefined,
             confirmButtonColor: "#124757",
-          }).then(() => navigate("/admin/trips-management"));
+          }).then(() => navigate(`/admin/trips-management?date=${encodeURIComponent(form.fromDate)}`));
           return;
         }
 
-        const firstSkip = result.skippedItems?.[0];
+        const skipText = formatSkippedScheduleItemsText(result.skippedItems, lang);
         notify({
           icon: "warning",
           title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
-          text: firstSkip?.reason
+          text: skipText
             || (lang === "VN"
               ? "Các khung giờ đã chọn không tạo được. Đổi lựa chọn rồi thử lại."
               : "Selected slots could not be created. Change selection and retry."),
@@ -560,20 +578,29 @@ export function CreateTrip() {
       const result = await scheduleTripsBatch(buildScheduleTripsPayload(form));
 
       if (result.created >= 1) {
+        const skipText = formatSkippedScheduleItemsText(result.skippedItems, lang);
+        const partial = (result.skippedItems || []).length > 0 || result.skipped > 0;
         notify({
-          icon: "success",
-          title: lang === "VN" ? "Tạo chuyến thành công!" : "Trip created successfully!",
+          icon: partial ? "warning" : "success",
+          title: partial
+            ? (lang === "VN"
+              ? `Đã tạo ${result.created} · bỏ qua ${result.skipped || result.skippedItems.length}`
+              : `Created ${result.created} · skipped ${result.skipped || result.skippedItems.length}`)
+            : (lang === "VN" ? "Tạo chuyến thành công!" : "Trip created successfully!"),
+          text: partial ? (skipText || undefined) : undefined,
           confirmButtonColor: "#124757",
-        }).then(() => navigate("/admin/trips-management"));
+        }).then(() => navigate(`/admin/trips-management?date=${encodeURIComponent(form.fromDate)}`));
         return;
       }
 
       // created = 0 (không có chuyến nào được tạo)
+      const skipText = formatSkippedScheduleItemsText(result.skippedItems, lang);
       const firstSkip = result.skippedItems?.[0];
       notify({
         icon: "warning",
         title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
-        text: firstSkip?.reason
+        text: skipText
+          || firstSkip?.reason
           || (lang === "VN"
           ? `Bỏ qua ${result.skipped} (tàu bận ${result.skippedBoatBusy} · bến bận ${result.skippedStationBusy} · quá giờ ${result.skippedPast} · thiếu crew ${result.skippedMissingOnBoardStaff}). Đổi tàu / giờ / ngày rồi thử lại.`
           : `Skipped ${result.skipped} (boat busy ${result.skippedBoatBusy} · station busy ${result.skippedStationBusy} · past ${result.skippedPast} · missing crew ${result.skippedMissingOnBoardStaff}). Change boat/time/dates and retry.`),
@@ -697,20 +724,6 @@ export function CreateTrip() {
           </button>
         ))}
       </div>
-
-      {!isRoundTrip && (
-        <div className={`rounded-2xl border px-4 py-3 text-xs font-bold ${isSingleCase
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
-          : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-300"
-          }`}
-        >
-          {isSingleCase
-            ? (lang === "VN" ? "Đang tạo 1 chuyến." : "Creating 1 trip.")
-            : (lang === "VN"
-              ? "Đang tạo nhiều chuyến theo khoảng ngày / giờ đã chọn."
-              : "Creating multiple trips for the selected date range and times.")}
-        </div>
-      )}
 
       {errorMsg && (
         <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20 shadow-sm">
@@ -881,7 +894,7 @@ export function CreateTrip() {
           <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3">
             {isRoundTrip
               ? (lang === "VN" ? "Khung giờ trong ngày" : "Daily time window")
-              : (lang === "VN" ? "Kiểu giờ chạy" : "Schedule mode")}
+              : (lang === "VN" ? "Giờ khởi hành" : "Departure times")}
           </h3>
 
           {isRoundTrip ? (
@@ -906,38 +919,68 @@ export function CreateTrip() {
                   className={inputStyle}
                 />
               </div>
-              <p className="sm:col-span-2 text-[11px] text-slate-400">
-                {lang === "VN"
-                  ? "BE tự xen chuyến đi/về trong khung giờ. Không dùng khoảng phút hay autoSpacing."
-                  : "BE alternates outbound/inbound inside this window. No interval or autoSpacing."}
-              </p>
             </div>
           ) : (
-            <>
-              <div className="flex gap-1 rounded-2xl bg-slate-100/80 p-1 dark:bg-slate-900/80">
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
-                  { id: "fixed", vn: "Giờ cố định", en: "Fixed times" },
-                  { id: "interval", vn: "Khoảng phút", en: "Interval" },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => updateForm({ mode: item.id })}
-                    className={`flex-1 rounded-xl px-2.5 py-2 text-center font-headline text-[10px] font-black uppercase tracking-wider transition sm:text-[11px] ${form.mode === item.id
-                      ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
-                      : "text-slate-500 dark:text-slate-400"
-                      }`}
-                  >
-                    {lang === "VN" ? item.vn : item.en}
-                  </button>
-                ))}
+                  {
+                    id: "fixed",
+                    vn: "Giờ cố định",
+                    en: "Fixed times",
+                    descVn: "Thêm từng giờ khởi hành cụ thể.",
+                    descEn: "Add specific departure times.",
+                    icon: "schedule",
+                  },
+                  {
+                    id: "interval",
+                    vn: "Khoảng phút",
+                    en: "Interval",
+                    descVn: "Tự tạo giờ theo chu kỳ trong khung.",
+                    descEn: "Generate times by interval in a window.",
+                    icon: "timelapse",
+                  },
+                ].map((item) => {
+                  const active = form.mode === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => updateForm({ mode: item.id })}
+                      className={`flex items-start gap-3 rounded-2xl border px-4 py-3.5 text-left transition ${active
+                        ? "border-[#124757] bg-[#124757]/5 dark:border-yellow-400 dark:bg-yellow-400/10"
+                        : "border-slate-200 bg-slate-50/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/40"
+                        }`}
+                    >
+                      <span className={`material-symbols-outlined mt-0.5 text-[22px] ${active
+                        ? "text-[#124757] dark:text-yellow-400"
+                        : "text-slate-400"
+                        }`}
+                      >
+                        {item.icon}
+                      </span>
+                      <span className="min-w-0">
+                        <span className={`block text-xs font-black uppercase tracking-wider ${active
+                          ? "text-[#124757] dark:text-yellow-400"
+                          : "text-slate-600 dark:text-slate-300"
+                          }`}
+                        >
+                          {lang === "VN" ? item.vn : item.en}
+                        </span>
+                        <span className="mt-1 block text-[11px] leading-relaxed text-slate-400">
+                          {lang === "VN" ? item.descVn : item.descEn}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
               {form.mode === "interval" ? (
-                <div className="space-y-3">
+                <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Giờ bắt đầu" : "Start time"}</label>
+                      <label className={labelStyle}>{lang === "VN" ? "Từ giờ" : "From"}</label>
                       <input
                         type="time"
                         required
@@ -947,7 +990,7 @@ export function CreateTrip() {
                       />
                     </div>
                     <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Giờ kết thúc" : "End time"}</label>
+                      <label className={labelStyle}>{lang === "VN" ? "Đến giờ" : "To"}</label>
                       <input
                         type="time"
                         required
@@ -957,7 +1000,7 @@ export function CreateTrip() {
                       />
                     </div>
                     <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Khoảng (phút)" : "Interval (min)"}</label>
+                      <label className={labelStyle}>{lang === "VN" ? "Mỗi (phút)" : "Every (min)"}</label>
                       <input
                         type="number"
                         min={1}
@@ -968,44 +1011,102 @@ export function CreateTrip() {
                       />
                     </div>
                   </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {lang === "VN" ? "Nhanh" : "Quick"}
+                    </span>
+                    {[15, 30, 45, 60].map((mins) => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => updateForm({ intervalMinutes: mins })}
+                        className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition ${Number(form.intervalMinutes) === mins
+                          ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
+                          : "border border-slate-200 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                          }`}
+                      >
+                        {mins}’
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
                   <div className="flex flex-wrap items-end gap-3">
-                    <div className="w-[140px]">
-                      <label className={labelStyle}>{lang === "VN" ? "Thêm giờ" : "Add time"}</label>
+                    <div className="min-w-[150px] flex-1 sm:flex-none sm:w-[160px]">
+                      <label className={labelStyle}>{lang === "VN" ? "Giờ mới" : "New time"}</label>
                       <input
                         type="time"
                         value={form.draftTime}
                         onChange={(e) => updateForm({ draftTime: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addFixedTime();
+                          }
+                        }}
                         className={inputStyle}
                       />
                     </div>
                     <button
                       type="button"
                       onClick={addFixedTime}
-                      className="rounded-xl border border-slate-200 px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-[#124757] dark:border-slate-600 dark:text-yellow-400"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#124757] px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-white transition hover:opacity-90 dark:bg-yellow-400 dark:text-[#124757]"
                     >
+                      <span className="material-symbols-outlined text-[16px]">add</span>
                       {lang === "VN" ? "Thêm" : "Add"}
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {form.departureTimes.map((time) => (
+
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {lang === "VN"
+                        ? `Đã chọn (${form.departureTimes.length})`
+                        : `Selected (${form.departureTimes.length})`}
+                    </p>
+                    {form.departureTimes.length > 1 && (
                       <button
-                        key={time}
                         type="button"
-                        onClick={() => removeFixedTime(time)}
-                        className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                        title={lang === "VN" ? "Bấm để xóa" : "Click to remove"}
+                        onClick={() => updateForm({ departureTimes: [] })}
+                        className="text-[11px] font-bold text-slate-400 hover:text-red-500"
                       >
-                        {time}
-                        <span className="material-symbols-outlined text-[14px] text-slate-400">close</span>
+                        {lang === "VN" ? "Xóa hết" : "Clear all"}
                       </button>
-                    ))}
+                    )}
                   </div>
+
+                  {form.departureTimes.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs font-bold text-slate-400 dark:border-slate-600">
+                      {lang === "VN" ? "Chưa có giờ khởi hành." : "No departure times yet."}
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-700 dark:border-slate-700 dark:bg-slate-800">
+                      {form.departureTimes.map((time) => (
+                        <li
+                          key={time}
+                          className="flex items-center justify-between gap-3 px-3.5 py-2.5"
+                        >
+                          <span className="inline-flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-white">
+                            <span className="material-symbols-outlined text-[18px] text-[#124757] dark:text-yellow-400">
+                              departure_board
+                            </span>
+                            {time}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeFixedTime(time)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                            title={lang === "VN" ? "Xóa" : "Remove"}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">close</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
 

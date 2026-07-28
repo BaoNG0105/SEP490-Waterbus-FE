@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { fetchStaffMeAssignments, fetchStaffMeTrips, normalizeStaffTrip } from "../../../services/staffMeService";
 import { ASSIGNMENT_TYPE } from "../../../services/staffAssignmentService";
-import { fetchAllTrips, fetchTripDetail, resumeTripDelay, startTripDelay, toOperatingDateQuery } from "../../../services/tripService";
+import {
+  fetchAllTrips,
+  fetchTripDetail,
+  resumeTripDelay,
+  startTripDelay,
+  toOperatingDateQuery,
+} from "../../../services/tripService";
 import { trackingHub } from "../../../services/trackingHubClient";
 import {
   addDays,
@@ -40,17 +46,15 @@ const todayKey = () => {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
-const formatDateTime = (value, lang) => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString(lang === "VN" ? "vi-VN" : "en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+const formatClock = (value) => {
+  if (!value) return "--:--";
+  const ms = Date.parse(String(value));
+  if (Number.isNaN(ms)) {
+    const m = String(value).match(/(\d{2}):(\d{2})/);
+    return m ? `${m[1]}:${m[2]}` : "--:--";
+  }
+  const d = new Date(ms);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 };
 
 const formatDayLabel = (ymd, lang) => {
@@ -106,7 +110,6 @@ const tripMatchesAssignment = (trip, assignment) => {
     if (!stationId && !stationCode) return false;
     const fromId = String(trip.fromStationId || trip.fromStation?.stationId || "").trim();
     const toId = String(trip.toStationId || trip.toStation?.stationId || "").trim();
-    // Ưu tiên khớp stationId; fallback stop.stationId trên trip.
     const stopIds = Array.isArray(trip.stops)
       ? trip.stops.map((s) => String(s?.stationId || "").trim()).filter(Boolean)
       : [];
@@ -129,11 +132,16 @@ const mergeUniqueTrips = (lists) => {
     if (!key || map.has(key)) return;
     map.set(key, trip);
   });
-  return [...map.values()];
+  return [...map.values()].sort((a, b) => {
+    const aMs = Date.parse(String(a.departureAt || "")) || 0;
+    const bMs = Date.parse(String(b.departureAt || "")) || 0;
+    return aMs - bMs;
+  });
 };
 
 export function StaffMyTripsPage() {
   const { lang } = useApp();
+  const navigate = useNavigate();
   const [date, setDate] = useState(todayKey);
   const [trips, setTrips] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -162,7 +170,6 @@ export function StaffMyTripsPage() {
         return;
       }
 
-      // 1) BE suy trip từ ca (chuẩn)
       let fromMe = [];
       try {
         fromMe = await fetchStaffMeTrips({ date });
@@ -170,7 +177,6 @@ export function StaffMyTripsPage() {
         fromMe = [];
       }
 
-      // 2) Fallback: ca của tôi + GET /trips (Staff được quyền) lọc theo tàu/bến ca
       let fromFallback = [];
       try {
         const [assignments, tripRows] = await Promise.all([
@@ -179,7 +185,6 @@ export function StaffMyTripsPage() {
         ]);
         const dayAssignments = (assignments || []).filter((row) => assignmentCoversDay(row, date));
         const boatAssignments = dayAssignments.filter((a) => a.assignmentType === ASSIGNMENT_TYPE.BOAT);
-        // Check vé / chuyến của staff: ưu tiên ca OnBoard (Boat); Ground chỉ fallback.
         const relevantAssignments = boatAssignments.length > 0 ? boatAssignments : dayAssignments;
         if (relevantAssignments.length === 0 && fromMe.length === 0) {
           setTrips([]);
@@ -228,6 +233,18 @@ export function StaffMyTripsPage() {
       boatIds.forEach((id) => trackingHub.leaveBoat(id).catch(() => {}));
     };
   }, [boatIdsKey]);
+
+  const openSeatBoard = (trip) => {
+    const tripId = String(trip?.tripId || trip?.id || "").trim();
+    if (!tripId) {
+      showToast({
+        icon: "warning",
+        title: lang === "VN" ? "Thiếu tripId" : "Missing tripId",
+      });
+      return;
+    }
+    navigate(`/admin/trips/${encodeURIComponent(tripId)}/seat-board?from=${encodeURIComponent("/admin/staff/my-trips")}`);
+  };
 
   const handleStartDelay = async (trip) => {
     const tripId = trip?.tripId || trip?.id;
@@ -365,18 +382,18 @@ export function StaffMyTripsPage() {
   const emptyMessage = (() => {
     if (emptyReason === "too_early") {
       return lang === "VN"
-        ? `Chuyến ngày ${formatDayLabel(date, lang)} chỉ xem được từ ${previewFromLabel} (trước 3 ngày). Admin/Manager xem toàn bộ ở Quản lý chuyến tàu.`
-        : `Trips on ${formatDayLabel(date, lang)} are visible from ${previewFromLabel} (3 days before). Admins/Managers see all trips in Trip Management.`;
+        ? `Chuyến ngày ${formatDayLabel(date, lang)} chỉ xem được từ ${previewFromLabel} (trước 3 ngày).`
+        : `Trips on ${formatDayLabel(date, lang)} are visible from ${previewFromLabel} (3 days before).`;
     }
     if (emptyReason === "no_assignment") {
       return lang === "VN"
-        ? "Bạn chưa có ca OnBoard (Boat) trong ngày này. Check vé dùng nhân viên trên tàu."
-        : "You have no OnBoard (Boat) duty this day. Ticket check uses boat crew.";
+        ? "Bạn chưa có ca OnBoard (Boat) trong ngày này."
+        : "You have no OnBoard (Boat) duty this day.";
     }
     if (emptyReason === "no_trips") {
       return lang === "VN"
-        ? "Có ca nhưng chưa có chuyến khớp tàu/bến trong ngày — Admin cần tạo trip trước."
-        : "You have a shift but no matching trips that day — Admin must create trips first.";
+        ? "Có ca nhưng chưa có chuyến khớp tàu trong ngày."
+        : "You have a shift but no matching trips that day.";
     }
     if (emptyReason === "error") {
       return lang === "VN" ? "Không tải được danh sách chuyến." : "Unable to load trips.";
@@ -385,43 +402,48 @@ export function StaffMyTripsPage() {
   })();
 
   return (
-    <div className="space-y-6 pb-10 font-body">
-      <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-headline font-black text-[#124757] dark:text-yellow-400">
-            {lang === "VN" ? "Chuyến của tôi" : "My trips"}
-          </h2>
-          <p className="mt-1 text-sm font-medium text-slate-500">
-            {lang === "VN"
-              ? "Ưu tiên chuyến theo ca OnBoard trên tàu. Quét vé dành cho nhân viên trên tàu, không dùng nhân viên bến làm chính."
-              : "Trips prefer your OnBoard boat duty. Ticket scan is for boat crew, not primarily station staff."}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="block">
-            <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block mb-1">
-              {lang === "VN" ? "Ngày chuyến" : "Trip date"}
-            </span>
-            <AppDateInput
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => setDate(today)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-          >
-            {lang === "VN" ? "Hôm nay" : "Today"}
-          </button>
-          <Link
-            to="/admin/staff/ticket-scan"
-            className="inline-flex items-center gap-2 rounded-xl bg-[#124757] px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
-          >
-            <span className="material-symbols-outlined text-base">qr_code_scanner</span>
-            {lang === "VN" ? "Quét vé" : "Scan"}
-          </Link>
+    <div className="space-y-5 pb-10 font-body">
+      <div className="rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-6">
+        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+          {lang === "VN" ? "Ca OnBoard" : "OnBoard duty"}
+        </p>
+        <div className="mt-1 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
+              {lang === "VN" ? "Chuyến của tôi" : "My trips"}
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-300">
+              {lang === "VN"
+                ? "Bấm chuyến để mở trang sơ đồ ghế theo bến (ai xuống / ai lên / ai đi tiếp). Quét vé dành cho nhân viên trên tàu."
+                : "Open a trip for the full-page station seat board (alight / board / through). Ticket scan is for boat crew."}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="block">
+              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                {lang === "VN" ? "Ngày chuyến" : "Trip date"}
+              </span>
+              <AppDateInput
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setDate(today)}
+              className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            >
+              {lang === "VN" ? "Hôm nay" : "Today"}
+            </button>
+            <Link
+              to="/admin/staff/ticket-scan"
+              className="inline-flex items-center gap-2 rounded-2xl bg-[#124757] px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
+            >
+              <span className="material-symbols-outlined text-base" aria-hidden>qr_code_scanner</span>
+              {lang === "VN" ? "Quét vé" : "Scan"}
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -433,13 +455,13 @@ export function StaffMyTripsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-4xl border border-slate-100 bg-white shadow-sm overflow-hidden dark:border-slate-700/50 dark:bg-slate-800">
+      <div className="overflow-hidden rounded-4xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
         {isLoading ? (
           <div className="flex justify-center py-16">
-            <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400" />
           </div>
         ) : trips.length === 0 ? (
-          <p className="px-6 py-14 text-center text-xs font-bold text-slate-400 leading-relaxed max-w-lg mx-auto">
+          <p className="mx-auto max-w-lg px-6 py-14 text-center text-xs font-bold leading-relaxed text-slate-400">
             {emptyMessage}
           </p>
         ) : (
@@ -449,16 +471,53 @@ export function StaffMyTripsPage() {
               const active = isDelayActive(trip);
               const mins = pickDelayMinutes(trip);
               const busy = delayBusyId === tripId;
+              const depart = pickDisplayDeparture(trip) || trip.departureAt;
+              const arrive = pickDisplayArrival(trip) || trip.arrivalAt;
+              const fromName = trip.fromStationName || trip.stationName || "";
+              const toName = trip.toStationName || "";
+              const boatLabel = trip.boatName || trip.boatCode || "";
               return (
-                <li key={tripId || trip.tripCode} className="px-5 py-4 hover:bg-slate-50/60 dark:hover:bg-slate-900/20">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-800 dark:text-white truncate">{trip.routeName}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {[trip.tripCode, trip.boatName || trip.boat?.vesselName || trip.boatId].filter(Boolean).join(" · ")}
+                <li key={tripId || trip.tripCode}>
+                  <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <button
+                      type="button"
+                      onClick={() => openSeatBoard(trip)}
+                      className="min-w-0 flex-1 text-left transition hover:opacity-90"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-headline text-lg font-black tabular-nums text-[#124757] dark:text-yellow-400">
+                          {formatClock(depart)}
+                        </span>
+                        <span className="text-slate-300">→</span>
+                        <span className="font-headline text-lg font-black tabular-nums text-[#124757] dark:text-yellow-400">
+                          {formatClock(arrive)}
+                        </span>
+                        {trip.tripCode ? (
+                          <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-300">
+                            {trip.tripCode}
+                          </span>
+                        ) : null}
+                        {trip.status ? (
+                          <span className="rounded-lg border border-slate-200 px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:text-slate-300">
+                            {trip.status}
+                          </span>
+                        ) : null}
+                        {active ? (
+                          <span className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9px] font-headline font-black uppercase text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
+                            Delay
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">
+                        {trip.routeName || "—"}
                       </p>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        {[trip.fromStationName, trip.toStationName].filter(Boolean).join(" → ") || "—"}
+                      {(fromName || toName) ? (
+                        <p className="mt-0.5 text-[12px] font-medium text-slate-500">
+                          {fromName || "—"} → <span className="text-[#124757] dark:text-yellow-400">{toName || "—"}</span>
+                        </p>
+                      ) : null}
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                        {[boatLabel, trip.routeCode].filter(Boolean).join(" · ") || "—"}
                       </p>
                       {active ? (
                         <p className="mt-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
@@ -469,46 +528,32 @@ export function StaffMyTripsPage() {
                           {formatPostResumeDelayLine(trip, lang)}
                         </p>
                       ) : null}
-                    </div>
-                    <div className="flex flex-col items-stretch gap-2 sm:items-end shrink-0">
-                      <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300 sm:text-right">
-                        <p>{formatDateTime(pickDisplayDeparture(trip) || trip.departureAt, lang)}</p>
-                        {(pickDisplayArrival(trip) || trip.arrivalAt) && (
-                          <p className="text-slate-400 mt-0.5">
-                            → {formatDateTime(pickDisplayArrival(trip) || trip.arrivalAt, lang)}
-                          </p>
-                        )}
-                        {trip.status && (
-                          <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">{trip.status}</p>
-                        )}
-                        {active ? (
-                          <span className="mt-1 inline-flex rounded-lg border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9px] font-headline font-black uppercase text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
-                            {lang === "VN" ? "Đang dừng / Delay" : "Stopped / Delay"}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap gap-2 sm:justify-end">
-                        {canStartTripDelay(trip) ? (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => handleStartDelay(trip)}
-                            className="inline-flex items-center rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200"
-                          >
-                            Delay
-                          </button>
-                        ) : null}
-                        {canResumeTripDelay(trip) ? (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => handleResumeDelay(trip)}
-                            className="inline-flex items-center rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800 disabled:opacity-50 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
-                          >
-                            {lang === "VN" ? "Tiếp tục" : "Resume"}
-                          </button>
-                        ) : null}
-                      </div>
+                      <p className="mt-2 text-[11px] font-bold text-[#124757] dark:text-yellow-400">
+                        {lang === "VN" ? "Sơ đồ ghế / khách →" : "Seat board / passengers →"}
+                      </p>
+                    </button>
+
+                    <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col sm:items-end">
+                      {canStartTripDelay(trip) ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleStartDelay(trip)}
+                          className="inline-flex items-center rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200"
+                        >
+                          Delay
+                        </button>
+                      ) : null}
+                      {canResumeTripDelay(trip) ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleResumeDelay(trip)}
+                          className="inline-flex items-center rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800 disabled:opacity-50 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
+                        >
+                          {lang === "VN" ? "Tiếp tục" : "Resume"}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </li>

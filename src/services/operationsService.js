@@ -223,12 +223,28 @@ export const normalizeOperationsScheduleEntry = (raw) => {
       : String(sellsBySegmentRaw).toLowerCase() === "true";
 
   const stops = normalizeTripStops(raw.stops || raw.Stops || []);
+  const destinationStationId = String(pick(raw, [
+    "destinationStationId", "DestinationStationId",
+    "toStationId", "ToStationId",
+  ], "")).trim() || null;
+  const destinationStationCode = String(pick(raw, [
+    "destinationStationCode", "DestinationStationCode",
+    "toStationCode", "ToStationCode",
+  ], "")).trim() || null;
+  const destinationStationName = String(pick(raw, [
+    "destinationStationName", "DestinationStationName",
+    "toLocation", "ToLocation", "toStationName", "toStation.stationName",
+  ], "")).trim() || (stops.length ? (stops[stops.length - 1]?.stationName || null) : null);
+
   const fromLocation = String(pick(raw, [
     "fromLocation", "FromLocation", "fromStationName", "fromStation.stationName",
   ], "")).trim() || (stops[0]?.stationName || null);
-  const toLocation = String(pick(raw, [
-    "toLocation", "ToLocation", "toStationName", "toStation.stationName",
-  ], "")).trim() || (stops.length ? (stops[stops.length - 1]?.stationName || null) : null);
+  // Alias cũ toLocation — ưu tiên destinationStationName khi BE đã gửi.
+  const toLocation = destinationStationName
+    || String(pick(raw, [
+      "toLocation", "ToLocation", "toStationName", "toStation.stationName",
+    ], "")).trim()
+    || (stops.length ? (stops[stops.length - 1]?.stationName || null) : null);
 
   return {
     boatId: boatId || boatCode || String(tripIdEarly || ""),
@@ -245,6 +261,9 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     capacitySnapshot,
     fromLocation,
     toLocation,
+    destinationStationId,
+    destinationStationCode,
+    destinationStationName: destinationStationName || toLocation,
     stops,
     movementStatus,
     currentStationName,
@@ -319,6 +338,8 @@ export const fetchOperationsSchedule = async ({
   /** booking | bus | sightseeing | charter | all — theo contract BE. */
   serviceType,
   stationId,
+  /** Customer board/schedule: gọi anonymous, không gửi Authorization. */
+  skipAuth = false,
 } = {}) => {
   const params = {
     fromDate,
@@ -332,7 +353,7 @@ export const fetchOperationsSchedule = async ({
   const sid = String(stationId || "").trim();
   if (sid) params.stationId = sid;
 
-  const data = await apiGetOperationsSchedule(params);
+  const data = await apiGetOperationsSchedule(params, { skipAuth });
   return normalizeOperationsScheduleList(data);
 };
 

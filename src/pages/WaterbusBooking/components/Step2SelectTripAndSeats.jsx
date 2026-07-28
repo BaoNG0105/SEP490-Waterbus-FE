@@ -23,6 +23,9 @@ import {
   formatMinPriceLabel,
   formatSegmentDistanceLabel,
   isMissingKmBookingBlock,
+  formatMissingKmTripBadge,
+  pickBookingClosedReason,
+  looksLikeMissingKm,
   pickSegmentDistanceKm,
 } from "../../../utils/bookingFareMessages";
 import {
@@ -104,10 +107,22 @@ const isSegmentBookingClosed = (trip) => {
 /**
  * BE: dùng isBookable + availableSeats — KHÔNG disable vì tripStatus = Boarding.
  * Fallback khi BE chưa gửi isBookable: còn ghế và chặng chưa khóa 10 phút.
+ * Thiếu km (isBookable=false) → không book được, nhưng vẫn cho click xem thông tin.
  */
-const isTripSelectable = (trip) => {
+const isTripBookable = (trip) => {
   if (!trip) return false;
   if (Number(trip.availableSeats) <= 0) return false;
+  if (isMissingKmBookingBlock(trip)) return false;
+  if (typeof trip.isBookable === "boolean") return trip.isBookable;
+  return !isSegmentBookingClosed(trip);
+};
+
+/** Cho phép click thẻ chuyến để xem thông tin / seat-map (kể cả thiếu km). */
+const canInspectTrip = (trip) => {
+  if (!trip) return false;
+  if (Number(trip.availableSeats) <= 0) return false;
+  if (trip.isBookingClosed === true) return false;
+  if (isMissingKmBookingBlock(trip)) return true;
   if (typeof trip.isBookable === "boolean") return trip.isBookable;
   return !isSegmentBookingClosed(trip);
 };
@@ -356,7 +371,9 @@ export default function Step2SelectTripAndSeats({
     currentSeatMapMeta.fareAdjustment ?? currentTrip?.fareAdjustment,
     lang,
   );
-  const isCurrentMissingKm = Boolean(currentTrip) && !isLoopRoute && currentSegmentKm == null;
+  const isCurrentMissingKm = Boolean(currentTrip) && !isLoopRoute && (
+    currentSegmentKm == null || isMissingKmBookingBlock(currentTrip)
+  );
 
   const filteredTripOptions = (tripOptions || [])
     .filter((trip) => {
@@ -399,9 +416,10 @@ export default function Step2SelectTripAndSeats({
     });
   };
 
-  // Khi người dùng chọn 1 chuyến: tải chi tiết chuyến (bến dừng) + sơ đồ ghế thực tế của chặng đang xem
+  // Khi người dùng chọn 1 chuyến: tải chi tiết chuyến (bến dừng) + sơ đồ ghế thực tế của chặng đang xem.
+  // Thiếu km: vẫn cho click xem thông tin; ghế/thanh toán bị khóa sau khi load seat-map.
   const handleSelectTrip = async (trip, { silent = false } = {}) => {
-    if (!isTripSelectable(trip)) {
+    if (!canInspectTrip(trip)) {
       if (!silent) {
         showToast({
           icon: "warning",
@@ -460,7 +478,6 @@ export default function Step2SelectTripAndSeats({
       }
 
       const seatMapResponse = await fetchTripSeatMap(trip.tripId, { fromStationCode, toStationCode });
-      const closed = resolveSeatMapBookingClosed(seatMapResponse, mergedTrip);
       const segmentDistanceKm = pickSegmentDistanceKm(seatMapResponse);
       const fareAdjustment = seatMapResponse?.fareAdjustment
         ?? seatMapResponse?.FareAdjustment
@@ -471,28 +488,38 @@ export default function Step2SelectTripAndSeats({
         segmentDistanceKm,
         fareAdjustment,
         minPrice: seatMapResponse?.minPrice ?? mergedTrip.minPrice,
+        isBookable: seatMapResponse?.isBookable ?? mergedTrip.isBookable,
+        bookingClosedReason: seatMapResponse?.bookingClosedReason || mergedTrip?.bookingClosedReason,
+        isBookingClosed: seatMapResponse?.isBookingClosed ?? mergedTrip?.isBookingClosed,
       };
+      const missingKm = !isLoopRoute && (
+        segmentDistanceKm == null || isMissingKmBookingBlock(tripWithFare)
+      );
+      // Đóng theo giờ ≠ thiếu km. Thiếu km vẫn cho xem seat-map nhưng khóa chọn ghế.
+      const closedBySchedule = resolveSeatMapBookingClosed(seatMapResponse, tripWithFare)
+        && !missingKm;
       setSeatMapByLeg((prev) => ({ ...prev, [activeLeg]: seatMapResponse?.seats || [] }));
       setSeatMapMetaByLeg((prev) => ({
         ...prev,
         [activeLeg]: { segmentDistanceKm, fareAdjustment },
       }));
-      setBookingClosedByLeg((prev) => ({ ...prev, [activeLeg]: closed }));
+      setBookingClosedByLeg((prev) => ({ ...prev, [activeLeg]: closedBySchedule }));
       setActiveDeckByLeg((prev) => ({ ...prev, [activeLeg]: 1 }));
 
-      const missingKm = !isLoopRoute && segmentDistanceKm == null;
-      if (closed || missingKm) {
+      if (closedBySchedule || missingKm) {
         const reasonPayload = {
           ...tripWithFare,
           ...seatMapResponse,
           bookingClosedReason: seatMapResponse?.bookingClosedReason || mergedTrip?.bookingClosedReason,
-          isBookingClosed: true,
+          isBookingClosed: closedBySchedule,
+          isBookable: false,
           minPrice: seatMapResponse?.minPrice ?? mergedTrip?.minPrice,
           segmentDistanceKm,
         };
         setSeatMapError(
-          missingKm || isMissingKmBookingBlock(reasonPayload)
-            ? formatBookingClosedMessage({ ...reasonPayload, minPrice: null, isBookable: false }, lang)
+          missingKm
+            ? (pickBookingClosedReason(reasonPayload)
+              || formatMissingKmTripBadge(lang))
             : (lang === "VN"
               ? `Chặng này đã khóa đặt ghế${seatMapResponse?.bookingClosedReason || getTripUnavailableLabel(mergedTrip, lang) ? `: ${seatMapResponse?.bookingClosedReason || getTripUnavailableLabel(mergedTrip, lang)}` : "."}`
               : `This segment is closed for booking${seatMapResponse?.bookingClosedReason || getTripUnavailableLabel(mergedTrip, lang) ? `: ${seatMapResponse?.bookingClosedReason || getTripUnavailableLabel(mergedTrip, lang)}` : "."}`),
@@ -514,12 +541,37 @@ export default function Step2SelectTripAndSeats({
         : (apiMsg?.bookingClosedReason || apiMsg?.detail || apiMsg?.message || apiMsg?.title || "");
       const reasonPayload = {
         bookingClosedReason: detail,
-        isBookingClosed: true,
-        minPrice: apiMsg?.minPrice,
+        isBookingClosed: false,
+        isBookable: false,
+        minPrice: apiMsg?.minPrice ?? null,
         validationMessage: detail,
       };
-      if (isMissingKmBookingBlock(reasonPayload)) {
-        setSeatMapError(formatBookingClosedMessage(reasonPayload, lang));
+      if (isMissingKmBookingBlock(reasonPayload) || looksLikeMissingKm(detail)) {
+        // Vẫn gắn trip đã chọn để user thấy lý do — không crash flow khi minPrice=null.
+        if (activeLeg === "departure") {
+          updateData({
+            selectedDepartureTrip: {
+              ...trip,
+              minPrice: null,
+              isBookable: false,
+              bookingClosedReason: detail || formatMissingKmTripBadge(lang),
+            },
+            selectedSeatsDeparture: [],
+          });
+        } else {
+          updateData({
+            selectedReturnTrip: {
+              ...trip,
+              minPrice: null,
+              isBookable: false,
+              bookingClosedReason: detail || formatMissingKmTripBadge(lang),
+            },
+            selectedSeatsReturn: [],
+          });
+        }
+        setBookingClosedByLeg((prev) => ({ ...prev, [activeLeg]: false }));
+        setSeatMapByLeg((prev) => ({ ...prev, [activeLeg]: [] }));
+        setSeatMapError(detail || formatMissingKmTripBadge(lang));
       } else {
         setSeatMapError(
           lang === "VN"
@@ -537,7 +589,7 @@ export default function Step2SelectTripAndSeats({
     if (!isAuthenticated) return;
     if (currentTrip?.tripId) return;
 
-    const firstAvailable = filteredTripOptions.find((trip) => isTripSelectable(trip));
+    const firstAvailable = filteredTripOptions.find((trip) => isTripBookable(trip));
     if (!firstAvailable?.tripId) return;
 
     const key = `${activeLeg}:${firstAvailable.tripId}:${filterTime}:${sortOrder}`;
@@ -605,14 +657,14 @@ export default function Step2SelectTripAndSeats({
 
   // Kiểm tra xem đã hoàn thành điều kiện để ấn nút "Tiếp tục" sang bước thanh toán chưa
   const isStepComplete = selectedDepartureTrip && selectedSeatsDeparture.length > 0
-    && isTripSelectable(selectedDepartureTrip)
+    && isTripBookable(selectedDepartureTrip)
     && !bookingClosedByLeg.departure
     && legHasSegmentKm("departure", selectedDepartureTrip)
     && (!isRoundTrip || (
       selectedReturnTrip
       && selectedSeatsReturn.length > 0
       && selectedSeatsReturn.length === selectedSeatsDeparture.length
-      && isTripSelectable(selectedReturnTrip)
+      && isTripBookable(selectedReturnTrip)
       && !bookingClosedByLeg.return
       && legHasSegmentKm("return", selectedReturnTrip)
     ));
@@ -783,12 +835,17 @@ export default function Step2SelectTripAndSeats({
       )}
 
       {filteredTripOptions.length > 0
-        && filteredTripOptions.every((trip) => !isTripSelectable(trip))
+        && filteredTripOptions.every((trip) => !isTripBookable(trip))
         && filteredTripOptions.some((trip) => isMissingKmBookingBlock(trip)) && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-            {lang === "VN"
-              ? "Các chuyến ngày này tạm chưa mở bán vì hệ thống chưa tính được giá. Bạn có thể thử ngày khác, hoặc liên hệ hỗ trợ để được cập nhật."
-              : "Trips on this date are not on sale yet because pricing is incomplete. Try another date, or contact support."}
+            {(() => {
+              const sample = filteredTripOptions.find((trip) => isMissingKmBookingBlock(trip));
+              const reason = pickBookingClosedReason(sample);
+              if (reason) return reason;
+              return lang === "VN"
+                ? "Tuyến chưa nhập đủ số km cho chặng này. Bạn vẫn xem được chuyến, nhưng chưa đặt/thanh toán được cho đến khi admin cập nhật km."
+                : "This route is missing segment km. You can view trips, but booking/checkout stays blocked until admin updates distances.";
+            })()}
           </div>
         )}
 
@@ -830,16 +887,18 @@ export default function Step2SelectTripAndSeats({
               </div>
             )}
             {filteredTripOptions.map((trip) => {
-              const selectable = isTripSelectable(trip);
+              const bookable = isTripBookable(trip);
+              const inspectable = canInspectTrip(trip);
+              const missingKm = isMissingKmBookingBlock(trip);
               const fareAdjLabel = formatFareAdjustmentLabel(trip.fareAdjustment, lang);
               return (
                 <div
                   key={trip.tripId}
                   onClick={() => handleSelectTrip(trip)}
-                  className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border shadow-sm cursor-pointer transition-all space-y-3 ${currentTrip?.tripId === trip.tripId
+                  className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border shadow-sm transition-all space-y-3 ${currentTrip?.tripId === trip.tripId
                       ? "border-[#124757] ring-2 ring-[#124757]/10 bg-teal-50/5"
                       : "border-slate-100 dark:border-slate-700 hover:border-slate-300"
-                    } ${!selectable ? "opacity-50 cursor-not-allowed" : ""}`}
+                    } ${inspectable ? "cursor-pointer" : "opacity-50 cursor-not-allowed"} ${missingKm && inspectable ? "opacity-95" : ""}`}
                 >
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-4">
@@ -879,23 +938,23 @@ export default function Step2SelectTripAndSeats({
                     </div>
                     <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto">
                       <div className="text-right">
-                        {/* BE: card chuyến show minPrice dạng "từ 9.000đ" — null khi thiếu km */}
-                        <div className={`text-base font-headline font-black ${trip.minPrice == null
+                        {/* BE: card chuyến show minPrice dạng "từ 9.000đ" — null khi thiếu km (không ẩn trip). */}
+                        <div className={`text-base font-headline font-black ${trip.minPrice == null || missingKm
                             ? "text-rose-600 dark:text-rose-300"
                             : "text-[#124757] dark:text-[#FFD100]"
                           }`}>
-                          {trip.minPrice != null && Number.isFinite(Number(trip.minPrice)) ? (
+                          {trip.minPrice != null && Number.isFinite(Number(trip.minPrice)) && !missingKm ? (
                             <>
                               <span className="text-xs font-bold text-slate-400 mr-1">{lang === "VN" ? "từ" : "from"}</span>
                               {formatMinPriceLabel(trip.minPrice, lang)}
                             </>
                           ) : (
-                            formatMinPriceLabel(trip.minPrice, lang)
+                            formatMinPriceLabel(null, lang)
                           )}
                         </div>
-                        <div className={`text-xs max-w-44 sm:max-w-52 ${selectable ? "text-slate-500 whitespace-nowrap" : "text-rose-600 dark:text-rose-300 font-semibold leading-snug"
+                        <div className={`text-xs max-w-44 sm:max-w-52 ${bookable ? "text-slate-500 whitespace-nowrap" : "text-rose-600 dark:text-rose-300 font-semibold leading-snug"
                           }`}>
-                          {selectable
+                          {bookable
                             ? (lang === "VN" ? `Còn trống ${trip.availableSeats}/${trip.totalSeats} chỗ` : `${trip.availableSeats}/${trip.totalSeats} left`)
                             : getTripUnavailableShortLabel(trip, lang)}
                         </div>
@@ -1151,7 +1210,10 @@ export default function Step2SelectTripAndSeats({
         </button>
 
         {/* Nút hỗ trợ chuyển tab phụ thông minh cho vé khứ hồi trước khi cho bấm sang bước checkout */}
-        {isRoundTrip && activeLeg === "departure" && selectedDepartureTrip && selectedSeatsDeparture.length > 0 ? (
+        {isRoundTrip && activeLeg === "departure" && selectedDepartureTrip && selectedSeatsDeparture.length > 0
+          && isTripBookable(selectedDepartureTrip)
+          && !bookingClosedByLeg.departure
+          && legHasSegmentKm("departure", selectedDepartureTrip) ? (
           <button
             type="button"
             onClick={() => setActiveLeg("return")}

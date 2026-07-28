@@ -14,8 +14,9 @@ export function LiveOps() {
   const { lang } = useApp();
   const { user } = useSelector((state) => state.auth);
   const [params, setParams] = useSearchParams();
-  const canMap = isAdminUser(user) || isManagerUser(user);
-  const canIncidents = canMap || isStaffUser(user);
+  // Admin / Manager / Staff đều xem được GPS live + sự cố.
+  const canMap = isAdminUser(user) || isManagerUser(user) || isStaffUser(user);
+  const canIncidents = canMap;
 
   const view = useMemo(() => {
     const raw = String(params.get("view") || "").toLowerCase();

@@ -65,6 +65,8 @@ import { ViewPromotion } from "./pages/Admin/PromotionManagement/ViewPromotion";
 import { StaffTicketScanPage } from "./pages/Admin/StaffTicketScan";
 import { StaffMyTripsPage } from "./pages/Admin/StaffMyTrips";
 import { StaffScanHistoryPage } from "./pages/Admin/StaffScanHistory";
+import { OperationsSchedulePage } from "./pages/Admin/OperationsSchedule";
+import { TripSeatBoardPage } from "./pages/Admin/TripSeatBoard";
 import { BlogManagement } from "./pages/Admin/BlogManagement";
 import { CreateBlog } from "./pages/Admin/BlogManagement/CreateBlog";
 import { EditBlog } from "./pages/Admin/BlogManagement/EditBlog";
@@ -431,6 +433,24 @@ function App() {
             element={
               <AdminLayout title="Live Tracking">
                 <LiveOps />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/operations-schedule"
+            element={
+              <AdminLayout title="Operations Schedule">
+                <OperationsSchedulePage />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/trips/:tripId/seat-board"
+            element={
+              <AdminLayout title="Trip Seat Board">
+                <TripSeatBoardPage />
               </AdminLayout>
             }
           />

@@ -18,6 +18,23 @@ export const refundPayment = (paymentId, refundPayload = {}) => {
     .then((response) => response.data);
 };
 
+/**
+ * POST /payments/{paymentId}/refund/otp
+ * Gửi OTP trước khi hoàn tiền. Body optional: { otpChannel: "phone" | "email" }.
+ * Response: challengeId, maskedDestination, expiresAt, resendAvailableAt.
+ */
+export const requestRefundOtp = (paymentId, payload = {}) => {
+  const value = String(paymentId || "").trim();
+
+  if (!value) {
+    return Promise.reject(new Error("paymentId is required to request refund OTP."));
+  }
+
+  return api
+    .post(`/payments/${encodeURIComponent(value)}/refund/otp`, payload || {})
+    .then((response) => response.data);
+};
+
 export const manualRefundPayment = (paymentId, manualPayload = {}) => {
   const value = String(paymentId || "").trim();
 

@@ -20,14 +20,17 @@ export const PRICE_MODIFIER_HINTS = [
   { value: 0, vn: 'Miễn phí', en: 'Free' },
 ];
 
-// Fallback khi API lỗi — không dùng làm nguồn sự thật khi BE còn sống.
+// Fallback khi API lỗi — Regular: ưu đãi = 0đ; Sightseeing: nhóm ưu đãi dùng sightseeingPriceModifier.
 export const DEFAULT_TICKET_TYPES = [
   { code: 'ADULT', name: 'Người lớn', priceModifier: 1, sightseeingPriceModifier: 1, allowedSeatTypeCodes: null },
-  { code: 'CHILD', name: 'Trẻ em', priceModifier: 0.5, sightseeingPriceModifier: 0.5, allowedSeatTypeCodes: null },
+  { code: 'CHILD', name: 'Trẻ em', priceModifier: 0, sightseeingPriceModifier: 0.9, allowedSeatTypeCodes: null },
   { code: 'INFANT', name: 'Em bé', priceModifier: 0, sightseeingPriceModifier: 0, allowedSeatTypeCodes: null },
-  { code: 'SENIOR', name: 'Người cao tuổi', priceModifier: 0, sightseeingPriceModifier: 0, allowedSeatTypeCodes: null },
-  { code: 'DISABLED', name: 'Người khuyết tật', priceModifier: 0, sightseeingPriceModifier: 0, allowedSeatTypeCodes: null },
+  { code: 'SENIOR', name: 'Người cao tuổi', priceModifier: 0, sightseeingPriceModifier: 0.9, allowedSeatTypeCodes: null },
+  { code: 'DISABLED', name: 'Người khuyết tật', priceModifier: 0, sightseeingPriceModifier: 0.9, allowedSeatTypeCodes: null },
 ];
+
+const FREE_ON_REGULAR_CODES = new Set(['CHILD', 'INFANT', 'SENIOR', 'DISABLED']);
+const SIGHTSEEING_CONCESSION_CODES = new Set(['CHILD', 'SENIOR', 'DISABLED']);
 
 const unwrapList = (data) => {
   if (Array.isArray(data)) return data;
@@ -53,16 +56,36 @@ const normalizeTicketType = (item) => ({
 });
 
 /**
- * Chọn hệ số theo routeType — không hardcode giảm giá.
- * SightseeingLoop → sightseeingPriceModifier; còn lại → priceModifier.
+ * Hệ số giá theo policy BE:
+ * - Regular: ADULT tính tiền; CHILD/SENIOR/DISABLED/INFANT = 0
+ * - Sightseeing: ADULT nguyên giá; CHILD/SENIOR/DISABLED = sightseeingPriceModifier; INFANT = 0
+ * Không dùng rule Regular % cũ (vd CHILD=0.5).
  */
 export const resolveTicketPriceModifier = (ticketType, routeType) => {
-  if (!ticketType) return String(routeType) === FARE_RULE_ROUTE_TYPES.SIGHTSEEING ? 0 : 1;
-  if (String(routeType) === FARE_RULE_ROUTE_TYPES.SIGHTSEEING) {
-    const n = Number(ticketType.sightseeingPriceModifier);
-    return Number.isFinite(n) ? n : Number(ticketType.priceModifier) || 0;
+  const code = String(ticketType?.code || '').toUpperCase();
+  const isSightseeing = String(routeType) === FARE_RULE_ROUTE_TYPES.SIGHTSEEING;
+
+  if (code === 'INFANT') return 0;
+
+  if (!isSightseeing) {
+    if (code === 'ADULT') {
+      const n = Number(ticketType?.priceModifier);
+      return Number.isFinite(n) ? n : 1;
+    }
+    if (FREE_ON_REGULAR_CODES.has(code)) return 0;
+    const n = Number(ticketType?.priceModifier);
+    return Number.isFinite(n) ? n : 0;
   }
-  const n = Number(ticketType.priceModifier);
+
+  if (code === 'ADULT') {
+    const n = Number(ticketType?.sightseeingPriceModifier ?? ticketType?.priceModifier);
+    return Number.isFinite(n) ? n : 1;
+  }
+  if (SIGHTSEEING_CONCESSION_CODES.has(code)) {
+    const n = Number(ticketType?.sightseeingPriceModifier);
+    return Number.isFinite(n) ? n : Number(ticketType?.priceModifier) || 0;
+  }
+  const n = Number(ticketType?.sightseeingPriceModifier ?? ticketType?.priceModifier);
   return Number.isFinite(n) ? n : 0;
 };
 
@@ -92,34 +115,57 @@ export const normalizeTicketFareRule = (item) => {
   };
 };
 
+/** Regular chỉ còn ADULT có ý nghĩa chỉnh sửa; ưu đãi Regular = 0đ cố định. */
+const isEditableFareRule = (rule) => {
+  if (!rule) return false;
+  if (rule.routeType === FARE_RULE_ROUTE_TYPES.REGULAR) {
+    return rule.ticketTypeCode === 'ADULT';
+  }
+  // Sightseeing: không expose INFANT % (luôn miễn phí).
+  if (rule.routeType === FARE_RULE_ROUTE_TYPES.SIGHTSEEING) {
+    return rule.ticketTypeCode !== 'INFANT';
+  }
+  return true;
+};
+
 export const fetchTicketFareRules = async () => {
   try {
     const data = await apiGetTicketFareRules();
-    return unwrapList(data).map(normalizeTicketFareRule).filter(Boolean);
+    return unwrapList(data).map(normalizeTicketFareRule).filter(isEditableFareRule);
   } catch (error) {
     // Azure BE có lúc lỗi 500 ở fare-rules dù GET /ticket-types vẫn là nguồn
     // hiện hành của priceModifier/sightseeingPriceModifier. Dùng nguồn đó để
     // trang chính sách giá không bị trống; PUT fare-rules vẫn là API lưu.
     console.warn('Không tải được fare-rules, dùng hệ số từ ticket-types:', error);
     const ticketTypes = await fetchTicketTypes();
-    return ticketTypes.flatMap((ticketType) => [
-      normalizeTicketFareRule({
-        ticketFareRuleId: `${ticketType.code}-${FARE_RULE_ROUTE_TYPES.REGULAR}`,
-        ticketTypeCode: ticketType.code,
-        ticketTypeName: ticketType.name,
-        routeType: FARE_RULE_ROUTE_TYPES.REGULAR,
-        priceModifier: ticketType.priceModifier,
-        isActive: true,
-      }),
-      normalizeTicketFareRule({
+    // Fallback Regular cũ trên BE (vd CHILD=0.5) không dùng nữa — chỉ giữ Sightseeing.
+    return ticketTypes.flatMap((ticketType) => {
+      // Sightseeing INFANT luôn miễn phí — không expose rule %.
+      if (ticketType.code === 'INFANT') return [];
+      const sightseeingRule = normalizeTicketFareRule({
         ticketFareRuleId: `${ticketType.code}-${FARE_RULE_ROUTE_TYPES.SIGHTSEEING}`,
         ticketTypeCode: ticketType.code,
         ticketTypeName: ticketType.name,
         routeType: FARE_RULE_ROUTE_TYPES.SIGHTSEEING,
         priceModifier: ticketType.sightseeingPriceModifier,
         isActive: true,
-      }),
-    ].filter(Boolean));
+      });
+      if (ticketType.code === 'ADULT') {
+        return [
+          normalizeTicketFareRule({
+            ticketFareRuleId: `${ticketType.code}-${FARE_RULE_ROUTE_TYPES.REGULAR}`,
+            ticketTypeCode: ticketType.code,
+            ticketTypeName: ticketType.name,
+            routeType: FARE_RULE_ROUTE_TYPES.REGULAR,
+            priceModifier: 1,
+            isActive: true,
+          }),
+          sightseeingRule,
+        ].filter(Boolean);
+      }
+      // Regular: CHILD/SENIOR/DISABLED miễn phí — không expose rule % để chỉnh.
+      return [sightseeingRule].filter(Boolean);
+    });
   }
 };
 

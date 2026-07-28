@@ -16,6 +16,8 @@ export function BankBinSelect({
   lang = "VN",
   disabled = false,
   label,
+  /** Khách không cần thấy mã BIN (vd 970416) — vẫn gửi BIN lên BE khi chọn ngân hàng. */
+  hideBin = false,
   searchInputClassName = "w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-11 text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white",
   fallbackInputClassName = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white",
 }) {
@@ -60,6 +62,27 @@ export function BankBinSelect({
     return findBankByBin(banks, value);
   }, [banks, value]);
 
+  const bankDisplayName = (bank) =>
+    bank?.shortName || bank?.code || (hideBin ? bank?.name : bank?.bin) || "—";
+
+  const bankSubtitle = (bank) => {
+    if (!bank) return "";
+    // Luôn hiện tên ngân hàng API trả về; hideBin chỉ ẩn mã BIN.
+    if (hideBin) return bank.name || bank.shortName || "";
+    return `${bank.name || "—"} / ${bank.bin || "—"}`;
+  };
+
+  const formatSelectedQuery = (bank) => {
+    if (!bank) return "";
+    if (hideBin) {
+      return `${bank.shortName || bank.code || ""} - ${bank.name || ""}`.replace(/^\s*-\s*|\s*-\s*$/g, "").trim()
+        || bank.name
+        || bank.shortName
+        || "";
+    }
+    return formatBankLabel(bank);
+  };
+
   useEffect(() => {
     if (!value) {
       setQuery("");
@@ -67,20 +90,20 @@ export function BankBinSelect({
     }
     const matched = findBankByBin(banks, value);
     if (matched) {
-      setQuery(formatBankLabel(matched));
+      setQuery(formatSelectedQuery(matched));
     } else if (/^\d{6}$/.test(value)) {
-      setQuery(value);
+      setQuery(hideBin ? "" : value);
     }
-  }, [banks, value]);
+  }, [banks, value, hideBin]);
 
   const applyBankBin = (bankBin, bank = null) => {
     const normalizedBin = String(bankBin || "").replace(/\D/g, "").slice(0, 6);
     const matchedBank = bank || findBankByBin(banks, normalizedBin);
     onChange?.(normalizedBin, matchedBank || null);
     if (matchedBank) {
-      setQuery(formatBankLabel(matchedBank));
+      setQuery(formatSelectedQuery(matchedBank));
     } else {
-      setQuery(normalizedBin);
+      setQuery(hideBin ? "" : normalizedBin);
     }
     setIsDropdownOpen(false);
   };
@@ -126,11 +149,13 @@ export function BankBinSelect({
     onChange?.(normalizedBin, null);
   };
 
-  const showDropdown = isDropdownOpen && banks.length > 0 && !/^\d{6}$/.test(query.trim());
+  const showDropdown = isDropdownOpen && banks.length > 0 && !(hideBin ? false : /^\d{6}$/.test(query.trim()));
 
   const inputPlaceholder = isLoading
     ? (lang === "VN" ? "Đang tải ngân hàng..." : "Loading banks...")
-    : (lang === "VN" ? "Tìm ngân hàng hoặc nhập BIN 6 số, ví dụ ACB / 970422" : "Search bank or enter 6-digit BIN, e.g. ACB / 970422");
+    : hideBin
+      ? (lang === "VN" ? "Tìm theo tên ngân hàng, ví dụ ACB, Vietcombank" : "Search by bank name, e.g. ACB, Vietcombank")
+      : (lang === "VN" ? "Tìm ngân hàng hoặc nhập BIN 6 số, ví dụ ACB / 970422" : "Search bank or enter 6-digit BIN, e.g. ACB / 970422");
 
   return (
     <div className="block w-full">
@@ -175,7 +200,7 @@ export function BankBinSelect({
               disabled={disabled}
               inputMode="numeric"
               maxLength={6}
-              placeholder="970422"
+              placeholder={hideBin ? (lang === "VN" ? "Nhập mã ngân hàng" : "Enter bank code") : "970422"}
               className={`mt-1 ${fallbackInputClassName}`}
             />
           )}
@@ -216,7 +241,7 @@ export function BankBinSelect({
             disabled={disabled}
             inputMode="numeric"
             maxLength={6}
-            placeholder="970422"
+            placeholder={hideBin ? (lang === "VN" ? "Nhập mã ngân hàng" : "Enter bank code") : "970422"}
             className={fallbackInputClassName}
           />
         )
@@ -227,16 +252,18 @@ export function BankBinSelect({
           <BankLogo bank={selectedBank || exactBinMatch} className="h-9 w-9" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-black text-[#124757] dark:text-yellow-400">
-              {(selectedBank || exactBinMatch).shortName || (selectedBank || exactBinMatch).code || (selectedBank || exactBinMatch).bin}
+              {bankDisplayName(selectedBank || exactBinMatch)}
             </p>
-            <p className="truncate text-xs font-bold text-slate-400">
-              {(selectedBank || exactBinMatch).name} / {(selectedBank || exactBinMatch).bin}
-            </p>
+            {bankSubtitle(selectedBank || exactBinMatch) ? (
+              <p className="truncate text-xs font-bold text-slate-400">
+                {bankSubtitle(selectedBank || exactBinMatch)}
+              </p>
+            ) : null}
           </div>
         </div>
       )}
 
-      {value && /^\d{6}$/.test(value) && !selectedBank && !exactBinMatch && (
+      {!hideBin && value && /^\d{6}$/.test(value) && !selectedBank && !exactBinMatch && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
           {lang === "VN"
             ? `Đã nhập BIN ${value}. Hệ thống chưa nhận diện được logo ngân hàng, nhưng vẫn có thể gửi hoàn nếu mã hợp lệ.`
@@ -251,7 +278,9 @@ export function BankBinSelect({
               {lang === "VN" ? "Chọn ngân hàng từ danh sách" : "Select a bank from the list"}
             </div>
           )}
-          {displayBanks.length > 0 ? displayBanks.map((bank) => (
+          {displayBanks.length > 0 ? displayBanks.map((bank) => {
+            const subtitle = bankSubtitle(bank);
+            return (
             <button
               key={bank.bin}
               type="button"
@@ -263,16 +292,21 @@ export function BankBinSelect({
               <BankLogo bank={bank} />
               <span className="min-w-0">
                 <span className="block truncate text-sm font-black text-[#124757] dark:text-yellow-400">
-                  {bank.shortName || bank.code || bank.bin}
+                  {bankDisplayName(bank)}
                 </span>
-                <span className="block truncate text-xs font-bold text-slate-400">
-                  {bank.name} / {bank.bin}
-                </span>
+                {subtitle ? (
+                  <span className="block truncate text-xs font-bold text-slate-400">
+                    {subtitle}
+                  </span>
+                ) : null}
               </span>
             </button>
-          )) : (
+          );
+          }) : (
             <div className="p-4 text-sm font-bold text-slate-400">
-              {lang === "VN" ? "Không tìm thấy ngân hàng — thử nhập đủ 6 số BIN" : "No banks found — try entering the full 6-digit BIN"}
+              {hideBin
+                ? (lang === "VN" ? "Không tìm thấy ngân hàng — thử tên khác" : "No banks found — try another name")
+                : (lang === "VN" ? "Không tìm thấy ngân hàng — thử nhập đủ 6 số BIN" : "No banks found — try entering the full 6-digit BIN")}
             </div>
           )}
         </div>

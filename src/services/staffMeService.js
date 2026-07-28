@@ -3,6 +3,7 @@ import {
     getStaffMeCurrentShift as apiGetStaffMeCurrentShift,
     getStaffMeAssignments as apiGetStaffMeAssignments,
     getStaffMeTrips as apiGetStaffMeTrips,
+    getStaffMeScanHistory as apiGetStaffMeScanHistory,
 } from '../api/staffMeApi';
 import { normalizeStaffAssignment } from './staffAssignmentService';
 
@@ -12,6 +13,7 @@ const extractRows = (data) => {
     if (Array.isArray(data?.data)) return data.data;
     if (Array.isArray(data?.trips)) return data.trips;
     if (Array.isArray(data?.assignments)) return data.assignments;
+    if (Array.isArray(data?.events)) return data.events;
     return [];
 };
 
@@ -57,17 +59,43 @@ export const fetchStaffMeAssignments = async ({ fromDate, toDate, status } = {})
 
 export const normalizeStaffTrip = (item) => {
     if (!item) return null;
+    const departureAt = pick(item, [
+        'departureTime', 'DepartureTime',
+        'departureAt', 'startAt', 'departAt',
+        'scheduledDeparture', 'displayStartAt',
+    ], '') || null;
+    const arrivalAt = pick(item, [
+        'arrivalTime', 'ArrivalTime',
+        'arrivalAt', 'endAt', 'arriveAt',
+        'scheduledArrival', 'displayEndAt',
+    ], '') || null;
+    const fromStationName = pick(item, [
+        'fromStationName', 'fromStation.stationName', 'departureStationName',
+        'fromLocation', 'stationName',
+    ], '');
+    const toStationName = pick(item, [
+        'toStationName', 'toStation.stationName', 'arrivalStationName',
+        'destinationStationName', 'toLocation',
+    ], '');
+
     return {
-        tripId: String(pick(item, ['tripId', 'id'], '')),
-        tripCode: pick(item, ['tripCode', 'code'], ''),
-        routeName: pick(item, ['routeName', 'route.name', 'route'], '—'),
-        boatName: pick(item, ['boatName', 'boat.boatName', 'boat.name'], ''),
-        boatCode: pick(item, ['boatCode', 'boat.boatCode'], ''),
-        departureAt: pick(item, ['departureAt', 'startAt', 'departAt'], '') || null,
-        arrivalAt: pick(item, ['arrivalAt', 'endAt', 'arriveAt'], '') || null,
-        fromStationName: pick(item, ['fromStationName', 'fromStation.stationName', 'departureStationName'], ''),
-        toStationName: pick(item, ['toStationName', 'toStation.stationName', 'arrivalStationName'], ''),
-        status: pick(item, ['status', 'tripStatus'], ''),
+        tripId: String(pick(item, ['tripId', 'TripId', 'id'], '')),
+        tripCode: pick(item, ['tripCode', 'TripCode', 'code'], ''),
+        routeName: pick(item, ['routeName', 'RouteName', 'route.name', 'route'], '—'),
+        routeCode: pick(item, ['routeCode', 'RouteCode'], ''),
+        boatId: String(pick(item, ['boatId', 'BoatId', 'boat.boatId', 'boat.vesselId'], '') || ''),
+        boatName: pick(item, ['boatName', 'BoatName', 'boat.boatName', 'boat.name'], ''),
+        boatCode: pick(item, ['boatCode', 'BoatCode', 'boat.boatCode'], ''),
+        departureAt,
+        arrivalAt,
+        fromStationName,
+        toStationName,
+        status: pick(item, ['tripStatus', 'TripStatus', 'status', 'tripStatus'], ''),
+        tripType: pick(item, ['tripType', 'TripType'], ''),
+        assignmentType: pick(item, ['assignmentType', 'AssignmentType'], ''),
+        stationName: pick(item, ['stationName', 'StationName'], ''),
+        stops: Array.isArray(item.stops) ? item.stops : (Array.isArray(item.Stops) ? item.Stops : []),
+        delayInfo: item.delayInfo || item.DelayInfo || null,
         raw: item,
     };
 };
@@ -80,6 +108,61 @@ export const fetchStaffMeTrips = async ({ date } = {}) => {
         return extractRows(data).map(normalizeStaffTrip).filter(Boolean);
     } catch (error) {
         console.error('Lỗi tải staff/me/trips:', error);
+        throw error;
+    }
+};
+
+/** TicketScanEventDto → row UI. */
+export const normalizeStaffScanEvent = (item) => {
+    if (!item) return null;
+    return {
+        eventId: String(pick(item, ['eventId', 'EventId', 'id'], '')),
+        ticketId: String(pick(item, ['ticketId', 'TicketId'], '') || ''),
+        ticketCode: pick(item, ['ticketCode', 'TicketCode'], '') || '',
+        bookingCode: pick(item, ['bookingCode', 'BookingCode'], '') || '',
+        tripId: String(pick(item, ['tripId', 'TripId'], '') || ''),
+        tripCode: pick(item, ['tripCode', 'TripCode'], '') || '',
+        action: pick(item, ['action', 'Action'], '') || '',
+        result: pick(item, ['result', 'Result'], '') || '',
+        source: pick(item, ['source', 'Source'], '') || '',
+        failureReason: pick(item, ['failureReason', 'FailureReason'], '') || '',
+        note: pick(item, ['note', 'Note'], '') || '',
+        scannedCodeOrToken: pick(item, ['scannedCodeOrToken', 'ScannedCodeOrToken'], '') || '',
+        ticketStatusBefore: pick(item, ['ticketStatusBefore', 'TicketStatusBefore'], '') || '',
+        ticketStatusAfter: pick(item, ['ticketStatusAfter', 'TicketStatusAfter'], '') || '',
+        boatName: pick(item, ['boatName', 'BoatName', 'boatCode', 'BoatCode'], '') || '',
+        stationName: pick(item, ['stationName', 'StationName', 'stationCode', 'StationCode'], '') || '',
+        assignmentType: pick(item, ['assignmentType', 'AssignmentType'], '') || '',
+        deviceTime: pick(item, ['deviceTime', 'DeviceTime'], '') || null,
+        serverTime: pick(item, ['serverTime', 'ServerTime'], '') || null,
+        raw: item,
+    };
+};
+
+/**
+ * GET /staff/me/scan-history
+ * @param {{ fromDate?: string, toDate?: string, tripId?: string, action?: string, result?: string, source?: string }} filters
+ */
+export const fetchStaffMeScanHistory = async ({
+    fromDate,
+    toDate,
+    tripId,
+    action,
+    result,
+    source,
+} = {}) => {
+    try {
+        const params = {};
+        if (fromDate) params.fromDate = fromDate;
+        if (toDate) params.toDate = toDate;
+        if (tripId) params.tripId = tripId;
+        if (action && action !== 'all') params.action = action;
+        if (result && result !== 'all') params.result = result;
+        if (source && source !== 'all') params.source = source;
+        const data = await apiGetStaffMeScanHistory(params);
+        return extractRows(data).map(normalizeStaffScanEvent).filter(Boolean);
+    } catch (error) {
+        console.error('Lỗi tải staff/me/scan-history:', error);
         throw error;
     }
 };
