@@ -14,8 +14,6 @@ import {
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 
-const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
-
 const STATUS_STYLE = {
     [BLOG_STATUS.DRAFT]: {
         dot: "bg-slate-400",
@@ -243,8 +241,8 @@ export function BlogManagement() {
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
                         {lang === "VN"
-                            ? "Admin tạo / sửa / xuất bản / lưu trữ. Draft ẩn, Published hiện public, Archived ẩn."
-                            : "Admin create / edit / publish / archive. Draft hidden, Published public, Archived hidden."}
+                            ? "Quản lý danh sách bài viết, tin tức của hệ thống"
+                            : "Manage the system's blog posts and news articles"}
                     </p>
                 </div>
                 {canManage && (
@@ -368,13 +366,17 @@ export function BlogManagement() {
                                             {/* Cột 1: Thông tin bài viết */}
                                             <td className="py-4 px-6">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shrink-0">
-                                                        <img
-                                                            src={blog.imageUrl || blog.imageUrls?.[0] || DEFAULT_BLOG_IMAGE}
-                                                            alt={blog.imageAltText || blog.title}
-                                                            className="w-full h-full object-cover"
-                                                            onError={(e) => { e.target.src = DEFAULT_BLOG_IMAGE; }}
-                                                        />
+                                                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center">
+                                                        {(blog.imageUrl || blog.imageUrls?.[0]) ? (
+                                                            <img
+                                                                src={blog.imageUrl || blog.imageUrls?.[0]}
+                                                                alt={blog.imageAltText || blog.title}
+                                                                className="w-full h-full object-cover"
+                                                                onError={(e) => { e.target.style.display = "none"; }}
+                                                            />
+                                                        ) : (
+                                                            <span className="material-symbols-outlined text-xl text-slate-300 dark:text-slate-600">image</span>
+                                                        )}
                                                     </div>
                                                     <div className="space-y-1 min-w-0">
                                                         <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug line-clamp-1">

@@ -13,8 +13,8 @@ const MENU_GROUPS = [
     labelVn: "Tổng quan",
     labelEn: "Overview",
     items: [
-      { path: "/admin", icon: "dashboard", labelVn: "Dashboard", labelEn: "Dashboard", roles: ["ADMIN", "MANAGER", "STAFF"] },
-      { path: "/admin/revenue", icon: "payments", labelVn: "Doanh thu", labelEn: "Revenue", roles: ["ADMIN"] },
+      { path: "/admin", labelVn: "Dashboard", labelEn: "Dashboard", roles: ["ADMIN", "MANAGER", "STAFF"] },
+      { path: "/admin/revenue", labelVn: "Doanh thu", labelEn: "Revenue", roles: ["ADMIN"] },
     ],
   },
   {
@@ -22,11 +22,10 @@ const MENU_GROUPS = [
     labelVn: "Nhân sự",
     labelEn: "People",
     items: [
-      { path: "/admin/users-management", icon: "manage_accounts", labelVn: "Khách hàng", labelEn: "Customers", roles: ["ADMIN"] },
-      { path: "/admin/managers-management", icon: "supervisor_account", labelVn: "Quản lí", labelEn: "Managers", roles: ["ADMIN"] },
+      { path: "/admin/users-management",labelVn: "Khách hàng", labelEn: "Customers", roles: ["ADMIN"] },
+      { path: "/admin/managers-management", labelVn: "Quản lí", labelEn: "Managers", roles: ["ADMIN"] },
       {
         path: "/admin/staffs-management",
-        icon: "badge",
         labelVn: "Nhân viên",
         labelEn: "Staff",
         labelVnStaff: "Lịch của tôi",
@@ -40,16 +39,16 @@ const MENU_GROUPS = [
     labelVn: "Vận hành",
     labelEn: "Operations",
     items: [
-      { path: "/admin/trips-management", icon: "sailing", labelVn: "Chuyến tàu", labelEn: "Trips", roles: ["ADMIN","MANAGER"] },
-      { path: "/admin/operations-schedule", icon: "departure_board", labelVn: "Lịch vận hành", labelEn: "Ops schedule", roles: ["ADMIN", "MANAGER", "STAFF"] },
-      { path: "/admin/routes-management", icon: "alt_route", labelVn: "Tuyến", labelEn: "Routes", roles: ["ADMIN"] },
-      { path: "/admin/stations-management", icon: "storefront", labelVn: "Nhà ga", labelEn: "Stations", roles: ["ADMIN", "MANAGER"] },
-      { path: "/admin/boats-management", icon: "directions_boat", labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN"] },
-      { path: "/admin/seat-types", icon: "sell", labelVn: "Chính sách giá", labelEn: "Fare Policy", roles: ["ADMIN"] },
-      { path: "/admin/live-tracking", icon: "my_location", labelVn: "Theo dõi / Sự cố", labelEn: "Tracking / Incidents", labelVnStaff: "Theo dõi GPS / Sự cố", labelEnStaff: "GPS / Incidents", roles: ["ADMIN", "MANAGER", "STAFF"] },
-      { path: "/admin/staff/my-trips", icon: "directions_boat", labelVn: "Chuyến của tôi", labelEn: "My trips", roles: ["STAFF"] },
-      { path: "/admin/staff/ticket-scan", icon: "qr_code_scanner", labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
-      { path: "/admin/staff/scan-history", icon: "history", labelVn: "Lịch sử quét", labelEn: "Scan history", roles: ["STAFF"] },
+      { path: "/admin/trips-management", labelVn: "Chuyến tàu", labelEn: "Trips", roles: ["ADMIN","MANAGER"] },
+      { path: "/admin/operations-schedule", labelVn: "Lịch vận hành", labelEn: "Ops schedule", roles: ["ADMIN", "MANAGER", "STAFF"] },
+      { path: "/admin/routes-management", labelVn: "Tuyến", labelEn: "Routes", roles: ["ADMIN"] },
+      { path: "/admin/stations-management",labelVn: "Nhà ga", labelEn: "Stations", roles: ["ADMIN", "MANAGER"] },
+      { path: "/admin/boats-management",labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN"] },
+      { path: "/admin/seat-types",labelVn: "Chính sách giá", labelEn: "Fare Policy", roles: ["ADMIN"] },
+      { path: "/admin/live-tracking",labelVn: "Theo dõi / Sự cố", labelEn: "Tracking / Incidents", labelVnStaff: "Theo dõi GPS / Sự cố", labelEnStaff: "GPS / Incidents", roles: ["ADMIN", "MANAGER", "STAFF"] },
+      { path: "/admin/staff/my-trips",labelVn: "Chuyến của tôi", labelEn: "My trips", roles: ["STAFF"] },
+      { path: "/admin/staff/ticket-scan",labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
+      { path: "/admin/staff/scan-history",labelVn: "Lịch sử quét", labelEn: "Scan history", roles: ["STAFF"] },
     ],
   },
   {
@@ -57,9 +56,9 @@ const MENU_GROUPS = [
     labelVn: "Đặt chỗ & BH",
     labelEn: "Bookings & Insurance",
     items: [
-      { path: "/admin/bookings", icon: "receipt_long", labelVn: "Booking vé", labelEn: "Seat bookings", roles: ["ADMIN"] },
-      { path: "/admin/charter-bookings-management", icon: "directions_boat", labelVn: "Thuê tàu", labelEn: "Request Booking", roles: ["ADMIN"] },
-      { path: "/admin/insurance-management", icon: "shield", labelVn: "Bảo hiểm", labelEn: "Insurance", roles: ["ADMIN"] },
+      { path: "/admin/bookings", labelVn: "Booking vé", labelEn: "Seat bookings", roles: ["ADMIN"] },
+      { path: "/admin/charter-bookings-management", labelVn: "Thuê tàu", labelEn: "Request Booking", roles: ["ADMIN"] },
+      { path: "/admin/insurance-management", labelVn: "Bảo hiểm", labelEn: "Insurance", roles: ["ADMIN"] },
     ],
   },
   {
@@ -67,17 +66,16 @@ const MENU_GROUPS = [
     labelVn: "Marketing",
     labelEn: "Marketing",
     items: [
-      { path: "/admin/promotions", icon: "local_offer", labelVn: "Khuyến mãi", labelEn: "Promotions", roles: ["ADMIN"] },
+      { path: "/admin/promotions", labelVn: "Khuyến mãi", labelEn: "Promotions", roles: ["ADMIN"] },
       {
         path: "/admin/news",
-        icon: "feed",
         labelVn: "Blog / News",
         labelEn: "Blog & Articles",
         labelVnStaff: "Blog / Tin tức",
         labelEnStaff: "Blog / News",
         roles: ["ADMIN"],
       },
-      { path: "/admin/ai-data", icon: "database", labelVn: "AI data", labelEn: "AI Data", roles: ["ADMIN"] },
+      { path: "/admin/ai-data", labelVn: "AI data", labelEn: "AI Data", roles: ["ADMIN"] },
     ],
   },
 ];
@@ -239,13 +237,6 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
                             : "text-white/80 hover:bg-white/5 hover:text-white dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-yellow-400"
                         }`}
                       >
-                        <span
-                          className={`material-symbols-outlined text-[20px] transition-colors ${
-                            isActive ? "text-yellow-400" : "text-white/40 dark:text-slate-500"
-                          }`}
-                        >
-                          {item.icon}
-                        </span>
                         <span className="truncate">{getItemLabel(item)}</span>
                       </Link>
                     );

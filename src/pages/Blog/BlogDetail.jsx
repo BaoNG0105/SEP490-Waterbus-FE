@@ -101,7 +101,7 @@ export function BlogDetail() {
                     </div>
                 ) : null}
 
-                <div className="prose prose-slate dark:prose-invert max-w-none font-body text-slate-600 dark:text-slate-300 text-sm md:text-base leading-relaxed space-y-6">
+                <div className="prose prose-slate dark:prose-invert max-w-none font-body text-slate-600 dark:text-slate-300 text-sm md:text-base leading-relaxed space-y-6 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-1 [&_h2]:text-xl [&_h2]:font-black [&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:text-[#124757] dark:[&_h2]:text-yellow-400 [&_blockquote]:border-l-4 [&_blockquote]:border-yellow-400 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 [&_a]:text-[#124757] dark:[&_a]:text-yellow-400 [&_a]:underline">
                     {blog.summary ? (
                         <p className="font-bold italic text-slate-800 dark:text-slate-200 text-base border-l-4 border-yellow-400 pl-4 py-1 bg-slate-50/50 dark:bg-slate-800/20 rounded-r-xl">
                             {blog.summary}

@@ -10,8 +10,7 @@ import {
 } from "../../../services/blogService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
-
-const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
+import { RichTextEditor } from "../../../components/RichTextEditor";
 
 export function CreateBlog() {
     const { lang } = useApp();
@@ -29,7 +28,6 @@ export function CreateBlog() {
         category: BLOG_CATEGORY.NEWS,
         imageAltText: "",
         content: "",
-        status: BLOG_STATUS.DRAFT,
     });
 
     const coverPreview = useMemo(() => {
@@ -60,11 +58,12 @@ export function CreateBlog() {
 
     const handleFormSubmit = async (e) => {
         e.preventDefault();
+        const status = e.nativeEvent.submitter?.value || BLOG_STATUS.DRAFT;
         try {
             setIsSubmitting(true);
             setErrorMsg("");
 
-            if (formData.status === BLOG_STATUS.PUBLISHED && imageFiles.length === 0) {
+            if (status === BLOG_STATUS.PUBLISHED && imageFiles.length === 0) {
                 setErrorMsg(
                     lang === "VN"
                         ? "Bài viết xuất bản bắt buộc phải có ảnh bìa."
@@ -79,7 +78,7 @@ export function CreateBlog() {
                 summary: formData.summary,
                 content: formData.content,
                 category: formData.category,
-                status: formData.status,
+                status,
                 imageAltText: formData.imageAltText,
                 imageFiles,
             });
@@ -130,8 +129,8 @@ export function CreateBlog() {
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
                         {lang === "VN"
-                            ? "Nhập nội dung, chuyên mục và trạng thái. Chỉ Admin. Slug do hệ thống tự tạo."
-                            : "Enter content, category and status. Admin only. Slug is auto-generated."}
+                            ? "Soạn thảo và đăng bài viết mới cho hệ thống"
+                            : "Compose and publish a new blog post for the system"}
                     </p>
                 </div>
             </div>
@@ -204,19 +203,20 @@ export function CreateBlog() {
                     </h3>
 
                     <div className="flex flex-col sm:flex-row gap-5 items-start">
-                        <div className="w-full sm:w-40 aspect-video rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shrink-0">
-                            <img
-                                src={coverPreview || DEFAULT_BLOG_IMAGE}
-                                alt={formData.imageAltText || "preview"}
-                                className="w-full h-full object-cover"
-                                onError={(e) => { e.target.src = DEFAULT_BLOG_IMAGE; }}
-                            />
+                        <div className="w-full sm:w-40 aspect-video rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center">
+                            {coverPreview ? (
+                                <img
+                                    src={coverPreview}
+                                    alt={formData.imageAltText || "preview"}
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                <span className="material-symbols-outlined text-3xl text-slate-300 dark:text-slate-600">image</span>
+                            )}
                         </div>
                         <div className="flex-1 w-full space-y-3">
                             <label className={labelStyle}>
-                                {lang === "VN"
-                                    ? `Chọn ảnh ${formData.status === BLOG_STATUS.PUBLISHED ? "(*)" : ""}`
-                                    : `Select images ${formData.status === BLOG_STATUS.PUBLISHED ? "(*)" : ""}`}
+                                {lang === "VN" ? "Chọn ảnh (bắt buộc nếu xuất bản)" : "Select images (required to publish)"}
                             </label>
                             <input
                                 type="file"
@@ -267,56 +267,36 @@ export function CreateBlog() {
                     </h3>
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Nội dung bài viết" : "Article content"}</label>
-                        <textarea
-                            rows={12}
-                            placeholder={lang === "VN" ? "Nhập nội dung dạng văn bản thường (không HTML)..." : "Enter plain text content (not HTML)..."}
+                        <RichTextEditor
                             value={formData.content}
-                            onChange={(e) => handleFieldChange("content", e.target.value)}
-                            className={`${inputStyle} leading-relaxed`}
+                            onChange={(html) => handleFieldChange("content", html)}
+                            placeholder={lang === "VN" ? "Nhập nội dung bài viết..." : "Enter article content..."}
                         />
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Trạng thái" : "Status"}
-                    </h3>
-                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                        {[
-                            { value: BLOG_STATUS.DRAFT, vn: "Lưu nháp", en: "Save as Draft" },
-                            { value: BLOG_STATUS.PUBLISHED, vn: "Xuất bản ngay", en: "Publish Now" },
-                        ].map((option) => {
-                            const selected = formData.status === option.value;
-                            return (
-                                <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => handleFieldChange("status", option.value)}
-                                    className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
-                                            ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                                            : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                                        }`}
-                                >
-                                    {lang === "VN" ? option.vn : option.en}
-                                </button>
-                            );
-                        })}
-                    </div>
-                    {formData.status === BLOG_STATUS.PUBLISHED && (
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                            {lang === "VN" ? "Bài viết xuất bản bắt buộc phải có ít nhất 1 ảnh bìa." : "Published posts must have at least one cover image."}
-                        </p>
-                    )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                        type="submit"
+                        name="status"
+                        value={BLOG_STATUS.DRAFT}
+                        disabled={isSubmitting}
+                        className="w-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                    >
+                        {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
+                        {lang === "VN" ? "Lưu bản nháp" : "Save as Draft"}
+                    </button>
+                    <button
+                        type="submit"
+                        name="status"
+                        value={BLOG_STATUS.PUBLISHED}
+                        disabled={isSubmitting}
+                        className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                    >
+                        {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
+                        {lang === "VN" ? "Xuất bản" : "Publish"}
+                    </button>
                 </div>
-
-                <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                >
-                    {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
-                    {lang === "VN" ? "Tạo bài viết" : "Create Post"}
-                </button>
             </form>
         </div>
     );
