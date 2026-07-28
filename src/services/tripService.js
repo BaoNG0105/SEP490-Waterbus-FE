@@ -8,6 +8,7 @@ import {
     searchTrips as apiSearchTrips,
     searchSightseeingTrips as apiSearchSightseeingTrips,
     getTripById as apiGetTripById,
+    getTripPassengers as apiGetTripPassengers,
     getTripSeats as apiGetTripSeats,
     holdTripSeats as apiHoldTripSeats,
     releaseTripSeats as apiReleaseTripSeats,
@@ -355,10 +356,12 @@ export const buildScheduleTripsPayload = (form) => {
 /** @deprecated Dùng buildScheduleTripsPayload */
 export const buildGenerateTripsPayload = buildScheduleTripsPayload;
 
+/** ISO / HH:mm(:ss) → HH:mm:ss theo giờ VN (+07). Không làm tròn xuống / đoán giờ. */
 const isoToHms = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return null;
     if (/^\d{2}:\d{2}(:\d{2})?$/.test(raw)) return toHms(raw);
+    // Chỉ tin wall-clock trong chuỗi khi BE đã gắn +07:00.
     const matched = raw.match(/T(\d{2}:\d{2}:\d{2})([+-]\d{2}:\d{2}|Z)?/);
     if (matched && matched[2] === '+07:00') return matched[1];
     const d = new Date(raw);
@@ -372,7 +375,9 @@ const isoToHms = (value) => {
     });
     const parts = Object.fromEntries(fmt.formatToParts(d).map((p) => [p.type, p.value]));
     if (!parts.hour || !parts.minute) return matched ? matched[1] : null;
-    return `${parts.hour}:${parts.minute}:${parts.second || '00'}`;
+    let hour = parts.hour;
+    if (hour === '24') hour = '00';
+    return `${hour}:${parts.minute}:${parts.second || '00'}`;
 };
 
 const toYmd = (value) => {
@@ -661,8 +666,8 @@ export const previewRoundTripScheduleBatch = async (payload) => {
 };
 
 /**
- * Gộp item preview (canCreate) theo routeCode + ngày → payload POST /trips/schedule (fixed times).
- * Tránh gửi cùng giờ cho mọi ngày khi admin chỉ chọn một phần.
+ * Mỗi khung preview → 1 payload schedule (1 ngày + 1 giờ).
+ * Gọi theo thứ tự thời gian để xen đi/về đúng lịch tàu (tránh tạo hết outbound trước).
  */
 export const buildSchedulePayloadsFromRoundTripSelection = ({
     boatCode,
@@ -675,38 +680,45 @@ export const buildSchedulePayloadsFromRoundTripSelection = ({
     const boat = String(boatCode || '').trim();
     const outCode = String(outboundRouteCode || '').trim();
     const inCode = String(inboundRouteCode || '').trim();
-    const groups = new Map();
 
-    selectedItems.forEach((item) => {
-        if (!item || item.canCreate === false) return;
-        const routeCode = String(item.routeCode || '').trim();
-        const operatingDate = toYmd(item.operatingDate);
-        const time = item.departureHms || isoToHms(item.departureTime);
-        if (!routeCode || !operatingDate || !time) return;
-        const groupKey = `${routeCode}||${operatingDate}`;
-        if (!groups.has(groupKey)) {
-            groups.set(groupKey, {
+    const rows = selectedItems
+        .filter((item) => item && item.canCreate !== false)
+        .map((item, index) => {
+            const routeCode = String(item.routeCode || '').trim();
+            const operatingDate = toYmd(item.operatingDate) || pickPreviewOperatingDate(item);
+            const time = item.departureHms || isoToHms(item.departureTime);
+            let sortMs = Number(item.departureMs);
+            if (!Number.isFinite(sortMs)) {
+                sortMs = Date.parse(String(item.departureTime || ''));
+            }
+            if (!Number.isFinite(sortMs) && operatingDate && time) {
+                const iso = combineOperatingDateAndTime(operatingDate, String(time).slice(0, 5));
+                sortMs = iso ? Date.parse(iso) : Number.POSITIVE_INFINITY;
+            }
+            return {
                 routeCode,
                 operatingDate,
-                times: new Set(),
-            });
-        }
-        groups.get(groupKey).times.add(time);
-    });
+                time,
+                sortMs: Number.isFinite(sortMs) ? sortMs : Number.POSITIVE_INFINITY,
+                index,
+            };
+        })
+        .filter((row) => row.routeCode && row.operatingDate && row.time)
+        .sort((a, b) => (a.sortMs - b.sortMs) || (a.index - b.index));
 
-    return [...groups.values()].map((group) => {
-        const isOutbound = group.routeCode === outCode;
-        const isInbound = group.routeCode === inCode;
+    return rows.map((row) => {
+        const isOutbound = row.routeCode === outCode;
+        const isInbound = row.routeCode === inCode;
         const stops = isOutbound
             ? mapScheduleStops(outboundStops)
             : (isInbound ? mapScheduleStops(inboundStops) : []);
         return {
-            routeCode: group.routeCode,
+            routeCode: row.routeCode,
             boatCode: boat,
-            fromDate: group.operatingDate,
-            toDate: group.operatingDate,
+            fromDate: row.operatingDate,
+            toDate: row.operatingDate,
             daysOfWeek: null,
-            departureTimes: [...group.times].sort(),
+            departureTimes: [row.time],
             startTime: null,
             endTime: null,
             intervalMinutes: null,
@@ -715,7 +727,7 @@ export const buildSchedulePayloadsFromRoundTripSelection = ({
     });
 };
 
-/** Gọi schedule lần lượt cho từng nhóm route/ngày từ preview khứ hồi. */
+/** Gọi schedule lần lượt theo thứ tự giờ (đi/về xen kẽ). Không đoán/retry giờ khi skip. */
 export const scheduleRoundTripSelection = async (args) => {
     const payloads = buildSchedulePayloadsFromRoundTripSelection(args);
     const totals = {
@@ -727,8 +739,10 @@ export const scheduleRoundTripSelection = async (args) => {
         skippedMissingOnBoardStaff: 0,
         skippedItems: [],
         createdTripCodes: [],
+        requested: payloads.length,
         calls: payloads.length,
     };
+
     for (const payload of payloads) {
         const result = await scheduleTripsBatch(payload);
         totals.created += result.created;
@@ -741,6 +755,33 @@ export const scheduleRoundTripSelection = async (args) => {
         totals.createdTripCodes.push(...(result.createdTripCodes || []));
     }
     return totals;
+};
+
+/** Text tóm tắt skippedItems cho toast admin. */
+export const formatSkippedScheduleItemsText = (skippedItems = [], lang = 'VN') => {
+    const list = Array.isArray(skippedItems) ? skippedItems.filter(Boolean) : [];
+    if (!list.length) return '';
+    return list.slice(0, 3).map((item) => {
+        const bits = [];
+        if (item.requestedDepartureLabel) bits.push(item.requestedDepartureLabel);
+        if (item.routeCode) bits.push(item.routeCode);
+        if (item.reason) bits.push(item.reason);
+        if (item.earliestAllowedDepartureLabel) {
+            bits.push(
+                lang === 'VN'
+                    ? `sớm nhất ${item.earliestAllowedDepartureLabel}`
+                    : `earliest ${item.earliestAllowedDepartureLabel}`,
+            );
+        }
+        if (item.conflictTripCode) {
+            bits.push(
+                lang === 'VN'
+                    ? `đụng ${item.conflictTripCode}`
+                    : `conflict ${item.conflictTripCode}`,
+            );
+        }
+        return bits.join(' · ');
+    }).join('\n');
 };
 
 /** @deprecated Dùng scheduleTripsBatch */
@@ -838,6 +879,67 @@ export const fetchTripDetail = async (tripId) => {
         console.error(`Lỗi khi lấy chi tiết chuyến tàu ${tripId}:`, error);
         throw error;
     }
+};
+
+const pickPassengerField = (source, keys, fallback = "") => {
+  for (const key of keys) {
+    const value = key.split(".").reduce((obj, part) => obj?.[part], source);
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return fallback;
+};
+
+const unwrapPassengerList = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.passengers)) return data.passengers;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.tickets)) return data.tickets;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+export const normalizeTripPassenger = (item) => {
+  if (!item || typeof item !== "object") return null;
+  const fromStopOrderRaw = pickPassengerField(item, ["fromStopOrder", "boardingStopOrder"], "");
+  const toStopOrderRaw = pickPassengerField(item, ["toStopOrder", "alightingStopOrder"], "");
+  const fromStopOrder = Number(fromStopOrderRaw);
+  const toStopOrder = Number(toStopOrderRaw);
+  return {
+    bookingCode: pickPassengerField(item, ["bookingCode", "booking.bookingCode"], "") || "—",
+    passengerName: pickPassengerField(item, ["passengerName", "fullName", "name"], "") || "—",
+    ticketTypeCode: String(pickPassengerField(item, ["ticketTypeCode", "ticketType"], "") || "").toUpperCase() || "—",
+    seatNumber: pickPassengerField(item, ["seatNumber", "seatLabel", "seatCode", "seat"], "") || "—",
+    fromStationId: pickPassengerField(item, ["fromStationId", "boardingStationId", "fromStation.id"], "") || "",
+    toStationId: pickPassengerField(item, ["toStationId", "alightingStationId", "toStation.id"], "") || "",
+    fromStationCode: pickPassengerField(item, ["fromStationCode", "boardingStationCode", "fromStation.code"], "") || "",
+    toStationCode: pickPassengerField(item, ["toStationCode", "alightingStationCode", "toStation.code"], "") || "",
+    fromStationName: pickPassengerField(item, ["fromStationName", "boardingStationName", "fromStation"], "") || "—",
+    toStationName: pickPassengerField(item, ["toStationName", "alightingStationName", "toStation"], "") || "—",
+    fromStopOrder: Number.isFinite(fromStopOrder) && fromStopOrder > 0 ? fromStopOrder : null,
+    toStopOrder: Number.isFinite(toStopOrder) && toStopOrder > 0 ? toStopOrder : null,
+    scheduledDeparture: pickPassengerField(item, ["scheduledDeparture", "fromStopScheduledDeparture", "departureTime"], "") || "",
+    scheduledArrival: pickPassengerField(item, ["scheduledArrival", "toStopScheduledArrival", "arrivalTime"], "") || "",
+    price: pickPassengerField(item, ["price", "unitPrice", "fareAmount", "ticketPrice"], null),
+    ticketCode: pickPassengerField(item, ["ticketCode", "code"], "") || "",
+    ticketQrToken: pickPassengerField(item, ["ticketQrToken", "qrToken", "qrCode"], "") || "",
+    ticketStatus: pickPassengerField(item, ["ticketStatus", "status", "attendanceStatus"], "") || "",
+    checkedInAt: pickPassengerField(item, ["checkedInAt", "checkInAt"], "") || "",
+    checkedOutAt: pickPassengerField(item, ["checkedOutAt", "checkOutAt"], "") || "",
+    raw: item,
+  };
+};
+
+/** GET /trips/{tripId}/passengers — danh sách khách mua vé đúng chuyến (không trộn chiều khứ hồi). */
+export const fetchTripPassengers = async (tripId) => {
+  const id = String(tripId || "").trim();
+  if (!id) throw new Error("tripId is required");
+  try {
+    const data = await apiGetTripPassengers(id);
+    return unwrapPassengerList(data).map(normalizeTripPassenger).filter(Boolean);
+  } catch (error) {
+    console.error(`Lỗi khi lấy danh sách khách chuyến ${id}:`, error);
+    throw error;
+  }
 };
 
 // Service: Lấy sơ đồ ghế của 1 chuyến tàu. Truyền fromStationCode/toStationCode để xem đúng trạng thái

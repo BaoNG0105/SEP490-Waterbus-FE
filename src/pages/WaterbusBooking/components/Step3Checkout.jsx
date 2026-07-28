@@ -29,24 +29,22 @@ import {
   releaseHeldBookingSeats,
 } from "../../../utils/bookingWizardGuard";
 
-// Nhãn tiếng Việt/Anh quen thuộc cho các mã loại vé BE đang có; mã lạ thì dùng name từ BE.
+// Nhãn loại hành khách / vé — FE gửi ticketTypeCode theo từng item booking.
 const TICKET_TYPE_LABELS = {
   ADULT: { vn: "Người lớn", en: "Adult" },
+  CHILD: { vn: "Trẻ em có ghế", en: "Child (seated)" },
   SENIOR: { vn: "Người cao tuổi", en: "Senior" },
   DISABLED: { vn: "Người khuyết tật", en: "Disabled" },
-  INFANT: { vn: "Em bé dưới 2 tuổi", en: "Infant" },
+  INFANT: { vn: "Em bé dưới 2 tuổi (không ghế)", en: "Infant under 2 (no seat)" },
 };
 
 const getTicketTypeLabel = (ticketType, lang, routeType) => {
   const base = TICKET_TYPE_LABELS[ticketType.code]?.[lang === "VN" ? "vn" : "en"] || ticketType.name;
   const modifier = resolveTicketPriceModifier(ticketType, routeType);
-  if (Number(modifier) === 0) {
-    return `${base} (${lang === "VN" ? "miễn phí" : "free"})`;
-  }
-  if (Number(modifier) !== 1) {
-    return `${base} (x${modifier})`;
-  }
-  return base;
+  if (modifier === 1) return base;
+  if (modifier === 0) return `${base} (${lang === "VN" ? "Miễn phí" : "Free"})`;
+  const pct = Math.round((1 - modifier) * 100);
+  return `${base} (−${pct}%)`;
 };
 
 const formatTripTime = (isoString) => {
@@ -76,6 +74,21 @@ const formatCountdown = (msRemaining) => {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+/** Năm hiện tại theo giờ Việt Nam — khớp rule BE birthYear INFANT. */
+const getVietnamCalendarYear = () => {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+    }).formatToParts(new Date());
+    const year = Number(parts.find((p) => p.type === "year")?.value);
+    if (Number.isFinite(year)) return year;
+  } catch {
+    // fallback local
+  }
+  return new Date().getFullYear();
 };
 
 const formatHoldDeadline = (value) => {
@@ -109,6 +122,9 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
   // Tuyến tham quan vòng (SightseeingLoop) không bán ghế theo chặng nên không bắt buộc phải tra
   // được stationCode theo cặp bến đi/đến như tuyến Regular.
   const isLoopRoute = routeType === "SightseeingLoop";
+  const vietnamCalendarYear = getVietnamCalendarYear();
+  // INFANT dưới 2 tuổi: UI gợi ý năm sinh gần đây; BE bắt buộc ≤ năm hiện tại (giờ VN).
+  const infantBirthYearMin = vietnamCalendarYear - 2;
 
   // Đếm ngược thời gian giữ ghế (ghế đã được giữ ở Bước 2 khi bấm "Tiếp tục thanh toán")
   const [nowTick, setNowTick] = useState(Date.now());
@@ -195,9 +211,10 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     notes: ""
   });
 
-  // 2. STATE: THÔNG TIN TỪNG HÀNH KHÁCH CÓ GHẾ (ADULT/SENIOR/DISABLED)
+  // 2. STATE: THÔNG TIN TỪNG HÀNH KHÁCH CÓ GHẾ (ADULT/CHILD/SENIOR/DISABLED)
   // Phone/Email để trống sẽ dùng thông tin liên hệ chung; nhập riêng nếu muốn hành khách đó
   // nhận vé điện tử (QR) riêng về số/email của mình.
+  // ticketTypeCode gửi theo từng item khi tạo booking — không suy từ số thứ tự ghế.
   const [passengers, setPassengers] = useState(
     Array.from({ length: selectedSeatsDeparture.length }, () => ({
       name: "",
@@ -480,6 +497,21 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
       return;
     }
 
+    // BE: birthYear không được lớn hơn năm hiện tại (giờ VN).
+    const invalidFutureBirth = infants.find((inf) => {
+      const year = Number(inf.birthYear);
+      return !Number.isInteger(year) || year > vietnamCalendarYear || year < 1900;
+    });
+    if (invalidFutureBirth) {
+      showError(
+        lang === "VN" ? "Năm sinh em bé không hợp lệ" : "Invalid infant birth year",
+        lang === "VN"
+          ? `Năm sinh không được lớn hơn năm hiện tại (${vietnamCalendarYear}).`
+          : `Birth year cannot be later than the current year (${vietnamCalendarYear}).`,
+      );
+      return;
+    }
+
     const departureFromCode = fromWharfCode || "";
     const departureToCode = toWharfCode || "";
     if (!isLoopRoute && (!departureFromCode || !departureToCode)) {
@@ -742,7 +774,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                       <span className="font-headline font-bold text-[#124757] dark:text-white">
                         {lang === "VN" ? `Hành khách ${index + 1}` : `Passenger ${index + 1}`}
                       </span>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <span className="bg-white dark:bg-slate-800 border dark:border-slate-600 text-xs font-bold px-2 py-1 rounded-md text-slate-600 dark:text-slate-300 shadow-sm">
                           Đi: {selectedSeatsDeparture[index]?.seatNumber}
                         </span>
@@ -751,6 +783,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                             Về: {selectedSeatsReturn[index]?.seatNumber}
                           </span>
                         )}
+                        <span className="bg-[#124757]/8 dark:bg-yellow-400/15 border border-[#124757]/15 dark:border-yellow-400/20 text-xs font-bold px-2 py-1 rounded-md text-[#124757] dark:text-yellow-400 shadow-sm">
+                          {TICKET_TYPE_LABELS[String(passenger.ticketType || "ADULT").toUpperCase()]?.[lang === "VN" ? "vn" : "en"]
+                            || passenger.ticketType
+                            || "ADULT"}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -780,26 +817,32 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                     />
                   </div>
 
-                  {!isLoopRoute && (
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Loại vé" : "Ticket Type"}</label>
-                      <select
-                        value={passenger.ticketType}
-                        onChange={(e) => handlePassengerChange(index, "ticketType", e.target.value)}
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
-                      >
-                        {seatedTicketTypes.map((option) => (
-                          <option
-                            key={option.code}
-                            value={option.code}
-                            disabled={!isTicketTypeAllowedForPassenger(option, index)}
-                          >
-                            {getTicketTypeLabel(option, lang, routeType)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="text-[11px] font-bold uppercase text-slate-500">
+                      {lang === "VN" ? "Loại hành khách *" : "Passenger type *"}
+                    </label>
+                    <select
+                      value={passenger.ticketType}
+                      onChange={(e) => handlePassengerChange(index, "ticketType", e.target.value)}
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                      required
+                    >
+                      {seatedTicketTypes.map((option) => (
+                        <option
+                          key={option.code}
+                          value={option.code}
+                          disabled={!isTicketTypeAllowedForPassenger(option, index)}
+                        >
+                          {getTicketTypeLabel(option, lang, routeType)}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400">
+                      {lang === "VN"
+                        ? "Chọn đúng loại để BE tính giá / in vé (ADULT, CHILD, SENIOR, DISABLED). Em bé dưới 2 tuổi thêm ở bên dưới — không chiếm ghế."
+                        : "Pick the correct type for pricing/ticket print (ADULT, CHILD, SENIOR, DISABLED). Infants under 2 are added below — no seat."}
+                    </p>
+                  </div>
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Số điện thoại (Không bắt buộc)" : "Phone Number (Optional)"}</label>
@@ -824,10 +867,9 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                   </div>
                 </div>
 
-                {/* Em bé dưới 2 tuổi đi kèm hành khách này — không chiếm ghế, miễn phí.
-                    BE: vé INFANT chỉ áp dụng waterbus thường, không áp dụng sightseeing → ẩn với tuyến vòng */}
-                {!isLoopRoute && (
-                  <div className="border-t border-slate-200/60 dark:border-slate-700 pt-4">
+                {/* INFANT: không chiếm ghế, seatNumber=null, bắt buộc birthYear; đi kèm hành khách có ghế.
+                    Policy BE: miễn phí cả Regular và Sightseeing. */}
+                <div className="border-t border-slate-200/60 dark:border-slate-700 pt-4">
                     {!passenger.infant ? (
                       <button
                         type="button"
@@ -863,22 +905,27 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                             />
                           </div>
                           <div className="w-full sm:w-32 space-y-1.5">
-                            <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh" : "Birth Year"}</label>
+                            <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh *" : "Birth Year *"}</label>
                             <input
                               type="number"
-                              min="2020"
-                              max={new Date().getFullYear()}
+                              min={infantBirthYearMin}
+                              max={vietnamCalendarYear}
                               value={passenger.infant.birthYear}
                               onChange={(e) => handleInfantChange(index, "birthYear", e.target.value)}
                               placeholder="YYYY"
+                              required
                               className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
                             />
+                            <p className="text-[10px] text-slate-400">
+                              {lang === "VN"
+                                ? `Tối đa ${vietnamCalendarYear} (năm hiện tại).`
+                                : `Max ${vietnamCalendarYear} (current year).`}
+                            </p>
                           </div>
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
+                </div>
               </div>
             ))}
           </div>

@@ -42,6 +42,11 @@ export const searchSightseeingTrips = (params) =>
 export const getTripById = (id) =>
     api.get(`/trips/${id}`).then(response => response.data);
 
+/** GET /api/trips/{tripId}/passengers — manifest khách mua vé của đúng chuyến (Admin/Manager/Staff). */
+export const getTripPassengers = (tripId) =>
+    api.get(`/trips/${encodeURIComponent(String(tripId || "").trim())}/passengers`)
+        .then((response) => response.data);
+
 // API: Sơ đồ ghế của 1 chuyến tàu (kèm trạng thái theo chuyến). fromStationCode/toStationCode optional —
 // truyền vào để xem trạng thái ghế đúng theo chặng khách sẽ đi, bỏ trống để xem trạng thái cả tuyến.
 export const getTripSeats = (id, params = {}) =>

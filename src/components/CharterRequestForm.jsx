@@ -1067,11 +1067,11 @@ export function CharterRequestForm({
             {/* Lượng ành khách */}
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Người lớn" : "Adults"}</label>
+                <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Người lớn (≥ 12 tuổi)" : "Adults (≥ 12)"}</label>
                 <input type="number" min="0" max="1000" value={formData.adultCount} onChange={(e) => handleFieldChange("adultCount", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
               </div>
               <div className="space-y-2">
-                <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Trẻ em" : "Children"}</label>
+                <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Trẻ em (< 12 tuổi)" : "Children (< 12)"}</label>
                 <input type="number" min="0" max="1000" value={formData.childCount} onChange={(e) => handleFieldChange("childCount", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
               </div>
             </div>

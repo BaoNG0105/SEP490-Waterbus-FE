@@ -47,8 +47,8 @@ export const formatCharterTicketDate = (value) => {
 
 export const formatCharterPassengerType = (value, lang = "VN") => {
   const normalized = String(value || "").toLowerCase();
-  if (normalized === "child") return lang === "VN" ? "Trẻ em" : "Child";
-  if (normalized === "adult") return lang === "VN" ? "Người lớn" : "Adult";
+  if (normalized === "child") return lang === "VN" ? "Trẻ em (< 12 tuổi)" : "Child (< 12)";
+  if (normalized === "adult") return lang === "VN" ? "Người lớn (≥ 12 tuổi)" : "Adult (≥ 12)";
   return value || "";
 };
 

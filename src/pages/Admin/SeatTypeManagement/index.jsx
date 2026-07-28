@@ -50,7 +50,7 @@ const concessionPriceFromBase = (basePrice, discountPercent) => {
 };
 
 const inputStyle =
-  "w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-600 dark:bg-slate-900 dark:text-white";
+  "box-border h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold leading-none text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-600 dark:bg-slate-900 dark:text-white";
 const labelStyle = "mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400";
 
 const digitsOnly = (value) => String(value ?? "").replace(/\D/g, "");
@@ -222,7 +222,7 @@ function SeatTypesTab({ lang, onGoToDistanceTab, deckMode = "deck1", concessionP
                   <th className="px-4 py-3">{lang === "VN" ? "Giá gốc" : "Base price"}</th>
                   {showConcessionCol ? (
                     <th className="px-4 py-3">
-                      {lang === "VN" ? "Trẻ em / Người lớn tuổi" : "Child / senior"}
+                      {lang === "VN" ? "Trẻ em / NCT / NKT" : "Child / senior / disabled"}
                     </th>
                   ) : null}
                   <th className="px-4 py-3 text-right">{lang === "VN" ? "Hành động" : "Actions"}</th>
@@ -439,8 +439,8 @@ function DistanceFareTab({ lang }) {
             </div>
             <p className="text-[11px] leading-relaxed text-slate-400">
               {lang === "VN"
-                ? `Giá = làm tròn lên (giá cơ bản + giá/km × km) theo bước ${Number(form.roundingStep) || 1000} VND. Vé đặc biệt (trẻ em / người lớn tuổi / người khuyết tật): miễn phí · 0 VND.`
-                : `Price = round up (base fare + price/km × km) to step ${Number(form.roundingStep) || 1000} VND. Special tickets (child / senior / disabled): free · 0 VND.`}
+                ? `Giá = làm tròn lên (giá cơ bản + giá/km × km) theo bước ${Number(form.roundingStep) || 1000} VND. Vé Regular ưu đãi (trẻ em / NCT / NKT / em bé): miễn phí · 0 VND — không cấu hình %.`
+                : `Price = round up (base fare + price/km × km) to step ${Number(form.roundingStep) || 1000} VND. Regular concession tickets (child / senior / disabled / infant): free · 0 VND — no % settings.`}
             </p>
           </div>
         )}
@@ -720,7 +720,7 @@ function SurchargeTab({ lang }) {
               <button
                 type="submit"
                 disabled={savingWeekend}
-                className="rounded-xl bg-[#124757] px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
+                className="box-border h-10 rounded-xl bg-[#124757] px-4 text-[11px] font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
               >
                 {savingWeekend ? "…" : (lang === "VN" ? "Lưu" : "Save")}
               </button>
@@ -772,7 +772,7 @@ function SurchargeTab({ lang }) {
                 <button
                   type="submit"
                   disabled={savingHoliday}
-                  className="rounded-xl bg-[#124757] px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
+                  className="box-border h-10 shrink-0 rounded-xl bg-[#124757] px-4 text-[11px] font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
                 >
                   {savingHoliday ? "…" : (lang === "VN" ? "Thêm" : "Add")}
                 </button>
@@ -934,12 +934,12 @@ function SightseeingConcessionTab({ lang, onPercentChange }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-              {lang === "VN" ? "Vé trẻ em / người lớn tuổi" : "Child / senior ticket"}
+              {lang === "VN" ? "Ưu đãi Sightseeing (CHILD / SENIOR / DISABLED)" : "Sightseeing concession (CHILD / SENIOR / DISABLED)"}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-400">
               {lang === "VN"
-                ? "Mức giảm trên giá gốc CABIN / RIVER / SKY."
-                : "Discount off CABIN / RIVER / SKY base price."}
+                ? "Giảm % trên giá gốc CABIN / RIVER / SKY. Em bé (INFANT) luôn miễn phí."
+                : "Percent off CABIN / RIVER / SKY base price. Infants (INFANT) stay free."}
             </p>
           </div>
           <div className="flex items-center gap-2">

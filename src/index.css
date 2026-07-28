@@ -754,6 +754,60 @@
   display: block !important;
 }
 
+/* Error X mặc định (line-left/right) lệch khi icon 2rem → vẽ X CSS. */
+.admin-swal-toast-icon.swal2-error {
+  border-color: #e11d48 !important;
+  background: #fff1f2 !important;
+  color: #e11d48 !important;
+  animation: none !important;
+}
+
+.admin-swal-toast-icon.swal2-error .swal2-x-mark,
+.admin-swal-toast-icon.swal2-error .swal2-x-mark-line-left,
+.admin-swal-toast-icon.swal2-error .swal2-x-mark-line-right,
+.admin-swal-toast-icon.swal2-error .swal2-icon-content {
+  display: none !important;
+  animation: none !important;
+}
+
+.admin-swal-toast-icon.swal2-error::before,
+.admin-swal-toast-icon.swal2-error::after {
+  content: "" !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: 0.85rem !important;
+  height: 0.15rem !important;
+  margin: 0 !important;
+  background: #e11d48 !important;
+  border-radius: 1px !important;
+  display: block !important;
+}
+
+.admin-swal-toast-icon.swal2-error::before {
+  transform: translate(-50%, -50%) rotate(45deg) !important;
+}
+
+.admin-swal-toast-icon.swal2-error::after {
+  transform: translate(-50%, -50%) rotate(-45deg) !important;
+}
+
+.admin-swal-toast-icon.swal2-warning {
+  border-color: #d97706 !important;
+  background: #fffbeb !important;
+  color: #d97706 !important;
+  animation: none !important;
+}
+
+.admin-swal-toast-icon.swal2-warning .swal2-icon-content {
+  font-size: 1.05rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
 .admin-swal-toast-icon .swal2-icon-content {
   font-size: 1rem !important;
 }
@@ -891,6 +945,37 @@
 .admin-swal-icon.swal2-error {
   border-color: #e11d48 !important;
   color: #e11d48 !important;
+  background: #fff1f2 !important;
+  animation: none !important;
+}
+
+.admin-swal-icon.swal2-error .swal2-x-mark,
+.admin-swal-icon.swal2-error .swal2-x-mark-line-left,
+.admin-swal-icon.swal2-error .swal2-x-mark-line-right,
+.admin-swal-icon.swal2-error .swal2-icon-content {
+  display: none !important;
+  animation: none !important;
+}
+
+.admin-swal-icon.swal2-error::before,
+.admin-swal-icon.swal2-error::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.35rem;
+  height: 0.22rem;
+  background: #e11d48;
+  border-radius: 1px;
+  display: block;
+}
+
+.admin-swal-icon.swal2-error::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.admin-swal-icon.swal2-error::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .admin-swal-icon .swal2-icon-content {

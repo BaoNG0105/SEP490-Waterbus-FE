@@ -1134,6 +1134,7 @@ export const normalizeRouteCandidateOption = (item) => {
     routeName: pick(item, ["routeName", "name", "route.routeName", "route.name"], "") || "",
     routeType,
     routeLabel,
+    status: pick(item, ["status", "routeStatus", "route.status"], "Active") || "Active",
     isSelectableForCharterQuote: selectableRaw === undefined ? undefined : Boolean(selectableRaw),
     isGeneratedForBooking: generatedRaw === undefined ? undefined : Boolean(generatedRaw),
     fromStationName: pick(item, ["fromStationName", "fromStation.stationName"], "") || "",
@@ -1390,9 +1391,11 @@ export const isCharterBookingGeneratedRoute = (routeOrCandidate) => {
   return /^CH[-_]?CB-/i.test(code) || /^Charter\s+CB-/i.test(name);
 };
 
-/** Candidate picker charter: chỉ GPS / Sightseeing — ẩn Charter & Bus. */
+/** Candidate picker charter: chỉ GPS / Sightseeing Active — ẩn Charter, Bus, Inactive. */
 export const isUsableRouteCandidateForBooking = (routeOrCandidate) => {
   if (!routeOrCandidate) return false;
+  const status = String(routeOrCandidate.status || "Active").toLowerCase();
+  if (status && status !== "active") return false;
   if (routeOrCandidate.isSelectableForCharterQuote === false) return false;
   if (routeOrCandidate.isGeneratedForBooking === true) return false;
   if (isCharterBookingGeneratedRoute(routeOrCandidate)) return false;
@@ -1412,6 +1415,7 @@ export const normalizeCatalogRouteAsCandidate = (route) => normalizeRouteCandida
   routeName: route?.routeName || route?.name,
   routeType: route?.routeType,
   routeLabel: route?.routeLabel,
+  status: route?.status,
   isSelectableForCharterQuote: route?.isSelectableForCharterQuote,
   isGeneratedForBooking: route?.isGeneratedForBooking,
   distanceKm: route?.distanceKm ?? route?.baseDistanceKm ?? route?.totalDistanceKm,

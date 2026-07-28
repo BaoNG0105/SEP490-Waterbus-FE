@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { BankBinSelect } from "../../../components/BankBinSelect";
 import { useApp } from "../../../context/AppContext";
+import { resendRegisterOtp } from "../../../api/authApi";
 import { cancelMyCharterBooking, fetchMyCharterBookingDetail } from "../../../services/charterBookingService";
-import { refundBookingPayment } from "../../../services/paymentService";
+import { refundBookingPayment, requestRefundBookingOtp } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { getRefundPaymentId, isPaymentUuid, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
@@ -72,7 +73,7 @@ const normalizeBooking = (item) => {
 
 const getRefundValidationMessage = (payload, lang) => {
   if (!/^\d{6}$/.test(payload.bankBin)) {
-    return lang === "VN" ? "Vui lòng chọn ngân hàng hợp lệ với bankBin gồm 6 chữ số." : "Please select a valid bank with a 6-digit bankBin.";
+    return lang === "VN" ? "Vui lòng chọn ngân hàng nhận hoàn từ danh sách." : "Please select a refund bank from the list.";
   }
   if (!/^\d{4,20}$/.test(payload.accountNumber)) {
     return lang === "VN" ? "Số tài khoản chỉ gồm 4-20 chữ số." : "Account number must contain 4-20 digits.";
@@ -86,6 +87,15 @@ const getRefundValidationMessage = (payload, lang) => {
   return "";
 };
 
+const unwrapOtpChallenge = (response) => ({
+  challengeId: String(
+    pick(response, ["challengeId", "id", "otpChallengeId", "data.challengeId"], "") || "",
+  ).trim(),
+  maskedDestination: pick(response, ["maskedDestination", "destination", "data.maskedDestination"], "") || "",
+  expiresAt: pick(response, ["expiresAt", "data.expiresAt"], "") || null,
+  resendAvailableAt: pick(response, ["resendAvailableAt", "data.resendAvailableAt"], "") || null,
+});
+
 export function CharterRefund() {
   const { id } = useParams();
   const location = useLocation();
@@ -97,10 +107,15 @@ export function CharterRefund() {
   const [paymentId, setPaymentId] = useState(location.state?.paymentId || "");
   const [isLoading, setIsLoading] = useState(!location.state?.booking);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [cancelAlreadySubmitted, setCancelAlreadySubmitted] = useState(false);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpMeta, setOtpMeta] = useState(null);
+  const [pendingRefundPayload, setPendingRefundPayload] = useState(null);
   const [form, setForm] = useState({
     reason: "Hoàn tiền booking bị hủy",
     bankBin: "",
@@ -159,6 +174,19 @@ export function CharterRefund() {
     setSubmitError("");
   };
 
+  const sendRefundOtp = async () => {
+    if (!paymentId) throw new Error("MISSING_PAYMENT");
+    const response = await requestRefundBookingOtp(paymentId);
+    const meta = unwrapOtpChallenge(response);
+    if (!meta.challengeId) {
+      throw new Error("MISSING_CHALLENGE");
+    }
+    setOtpMeta(meta);
+    setOtpCode("");
+    setOtpStep(true);
+    return meta;
+  };
+
   const handleSubmitRefund = async (event) => {
     event.preventDefault();
     if (!booking?.id || !paymentId) {
@@ -186,38 +214,107 @@ export function CharterRefund() {
       setIsSubmitting(true);
       setSubmitError("");
       if (shouldCancelBooking) {
-        await cancelMyCharterBooking(booking.id, payload);
+        await cancelMyCharterBooking(booking.id, {});
         didCancelBooking = true;
         setCancelAlreadySubmitted(true);
       }
-      await refundBookingPayment(paymentId, payload);
+
+      setPendingRefundPayload(payload);
+      setIsSendingOtp(true);
+      await sendRefundOtp();
+    } catch (error) {
+      if (didCancelBooking) setCancelAlreadySubmitted(true);
+      if (error?.message === "MISSING_CHALLENGE") {
+        setSubmitError(lang === "VN"
+          ? "Không nhận được challengeId OTP từ máy chủ. Vui lòng thử lại."
+          : "Server did not return an OTP challengeId. Please try again.");
+      } else {
+        const detail = String(error?.response?.data?.detail || "");
+        const isPaymentMissing = error?.response?.status === 404 || /payment not found/i.test(detail);
+        setSubmitError(
+          isPaymentMissing
+            ? (lang === "VN"
+              ? "Không tìm thấy giao dịch thanh toán. Vui lòng quay lại chi tiết yêu cầu, kiểm tra mục Thanh toán rồi thử lại."
+              : "We could not find the payment. Please go back to your booking, check Payments, then try again.")
+            : getApiErrorMessage(
+              error,
+              didCancelBooking || !shouldCancelBooking
+                ? (lang === "VN" ? "Yêu cầu đã hủy nhưng chưa gửi được OTP hoàn tiền. Vui lòng thử lại." : "Your request was cancelled, but refund OTP could not be sent. Please try again.")
+                : (lang === "VN" ? "Không thể hủy yêu cầu hoặc gửi OTP hoàn tiền. Vui lòng thử lại." : "Unable to cancel the request or send refund OTP. Please try again."),
+            ),
+        );
+      }
+    } finally {
+      setIsSendingOtp(false);
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmOtpRefund = async (event) => {
+    event.preventDefault();
+    const code = String(otpCode || "").replace(/\D/g, "").slice(0, 6);
+    if (code.length < 6) {
+      setSubmitError(lang === "VN" ? "Vui lòng nhập đủ 6 số OTP." : "Please enter the full 6-digit OTP.");
+      return;
+    }
+    if (!paymentId || !pendingRefundPayload || !otpMeta?.challengeId) {
+      setSubmitError(lang === "VN" ? "Thiếu thông tin OTP. Vui lòng gửi lại mã." : "Missing OTP info. Please resend the code.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError("");
+      await refundBookingPayment(paymentId, {
+        ...pendingRefundPayload,
+        otpChallengeId: otpMeta.challengeId,
+        otpCode: code,
+      });
       setSuccessMessage(
-        shouldCancelBooking || didCancelBooking
+        cancelAlreadySubmitted
           ? (lang === "VN"
             ? "Yêu cầu thuê tàu đã được hủy và yêu cầu hoàn tiền đã gửi. Chúng tôi sẽ xử lý theo chính sách hoàn tiền."
             : "Your booking request was cancelled and the refund request was submitted. We will process it under our refund policy.")
           : (lang === "VN"
             ? "Đã gửi yêu cầu hoàn tiền. Chúng tôi sẽ xử lý theo chính sách hoàn tiền của Waterbus."
-            : "Refund request submitted. We will process it according to Waterbus refund policy.")
+            : "Refund request submitted. We will process it according to Waterbus refund policy."),
       );
     } catch (error) {
-      if (didCancelBooking) setCancelAlreadySubmitted(true);
-      const detail = String(error?.response?.data?.detail || "");
-      const isPaymentMissing = error?.response?.status === 404 || /payment not found/i.test(detail);
-      setSubmitError(
-        isPaymentMissing
-          ? (lang === "VN"
-            ? "Không tìm thấy giao dịch thanh toán. Vui lòng quay lại chi tiết yêu cầu, kiểm tra mục Thanh toán rồi thử lại."
-            : "We could not find the payment. Please go back to your booking, check Payments, then try again.")
-          : getApiErrorMessage(
-            error,
-            didCancelBooking || !shouldCancelBooking
-              ? (lang === "VN" ? "Yêu cầu đã hủy nhưng hoàn tiền chưa gửi được. Vui lòng thử lại." : "Your request was cancelled, but the refund could not be submitted. Please try again.")
-              : (lang === "VN" ? "Không thể hủy yêu cầu hoặc gửi hoàn tiền. Vui lòng thử lại." : "Unable to cancel the request or submit the refund. Please try again.")
-          )
-      );
+      setSubmitError(getApiErrorMessage(
+        error,
+        lang === "VN" ? "OTP không hợp lệ hoặc hoàn tiền thất bại. Vui lòng thử lại." : "Invalid OTP or refund failed. Please try again.",
+      ));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!otpMeta?.challengeId && !paymentId) return;
+    try {
+      setIsSendingOtp(true);
+      setSubmitError("");
+      if (otpMeta?.challengeId) {
+        try {
+          const response = await resendRegisterOtp(otpMeta.challengeId);
+          const meta = unwrapOtpChallenge(response);
+          if (meta.challengeId) {
+            setOtpMeta((prev) => ({ ...prev, ...meta }));
+            setOtpCode("");
+            return;
+          }
+        } catch {
+          // fallback: request new refund OTP
+        }
+      }
+      await sendRefundOtp();
+    } catch (error) {
+      setSubmitError(getApiErrorMessage(
+        error,
+        lang === "VN" ? "Không gửi lại được OTP." : "Unable to resend OTP.",
+      ));
+    } finally {
+      setIsSendingOtp(false);
     }
   };
 
@@ -315,16 +412,22 @@ export function CharterRefund() {
                   {lang === "VN" ? "Hoàn tiền thuê tàu" : "Booking request refund"}
                 </p>
                 <h1 className="mt-2 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400 md:text-3xl">
-                  {lang === "VN" ? "Tài khoản nhận hoàn tiền" : "Refund receiving account"}
+                  {otpStep
+                    ? (lang === "VN" ? "Xác nhận OTP hoàn tiền" : "Confirm refund OTP")
+                    : (lang === "VN" ? "Tài khoản nhận hoàn tiền" : "Refund receiving account")}
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm font-bold text-slate-500 dark:text-slate-300">
-                  {["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())
+                  {otpStep
                     ? (lang === "VN"
-                      ? "Yêu cầu đã hủy. Vui lòng nhập ngân hàng, số tài khoản và tên chủ tài khoản để nhận hoàn tiền."
-                      : "This request is cancelled. Please enter your bank, account number, and account holder name to receive the refund.")
-                    : (lang === "VN"
-                      ? "Vui lòng nhập chính xác ngân hàng, số tài khoản và tên chủ tài khoản. Sau khi gửi, hệ thống sẽ hủy yêu cầu và tạo yêu cầu hoàn tiền."
-                      : "Please enter your bank, account number, and account name carefully. After submitting, we will cancel the request and start the refund.")}
+                      ? `Đã gửi mã OTP${otpMeta?.maskedDestination ? ` tới ${otpMeta.maskedDestination}` : ""}. Nhập mã 6 số để xác nhận hoàn tiền.`
+                      : `An OTP was sent${otpMeta?.maskedDestination ? ` to ${otpMeta.maskedDestination}` : ""}. Enter the 6-digit code to confirm the refund.`)
+                    : (["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())
+                      ? (lang === "VN"
+                        ? "Yêu cầu đã hủy. Vui lòng nhập ngân hàng, số tài khoản và tên chủ tài khoản để nhận hoàn tiền."
+                        : "This request is cancelled. Please enter your bank, account number, and account holder name to receive the refund.")
+                      : (lang === "VN"
+                        ? "Vui lòng nhập chính xác ngân hàng, số tài khoản và tên chủ tài khoản. Sau khi gửi, hệ thống sẽ hủy yêu cầu và gửi OTP xác nhận hoàn tiền."
+                        : "Please enter your bank, account number, and account name carefully. After submitting, we will cancel the request and send a refund OTP."))}
                 </p>
               </div>
               {statusInfo && (
@@ -357,75 +460,127 @@ export function CharterRefund() {
               </div>
             </aside>
 
-            <form onSubmit={handleSubmitRefund} className="space-y-5">
-              <BankBinSelect
-                value={form.bankBin}
-                onChange={handleBankBinChange}
-                lang={lang}
-                disabled={isSubmitting}
-                label={lang === "VN" ? "Ngân hàng nhận hoàn" : "Refund bank"}
-              />
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                    {lang === "VN" ? "Số tài khoản" : "Account number"}
-                  </label>
-                  <input
-                    value={form.accountNumber}
-                    onChange={handleFieldChange("accountNumber")}
-                    inputMode="numeric"
-                    maxLength={20}
-                    placeholder="123456789"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                    {lang === "VN" ? "Tên chủ tài khoản" : "Account name"}
-                  </label>
-                  <input
-                    value={form.accountName}
-                    onChange={handleFieldChange("accountName")}
-                    placeholder="NGUYEN VAN A"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold uppercase outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                  {lang === "VN" ? "Lý do hoàn tiền" : "Refund reason"}
-                </label>
-                <textarea
-                  value={form.reason}
-                  onChange={handleFieldChange("reason")}
-                  maxLength={200}
-                  rows={3}
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            {!otpStep ? (
+              <form onSubmit={handleSubmitRefund} className="space-y-5">
+                <BankBinSelect
+                  value={form.bankBin}
+                  onChange={handleBankBinChange}
+                  lang={lang}
+                  disabled={isSubmitting}
+                  hideBin
+                  label={lang === "VN" ? "Ngân hàng nhận hoàn" : "Refund bank"}
                 />
-              </div>
 
-              {submitError && (
-                <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
-                  {submitError}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                      {lang === "VN" ? "Số tài khoản" : "Account number"}
+                    </label>
+                    <input
+                      value={form.accountNumber}
+                      onChange={handleFieldChange("accountNumber")}
+                      inputMode="numeric"
+                      maxLength={20}
+                      placeholder="123456789"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                      {lang === "VN" ? "Tên chủ tài khoản" : "Account name"}
+                    </label>
+                    <input
+                      value={form.accountName}
+                      onChange={handleFieldChange("accountName")}
+                      placeholder="NGUYEN VAN A"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold uppercase outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    />
+                  </div>
                 </div>
-              )}
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                <button type="button" onClick={() => navigate(`/profile/my-charter-booking/${booking.id}`)} disabled={isSubmitting} className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  {lang === "VN" ? "Hủy thao tác" : "Cancel"}
-                </button>
-                <button type="submit" disabled={isSubmitting} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60">
-                  <span className={`material-symbols-outlined text-base ${isSubmitting ? "animate-spin" : ""}`}>{isSubmitting ? "progress_activity" : "payments"}</span>
-                  {isSubmitting
-                    ? (lang === "VN" ? "Đang gửi" : "Submitting")
-                    : (["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())
-                      ? (lang === "VN" ? "Gửi yêu cầu hoàn tiền" : "Submit refund request")
-                      : (lang === "VN" ? "Hủy và gửi hoàn tiền" : "Cancel and submit refund"))}
-                </button>
-              </div>
-            </form>
+                <div>
+                  <label className="mb-2 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                    {lang === "VN" ? "Lý do hoàn tiền" : "Refund reason"}
+                  </label>
+                  <textarea
+                    value={form.reason}
+                    onChange={handleFieldChange("reason")}
+                    maxLength={200}
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  />
+                </div>
+
+                {submitError && (
+                  <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+                    {submitError}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <button type="button" onClick={() => navigate(`/profile/my-charter-booking/${booking.id}`)} disabled={isSubmitting} className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                    {lang === "VN" ? "Hủy thao tác" : "Cancel"}
+                  </button>
+                  <button type="submit" disabled={isSubmitting || isSendingOtp} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60">
+                    <span className={`material-symbols-outlined text-base ${isSubmitting || isSendingOtp ? "animate-spin" : ""}`}>
+                      {isSubmitting || isSendingOtp ? "progress_activity" : "sms"}
+                    </span>
+                    {isSubmitting || isSendingOtp
+                      ? (lang === "VN" ? "Đang gửi OTP…" : "Sending OTP…")
+                      : (["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())
+                        ? (lang === "VN" ? "Gửi OTP hoàn tiền" : "Send refund OTP")
+                        : (lang === "VN" ? "Hủy và gửi OTP" : "Cancel and send OTP"))}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleConfirmOtpRefund} className="space-y-5">
+                <div>
+                  <label className="mb-2 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                    OTP
+                  </label>
+                  <input
+                    value={otpCode}
+                    onChange={(e) => {
+                      setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                      setSubmitError("");
+                    }}
+                    inputMode="numeric"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                    placeholder="123456"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-xl font-black tracking-[0.35em] outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  />
+                </div>
+
+                {submitError && (
+                  <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+                    {submitError}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={isSubmitting || isSendingOtp}
+                    className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    {isSendingOtp
+                      ? (lang === "VN" ? "Đang gửi…" : "Sending…")
+                      : (lang === "VN" ? "Gửi lại OTP" : "Resend OTP")}
+                  </button>
+                  <button type="submit" disabled={isSubmitting || otpCode.length < 6} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-wider text-white disabled:opacity-60">
+                    <span className={`material-symbols-outlined text-base ${isSubmitting ? "animate-spin" : ""}`}>
+                      {isSubmitting ? "progress_activity" : "payments"}
+                    </span>
+                    {isSubmitting
+                      ? (lang === "VN" ? "Đang hoàn tiền…" : "Submitting…")
+                      : (lang === "VN" ? "Xác nhận hoàn tiền" : "Confirm refund")}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </section>
       </main>

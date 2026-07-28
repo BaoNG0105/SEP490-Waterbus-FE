@@ -236,6 +236,7 @@ export function Schedule() {
         serviceType: "booking",
         includeCancelled: false,
         stationId: stationId || undefined,
+        skipAuth: true,
       });
       setEntries(Array.isArray(list) ? list : []);
     } catch (error) {
@@ -309,6 +310,7 @@ export function Schedule() {
 
   const onDateChange = (value) => {
     if (!value) return;
+    if (value < today || value > maxDate) return;
     setSelectedDate(value);
   };
 
@@ -337,6 +339,7 @@ export function Schedule() {
               <AppDateInput
                 value={selectedDate}
                 min={today}
+                max={maxDate}
                 onChange={(e) => onDateChange(e.target.value)}
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#124757] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
               />

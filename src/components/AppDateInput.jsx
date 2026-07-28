@@ -368,7 +368,7 @@ export function AppDateInput({
 
   return (
     <div ref={rootRef} className="relative w-full">
-      <div className={`flex w-full items-center gap-1.5 overflow-visible ${className}`}>
+      <div className={`box-border flex w-full items-center gap-1 overflow-hidden ${className}`}>
         <input
           type="text"
           inputMode="numeric"
@@ -399,7 +399,7 @@ export function AppDateInput({
               openPicker();
             }
           }}
-          className={`min-w-0 flex-1 bg-transparent outline-none ${
+          className={`h-full min-w-0 flex-1 bg-transparent text-inherit leading-none outline-none ${
             isInvalid ? "text-rose-600 dark:text-rose-400" : ""
           }`}
         />
@@ -409,12 +409,11 @@ export function AppDateInput({
           tabIndex={-1}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => (open ? setOpen(false) : openPicker())}
-          className="inline-flex size-7 shrink-0 items-center justify-center overflow-visible rounded-md text-slate-400 hover:text-[#124757] disabled:opacity-50 dark:hover:text-yellow-400"
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 hover:text-[#124757] disabled:opacity-50 dark:hover:text-yellow-400"
           aria-label={isVn ? "Mở lịch" : "Open calendar"}
         >
           <span
-            className="material-symbols-outlined pointer-events-none select-none text-[20px] leading-none"
-            style={{ overflow: "visible", display: "block", width: 20, height: 20 }}
+            className="material-symbols-outlined pointer-events-none select-none text-[18px] leading-none"
             aria-hidden
           >
             calendar_month

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllTrips, toOperatingDateQuery, getTripStatusLabel, normalizeTripStatusKey, sortTripsForOpsList } from "../../../services/tripService";
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
@@ -25,6 +25,11 @@ const todayInputValue = () => {
     const now = new Date();
     const pad2 = (n) => String(n).padStart(2, "0");
     return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+};
+
+const pickDateFromSearch = (params) => {
+    const raw = String(params.get("date") || params.get("operatingDate") || "").trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : todayInputValue();
 };
 
 const tripStatusBadgeClass = (status) => {
@@ -227,6 +232,7 @@ const resolvePaxLabel = (trip) => {
 export function TripManagement() {
     const { lang } = useApp();
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
 
     const [trips, setTrips] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -234,9 +240,24 @@ export function TripManagement() {
 
     const [routes, setRoutes] = useState([]);
     const [routeDetailsByCode, setRouteDetailsByCode] = useState({});
-    const [operatingDate, setOperatingDate] = useState(todayInputValue());
+    const [operatingDate, setOperatingDate] = useState(() => pickDateFromSearch(searchParams));
     const [statusFilter, setStatusFilter] = useState("All");
     const [boatFilter, setBoatFilter] = useState("All");
+
+    useEffect(() => {
+        const next = pickDateFromSearch(searchParams);
+        setOperatingDate((prev) => (prev === next ? prev : next));
+    }, [searchParams]);
+
+    const handleOperatingDateChange = (value) => {
+        const next = String(value || "").trim();
+        setOperatingDate(next);
+        const params = new URLSearchParams(searchParams);
+        if (next) params.set("date", next);
+        else params.delete("date");
+        params.delete("operatingDate");
+        setSearchParams(params, { replace: true });
+    };
 
     useEffect(() => {
         fetchAllRoutes()
@@ -486,7 +507,7 @@ export function TripManagement() {
                     </span>
                     <AppDateInput
                         value={operatingDate}
-                        onChange={(e) => setOperatingDate(e.target.value)}
+                        onChange={(e) => handleOperatingDateChange(e.target.value)}
                         className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                     />
                 </div>

@@ -1,65 +1,101 @@
 /** Lý do khóa đặt / thiếu km từ search trip & seat-map. */
 
-const looksLikeMissingKm = (text) => {
+export const looksLikeMissingKm = (text) => {
   const t = String(text || "").toLowerCase();
   if (!t) return false;
-  return /km|distance|distancefromprevious|thiếu\s*km|missing\s*(segment\s*)?distance|fare\s*unavailable|chưa\s*(có\s*)?(giá|km)|không\s*tính\s*được\s*giá|no\s*fare|pricing\s*unavailable/i.test(
+  return /km|distance|distancefromprevious|thiếu\s*km|missing\s*(segment\s*)?distance|fare\s*unavailable|chưa\s*(có\s*)?(giá|km)|không\s*tính\s*được\s*giá|no\s*fare|pricing\s*unavailable|chưa\s*nhập\s*đủ\s*số\s*km/i.test(
     t,
   );
 };
 
+export const pickBookingClosedReason = (tripOrMap) => String(
+  tripOrMap?.bookingClosedReason
+  || tripOrMap?.validationMessage
+  || tripOrMap?.message
+  || "",
+).trim();
+
+/**
+ * BE contract:
+ * - thiếu km: isBookingClosed=false, isBookable=false, bookingClosedReason có nội dung (minPrice thường null)
+ * - đóng/chưa mở theo giờ: isBookingClosed=true
+ * Không dùng isBookable=false một mình để hiện "chưa mở bán".
+ */
 export const isMissingKmBookingBlock = (tripOrMap) => {
   if (!tripOrMap) return false;
-  const reason = tripOrMap.bookingClosedReason || tripOrMap.validationMessage || tripOrMap.message;
+  if (tripOrMap.isBookingClosed === true) return false;
+  const reason = pickBookingClosedReason(tripOrMap);
   if (looksLikeMissingKm(reason)) return true;
-  const minPrice = tripOrMap.minPrice;
-  const hasNullPrice = minPrice === null || minPrice === undefined;
-  if (hasNullPrice && (tripOrMap.isBookable === false || tripOrMap.isBookingClosed === true)) {
-    return true;
+  // Search: isBookable=false + minPrice=null thường là thiếu distance fare.
+  if (
+    tripOrMap.isBookable === false
+    && (tripOrMap.minPrice === null || tripOrMap.minPrice === undefined || tripOrMap.minPrice === "")
+  ) {
+    if (tripOrMap.segmentDistanceKm == null) return true;
+    return Boolean(reason) && looksLikeMissingKm(reason);
   }
   return false;
 };
 
+/** Badge trên thẻ chuyến khi thiếu km (theo note BE). */
+export const formatMissingKmTripBadge = (lang = "VN") => (
+  lang === "VN" ? "Chưa có giá - thiếu km tuyến" : "No price - missing route km"
+);
+
 /** Thông báo ngắn trên thẻ chuyến (tránh tràn layout). */
 export const formatTripUnavailableShortLabel = (tripOrMap, lang = "VN") => {
+  if (!tripOrMap) return lang === "VN" ? "Không thể chọn" : "Unavailable";
+
   if (isMissingKmBookingBlock(tripOrMap)) {
-    return lang === "VN" ? "Chưa mở bán — thiếu giá" : "Not on sale — price N/A";
+    return formatMissingKmTripBadge(lang);
   }
+
+  if (tripOrMap.isBookingClosed === true) {
+    return lang === "VN" ? "Đã đóng / chưa mở bán" : "Closed / not open yet";
+  }
+
   if (Number(tripOrMap?.availableSeats) <= 0) {
     return lang === "VN" ? "Hết chỗ" : "Sold out";
   }
-  if (tripOrMap?.isBookable === false || tripOrMap?.isBookingClosed === true) {
-    return lang === "VN" ? "Đã khóa đặt" : "Booking closed";
+
+  if (tripOrMap.isBookable === false) {
+    const reason = pickBookingClosedReason(tripOrMap);
+    if (reason) {
+      return reason.length > 42 ? `${reason.slice(0, 40)}…` : reason;
+    }
+    return lang === "VN" ? "Chưa thể đặt vé" : "Not bookable";
   }
+
   return lang === "VN" ? "Không thể chọn" : "Unavailable";
 };
 
-/** Thông báo cho khách — không lộ jargon/admin field. */
+/**
+ * Thông báo cho khách theo contract BE:
+ * isBookingClosed → đóng/chưa mở theo thời gian
+ * !isBookable + bookingClosedReason → hiện reason (vd thiếu km)
+ * !isBookable → chưa thể đặt
+ */
 export const formatBookingClosedMessage = (tripOrMap, lang = "VN") => {
-  const reason = String(
-    tripOrMap?.bookingClosedReason
-    || tripOrMap?.validationMessage
-    || tripOrMap?.message
-    || "",
-  ).trim();
-
-  if (isMissingKmBookingBlock(tripOrMap)) {
-    return lang === "VN"
-      ? "Chuyến này tạm chưa mở bán vì hệ thống chưa có đủ thông tin để tính giá. Vui lòng thử ngày/chặng khác hoặc liên hệ hỗ trợ."
-      : "This trip is not on sale yet — pricing data is incomplete. Please try another date/route or contact support.";
+  if (!tripOrMap) {
+    return lang === "VN" ? "Không thể chọn" : "Unavailable";
   }
 
-  // Ẩn lý do kỹ thuật BE (tên field, hướng dẫn admin) khỏi UI khách
-  if (reason && !looksLikeMissingKm(reason) && !/distanceFromPreviousKm|admin/i.test(reason)) {
-    return reason;
+  if (tripOrMap.isBookingClosed === true) {
+    return lang === "VN"
+      ? "Đã đóng bán / chưa mở bán theo thời gian."
+      : "Booking is closed / not open yet by schedule.";
   }
 
   if (Number(tripOrMap?.availableSeats) <= 0) {
     return lang === "VN" ? "Hết chỗ" : "Sold out";
   }
 
-  if (tripOrMap?.isBookable === false || tripOrMap?.isBookingClosed === true) {
-    return lang === "VN" ? "Đã khóa bến lên" : "Boarding closed";
+  if (tripOrMap.isBookable === false) {
+    const reason = pickBookingClosedReason(tripOrMap);
+    if (reason) return reason;
+    return lang === "VN"
+      ? "Chuyến hiện chưa thể đặt vé."
+      : "This trip cannot be booked right now.";
   }
 
   return lang === "VN" ? "Không thể chọn" : "Unavailable";

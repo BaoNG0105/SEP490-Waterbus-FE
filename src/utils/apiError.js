@@ -2,6 +2,14 @@ export const getApiErrorMessage = (error, fallback) => {
   const status = error?.response?.status;
   const data = error?.response?.data;
 
+  if (status === 502 || status === 503 || status === 504) {
+    // Gateway/proxy — thường BE crash, restart, hoặc timeout; không phải lỗi payload FE.
+    const htmlOrText = typeof data === "string" ? data : "";
+    if (!htmlOrText || /<!DOCTYPE|<html|Bad Gateway|invalid response/i.test(htmlOrText)) {
+      return "Máy chủ / gateway tạm không phản hồi. Kiểm tra BE có đang chạy không (502/503).";
+    }
+  }
+
   if (status === 403) {
     const detail =
       (typeof data === "string" && data) ||
@@ -14,14 +22,30 @@ export const getApiErrorMessage = (error, fallback) => {
     return "Bạn không có quyền thực hiện thao tác này.";
   }
 
-  if (!data) return fallback;
+  if (!data) {
+    if (status === 502 || status === 503 || status === 504) {
+      return "Máy chủ / gateway tạm không phản hồi. Kiểm tra BE có đang chạy không (502/503).";
+    }
+    return fallback;
+  }
   if (typeof data === "string") {
     if (/^forbidden$/i.test(data.trim())) {
       return "Bạn không có quyền thực hiện thao tác này.";
     }
+    // IIS/Azure gateway HTML (502 Bad Gateway, …)
+    if (
+      /<!DOCTYPE html/i.test(data)
+      || /<html[\s>]/i.test(data)
+      || /502\s*-\s*Web server received an invalid response/i.test(data)
+      || /Bad Gateway/i.test(data)
+    ) {
+      return status === 502 || status === 503 || status === 504
+        ? "Máy chủ / gateway tạm không phản hồi. Kiểm tra BE có đang chạy không (502/503)."
+        : "Máy chủ trả về trang lỗi HTML. Kiểm tra log BE / proxy.";
+    }
     // ASP.NET generic HTML/text 500
     if (/an error occurred while processing your request/i.test(data)) {
-      return "Máy chủ gặp lỗi khi xử lý (500). Kiểm tra log BE — thường do payload tạo chuyến (stops, trùng lịch tàu, giờ khởi hành).";
+      return "Máy chủ gặp lỗi khi xử lý (500). Kiểm tra log BE.";
     }
     return rewriteCharterValidationMessage(data) || data;
   }
