@@ -5,7 +5,7 @@ import { useApp } from "../../../context/AppContext";
 import {
     fetchBlogPostManagementDetail,
     modifyBlogPost,
-    buildBlogMultipartPayload,
+    buildBlogWritePayload,
     collectBlogImageUrls,
     BLOG_CATEGORY,
     BLOG_STATUS,
@@ -13,8 +13,7 @@ import {
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 import { RichTextEditor } from "../../../components/RichTextEditor";
-
-const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
+import { BlogCoverField } from "../../../components/BlogCoverField";
 
 export function EditBlog() {
     const { lang } = useApp();
@@ -100,12 +99,12 @@ export function EditBlog() {
     };
 
     const handleImageFilesChange = (e) => {
-        const files = Array.from(e.target.files || []).filter(Boolean);
-        setImageFiles(files);
-        e.target.value = "";
+        const file = e.target.files?.[0];
+        setImageFiles(file ? [file] : []);
     };
 
     const clearImageFiles = () => setImageFiles([]);
+
 
     const handleFormSubmit = async (e) => {
         e.preventDefault();
@@ -125,8 +124,8 @@ export function EditBlog() {
                 return;
             }
 
-            // Không chọn ảnh mới → không append images (BE giữ ảnh cũ)
-            const payload = buildBlogMultipartPayload({
+            // Có ảnh mới → multipart; không → JSON (không gửi imageUrl — BE giữ ảnh cũ).
+            const payload = buildBlogWritePayload({
                 title: formData.title,
                 summary: formData.summary,
                 content: formData.content,
@@ -146,11 +145,19 @@ export function EditBlog() {
             }).then(() => navigate("/admin/news"));
         } catch (error) {
             console.error("Lỗi cập nhật blog:", error);
-            let validationError = "";
-            if (error.response?.data?.errors) {
-                validationError = Object.values(error.response.data.errors).flat().join(" | ");
-            }
-            setErrorMsg(validationError || error.response?.data?.message || (lang === "VN" ? "Gặp lỗi trong quá trình lưu thông tin." : "Failed to save changes."));
+            const status = error.response?.status;
+            const beMessage = error.response?.data?.message
+                || (error.response?.data?.errors
+                    ? Object.values(error.response.data.errors).flat().join(" | ")
+                    : "");
+            setErrorMsg(
+                beMessage
+                || (status === 415
+                    ? (lang === "VN"
+                        ? "Kiểu gửi không đúng (415). Thử refresh rồi lưu lại."
+                        : "Unsupported media type (415). Refresh and retry.")
+                    : (lang === "VN" ? "Gặp lỗi trong quá trình lưu thông tin." : "Failed to save changes.")),
+            );
         } finally {
             setIsSubmitting(false);
         }
@@ -255,78 +262,21 @@ export function EditBlog() {
 
                 <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Ảnh bìa" : "Cover Images"}
+                        {lang === "VN" ? "Ảnh bìa" : "Cover"}
                     </h3>
 
-                    <div className="flex flex-col sm:flex-row gap-5 items-start">
-                        <div className="w-full sm:w-40 aspect-video rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center">
-                            {coverPreview ? (
-                                <img
-                                    src={coverPreview}
-                                    alt={formData.imageAltText || "preview"}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => { e.target.style.display = "none"; }}
-                                />
-                            ) : (
-                                <span className="material-symbols-outlined text-3xl text-slate-300 dark:text-slate-600">image</span>
-                            )}
-                        </div>
-                        <div className="flex-1 w-full space-y-3">
-                            {existingImageUrls.length > 0 && imageFiles.length === 0 && (
-                                <div className="space-y-2">
-                                    <label className={labelStyle}>
-                                        {lang === "VN" ? "Ảnh hiện tại (BE giữ nếu không chọn ảnh mới)" : "Current images (kept if no new files)"}
-                                    </label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {existingImageUrls.map((url) => (
-                                            <div
-                                                key={url}
-                                                className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900"
-                                            >
-                                                <img
-                                                    src={url}
-                                                    alt=""
-                                                    className="w-full h-full object-cover"
-                                                    onError={(e) => { e.target.src = DEFAULT_BLOG_IMAGE; }}
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            <label className={labelStyle}>
-                                {lang === "VN" ? "Chọn ảnh mới (tuỳ chọn)" : "Select new images (optional)"}
-                            </label>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={handleImageFilesChange}
-                                className={`${inputStyle} file:mr-3 file:rounded-lg file:border-0 file:bg-[#124757] file:px-3 file:py-1.5 file:text-[10px] file:font-black file:uppercase file:tracking-wider file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900`}
-                            />
-                            {imageFiles.length > 0 ? (
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={clearImageFiles}
-                                        className="text-[10px] font-headline font-black uppercase tracking-wider text-rose-500"
-                                    >
-                                        {lang === "VN" ? "Huỷ chọn ảnh mới" : "Cancel new selection"}
-                                    </button>
-                                </div>
-                            ) : null}
-                            <div>
-                                <label className={labelStyle}>{lang === "VN" ? "Mô tả ảnh (Alt Text)" : "Image Alt Text"}</label>
-                                <input
-                                    type="text"
-                                    value={formData.imageAltText}
-                                    onChange={(e) => handleFieldChange("imageAltText", e.target.value)}
-                                    className={inputStyle}
-                                />
-                            </div>
-                        </div>
-                    </div>
+                    <BlogCoverField
+                        lang={lang}
+                        previewUrl={coverPreview}
+                        hasExisting={existingImageUrls.length > 0}
+                        hasNewFile={imageFiles.length > 0}
+                        fileName={imageFiles[0]?.name || ""}
+                        altText={formData.imageAltText}
+                        onAltChange={(value) => handleFieldChange("imageAltText", value)}
+                        onFileChange={handleImageFilesChange}
+                        onClearNewFile={clearImageFiles}
+                        disabled={isSubmitting}
+                    />
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">

@@ -7,6 +7,12 @@ import { WaterwayMap } from "../../components/WaterwayMap";
 import { fetchPublishedBlogPosts, labelBlogCategory } from "../../services/blogService";
 import { fetchPublicPromotions } from "../../services/promotionService";
 import { ContactForm } from "../../components/ContactForm";
+import {
+  COMPANY_ADDRESS_EN,
+  COMPANY_ADDRESS_VN,
+  COMPANY_EMAIL,
+  COMPANY_HOTLINE,
+} from "../../constants/companyContact";
 
 const heroVideo = "https://res.cloudinary.com/dygipvoal/video/upload/v1783865624/q7gde8dluohboeqjzdtx.mp4";
 const fallbackPromoImg = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
@@ -940,7 +946,7 @@ export const Home = () => {
                       {lang === "VN" ? "Hotline hỗ trợ 24/7" : "Support Hotline"}
                     </p>
                     <p className="text-lg font-headline font-black text-[#124757] dark:text-white">
-                      1900 636830
+                      {COMPANY_HOTLINE}
                     </p>
                   </div>
                 </div>
@@ -954,7 +960,7 @@ export const Home = () => {
                       {lang === "VN" ? "Email giao dịch" : "Email Address"}
                     </p>
                     <p className="text-base font-semibold text-slate-700 dark:text-slate-300">
-                      info@thuongnhat.com
+                      {COMPANY_EMAIL}
                     </p>
                   </div>
                 </div>
@@ -968,7 +974,7 @@ export const Home = () => {
                       {lang === "VN" ? "Trụ sở điều hành chính" : "Main Office"}
                     </p>
                     <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed max-w-xs">
-                      10B Tôn Đức Thắng, Phường Bến Nghé, Quận 1, Thành phố Hồ Chí Minh, Việt Nam
+                      {lang === "VN" ? COMPANY_ADDRESS_VN : COMPANY_ADDRESS_EN}
                     </p>
                   </div>
                 </div>

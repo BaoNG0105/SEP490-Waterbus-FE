@@ -201,10 +201,28 @@ export const modifyBlogPost = async (id, payload) => {
 };
 
 /**
- * Build multipart body theo contract BE:
- * - fields: title, summary, content, category, status, imageAltText
- * - files: images (không gửi imageUrl/imageUrls)
- * - update: không chọn ảnh mới → không append images (BE giữ ảnh cũ)
+ * JSON create/update — KHÔNG gửi imageUrl/imageUrls (BE mới: chỉ nhận upload file).
+ * Không gửi file → BE giữ ảnh hiện có.
+ */
+export const buildBlogJsonPayload = ({
+    title,
+    summary = "",
+    content = "",
+    category,
+    status,
+    imageAltText = "",
+} = {}) => ({
+    title: String(title || "").trim(),
+    summary: String(summary || "").trim(),
+    content: String(content || "").trim(),
+    category: normalizeBlogCategory(category),
+    status: String(status || BLOG_STATUS.DRAFT),
+    imageAltText: String(imageAltText || "").trim() || null,
+});
+
+/**
+ * Multipart khi có file ảnh mới.
+ * Field: `image` / `images` / `file` (BE chấp nhận cả ba). Không set Content-Type tay.
  */
 export const buildBlogMultipartPayload = ({
     title,
@@ -223,11 +241,43 @@ export const buildBlogMultipartPayload = ({
     formData.append("status", String(status || BLOG_STATUS.DRAFT));
     formData.append("imageAltText", String(imageAltText || "").trim());
 
-    (Array.isArray(imageFiles) ? imageFiles : []).forEach((file) => {
-        if (file) formData.append("images", file);
-    });
+    const files = Array.isArray(imageFiles) ? imageFiles.filter(Boolean) : [];
+    // BE chấp nhận field image | images | files — chỉ append 1 lần / file.
+    files.forEach((file) => formData.append("images", file));
 
     return formData;
+};
+
+/** Có file → multipart; không → JSON (không kèm imageUrl). */
+export const buildBlogWritePayload = ({
+    title,
+    summary,
+    content,
+    category,
+    status,
+    imageAltText,
+    imageFiles = [],
+} = {}) => {
+    const files = Array.isArray(imageFiles) ? imageFiles.filter(Boolean) : [];
+    if (files.length > 0) {
+        return buildBlogMultipartPayload({
+            title,
+            summary,
+            content,
+            category,
+            status,
+            imageAltText,
+            imageFiles: files,
+        });
+    }
+    return buildBlogJsonPayload({
+        title,
+        summary,
+        content,
+        category,
+        status,
+        imageAltText,
+    });
 };
 
 /** Xóa thật bài viết (DELETE). */

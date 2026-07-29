@@ -1,5 +1,11 @@
 import { useApp } from "../../context/AppContext";
 import { ContactForm } from "../../components/ContactForm";
+import {
+  COMPANY_ADDRESS_EN,
+  COMPANY_ADDRESS_VN,
+  COMPANY_EMAIL,
+  COMPANY_HOTLINE,
+} from "../../constants/companyContact";
 
 export const Contact = () => {
   // Lấy ngôn ngữ hiện tại từ Context
@@ -44,7 +50,7 @@ export const Contact = () => {
                     {lang === "VN" ? "Hotline hỗ trợ 24/7" : "Support Hotline"}
                   </p>
                   <p className="text-lg font-headline font-black text-[#124757] dark:text-white">
-                    1900 636830
+                    {COMPANY_HOTLINE}
                   </p>
                 </div>
               </div>
@@ -58,10 +64,10 @@ export const Contact = () => {
                     {lang === "VN" ? "Email giao dịch" : "Email Address"}
                   </p>
                   <a
-                    href="mailto:support@waterbus.com"
+                    href={`mailto:${COMPANY_EMAIL}`}
                     className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors"
                   >
-                    support@waterbus.com
+                    {COMPANY_EMAIL}
                   </a>
                 </div>
               </div>
@@ -75,7 +81,7 @@ export const Contact = () => {
                     {lang === "VN" ? "Trụ sở điều hành chính" : "Main Office"}
                   </p>
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed max-w-xs">
-                    7 Đ. D1, Long Thạnh Mỹ, Tăng Nhơn Phú, Thành phố Hồ Chí Minh, Việt Nam
+                    {lang === "VN" ? COMPANY_ADDRESS_VN : COMPANY_ADDRESS_EN}
                   </p>
                 </div>
               </div>
