@@ -4,13 +4,14 @@ import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import {
     addBlogPost,
-    buildBlogMultipartPayload,
+    buildBlogWritePayload,
     BLOG_CATEGORY,
     BLOG_STATUS,
 } from "../../../services/blogService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 import { RichTextEditor } from "../../../components/RichTextEditor";
+import { BlogCoverField } from "../../../components/BlogCoverField";
 
 export function CreateBlog() {
     const { lang } = useApp();
@@ -49,9 +50,8 @@ export function CreateBlog() {
     };
 
     const handleImageFilesChange = (e) => {
-        const files = Array.from(e.target.files || []).filter(Boolean);
-        setImageFiles(files);
-        e.target.value = "";
+        const file = e.target.files?.[0];
+        setImageFiles(file ? [file] : []);
     };
 
     const clearImageFiles = () => setImageFiles([]);
@@ -73,7 +73,7 @@ export function CreateBlog() {
                 return;
             }
 
-            const payload = buildBlogMultipartPayload({
+            const payload = buildBlogWritePayload({
                 title: formData.title,
                 summary: formData.summary,
                 content: formData.content,
@@ -198,66 +198,21 @@ export function CreateBlog() {
 
                 <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Ảnh bìa" : "Cover Images"}
+                        {lang === "VN" ? "Ảnh bìa" : "Cover"}
                     </h3>
 
-                    <div className="flex flex-col sm:flex-row gap-5 items-start">
-                        <div className="w-full sm:w-40 aspect-video rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center">
-                            {coverPreview ? (
-                                <img
-                                    src={coverPreview}
-                                    alt={formData.imageAltText || "preview"}
-                                    className="w-full h-full object-cover"
-                                />
-                            ) : (
-                                <span className="material-symbols-outlined text-3xl text-slate-300 dark:text-slate-600">image</span>
-                            )}
-                        </div>
-                        <div className="flex-1 w-full space-y-3">
-                            <label className={labelStyle}>
-                                {lang === "VN" ? "Chọn ảnh (bắt buộc nếu xuất bản)" : "Select images (required to publish)"}
-                            </label>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={handleImageFilesChange}
-                                className={`${inputStyle} file:mr-3 file:rounded-lg file:border-0 file:bg-[#124757] file:px-3 file:py-1.5 file:text-[10px] file:font-black file:uppercase file:tracking-wider file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900`}
-                            />
-                            {imageFiles.length > 0 ? (
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <p className="text-[11px] font-semibold text-slate-500">
-                                        {lang === "VN"
-                                            ? `Đã chọn ${imageFiles.length} ảnh`
-                                            : `${imageFiles.length} image(s) selected`}
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={clearImageFiles}
-                                        className="text-[10px] font-headline font-black uppercase tracking-wider text-rose-500"
-                                    >
-                                        {lang === "VN" ? "Xóa ảnh đã chọn" : "Clear selected"}
-                                    </button>
-                                </div>
-                            ) : (
-                                <p className="text-[10px] text-slate-400 font-bold">
-                                    {lang === "VN"
-                                        ? "Upload file ảnh (multipart). Không dán URL."
-                                        : "Upload image files (multipart). Do not paste URLs."}
-                                </p>
-                            )}
-                            <div>
-                                <label className={labelStyle}>{lang === "VN" ? "Mô tả ảnh (Alt Text)" : "Image Alt Text"}</label>
-                                <input
-                                    type="text"
-                                    placeholder={lang === "VN" ? "VD: Tàu waterbus trên sông Sài Gòn" : "e.g. Waterbus boat on the Saigon river"}
-                                    value={formData.imageAltText}
-                                    onChange={(e) => handleFieldChange("imageAltText", e.target.value)}
-                                    className={inputStyle}
-                                />
-                            </div>
-                        </div>
-                    </div>
+                    <BlogCoverField
+                        lang={lang}
+                        previewUrl={coverPreview}
+                        hasExisting={false}
+                        hasNewFile={imageFiles.length > 0}
+                        fileName={imageFiles[0]?.name || ""}
+                        altText={formData.imageAltText}
+                        onAltChange={(value) => handleFieldChange("imageAltText", value)}
+                        onFileChange={handleImageFilesChange}
+                        onClearNewFile={clearImageFiles}
+                        disabled={isSubmitting}
+                    />
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
