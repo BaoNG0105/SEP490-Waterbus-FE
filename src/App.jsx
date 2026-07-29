@@ -43,6 +43,7 @@ import { TripManagement, CreateTrip, TripDetail } from "./pages/Admin/TripManage
 import { SeatTypeManagement } from "./pages/Admin/SeatTypeManagement";
 import { StationManagement } from "./pages/Admin/StationManagement";
 import { InsuranceManagement } from "./pages/Admin/InsuranceManagement";
+import { ReviewManagement } from "./pages/Admin/ReviewManagement";
 import { CreateStation } from "./pages/Admin/StationManagement/CreateStation";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
 import { UserManagement } from "./pages/Admin/UserManagement";
@@ -601,6 +602,16 @@ function App() {
             element={
               <AdminLayout title="Insurance Packages">
                 <InsuranceManagement />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Review Management ******* */}
+          <Route
+            path="/admin/reviews-management"
+            element={
+              <AdminLayout title="Review Management">
+                <ReviewManagement />
               </AdminLayout>
             }
           />

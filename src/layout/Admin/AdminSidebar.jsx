@@ -59,6 +59,7 @@ const MENU_GROUPS = [
       { path: "/admin/bookings", labelVn: "Booking vé", labelEn: "Seat bookings", roles: ["ADMIN"] },
       { path: "/admin/charter-bookings-management", labelVn: "Thuê tàu", labelEn: "Request Booking", roles: ["ADMIN"] },
       { path: "/admin/insurance-management", labelVn: "Bảo hiểm", labelEn: "Insurance", roles: ["ADMIN"] },
+      { path: "/admin/reviews-management", labelVn: "Đánh giá", labelEn: "Reviews", roles: ["ADMIN"] },
     ],
   },
   {
