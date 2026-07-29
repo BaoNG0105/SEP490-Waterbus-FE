@@ -1,9 +1,20 @@
 import {
+    getPublicReviews as apiGetPublicReviews,
     getReviewableTrips as apiGetReviewableTrips,
     createTripReview as apiCreateTripReview,
     getAdminReviews as apiGetAdminReviews,
     updateReviewStatus as apiUpdateReviewStatus,
 } from '../api/reviewApi';
+
+// Service: Danh sách đánh giá công khai (trang chủ / marketing) — kèm averageRating toàn hệ thống
+export const fetchPublicReviews = async (params) => {
+    try {
+        return await apiGetPublicReviews(params);
+    } catch (error) {
+        console.error('Lỗi khi lấy danh sách đánh giá công khai:', error);
+        throw error;
+    }
+};
 
 // Service: Danh sách chuyến tôi có thể / đã đánh giá (dùng để hiện nút "Đánh giá" trong chi tiết booking)
 export const fetchReviewableTrips = async (params) => {

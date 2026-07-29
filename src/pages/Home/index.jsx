@@ -6,20 +6,19 @@ import { fetchAllStations } from "../../services/stationService";
 import { WaterwayMap } from "../../components/WaterwayMap";
 import { fetchPublishedBlogPosts, labelBlogCategory } from "../../services/blogService";
 import { fetchPublicPromotions } from "../../services/promotionService";
+import { fetchPublicReviews } from "../../services/reviewService";
+import { StarRatingDisplay } from "../../components/TripReview";
 import { ContactForm } from "../../components/ContactForm";
-import {
-  COMPANY_ADDRESS_EN,
-  COMPANY_ADDRESS_VN,
-  COMPANY_EMAIL,
-  COMPANY_HOTLINE,
-} from "../../constants/companyContact";
 
 const heroVideo = "https://res.cloudinary.com/dygipvoal/video/upload/v1783865624/q7gde8dluohboeqjzdtx.mp4";
 const fallbackPromoImg = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
 import {
-  testimonialsData,
-  appImages
+  appImages,
+  COMPANY_ADDRESS_EN,
+  COMPANY_ADDRESS_VN,
+  COMPANY_EMAIL,
+  COMPANY_HOTLINE,
 } from "../../data/homeData";
 
 
@@ -81,10 +80,11 @@ export const Home = () => {
 
   // Quản lý Slide chạy tự động cho phần Testimonials
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
+  const [reviews, setReviews] = useState([]);
 
   // Hàm chuyển testimonial tiếp theo và trước đó
-  const nextTestimonial = () => setCurrentTestimonial((prev) => (prev + 1) % testimonialsData.length);
-  const prevTestimonial = () => setCurrentTestimonial((prev) => (prev === 0 ? testimonialsData.length - 1 : prev - 1));
+  const nextTestimonial = () => setCurrentTestimonial((prev) => (prev + 1) % reviews.length);
+  const prevTestimonial = () => setCurrentTestimonial((prev) => (prev === 0 ? reviews.length - 1 : prev - 1));
 
   // Blog Slide tự động chạy sau mỗi 5 giây
   useEffect(() => {
@@ -144,13 +144,34 @@ export const Home = () => {
     loadPromotions();
   }, []);
 
+  // useEffect tự động gọi API lấy đánh giá công khai (status=Published) khi vào trang Home
+  useEffect(() => {
+    const loadReviews = async () => {
+      try {
+        const data = await fetchPublicReviews({ page: 1, pageSize: 10 });
+        const items = Array.isArray(data) ? data : (data?.items || []);
+        setReviews(items.map((item) => ({
+          id: item?.reviewId || item?.id || "",
+          comment: item?.comment || "",
+          rating: Number(item?.rating) || 0,
+          routeName: item?.routeName || "",
+          createdAt: item?.createdAt || "",
+        })));
+      } catch (error) {
+        console.error("Lỗi khi tải danh sách đánh giá công khai:", error);
+      }
+    };
+    loadReviews();
+  }, []);
+
   // Testimonials tự động chạy sau mỗi 6 giây
   useEffect(() => {
+    if (reviews.length === 0) return undefined;
     const timer = setInterval(() => {
-      setCurrentTestimonial((prev) => (prev + 1) % testimonialsData.length);
+      setCurrentTestimonial((prev) => (prev + 1) % reviews.length);
     }, 6000); // Tự động trượt sau mỗi 6 giây
     return () => clearInterval(timer);
-  }, []);
+  }, [reviews.length]);
 
   // Auto-cycle cho App Download Section
   useEffect(() => {
@@ -830,83 +851,83 @@ export const Home = () => {
       </section>
 
       {/* ===== Testimonials Section ===== */}
-      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden">
-        <div className="max-w-5xl mx-auto px-6 md:px-12 flex flex-col items-center">
-          {/* Khối tiêu đề căn giữa đồng bộ */}
-          <div className="text-center mb-16 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-              {lang === "VN" ? "Đánh giá từ hành khách" : "Passenger Reviews"}
-            </p>
-            <h2 className="text-4xl md:text-5xl lg:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-              {lang === "VN" ? "Tiếng nói từ những hành khách của chúng tôi" : "Voices Of Our Passengers"}
-            </h2>
-          </div>
-          {/* Khung Slider chính */}
-          <div className="relative w-full bg-slate-50 dark:bg-slate-800 rounded-[2.5rem] p-8 md:p-14 shadow-xl border border-slate-100 dark:border-slate-700/50 flex flex-col items-center">
-            {/* Icon Dấu ngoặc kép trang trí lớn tinh tế */}
-            <span className="material-symbols-outlined text-6xl md:text-7xl text-[#124757]/10 dark:text-yellow-400/10 absolute top-8 left-8 md:top-10 md:left-12 pointer-events-none font-black">
-              format_quote
-            </span>
-            {/* Nội dung Review chuyển đổi slide mượt mà */}
-            <div className="w-full text-center space-y-6 relative min-h-40 flex flex-col justify-center items-center">
-              {testimonialsData.map((item, index) => (
-                <div
-                  key={item.id}
-                  className={`transition-all duration-700 ease-in-out flex flex-col items-center space-y-6 ${index === currentTestimonial
-                    ? "opacity-100 scale-100 relative z-10"
-                    : "opacity-0 scale-95 absolute z-0 pointer-events-none"
-                    }`}
-                >
-                  {/* Lời trích dẫn của khách hàng */}
-                  <p className="text-lg md:text-xl font-medium font-body text-slate-700 dark:text-slate-200 leading-relaxed max-w-3xl italic">
-                    "{lang === "VN" ? item.quoteVn : item.quoteEn}"
-                  </p>
-                  {/* Khối thông tin Người đánh giá */}
-                  <div className="flex items-center gap-3.5 pt-4">
-                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#124757] dark:border-yellow-400 shadow-md shrink-0">
-                      <img src={item.avatar} alt={item.name} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="text-left">
-                      <h4 className="font-headline font-bold text-base text-[#124757] dark:text-white leading-none">
-                        {item.name}
-                      </h4>
+      {reviews.length > 0 && (
+        <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden">
+          <div className="max-w-5xl mx-auto px-6 md:px-12 flex flex-col items-center">
+            {/* Khối tiêu đề căn giữa đồng bộ */}
+            <div className="text-center mb-16 space-y-4">
+              <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+                {lang === "VN" ? "Đánh giá từ hành khách" : "Passenger Reviews"}
+              </p>
+              <h2 className="text-4xl md:text-5xl lg:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+                {lang === "VN" ? "Tiếng nói từ những hành khách của chúng tôi" : "Voices Of Our Passengers"}
+              </h2>
+            </div>
+            {/* Khung Slider chính */}
+            <div className="relative w-full bg-slate-50 dark:bg-slate-800 rounded-[2.5rem] p-8 md:p-14 shadow-xl border border-slate-100 dark:border-slate-700/50 flex flex-col items-center">
+              {/* Icon Dấu ngoặc kép trang trí lớn tinh tế */}
+              <span className="material-symbols-outlined text-6xl md:text-7xl text-[#124757]/10 dark:text-yellow-400/10 absolute top-8 left-8 md:top-10 md:left-12 pointer-events-none font-black">
+                format_quote
+              </span>
+              {/* Nội dung Review chuyển đổi slide mượt mà */}
+              <div className="w-full text-center space-y-6 relative min-h-40 flex flex-col justify-center items-center">
+                {reviews.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className={`transition-all duration-700 ease-in-out flex flex-col items-center space-y-6 ${index === currentTestimonial
+                      ? "opacity-100 scale-100 relative z-10"
+                      : "opacity-0 scale-95 absolute z-0 pointer-events-none"
+                      }`}
+                  >
+                    {/* Lời trích dẫn của khách hàng */}
+                    <p className="text-lg md:text-xl font-medium font-body text-slate-700 dark:text-slate-200 leading-relaxed max-w-3xl italic">
+                      "{item.comment}"
+                    </p>
+                    {/* Số sao + tuyến đường — không hiển thị tên khách hàng */}
+                    <div className="flex flex-col items-center gap-1.5 pt-4">
+                      <StarRatingDisplay rating={item.rating} size="text-xl" />
+                      {item.routeName ? (
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                          {lang === "VN" ? `Đánh giá về chuyến ${item.routeName}` : `Reviewed trip: ${item.routeName}`}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
-                </div>
+                ))}
+              </div>
+              {/* Nút mũi tên điều hướng Trái / Phải phẳng cao cấp */}
+              <div className="absolute top-1/2 -translate-y-1/2 left-3 md:-left-6 right-3 md:-right-6 flex justify-between pointer-events-none z-30">
+                <button
+                  onClick={prevTestimonial}
+                  className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white dark:bg-slate-700 text-[#124757] dark:text-white border border-slate-200/60 dark:border-slate-600 shadow-md flex items-center justify-center pointer-events-auto hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 hover:scale-105 transition-all outline-none"
+                >
+                  <span className="material-symbols-outlined text-xl font-bold">chevron_left</span>
+                </button>
+                <button
+                  onClick={nextTestimonial}
+                  className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white dark:bg-slate-700 text-[#124757] dark:text-white border border-slate-200/60 dark:border-slate-600 shadow-md flex items-center justify-center pointer-events-auto hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 hover:scale-105 transition-all outline-none"
+                >
+                  <span className="material-symbols-outlined text-xl font-bold">chevron_right</span>
+                </button>
+              </div>
+            </div>
+            {/* Hệ thống các chấm nhỏ Pagination hiển thị trạng thái slide hiện tại */}
+            <div className="flex gap-2 mt-8 z-20">
+              {reviews.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentTestimonial(index)}
+                  className={`h-2 rounded-full transition-all duration-300 outline-none ${index === currentTestimonial
+                    ? "w-6 bg-[#124757] dark:bg-yellow-400"
+                    : "w-2 bg-slate-300 dark:bg-slate-600 hover:bg-slate-400"
+                    }`}
+                  title={`Go to slide ${index + 1}`}
+                />
               ))}
             </div>
-            {/* Nút mũi tên điều hướng Trái / Phải phẳng cao cấp */}
-            <div className="absolute top-1/2 -translate-y-1/2 left-3 md:-left-6 right-3 md:-right-6 flex justify-between pointer-events-none z-30">
-              <button
-                onClick={prevTestimonial}
-                className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white dark:bg-slate-700 text-[#124757] dark:text-white border border-slate-200/60 dark:border-slate-600 shadow-md flex items-center justify-center pointer-events-auto hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 hover:scale-105 transition-all outline-none"
-              >
-                <span className="material-symbols-outlined text-xl font-bold">chevron_left</span>
-              </button>
-              <button
-                onClick={nextTestimonial}
-                className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white dark:bg-slate-700 text-[#124757] dark:text-white border border-slate-200/60 dark:border-slate-600 shadow-md flex items-center justify-center pointer-events-auto hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 hover:scale-105 transition-all outline-none"
-              >
-                <span className="material-symbols-outlined text-xl font-bold">chevron_right</span>
-              </button>
-            </div>
           </div>
-          {/* Hệ thống các chấm nhỏ Pagination hiển thị trạng thái slide hiện tại */}
-          <div className="flex gap-2 mt-8 z-20">
-            {testimonialsData.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentTestimonial(index)}
-                className={`h-2 rounded-full transition-all duration-300 outline-none ${index === currentTestimonial
-                  ? "w-6 bg-[#124757] dark:bg-yellow-400"
-                  : "w-2 bg-slate-300 dark:bg-slate-600 hover:bg-slate-400"
-                  }`}
-                title={`Go to slide ${index + 1}`}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ===== CONTACT SECTION ===== */}
       <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none">

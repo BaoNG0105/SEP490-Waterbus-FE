@@ -1,5 +1,14 @@
 // src/data/homeData.js
 
+// THÔNG TIN LIÊN HỆ CÔNG KHAI — dùng chung Home / Contact / form email
+export const COMPANY_HOTLINE = '1900 636830';
+export const COMPANY_HOTLINE_TEL = '1900636830';
+export const COMPANY_EMAIL = 'support@waterbus.top';
+export const COMPANY_ADDRESS_VN =
+    '7 Đ. D1, Long Thạnh Mỹ, Tăng Nhơn Phú, Thành phố Hồ Chí Minh, Việt Nam';
+export const COMPANY_ADDRESS_EN =
+    '7 D1 Street, Long Thanh My, Tang Nhon Phu, Ho Chi Minh City, Vietnam';
+
 // DỮ LIỆU SLIDE HERO
 export const heroSlides = [
     {
@@ -47,40 +56,6 @@ export const guidelines = [
         descVn: "Hệ thống sẽ gửi mã QR vé về email và app của bạn. Xuất trình mã này khi lên tàu.",
         descEn: "The system will send your ticket QR code to your email and phone. Present this code when boarding."
     },
-];
-
-// DỮ LIỆU Ý KIẾN KHÁCH HÀNG
-export const testimonialsData = [
-    {
-        id: 1,
-        name: "Nguyễn Văn Hải",
-        roleVn: "Hành khách thường xuyên (Quận 1)",
-        roleEn: "Frequent Passenger (District 1)",
-        avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop",
-        quoteVn: "Đi WaterBus đi làm hằng ngày giúp tôi tránh được hoàn toàn cảnh kẹt xe mệt mỏi trên đường Tôn Đức Thắng. Tàu chạy rất đúng giờ, không gian thoáng mát và mát mẻ vô cùng.",
-        quoteEn: "Commuting by WaterBus daily helps me completely avoid the exhausting traffic on Ton Duc Thang street. The vessels are extremely punctual, spacious, and wonderfully cool.",
-        rating: 5
-    },
-    {
-        id: 2,
-        name: "Sarah Jenkins",
-        roleVn: "Khách du lịch (Australia)",
-        roleEn: "Tourist (Australia)",
-        avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop",
-        quoteVn: "Một trải nghiệm ngắm hoàng hôn trên sông Sài Gòn tuyệt vời với mức giá quá rẻ! Hệ thống đặt vé trực tuyến bằng mã QR cực kỳ nhanh chóng và tiện lợi cho người nước ngoài.",
-        quoteEn: "An amazing sunset experience on the Saigon River for such an affordable price! The online QR ticketing system is incredibly fast and convenient for foreigners.",
-        rating: 5
-    },
-    {
-        id: 3,
-        name: "Trần Minh Quân",
-        roleVn: "Nhiếp ảnh gia tự do",
-        roleEn: "Freelance Photographer",
-        avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=200&auto=format&fit=crop",
-        quoteVn: "Tôi thường chọn các chuyến tàu chiều muộn để săn ảnh thành phố lên đèn. Nhân viên thân thiện, tàu chạy êm, boong tàu phía sau rộng rãi rất lý tưởng để tác nghiệp.",
-        quoteEn: "I often choose late afternoon trips to capture city lights. Friendly staff, smooth sailing, and the spacious rear deck is just perfect for taking photos.",
-        rating: 5
-    }
 ];
 
 // ẢNH SLIDE QUẢNG CÁO APP

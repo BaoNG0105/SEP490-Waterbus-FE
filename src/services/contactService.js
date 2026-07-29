@@ -1,4 +1,4 @@
-import { COMPANY_EMAIL } from '../constants/companyContact';
+import { COMPANY_EMAIL } from '../data/homeData';
 
 const getContactToEmail = () =>
   String(import.meta.env.VITE_CONTACT_TO_EMAIL || COMPANY_EMAIL).trim() || COMPANY_EMAIL;

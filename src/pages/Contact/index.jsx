@@ -5,7 +5,7 @@ import {
   COMPANY_ADDRESS_VN,
   COMPANY_EMAIL,
   COMPANY_HOTLINE,
-} from "../../constants/companyContact";
+} from "../../data/homeData";
 
 export const Contact = () => {
   // Lấy ngôn ngữ hiện tại từ Context

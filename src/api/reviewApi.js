@@ -1,5 +1,9 @@
 import api from './axios';
 
+// API: Danh sách đánh giá công khai (status=Published) kèm averageRating toàn hệ thống. Public, không cần token.
+export const getPublicReviews = (params = {}) =>
+    api.get('/reviews', { params, skipAuth: true }).then(response => response.data);
+
 // API: Các chuyến tôi có thể / đã đánh giá (mới hoàn thành trước). myReview=null nghĩa là chưa đánh giá.
 export const getReviewableTrips = (params = {}) =>
     api.get('/reviews/my/reviewable-trips', { params }).then(response => response.data);

@@ -3,7 +3,7 @@ import { useApp } from "../context/AppContext";
 import { notify } from "../utils/swalToast";
 import { getApiErrorMessage } from "../utils/apiError";
 import { sendContactMessage } from "../services/contactService";
-import { COMPANY_EMAIL } from "../constants/companyContact";
+import { COMPANY_EMAIL } from "../data/homeData";
 
 const INITIAL_FORM_STATE = {
   fullName: "",
