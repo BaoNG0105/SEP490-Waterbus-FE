@@ -1,5 +1,6 @@
 import {
   createPayment as apiCreatePayment,
+  getRefundOtpOptions as apiGetRefundOtpOptions,
   manualRefundPayment as apiManualRefundPayment,
   refundPayment as apiRefundPayment,
   requestRefundOtp as apiRequestRefundOtp,
@@ -7,15 +8,86 @@ import {
   syncPaymentByOrderCode as apiSyncPaymentByOrderCode,
 } from "../api/paymentApi";
 
+const pick = (source, keys, fallback = "") => {
+  for (const key of keys) {
+    const value = key.split(".").reduce((obj, part) => obj?.[part], source);
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return fallback;
+};
+
 export const createBookingPayment = (paymentPayload) =>
   apiCreatePayment(paymentPayload);
 
 export const refundBookingPayment = (paymentId, refundPayload) =>
   apiRefundPayment(paymentId, refundPayload);
 
-/** POST /payments/{id}/refund/otp — lấy challengeId trước khi refund. */
-export const requestRefundBookingOtp = (paymentId, { otpChannel } = {}) =>
-  apiRequestRefundOtp(paymentId, otpChannel ? { otpChannel } : {});
+/** Chuẩn hoá kênh OTP: BE trả "Phone"/"Email", POST body cần "phone"/"email". */
+export const normalizeRefundOtpChannel = (value) => {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "phone" || key === "sms" || key === "mobile") return "phone";
+  if (key === "email" || key === "mail") return "email";
+  return key;
+};
+
+/** GET /payments/{id}/refund/otp-options */
+export const fetchRefundOtpOptions = async (paymentId) => {
+  const data = await apiGetRefundOtpOptions(paymentId);
+  const root = data?.data && typeof data.data === "object" && !Array.isArray(data.data) ? data.data : data;
+  const rawChannels = Array.isArray(root?.channels)
+    ? root.channels
+    : Array.isArray(root?.options)
+      ? root.options
+      : Array.isArray(root?.availableChannels)
+        ? root.availableChannels
+        : [];
+
+  const channels = rawChannels.map((item) => {
+    if (typeof item === "string") {
+      const channel = normalizeRefundOtpChannel(item);
+      return {
+        channel,
+        maskedDestination: "",
+        isDefault: false,
+        label: channel,
+      };
+    }
+    const channel = normalizeRefundOtpChannel(
+      pick(item, ["channel", "otpChannel", "type", "name"], ""),
+    );
+    return {
+      channel,
+      maskedDestination: pick(item, ["maskedDestination", "destination", "masked"], "") || "",
+      isDefault: Boolean(item?.isDefault ?? item?.IsDefault),
+      label: pick(item, ["label", "displayName"], "") || channel,
+      raw: item,
+    };
+  }).filter((item) => item.channel === "phone" || item.channel === "email");
+
+  const defaultFromFlag = channels.find((item) => item.isDefault)?.channel || "";
+  const defaultChannel = normalizeRefundOtpChannel(
+    defaultFromFlag
+    || pick(root, ["defaultChannel", "otpChannel", "preferredChannel"], "")
+    || channels[0]?.channel
+    || "phone",
+  );
+
+  return {
+    paymentId: pick(root, ["paymentId", "id"], "") || "",
+    refundAmount: Number(pick(root, ["refundAmount", "amount", "payableAmount"], 0)) || 0,
+    defaultChannel: defaultChannel === "email" ? "email" : "phone",
+    channels,
+    raw: root,
+  };
+};
+
+/** POST /payments/{id}/refund/otp — body { otpChannel: "phone" | "email" }. */
+export const requestRefundBookingOtp = (paymentId, { otpChannel } = {}) => {
+  const channel = normalizeRefundOtpChannel(otpChannel) || "phone";
+  return apiRequestRefundOtp(paymentId, {
+    otpChannel: channel === "email" ? "email" : "phone",
+  });
+};
 
 export const manualRefundBookingPayment = (paymentId, manualPayload) =>
   apiManualRefundPayment(paymentId, manualPayload);

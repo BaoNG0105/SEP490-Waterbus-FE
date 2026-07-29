@@ -315,6 +315,14 @@ export function MyCharterPaymentPanel({
                     </p>
                   )}
 
+                  {(booking.requiresAdditionalPayment || Number(booking.additionalInsuranceAmount) > 0) && (
+                    <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+                      {lang === "VN"
+                        ? `Phí bảo hiểm phát sinh${Number(booking.additionalInsuranceAmount) > 0 ? ` ${currencyFormatter.format(Number(booking.additionalInsuranceAmount))}` : ""} do thêm hành khách. Thanh toán phần còn lại để nhận boarding pass.`
+                        : `Additional insurance${Number(booking.additionalInsuranceAmount) > 0 ? ` ${currencyFormatter.format(Number(booking.additionalInsuranceAmount))}` : ""} after passenger changes. Pay the remaining balance to unlock boarding passes.`}
+                    </p>
+                  )}
+
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
                     <SelectablePublicVouchers
                       lang={lang}

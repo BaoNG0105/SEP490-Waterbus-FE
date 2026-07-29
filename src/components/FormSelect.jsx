@@ -136,22 +136,31 @@ export function FormSelect({
               ) : (
                 filtered.map((opt) => {
                   const active = String(opt.value) === String(value);
+                  const optDisabled = Boolean(opt.disabled);
                   return (
-                    <li key={String(opt.value)} role="option" aria-selected={active}>
+                    <li key={String(opt.value)} role="option" aria-selected={active} aria-disabled={optDisabled || undefined}>
                       <button
                         type="button"
-                        onClick={() => pick(opt.value)}
+                        disabled={optDisabled}
+                        onClick={() => {
+                          if (optDisabled) return;
+                          pick(opt.value);
+                        }}
                         className={`flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-xs font-bold transition-colors ${
-                          active
-                            ? "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
-                            : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                          optDisabled
+                            ? "cursor-not-allowed text-slate-300 dark:text-slate-600"
+                            : active
+                              ? "border-l-[3px] border-l-[#124757] bg-[#124757]/10 text-[#124757] dark:border-l-yellow-400 dark:bg-yellow-400/15 dark:text-yellow-300"
+                              : "border-l-[3px] border-l-transparent text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
                         }`}
                       >
-                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                        <span className="flex min-w-0 flex-1 items-center gap-2.5">
                           {opt.icon ? <span className="inline-flex shrink-0 items-center">{opt.icon}</span> : null}
                           <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{opt.label}</span>
                         </span>
-                        {active && <span className="material-symbols-outlined shrink-0 text-base">check</span>}
+                        {active && !optDisabled ? (
+                          <span className="material-symbols-outlined shrink-0 text-base text-[#124757] dark:text-yellow-400">check</span>
+                        ) : null}
                       </button>
                     </li>
                   );

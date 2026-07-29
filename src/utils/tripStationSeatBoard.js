@@ -1,5 +1,14 @@
 /** Phân loại ghế / khách theo bến dừng trên chuyến — hỗ trợ staff tránh khách đi lố bến. */
 
+import {
+  pickStopActualArrival,
+  pickStopActualDeparture,
+  pickStopDisplayArrival,
+  pickStopDisplayDeparture,
+  pickStopScheduledArrival,
+  pickStopScheduledDeparture,
+} from "./tripStopTimes";
+
 const norm = (value) => String(value || "").trim().toLowerCase();
 
 /** Chuẩn hoá mã ghế để khớp "1-A1" / "A1" / "1A1". */
@@ -57,6 +66,62 @@ export const sortTripStops = (stops) => (
     (a, b) => Number(a?.stopOrder ?? a?.order ?? 0) - Number(b?.stopOrder ?? b?.order ?? 0),
   )
 );
+
+/** Parse giờ bến → ms (ISO hoặc HH:mm theo ngày local). */
+const stopMomentMs = (value) => {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const ms = Date.parse(text);
+  if (!Number.isNaN(ms)) return ms;
+  const wall = text.match(/(?:T|\s)(\d{1,2}):(\d{2})(?::\d{2})?/) || text.match(/^(\d{1,2}):(\d{2})$/);
+  if (!wall) return null;
+  const d = new Date();
+  d.setHours(Number(wall[1]), Number(wall[2]), 0, 0);
+  return d.getTime();
+};
+
+const stopMatchesStationHint = (stop, hint) => {
+  const token = norm(hint);
+  if (!token || !stop) return false;
+  return [stop.stationId, stop.stationCode, stop.stationName].some((v) => norm(v) === token);
+};
+
+/**
+ * Bến “đang ở” cho ops board:
+ * 1) actualArrival mà chưa actualDeparture
+ * 2) currentStation* từ trip/ops
+ * 3) bến cuối có giờ đến/đi đã qua (theo lịch hiển thị)
+ */
+export const resolveLiveTripStop = (stops = [], trip = null, nowMs = Date.now()) => {
+  const list = sortTripStops(stops);
+  if (!list.length) return null;
+
+  const atBerth = list.find((stop) => {
+    const arrived = pickStopActualArrival(stop);
+    const departed = pickStopActualDeparture(stop);
+    return Boolean(arrived) && !departed;
+  });
+  if (atBerth) return atBerth;
+
+  const hints = [
+    trip?.currentStationId,
+    trip?.currentStationCode,
+    trip?.currentStationName,
+  ].filter(Boolean);
+  for (const hint of hints) {
+    const hit = list.find((stop) => stopMatchesStationHint(stop, hint));
+    if (hit) return hit;
+  }
+
+  let live = list[0];
+  for (const stop of list) {
+    const t = stopMomentMs(pickStopDisplayArrival(stop) || pickStopDisplayDeparture(stop));
+    if (t != null && t <= nowMs) live = stop;
+    else break;
+  }
+  return live;
+};
 
 const stationTokens = (stopOrPassenger, role = "both") => {
   const ids = [];
@@ -132,6 +197,42 @@ const resolvePassengerStopOrders = (passenger, stops) => {
   return { fromOrder, toOrder };
 };
 
+export { resolvePassengerStopOrders };
+
+/**
+ * Bổ sung giờ dự kiến lên/xuống từ trip.stops khi API passengers không trả scheduled*.
+ * Lên = giờ rời bến đi; xuống = giờ tới bến đến.
+ */
+export const enrichPassengersWithStopTimes = (passengers, stops = []) => {
+  const sorted = sortTripStops(stops);
+  if (!sorted.length) return Array.isArray(passengers) ? passengers : [];
+
+  return (Array.isArray(passengers) ? passengers : []).map((passenger) => {
+    if (!passenger) return passenger;
+    const hasDep = Boolean(passenger.scheduledDeparture);
+    const hasArr = Boolean(passenger.scheduledArrival);
+    if (hasDep && hasArr) return passenger;
+
+    const { fromOrder, toOrder } = resolvePassengerStopOrders(passenger, sorted);
+    const fromStop = sorted.find((stop) => Number(stop?.stopOrder) === fromOrder) || null;
+    const toStop = sorted.find((stop) => Number(stop?.stopOrder) === toOrder) || null;
+
+    return {
+      ...passenger,
+      scheduledDeparture: passenger.scheduledDeparture
+        || pickStopDisplayDeparture(fromStop)
+        || pickStopScheduledDeparture(fromStop)
+        || "",
+      scheduledArrival: passenger.scheduledArrival
+        || pickStopDisplayArrival(toStop)
+        || pickStopScheduledArrival(toStop)
+        || "",
+      fromStopOrder: passenger.fromStopOrder || (fromOrder > 0 ? fromOrder : null),
+      toStopOrder: passenger.toStopOrder || (toOrder > 0 ? toOrder : null),
+    };
+  });
+};
+
 /**
  * Phân loại 1 khách tại bến đang chọn:
  * - alighting / boarding / through theo bến
@@ -167,7 +268,10 @@ export const classifyPassengerAtStop = (passenger, stop, stops = []) => {
   if (fromOrder > 0 && toOrder > 0 && fromOrder < currentOrder && currentOrder < toOrder) {
     return "through";
   }
-  // Có ghế trên chuyến → vẫn hiện (không bỏ / ẩn thành trống).
+  // Chưa tới ga lên / đã qua ga xuống → không gắn vào ghế tại bến này.
+  if (fromOrder > 0 && currentOrder < fromOrder) return "other";
+  if (toOrder > 0 && currentOrder > toOrder) return "other";
+  // Có ghế trên chuyến nhưng không khớp bến → vẫn hiện.
   return "occupied";
 };
 
@@ -187,6 +291,7 @@ export const buildSeatOccupancyAtStop = (seats, passengers, stop, stops = []) =>
   };
 
   (Array.isArray(passengers) ? passengers : []).forEach((passenger) => {
+    if (passenger?.isLapInfant) return; // Em bé đi kèm không chiếm ghế
     const keys = normalizeSeatKeys(passenger?.seatNumber);
     if (!keys.length) return;
     const role = classifyPassengerAtStop(passenger, stop, stops);
@@ -202,12 +307,21 @@ export const buildSeatOccupancyAtStop = (seats, passengers, stop, stops = []) =>
     const status = String(seat?.status || "").toLowerCase();
 
     let role = "empty";
-    if (groups.alighting.length) role = "alighting";
-    else if (groups.boarding.length) role = "boarding";
-    else if (groups.through.length) role = "through";
-    else if (groups.occupied.length) role = "occupied";
-    else if (status === "booked") role = "occupied";
-    else if (["blocked", "held", "heldbyme"].includes(status)) role = "blocked";
+    if (groups.boarding.length) {
+      // Có khách lên ghế này cho đoạn sau → ưu tiên màu lên
+      role = "boarding";
+    } else if (groups.through.length) {
+      role = "through";
+    } else if (groups.alighting.length) {
+      // Khách phải xuống tại bến này → màu amber để staff dễ thấy
+      role = "alighting";
+    } else if (groups.occupied.length) {
+      role = "occupied";
+    } else if (status === "booked") {
+      role = "occupied";
+    } else if (["blocked", "held", "heldbyme"].includes(status)) {
+      role = "blocked";
+    }
 
     return {
       ...seat,

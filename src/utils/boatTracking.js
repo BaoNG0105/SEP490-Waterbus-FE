@@ -465,18 +465,17 @@ export const normalizeBoatLocation = (raw) => {
     raw.seatCount ?? raw.SeatCount ?? raw.totalSeats ?? raw.TotalSeats ?? raw.capacity ?? raw.Capacity,
   );
   // Đừng Number(null) → 0: thiếu field thì để null để map không hiện "0/ghế".
-  const passengerSource = raw.passengerCount
-    ?? raw.PassengerCount
-    ?? raw.onboardPassengerCount
+  // Chỉ đếm khách đang trên tàu — không dùng totalPassengerCount (gồm vé đã checkout).
+  const passengerSource = raw.onboardPassengerCount
     ?? raw.OnboardPassengerCount
-    ?? raw.totalPassengerCount
-    ?? raw.TotalPassengerCount
-    ?? raw.occupiedSeats
-    ?? raw.OccupiedSeats
-    ?? raw.bookedSeats
-    ?? raw.BookedSeats
+    ?? raw.checkedInPassengerCount
+    ?? raw.CheckedInPassengerCount
+    ?? raw.passengerCount
+    ?? raw.PassengerCount
     ?? raw.currentPassengers
-    ?? raw.CurrentPassengers;
+    ?? raw.CurrentPassengers
+    ?? raw.occupiedSeats
+    ?? raw.OccupiedSeats;
   const passengerRaw = passengerSource === null || passengerSource === undefined || passengerSource === ""
     ? NaN
     : Number(passengerSource);

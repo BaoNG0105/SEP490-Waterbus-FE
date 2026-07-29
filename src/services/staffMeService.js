@@ -57,6 +57,85 @@ export const fetchStaffMeAssignments = async ({ fromDate, toDate, status } = {})
     }
 };
 
+/** Tên bến từ string hoặc object BE. */
+const coerceStationLabel = (value) => {
+    if (value == null || value === '') return '';
+    if (typeof value === 'string' || typeof value === 'number') {
+        const text = String(value).trim();
+        return text === '[object Object]' || text === '—' ? '' : text;
+    }
+    if (typeof value === 'object') {
+        return String(
+            value.stationName
+            || value.name
+            || value.stationCode
+            || value.code
+            || '',
+        ).trim();
+    }
+    return '';
+};
+
+const stopStationLabel = (stop) => coerceStationLabel(
+    stop?.stationName
+    || stop?.StationName
+    || stop?.station
+    || stop?.Station
+    || stop?.stationCode
+    || stop?.name
+    || stop,
+);
+
+/** Tách "WATERBUS - BACH DANG- LINH DONG" / "A → B" thành [from, to]. */
+const parseRouteEndpoints = (routeName) => {
+    const raw = String(routeName || '').trim();
+    if (!raw || raw === '—') return { from: '', to: '' };
+
+    const arrow = raw.split(/\s*(?:→|->|—)\s*/).map((part) => part.trim()).filter(Boolean);
+    if (arrow.length >= 2) {
+        return { from: arrow[0], to: arrow[arrow.length - 1] };
+    }
+
+    // "WATERBUS - BACH DANG- LINH DONG" / "WB-BD-LB" / "WATERBUS-BACH DANG-LINH DONG"
+    const cleaned = raw
+        .replace(/^waterbus\s*[-–]?\s*/i, '')
+        .replace(/^wb\s*[-–]\s*/i, '')
+        .trim();
+    const parts = cleaned.split(/\s*[-–]\s*/).map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+        return { from: parts[0], to: parts[parts.length - 1] };
+    }
+    return { from: '', to: '' };
+};
+
+/**
+ * BB-20260728-WATERBUS-LINH DONG-BACH DANG-1709 → LINH DONG / BACH DANG
+ * BB-20260728-WB-BD-LB-1900 → BD / LB
+ */
+const parseEndpointsFromTripCode = (tripCode) => {
+    const raw = String(tripCode || '').trim();
+    if (!raw) return { from: '', to: '' };
+    const match = raw.match(/^[A-Za-z]{1,6}-\d{8}-(.+)-(\d{3,4})$/);
+    if (match?.[1]) return parseRouteEndpoints(match[1]);
+    return parseRouteEndpoints(raw);
+};
+
+const resolveRouteName = (item) => {
+    const direct = pick(item, ['routeName', 'RouteName', 'route.name'], '');
+    if (typeof direct === 'string' && direct.trim() && direct.trim() !== '—') {
+        return direct.trim();
+    }
+    if (direct && typeof direct === 'object') {
+        return coerceStationLabel(direct.name || direct.routeName || direct) || '';
+    }
+    const route = item?.route ?? item?.Route;
+    if (typeof route === 'string' && route.trim() && route.trim() !== '—') return route.trim();
+    if (route && typeof route === 'object') {
+        return coerceStationLabel(route.name || route.routeName || route) || '';
+    }
+    return '';
+};
+
 export const normalizeStaffTrip = (item) => {
     if (!item) return null;
     const departureAt = pick(item, [
@@ -69,19 +148,50 @@ export const normalizeStaffTrip = (item) => {
         'arrivalAt', 'endAt', 'arriveAt',
         'scheduledArrival', 'displayEndAt',
     ], '') || null;
-    const fromStationName = pick(item, [
-        'fromStationName', 'fromStation.stationName', 'departureStationName',
-        'fromLocation', 'stationName',
-    ], '');
-    const toStationName = pick(item, [
-        'toStationName', 'toStation.stationName', 'arrivalStationName',
-        'destinationStationName', 'toLocation',
-    ], '');
+
+    const stops = Array.isArray(item.stops)
+        ? item.stops
+        : (Array.isArray(item.Stops) ? item.Stops : []);
+    const sortedStops = [...stops].sort(
+        (a, b) => Number(a?.stopOrder ?? a?.StopOrder ?? 0) - Number(b?.stopOrder ?? b?.StopOrder ?? 0),
+    );
+    const firstStop = sortedStops[0];
+    const lastStop = sortedStops.length ? sortedStops[sortedStops.length - 1] : null;
+
+    const tripCode = pick(item, ['tripCode', 'TripCode', 'code'], '');
+    const routeName = resolveRouteName(item) || '—';
+    const routeEnds = parseRouteEndpoints(routeName);
+    const codeEnds = parseEndpointsFromTripCode(tripCode);
+
+    const fromStationName = coerceStationLabel(pick(item, [
+        'fromStationName', 'FromStationName',
+        'fromStation.stationName', 'fromStation.name',
+        'departureStationName', 'fromLocation', 'FromLocation',
+        'startStationName', 'originName',
+        'fromStation',
+    ], ''))
+        || stopStationLabel(firstStop)
+        || routeEnds.from
+        || codeEnds.from
+        || '';
+
+    const toStationName = coerceStationLabel(pick(item, [
+        'toStationName', 'ToStationName',
+        'toStation.stationName', 'toStation.name',
+        'arrivalStationName', 'destinationStationName', 'DestinationStationName',
+        'toLocation', 'ToLocation',
+        'endStationName', 'destinationName',
+        'toStation',
+    ], ''))
+        || stopStationLabel(lastStop)
+        || routeEnds.to
+        || codeEnds.to
+        || '';
 
     return {
         tripId: String(pick(item, ['tripId', 'TripId', 'id'], '')),
-        tripCode: pick(item, ['tripCode', 'TripCode', 'code'], ''),
-        routeName: pick(item, ['routeName', 'RouteName', 'route.name', 'route'], '—'),
+        tripCode,
+        routeName,
         routeCode: pick(item, ['routeCode', 'RouteCode'], ''),
         boatId: String(pick(item, ['boatId', 'BoatId', 'boat.boatId', 'boat.vesselId'], '') || ''),
         boatName: pick(item, ['boatName', 'BoatName', 'boat.boatName', 'boat.name'], ''),
@@ -90,11 +200,11 @@ export const normalizeStaffTrip = (item) => {
         arrivalAt,
         fromStationName,
         toStationName,
-        status: pick(item, ['tripStatus', 'TripStatus', 'status', 'tripStatus'], ''),
+        status: pick(item, ['tripStatus', 'TripStatus', 'status'], ''),
         tripType: pick(item, ['tripType', 'TripType'], ''),
         assignmentType: pick(item, ['assignmentType', 'AssignmentType'], ''),
-        stationName: pick(item, ['stationName', 'StationName'], ''),
-        stops: Array.isArray(item.stops) ? item.stops : (Array.isArray(item.Stops) ? item.Stops : []),
+        stationName: coerceStationLabel(pick(item, ['stationName', 'StationName'], '')) || fromStationName,
+        stops: sortedStops,
         delayInfo: item.delayInfo || item.DelayInfo || null,
         raw: item,
     };

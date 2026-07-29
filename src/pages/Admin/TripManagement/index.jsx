@@ -446,11 +446,6 @@ export function TripManagement() {
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
                         {lang === "VN" ? "Quản lý Chuyến tàu" : "Trip Management"}
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN"
-                            ? "Mỗi dòng = 1 chuyến: tàu · giờ · tuyến. Lọc theo tàu để xem lịch của từng tàu."
-                            : "Each row = 1 trip: boat · time · route. Filter by boat to see that boat’s schedule."}
-                    </p>
                 </div>
                 <button
                     type="button"

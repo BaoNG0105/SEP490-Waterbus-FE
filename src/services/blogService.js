@@ -5,28 +5,32 @@ import {
     getBlogPostManagementById as apiGetBlogPostManagementById,
     createBlogPost as apiCreateBlogPost,
     updateBlogPost as apiUpdateBlogPost,
+    updateBlogPostStatus as apiUpdateBlogPostStatus,
     deleteBlogPost as apiDeleteBlogPost,
-    publishBlogPost as apiPublishBlogPost,
 } from '../api/blogApi';
 
 export const BLOG_STATUS = {
     DRAFT: 'Draft',
     PUBLISHED: 'Published',
-    ARCHIVED: 'Archived',
 };
 
 export const BLOG_CATEGORY = {
-    ACTIVITY: 'Activity',
     EVENT: 'Event',
     NEWS: 'News',
 };
 
+/** Chỉ News | Event — map Activity cũ → News. */
+export const normalizeBlogCategory = (category) => {
+    const key = String(category || '').trim();
+    if (key === BLOG_CATEGORY.EVENT || key.toLowerCase() === 'event') return BLOG_CATEGORY.EVENT;
+    return BLOG_CATEGORY.NEWS;
+};
+
 export const labelBlogCategory = (category, lang = 'VN') => {
-    const key = String(category || '');
+    const key = normalizeBlogCategory(category);
     const isVn = lang === 'VN';
     if (key === BLOG_CATEGORY.NEWS) return isVn ? 'Tin tức' : 'News';
     if (key === BLOG_CATEGORY.EVENT) return isVn ? 'Sự kiện' : 'Event';
-    if (key === BLOG_CATEGORY.ACTIVITY) return isVn ? 'Hoạt động' : 'Activity';
     return key || '—';
 };
 
@@ -35,7 +39,6 @@ export const labelBlogStatus = (status, lang = 'VN') => {
     const isVn = lang === 'VN';
     if (key === BLOG_STATUS.DRAFT) return isVn ? 'Nháp' : 'Draft';
     if (key === BLOG_STATUS.PUBLISHED) return isVn ? 'Đã xuất bản' : 'Published';
-    if (key === BLOG_STATUS.ARCHIVED) return isVn ? 'Lưu trữ' : 'Archived';
     return key || '—';
 };
 
@@ -110,21 +113,23 @@ const normalizeBlogPost = (item) => {
     if (!item) return null;
     const imageUrls = collectBlogImageUrls(item);
     const contentText = getBlogEditableContent(item);
+    const rawStatus = String(item.status || BLOG_STATUS.DRAFT);
+    // Archived cũ → coi như Draft trên UI (BE không còn trả Archived).
+    const status = rawStatus === 'Archived' ? BLOG_STATUS.DRAFT : rawStatus;
     return {
         ...item,
         id: String(item.blogPostId ?? item.id ?? ''),
         title: item.title || '',
         slug: item.slug || '',
         summary: item.summary || '',
-        category: item.category || BLOG_CATEGORY.NEWS,
+        category: normalizeBlogCategory(item.category),
         imageUrls,
         imageUrl: imageUrls[0] || '',
         imageAltText: item.imageAltText || '',
         content: contentText,
         contentText,
         contentHtml: item.contentHtml || (item.content && String(item.content).includes("<") ? item.content : "") || "",
-        status: item.status || BLOG_STATUS.DRAFT,
-        // BE không còn trả authorId / authorName cho FE
+        status,
         publishedAt: item.publishedAt || null,
         createdAt: item.createdAt || null,
         updatedAt: item.updatedAt || null,
@@ -153,7 +158,7 @@ export const fetchBlogPostDetail = async (slug) => {
     }
 };
 
-// Service: Tải danh sách blog để quản lý (params.status optional: Draft | Published | Archived)
+// Service: Tải danh sách blog để quản lý (params.status optional: Draft | Published)
 export const fetchBlogPostsManagement = async (params = {}) => {
     try {
         const data = await apiGetBlogPostsManagement(params);
@@ -214,7 +219,7 @@ export const buildBlogMultipartPayload = ({
     formData.append("title", String(title || "").trim());
     formData.append("summary", String(summary || "").trim());
     formData.append("content", String(content || "").trim());
-    formData.append("category", String(category || BLOG_CATEGORY.NEWS));
+    formData.append("category", normalizeBlogCategory(category));
     formData.append("status", String(status || BLOG_STATUS.DRAFT));
     formData.append("imageAltText", String(imageAltText || "").trim());
 
@@ -225,22 +230,28 @@ export const buildBlogMultipartPayload = ({
     return formData;
 };
 
-// Service: Lưu trữ bài viết (soft delete, đặt Status = Archived)
+/** Xóa thật bài viết (DELETE). */
 export const removeBlogPost = async (id) => {
     try {
         return await apiDeleteBlogPost(id);
     } catch (error) {
-        console.error(`Lỗi khi lưu trữ blog ${id}:`, error);
+        console.error(`Lỗi khi xóa blog ${id}:`, error);
         throw error;
     }
 };
 
-// Service: Xuất bản bài viết (đặt Status = Published)
-export const publishBlogPostById = async (id) => {
+/** Đổi trạng thái nhanh: Draft | Published. */
+export const setBlogPostStatus = async (id, status) => {
     try {
-        return await apiPublishBlogPost(id);
+        return await apiUpdateBlogPostStatus(id, status);
     } catch (error) {
-        console.error(`Lỗi khi xuất bản blog ${id}:`, error);
+        console.error(`Lỗi khi đổi status blog ${id}:`, error);
         throw error;
     }
 };
+
+/** Xuất bản bài viết (PATCH status = Published). */
+export const publishBlogPostById = async (id) => setBlogPostStatus(id, BLOG_STATUS.PUBLISHED);
+
+/** Hạ xuống nháp (PATCH status = Draft). */
+export const unpublishBlogPostById = async (id) => setBlogPostStatus(id, BLOG_STATUS.DRAFT);

@@ -11,8 +11,14 @@ const hasText = (value) => String(value || "").trim().length > 0;
 export const hasCharterPassengerName = (entry) =>
   hasText(pick(entry, ["fullName", "passengerName", "name", "contactName"], ""));
 
-export const isCharterFullyPaid = (booking) =>
-  String(booking?.paymentStatus || "").toLowerCase() === "paid";
+export const isCharterFullyPaid = (booking) => {
+  if (booking?.requiresAdditionalPayment === true) return false;
+  if (booking?.remainingAmount !== undefined && booking?.remainingAmount !== null && booking?.remainingAmount !== "") {
+    const remaining = Number(booking.remainingAmount);
+    if (Number.isFinite(remaining) && remaining > 0) return false;
+  }
+  return String(booking?.paymentStatus || "").toLowerCase() === "paid";
+};
 
 export const hasCharterPassengerManifest = (source) => {
   const passengers = Array.isArray(source?.passengers) ? source.passengers : [];
@@ -48,7 +54,7 @@ export const formatCharterTicketDate = (value) => {
 export const formatCharterPassengerType = (value, lang = "VN") => {
   const normalized = String(value || "").toLowerCase();
   if (normalized === "child") return lang === "VN" ? "Trẻ em (< 12 tuổi)" : "Child (< 12)";
-  if (normalized === "adult") return lang === "VN" ? "Người lớn (≥ 12 tuổi)" : "Adult (≥ 12)";
+  if (normalized === "adult") return lang === "VN" ? "Người lớn" : "Adult";
   return value || "";
 };
 

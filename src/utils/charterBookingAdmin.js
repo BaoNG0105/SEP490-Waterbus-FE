@@ -1741,6 +1741,17 @@ export const normalizeBooking = (item) => {
     subtotalAmount: Number(pick(item, ["subtotalAmount", "subtotalBeforeDiscount"], 0)) || 0,
     discountAmount: Number(pick(item, ["discountAmount"], 0)) || 0,
     depositAmount: Number(pick(item, ["depositAmount"], 0)),
+    remainingAmount: (() => {
+      const raw = pick(item, ["remainingAmount"], "");
+      if (raw === "" || raw === null || raw === undefined) return undefined;
+      const value = Number(raw);
+      return Number.isFinite(value) ? Math.max(value, 0) : undefined;
+    })(),
+    requiresAdditionalPayment: Boolean(
+      item?.requiresAdditionalPayment === true || item?.RequiresAdditionalPayment === true,
+    ),
+    additionalInsuranceAmount: Number(pick(item, ["additionalInsuranceAmount"], 0)) || 0,
+    paidAmount: Number(pick(item, ["paidAmount", "paidPaymentAmount"], 0)) || 0,
     promotionCode: pick(item, ["promotionCode"], ""),
     quoteBoats: pick(item, ["quoteBoats", "quoteBreakdown.boats", "pricing.boats", "pricePreview.boats"], []),
     specialRequests: pick(item, ["specialRequests"], ""),

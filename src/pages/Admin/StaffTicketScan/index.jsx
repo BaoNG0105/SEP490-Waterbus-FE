@@ -2,12 +2,19 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import {
+  buildEligibilityConfirmNote,
   checkInAllBookingManifest,
+  checkOutAllBookingManifest,
   checkInTicket,
   checkOutTicket,
+  collectEligibilityCodes,
   fetchBookingManifestByQr,
+  isGroupQrToken,
   lookupTicketOrManifest,
+  resolveIndividualTicketToken,
+  updateCharterManifestAttendance,
 } from "../../../services/ticketScanService";
+import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify } from "../../../utils/swalToast";
 
@@ -24,120 +31,561 @@ const formatDateTime = (value) => {
   return new Date(ms).toLocaleString("vi-VN");
 };
 
-const ticketTypeLabel = (code, lang) => {
-  const key = String(code || "").toUpperCase();
-  const map = {
-    ADULT: { vn: "Người lớn", en: "Adult" },
-    CHILD: { vn: "Trẻ em", en: "Child" },
-    INFANT: { vn: "Em bé (<2)", en: "Infant" },
-    SENIOR: { vn: "Người cao tuổi", en: "Senior" },
-    DISABLED: { vn: "Người khuyết tật", en: "Disabled" },
-  };
-  return map[key]?.[lang === "VN" ? "vn" : "en"] || code || "—";
+const ticketTypeLabel = (code, lang, name = "") => {
+  const rawName = String(name || "").trim();
+  // Ưu tiên ticketTypeName tiếng Việt từ BE (vd "Người cao tuổi trên 70").
+  if (lang === "VN" && rawName && !/^(ADULT|CHILD|INFANT|SENIOR|DISABLED)$/i.test(rawName)) {
+    return rawName;
+  }
+  return formatTicketTypeLabel(code || name, lang);
 };
 
-const TicketFields = ({ ticket, lang }) => (
-  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-        {lang === "VN" ? "Mã booking" : "Booking code"}
-      </dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">{ticket.bookingCode || "—"}</dd>
-    </div>
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-        {lang === "VN" ? "Mã chuyến" : "Trip code"}
-      </dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">{ticket.tripCode || "—"}</dd>
-    </div>
-    {ticket.legLabel ? (
-      <div>
-        <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          {lang === "VN" ? "Chiều" : "Leg"}
-        </dt>
-        <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">{ticket.legLabel}</dd>
-      </div>
-    ) : null}
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-        {lang === "VN" ? "Loại vé" : "Ticket type"}
-      </dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">
-        {ticket.ticketTypeName || ticketTypeLabel(ticket.ticketTypeCode, lang)}
-      </dd>
-    </div>
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-        {lang === "VN" ? "Ghế" : "Seat"}
-      </dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">{ticket.seatLabel || "—"}</dd>
-    </div>
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-        {lang === "VN" ? "Ga lên / xuống" : "Boarding / alighting"}
-      </dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">
-        {[ticket.fromStation, ticket.toStation].filter(Boolean).join(" → ") || "—"}
-        {(ticket.fromStationCode || ticket.toStationCode) ? (
-          <span className="mt-0.5 block text-[10px] font-medium text-slate-400">
-            {[ticket.fromStationCode, ticket.toStationCode].filter(Boolean).join(" → ")}
-          </span>
-        ) : null}
-      </dd>
-    </div>
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-        {lang === "VN" ? "Giờ lên / xuống dự kiến" : "Scheduled board / alight"}
-      </dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">
-        {formatDateTime(ticket.scheduledBoardingAt)} → {formatDateTime(ticket.scheduledAlightingAt)}
-      </dd>
-    </div>
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-        {lang === "VN" ? "Giá vé" : "Fare"}
-      </dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">{formatMoney(ticket.price)}</dd>
-    </div>
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-        {lang === "VN" ? "Mã vé" : "Ticket code"}
-      </dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">
-        {ticket.ticketCode || ticket.codeOrToken || "—"}
-      </dd>
-    </div>
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">checkedInAt</dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">
-        {formatDateTime(ticket.checkedInAt)}
-        {ticket.checkedInByName ? (
-          <span className="mt-0.5 block text-[10px] font-medium text-slate-400">{ticket.checkedInByName}</span>
-        ) : null}
-      </dd>
-    </div>
-    <div>
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">checkedOutAt</dt>
-      <dd className="mt-0.5 font-bold text-slate-700 dark:text-slate-200">
-        {formatDateTime(ticket.checkedOutAt)}
-        {ticket.checkedOutByName ? (
-          <span className="mt-0.5 block text-[10px] font-medium text-slate-400">{ticket.checkedOutByName}</span>
-        ) : null}
-      </dd>
-    </div>
-  </dl>
+const formatSkippedTickets = (skipped, lang) => {
+  if (!Array.isArray(skipped) || skipped.length === 0) return "";
+  const labels = skipped.slice(0, 5).map((row) => {
+    if (typeof row === "string") return row;
+    return row?.ticketCode || row?.fullName || row?.ticketId || row?.reason || "—";
+  });
+  const more = skipped.length > 5 ? ` (+${skipped.length - 5})` : "";
+  return lang === "VN"
+    ? `Bỏ qua ${skipped.length}: ${labels.join(", ")}${more}`
+    : `Skipped ${skipped.length}: ${labels.join(", ")}${more}`;
+};
+
+const eligibilityCodesOf = (ticket) => (
+  Array.isArray(ticket?.eligibilityCodes) && ticket.eligibilityCodes.length
+    ? ticket.eligibilityCodes
+    : collectEligibilityCodes(ticket)
 );
+
+const formatClock = (value) => {
+  if (!value) return "—";
+  const ms = Date.parse(String(value));
+  if (Number.isNaN(ms)) {
+    const m = String(value).match(/(\d{1,2}):(\d{2})/);
+    return m ? `${String(m[1]).padStart(2, "0")}:${m[2]}` : "—";
+  }
+  const d = new Date(ms);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const statusTone = (ticket) => {
+  const raw = String(ticket?.status || "").toLowerCase().replace(/[\s_-]/g, "");
+  if (ticket?.canCheckOut || raw.includes("checkedin")) {
+    return {
+      badge: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200",
+      strip: "border-emerald-200 bg-emerald-50/80 dark:border-emerald-500/30 dark:bg-emerald-500/10",
+    };
+  }
+  if (ticket?.canCheckIn || raw === "active") {
+    return {
+      badge: "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-200",
+      strip: "border-sky-200 bg-sky-50/70 dark:border-sky-500/30 dark:bg-sky-500/10",
+    };
+  }
+  if (raw.includes("checkout") || raw.includes("used") || raw.includes("complete")) {
+    return {
+      badge: "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300",
+      strip: "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/50",
+    };
+  }
+  return {
+    badge: "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300",
+    strip: "border-slate-100 bg-white dark:border-slate-700 dark:bg-slate-800",
+  };
+};
+
+const statusLabel = (ticket, lang) => {
+  const raw = String(ticket?.status || "").toLowerCase().replace(/[\s_-]/g, "");
+  if (ticket?.canCheckOut || raw.includes("checkedin")) {
+    return lang === "VN" ? "Đã check-in" : "Checked in";
+  }
+  if (ticket?.canCheckIn || raw === "active") {
+    return lang === "VN" ? "Chờ check-in" : "Ready to check-in";
+  }
+  if (raw.includes("checkout")) return lang === "VN" ? "Đã check-out" : "Checked out";
+  return ticket?.status || (lang === "VN" ? "—" : "—");
+};
+
+const ticketTypeTone = (code) => {
+  const key = String(code || "").toUpperCase();
+  if (key === "SENIOR") {
+    return "border-amber-300 bg-amber-100 text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-100";
+  }
+  if (key === "DISABLED") {
+    return "border-rose-300 bg-rose-100 text-rose-950 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-100";
+  }
+  if (key === "CHILD") {
+    return "border-sky-300 bg-sky-100 text-sky-950 dark:border-sky-500/40 dark:bg-sky-500/20 dark:text-sky-100";
+  }
+  if (key === "INFANT") {
+    return "border-violet-300 bg-violet-100 text-violet-950 dark:border-violet-500/40 dark:bg-violet-500/20 dark:text-violet-100";
+  }
+  return "border-slate-200 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200";
+};
+
+/** Hiển thị passengers[] trên 1 vé: holder + INFANT đi kèm (chung QR). CHILD = vé riêng. */
+const PassengersOnTicket = ({ ticket, lang, compact = false }) => {
+  const passengers = Array.isArray(ticket?.passengers) ? ticket.passengers : [];
+  const isCompanion = (row) => Boolean(
+    row?.isLapInfant
+    || row?.usesCompanionTicket
+    || String(row?.ticketTypeCode || "").toUpperCase() === "INFANT",
+  );
+  const holders = passengers.filter((row) => !isCompanion(row));
+  const companions = passengers.filter((row) => isCompanion(row));
+  const sharedTicketCode = ticket?.ticketCode || ticket?.codeOrToken || "";
+
+  const companionsForHolder = (holder) => {
+    const holderName = String(holder?.fullName || "").trim().toLowerCase();
+    const matched = companions.filter((row) => {
+      const companion = String(row.companionPassengerName || "").trim().toLowerCase();
+      return companion && holderName && companion === holderName;
+    });
+    if (matched.length) return matched;
+    if (holders.length === 1) return companions;
+    return [];
+  };
+
+  const orphanCompanions = companions.filter(
+    (row) => !holders.some((holder) => companionsForHolder(holder).includes(row)),
+  );
+
+  const birthYearLine = (row) => {
+    if (!row?.birthYear) return "";
+    return lang === "VN" ? ` · Năm sinh ${row.birthYear}` : ` · Born ${row.birthYear}`;
+  };
+
+  if (!passengers.length) {
+    if (compact) return null;
+    return (
+      <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/40">
+        <p className="text-xs font-black text-slate-700 dark:text-slate-200">{ticket.passengerName || "—"}</p>
+      </div>
+    );
+  }
+
+  // 1 khách, không đi kèm → không lặp khối (đã hiện ở hero).
+  if (compact && holders.length <= 1 && companions.length === 0) return null;
+
+  const renderCompanion = (row) => {
+    const type = String(row.ticketTypeCode || "").toUpperCase();
+    const isInfant = row.isLapInfant || type === "INFANT";
+    return (
+      <div
+        key={`companion-${row.fullName}-${row.companionPassengerName}-${row.seatCode}`}
+        className={`mt-2 rounded-xl border px-3 py-2 ${
+          isInfant
+            ? "border-violet-200 bg-violet-50/80 dark:border-violet-500/30 dark:bg-violet-500/10"
+            : "border-sky-200 bg-sky-50/80 dark:border-sky-500/30 dark:bg-sky-500/10"
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-lg border bg-white px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wider dark:bg-slate-900 ${
+            isInfant
+              ? "border-violet-200 text-violet-700 dark:border-violet-500/30 dark:text-violet-200"
+              : "border-sky-200 text-sky-700 dark:border-sky-500/30 dark:text-sky-200"
+          }`}>
+            {isInfant
+              ? (lang === "VN" ? "Em bé đi kèm" : "Lap infant")
+              : (lang === "VN" ? "Trẻ em đi kèm" : "Child companion")}
+          </span>
+        </div>
+        <p className={`mt-1 text-xs font-black ${
+          isInfant ? "text-violet-950 dark:text-violet-100" : "text-sky-950 dark:text-sky-100"
+        }`}>
+          {row.fullName}
+        </p>
+        <p className={`mt-0.5 text-[10px] font-bold ${
+          isInfant ? "text-violet-700/90 dark:text-violet-200/90" : "text-sky-700/90 dark:text-sky-200/90"
+        }`}>
+          {lang === "VN" ? "Đi kèm với" : "With"}: {row.companionPassengerName || ticket.passengerName || "—"}
+          {row.seatCode ? ` · ${lang === "VN" ? "Ghế" : "Seat"} ${row.seatCode}` : ""}
+          {birthYearLine(row)}
+        </p>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+        {lang === "VN" ? "Hành khách trên vé" : "Passengers on ticket"}
+        {sharedTicketCode ? ` · ${sharedTicketCode}` : ""}
+      </p>
+      {holders.map((holder) => (
+        <div
+          key={`holder-${holder.fullName}-${holder.seatCode}`}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-600 dark:bg-slate-900"
+        >
+          <p className="text-xs font-black text-[#124757] dark:text-yellow-400">{holder.fullName}</p>
+          <p className="mt-0.5 text-[10px] font-bold text-slate-500">
+            {ticketTypeLabel(holder.ticketTypeCode || ticket.ticketTypeCode, lang, holder.ticketTypeName || ticket.ticketTypeName)}
+            {" · "}
+            {holder.seatCode || ticket.seatLabel
+              ? `${lang === "VN" ? "Ghế" : "Seat"} ${holder.seatCode || ticket.seatLabel}`
+              : (lang === "VN" ? "Chưa có ghế" : "No seat")}
+            {birthYearLine(holder)}
+          </p>
+          {holder.phoneNumber ? (
+            <p className="mt-0.5 text-[10px] font-medium text-slate-400">{holder.phoneNumber}</p>
+          ) : null}
+          {companionsForHolder(holder).map(renderCompanion)}
+        </div>
+      ))}
+      {orphanCompanions.map(renderCompanion)}
+      {!holders.length && companions.map(renderCompanion)}
+    </div>
+  );
+};
+
+const DetailField = ({ label, children, className = "" }) => (
+  <div className={className}>
+    <dt className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+      {label}
+    </dt>
+    <dd className="mt-1 text-sm font-black text-slate-800 dark:text-slate-100">
+      {children}
+    </dd>
+  </div>
+);
+
+/** Card chi tiết vé — ưu tiên thông tin staff cần đối chiếu / thao tác. */
+const TicketResultCard = ({
+  ticket,
+  lang,
+  isActing,
+  onCheckIn,
+  onCheckOut,
+  onRejectEligibility,
+}) => {
+  const tone = statusTone(ticket);
+  const typeCode = String(ticket.ticketTypeCode || "").toUpperCase();
+  const typeLabel = ticketTypeLabel(typeCode, lang, ticket.ticketTypeName);
+  const needsVerify = eligibilityCodesOf(ticket).length > 0;
+  const routeLine = [ticket.fromStation, ticket.toStation].filter(Boolean).join(" → ") || "—";
+  const stationCodes = [ticket.fromStationCode, ticket.toStationCode].filter(Boolean).join(" → ");
+  const primary = ticket.primaryPassenger || ticket.passengers?.find((p) => !p.isLapInfant) || null;
+  const raw = ticket.raw && typeof ticket.raw === "object" ? ticket.raw : {};
+  const rawPassenger = raw.ticketPassenger || raw.TicketPassenger || null;
+  const phone = String(
+    ticket.passengerPhone
+    || primary?.phoneNumber
+    || raw.contactPhone
+    || raw.ContactPhone
+    || rawPassenger?.phoneNumber
+    || rawPassenger?.PhoneNumber
+    || "",
+  ).trim();
+  const email = String(
+    ticket.passengerEmail
+    || primary?.email
+    || raw.contactEmail
+    || raw.ContactEmail
+    || rawPassenger?.email
+    || rawPassenger?.Email
+    || "",
+  ).trim();
+  const birthYear = primary?.birthYear || "";
+  const passengerCount = Array.isArray(ticket.passengers) && ticket.passengers.length
+    ? ticket.passengers.length
+    : (ticket.passengerCount || 1);
+
+  return (
+    <div className={`overflow-hidden rounded-4xl border shadow-sm dark:border-slate-700/50 ${tone.strip}`}>
+      {/* Hero */}
+      <div className="border-b border-slate-200/70 px-5 py-4 dark:border-slate-700/60 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${tone.badge}`}>
+                {statusLabel(ticket, lang)}
+              </span>
+              {ticket.status ? (
+                <span className="rounded-xl border border-slate-200 bg-white/80 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-900">
+                  {ticket.status}
+                </span>
+              ) : null}
+              {needsVerify && ticket.canCheckIn ? (
+                <span className="rounded-xl border border-amber-300 bg-amber-100 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-100">
+                  {lang === "VN" ? "Cần đối chiếu giấy tờ" : "Verify ID"}
+                </span>
+              ) : null}
+            </div>
+            <h3 className="mt-2 font-headline text-xl font-black text-[#124757] dark:text-yellow-400 sm:text-2xl">
+              {ticket.passengerName || "—"}
+            </h3>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className={`inline-flex items-center rounded-xl border px-3 py-1.5 text-[11px] font-headline font-black ${ticketTypeTone(typeCode)}`}>
+                {typeLabel}
+                {Number(ticket.price) === 0 ? (
+                  <span className="ml-1.5 opacity-80">· {lang === "VN" ? "Miễn phí" : "Free"}</span>
+                ) : null}
+              </span>
+              {ticket.boatName ? (
+                <span className="inline-flex items-center rounded-xl border border-slate-200 bg-white/80 px-3 py-1.5 text-[11px] font-bold text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                  {ticket.boatName}
+                </span>
+              ) : null}
+              <span className="inline-flex items-center rounded-xl border border-slate-200 bg-white/80 px-3 py-1.5 text-[11px] font-bold text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                {passengerCount} {lang === "VN" ? "hành khách" : "pax"}
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#124757]/20 bg-white px-4 py-2.5 text-center shadow-sm dark:border-yellow-400/30 dark:bg-slate-900">
+            <p className="text-[9px] font-headline font-black uppercase tracking-widest text-slate-400">
+              {lang === "VN" ? "Ghế" : "Seat"}
+            </p>
+            <p className="font-headline text-2xl font-black tabular-nums text-[#124757] dark:text-yellow-400">
+              {ticket.seatLabel || "—"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Hành khách chi tiết */}
+      <div className="border-b border-slate-200/70 bg-white/60 px-5 py-4 dark:border-slate-700/60 dark:bg-slate-900/30 sm:px-6">
+        <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+          {lang === "VN" ? "Thông tin hành khách" : "Passenger details"}
+        </p>
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DetailField label={lang === "VN" ? "Họ và tên" : "Full name"}>
+            {ticket.passengerName || "—"}
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Loại vé" : "Ticket type"}>
+            <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-headline font-black ${ticketTypeTone(typeCode)}`}>
+              {typeLabel}
+            </span>
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Số điện thoại" : "Phone"}>
+            {phone || "—"}
+          </DetailField>
+          <DetailField label="Email">
+            <span className="break-all text-xs">{email || "—"}</span>
+          </DetailField>
+          {birthYear ? (
+            <DetailField label={lang === "VN" ? "Năm sinh" : "Birth year"}>
+              {birthYear}
+            </DetailField>
+          ) : null}
+          {ticket.contactName && ticket.contactName !== ticket.passengerName ? (
+            <DetailField label={lang === "VN" ? "Người liên hệ" : "Contact"}>
+              {ticket.contactName}
+            </DetailField>
+          ) : null}
+        </dl>
+        <div className="mt-3">
+          <PassengersOnTicket ticket={ticket} lang={lang} compact />
+        </div>
+      </div>
+
+      {/* Lộ trình / chuyến */}
+      <div className="border-b border-slate-200/70 px-5 py-4 dark:border-slate-700/60 sm:px-6">
+        <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+          {lang === "VN" ? "Lộ trình & chuyến" : "Route & trip"}
+        </p>
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DetailField label={lang === "VN" ? "Ga lên → xuống" : "From → to"} className="sm:col-span-2">
+            {routeLine}
+            {stationCodes ? (
+              <span className="mt-0.5 block text-[11px] font-bold text-slate-400">{stationCodes}</span>
+            ) : null}
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Giờ lên dự kiến" : "Board at"}>
+            <span className="tabular-nums">
+              {ticket.scheduledBoardingAt
+                ? formatClock(ticket.scheduledBoardingAt)
+                : (ticket.startTime || "—")}
+            </span>
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Giờ xuống dự kiến" : "Alight at"}>
+            <span className="tabular-nums">{formatClock(ticket.scheduledAlightingAt)}</span>
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Ngày khởi hành" : "Departure date"}>
+            {ticket.departureDate || "—"}
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Tàu" : "Boat"}>
+            {ticket.boatName || "—"}
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Mã chuyến" : "Trip code"} className="sm:col-span-2">
+            <span className="break-all text-xs">{ticket.tripCode || "—"}</span>
+            {ticket.legLabel ? (
+              <span className="mt-0.5 block text-[11px] font-bold text-slate-500">{ticket.legLabel}</span>
+            ) : null}
+          </DetailField>
+        </dl>
+      </div>
+
+      {/* Mã / booking */}
+      <div className="border-b border-slate-200/70 bg-white/50 px-5 py-4 dark:border-slate-700/60 dark:bg-slate-900/20 sm:px-6">
+        <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+          {lang === "VN" ? "Mã & thanh toán" : "Codes & payment"}
+        </p>
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DetailField label={lang === "VN" ? "Mã vé" : "Ticket code"}>
+            <span className="font-mono text-xs">{ticket.ticketCode || ticket.codeOrToken || "—"}</span>
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Mã booking" : "Booking code"}>
+            <span className="font-mono text-xs">{ticket.bookingCode || "—"}</span>
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Ghế" : "Seat"}>
+            {ticket.seatLabel || "—"}
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Giá vé" : "Fare"}>
+            {formatMoney(ticket.price)}
+            {Number(ticket.price) === 0 ? (
+              <span className="ml-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                ({lang === "VN" ? "miễn phí" : "free"})
+              </span>
+            ) : null}
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Trạng thái booking" : "Booking status"}>
+            {ticket.bookingStatus || "—"}
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Thanh toán" : "Payment"}>
+            {ticket.paymentStatus || "—"}
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Phát hành vé" : "Issued at"} className="sm:col-span-2">
+            {ticket.issuedAt ? formatDateTime(ticket.issuedAt) : "—"}
+          </DetailField>
+        </dl>
+      </div>
+
+      {/* Check-in / out */}
+      <div className="border-b border-slate-200/70 px-5 py-4 dark:border-slate-700/60 sm:px-6">
+        <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+          {lang === "VN" ? "Lịch sử soát vé" : "Scan history"}
+        </p>
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DetailField label={lang === "VN" ? "Check-in" : "Checked in"}>
+            {ticket.checkedInAt ? formatDateTime(ticket.checkedInAt) : (lang === "VN" ? "Chưa check-in" : "Not yet")}
+            {ticket.checkedInByName ? (
+              <span className="mt-0.5 block text-[11px] font-bold text-slate-500">
+                {lang === "VN" ? "Bởi" : "By"}: {ticket.checkedInByName}
+              </span>
+            ) : null}
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Check-out" : "Checked out"}>
+            {ticket.checkedOutAt ? formatDateTime(ticket.checkedOutAt) : "—"}
+            {ticket.checkedOutByName ? (
+              <span className="mt-0.5 block text-[11px] font-bold text-slate-500">
+                {lang === "VN" ? "Bởi" : "By"}: {ticket.checkedOutByName}
+              </span>
+            ) : null}
+          </DetailField>
+        </dl>
+      </div>
+
+      <div className="bg-white px-5 py-4 dark:bg-slate-800 sm:px-6">
+        <TicketActionButtons
+          ticket={ticket}
+          lang={lang}
+          isActing={isActing}
+          onCheckIn={onCheckIn}
+          onCheckOut={onCheckOut}
+          onRejectEligibility={onRejectEligibility}
+        />
+      </div>
+    </div>
+  );
+};
+
+/** Nút theo BE: canCheckIn → Check-in; ưu đãi cần xác nhận đối tượng trước. */
+const TicketActionButtons = ({
+  ticket,
+  lang,
+  isActing,
+  onCheckIn,
+  onCheckOut,
+  onRejectEligibility,
+}) => {
+  const eligibilityCodes = eligibilityCodesOf(ticket);
+  const needsEligibilityCheck = ticket.canCheckIn && eligibilityCodes.length > 0;
+
+  if (needsEligibilityCheck) {
+    return (
+      <div className="w-full space-y-3">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+          <p className="text-[11px] font-black text-amber-900 dark:text-amber-100">
+            {lang === "VN"
+              ? "Vé ưu đãi — đối chiếu giấy tờ / độ tuổi trước khi cho lên tàu."
+              : "Discount ticket — verify ID / age before boarding."}
+          </p>
+          <p className="mt-1 text-[10px] font-bold text-amber-800/90 dark:text-amber-200/90">
+            {eligibilityCodes.map((code) => ticketTypeLabel(code, lang)).join(" · ")}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={isActing}
+            onClick={() => onCheckIn(ticket, {
+              eligibilityConfirmed: true,
+              eligibilityCodes,
+            })}
+            className="rounded-xl bg-yellow-400 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-900 disabled:opacity-50"
+          >
+            {lang === "VN" ? "Xác nhận & Check-in" : "Confirm & Check-in"}
+          </button>
+          <button
+            type="button"
+            disabled={isActing}
+            onClick={() => onRejectEligibility(ticket, eligibilityCodes)}
+            className="rounded-xl border border-rose-200 bg-rose-50 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-rose-700 disabled:opacity-50 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200"
+          >
+            {lang === "VN" ? "Không đúng đối tượng" : "Wrong eligibility"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (ticket.canCheckIn) {
+    return (
+      <button
+        type="button"
+        disabled={isActing}
+        onClick={() => onCheckIn(ticket)}
+        className="w-full rounded-xl bg-yellow-400 px-5 py-3 text-[11px] font-headline font-black uppercase tracking-wider text-slate-900 disabled:opacity-50 sm:w-auto"
+      >
+        Check-in
+      </button>
+    );
+  }
+  if (ticket.canCheckOut) {
+    return (
+      <button
+        type="button"
+        disabled={isActing}
+        onClick={() => onCheckOut(ticket)}
+        className="w-full rounded-xl border border-slate-200 bg-white px-5 py-3 text-[11px] font-headline font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 sm:w-auto"
+      >
+        Check-out
+      </button>
+    );
+  }
+  return (
+    <p className="text-[11px] font-bold text-slate-400">
+      {lang === "VN" ? "Không có thao tác khả dụng." : "No actions available."}
+    </p>
+  );
+};
 
 /**
  * Quét vé Staff OnBoard — contract BE:
- * POST /tickets/scan { ticketCode | bookingQrToken | codeOrToken }
- * · POST check-in|out/{code}?source&… · check-in-all?tripCode=
+ * 1) Luôn POST /tickets/scan trước (BE tự nhận TK / BK / CB)
+ * 2) Vé riêng → /tickets/check-in|out với mã TK (không gửi BK/CB)
+ * 3) QR tổng booking → check-in-all / check-out-all (?tripCode= khứ hồi)
+ * 4) QR tổng charter → /charter-bookings/.../attendance
  */
 export function StaffTicketScanPage() {
   const { lang } = useApp();
   const [code, setCode] = useState("");
   const [result, setResult] = useState(null);
   const [selectedTripCode, setSelectedTripCode] = useState("");
+  const [selectedTicketIds, setSelectedTicketIds] = useState([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isActing, setIsActing] = useState(false);
   const [lastError, setLastError] = useState("");
@@ -145,6 +593,7 @@ export function StaffTicketScanPage() {
   const isManifest = result?.kind === "manifest";
   const ticket = result?.kind === "ticket" ? result : null;
   const manifest = isManifest ? result : null;
+  const isCharterManifest = Boolean(manifest?.isCharter);
 
   const tripOptions = useMemo(() => {
     if (!manifest) return [];
@@ -154,13 +603,44 @@ export function StaffTicketScanPage() {
     }));
   }, [manifest]);
 
-  const refreshManifest = async (token = manifest?.bookingQrToken || code) => {
-    const data = await fetchBookingManifestByQr(token);
+  const applyManifestResult = (data) => {
     setResult(data);
     setSelectedTripCode((prev) => (
       prev && data.tripCodes.includes(prev) ? prev : (data.selectedTripCode || data.tripCodes[0] || "")
     ));
+    setSelectedTicketIds((prev) => prev.filter((id) =>
+      data.tickets.some((row) => row.ticketId === id),
+    ));
     return data;
+  };
+
+  const refreshManifest = async (token = manifest?.bookingQrToken || code) => {
+    if (isCharterManifest || String(token || "").toUpperCase().startsWith("CB")) {
+      const data = await lookupTicketOrManifest(token);
+      if (data?.kind === "manifest") return applyManifestResult(data);
+      setResult(data);
+      return data;
+    }
+    const data = await fetchBookingManifestByQr(token);
+    return applyManifestResult(data);
+  };
+
+  const notifyAttendanceResult = (data, fallbackTitle) => {
+    const skippedText = formatSkippedTickets(data?.skippedTickets, lang);
+    const updated = Number(data?.updatedCount);
+    notify({
+      icon: "success",
+      title: fallbackTitle,
+      text: [
+        Number.isFinite(updated) && updated > 0
+          ? (lang === "VN" ? `Đã cập nhật ${updated} vé` : `Updated ${updated} ticket(s)`)
+          : "",
+        skippedText,
+      ].filter(Boolean).join(". ") || undefined,
+      timer: skippedText ? 3200 : 1600,
+      showConfirmButton: Boolean(skippedText),
+      confirmButtonColor: "#124757",
+    });
   };
 
   const handleLookup = async (event) => {
@@ -177,6 +657,7 @@ export function StaffTicketScanPage() {
     try {
       setIsScanning(true);
       setResult(null);
+      setSelectedTicketIds([]);
       setLastError("");
       const data = await lookupTicketOrManifest(trimmed);
       setResult(data);
@@ -201,13 +682,55 @@ export function StaffTicketScanPage() {
     }
   };
 
-  const handleCheckInOne = async (row) => {
-    const trimmed = String(row?.codeOrToken || row?.ticketCode || code || "").trim();
-    if (!trimmed) return;
+  const handleCheckInOne = async (row, options = {}) => {
     try {
       setIsActing(true);
       setLastError("");
-      await checkInTicket(trimmed);
+
+      const eligibilityCodes = options.eligibilityCodes || eligibilityCodesOf(row);
+      const needsVerify = eligibilityCodes.length > 0;
+      if (needsVerify && !options.eligibilityConfirmed) {
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "Cần xác nhận đối tượng" : "Confirm eligibility first",
+          text: lang === "VN"
+            ? "Vé ưu đãi — đối chiếu giấy tờ/độ tuổi rồi bấm Xác nhận & Check-in."
+            : "Discount ticket — verify ID/age, then Confirm & Check-in.",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
+
+      if (isCharterManifest) {
+        const token = String(manifest?.bookingQrToken || code || "").trim();
+        const ticketId = String(row?.ticketId || "").trim();
+        if (!token || !ticketId) throw new Error("EMPTY_CODE");
+        const data = await updateCharterManifestAttendance(token, {
+          action: "CheckIn",
+          mode: "Selected",
+          ticketIds: [ticketId],
+        });
+        applyManifestResult(data);
+        notifyAttendanceResult(data, lang === "VN" ? "Check-in thành công" : "Checked in");
+        return;
+      }
+
+      // Vé riêng / từng vé trong booking thường: chỉ TK — không gửi QR tổng BK.
+      const scannedFallback = (!isManifest && !isGroupQrToken(code)) ? code : "";
+      const trimmed = resolveIndividualTicketToken(row, scannedFallback);
+      if (!trimmed) {
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "Thiếu mã vé riêng" : "Missing ticket code",
+          text: lang === "VN"
+            ? "Check-in từng vé cần mã TK. QR tổng BK chỉ dùng nút Check-in tất cả."
+            : "Per-ticket check-in needs a TK code. Use Check-in all for BK group QR.",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
+      const note = needsVerify ? buildEligibilityConfirmNote(eligibilityCodes) : undefined;
+      await checkInTicket(trimmed, { note });
       if (isManifest) await refreshManifest();
       else {
         const data = await lookupTicketOrManifest(trimmed);
@@ -233,12 +756,53 @@ export function StaffTicketScanPage() {
     }
   };
 
+  const handleRejectEligibility = (row, codes = []) => {
+    const labels = (codes.length ? codes : eligibilityCodesOf(row))
+      .map((code) => ticketTypeLabel(code, lang))
+      .join(", ");
+    notify({
+      icon: "warning",
+      title: lang === "VN" ? "Không check-in" : "Check-in blocked",
+      text: lang === "VN"
+        ? `Không đúng đối tượng${labels ? ` (${labels})` : ""}. Báo khách đổi vé hoặc báo quản lý — chưa ghi nhận lên tàu.`
+        : `Eligibility mismatch${labels ? ` (${labels})` : ""}. Ask passenger to exchange ticket or report to manager — not boarded.`,
+      confirmButtonColor: "#124757",
+    });
+  };
+
   const handleCheckOutOne = async (row) => {
-    const trimmed = String(row?.codeOrToken || row?.ticketCode || code || "").trim();
-    if (!trimmed) return;
     try {
       setIsActing(true);
       setLastError("");
+
+      if (isCharterManifest) {
+        const token = String(manifest?.bookingQrToken || code || "").trim();
+        const ticketId = String(row?.ticketId || "").trim();
+        if (!token || !ticketId) throw new Error("EMPTY_CODE");
+        const data = await updateCharterManifestAttendance(token, {
+          action: "CheckOut",
+          mode: "Selected",
+          ticketIds: [ticketId],
+        });
+        applyManifestResult(data);
+        notifyAttendanceResult(data, lang === "VN" ? "Check-out thành công" : "Checked out");
+        return;
+      }
+
+      // Booking thường: checkout từng vé bằng TK; QR tổng dùng nút Check-out tất cả.
+      const scannedFallback = (!isManifest && !isGroupQrToken(code)) ? code : "";
+      const trimmed = resolveIndividualTicketToken(row, scannedFallback);
+      if (!trimmed) {
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "Thiếu mã vé riêng" : "Missing ticket code",
+          text: lang === "VN"
+            ? "Check-out từng vé cần mã TK. QR tổng BK dùng nút Check-out tất cả."
+            : "Per-ticket check-out needs a TK code. Use Check-out all for BK group QR.",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
       await checkOutTicket(trimmed);
       if (isManifest) await refreshManifest();
       else {
@@ -265,7 +829,85 @@ export function StaffTicketScanPage() {
     }
   };
 
+  const handleCharterAttendanceAll = async (action) => {
+    const token = String(manifest?.bookingQrToken || code || "").trim();
+    if (!token) return;
+    try {
+      setIsActing(true);
+      setLastError("");
+      const data = await updateCharterManifestAttendance(token, {
+        action,
+        mode: "All",
+      });
+      applyManifestResult(data);
+      notifyAttendanceResult(
+        data,
+        action === "CheckOut"
+          ? (lang === "VN" ? "Check-out cả nhóm thành công" : "Group check-out done")
+          : (lang === "VN" ? "Check-in cả nhóm thành công" : "Group check-in done"),
+      );
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      setLastError(message);
+      notify({
+        icon: "error",
+        title: action === "CheckOut"
+          ? (lang === "VN" ? "Check-out nhóm thất bại" : "Group check-out failed")
+          : (lang === "VN" ? "Check-in nhóm thất bại" : "Group check-in failed"),
+        text: message,
+        confirmButtonColor: "#124757",
+      });
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const handleCharterAttendanceSelected = async (action) => {
+    const token = String(manifest?.bookingQrToken || code || "").trim();
+    if (!token || selectedTicketIds.length === 0) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Chọn ít nhất 1 vé" : "Select at least one ticket",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+    try {
+      setIsActing(true);
+      setLastError("");
+      const data = await updateCharterManifestAttendance(token, {
+        action,
+        mode: "Selected",
+        ticketIds: selectedTicketIds,
+      });
+      applyManifestResult(data);
+      setSelectedTicketIds([]);
+      notifyAttendanceResult(
+        data,
+        action === "CheckOut"
+          ? (lang === "VN" ? "Check-out đã chọn" : "Selected check-out done")
+          : (lang === "VN" ? "Check-in đã chọn" : "Selected check-in done"),
+      );
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      setLastError(message);
+      notify({
+        icon: "error",
+        title: lang === "VN" ? "Thao tác thất bại" : "Action failed",
+        text: message,
+        confirmButtonColor: "#124757",
+      });
+    } finally {
+      setIsActing(false);
+    }
+  };
+
   const handleCheckInAll = async () => {
+    if (isCharterManifest) {
+      await handleCharterAttendanceAll("CheckIn");
+      return;
+    }
+
     const token = String(manifest?.bookingQrToken || code || "").trim();
     if (!token) return;
     if (manifest?.isRoundTrip && !selectedTripCode) {
@@ -302,6 +944,56 @@ export function StaffTicketScanPage() {
     } finally {
       setIsActing(false);
     }
+  };
+
+  const handleCheckOutAll = async () => {
+    if (isCharterManifest) {
+      await handleCharterAttendanceAll("CheckOut");
+      return;
+    }
+
+    const token = String(manifest?.bookingQrToken || code || "").trim();
+    if (!token) return;
+    if (manifest?.isRoundTrip && !selectedTripCode) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Chọn mã chuyến" : "Select trip code",
+        text: lang === "VN"
+          ? "Booking khứ hồi cần tripCode chiều đang trả khách để tránh check-out nhầm cả hai chiều."
+          : "Round-trip bookings require the alighting leg tripCode to avoid checking out both legs.",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+    try {
+      setIsActing(true);
+      setLastError("");
+      const data = await checkOutAllBookingManifest(token, selectedTripCode);
+      await refreshManifest(token);
+      notifyAttendanceResult(
+        data,
+        lang === "VN" ? "Check-out cả nhóm thành công" : "Group check-out done",
+      );
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      setLastError(message);
+      notify({
+        icon: "error",
+        title: lang === "VN" ? "Check-out nhóm thất bại" : "Group check-out failed",
+        text: message,
+        confirmButtonColor: "#124757",
+      });
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const toggleTicketSelection = (ticketId) => {
+    const id = String(ticketId || "").trim();
+    if (!id) return;
+    setSelectedTicketIds((prev) => (
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    ));
   };
 
   return (
@@ -352,56 +1044,14 @@ export function StaffTicketScanPage() {
       </div>
 
       {ticket ? (
-        <div className="space-y-4 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                {ticket.passengerName}
-              </p>
-              <p className="mt-1 text-xs font-bold text-slate-500">
-                {ticket.ticketCode || ticket.codeOrToken || "—"}
-              </p>
-            </div>
-            {ticket.status ? (
-              <span className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                {ticket.status}
-              </span>
-            ) : null}
-          </div>
-
-          <TicketFields ticket={ticket} lang={lang} />
-
-          {(ticket.canCheckIn || ticket.canCheckOut) ? (
-            <div className="flex flex-wrap gap-2 pt-2">
-              {ticket.canCheckIn ? (
-                <button
-                  type="button"
-                  disabled={isActing}
-                  onClick={() => handleCheckInOne(ticket)}
-                  className="rounded-xl bg-emerald-600 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
-                >
-                  Check-in
-                </button>
-              ) : null}
-              {ticket.canCheckOut ? (
-                <button
-                  type="button"
-                  disabled={isActing}
-                  onClick={() => handleCheckOutOne(ticket)}
-                  className="rounded-xl border border-slate-200 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300"
-                >
-                  Check-out
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <p className="pt-2 text-[11px] font-bold text-slate-400">
-              {lang === "VN"
-                ? "Vé đã check-out — chỉ xem trạng thái."
-                : "Ticket already checked out — view only."}
-            </p>
-          )}
-        </div>
+        <TicketResultCard
+          ticket={ticket}
+          lang={lang}
+          isActing={isActing}
+          onCheckIn={handleCheckInOne}
+          onCheckOut={handleCheckOutOne}
+          onRejectEligibility={handleRejectEligibility}
+        />
       ) : null}
 
       {manifest ? (
@@ -409,17 +1059,22 @@ export function StaffTicketScanPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                {lang === "VN" ? "QR tổng booking" : "Booking group QR"}
+                {isCharterManifest
+                  ? (lang === "VN" ? "QR tổng charter" : "Charter group QR")
+                  : (lang === "VN" ? "QR tổng booking" : "Booking group QR")}
               </p>
               <p className="mt-1 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
                 {manifest.bookingCode}
               </p>
               <p className="mt-1 text-xs font-bold text-slate-500">
                 {manifest.tickets.length} {lang === "VN" ? "vé" : "ticket(s)"}
+                {selectedTicketIds.length > 0
+                  ? ` · ${lang === "VN" ? "đã chọn" : "selected"} ${selectedTicketIds.length}`
+                  : ""}
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2">
-              {tripOptions.length > 0 ? (
+              {!isCharterManifest && tripOptions.length > 0 ? (
                 <label className="block space-y-1">
                   <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
                     tripCode {manifest.isRoundTrip ? (lang === "VN" ? "(bắt buộc khứ hồi)" : "(required for RT)") : ""}
@@ -439,10 +1094,38 @@ export function StaffTicketScanPage() {
                 type="button"
                 disabled={isActing || !manifest.tickets.some((row) => row.canCheckIn)}
                 onClick={handleCheckInAll}
-                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
+                className="rounded-xl bg-yellow-400 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-900 disabled:opacity-50"
               >
-                {lang === "VN" ? "Check-in cả nhóm" : "Check-in all"}
+                {lang === "VN" ? "Check-in tất cả" : "Check-in all"}
               </button>
+              <button
+                type="button"
+                disabled={isActing || !manifest.tickets.some((row) => row.canCheckOut)}
+                onClick={handleCheckOutAll}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300"
+              >
+                {lang === "VN" ? "Check-out tất cả" : "Check-out all"}
+              </button>
+              {isCharterManifest ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={isActing || selectedTicketIds.length === 0}
+                    onClick={() => handleCharterAttendanceSelected("CheckIn")}
+                    className="rounded-xl bg-[#124757] px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
+                  >
+                    {lang === "VN" ? "Check-in đã chọn" : "Check-in selected"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isActing || selectedTicketIds.length === 0}
+                    onClick={() => handleCharterAttendanceSelected("CheckOut")}
+                    className="rounded-xl border border-slate-200 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300"
+                  >
+                    {lang === "VN" ? "Check-out đã chọn" : "Check-out selected"}
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
 
@@ -452,57 +1135,34 @@ export function StaffTicketScanPage() {
                 {lang === "VN" ? "Manifest chưa có vé." : "No tickets in manifest."}
               </p>
             ) : (
-              manifest.tickets.map((row) => (
-                <div
-                  key={`${row.ticketCode || row.codeOrToken}-${row.tripCode}`}
-                  className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40"
-                >
-                  <div className="mb-3 flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-headline font-black text-[#124757] dark:text-yellow-400">
-                        {row.passengerName}
-                      </p>
-                      <p className="text-[11px] font-bold text-slate-500">
-                        {ticketTypeLabel(row.ticketTypeCode, lang)} · {row.seatLabel || "—"}
-                      </p>
-                    </div>
-                    {row.status ? (
-                      <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        {row.status}
-                      </span>
+              manifest.tickets.map((row) => {
+                const rowKey = row.ticketId || `${row.ticketCode || row.codeOrToken}-${row.tripCode}`;
+                const checked = row.ticketId && selectedTicketIds.includes(row.ticketId);
+                return (
+                  <div key={rowKey} className="relative">
+                    {isCharterManifest && row.ticketId ? (
+                      <label className="absolute left-3 top-3 z-10 inline-flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(checked)}
+                          onChange={() => toggleTicketSelection(row.ticketId)}
+                          className="h-4 w-4 rounded border-slate-300 text-[#124757] focus:ring-[#124757]"
+                        />
+                      </label>
                     ) : null}
-                  </div>
-                  <TicketFields ticket={row} lang={lang} />
-                  {(row.canCheckIn || row.canCheckOut) ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {row.canCheckIn ? (
-                        <button
-                          type="button"
-                          disabled={isActing}
-                          onClick={() => handleCheckInOne(row)}
-                          className="rounded-xl bg-emerald-600 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
-                        >
-                          Check-in
-                        </button>
-                      ) : null}
-                      {row.canCheckOut ? (
-                        <button
-                          type="button"
-                          disabled={isActing}
-                          onClick={() => handleCheckOutOne(row)}
-                          className="rounded-xl border border-slate-200 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300"
-                        >
-                          Check-out
-                        </button>
-                      ) : null}
+                    <div className={isCharterManifest && row.ticketId ? "pl-6" : ""}>
+                      <TicketResultCard
+                        ticket={row}
+                        lang={lang}
+                        isActing={isActing}
+                        onCheckIn={handleCheckInOne}
+                        onCheckOut={handleCheckOutOne}
+                        onRejectEligibility={handleRejectEligibility}
+                      />
                     </div>
-                  ) : (
-                    <p className="mt-3 text-[10px] font-bold text-slate-400">
-                      {lang === "VN" ? "Chỉ xem trạng thái" : "View status only"}
-                    </p>
-                  )}
-                </div>
-              ))
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

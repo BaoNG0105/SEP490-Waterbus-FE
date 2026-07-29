@@ -19,6 +19,7 @@ import {
   hasCharterPassengerManifest,
   isCharterFullyPaid,
 } from "../utils/charterBookingTickets";
+import { extractCharterAdditionalPaymentMeta } from "../utils/charterPayOs";
 import {
   formatPassengerApprovalStatus,
   getPassengerAddRequestBatches,
@@ -148,6 +149,7 @@ function AdminCharterRouteInfoPanel({
           ) : null}
         </div>
         <span className="rounded-lg bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+          {lang === "VN" ? "Khởi hành" : "Depart"}{" "}
           {formatDate(booking?.departureDate)} · {String(booking?.startTime || "--").slice(0, 5)}
         </span>
       </div>
@@ -921,6 +923,14 @@ export function AdminBookingOverviewTab({
             />
           </div>
 
+          {(booking.requiresAdditionalPayment || Number(booking.additionalInsuranceAmount) > 0) ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+              {lang === "VN"
+                ? `Cần thanh toán thêm phí bảo hiểm${Number(booking.additionalInsuranceAmount) > 0 ? ` (${currencyFormatter.format(Number(booking.additionalInsuranceAmount))})` : ""}. Boarding pass / export / check-in chỉ mở khi paymentStatus = Paid.`
+                : `Additional insurance payment required${Number(booking.additionalInsuranceAmount) > 0 ? ` (${currencyFormatter.format(Number(booking.additionalInsuranceAmount))})` : ""}. Boarding pass / export / check-in unlock only when paymentStatus = Paid.`}
+            </div>
+          ) : null}
+
           {bookingQuotePreview?.boats?.length > 0 ? (
             <CharterQuotePreviewTable
               preview={bookingQuotePreview}
@@ -967,6 +977,11 @@ export function AdminBookingOverviewTab({
                 icon="groups"
                 label={lang === "VN" ? "Hành khách" : "Passengers"}
                 value={formatPassengerSummary(booking, lang)}
+              />
+              <OverviewField
+                icon="event_available"
+                label={lang === "VN" ? "Ngày giờ khởi hành" : "Departure date & time"}
+                value={`${formatDate(booking.departureDate)} · ${String(booking.startTime || "--").slice(0, 5)}`}
               />
               <OverviewField
                 icon="schedule"
@@ -1953,37 +1968,30 @@ export function AdminBookingTicketsTab({
 
     try {
       setReviewingBatchId(batch.requestBatchId);
-      const beforeInsuranceTotal = Number(booking?.insurance?.totalAmount || 0) || 0;
-      const beforeTotal = Number(booking?.totalAmount || booking?.estimatedPrice || 0) || 0;
       const response = await approveCharterPassengerAddRequest(booking.id, batch.requestBatchId);
+      const paymentMeta = extractCharterAdditionalPaymentMeta(response);
       await onRefresh?.();
 
-      const afterInsuranceTotal = Number(
-        response?.insurance?.totalAmount
-        ?? response?.booking?.insurance?.totalAmount
-        ?? response?.data?.insurance?.totalAmount
-        ?? booking?.insurance?.totalAmount
-        ?? 0,
-      ) || 0;
-      const afterTotal = Number(
-        response?.totalAmount
-        ?? response?.finalAmount
-        ?? response?.booking?.totalAmount
-        ?? response?.data?.totalAmount
-        ?? booking?.totalAmount
-        ?? 0,
-      ) || 0;
-      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal || afterTotal > beforeTotal;
+      const needsExtraPayment = paymentMeta.requiresAdditionalPayment
+        || paymentMeta.remainingAmount > 0
+        || paymentMeta.additionalInsuranceAmount > 0
+        || String(paymentMeta.paymentStatus).toLowerCase() === "depositpaid";
+      const extraAmount = paymentMeta.additionalInsuranceAmount > 0
+        ? paymentMeta.additionalInsuranceAmount
+        : paymentMeta.remainingAmount;
+      const extraAmountLabel = extraAmount > 0
+        ? new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(extraAmount)
+        : "";
 
       showToast({
         icon: "success",
         title: lang === "VN" ? "Đã duyệt" : "Approved",
-        text: insuranceGrew
+        text: needsExtraPayment
           ? (lang === "VN"
-            ? "Phí bảo hiểm đã tăng. Khách cần thanh toán phần còn lại qua PayOS."
-            : "Insurance increased. Customer needs to pay the remaining amount via PayOS.")
+            ? `Phí bảo hiểm phát sinh${extraAmountLabel ? ` ${extraAmountLabel}` : ""}. Khách cần thanh toán phần còn lại (Remaining). Vé/boarding pass chỉ phát sau khi Paid.`
+            : `Extra insurance due${extraAmountLabel ? ` (${extraAmountLabel})` : ""}. Customer must pay Remaining. Boarding pass only after Paid.`)
           : undefined,
-        timer: insuranceGrew ? 3500 : 1800,
+        timer: needsExtraPayment ? 4500 : 1800,
       });
     } catch (error) {
       showToast({

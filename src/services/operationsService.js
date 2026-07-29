@@ -41,29 +41,62 @@ export const getMovementStatusLabel = (status, lang = "VN") => {
   const isVn = lang === "VN";
   switch (key) {
     case "scheduled":
+    case "chuachay":
+    case "pending":
+    case "planned":
       return isVn ? "Chưa chạy" : "Scheduled";
     case "boarding":
-      return isVn ? "Đang chuẩn bị / chờ xuất bến" : "Boarding";
+    case "dangchuanbi":
+      return isVn ? "Đang chuẩn bị" : "Boarding";
     case "moving":
+    case "bangdichuyen":
+    case "dangdichuyen":
+    case "inprogress":
+    case "ongoing":
+    case "running":
       return isVn ? "Đang di chuyển" : "Moving";
     case "arriving":
+    case "sapcapben":
       return isVn ? "Sắp cập bến" : "Arriving";
     case "atstation":
     case "arrived":
+    case "dacapben":
       return isVn ? "Đã cập bến" : "Arrived";
     case "departed":
     case "departing":
+    case "daroiben":
       return isVn ? "Đã rời bến" : "Departed";
     case "delayed":
+    case "tre":
       return isVn ? "Trễ" : "Delayed";
     case "completed":
+    case "hoantat":
+    case "finished":
       return isVn ? "Hoàn tất" : "Completed";
     case "cancelled":
     case "canceled":
+    case "huy":
       return isVn ? "Hủy" : "Cancelled";
     default:
       return status ? String(status) : "";
   }
+};
+
+export const getMovementStatusTone = (status) => {
+  const key = String(status || "").trim().toLowerCase().replace(/[_\s-]/g, "");
+  if (["moving", "bangdichuyen", "dangdichuyen", "inprogress", "ongoing", "running", "boarding", "arriving", "atstation", "arrived", "departed", "departing"].includes(key)) {
+    return "border-emerald-500 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-emerald-950";
+  }
+  if (["delayed", "tre"].includes(key)) {
+    return "border-amber-500 bg-amber-400 text-amber-950";
+  }
+  if (["completed", "hoantat", "finished"].includes(key)) {
+    return "border-slate-400 bg-slate-700 text-white dark:border-slate-500 dark:bg-slate-200 dark:text-slate-900";
+  }
+  if (["cancelled", "canceled", "huy"].includes(key)) {
+    return "border-rose-400 bg-rose-600 text-white";
+  }
+  return "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200";
 };
 
 export const normalizeOperationsScheduleEntry = (raw) => {
@@ -71,10 +104,17 @@ export const normalizeOperationsScheduleEntry = (raw) => {
 
   const boatCode = String(pick(raw, ["boatCode", "BoatCode", "boat.boatCode", "boat.code"], "")).trim();
   const boatId = String(pick(raw, ["boatId", "BoatId", "boat.boatId", "boat.id"], "")).trim();
-  const tripIdEarly = pick(raw, ["tripId", "TripId"], null) || null;
+  const tripIdEarly = pick(raw, [
+    "tripId", "TripId", "TRIPID",
+    "id", "Id", "ID",
+    "trip.id", "Trip.Id",
+  ], null);
+  const tripId = tripIdEarly != null && String(tripIdEarly).trim()
+    ? String(tripIdEarly).trim()
+    : null;
   const tripCodeEarly = String(pick(raw, ["tripCode", "TripCode"], "")).trim();
   // Customer schedule có thể trả trip chưa gán tàu — vẫn giữ entry.
-  if (!boatCode && !boatId && !tripIdEarly && !tripCodeEarly) return null;
+  if (!boatCode && !boatId && !tripId && !tripCodeEarly) return null;
 
   const lat = toFiniteNumber(pick(raw, [
     "latestLatitude", "LatestLatitude", "latitude", "lat", "Latitude",
@@ -184,10 +224,10 @@ export const normalizeOperationsScheduleEntry = (raw) => {
   ], "")).trim() || null;
 
   const dwellCountdown = normalizeDwellCountdown(raw);
-  // Ưu tiên tổng khách chuyến (totalPassengerCount), không dùng ghế còn.
+  // Khách đang trên tàu (check-in, chưa checkout). Không dùng totalPassengerCount cho map/live.
   const passengerSource = pick(raw, [
-    "totalPassengerCount", "TotalPassengerCount",
     "onboardPassengerCount", "OnboardPassengerCount",
+    "checkedInPassengerCount", "CheckedInPassengerCount",
     "passengerCount", "PassengerCount",
   ], null);
   const passengerCount = toFiniteNumber(passengerSource);
@@ -247,11 +287,11 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     || (stops.length ? (stops[stops.length - 1]?.stationName || null) : null);
 
   return {
-    boatId: boatId || boatCode || String(tripIdEarly || ""),
+    boatId: boatId || boatCode || String(tripId || ""),
     boatCode: boatCode || boatId || "",
     boatName: pick(raw, ["boatName", "BoatName", "boat.boatName"], "") || null,
-    tripId: tripIdEarly,
-    tripCode: tripCodeEarly || pick(raw, ["tripCode", "TripCode"], "") || null,
+    tripId,
+    tripCode: tripCodeEarly || null,
     routeName: pick(raw, ["routeName", "RouteName"], "") || null,
     routeCode: pick(raw, ["routeCode", "RouteCode"], "") || null,
     routeType,

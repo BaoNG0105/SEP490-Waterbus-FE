@@ -36,6 +36,7 @@ import { getRefundPaymentId, isPaymentUuid, normalizeSelectedRoute, resolveChart
 import { buildConfirmBodyHtml, showAlertDialog, showConfirmDialog, showToast } from "../../../utils/swalToast";
 import {
   canShowCharterTicketsWithBalance,
+  extractCharterAdditionalPaymentMeta,
   extractPayOsPaymentFields,
   getCharterBalanceDue,
   markCharterTopUpPayOsStarted,
@@ -210,6 +211,16 @@ const normalizeBooking = (item) => {
     updatedAt: pick(item, ["updatedAt", "modifiedAt"], ""),
     estimatedPrice: Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0)),
     depositAmount: rawDepositAmount || paidDepositAmount,
+    remainingAmount: (() => {
+      const raw = pick(item, ["remainingAmount"], "");
+      if (raw === "" || raw === null || raw === undefined) return undefined;
+      const value = Number(raw);
+      return Number.isFinite(value) ? Math.max(value, 0) : undefined;
+    })(),
+    requiresAdditionalPayment: Boolean(
+      item?.requiresAdditionalPayment === true || item?.RequiresAdditionalPayment === true,
+    ),
+    additionalInsuranceAmount: Number(pick(item, ["additionalInsuranceAmount"], 0)) || 0,
     promotionCode: pick(item, ["promotionCode"], ""),
     specialRequests: pick(item, ["specialRequests"], "--"),
     insuranceSelected: resolveInsuranceSelected(item),
@@ -1102,7 +1113,7 @@ export function CharterDetail() {
 
     if (prev === null) return undefined;
     if (!(balanceDue > 0) || balanceDue <= prev) return undefined;
-    if (booking.insuranceSelected === false) return undefined;
+    if (booking.insuranceSelected === false && !booking.requiresAdditionalPayment) return undefined;
     if (!["Confirmed", "Completed", "PendingPayment"].includes(booking.status)) return undefined;
 
     const hasPending = Array.isArray(booking.payments)
@@ -1119,6 +1130,9 @@ export function CharterDetail() {
     booking?.id,
     booking?.totalAmount,
     booking?.paidAmount,
+    booking?.remainingAmount,
+    booking?.requiresAdditionalPayment,
+    booking?.additionalInsuranceAmount,
     booking?.status,
     booking?.insuranceSelected,
     booking?.payments,
@@ -1450,8 +1464,34 @@ export function CharterDetail() {
 
     try {
       setIsSubmitting(true);
-      await importMyCharterBookingPassengers(booking.id, file);
-      await loadDetail();
+      const beforeBalance = getCharterBalanceDue(booking);
+      const response = await importMyCharterBookingPassengers(booking.id, file);
+      const paymentMeta = extractCharterAdditionalPaymentMeta(response);
+      const embeddedPayment = extractPayOsPaymentFields(response);
+      const refreshed = await loadDetail({ silent: true });
+      const afterBalance = Math.max(
+        getCharterBalanceDue(refreshed || booking),
+        paymentMeta.remainingAmount,
+        embeddedPayment?.amount || 0,
+      );
+      const needsTopUp = paymentMeta.requiresAdditionalPayment
+        || paymentMeta.additionalInsuranceAmount > 0
+        || afterBalance > beforeBalance;
+
+      if (embeddedPayment?.checkoutUrl) {
+        rememberCharterPayOsSession(booking.id, embeddedPayment);
+        applyCreatedPayOsPayment(embeddedPayment, {
+          fallbackAmount: afterBalance || embeddedPayment.amount,
+          openCheckout: true,
+        });
+        return;
+      }
+
+      if (needsTopUp && afterBalance > 0) {
+        await createInsuranceTopUpPayOs(afterBalance, { openCheckout: true });
+        return;
+      }
+
       showAlertDialog({
         icon: "success",
         title: lang === "VN" ? "Đã nhập danh sách hành khách" : "Passenger list imported",
@@ -1552,12 +1592,19 @@ export function CharterDetail() {
       const beforeBalance = getCharterBalanceDue(booking);
       const beforeInsuranceTotal = Number(booking.insurance?.totalAmount || 0) || 0;
       const response = await updateMyCharterBookingPassengers(booking.id, { passengers: passengerPayload.passengers });
+      const paymentMeta = extractCharterAdditionalPaymentMeta(response);
       const embeddedPayment = extractPayOsPaymentFields(response);
       const refreshed = await loadDetail({ silent: true });
-      const afterBalance = getCharterBalanceDue(refreshed || booking);
+      const afterBalance = Math.max(
+        getCharterBalanceDue(refreshed || booking),
+        paymentMeta.remainingAmount,
+        embeddedPayment?.amount || 0,
+      );
       const afterInsuranceTotal = Number((refreshed || booking)?.insurance?.totalAmount || 0) || 0;
-      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal;
-      const balanceDue = Math.max(afterBalance, embeddedPayment?.amount || 0);
+      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal
+        || paymentMeta.additionalInsuranceAmount > 0
+        || paymentMeta.requiresAdditionalPayment;
+      const balanceDue = afterBalance;
 
       if (embeddedPayment?.checkoutUrl) {
         rememberCharterPayOsSession(booking.id, embeddedPayment);
@@ -1568,7 +1615,7 @@ export function CharterDetail() {
         return;
       }
 
-      if ((insuranceGrew || afterBalance > beforeBalance) && balanceDue > 0) {
+      if ((insuranceGrew || afterBalance > beforeBalance || paymentMeta.requiresAdditionalPayment) && balanceDue > 0) {
         await createInsuranceTopUpPayOs(balanceDue, { openCheckout: true });
         return;
       }
@@ -1633,12 +1680,19 @@ export function CharterDetail() {
       const beforeBalance = getCharterBalanceDue(booking);
       const beforeInsuranceTotal = Number(booking.insurance?.totalAmount || 0) || 0;
       const response = await addMyCharterBookingPassengers(booking.id, { passengers });
+      const paymentMeta = extractCharterAdditionalPaymentMeta(response);
       const embeddedPayment = extractPayOsPaymentFields(response);
       const refreshed = await loadDetail({ silent: true });
-      const afterBalance = getCharterBalanceDue(refreshed || booking);
+      const afterBalance = Math.max(
+        getCharterBalanceDue(refreshed || booking),
+        paymentMeta.remainingAmount,
+        embeddedPayment?.amount || 0,
+      );
       const afterInsuranceTotal = Number((refreshed || booking)?.insurance?.totalAmount || 0) || 0;
-      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal;
-      const balanceDue = Math.max(afterBalance, embeddedPayment?.amount || 0);
+      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal
+        || paymentMeta.additionalInsuranceAmount > 0
+        || paymentMeta.requiresAdditionalPayment;
+      const balanceDue = afterBalance;
 
       if (embeddedPayment?.checkoutUrl) {
         rememberCharterPayOsSession(booking.id, embeddedPayment);
@@ -1649,7 +1703,7 @@ export function CharterDetail() {
         return true;
       }
 
-      if ((insuranceGrew || afterBalance > beforeBalance) && balanceDue > 0) {
+      if ((insuranceGrew || afterBalance > beforeBalance || paymentMeta.requiresAdditionalPayment) && balanceDue > 0) {
         await createInsuranceTopUpPayOs(balanceDue, { openCheckout: true });
         return true;
       }
@@ -1831,10 +1885,15 @@ export function CharterDetail() {
   const canPayDeposit = depositPaymentAmount > 0 && !booking.hasDepositPaid;
   const usesDefaultDeposit = !(Number(booking.depositAmount) > 0);
   const effectivePaidAmount = Math.max(paidAmount, booking.hasDepositPaid ? paidDepositAmount || quoteDepositAmount : 0);
-  const remainingAmount = promoApplied && booking.hasDepositPaid
+  const computedRemaining = promoApplied && booking.hasDepositPaid
     ? Math.max(0, Number(promoPreview.finalAmount) || 0)
     : Math.max(payableQuoteTotal - effectivePaidAmount, 0);
-  const needsBalancePayment = remainingAmount > 0 && effectivePaidAmount > 0;
+  const remainingAmount = booking.remainingAmount !== undefined && booking.remainingAmount !== null
+    ? Math.max(0, Number(booking.remainingAmount) || 0)
+    : computedRemaining;
+  const needsBalancePayment = Boolean(booking.requiresAdditionalPayment)
+    || (remainingAmount > 0 && effectivePaidAmount > 0)
+    || (Number(booking.additionalInsuranceAmount) > 0);
   const normalizedPaymentOption = (needsBalancePayment || booking.hasDepositPaid)
     ? "Remaining"
     : paymentOption === "Remaining"
