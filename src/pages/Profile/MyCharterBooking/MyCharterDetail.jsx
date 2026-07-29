@@ -12,7 +12,6 @@ import {
   fetchCharterBookingQrImage,
   fetchMyCharterBookingDetail,
   importMyCharterBookingPassengers,
-  printSelectedCharterBookingTickets,
   respondToCharterBookingQuote,
   updateMyCharterBookingPassengers,
   addMyCharterBookingPassengers,
@@ -1524,8 +1523,6 @@ export function CharterDetail() {
       return;
     }
 
-    const popup = action === "print" ? window.open("", "_blank") : null;
-
     try {
       setIsSubmitting(true);
       if (missingManifestPayload?.passengers) {
@@ -1549,18 +1546,13 @@ export function CharterDetail() {
         }
         downloadBlobResponse(response, `${booking.bookingCode}-tickets.pdf`);
       } else {
-        response = await printSelectedCharterBookingTickets(booking.id, ticketIds);
-        const url = URL.createObjectURL(response.data);
-        if (popup) popup.location.href = url;
-        else window.open(url, "_blank");
-        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+        throw new Error(lang === "VN" ? "Chỉ hỗ trợ tải PDF vé." : "Only PDF download is supported.");
       }
     } catch (error) {
-      if (popup) popup.close();
       showAlertDialog({
         icon: "error",
         title: lang === "VN" ? "Không thể xuất vé" : "Unable to export tickets",
-        text: getApiErrorMessage(error, lang === "VN" ? "Không thể xuất PDF/vé. Vui lòng lưu danh sách hành khách rồi thử lại." : "Unable to export tickets. Please save the passenger list and try again."),
+        text: getApiErrorMessage(error, lang === "VN" ? "Không thể tải PDF. Vui lòng lưu danh sách hành khách rồi thử lại." : "Unable to download PDF. Please save the passenger list and try again."),
       });
     } finally {
       setIsSubmitting(false);

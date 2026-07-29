@@ -1100,24 +1100,10 @@ export function LiveTracking({ viewTabs = null } = {}) {
         routeOverlays={focusSolo && focusedRouteCoordinates.length >= 2 ? [] : mapRouteOverlays}
         selectedBoatId={selectedBoatId}
         focusView={focusView}
-    preferFocus={Boolean(focusView && selectedBoatId)}
+        preferFocus={Boolean(focusView && selectedBoatId)}
         fitBoatMarkers
         stationAsFlag
         hideStationLink
-        waterwayName={
-          focusSolo
-            ? (
-              focusRouteCode
-              || selectedBoat?.boatCode
-              || (lang === "VN" ? "Đang xem 1 tàu" : "Viewing one boat")
-            )
-            : ""
-        }
-        overlayEyebrow={
-          focusSolo
-            ? (lang === "VN" ? "Tuyến GPS đã vẽ" : "Recorded GPS route")
-            : "Đang hiển thị tuyến"
-        }
         className="h-full min-h-0"
       />
 
@@ -1152,42 +1138,57 @@ export function LiveTracking({ viewTabs = null } = {}) {
             </span>
           ) : null}
         </div>
-        <div className="pointer-events-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+        <div className="pointer-events-auto flex min-w-0 flex-col items-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {focusSolo ? (
+              <button
+                type="button"
+                onClick={exitFocusSolo}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#0EA5E9] px-3 text-[11px] font-headline font-black uppercase tracking-wider text-white shadow-md transition hover:brightness-110"
+                title={lang === "VN" ? "Hiện toàn bộ đội tàu" : "Show full fleet"}
+              >
+                <span className="material-symbols-outlined text-[16px]" aria-hidden>fullscreen</span>
+                <span>{lang === "VN" ? "Full" : "Full"}</span>
+              </button>
+            ) : null}
+            {viewTabs}
+            {canReportIncident ? (
+              <button
+                type="button"
+                onClick={() => openReportForBoat(selectedBoat || enrichedBoats[0] || null)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-rose-600 px-3 text-[11px] font-headline font-black uppercase tracking-wider text-white shadow-md transition hover:brightness-110"
+                title={lang === "VN" ? "Báo sự cố" : "Report incident"}
+              >
+                <span className="material-symbols-outlined text-[16px]" aria-hidden>report</span>
+                <span className="hidden sm:inline">{lang === "VN" ? "Báo sự cố" : "Report"}</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                refresh().catch(() => {});
+                refreshIncidents().catch(() => {});
+                refreshOpsSchedule().catch(() => {});
+              }}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#124757] shadow-md transition hover:bg-slate-50"
+              title={lang === "VN" ? "Tải lại" : "Refresh"}
+            >
+              <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span>
+            </button>
+          </div>
           {focusSolo ? (
-            <button
-              type="button"
-              onClick={exitFocusSolo}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#0EA5E9] px-3 text-[11px] font-headline font-black uppercase tracking-wider text-white shadow-md transition hover:brightness-110"
-              title={lang === "VN" ? "Hiện toàn bộ đội tàu" : "Show full fleet"}
-            >
-              <span className="material-symbols-outlined text-[16px]" aria-hidden>fullscreen</span>
-              <span>{lang === "VN" ? "Full" : "Full"}</span>
-            </button>
+            <div className="max-w-[min(100%,20rem)] rounded-xl bg-white/90 px-3.5 py-2 shadow-sm backdrop-blur dark:bg-slate-800/90">
+              <p className="text-[10px] font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                {lang === "VN" ? "Tuyến GPS đã vẽ" : "Recorded GPS route"}
+              </p>
+              <p className="truncate text-xs font-bold text-slate-700 dark:text-slate-200">
+                {mapRouteOverlays.find((route) => route.emphasis === "active")?.label
+                  || focusRouteCode
+                  || selectedBoat?.boatCode
+                  || (lang === "VN" ? "Đang xem 1 tàu" : "Viewing one boat")}
+              </p>
+            </div>
           ) : null}
-          {viewTabs}
-          {canReportIncident ? (
-            <button
-              type="button"
-              onClick={() => openReportForBoat(selectedBoat || enrichedBoats[0] || null)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-rose-600 px-3 text-[11px] font-headline font-black uppercase tracking-wider text-white shadow-md transition hover:brightness-110"
-              title={lang === "VN" ? "Báo sự cố" : "Report incident"}
-            >
-              <span className="material-symbols-outlined text-[16px]" aria-hidden>report</span>
-              <span className="hidden sm:inline">{lang === "VN" ? "Báo sự cố" : "Report"}</span>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => {
-              refresh().catch(() => {});
-              refreshIncidents().catch(() => {});
-              refreshOpsSchedule().catch(() => {});
-            }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#124757] shadow-md transition hover:bg-slate-50"
-            title={lang === "VN" ? "Tải lại" : "Refresh"}
-          >
-            <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span>
-          </button>
         </div>
       </div>
 

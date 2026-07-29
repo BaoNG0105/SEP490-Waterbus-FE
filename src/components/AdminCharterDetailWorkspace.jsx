@@ -7,7 +7,6 @@ import {
   downloadCharterBookingTicketsPdfByQrToken,
   downloadSelectedCharterBookingTickets,
   fetchCharterBookingQrImage,
-  printSelectedCharterBookingTickets,
   approveCharterPassengerAddRequest,
   rejectCharterPassengerAddRequest,
 } from "../services/charterBookingService";
@@ -1891,7 +1890,7 @@ export function AdminBookingTicketsTab({
     if (!booking?.id || !canExportTickets) return;
 
     const targetTicketIds = resolveTicketIds(ticketIds);
-    const popup = action === "print" || action === "view" ? window.open("", "_blank") : null;
+    const popup = action === "view" ? window.open("", "_blank") : null;
 
     try {
       setIsSubmitting(true);
@@ -1910,12 +1909,20 @@ export function AdminBookingTicketsTab({
           response = await downloadCharterBookingTicketsPdfByQrToken(booking.qrToken);
         }
         downloadBlobResponse(response, `${booking.bookingCode}-tickets.pdf`);
-      } else {
-        response = await printSelectedCharterBookingTickets(booking.id, targetTicketIds);
+      } else if (action === "view") {
+        // Xem vé: mở PDF trong tab mới (không dùng luồng in riêng).
+        try {
+          response = await downloadCharterBookingTicketsPdf(booking.id, targetTicketIds);
+        } catch (pdfError) {
+          if (targetTicketIds || !booking.qrToken) throw pdfError;
+          response = await downloadCharterBookingTicketsPdfByQrToken(booking.qrToken);
+        }
         const url = URL.createObjectURL(response.data);
         if (popup) popup.location.href = url;
         else openBlobInNewTab(response);
         window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } else {
+        throw new Error(lang === "VN" ? "Thao tác vé không hỗ trợ." : "Unsupported ticket action.");
       }
     } catch (error) {
       if (popup) popup.close();
@@ -1925,8 +1932,8 @@ export function AdminBookingTicketsTab({
         text: getApiErrorMessage(
           error,
           lang === "VN"
-            ? "Không thể mở hoặc in vé. Vui lòng thử lại sau khi khách đã lưu danh sách hành khách."
-            : "Unable to open or print tickets. Please try again after the passenger list is saved.",
+            ? "Không thể tải PDF vé. Vui lòng thử lại sau khi khách đã lưu danh sách hành khách."
+            : "Unable to download ticket PDF. Please try again after the passenger list is saved.",
         ),
         timer: 4500,
       });
@@ -2068,8 +2075,8 @@ export function AdminBookingTicketsTab({
               </h2>
               <p className="mt-1 text-xs font-medium text-slate-400">
                 {lang === "VN"
-                  ? "Xem, in hoặc tải vé để xử lý khi khách gặp sự cố tại bến."
-                  : "View, print, or download tickets for on-site passenger support."}
+                  ? "Xem hoặc tải PDF vé — khách in từ file PDF nếu cần."
+                  : "View or download ticket PDFs — customers print from the PDF if needed."}
               </p>
             </div>
             {qrImageUrl && (
@@ -2109,15 +2116,6 @@ export function AdminBookingTicketsTab({
               {selectedTicketIds.length > 0
                 ? (lang === "VN" ? `Xem ${selectedTicketIds.length} vé` : `View ${selectedTicketIds.length}`)
                 : (lang === "VN" ? "Xem tất cả vé" : "View all tickets")}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTicketAction("print")}
-              disabled={isSubmitting || !canExportTickets}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
-            >
-              <span className="material-symbols-outlined text-base">print</span>
-              {lang === "VN" ? "In vé" : "Print"}
             </button>
             <button
               type="button"
@@ -2298,12 +2296,12 @@ export function AdminBookingTicketsTab({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleTicketAction("print", row.hasTicketId ? [row.ticketId] : null)}
+                      onClick={() => handleTicketAction("pdf", row.hasTicketId ? [row.ticketId] : null)}
                       disabled={isSubmitting || !row.hasTicketId}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-[#124757] px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
                     >
-                      <span className="material-symbols-outlined text-sm">print</span>
-                      {lang === "VN" ? "In" : "Print"}
+                      <span className="material-symbols-outlined text-sm">download</span>
+                      {lang === "VN" ? "PDF" : "PDF"}
                     </button>
                   </div>
                 </div>

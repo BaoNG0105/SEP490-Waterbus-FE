@@ -74,9 +74,11 @@ const pick = (source, keys, fallback = "") => {
 
 import {
   classifyPassengerAgeBand,
+  getAgeFromBirthYear,
   getTravelYear,
   getVietnamCalendarYear,
   isTicketTypeMatchingBirthYear,
+  SENIOR_MIN_AGE,
   ticketTypeAgeHint,
 } from "../../../utils/passengerAge";
 
@@ -543,11 +545,17 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     if (mismatchedType) {
       const band = classifyPassengerAgeBand(mismatchedType.birthYear, travelYear);
       const type = String(mismatchedType.ticketType || "").toUpperCase();
+      const age = getAgeFromBirthYear(mismatchedType.birthYear, travelYear);
+      const seniorHint = type === "SENIOR"
+        ? (lang === "VN"
+          ? ` Người cao tuổi cần ≥ ${SENIOR_MIN_AGE} tuổi tại năm đi ${travelYear} (hiện ${age ?? "—"} tuổi).`
+          : ` Senior needs age ≥ ${SENIOR_MIN_AGE} in travel year ${travelYear} (now ${age ?? "—"}).`)
+        : "";
       showError(
         lang === "VN" ? "Loại vé không khớp năm sinh" : "Ticket type does not match birth year",
         lang === "VN"
-          ? `「${mismatchedType.name || "Hành khách"}」 loại ${type} nhưng theo năm sinh thuộc nhóm ${band} (năm đi ${travelYear}). CHILD: >2–≤12 tuổi; từ 13 tuổi chọn ADULT; ≤2 tuổi dùng em bé đi kèm.`
-          : `"${mismatchedType.name || "Passenger"}" is ${type} but age band is ${band} (travel year ${travelYear}). CHILD: >2–≤12; age 13+ use ADULT; ≤2 use accompanying infant.`,
+          ? `「${mismatchedType.name || "Hành khách"}」 loại ${type} nhưng theo năm sinh thuộc nhóm ${band} (năm đi ${travelYear}). CHILD: >2–≤12 tuổi; từ 13 tuổi chọn ADULT; ≤2 tuổi dùng em bé đi kèm.${seniorHint}`
+          : `"${mismatchedType.name || "Passenger"}" is ${type} but age band is ${band} (travel year ${travelYear}). CHILD: >2–≤12; age 13+ use ADULT; ≤2 use accompanying infant.${seniorHint}`,
       );
       return;
     }
@@ -923,8 +931,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                     />
                     <p className="text-[10px] text-slate-400">
                       {lang === "VN"
-                        ? "Người lớn (≥13). Trẻ em >2–≤12 chọn CHILD (ghế + QR riêng). Em bé ≤2 thêm dưới người lớn — không ghế, dùng QR người lớn. Booking có trẻ/em bé cần ≥ 1 ADULT."
-                        : "Adult (≥13). Ages >2–≤12 use CHILD (own seat + QR). Infants ≤2 under an adult — no seat, adult QR. Child/infant bookings need ≥ 1 ADULT."}
+                        ? "Người lớn (≥13). Trẻ em >2–≤12 chọn CHILD. Người cao tuổi ≥70 chọn SENIOR (bắt buộc năm sinh). Khuyết tật chọn DISABLED (bắt buộc năm sinh). Em bé ≤2 thêm dưới người lớn."
+                        : "Adult (≥13). Ages >2–≤12 use CHILD. Seniors ≥70 use SENIOR (birth year required). Disabled use DISABLED (birth year required). Infants ≤2 under an adult."}
                     </p>
                     {ticketTypeAgeHint(passenger.ticketType, travelYear, lang) ? (
                       <p className="text-[10px] font-medium text-[#124757] dark:text-yellow-400">

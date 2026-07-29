@@ -2,6 +2,7 @@ import {
   scanTicket as apiScanTicket,
   checkInTicket as apiCheckInTicket,
   checkOutTicket as apiCheckOutTicket,
+  rejectTicketConcession as apiRejectTicketConcession,
   getBookingManifestByQr as apiGetBookingManifestByQr,
   checkInAllBookingManifestByQr as apiCheckInAllBookingManifestByQr,
   checkOutAllBookingManifestByQr as apiCheckOutAllBookingManifestByQr,
@@ -83,7 +84,11 @@ export const assertIndividualTicketToken = (codeOrToken) => {
 /** Loại vé/hành khách staff phải đối chiếu giấy tờ/độ tuổi trước check-in. */
 export const ELIGIBILITY_VERIFY_CODES = Object.freeze(['CHILD', 'INFANT', 'SENIOR', 'DISABLED']);
 
+/** SENIOR / DISABLED — 2 nút xác nhận / reject + POST /tickets/concession/reject. */
+export const CONCESSION_VERIFY_CODES = Object.freeze(['SENIOR', 'DISABLED']);
+
 const ELIGIBILITY_VERIFY_SET = new Set(ELIGIBILITY_VERIFY_CODES);
+const CONCESSION_VERIFY_SET = new Set(CONCESSION_VERIFY_CODES);
 
 /** Thu thập mã ưu đãi cần xác nhận từ ticket + passengers[]. */
 export const collectEligibilityCodes = (ticketLike) => {
@@ -105,8 +110,14 @@ export const collectEligibilityCodes = (ticketLike) => {
   return ELIGIBILITY_VERIFY_CODES.filter((code) => found.has(code));
 };
 
+export const collectConcessionCodes = (ticketLike) =>
+  collectEligibilityCodes(ticketLike).filter((code) => CONCESSION_VERIFY_SET.has(code));
+
 export const requiresEligibilityVerification = (ticketLike) =>
   collectEligibilityCodes(ticketLike).length > 0;
+
+export const requiresConcessionVerification = (ticketLike) =>
+  collectConcessionCodes(ticketLike).length > 0;
 
 export const buildEligibilityConfirmNote = (codes) => {
   const list = (Array.isArray(codes) ? codes : collectEligibilityCodes(codes))
@@ -114,6 +125,88 @@ export const buildEligibilityConfirmNote = (codes) => {
     .filter((code) => ELIGIBILITY_VERIFY_SET.has(code));
   if (!list.length) return '';
   return `Staff confirmed eligibility: ${list.join('/')}`;
+};
+
+/**
+ * Body POST /tickets/concession/reject
+ * { codeOrToken, reason, source, clientOperationId, note? }
+ */
+export const buildConcessionRejectBody = (rawInput, {
+  reason,
+  source = 'Qr',
+  note,
+  clientOperationId,
+} = {}) => {
+  const trimmed = String(rawInput || '').trim();
+  const reasonText = String(reason || '').trim();
+  if (!trimmed || !reasonText) return null;
+  const body = {
+    codeOrToken: trimmed,
+    reason: reasonText,
+    source: source || 'Qr',
+    clientOperationId: clientOperationId || createClientOperationId(),
+  };
+  const trimmedNote = note == null ? '' : String(note).trim();
+  if (trimmedNote) body.note = trimmedNote;
+  return body;
+};
+
+/** Chuẩn hoá response reject concession. */
+export const normalizeConcessionRejectResult = (raw) => {
+  const data = raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? raw.data : raw;
+  if (!data || typeof data !== 'object') {
+    return {
+      action: '',
+      requiresAdditionalPayment: false,
+      additionalAmount: null,
+      bookingRemainingAmount: null,
+      bookingTotalAmount: null,
+      bookingId: '',
+      ticketStatus: '',
+      raw,
+    };
+  }
+  const action = String(pick(data, ['action', 'Action'], '') || '').trim();
+  const requiresAdditionalPayment = toBool(
+    data.requiresAdditionalPayment ?? data.RequiresAdditionalPayment,
+    String(action).toLowerCase() === 'adjustedtoadult',
+  );
+  const toMoney = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  return {
+    action,
+    requiresAdditionalPayment,
+    additionalAmount: toMoney(pick(data, ['additionalAmount', 'AdditionalAmount'], null)),
+    bookingRemainingAmount: toMoney(pick(data, [
+      'bookingRemainingAmount', 'BookingRemainingAmount', 'remainingAmount',
+    ], null)),
+    bookingTotalAmount: toMoney(pick(data, [
+      'bookingTotalAmount', 'BookingTotalAmount', 'totalAmount',
+    ], null)),
+    bookingId: String(pick(data, ['bookingId', 'BookingId'], '') || '').trim(),
+    ticketStatus: String(pick(data, ['ticketStatus', 'TicketStatus', 'status'], '') || '').trim(),
+    message: String(pick(data, ['message', 'Message'], '') || '').trim(),
+    raw: data,
+  };
+};
+
+export const rejectTicketConcession = async (codeOrToken, options = {}) => {
+  const body = buildConcessionRejectBody(codeOrToken, options);
+  if (!body) {
+    const err = new Error('EMPTY_CODE_OR_REASON');
+    err.code = 'EMPTY_CODE_OR_REASON';
+    throw err;
+  }
+  assertIndividualTicketToken(body.codeOrToken);
+  try {
+    const data = await apiRejectTicketConcession(body);
+    return normalizeConcessionRejectResult(data);
+  } catch (error) {
+    console.error('Lỗi reject concession:', error);
+    throw error;
+  }
 };
 
 /**
@@ -288,6 +381,35 @@ export const normalizeScannedTicket = (item) => {
     || pick(item, ['fullName', 'passengerName', 'contactName', 'name'], '')
     || '—';
 
+  const passengerBirthRaw = pick(passenger, ['birthYear', 'BirthYear', 'yearOfBirth'], '')
+    || primaryPassenger?.birthYear
+    || '';
+  const passengerBirthNum = Number(passengerBirthRaw);
+  const birthYear = Number.isFinite(passengerBirthNum) && passengerBirthNum > 1900
+    ? passengerBirthNum
+    : (passengerBirthRaw ? String(passengerBirthRaw).trim() : '');
+
+  const enrichedPrimary = primaryPassenger
+    ? {
+      ...primaryPassenger,
+      birthYear: primaryPassenger.birthYear || birthYear,
+      fullName: primaryPassenger.fullName || passengerName,
+      passengerType: primaryPassenger.passengerType || ticketTypeCode,
+      ticketTypeCode: primaryPassenger.ticketTypeCode || ticketTypeCode,
+    }
+    : (passenger || birthYear || passengerName !== '—'
+      ? {
+        fullName: passengerName,
+        birthYear,
+        passengerType: ticketTypeCode,
+        ticketTypeCode,
+        phoneNumber: String(pick(passenger, ['phoneNumber', 'PhoneNumber', 'phone'], '') || '').trim(),
+        email: String(pick(passenger, ['email', 'Email'], '') || '').trim(),
+        isLapInfant: false,
+        usesCompanionTicket: false,
+      }
+      : null);
+
   const seatLabel = String(
     pick(item, ['seatCode', 'seatNumber', 'seatLabel', 'seat'], '')
     || pick(ticket, ['seatNumber', 'seatCode', 'seatLabel', 'seat'], '')
@@ -315,11 +437,22 @@ export const normalizeScannedTicket = (item) => {
     || pick(ticket, ['contactName', 'ContactName'], '')
     || '';
 
+  const eligibilityCodes = collectEligibilityCodes({
+    ticketTypeCode,
+    passengerType: ticketTypeCode,
+    passengers,
+  });
+
   return {
     kind: 'ticket',
     ticketId: String(
       pick(item, ['ticketId', 'id'], '')
       || pick(ticket, ['ticketId', 'id'], '')
+      || '',
+    ).trim(),
+    bookingId: String(
+      pick(item, ['bookingId', 'BookingId', 'booking.id'], '')
+      || pick(ticket, ['bookingId', 'BookingId'], '')
       || '',
     ).trim(),
     codeOrToken: String(
@@ -341,18 +474,18 @@ export const normalizeScannedTicket = (item) => {
     passengerPhone,
     passengerEmail,
     contactName,
+    birthYear,
     passengers,
-    primaryPassenger,
+    primaryPassenger: enrichedPrimary,
     lapInfants,
     ticketTypeCode: ticketTypeCode || '—',
+    passengerType: ticketTypeCode || '—',
     ticketTypeName: pick(item, ['ticketTypeName'], '')
       || pick(ticket, ['ticketTypeName'], '')
       || pick(passenger, ['ticketTypeName'], '')
       || '',
-    eligibilityCodes: collectEligibilityCodes({
-      ticketTypeCode,
-      passengers,
-    }),
+    eligibilityCodes,
+    concessionCodes: eligibilityCodes.filter((code) => CONCESSION_VERIFY_SET.has(code)),
     status,
     canCheckIn: toBool(canCheckInRaw, canCheckInFallback),
     canCheckOut: toBool(canCheckOutRaw, canCheckOutFallback),
