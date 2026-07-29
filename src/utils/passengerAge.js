@@ -1,5 +1,7 @@
 /** Tuổi / loại vé theo birthYear (BE chưa dùng ngày-tháng sinh). */
 
+export const SENIOR_MIN_AGE = 70;
+
 export const getVietnamCalendarYear = (date = new Date()) => {
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
@@ -48,14 +50,21 @@ export const classifyPassengerAgeBand = (birthYear, travelYear) => {
   return "ADULT";
 };
 
+/** SENIOR: tuổi tại ngày/năm khởi hành >= 70 (UX; BE validate lại). */
+export const isSeniorAgeEligible = (birthYear, travelYear) => {
+  const age = getAgeFromBirthYear(birthYear, travelYear);
+  return age != null && age >= SENIOR_MIN_AGE;
+};
+
 export const isTicketTypeMatchingBirthYear = (ticketTypeCode, birthYear, travelYear) => {
   const type = String(ticketTypeCode || "").toUpperCase();
   const band = classifyPassengerAgeBand(birthYear, travelYear);
   if (!band) return false;
   if (type === "INFANT") return band === "INFANT";
   if (type === "CHILD") return band === "CHILD";
-  // ADULT / SENIOR / DISABLED: không phải INFANT/CHILD theo tuổi
-  if (["ADULT", "SENIOR", "DISABLED"].includes(type)) return band === "ADULT";
+  if (type === "SENIOR") return band === "ADULT" && isSeniorAgeEligible(birthYear, travelYear);
+  // ADULT / DISABLED: không phải INFANT/CHILD theo tuổi (DISABLED bắt birthYear, không sàn tuổi)
+  if (["ADULT", "DISABLED"].includes(type)) return band === "ADULT";
   return true;
 };
 
@@ -71,6 +80,16 @@ export const ticketTypeAgeHint = (ticketTypeCode, travelYear, lang = "VN") => {
     return lang === "VN"
       ? `Trẻ em > 2 đến ≤ 12 tuổi (sinh từ ${y - 12}–${y - 3}). Có ghế riêng + QR riêng; booking cần ≥ 1 ADULT cùng chặng.`
       : `Child > 2 and ≤ 12 (born ${y - 12}–${y - 3}). Own seat + own QR; booking needs ≥ 1 ADULT on the same leg.`;
+  }
+  if (type === "SENIOR") {
+    return lang === "VN"
+      ? `Người cao tuổi: tuổi tại năm đi ${y} phải ≥ ${SENIOR_MIN_AGE} (sinh ≤ ${y - SENIOR_MIN_AGE}). Bắt buộc năm sinh.`
+      : `Senior: age in travel year ${y} must be ≥ ${SENIOR_MIN_AGE} (born ≤ ${y - SENIOR_MIN_AGE}). Birth year required.`;
+  }
+  if (type === "DISABLED") {
+    return lang === "VN"
+      ? "Người khuyết tật: bắt buộc nhập năm sinh để đối chiếu khi lên tàu."
+      : "Disabled: birth year is required for boarding verification.";
   }
   return "";
 };

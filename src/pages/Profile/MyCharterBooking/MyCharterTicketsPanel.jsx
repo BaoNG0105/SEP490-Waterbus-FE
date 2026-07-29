@@ -76,15 +76,12 @@ export function MyCharterTicketsPanel({
             </h2>
             <p className="text-xs text-slate-400 mt-1">
               {selectedTicketIds.length > 0
-                ? (lang === "VN" ? `Đã chọn ${selectedTicketIds.length} vé để xuất.` : `${selectedTicketIds.length} tickets selected.`)
-                : (lang === "VN" ? "Không chọn vé để xuất toàn bộ danh sách." : "Leave tickets unselected to export all.")}
+                ? (lang === "VN" ? `Đã chọn ${selectedTicketIds.length} vé để tải PDF.` : `${selectedTicketIds.length} tickets selected for PDF.`)
+                : (lang === "VN" ? "Không chọn vé để tải PDF toàn bộ danh sách. Mở PDF rồi in nếu cần." : "Leave tickets unselected to download the full PDF. Open the PDF to print if needed.")}
             </p>
 
-            <div className="grid sm:grid-cols-2 gap-3 mt-5">
-              <button type="button" onClick={() => handleTicketFileAction("print")} disabled={isSubmitting || !isPaid} className="px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[#124757] dark:text-yellow-400 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
-                {lang === "VN" ? "In vé" : "Print Tickets"}
-              </button>
-              <button type="button" onClick={() => handleTicketFileAction("pdf")} disabled={isSubmitting || !isPaid} className="px-4 py-3 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
+            <div className="mt-5">
+              <button type="button" onClick={() => handleTicketFileAction("pdf")} disabled={isSubmitting || !isPaid} className="w-full sm:w-auto px-4 py-3 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
                 {lang === "VN" ? "Tải PDF" : "Download PDF"}
               </button>
             </div>

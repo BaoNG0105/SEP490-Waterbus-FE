@@ -1,22 +1,34 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
+import { TicketQrCameraScanner } from "../../../components/TicketQrCameraScanner";
 import {
   buildEligibilityConfirmNote,
   checkInAllBookingManifest,
   checkOutAllBookingManifest,
   checkInTicket,
   checkOutTicket,
+  collectConcessionCodes,
   collectEligibilityCodes,
   fetchBookingManifestByQr,
   isGroupQrToken,
   lookupTicketOrManifest,
+  rejectTicketConcession,
   resolveIndividualTicketToken,
   updateCharterManifestAttendance,
 } from "../../../services/ticketScanService";
 import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
+import { createBookingPayment } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify } from "../../../utils/swalToast";
+
+const pickDeep = (source, keys, fallback = "") => {
+  for (const key of keys) {
+    const value = key.split(".").reduce((obj, part) => obj?.[part], source);
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return fallback;
+};
 
 const formatMoney = (value) => {
   const n = Number(value);
@@ -56,6 +68,12 @@ const eligibilityCodesOf = (ticket) => (
   Array.isArray(ticket?.eligibilityCodes) && ticket.eligibilityCodes.length
     ? ticket.eligibilityCodes
     : collectEligibilityCodes(ticket)
+);
+
+const concessionCodesOf = (ticket) => (
+  Array.isArray(ticket?.concessionCodes) && ticket.concessionCodes.length
+    ? ticket.concessionCodes
+    : collectConcessionCodes(ticket)
 );
 
 const formatClock = (value) => {
@@ -263,7 +281,7 @@ const TicketResultCard = ({
   const tone = statusTone(ticket);
   const typeCode = String(ticket.ticketTypeCode || "").toUpperCase();
   const typeLabel = ticketTypeLabel(typeCode, lang, ticket.ticketTypeName);
-  const needsVerify = eligibilityCodesOf(ticket).length > 0;
+  const needsVerify = concessionCodesOf(ticket).length > 0;
   const routeLine = [ticket.fromStation, ticket.toStation].filter(Boolean).join(" → ") || "—";
   const stationCodes = [ticket.fromStationCode, ticket.toStationCode].filter(Boolean).join(" → ");
   const primary = ticket.primaryPassenger || ticket.passengers?.find((p) => !p.isLapInfant) || null;
@@ -287,10 +305,13 @@ const TicketResultCard = ({
     || rawPassenger?.Email
     || "",
   ).trim();
-  const birthYear = primary?.birthYear || "";
+  const birthYear = ticket.birthYear || primary?.birthYear || "";
   const passengerCount = Array.isArray(ticket.passengers) && ticket.passengers.length
     ? ticket.passengers.length
     : (ticket.passengerCount || 1);
+  const passengerTypeCode = String(
+    ticket.passengerType || primary?.passengerType || typeCode || "",
+  ).toUpperCase();
 
   return (
     <div className={`overflow-hidden rounded-4xl border shadow-sm dark:border-slate-700/50 ${tone.strip}`}>
@@ -307,6 +328,15 @@ const TicketResultCard = ({
                   {ticket.status}
                 </span>
               ) : null}
+              {ticket.canCheckIn != null ? (
+                <span className={`rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${
+                  ticket.canCheckIn
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
+                    : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400"
+                }`}>
+                  canCheckIn: {ticket.canCheckIn ? "true" : "false"}
+                </span>
+              ) : null}
               {needsVerify && ticket.canCheckIn ? (
                 <span className="rounded-xl border border-amber-300 bg-amber-100 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-100">
                   {lang === "VN" ? "Cần đối chiếu giấy tờ" : "Verify ID"}
@@ -319,6 +349,9 @@ const TicketResultCard = ({
             <div className="mt-2 flex flex-wrap gap-2">
               <span className={`inline-flex items-center rounded-xl border px-3 py-1.5 text-[11px] font-headline font-black ${ticketTypeTone(typeCode)}`}>
                 {typeLabel}
+                {passengerTypeCode && passengerTypeCode !== typeCode ? (
+                  <span className="ml-1.5 opacity-70">· {passengerTypeCode}</span>
+                ) : null}
                 {Number(ticket.price) === 0 ? (
                   <span className="ml-1.5 opacity-80">· {lang === "VN" ? "Miễn phí" : "Free"}</span>
                 ) : null}
@@ -345,19 +378,25 @@ const TicketResultCard = ({
         </div>
       </div>
 
-      {/* Hành khách chi tiết */}
+      {/* Hành khách chi tiết — ticketPassenger + ticketStatus */}
       <div className="border-b border-slate-200/70 bg-white/60 px-5 py-4 dark:border-slate-700/60 dark:bg-slate-900/30 sm:px-6">
         <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
           {lang === "VN" ? "Thông tin hành khách" : "Passenger details"}
         </p>
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <DetailField label={lang === "VN" ? "Họ và tên" : "Full name"}>
-            {ticket.passengerName || "—"}
+          <DetailField label={lang === "VN" ? "Họ và tên (ticketPassenger)" : "Full name (ticketPassenger)"}>
+            {ticket.passengerName || primary?.fullName || "—"}
           </DetailField>
-          <DetailField label={lang === "VN" ? "Loại vé" : "Ticket type"}>
-            <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-headline font-black ${ticketTypeTone(typeCode)}`}>
-              {typeLabel}
+          <DetailField label="passengerType">
+            <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-headline font-black ${ticketTypeTone(passengerTypeCode || typeCode)}`}>
+              {ticketTypeLabel(passengerTypeCode || typeCode, lang, ticket.ticketTypeName)}
             </span>
+          </DetailField>
+          <DetailField label={lang === "VN" ? "Năm sinh (birthYear)" : "Birth year"}>
+            {birthYear || "—"}
+          </DetailField>
+          <DetailField label="ticketStatus">
+            {ticket.status || "—"}
           </DetailField>
           <DetailField label={lang === "VN" ? "Số điện thoại" : "Phone"}>
             {phone || "—"}
@@ -365,11 +404,6 @@ const TicketResultCard = ({
           <DetailField label="Email">
             <span className="break-all text-xs">{email || "—"}</span>
           </DetailField>
-          {birthYear ? (
-            <DetailField label={lang === "VN" ? "Năm sinh" : "Birth year"}>
-              {birthYear}
-            </DetailField>
-          ) : null}
           {ticket.contactName && ticket.contactName !== ticket.passengerName ? (
             <DetailField label={lang === "VN" ? "Người liên hệ" : "Contact"}>
               {ticket.contactName}
@@ -501,20 +535,21 @@ const TicketActionButtons = ({
   onCheckOut,
   onRejectEligibility,
 }) => {
-  const eligibilityCodes = eligibilityCodesOf(ticket);
-  const needsEligibilityCheck = ticket.canCheckIn && eligibilityCodes.length > 0;
+  const concessionCodes = concessionCodesOf(ticket);
+  const needsConcessionCheck = ticket.canCheckIn && concessionCodes.length > 0;
 
-  if (needsEligibilityCheck) {
+  if (needsConcessionCheck) {
     return (
       <div className="w-full space-y-3">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
           <p className="text-[11px] font-black text-amber-900 dark:text-amber-100">
             {lang === "VN"
-              ? "Vé ưu đãi — đối chiếu giấy tờ / độ tuổi trước khi cho lên tàu."
-              : "Discount ticket — verify ID / age before boarding."}
+              ? "Vé ưu đãi SENIOR / DISABLED — đối chiếu giấy tờ trước khi cho lên tàu."
+              : "SENIOR / DISABLED concession — verify ID before boarding."}
           </p>
           <p className="mt-1 text-[10px] font-bold text-amber-800/90 dark:text-amber-200/90">
-            {eligibilityCodes.map((code) => ticketTypeLabel(code, lang)).join(" · ")}
+            {concessionCodes.map((code) => ticketTypeLabel(code, lang)).join(" · ")}
+            {ticket.birthYear ? ` · birthYear ${ticket.birthYear}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -523,19 +558,19 @@ const TicketActionButtons = ({
             disabled={isActing}
             onClick={() => onCheckIn(ticket, {
               eligibilityConfirmed: true,
-              eligibilityCodes,
+              eligibilityCodes: concessionCodes,
             })}
             className="rounded-xl bg-yellow-400 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-900 disabled:opacity-50"
           >
-            {lang === "VN" ? "Xác nhận & Check-in" : "Confirm & Check-in"}
+            {lang === "VN" ? "Xác nhận đúng đối tượng" : "Confirm eligible"}
           </button>
           <button
             type="button"
             disabled={isActing}
-            onClick={() => onRejectEligibility(ticket, eligibilityCodes)}
+            onClick={() => onRejectEligibility(ticket, concessionCodes)}
             className="rounded-xl border border-rose-200 bg-rose-50 px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-rose-700 disabled:opacity-50 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200"
           >
-            {lang === "VN" ? "Không đúng đối tượng" : "Wrong eligibility"}
+            {lang === "VN" ? "Sai đối tượng ưu đãi" : "Wrong concession"}
           </button>
         </div>
       </div>
@@ -589,6 +624,7 @@ export function StaffTicketScanPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [isActing, setIsActing] = useState(false);
   const [lastError, setLastError] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const isManifest = result?.kind === "manifest";
   const ticket = result?.kind === "ticket" ? result : null;
@@ -643,9 +679,8 @@ export function StaffTicketScanPage() {
     });
   };
 
-  const handleLookup = async (event) => {
-    event?.preventDefault?.();
-    const trimmed = String(code || "").trim();
+  const lookupByCode = useCallback(async (rawCode) => {
+    const trimmed = String(rawCode || "").trim();
     if (!trimmed) {
       notify({
         icon: "warning",
@@ -680,22 +715,37 @@ export function StaffTicketScanPage() {
     } finally {
       setIsScanning(false);
     }
+  }, [lang]);
+
+  const handleLookup = async (event) => {
+    event?.preventDefault?.();
+    await lookupByCode(code);
   };
+
+  const handleCameraScan = useCallback(async (decodedText) => {
+    const trimmed = String(decodedText || "").trim();
+    if (!trimmed) return;
+    setCameraOpen(false);
+    setCode(trimmed);
+    await lookupByCode(trimmed);
+  }, [lookupByCode]);
 
   const handleCheckInOne = async (row, options = {}) => {
     try {
       setIsActing(true);
       setLastError("");
 
-      const eligibilityCodes = options.eligibilityCodes || eligibilityCodesOf(row);
-      const needsVerify = eligibilityCodes.length > 0;
+      const eligibilityCodes = options.eligibilityCodes
+        || concessionCodesOf(row)
+        || eligibilityCodesOf(row);
+      const needsVerify = concessionCodesOf(row).length > 0;
       if (needsVerify && !options.eligibilityConfirmed) {
         notify({
           icon: "warning",
           title: lang === "VN" ? "Cần xác nhận đối tượng" : "Confirm eligibility first",
           text: lang === "VN"
-            ? "Vé ưu đãi — đối chiếu giấy tờ/độ tuổi rồi bấm Xác nhận & Check-in."
-            : "Discount ticket — verify ID/age, then Confirm & Check-in.",
+            ? "Vé SENIOR/DISABLED — đối chiếu giấy tờ rồi bấm «Xác nhận đúng đối tượng»."
+            : "SENIOR/DISABLED ticket — verify ID, then tap “Confirm eligible”.",
           confirmButtonColor: "#124757",
         });
         return;
@@ -756,18 +806,221 @@ export function StaffTicketScanPage() {
     }
   };
 
-  const handleRejectEligibility = (row, codes = []) => {
-    const labels = (codes.length ? codes : eligibilityCodesOf(row))
+  const handleRejectEligibility = async (row, codes = []) => {
+    const labels = (codes.length ? codes : concessionCodesOf(row))
       .map((code) => ticketTypeLabel(code, lang))
       .join(", ");
-    notify({
+
+    const prompt = await notify({
+      dialog: true,
       icon: "warning",
-      title: lang === "VN" ? "Không check-in" : "Check-in blocked",
+      title: lang === "VN" ? "Sai đối tượng ưu đãi" : "Wrong concession",
       text: lang === "VN"
-        ? `Không đúng đối tượng${labels ? ` (${labels})` : ""}. Báo khách đổi vé hoặc báo quản lý — chưa ghi nhận lên tàu.`
-        : `Eligibility mismatch${labels ? ` (${labels})` : ""}. Ask passenger to exchange ticket or report to manager — not boarded.`,
+        ? `Nhập lý do từ chối${labels ? ` (${labels})` : ""}. Hệ thống sẽ hủy vé Waterbus hoặc chuyển về ADULT (Sightseeing) tùy loại booking.`
+        : `Enter rejection reason${labels ? ` (${labels})` : ""}. Waterbus tickets are cancelled; Sightseeing may adjust to ADULT with extra payment.`,
+      input: "textarea",
+      inputPlaceholder: lang === "VN"
+        ? "VD: Khách không chứng minh đúng đối tượng"
+        : "e.g. Passenger could not prove eligibility",
+      inputValue: lang === "VN"
+        ? "Khách không chứng minh đúng đối tượng"
+        : "Passenger could not prove eligibility",
+      inputValidator: (value) => {
+        if (!String(value || "").trim()) {
+          return lang === "VN" ? "Bắt buộc nhập lý do" : "Reason is required";
+        }
+        return undefined;
+      },
+      showCancelButton: true,
+      confirmButtonText: lang === "VN" ? "Gửi từ chối" : "Submit reject",
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
       confirmButtonColor: "#124757",
     });
+
+    if (!prompt?.isConfirmed) return;
+
+    const reason = String(prompt.value || "").trim();
+    const note = labels
+      ? (lang === "VN" ? `Từ chối ưu đãi: ${labels}` : `Concession rejected: ${labels}`)
+      : undefined;
+
+    try {
+      setIsActing(true);
+      setLastError("");
+
+      const scannedFallback = (!isManifest && !isGroupQrToken(code)) ? code : "";
+      const trimmed = resolveIndividualTicketToken(row, scannedFallback);
+      if (!trimmed) {
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "Thiếu mã vé riêng" : "Missing ticket code",
+          text: lang === "VN"
+            ? "Reject ưu đãi cần mã TK / qrToken của vé."
+            : "Concession reject needs the ticket TK / qrToken.",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
+
+      const resultReject = await rejectTicketConcession(trimmed, {
+        reason,
+        note,
+        source: "Qr",
+      });
+
+      const actionKey = String(resultReject.action || "").toLowerCase();
+
+      if (actionKey === "cancelled") {
+        if (isManifest) await refreshManifest();
+        else {
+          try {
+            const data = await lookupTicketOrManifest(trimmed);
+            setResult(data);
+          } catch {
+            setResult((prev) => (prev?.kind === "ticket"
+              ? { ...prev, canCheckIn: false, status: resultReject.ticketStatus || "Cancelled" }
+              : prev));
+          }
+        }
+        notify({
+          icon: "info",
+          title: lang === "VN" ? "Vé đã bị hủy" : "Ticket cancelled",
+          text: lang === "VN"
+            ? "Waterbus thường: vé ưu đãi đã hủy, không cho check-in nữa."
+            : "Regular Waterbus: concession ticket cancelled — check-in is no longer allowed.",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
+
+      if (actionKey === "adjustedtoadult" || resultReject.requiresAdditionalPayment) {
+        const formatMoneyVn = (value) => {
+          const n = Number(value);
+          if (!Number.isFinite(n)) return "—";
+          return `${n.toLocaleString("vi-VN")}đ`;
+        };
+        const bookingId = resultReject.bookingId
+          || row?.bookingId
+          || ticket?.bookingId
+          || "";
+
+        const payAsk = await notify({
+          dialog: true,
+          icon: "warning",
+          title: lang === "VN" ? "Đã chuyển về vé ADULT" : "Adjusted to ADULT",
+          html: lang === "VN"
+            ? `<div class="text-left text-sm space-y-1">
+                <p>Sightseeing: cần thu phần còn lại trước khi check-in.</p>
+                <p><b>Phụ thu:</b> ${formatMoneyVn(resultReject.additionalAmount)}</p>
+                <p><b>Còn lại booking:</b> ${formatMoneyVn(resultReject.bookingRemainingAmount)}</p>
+                <p><b>Tổng booking:</b> ${formatMoneyVn(resultReject.bookingTotalAmount)}</p>
+              </div>`
+            : `<div class="text-left text-sm space-y-1">
+                <p>Sightseeing: collect remaining fare before check-in.</p>
+                <p><b>Surcharge:</b> ${formatMoneyVn(resultReject.additionalAmount)}</p>
+                <p><b>Booking remaining:</b> ${formatMoneyVn(resultReject.bookingRemainingAmount)}</p>
+                <p><b>Booking total:</b> ${formatMoneyVn(resultReject.bookingTotalAmount)}</p>
+              </div>`,
+          showCancelButton: Boolean(bookingId),
+          confirmButtonText: bookingId
+            ? (lang === "VN" ? "Tạo link thanh toán (Full)" : "Create Full payment link")
+            : (lang === "VN" ? "Đã hiểu" : "OK"),
+          cancelButtonText: lang === "VN" ? "Để sau" : "Later",
+          confirmButtonColor: "#124757",
+        });
+
+        if (isManifest) await refreshManifest();
+        else {
+          try {
+            const data = await lookupTicketOrManifest(trimmed);
+            setResult(data);
+          } catch {
+            setResult((prev) => (prev?.kind === "ticket"
+              ? {
+                ...prev,
+                canCheckIn: false,
+                ticketTypeCode: "ADULT",
+                passengerType: "ADULT",
+                status: resultReject.ticketStatus || prev.status,
+              }
+              : prev));
+          }
+        }
+
+        if (payAsk?.isConfirmed && bookingId) {
+          try {
+            const payment = await createBookingPayment({
+              bookingId,
+              paymentOption: "Full",
+            });
+            const checkoutUrl = String(pickDeep(payment, [
+              "checkoutUrl", "paymentUrl", "paymentLink", "payUrl", "url",
+              "data.checkoutUrl", "data.paymentUrl", "data.paymentLink", "data.payUrl", "data.url",
+              "payment.checkoutUrl", "payment.paymentUrl",
+              "data.payment.checkoutUrl", "data.payment.paymentUrl",
+            ], "") || "").trim();
+            if (checkoutUrl) {
+              window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+              notify({
+                icon: "success",
+                title: lang === "VN" ? "Đã mở link thanh toán" : "Payment link opened",
+                text: lang === "VN"
+                  ? "Sau khi khách thanh toán xong, quét lại vé (đã là ADULT) rồi check-in bình thường."
+                  : "After the customer pays, scan again (now ADULT) and check in as usual.",
+                confirmButtonColor: "#124757",
+              });
+            } else {
+              notify({
+                icon: "warning",
+                title: lang === "VN" ? "Chưa có checkoutUrl" : "No checkoutUrl",
+                text: lang === "VN"
+                  ? "Payment đã tạo nhưng BE không trả link. Kiểm tra booking trên hệ thống."
+                  : "Payment was created but no checkout URL was returned.",
+                confirmButtonColor: "#124757",
+              });
+            }
+          } catch (payError) {
+            notify({
+              icon: "error",
+              title: lang === "VN" ? "Không tạo được thanh toán" : "Unable to create payment",
+              text: getApiErrorMessage(payError),
+              confirmButtonColor: "#124757",
+            });
+          }
+        }
+        return;
+      }
+
+      if (isManifest) await refreshManifest();
+      else {
+        try {
+          const data = await lookupTicketOrManifest(trimmed);
+          setResult(data);
+        } catch {
+          /* ignore refresh errors */
+        }
+      }
+      notify({
+        icon: "success",
+        title: lang === "VN" ? "Đã ghi nhận từ chối ưu đãi" : "Concession rejected",
+        text: resultReject.message
+          || (resultReject.action
+            ? `action: ${resultReject.action}`
+            : undefined),
+        confirmButtonColor: "#124757",
+      });
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      setLastError(message);
+      notify({
+        icon: "error",
+        title: lang === "VN" ? "Từ chối ưu đãi thất bại" : "Concession reject failed",
+        text: message,
+        confirmButtonColor: "#124757",
+      });
+    } finally {
+      setIsActing(false);
+    }
   };
 
   const handleCheckOutOne = async (row) => {
@@ -1012,7 +1265,7 @@ export function StaffTicketScanPage() {
           {lang === "VN" ? "Lịch sử quét" : "Scan history"}
         </Link>
 
-        <form onSubmit={handleLookup} className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <form onSubmit={handleLookup} className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
           <label className="block space-y-1.5">
             <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
               {lang === "VN" ? "Mã vé / QR booking" : "Ticket code / booking QR"}
@@ -1020,11 +1273,28 @@ export function StaffTicketScanPage() {
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder={lang === "VN" ? "Nhập hoặc dán mã…" : "Type or paste code…"}
+              placeholder={lang === "VN" ? "Nhập, dán hoặc quét camera…" : "Type, paste, or scan…"}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               autoComplete="off"
             />
           </label>
+          <button
+            type="button"
+            onClick={() => setCameraOpen((prev) => !prev)}
+            disabled={isScanning}
+            className={`inline-flex h-[46px] items-center justify-center gap-1.5 rounded-2xl px-4 text-xs font-headline font-black uppercase tracking-wider disabled:opacity-50 ${
+              cameraOpen
+                ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                : "border border-slate-200 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+            }`}
+          >
+            <span className="material-symbols-outlined text-base" aria-hidden>
+              {cameraOpen ? "close" : "photo_camera"}
+            </span>
+            {cameraOpen
+              ? (lang === "VN" ? "Đóng cam" : "Close cam")
+              : (lang === "VN" ? "Quét cam" : "Camera")}
+          </button>
           <button
             type="submit"
             disabled={isScanning}
@@ -1035,6 +1305,16 @@ export function StaffTicketScanPage() {
               : (lang === "VN" ? "Tra cứu" : "Lookup")}
           </button>
         </form>
+
+        {cameraOpen ? (
+          <TicketQrCameraScanner
+            lang={lang}
+            active={cameraOpen}
+            onScan={handleCameraScan}
+            onClose={() => setCameraOpen(false)}
+            className="mt-4"
+          />
+        ) : null}
 
         {lastError ? (
           <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">

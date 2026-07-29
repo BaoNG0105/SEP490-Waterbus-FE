@@ -33,7 +33,6 @@ import {
     updateCharterBookingAttendance as apiUpdateCharterBookingAttendance,
     exportAllCharterBookingTickets as apiExportAllCharterBookingTickets,
     exportSelectedCharterBookingTickets as apiExportSelectedCharterBookingTickets,
-    printCharterBookingTickets as apiPrintCharterBookingTickets,
     exportCharterBookingTicketsPdf as apiExportCharterBookingTicketsPdf,
     exportCharterBookingTicketsPdfByQrToken as apiExportCharterBookingTicketsPdfByQrToken,
 } from '../api/charterBookingApi';
@@ -109,9 +108,6 @@ export const downloadAllCharterBookingTickets = (id) =>
 
 export const downloadSelectedCharterBookingTickets = (id, ticketIds) =>
     apiExportSelectedCharterBookingTickets(id, { ticketIds });
-
-export const printSelectedCharterBookingTickets = (id, ticketIds) =>
-    apiPrintCharterBookingTickets(id, { ticketIds });
 
 export const downloadCharterBookingTicketsPdf = (id, ticketIds) =>
     apiExportCharterBookingTicketsPdf(id, { ticketIds });

@@ -2,13 +2,25 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { TripStationSeatBoard } from "../../../components/TripStationSeatBoard";
-import { fetchTripDetail, fetchTripPassengers, groupTripPassengersForDisplay } from "../../../services/tripService";
+import {
+  fetchTripDetail,
+  fetchTripPassengers,
+  groupTripPassengersForDisplay,
+  normalizeTripStatusKey,
+} from "../../../services/tripService";
 import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { pickDisplayArrival, pickDisplayDeparture } from "../../../utils/tripDelay";
 import { enrichPassengersWithStopTimes } from "../../../utils/tripStationSeatBoard";
 
 const pad2 = (n) => String(n).padStart(2, "0");
+
+/** Ẩn nút Live GPS khi chuyến đã kết thúc / hủy. */
+const canOpenLiveGps = (trip) => {
+  if (!trip) return false;
+  const key = normalizeTripStatusKey(trip?.tripStatus || trip?.status);
+  return key !== "Completed" && key !== "Cancelled";
+};
 
 /** Tên bến từ string hoặc object BE ({ stationName, name, ... }). */
 const stationLabel = (value) => {
@@ -157,6 +169,25 @@ export function TripSeatBoardPage() {
   const [paxError, setPaxError] = useState("");
   const [expandedPaxKeys, setExpandedPaxKeys] = useState(() => new Set());
   const [paxQuery, setPaxQuery] = useState("");
+
+  const showLiveGpsButton = canOpenLiveGps(trip);
+
+  const openLiveGps = () => {
+    if (!trip) return;
+    const params = new URLSearchParams();
+    const boatId = trip.boatId || trip.boat?.boatId || trip.boat?.vesselId || "";
+    const boatCode = trip.boatCode || trip.boat?.boatCode || trip.boat?.code || "";
+    const routeId = trip.routeId || trip.route?.routeId || trip.route?.id || "";
+    const routeCode = trip.routeCode || trip.route?.routeCode || "";
+    if (boatId) params.set("boatId", String(boatId));
+    if (boatCode) params.set("boatCode", String(boatCode));
+    if (routeId) params.set("routeId", String(routeId));
+    if (routeCode) params.set("routeCode", String(routeCode));
+    if (trip.tripId || tripId) params.set("tripId", String(trip.tripId || tripId));
+    if (trip.tripCode) params.set("tripCode", String(trip.tripCode));
+    params.set("focus", "1");
+    navigate(`/admin/live-tracking?${params.toString()}`);
+  };
 
   const togglePaxRow = (key) => {
     setExpandedPaxKeys((prev) => {
@@ -312,21 +343,31 @@ export function TripSeatBoardPage() {
                 ) : null}
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => navigate(backTo)}
+                className="inline-flex items-center whitespace-nowrap rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+              >
+                {lang === "VN" ? "Quay lại" : "Back"}
+              </button>
+              {showLiveGpsButton ? (
+                <button
+                  type="button"
+                  onClick={openLiveGps}
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 transition hover:border-[#124757]/30 hover:text-[#124757] dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-yellow-400/40 dark:hover:text-yellow-400"
+                >
+                  <span className="material-symbols-outlined text-base" aria-hidden>my_location</span>
+                  {lang === "VN" ? "Theo dõi GPS" : "Live GPS"}
+                </button>
+              ) : null}
               <Link
                 to="/admin/staff/ticket-scan"
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#124757] px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-2xl bg-[#124757] px-3.5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
               >
                 <span className="material-symbols-outlined text-base" aria-hidden>qr_code_scanner</span>
                 {lang === "VN" ? "Quét vé" : "Scan"}
               </Link>
-              <button
-                type="button"
-                onClick={() => navigate(backTo)}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
-              >
-                {lang === "VN" ? "Quay lại" : "Back"}
-              </button>
             </div>
           </div>
         </div>

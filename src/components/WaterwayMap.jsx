@@ -500,6 +500,8 @@ export const WaterwayMap = ({
   showStationImages = false,
   /** Tuyến nền (chỉ xem): [{ id, positions: [[lat,lng],...], label? }] */
   routeOverlays = [],
+  /** Class vị trí nhãn tên tuyến (mặc định góc phải trên). */
+  nameOverlayClassName = "absolute top-4 right-4 z-[1000]",
   className = "",
 }) => {
   const navigate = useNavigate();
@@ -556,8 +558,8 @@ export const WaterwayMap = ({
     <div className={`relative z-10 h-full min-h-0 w-full overflow-hidden border-0 ${className}`}>
 
       {waterwayName && (
-        <div className="absolute top-4 right-4 z-1000 max-w-[min(100%-2rem,20rem)] bg-white/90 dark:bg-slate-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm pointer-events-none">
-          <span className="text-[10px] font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider block">
+        <div className={`${nameOverlayClassName} pointer-events-none max-w-[min(100%-2rem,20rem)] rounded-xl bg-white/90 px-4 py-2 shadow-sm backdrop-blur dark:bg-slate-800/90`}>
+          <span className="block text-[10px] font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
             {overlayEyebrow}
           </span>
           <span className="text-xs font-bold text-slate-700 dark:text-slate-200">

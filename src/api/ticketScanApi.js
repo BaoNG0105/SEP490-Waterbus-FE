@@ -22,6 +22,13 @@ export const checkInTicket = (payload) =>
 export const checkOutTicket = (payload) =>
   api.post('/tickets/check-out', payload).then((response) => response.data);
 
+/**
+ * POST /tickets/concession/reject
+ * Staff xác nhận sai đối tượng ưu đãi (SENIOR / DISABLED).
+ */
+export const rejectTicketConcession = (payload) =>
+  api.post('/tickets/concession/reject', payload).then((response) => response.data);
+
 /** GET /bookings/manifest/qr/{bookingQrToken} — fallback nếu scan không trả manifest. */
 export const getBookingManifestByQr = (bookingQrToken) =>
   api
