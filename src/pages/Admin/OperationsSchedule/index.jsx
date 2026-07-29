@@ -1,28 +1,199 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { AppDateInput } from "../../../components/AppDateInput";
-import { FormSelect } from "../../../components/FormSelect";
 import {
   fetchOperationsSchedule,
   getMovementStatusLabel,
+  getMovementStatusTone,
   toOperationsScheduleDate,
 } from "../../../services/operationsService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getTodayDateString } from "../../../utils/dateOnly";
+import { notify } from "../../../utils/swalToast";
+import { formatTripClock, tripClockSortMinutes } from "../../../utils/tripClock";
 
-const pad = (n) => String(n).padStart(2, "0");
-
-const formatClock = (iso) => {
-  if (!iso) return "--:--";
-  const ms = Date.parse(String(iso));
-  if (Number.isNaN(ms)) {
-    const m = String(iso).match(/(\d{2}):(\d{2})/);
-    return m ? `${m[1]}:${m[2]}` : "--:--";
+/** 0 = đang di chuyển, 1 = chưa chạy, 2 = hoàn tất, 3 = khác. */
+const tripStatusSortRank = (trip) => {
+  const key = String(trip?.movementStatus || trip?.operationStatus || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s-]/g, "");
+  if (
+    [
+      "moving", "bangdichuyen", "dangdichuyen", "inprogress", "ongoing", "running",
+      "boarding", "dangchuanbi", "arriving", "sapcapben",
+      "atstation", "arrived", "dacapben", "departed", "departing", "daroiben",
+      "delayed", "tre",
+    ].includes(key)
+  ) {
+    return 0;
   }
-  const d = new Date(ms);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (["scheduled", "chuachay", "pending", "planned"].includes(key)) return 1;
+  if (["completed", "hoantat", "finished"].includes(key)) return 2;
+  return 3;
 };
+
+const SERVICE_FILTER_KEYS = ["bus", "sightseeing", "charter"];
+
+/** Map trip → bus | sightseeing | charter để lọc multi-select. */
+const resolveTripServiceKey = (trip) => {
+  const blob = [
+    trip?.serviceType,
+    trip?.routeType,
+    trip?.tripType,
+    trip?.routeCode,
+    trip?.routeName,
+  ].map((v) => String(v || "").toLowerCase()).join(" ");
+  if (blob.includes("charter") || blob.includes("thuê") || blob.includes("request")) return "charter";
+  if (blob.includes("sight")) return "sightseeing";
+  if (blob.includes("bus") || blob.includes("water") || blob.includes("booking") || blob.includes("regular")) {
+    return "bus";
+  }
+  return "";
+};
+
+/** Select multi: ô vuông trong menu — chọn 1 hoặc nhiều loại dịch vụ. */
+function ServiceTypeMultiSelect({
+  options,
+  selected,
+  onChange,
+  allLabel,
+  className = "",
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null);
+  const rootRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const isAll = selected.length === 0 || selected.length === options.length;
+
+  const summary = useMemo(() => {
+    if (isAll) return allLabel;
+    const labels = options.filter((o) => selected.includes(o.value)).map((o) => o.label);
+    return labels.join(", ") || allLabel;
+  }, [allLabel, isAll, options, selected]);
+
+  const updateMenuPos = () => {
+    const el = rootRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const width = Math.max(rect.width, 220);
+    setMenuPos({
+      left: Math.min(window.innerWidth - width - 8, Math.max(8, rect.left)),
+      top: rect.bottom + 6,
+      width,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setMenuPos(null);
+      return undefined;
+    }
+    updateMenuPos();
+    window.addEventListener("resize", updateMenuPos);
+    window.addEventListener("scroll", updateMenuPos, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPos);
+      window.removeEventListener("scroll", updateMenuPos, true);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onDoc = (e) => {
+      if (rootRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      setIsOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [isOpen]);
+
+  const selectAll = () => onChange([]);
+
+  const toggleOne = (value) => {
+    const set = new Set(selected);
+    if (set.has(value)) set.delete(value);
+    else set.add(value);
+    const next = options.map((o) => o.value).filter((key) => set.has(key));
+    onChange(next.length === options.length ? [] : next);
+  };
+
+  const menu = isOpen && menuPos
+    ? createPortal(
+      <div
+        ref={menuRef}
+        style={{
+          position: "fixed",
+          left: menuPos.left,
+          top: menuPos.top,
+          width: menuPos.width,
+          zIndex: 9999,
+        }}
+        className="overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl shadow-slate-900/15 dark:border-slate-700 dark:bg-slate-900"
+      >
+        <label className={`flex cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-xs font-bold transition ${
+          isAll
+            ? "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
+            : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+        }`}>
+          <input
+            type="checkbox"
+            checked={isAll}
+            onChange={selectAll}
+            className="h-4 w-4 rounded border-slate-300 text-[#124757] focus:ring-[#124757]"
+          />
+          <span className="min-w-0 flex-1">{allLabel}</span>
+        </label>
+        {options.map((opt) => {
+          const checked = !isAll && selected.includes(opt.value);
+          return (
+            <label
+              key={opt.value}
+              className={`flex cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-xs font-bold transition ${
+                checked
+                  ? "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
+                  : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggleOne(opt.value)}
+                className="h-4 w-4 rounded border-slate-300 text-[#124757] focus:ring-[#124757]"
+              />
+              <span className="min-w-0 flex-1">{opt.label}</span>
+            </label>
+          );
+        })}
+      </div>,
+      document.body,
+    )
+    : null;
+
+  return (
+    <div ref={rootRef} className={`relative w-full ${isOpen ? "z-[60]" : ""}`}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((v) => !v)}
+        className={`flex w-full min-w-0 items-center justify-between gap-1.5 overflow-hidden text-left ${className}`}
+      >
+        <span className="min-w-0 flex-1 truncate text-xs font-bold leading-5">{summary}</span>
+        <span
+          aria-hidden
+          className={`material-symbols-outlined inline-flex h-5 w-5 shrink-0 items-center justify-center text-[20px] leading-none text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        >
+          expand_more
+        </span>
+      </button>
+      {menu}
+    </div>
+  );
+}
 
 /**
  * Lịch vận hành nội bộ (Admin / Manager / Staff).
@@ -33,17 +204,16 @@ export function OperationsSchedulePage() {
   const navigate = useNavigate();
   const today = getTodayDateString();
   const [date, setDate] = useState(today);
-  const [serviceType, setServiceType] = useState("all");
+  /** Multi-select: [] = tất cả; còn lại subset của bus|sightseeing|charter. */
+  const [selectedServices, setSelectedServices] = useState([]);
   const [entries, setEntries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const serviceOptions = useMemo(() => ([
-    { value: "all", label: lang === "VN" ? "Tất cả" : "All" },
-    { value: "booking", label: lang === "VN" ? "Bus + Sightseeing" : "Bus + Sightseeing" },
-    { value: "bus", label: "Bus" },
+  const serviceChecks = useMemo(() => ([
+    { value: "bus", label: "Waterbus" },
     { value: "sightseeing", label: "Sightseeing" },
-    { value: "charter", label: "Charter" },
+    { value: "charter", label: lang === "VN" ? "Tàu thuê" : "Request booking" },
   ]), [lang]);
 
   const load = useCallback(async () => {
@@ -51,17 +221,34 @@ export function OperationsSchedulePage() {
       setIsLoading(true);
       setErrorMsg("");
       const day = date || toOperationsScheduleDate();
+      const selected = SERVICE_FILTER_KEYS.filter((key) => selectedServices.includes(key));
+      const allSelected = selected.length === 0 || selected.length === SERVICE_FILTER_KEYS.length;
+
+      // 1 loại → gửi serviceType cho BE; nhiều loại / tất cả → lấy full rồi lọc FE.
+      const apiServiceType = !allSelected && selected.length === 1 ? selected[0] : undefined;
       const list = await fetchOperationsSchedule({
         fromDate: day,
         toDate: day,
-        serviceType: serviceType === "all" ? undefined : serviceType,
+        serviceType: apiServiceType,
         includeCancelled: false,
         skipAuth: false,
       });
-      const sorted = [...(Array.isArray(list) ? list : [])].sort((a, b) => {
-        const aMs = Date.parse(String(a.displayStartAt || a.startAt || "")) || 0;
-        const bMs = Date.parse(String(b.displayStartAt || b.startAt || "")) || 0;
-        return aMs - bMs;
+
+      let rows = Array.isArray(list) ? list : [];
+      if (!allSelected && selected.length > 1) {
+        const allow = new Set(selected);
+        rows = rows.filter((trip) => {
+          const key = resolveTripServiceKey(trip);
+          return key && allow.has(key);
+        });
+      }
+
+      // Đang di chuyển → Chưa chạy → Hoàn tất; trong nhóm xếp theo giờ khởi hành.
+      const sorted = [...rows].sort((a, b) => {
+        const byStatus = tripStatusSortRank(a) - tripStatusSortRank(b);
+        if (byStatus !== 0) return byStatus;
+        return tripClockSortMinutes(a.displayStartAt || a.startAt)
+          - tripClockSortMinutes(b.displayStartAt || b.startAt);
       });
       setEntries(sorted);
     } catch (error) {
@@ -75,15 +262,28 @@ export function OperationsSchedulePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [date, serviceType, lang]);
+  }, [date, selectedServices, lang]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const openSeatBoard = (trip) => {
-    const tripId = String(trip?.tripId || "").trim();
-    if (!tripId) return;
+    const tripId = String(trip?.tripId || trip?.id || trip?.tripCode || "").trim();
+    if (!tripId) {
+      notify({
+        toast: true,
+        position: "top-end",
+        icon: "warning",
+        title: lang === "VN" ? "Thiếu mã chuyến" : "Missing trip id",
+        text: lang === "VN"
+          ? "Chuyến này không có tripId/tripCode để mở chi tiết."
+          : "This trip has no tripId/tripCode to open details.",
+        showConfirmButton: false,
+        timer: 2500,
+      });
+      return;
+    }
     navigate(`/admin/trips/${encodeURIComponent(tripId)}/seat-board?from=${encodeURIComponent("/admin/operations-schedule")}`);
   };
 
@@ -96,11 +296,6 @@ export function OperationsSchedulePage() {
         <h2 className="mt-1 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
           {lang === "VN" ? "Lịch vận hành / Manifest chuyến" : "Ops schedule / Trip manifest"}
         </h2>
-        <p className="mt-2 max-w-3xl text-sm font-medium text-slate-500 dark:text-slate-300">
-          {lang === "VN"
-            ? "Admin / Manager / Staff: xem lịch trong ngày, bấm chuyến để mở trang sơ đồ ghế theo bến (xuống / lên / đi tiếp) và danh sách khách."
-            : "Admin / Manager / Staff: day schedule; open a trip for the full-page station seat board and passenger list."}
-        </p>
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="min-w-[11rem]">
@@ -115,22 +310,16 @@ export function OperationsSchedulePage() {
           </div>
           <div className="min-w-[14rem]">
             <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
-              serviceType
+              {lang === "VN" ? "Loại dịch vụ" : "Service type"}
             </label>
-            <FormSelect
-              value={serviceType}
-              onChange={setServiceType}
-              options={serviceOptions}
+            <ServiceTypeMultiSelect
+              options={serviceChecks}
+              selected={selectedServices}
+              onChange={setSelectedServices}
+              allLabel={lang === "VN" ? "Tất cả" : "All"}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
             />
           </div>
-          <button
-            type="button"
-            onClick={load}
-            className="rounded-2xl bg-[#124757] px-5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
-          >
-            {lang === "VN" ? "Tải lại" : "Refresh"}
-          </button>
         </div>
       </div>
 
@@ -151,51 +340,59 @@ export function OperationsSchedulePage() {
           </div>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
-            {entries.map((trip) => {
+            {entries.map((trip, index) => {
               const dest = trip.destinationStationName || trip.toLocation || "—";
               const status = trip.movementStatus || trip.operationStatus || "";
+              const statusLabel = getMovementStatusLabel(status, lang) || status || "—";
               const stopCount = Array.isArray(trip.stops) ? trip.stops.length : 0;
+              const meta = [trip.boatCode, trip.routeName || trip.routeCode]
+                .filter(Boolean)
+                .join(" · ");
+              const rowKey = String(
+                trip.tripId
+                || trip.tripCode
+                || `${trip.boatCode || "boat"}-${trip.displayStartAt || trip.startAt || index}`,
+              );
+
               return (
-                <li key={String(trip.tripId || trip.tripCode || Math.random())}>
+                <li key={rowKey}>
                   <button
                     type="button"
                     onClick={() => openSeatBoard(trip)}
-                    className="flex w-full flex-col gap-2 px-5 py-4 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900/40 sm:flex-row sm:items-center sm:justify-between"
+                    className="grid w-full cursor-pointer grid-cols-[5.5rem_1fr_auto] items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900/40 sm:gap-4 sm:px-5"
                   >
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-headline text-lg font-black tabular-nums text-[#124757] dark:text-yellow-400">
-                          {formatClock(trip.displayStartAt || trip.startAt)}
-                        </span>
-                        <span className="text-slate-300">→</span>
-                        <span className="font-headline text-lg font-black tabular-nums text-[#124757] dark:text-yellow-400">
-                          {formatClock(trip.displayEndAt || trip.endAt)}
-                        </span>
-                        <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-300">
-                          {trip.tripCode || "—"}
-                        </span>
-                      </div>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                        {(trip.fromLocation || "—")} → <span className="text-[#124757] dark:text-yellow-400">{dest}</span>
+                    <div className="min-w-0">
+                      <p className="font-headline text-base font-black tabular-nums leading-tight text-[#124757] dark:text-yellow-400 sm:text-lg">
+                        {formatTripClock(trip.displayStartAt || trip.startAt)}
                       </p>
-                      <p className="text-[11px] font-medium text-slate-400">
-                        {[trip.boatCode, trip.routeName || trip.routeCode].filter(Boolean).join(" · ") || "—"}
+                      <p className="mt-0.5 text-[11px] font-bold tabular-nums text-slate-400">
+                        → {formatTripClock(trip.displayEndAt || trip.endAt)}
+                      </p>
+                    </div>
+
+                    <div className="min-w-0 space-y-1">
+                      <p className="truncate text-sm font-black text-slate-800 dark:text-slate-100">
+                        {(trip.fromLocation || "—")} → {dest}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wide ${getMovementStatusTone(status)}`}>
+                          {statusLabel}
+                        </span>
+                        {trip.tripCode ? (
+                          <span className="truncate text-[10px] font-bold text-slate-400">
+                            {trip.tripCode}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="truncate text-[11px] font-medium text-slate-400">
+                        {meta || "—"}
                         {stopCount > 0 ? ` · ${stopCount} ${lang === "VN" ? "bến" : "stops"}` : ""}
                       </p>
-                      {stopCount > 0 ? (
-                        <p className="text-[10px] text-slate-400 line-clamp-1">
-                          {trip.stops.map((s) => s.stationName || s.stationCode).filter(Boolean).join(" → ")}
-                        </p>
-                      ) : null}
                     </div>
-                    <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
-                      <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-500">
-                        {getMovementStatusLabel(status, lang) || status || "—"}
-                      </span>
-                      <span className="text-[11px] font-bold text-[#124757] dark:text-yellow-400">
-                        {lang === "VN" ? "Sơ đồ ghế / khách →" : "Seat board / passengers →"}
-                      </span>
-                    </div>
+
+                    <span className="hidden shrink-0 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] sm:inline dark:text-yellow-400">
+                      {lang === "VN" ? "Chi tiết →" : "Open →"}
+                    </span>
                   </button>
                 </li>
               );

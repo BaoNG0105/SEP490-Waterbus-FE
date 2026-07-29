@@ -1,9 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { addNewBoat, fetchAllBoats } from "../../../services/boatService";
+import { addNewBoat, fetchAllBoats, uploadBoatDocument } from "../../../services/boatService";
 import { FormSelect } from "../../../components/FormSelect";
 import { notify } from "../../../utils/swalToast";
+import {
+  BOAT_DOCUMENT_ACCEPT,
+  BOAT_DOCUMENT_MAX_SIZE,
+  BOAT_DOCUMENT_META,
+  BOAT_DOCUMENT_MIME_TYPES,
+  BOAT_DOCUMENT_TYPES,
+} from "../../../utils/boatDocuments";
 import { BoatDocumentsPanel } from "./BoatDocumentsPanel";
 
 const unwrapList = (data) => (Array.isArray(data) ? data : (data?.items || data?.data || []));
@@ -20,6 +27,9 @@ const pickCreatedBoatId = (response) => {
     || null
   );
 };
+
+const isValidDocFile = (file) =>
+  BOAT_DOCUMENT_MIME_TYPES.includes(file.type) && file.size <= BOAT_DOCUMENT_MAX_SIZE;
 
 export function CreateBoat() {
   const { lang } = useApp();
@@ -39,12 +49,34 @@ export function CreateBoat() {
 
   const [selectedImages, setSelectedImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
+  const [pendingDocs, setPendingDocs] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  /** Chỉ giữ lại khi tạo OK nhưng còn hồ sơ chưa upload xong. */
   const [createdBoat, setCreatedBoat] = useState(null);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const setPendingDoc = (type, file) => {
+    if (file && !isValidDocFile(file)) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "File không hợp lệ" : "Invalid file",
+        text: lang === "VN"
+          ? "Chỉ hỗ trợ PDF, JPG, PNG, WEBP và tối đa 10MB."
+          : "Only PDF, JPG, PNG, WEBP files up to 10MB are supported.",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+    setPendingDocs((prev) => {
+      const next = { ...prev };
+      if (file) next[type] = file;
+      else delete next[type];
+      return next;
+    });
   };
 
   const handleImagesChange = (e) => {
@@ -93,6 +125,25 @@ export function CreateBoat() {
     return match?.id || match?.boatId || null;
   };
 
+  const uploadSelectedDocs = async (boatId, docs) => {
+    const entries = Object.entries(docs).filter(([, file]) => Boolean(file));
+    const failures = [];
+
+    for (const [type, file] of entries) {
+      const payload = new FormData();
+      payload.append("file", file);
+      try {
+        await uploadBoatDocument(boatId, type, payload);
+      } catch (error) {
+        console.error(error);
+        const label = lang === "VN" ? BOAT_DOCUMENT_META[type]?.labelVn : BOAT_DOCUMENT_META[type]?.labelEn;
+        failures.push(label || type);
+      }
+    }
+
+    return { uploaded: entries.length - failures.length, failures };
+  };
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -118,23 +169,43 @@ export function CreateBoat() {
       }
 
       const src = created?.data && typeof created.data === "object" ? created.data : created;
-      setCreatedBoat({
+      const boatMeta = {
         id: String(boatId),
         code: formData.code.trim(),
         name: formData.name.trim(),
         status: src?.status || src?.Status || "Inactive",
-      });
+      };
+
+      const selectedDocCount = Object.values(pendingDocs).filter(Boolean).length;
+      const { failures } = selectedDocCount > 0
+        ? await uploadSelectedDocs(boatId, pendingDocs)
+        : { failures: [] };
+
+      if (failures.length > 0) {
+        setCreatedBoat(boatMeta);
+        setPendingDocs({});
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "Tàu đã tạo — một số hồ sơ lỗi" : "Boat created — some documents failed",
+          text: (lang === "VN" ? "Chưa lưu được: " : "Failed: ") + failures.join(", "),
+          confirmButtonColor: "#124757",
+        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
 
       notify({
         toast: true,
         position: "top-end",
         icon: "success",
         title: lang === "VN" ? "Đã tạo tàu" : "Boat created",
-        text: lang === "VN" ? "Tiếp tục tải 4 hồ sơ pháp lý bên dưới." : "Continue with the 4 legal documents below.",
+        text: selectedDocCount > 0
+          ? (lang === "VN" ? `Đã lưu ${selectedDocCount}/4 hồ sơ pháp lý.` : `Saved ${selectedDocCount}/4 legal documents.`)
+          : (lang === "VN" ? "Có thể bổ sung hồ sơ pháp lý sau trong hồ sơ tàu." : "You can add legal documents later from the boat file."),
         showConfirmButton: false,
-        timer: 2200,
+        timer: 2400,
       });
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      navigate("/admin/boats-management");
     } catch (error) {
       console.error("Lỗi thêm tàu mới:", error);
       let validationError = "";
@@ -167,6 +238,7 @@ export function CreateBoat() {
     { value: "Passenger", label: lang === "VN" ? "Chở khách" : "Passenger" },
     { value: "Rescue", label: lang === "VN" ? "Cứu hộ / kéo tàu" : "Rescue" },
   ];
+  const pendingDocCount = Object.values(pendingDocs).filter(Boolean).length;
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-4xl mx-auto animate-fade-in">
@@ -185,11 +257,11 @@ export function CreateBoat() {
           <p className="text-xs text-slate-400 mt-0.5">
             {createdBoat
               ? (lang === "VN"
-                ? `Bước 2/2 · Tải hồ sơ pháp lý cho ${createdBoat.code}.`
-                : `Step 2/2 · Upload legal documents for ${createdBoat.code}.`)
+                ? `Tàu ${createdBoat.code} đã tạo — bổ sung hồ sơ còn thiếu.`
+                : `Boat ${createdBoat.code} created — finish remaining documents.`)
               : (lang === "VN"
-                ? "Bước 1/2 · Thông số tàu, sau đó thêm hồ sơ pháp lý."
-                : "Step 1/2 · Vessel specs, then legal documents.")}
+                ? "Thông số tàu và 4 hồ sơ pháp lý trong một lần lưu."
+                : "Vessel specs and all 4 legal documents in one save.")}
           </p>
         </div>
       </div>
@@ -311,6 +383,64 @@ export function CreateBoat() {
             </div>
           </div>
 
+          <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+            <div className="flex flex-col gap-2 border-b border-slate-100 dark:border-slate-700 pb-3 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                {lang === "VN" ? "Hồ sơ pháp lý (4 loại)" : "Legal documents (4 types)"}
+              </h3>
+              <span className="inline-flex w-fit items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                <span className="material-symbols-outlined text-sm">folder_open</span>
+                {pendingDocCount}/4 {lang === "VN" ? "đã chọn" : "selected"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {BOAT_DOCUMENT_TYPES.map((type) => {
+                const meta = BOAT_DOCUMENT_META[type];
+                const label = lang === "VN" ? meta.labelVn : meta.labelEn;
+                const file = pendingDocs[type] || null;
+                return (
+                  <div
+                    key={type}
+                    className={`rounded-2xl border p-4 space-y-2 transition-colors ${
+                      file
+                        ? "border-[#124757]/40 bg-[#124757]/5 dark:border-yellow-400/40 dark:bg-yellow-400/5"
+                        : "border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-900/50"
+                    }`}
+                  >
+                    <label className={labelStyle}>{label}</label>
+                    <input
+                      type="file"
+                      accept={BOAT_DOCUMENT_ACCEPT}
+                      onChange={(e) => setPendingDoc(type, e.target.files?.[0] || null)}
+                      className="block w-full text-[11px] font-bold text-slate-600 dark:text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-[#124757] file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900 file:font-bold file:cursor-pointer"
+                    />
+                    {file ? (
+                      <div className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 dark:bg-slate-800">
+                        <span className="truncate text-[11px] font-bold text-[#124757] dark:text-yellow-300 inline-flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-[14px]">description</span>
+                          {file.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPendingDoc(type, null)}
+                          className="shrink-0 text-slate-400 transition-colors hover:text-red-500"
+                          title={lang === "VN" ? "Bỏ chọn" : "Clear"}
+                        >
+                          <span className="material-symbols-outlined text-base">close</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-400">
+                        {lang === "VN" ? "PDF, JPG, PNG, WEBP · tối đa 10MB" : "PDF, JPG, PNG, WEBP · max 10MB"}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             <button
               type="submit"
@@ -320,30 +450,27 @@ export function CreateBoat() {
               {isSubmitting ? (
                 <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
               ) : (
-                <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                <span className="material-symbols-outlined text-lg">save</span>
               )}
-              {lang === "VN" ? "Lưu tàu & thêm hồ sơ" : "Save boat & add documents"}
+              {lang === "VN"
+                ? (pendingDocCount > 0 ? `Lưu tàu & ${pendingDocCount} hồ sơ` : "Lưu tàu")
+                : (pendingDocCount > 0 ? `Save boat & ${pendingDocCount} document(s)` : "Save boat")}
             </button>
           </div>
         </form>
       ) : (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
             {lang === "VN"
-              ? `Tàu ${createdBoat.code} đã tạo. Tải đủ 4 hồ sơ pháp lý rồi bấm Hoàn tất.`
-              : `Boat ${createdBoat.code} created. Upload all 4 legal documents, then finish.`}
+              ? `Tàu ${createdBoat.code} đã tạo. Bổ sung / sửa hồ sơ còn thiếu rồi bấm Hoàn tất.`
+              : `Boat ${createdBoat.code} created. Finish remaining documents, then click Done.`}
           </div>
 
-          <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
-            <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3">
-              {lang === "VN" ? "Hồ sơ pháp lý" : "Legal documents"}
-            </h3>
-            <BoatDocumentsPanel
-              boatId={createdBoat.id}
-              boatCode={createdBoat.code}
-              boatStatus={createdBoat.status}
-            />
-          </div>
+          <BoatDocumentsPanel
+            boatId={createdBoat.id}
+            boatCode={createdBoat.code}
+            boatStatus={createdBoat.status}
+          />
 
           <button
             type="button"

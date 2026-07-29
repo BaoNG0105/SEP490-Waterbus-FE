@@ -229,11 +229,10 @@ export function EditBlog() {
 
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Chuyên mục" : "Category"}</label>
-                        <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                        <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
                             {[
                                 { value: BLOG_CATEGORY.NEWS, vn: "Tin tức", en: "News" },
                                 { value: BLOG_CATEGORY.EVENT, vn: "Sự kiện", en: "Event" },
-                                { value: BLOG_CATEGORY.ACTIVITY, vn: "Hoạt động", en: "Activity" },
                             ].map((option) => {
                                 const selected = formData.category === option.value;
                                 return (
@@ -344,7 +343,7 @@ export function EditBlog() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                         type="submit"
                         name="status"
@@ -364,16 +363,6 @@ export function EditBlog() {
                     >
                         {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
                         {lang === "VN" ? "Xuất bản" : "Publish"}
-                    </button>
-                    <button
-                        type="submit"
-                        name="status"
-                        value={BLOG_STATUS.ARCHIVED}
-                        disabled={isSubmitting}
-                        className="w-full bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-500/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                    >
-                        {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
-                        {lang === "VN" ? "Lưu trữ" : "Archive"}
                     </button>
                 </div>
             </form>

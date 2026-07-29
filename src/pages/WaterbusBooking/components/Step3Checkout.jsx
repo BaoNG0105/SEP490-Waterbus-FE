@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
+import { FormSelect } from "../../../components/FormSelect";
 import { PayOSLogo, payosButtonLgClassName } from "../../../components/PayOSLogo";
 import { SelectablePublicVouchers } from "../../../components/SelectablePublicVouchers";
 import { submitBooking, fetchMyBookingDetail } from "../../../services/bookingService";
 import { createBookingPayment } from "../../../services/paymentService";
 import { fetchCurrentUserProfile } from "../../../services/authService";
-import { fetchTicketTypes, DEFAULT_TICKET_TYPES, resolveTicketPriceModifier } from "../../../services/ticketTypeService";
+import { fetchTicketTypes, DEFAULT_TICKET_TYPES, formatTicketTypeLabel, resolveTicketPriceModifier } from "../../../services/ticketTypeService";
 import { fetchMyPointBalance, fetchMyPoints, getMaxPointsToUse, estimateEarnPoints } from "../../../services/pointService";
 import {
   fetchActiveInsurancePackages,
@@ -32,14 +33,16 @@ import {
 // Nhãn loại hành khách / vé — FE gửi ticketTypeCode theo từng item booking.
 const TICKET_TYPE_LABELS = {
   ADULT: { vn: "Người lớn", en: "Adult" },
-  CHILD: { vn: "Trẻ em có ghế", en: "Child (seated)" },
+  CHILD: { vn: "Trẻ em (>2–≤12 tuổi, ghế + QR riêng)", en: "Child (>2–≤12, own seat + QR)" },
   SENIOR: { vn: "Người cao tuổi", en: "Senior" },
   DISABLED: { vn: "Người khuyết tật", en: "Disabled" },
-  INFANT: { vn: "Em bé dưới 2 tuổi (không ghế)", en: "Infant under 2 (no seat)" },
+  INFANT: { vn: "Em bé ≤ 2 tuổi (không ghế)", en: "Infant ≤ 2 (no seat)" },
 };
 
 const getTicketTypeLabel = (ticketType, lang, routeType) => {
-  const base = TICKET_TYPE_LABELS[ticketType.code]?.[lang === "VN" ? "vn" : "en"] || ticketType.name;
+  const code = String(ticketType?.code || "").toUpperCase();
+  const base = TICKET_TYPE_LABELS[code]?.[lang === "VN" ? "vn" : "en"]
+    || formatTicketTypeLabel(code || ticketType?.name, lang);
   const modifier = resolveTicketPriceModifier(ticketType, routeType);
   if (modifier === 1) return base;
   if (modifier === 0) return `${base} (${lang === "VN" ? "Miễn phí" : "Free"})`;
@@ -69,26 +72,19 @@ const pick = (source, keys, fallback = "") => {
 
 // Mã bến lấy từ catalog Step1 — không đọc stationCode trên trip.stops.
 
+import {
+  classifyPassengerAgeBand,
+  getTravelYear,
+  getVietnamCalendarYear,
+  isTicketTypeMatchingBirthYear,
+  ticketTypeAgeHint,
+} from "../../../utils/passengerAge";
+
 const formatCountdown = (msRemaining) => {
   const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-};
-
-/** Năm hiện tại theo giờ Việt Nam — khớp rule BE birthYear INFANT. */
-const getVietnamCalendarYear = () => {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Ho_Chi_Minh",
-      year: "numeric",
-    }).formatToParts(new Date());
-    const year = Number(parts.find((p) => p.type === "year")?.value);
-    if (Number.isFinite(year)) return year;
-  } catch {
-    // fallback local
-  }
-  return new Date().getFullYear();
 };
 
 const formatHoldDeadline = (value) => {
@@ -123,8 +119,9 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
   // được stationCode theo cặp bến đi/đến như tuyến Regular.
   const isLoopRoute = routeType === "SightseeingLoop";
   const vietnamCalendarYear = getVietnamCalendarYear();
-  // INFANT dưới 2 tuổi: UI gợi ý năm sinh gần đây; BE bắt buộc ≤ năm hiện tại (giờ VN).
-  const infantBirthYearMin = vietnamCalendarYear - 2;
+  const travelYear = getTravelYear(departureDate) || vietnamCalendarYear;
+  // INFANT ≤ 2 tuổi theo năm đi.
+  const infantBirthYearMin = travelYear - 2;
 
   // Đếm ngược thời gian giữ ghế (ghế đã được giữ ở Bước 2 khi bấm "Tiếp tục thanh toán")
   const [nowTick, setNowTick] = useState(Date.now());
@@ -219,6 +216,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     Array.from({ length: selectedSeatsDeparture.length }, () => ({
       name: "",
       ticketType: "ADULT",
+      birthYear: "",
       phone: "",
       email: "",
       infant: null,
@@ -227,7 +225,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
 
   const handlePassengerChange = (index, field, value) => {
     const updated = [...passengers];
-    updated[index] = { ...updated[index], [field]: value };
+    const next = { ...updated[index], [field]: value };
+    if (field === "ticketType" && String(value || "").toUpperCase() !== "ADULT") {
+      next.infant = null;
+    }
+    updated[index] = next;
     setPassengers(updated);
   };
 
@@ -273,11 +275,23 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     )));
   };
 
-  // 3. HÀNH KHÁCH TRẺ EM DƯỚI 2 TUỔI (INFANT — không chiếm ghế, miễn phí) giờ gắn liền với hành
-  // khách người lớn đi kèm (passenger.infant), không còn là danh sách rời rạc như trước.
-  const infants = passengers.filter((p) => p.infant).map((p) => p.infant);
+  // 3. Em bé ≤2 tuổi (INFANT) gắn với hành khách ADULT đi kèm — không chiếm ghế.
+  const infants = passengers
+    .map((p, index) => (p.infant ? { ...p.infant, companionIndex: index, companionName: p.name } : null))
+    .filter(Boolean);
 
   const handleToggleInfant = (index) => {
+    const passenger = passengers[index];
+    if (!passenger?.infant && String(passenger?.ticketType || "").toUpperCase() !== "ADULT") {
+      showToast({
+        icon: "warning",
+        title: lang === "VN" ? "Chỉ người lớn mới thêm em bé" : "Only adults can add an infant",
+        text: lang === "VN"
+          ? "Em bé (≤ 2 tuổi) phải đi kèm một hành khách người lớn."
+          : "Infants (≤ 2) must accompany an adult passenger.",
+      });
+      return;
+    }
     setPassengers((prev) => prev.map((p, i) => (
       i === index ? { ...p, infant: p.infant ? null : { name: "", birthYear: "" } } : p
     )));
@@ -450,25 +464,35 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     showToast({ icon: "warning", title, text });
   };
 
-  const buildLegItems = (seats, fromStationCode, toStationCode) => [
-    ...seats.map((seat, i) => ({
-      seatNumber: seat.seatNumber,
-      ticketTypeCode: passengers[i]?.ticketType || "ADULT",
-      fromStationCode,
-      toStationCode,
-      passengerName: passengers[i]?.name.trim(),
-      passengerPhone: (passengers[i]?.phone.trim() || contact.phone.trim()),
-      passengerEmail: (passengers[i]?.email.trim() || contact.email.trim()),
-    })),
-    ...infants.map((infant) => ({
-      seatNumber: null,
-      ticketTypeCode: "INFANT",
-      fromStationCode,
-      toStationCode,
-      passengerName: infant.name.trim(),
-      birthYear: Number(infant.birthYear),
-    })),
-  ];
+  // Thứ tự giống form điền: từng ghế/hành khách, em bé ngay sau người lớn đi kèm.
+  const buildLegItems = (seats, fromStationCode, toStationCode) => (
+    seats.flatMap((seat, i) => {
+      const passenger = passengers[i];
+      const seated = {
+        seatNumber: seat.seatNumber,
+        ticketTypeCode: passenger?.ticketType || "ADULT",
+        fromStationCode,
+        toStationCode,
+        passengerName: passenger?.name.trim(),
+        passengerPhone: (passenger?.phone.trim() || contact.phone.trim()),
+        passengerEmail: (passenger?.email.trim() || contact.email.trim()),
+        birthYear: Number(passenger?.birthYear),
+      };
+      if (!passenger?.infant) return [seated];
+      return [
+        seated,
+        {
+          seatNumber: null,
+          ticketTypeCode: "INFANT",
+          fromStationCode,
+          toStationCode,
+          passengerName: passenger.infant.name.trim(),
+          birthYear: Number(passenger.infant.birthYear),
+          companionPassengerName: passenger.name.trim(),
+        },
+      ];
+    })
+  );
 
   const handlePayment = async () => {
     setSubmitError("");
@@ -489,6 +513,45 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
       return;
     }
 
+    if (passengers.some((p) => !String(p.birthYear || "").trim())) {
+      showError(
+        lang === "VN" ? "Thiếu năm sinh" : "Missing birth year",
+        lang === "VN"
+          ? "Vui lòng nhập năm sinh cho tất cả hành khách có ghế."
+          : "Please enter the birth year for every seated passenger.",
+      );
+      return;
+    }
+
+    const invalidSeatedBirth = passengers.find((p) => {
+      const year = Number(p.birthYear);
+      return !Number.isInteger(year) || year > travelYear || year < 1900;
+    });
+    if (invalidSeatedBirth) {
+      showError(
+        lang === "VN" ? "Năm sinh không hợp lệ" : "Invalid birth year",
+        lang === "VN"
+          ? `Năm sinh phải từ 1900 đến ${travelYear} (năm đi).`
+          : `Birth year must be between 1900 and ${travelYear} (travel year).`,
+      );
+      return;
+    }
+
+    const mismatchedType = passengers.find((p) => (
+      !isTicketTypeMatchingBirthYear(p.ticketType, p.birthYear, travelYear)
+    ));
+    if (mismatchedType) {
+      const band = classifyPassengerAgeBand(mismatchedType.birthYear, travelYear);
+      const type = String(mismatchedType.ticketType || "").toUpperCase();
+      showError(
+        lang === "VN" ? "Loại vé không khớp năm sinh" : "Ticket type does not match birth year",
+        lang === "VN"
+          ? `「${mismatchedType.name || "Hành khách"}」 loại ${type} nhưng theo năm sinh thuộc nhóm ${band} (năm đi ${travelYear}). CHILD: >2–≤12 tuổi; từ 13 tuổi chọn ADULT; ≤2 tuổi dùng em bé đi kèm.`
+          : `"${mismatchedType.name || "Passenger"}" is ${type} but age band is ${band} (travel year ${travelYear}). CHILD: >2–≤12; age 13+ use ADULT; ≤2 use accompanying infant.`,
+      );
+      return;
+    }
+
     if (infants.some((inf) => !inf.name.trim() || !inf.birthYear)) {
       showError(
         lang === "VN" ? "Thiếu thông tin em bé" : "Missing infant information",
@@ -497,17 +560,44 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
       return;
     }
 
-    // BE: birthYear không được lớn hơn năm hiện tại (giờ VN).
-    const invalidFutureBirth = infants.find((inf) => {
+    const invalidInfantBirth = infants.find((inf) => {
       const year = Number(inf.birthYear);
-      return !Number.isInteger(year) || year > vietnamCalendarYear || year < 1900;
+      return !Number.isInteger(year) || year > travelYear || year < 1900
+        || classifyPassengerAgeBand(year, travelYear) !== "INFANT";
     });
-    if (invalidFutureBirth) {
+    if (invalidInfantBirth) {
       showError(
         lang === "VN" ? "Năm sinh em bé không hợp lệ" : "Invalid infant birth year",
         lang === "VN"
-          ? `Năm sinh không được lớn hơn năm hiện tại (${vietnamCalendarYear}).`
-          : `Birth year cannot be later than the current year (${vietnamCalendarYear}).`,
+          ? `Em bé phải ≤ 2 tuổi theo năm đi ${travelYear} (sinh từ ${travelYear - 2}–${travelYear}).`
+          : `Infant must be ≤ 2 years for travel year ${travelYear} (born ${travelYear - 2}–${travelYear}).`,
+      );
+      return;
+    }
+
+    const adultCount = passengers.filter((p) => String(p.ticketType || "").toUpperCase() === "ADULT").length;
+    const childCount = passengers.filter((p) => String(p.ticketType || "").toUpperCase() === "CHILD").length;
+    const infantCount = infants.length;
+    // BE: booking có CHILD/INFANT cần ≥ 1 ADULT cùng chiều/chặng (không bắt 1:1).
+    if ((childCount + infantCount) > 0 && adultCount === 0) {
+      showError(
+        lang === "VN" ? "Thiếu người lớn đi kèm" : "Adult companion required",
+        lang === "VN"
+          ? "Booking có trẻ em / em bé phải có ít nhất 1 người lớn (ADULT) cùng chiều."
+          : "A booking with child/infant needs at least 1 adult (ADULT) on the same leg.",
+      );
+      return;
+    }
+
+    const infantOnNonAdult = passengers.find((p) => (
+      p.infant && String(p.ticketType || "").toUpperCase() !== "ADULT"
+    ));
+    if (infantOnNonAdult) {
+      showError(
+        lang === "VN" ? "Em bé phải đi kèm người lớn" : "Infant must accompany an adult",
+        lang === "VN"
+          ? "Chỉ thêm em bé dưới hành khách loại Người lớn."
+          : "Add infants only under an Adult passenger.",
       );
       return;
     }
@@ -760,7 +850,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
             {lang === "VN" ? "Thông tin hành khách" : "Passenger Informations"}
           </h3>
 
-          <div className="space-y-5 max-h-500px overflow-y-auto pr-2 custom-scrollbar">
+          <div className="max-h-[500px] space-y-5 overflow-y-auto pr-2 custom-scrollbar">
             {passengers.map((passenger, index) => (
               <div key={index} className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
 
@@ -785,8 +875,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                         )}
                         <span className="bg-[#124757]/8 dark:bg-yellow-400/15 border border-[#124757]/15 dark:border-yellow-400/20 text-xs font-bold px-2 py-1 rounded-md text-[#124757] dark:text-yellow-400 shadow-sm">
                           {TICKET_TYPE_LABELS[String(passenger.ticketType || "ADULT").toUpperCase()]?.[lang === "VN" ? "vn" : "en"]
-                            || passenger.ticketType
-                            || "ADULT"}
+                            || formatTicketTypeLabel(passenger.ticketType, lang)}
                         </span>
                       </div>
                     </div>
@@ -817,30 +906,51 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                     />
                   </div>
 
-                  <div className="space-y-1.5 sm:col-span-2">
+                  <div className="relative z-10 space-y-1.5 sm:col-span-2">
                     <label className="text-[11px] font-bold uppercase text-slate-500">
                       {lang === "VN" ? "Loại hành khách *" : "Passenger type *"}
                     </label>
-                    <select
+                    <FormSelect
                       value={passenger.ticketType}
-                      onChange={(e) => handlePassengerChange(index, "ticketType", e.target.value)}
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                      onChange={(next) => handlePassengerChange(index, "ticketType", next)}
                       required
-                    >
-                      {seatedTicketTypes.map((option) => (
-                        <option
-                          key={option.code}
-                          value={option.code}
-                          disabled={!isTicketTypeAllowedForPassenger(option, index)}
-                        >
-                          {getTicketTypeLabel(option, lang, routeType)}
-                        </option>
-                      ))}
-                    </select>
+                      options={seatedTicketTypes.map((option) => ({
+                        value: option.code,
+                        label: getTicketTypeLabel(option, lang, routeType),
+                        disabled: !isTicketTypeAllowedForPassenger(option, index),
+                      }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-[#FFD100]"
+                    />
                     <p className="text-[10px] text-slate-400">
                       {lang === "VN"
-                        ? "Chọn đúng loại để BE tính giá / in vé (ADULT, CHILD, SENIOR, DISABLED). Em bé dưới 2 tuổi thêm ở bên dưới — không chiếm ghế."
-                        : "Pick the correct type for pricing/ticket print (ADULT, CHILD, SENIOR, DISABLED). Infants under 2 are added below — no seat."}
+                        ? "Người lớn (≥13). Trẻ em >2–≤12 chọn CHILD (ghế + QR riêng). Em bé ≤2 thêm dưới người lớn — không ghế, dùng QR người lớn. Booking có trẻ/em bé cần ≥ 1 ADULT."
+                        : "Adult (≥13). Ages >2–≤12 use CHILD (own seat + QR). Infants ≤2 under an adult — no seat, adult QR. Child/infant bookings need ≥ 1 ADULT."}
+                    </p>
+                    {ticketTypeAgeHint(passenger.ticketType, travelYear, lang) ? (
+                      <p className="text-[10px] font-medium text-[#124757] dark:text-yellow-400">
+                        {ticketTypeAgeHint(passenger.ticketType, travelYear, lang)}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2 sm:max-w-[12rem]">
+                    <label className="text-[11px] font-bold uppercase text-slate-500">
+                      {lang === "VN" ? "Năm sinh *" : "Birth year *"}
+                    </label>
+                    <input
+                      type="number"
+                      min={1900}
+                      max={travelYear}
+                      value={passenger.birthYear}
+                      onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
+                      placeholder="YYYY"
+                      required
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      {lang === "VN"
+                        ? `Bắt buộc — đối chiếu tuổi theo năm đi ${travelYear}.`
+                        : `Required — age checked against travel year ${travelYear}.`}
                     </p>
                   </div>
 
@@ -867,23 +977,28 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                   </div>
                 </div>
 
-                {/* INFANT: không chiếm ghế, seatNumber=null, bắt buộc birthYear; đi kèm hành khách có ghế.
-                    Policy BE: miễn phí cả Regular và Sightseeing. */}
+                {/* INFANT ≤2: không ghế, bắt buộc birthYear; chỉ gắn dưới ADULT. */}
                 <div className="border-t border-slate-200/60 dark:border-slate-700 pt-4">
-                    {!passenger.infant ? (
+                    {String(passenger.ticketType || "").toUpperCase() !== "ADULT" ? (
+                      <p className="text-[10px] font-medium text-slate-400">
+                        {lang === "VN"
+                          ? "Chỉ hành khách Người lớn mới thêm được em bé đi kèm."
+                          : "Only Adult passengers can add an accompanying infant."}
+                      </p>
+                    ) : !passenger.infant ? (
                       <button
                         type="button"
                         onClick={() => handleToggleInfant(index)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10"
                       >
                         <span className="material-symbols-outlined text-sm">add</span>
-                        {lang === "VN" ? "Thêm em bé đi kèm (dưới 2 tuổi)" : "Add accompanying infant (under 2)"}
+                        {lang === "VN" ? "Thêm em bé đi kèm (≤ 2 tuổi)" : "Add accompanying infant (≤ 2)"}
                       </button>
                     ) : (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-500">
-                            {lang === "VN" ? "Em bé đi kèm (không tính ghế, miễn phí)" : "Accompanying infant (no seat, free)"}
+                            {lang === "VN" ? "Em bé đi kèm (không ghế, miễn phí)" : "Accompanying infant (no seat, free)"}
                           </span>
                           <button
                             type="button"
@@ -909,7 +1024,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                             <input
                               type="number"
                               min={infantBirthYearMin}
-                              max={vietnamCalendarYear}
+                              max={travelYear}
                               value={passenger.infant.birthYear}
                               onChange={(e) => handleInfantChange(index, "birthYear", e.target.value)}
                               placeholder="YYYY"
@@ -918,8 +1033,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                             />
                             <p className="text-[10px] text-slate-400">
                               {lang === "VN"
-                                ? `Tối đa ${vietnamCalendarYear} (năm hiện tại).`
-                                : `Max ${vietnamCalendarYear} (current year).`}
+                                ? `≤ 2 tuổi · sinh ${infantBirthYearMin}–${travelYear}.`
+                                : `≤ 2 yrs · born ${infantBirthYearMin}–${travelYear}.`}
                             </p>
                           </div>
                         </div>

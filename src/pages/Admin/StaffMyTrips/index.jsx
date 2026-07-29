@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { fetchStaffMeAssignments, fetchStaffMeTrips, normalizeStaffTrip } from "../../../services/staffMeService";
@@ -36,6 +36,7 @@ import {
   pickStationNameForStopOrder,
   resolveDelayStartStopOrder,
 } from "../../../utils/tripDelay";
+import { getMovementStatusLabel, getMovementStatusTone } from "../../../services/operationsService";
 
 /** Staff chỉ xem chuyến từ 3 ngày trước ngày vận hành đến đúng ngày đó. */
 const PREVIEW_DAYS_BEFORE = 3;
@@ -48,13 +49,34 @@ const todayKey = () => {
 
 const formatClock = (value) => {
   if (!value) return "--:--";
-  const ms = Date.parse(String(value));
-  if (Number.isNaN(ms)) {
-    const m = String(value).match(/(\d{2}):(\d{2})/);
-    return m ? `${m[1]}:${m[2]}` : "--:--";
+  const text = String(value).trim();
+  // BE: +07:00 = giờ tường VN; Z/+00:00 = đổi sang Asia/Ho_Chi_Minh (không lấy HH:mm UTC trần).
+  const wall = text.match(/(?:T|\s)(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?([Zz]|[+-]\d{2}:?\d{2})?/)
+    || text.match(/^(\d{1,2}):(\d{2})(:\d{2})?$/);
+  if (wall) {
+    const offset = wall[3] || "";
+    const normalized = offset.toUpperCase() === "Z"
+      ? "Z"
+      : offset.replace(/^([+-]\d{2})(\d{2})$/, "$1:$2");
+    if (!normalized || normalized === "+07:00") {
+      return `${pad2(Number(wall[1]))}:${wall[2]}`;
+    }
   }
-  const d = new Date(ms);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const ms = Date.parse(text);
+  if (Number.isNaN(ms)) {
+    if (wall) return `${pad2(Number(wall[1]))}:${wall[2]}`;
+    return "--:--";
+  }
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(new Date(ms)).map((p) => [p.type, p.value]));
+  let hour = parts.hour || "00";
+  if (hour === "24") hour = "00";
+  return `${hour}:${parts.minute || "00"}`;
 };
 
 const formatDayLabel = (ymd, lang) => {
@@ -129,14 +151,91 @@ const mergeUniqueTrips = (lists) => {
   lists.flat().forEach((trip) => {
     if (!trip) return;
     const key = String(trip.tripId || trip.tripCode || JSON.stringify(trip)).trim();
-    if (!key || map.has(key)) return;
-    map.set(key, trip);
+    if (!key) return;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, trip);
+      return;
+    }
+    // Giữ bản đầu, bổ sung bến/stops nếu thiếu (staff/me/trips thường không có).
+    map.set(key, {
+      ...existing,
+      fromStationName: existing.fromStationName || trip.fromStationName || "",
+      toStationName: existing.toStationName || trip.toStationName || "",
+      stationName: existing.stationName || trip.stationName || "",
+      routeName: (existing.routeName && existing.routeName !== "—")
+        ? existing.routeName
+        : (trip.routeName || existing.routeName || "—"),
+      stops: (Array.isArray(existing.stops) && existing.stops.length)
+        ? existing.stops
+        : (trip.stops || existing.stops || []),
+      boatName: existing.boatName || trip.boatName || "",
+      boatCode: existing.boatCode || trip.boatCode || "",
+    });
   });
-  return [...map.values()].sort((a, b) => {
-    const aMs = Date.parse(String(a.departureAt || "")) || 0;
-    const bMs = Date.parse(String(b.departureAt || "")) || 0;
-    return aMs - bMs;
-  });
+  return [...map.values()];
+};
+
+/** 0 = đang vận hành, 1 = chưa chạy / chuẩn bị, 2 = hoàn tất (đồng bộ với Lịch vận hành). */
+const tripStatusBucket = (trip) => {
+  const raw = String(trip?.status || trip?.tripStatus || trip?.movementStatus || "").toLowerCase().replace(/[\s_-]/g, "");
+  if (
+    raw.includes("inprogress")
+    || raw.includes("ongoing")
+    || raw.includes("running")
+    || raw.includes("moving")
+    || raw.includes("departed")
+    || raw.includes("arriving")
+    || raw.includes("atstation")
+  ) {
+    return 0;
+  }
+  if (
+    raw.includes("complete")
+    || raw.includes("finished")
+    || raw.includes("hoantat")
+    || raw.includes("cancel")
+  ) {
+    return 2;
+  }
+  // Scheduled / boarding / unknown
+  return 1;
+};
+
+const tripStatusRaw = (trip) => (
+  trip?.movementStatus || trip?.status || trip?.tripStatus || ""
+);
+
+const tripDepartureMs = (trip) => {
+  const raw = pickDisplayDeparture(trip) || trip?.departureAt || trip?.startAt || "";
+  const text = String(raw || "").trim();
+  if (!text) return 0;
+  // Sort theo giờ tường trên chuỗi (tránh lệch TZ làm sai thứ tự trong ngày).
+  const wall = text.match(/(?:T|\s)(\d{1,2}):(\d{2})/) || text.match(/^(\d{1,2}):(\d{2})$/);
+  if (wall) return (Number(wall[1]) * 60 + Number(wall[2]));
+  return Date.parse(text) || 0;
+};
+
+/** Trong ngày: xếp theo giờ khởi hành. */
+const sortTripsForOps = (trips) => (
+  [...(Array.isArray(trips) ? trips : [])].sort((a, b) => tripDepartureMs(a) - tripDepartureMs(b))
+);
+
+/** "LINH DONG" / "Bến Bạch Đằng" → dễ đọc hơn khi BE trả code hoa. */
+const formatStationLabel = (value) => {
+  const text = String(value || "").trim();
+  if (!text || text === "—") return "—";
+  if (/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(text)) {
+    return text;
+  }
+  if (text === text.toUpperCase() && /[A-Z]/.test(text)) {
+    return text
+      .toLowerCase()
+      .split(/\s+/)
+      .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : ""))
+      .join(" ");
+  }
+  return text;
 };
 
 export function StaffMyTripsPage() {
@@ -200,7 +299,7 @@ export function StaffMyTripsPage() {
         fromFallback = [];
       }
 
-      const merged = mergeUniqueTrips([fromMe, fromFallback]);
+      const merged = sortTripsForOps(mergeUniqueTrips([fromMe, fromFallback]));
       setTrips(merged);
       if (merged.length === 0) {
         setEmptyReason("no_trips");
@@ -225,7 +324,7 @@ export function StaffMyTripsPage() {
       if (!payload) return;
       setTrips((prev) => {
         let next = prev.map((trip) => applyDelayPayloadToTrip(trip, payload));
-        return mergeAffectedTripsIntoList(next, pickAffectedTrips(payload));
+        return sortTripsForOps(mergeAffectedTripsIntoList(next, pickAffectedTrips(payload)));
       });
     });
     return () => {
@@ -233,6 +332,8 @@ export function StaffMyTripsPage() {
       boatIds.forEach((id) => trackingHub.leaveBoat(id).catch(() => {}));
     };
   }, [boatIdsKey]);
+
+  const sortedTrips = useMemo(() => sortTripsForOps(trips), [trips]);
 
   const openSeatBoard = (trip) => {
     const tripId = String(trip?.tripId || trip?.id || "").trim();
@@ -403,47 +504,47 @@ export function StaffMyTripsPage() {
 
   return (
     <div className="space-y-5 pb-10 font-body">
-      <div className="rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-6">
-        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-          {lang === "VN" ? "Ca OnBoard" : "OnBoard duty"}
-        </p>
-        <div className="mt-1 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
-              {lang === "VN" ? "Chuyến của tôi" : "My trips"}
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-300">
-              {lang === "VN"
-                ? "Bấm chuyến để mở trang sơ đồ ghế theo bến (ai xuống / ai lên / ai đi tiếp). Quét vé dành cho nhân viên trên tàu."
-                : "Open a trip for the full-page station seat board (alight / board / through). Ticket scan is for boat crew."}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="block">
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                {lang === "VN" ? "Ngày chuyến" : "Trip date"}
+      <div className="flex flex-col gap-4 rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+            {lang === "VN" ? "Ca OnBoard" : "OnBoard duty"}
+          </p>
+          <h2 className="mt-1 font-headline text-xl font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400 md:text-2xl">
+            {lang === "VN" ? "Chuyến của tôi" : "My trips"}
+          </h2>
+          <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">
+            {formatDayLabel(date, lang)}
+            {!isLoading ? (
+              <span className="text-slate-400">
+                {" · "}
+                {lang === "VN" ? `${trips.length} chuyến` : `${trips.length} trip(s)`}
               </span>
-              <AppDateInput
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => setDate(today)}
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-            >
-              {lang === "VN" ? "Hôm nay" : "Today"}
-            </button>
-            <Link
-              to="/admin/staff/ticket-scan"
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#124757] px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
-            >
-              <span className="material-symbols-outlined text-base" aria-hidden>qr_code_scanner</span>
-              {lang === "VN" ? "Quét vé" : "Scan"}
-            </Link>
-          </div>
+            ) : null}
+          </p>
+        </div>
+
+        <div
+          className="flex h-11 w-full items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:w-auto dark:border-slate-700 dark:bg-slate-900"
+          role="group"
+          aria-label={lang === "VN" ? "Ngày chuyến" : "Trip date"}
+        >
+          <AppDateInput
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-9 min-w-[9.5rem] flex-1 rounded-xl border-0 bg-white px-2.5 text-xs font-bold text-[#124757] shadow-sm dark:bg-slate-800 dark:text-yellow-400 sm:flex-none"
+          />
+          <button
+            type="button"
+            onClick={() => setDate(today)}
+            aria-pressed={date === today}
+            className={`h-9 shrink-0 rounded-xl px-3 text-[10px] font-headline font-black uppercase tracking-wider transition ${
+              date === today
+                ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                : "text-slate-500 hover:bg-white hover:text-[#124757] dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-yellow-400"
+            }`}
+          >
+            {lang === "VN" ? "Hôm nay" : "Today"}
+          </button>
         </div>
       </div>
 
@@ -455,111 +556,121 @@ export function StaffMyTripsPage() {
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-4xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+      <div className="space-y-4">
         {isLoading ? (
-          <div className="flex justify-center py-16">
+          <div className="flex justify-center rounded-4xl border border-slate-100 bg-white py-16 dark:border-slate-700/50 dark:bg-slate-800">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400" />
           </div>
         ) : trips.length === 0 ? (
-          <p className="mx-auto max-w-lg px-6 py-14 text-center text-xs font-bold leading-relaxed text-slate-400">
+          <p className="mx-auto max-w-lg rounded-4xl border border-slate-100 bg-white px-6 py-14 text-center text-xs font-bold leading-relaxed text-slate-400 dark:border-slate-700/50 dark:bg-slate-800">
             {emptyMessage}
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
-            {trips.map((trip) => {
-              const tripId = String(trip.tripId || trip.id || "");
-              const active = isDelayActive(trip);
-              const mins = pickDelayMinutes(trip);
-              const busy = delayBusyId === tripId;
-              const depart = pickDisplayDeparture(trip) || trip.departureAt;
-              const arrive = pickDisplayArrival(trip) || trip.arrivalAt;
-              const fromName = trip.fromStationName || trip.stationName || "";
-              const toName = trip.toStationName || "";
-              const boatLabel = trip.boatName || trip.boatCode || "";
-              return (
-                <li key={tripId || trip.tripCode}>
-                  <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <button
-                      type="button"
-                      onClick={() => openSeatBoard(trip)}
-                      className="min-w-0 flex-1 text-left transition hover:opacity-90"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-headline text-lg font-black tabular-nums text-[#124757] dark:text-yellow-400">
-                          {formatClock(depart)}
-                        </span>
-                        <span className="text-slate-300">→</span>
-                        <span className="font-headline text-lg font-black tabular-nums text-[#124757] dark:text-yellow-400">
-                          {formatClock(arrive)}
-                        </span>
-                        {trip.tripCode ? (
-                          <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-300">
-                            {trip.tripCode}
-                          </span>
-                        ) : null}
-                        {trip.status ? (
-                          <span className="rounded-lg border border-slate-200 px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:text-slate-300">
-                            {trip.status}
-                          </span>
-                        ) : null}
-                        {active ? (
-                          <span className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9px] font-headline font-black uppercase text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
-                            Delay
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">
-                        {trip.routeName || "—"}
-                      </p>
-                      {(fromName || toName) ? (
-                        <p className="mt-0.5 text-[12px] font-medium text-slate-500">
-                          {fromName || "—"} → <span className="text-[#124757] dark:text-yellow-400">{toName || "—"}</span>
-                        </p>
-                      ) : null}
-                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">
-                        {[boatLabel, trip.routeCode].filter(Boolean).join(" · ") || "—"}
-                      </p>
-                      {active ? (
-                        <p className="mt-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                          {formatActiveDelayLine(trip, { lang, stops: trip.stops })}
-                        </p>
-                      ) : mins > 0 ? (
-                        <p className="mt-1.5 text-[11px] font-bold text-orange-700 dark:text-orange-300">
-                          {formatPostResumeDelayLine(trip, lang)}
-                        </p>
-                      ) : null}
-                      <p className="mt-2 text-[11px] font-bold text-[#124757] dark:text-yellow-400">
-                        {lang === "VN" ? "Sơ đồ ghế / khách →" : "Seat board / passengers →"}
-                      </p>
-                    </button>
+          <section className="overflow-hidden rounded-4xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+            <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
+              {sortedTrips.map((trip) => {
+                const tripId = String(trip.tripId || trip.id || "");
+                const active = isDelayActive(trip);
+                const mins = pickDelayMinutes(trip);
+                const busy = delayBusyId === tripId;
+                const depart = pickDisplayDeparture(trip) || trip.departureAt || trip.startAt;
+                const arrive = pickDisplayArrival(trip) || trip.arrivalAt || trip.endAt;
+                const fromName = formatStationLabel(trip.fromStationName || trip.stationName || "");
+                const toName = formatStationLabel(trip.toStationName || "");
+                const boatLabel = trip.boatName || trip.boatCode || "";
+                const bucket = tripStatusBucket(trip);
+                const statusRaw = tripStatusRaw(trip);
+                const tone = getMovementStatusTone(statusRaw);
+                const label = getMovementStatusLabel(statusRaw, lang) || (lang === "VN" ? "Chưa chạy" : "Scheduled");
+                const hasDelayActions = canStartTripDelay(trip) || canResumeTripDelay(trip);
 
-                    <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col sm:items-end">
-                      {canStartTripDelay(trip) ? (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleStartDelay(trip)}
-                          className="inline-flex items-center rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200"
-                        >
-                          Delay
-                        </button>
-                      ) : null}
-                      {canResumeTripDelay(trip) ? (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleResumeDelay(trip)}
-                          className="inline-flex items-center rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800 disabled:opacity-50 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
-                        >
-                          {lang === "VN" ? "Tiếp tục" : "Resume"}
-                        </button>
+                return (
+                  <li key={tripId || trip.tripCode}>
+                    <div className={`grid grid-cols-[5.5rem_1fr] items-start gap-3 px-4 py-3.5 sm:grid-cols-[5.5rem_1fr_auto] sm:items-center sm:gap-4 sm:px-5 ${
+                      bucket === 0 ? "bg-emerald-50/60 dark:bg-emerald-500/5" : ""
+                    }`}>
+                      <button
+                        type="button"
+                        onClick={() => openSeatBoard(trip)}
+                        className="contents text-left"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-headline text-base font-black tabular-nums leading-tight text-[#124757] dark:text-yellow-400 sm:text-lg">
+                            {formatClock(depart)}
+                          </p>
+                          <p className="mt-0.5 text-[11px] font-bold tabular-nums text-slate-400">
+                            → {formatClock(arrive)}
+                          </p>
+                        </div>
+
+                        <div className="min-w-0 space-y-1">
+                          <p className="truncate text-sm font-black text-slate-800 dark:text-slate-100">
+                            {fromName} → {toName}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wide ${tone}`}>
+                              {label}
+                            </span>
+                            {active ? (
+                              <span className="rounded-lg border border-amber-500 bg-amber-400 px-2 py-0.5 text-[9px] font-headline font-black uppercase text-amber-950">
+                                Delay
+                              </span>
+                            ) : null}
+                            {trip.tripCode ? (
+                              <span className="truncate text-[10px] font-bold text-slate-400">
+                                {trip.tripCode}
+                              </span>
+                            ) : null}
+                          </div>
+                          {boatLabel ? (
+                            <p className="truncate text-[11px] font-medium text-slate-400">{boatLabel}</p>
+                          ) : null}
+                          {active ? (
+                            <p className="text-[11px] font-black text-amber-800 dark:text-amber-200">
+                              {formatActiveDelayLine(trip, { lang, stops: trip.stops })}
+                            </p>
+                          ) : mins > 0 ? (
+                            <p className="text-[11px] font-black text-orange-800 dark:text-orange-200">
+                              {formatPostResumeDelayLine(trip, lang)}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <span className="col-span-2 hidden shrink-0 text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] sm:col-auto sm:inline dark:text-yellow-400">
+                          {lang === "VN" ? "Chi tiết →" : "Open →"}
+                        </span>
+                      </button>
+
+                      {hasDelayActions ? (
+                        <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-3 sm:justify-end">
+                          {canStartTripDelay(trip) ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleStartDelay(trip)}
+                              className="inline-flex items-center rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200"
+                            >
+                              Delay
+                            </button>
+                          ) : null}
+                          {canResumeTripDelay(trip) ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleResumeDelay(trip)}
+                              className="inline-flex items-center rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800 disabled:opacity-50 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
+                            >
+                              {lang === "VN" ? "Tiếp tục" : "Resume"}
+                            </button>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         )}
       </div>
     </div>

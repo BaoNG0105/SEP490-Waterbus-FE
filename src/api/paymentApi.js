@@ -19,9 +19,25 @@ export const refundPayment = (paymentId, refundPayload = {}) => {
 };
 
 /**
+ * GET /payments/{paymentId}/refund/otp-options
+ * Trả refundAmount, defaultChannel, channels[{ channel, maskedDestination, ... }].
+ */
+export const getRefundOtpOptions = (paymentId) => {
+  const value = String(paymentId || "").trim();
+
+  if (!value) {
+    return Promise.reject(new Error("paymentId is required to load refund OTP options."));
+  }
+
+  return api
+    .get(`/payments/${encodeURIComponent(value)}/refund/otp-options`)
+    .then((response) => response.data);
+};
+
+/**
  * POST /payments/{paymentId}/refund/otp
- * Gửi OTP trước khi hoàn tiền. Body optional: { otpChannel: "phone" | "email" }.
- * Response: challengeId, maskedDestination, expiresAt, resendAvailableAt.
+ * Body: { otpChannel: "phone" | "email" }.
+ * Response: challengeId / otpChallengeId, maskedDestination, expiresAt, resendAvailableAt.
  */
 export const requestRefundOtp = (paymentId, payload = {}) => {
   const value = String(paymentId || "").trim();

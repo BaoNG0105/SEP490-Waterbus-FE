@@ -889,6 +889,24 @@ const pickPassengerField = (source, keys, fallback = "") => {
   return fallback;
 };
 
+const coerceStationLabel = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    return text === "[object Object]" ? "" : text;
+  }
+  if (typeof value === "object") {
+    return String(
+      value.stationName
+      || value.name
+      || value.stationCode
+      || value.code
+      || "",
+    ).trim();
+  }
+  return "";
+};
+
 const unwrapPassengerList = (data) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.passengers)) return data.passengers;
@@ -904,29 +922,140 @@ export const normalizeTripPassenger = (item) => {
   const toStopOrderRaw = pickPassengerField(item, ["toStopOrder", "alightingStopOrder"], "");
   const fromStopOrder = Number(fromStopOrderRaw);
   const toStopOrder = Number(toStopOrderRaw);
+  const ticketTypeCode = String(
+    pickPassengerField(item, ["ticketTypeCode", "ticketType", "passengerType", "type"], "") || "",
+  ).toUpperCase();
+  const seatRaw = String(
+    pickPassengerField(item, ["seatNumber", "seatLabel", "seatCode", "seat"], "") || "",
+  ).trim();
+  const ticketCode = pickPassengerField(item, ["ticketCode", "code"], "") || "";
+  const priceRaw = pickPassengerField(item, ["price", "unitPrice", "fareAmount", "ticketPrice"], null);
+  const priceNum = priceRaw === null || priceRaw === "" ? null : Number(priceRaw);
+  const noSeat = !seatRaw;
+  const isLapInfantFlag = Boolean(item?.isLapInfant ?? item?.IsLapInfant);
+  // Không ghế riêng: INFANT / CHILD / giá 0 → vẫn là hành khách, dùng chung ghế người lớn.
+  const isLapInfant = isLapInfantFlag
+    || ticketTypeCode === "INFANT"
+    || (ticketTypeCode === "CHILD" && noSeat)
+    || (noSeat && Number.isFinite(priceNum) && priceNum === 0);
+
   return {
     bookingCode: pickPassengerField(item, ["bookingCode", "booking.bookingCode"], "") || "—",
     passengerName: pickPassengerField(item, ["passengerName", "fullName", "name"], "") || "—",
-    ticketTypeCode: String(pickPassengerField(item, ["ticketTypeCode", "ticketType"], "") || "").toUpperCase() || "—",
-    seatNumber: pickPassengerField(item, ["seatNumber", "seatLabel", "seatCode", "seat"], "") || "—",
+    ticketTypeCode: ticketTypeCode
+      || (isLapInfant ? (priceNum === 0 ? "INFANT" : "CHILD") : "—"),
+    ticketTypeName: pickPassengerField(item, ["ticketTypeName"], "") || "",
+    seatNumber: isLapInfant ? "" : (seatRaw || "—"),
+    isLapInfant,
+    companionPassengerName: pickPassengerField(item, [
+      "companionPassengerName",
+      "companionName",
+      "accompaniedBy",
+      "accompaniedByName",
+    ], "") || "",
     fromStationId: pickPassengerField(item, ["fromStationId", "boardingStationId", "fromStation.id"], "") || "",
     toStationId: pickPassengerField(item, ["toStationId", "alightingStationId", "toStation.id"], "") || "",
     fromStationCode: pickPassengerField(item, ["fromStationCode", "boardingStationCode", "fromStation.code"], "") || "",
     toStationCode: pickPassengerField(item, ["toStationCode", "alightingStationCode", "toStation.code"], "") || "",
-    fromStationName: pickPassengerField(item, ["fromStationName", "boardingStationName", "fromStation"], "") || "—",
-    toStationName: pickPassengerField(item, ["toStationName", "alightingStationName", "toStation"], "") || "—",
+    fromStationName: coerceStationLabel(
+      pickPassengerField(item, ["fromStationName", "boardingStationName", "fromStation"], ""),
+    ) || "—",
+    toStationName: coerceStationLabel(
+      pickPassengerField(item, ["toStationName", "alightingStationName", "toStation"], ""),
+    ) || "—",
     fromStopOrder: Number.isFinite(fromStopOrder) && fromStopOrder > 0 ? fromStopOrder : null,
     toStopOrder: Number.isFinite(toStopOrder) && toStopOrder > 0 ? toStopOrder : null,
-    scheduledDeparture: pickPassengerField(item, ["scheduledDeparture", "fromStopScheduledDeparture", "departureTime"], "") || "",
-    scheduledArrival: pickPassengerField(item, ["scheduledArrival", "toStopScheduledArrival", "arrivalTime"], "") || "",
-    price: pickPassengerField(item, ["price", "unitPrice", "fareAmount", "ticketPrice"], null),
-    ticketCode: pickPassengerField(item, ["ticketCode", "code"], "") || "",
+    scheduledDeparture: pickPassengerField(item, [
+      "scheduledDeparture",
+      "scheduledBoardingAt",
+      "fromStopScheduledDeparture",
+      "boardingScheduledAt",
+      "departureTime",
+    ], "") || "",
+    scheduledArrival: pickPassengerField(item, [
+      "scheduledArrival",
+      "scheduledAlightingAt",
+      "toStopScheduledArrival",
+      "alightingScheduledAt",
+      "arrivalTime",
+    ], "") || "",
+    price: priceRaw,
+    dateOfBirth: pickPassengerField(item, [
+      "dateOfBirth",
+      "DateOfBirth",
+      "dob",
+      "birthDate",
+      "BirthDate",
+      "passengerDateOfBirth",
+    ], "") || "",
+    birthYear: (() => {
+      const raw = pickPassengerField(item, [
+        "birthYear",
+        "BirthYear",
+        "passengerBirthYear",
+        "yearOfBirth",
+      ], "");
+      const n = Number(raw);
+      return Number.isFinite(n) && n > 1900 ? n : null;
+    })(),
+    ticketCode,
     ticketQrToken: pickPassengerField(item, ["ticketQrToken", "qrToken", "qrCode"], "") || "",
-    ticketStatus: pickPassengerField(item, ["ticketStatus", "status", "attendanceStatus"], "") || "",
-    checkedInAt: pickPassengerField(item, ["checkedInAt", "checkInAt"], "") || "",
-    checkedOutAt: pickPassengerField(item, ["checkedOutAt", "checkOutAt"], "") || "",
+    ticketStatus: pickPassengerField(item, ["ticketStatus", "TicketStatus", "status", "attendanceStatus"], "") || "",
+    checkedInAt: pickPassengerField(item, ["checkedInAt", "CheckedInAt", "checkInAt"], "") || "",
+    checkedInByName: pickPassengerField(item, ["checkedInByName", "CheckedInByName", "checkInByName"], "") || "",
+    checkedOutAt: pickPassengerField(item, ["checkedOutAt", "CheckedOutAt", "checkOutAt"], "") || "",
+    checkedOutByName: pickPassengerField(item, ["checkedOutByName", "CheckedOutByName", "checkOutByName"], "") || "",
     raw: item,
   };
+};
+
+/**
+ * Gộp trẻ em/em bé đi kèm (isLapInfant — không ghế riêng) vào card người lớn cùng booking / companion.
+ * Trả về holders[]; mỗi holder có lapInfants[].
+ */
+export const groupTripPassengersForDisplay = (passengers = []) => {
+  const list = Array.isArray(passengers) ? passengers.filter(Boolean) : [];
+  const holders = list.filter((row) => !row.isLapInfant);
+  const infants = list.filter((row) => row.isLapInfant);
+  const used = new Set();
+
+  const matchesHolder = (infant, holder) => {
+    const companion = String(infant.companionPassengerName || "").trim().toLowerCase();
+    const holderName = String(holder.passengerName || "").trim().toLowerCase();
+    if (companion && holderName && companion === holderName) return true;
+
+    const infantBooking = String(infant.bookingCode || "").trim().toUpperCase();
+    const holderBooking = String(holder.bookingCode || "").trim().toUpperCase();
+    if (infantBooking && holderBooking && infantBooking !== "—" && infantBooking === holderBooking) {
+      return true;
+    }
+
+    const infantTicket = String(infant.ticketCode || "").trim().toUpperCase();
+    const holderTicket = String(holder.ticketCode || "").trim().toUpperCase();
+    if (infantTicket && holderTicket && infantTicket === holderTicket) return true;
+
+    return false;
+  };
+
+  const groups = holders.map((holder) => {
+    const lapInfants = infants.filter((infant, index) => {
+      const key = `${infant.passengerName}|${infant.bookingCode}|${index}`;
+      if (used.has(key)) return false;
+      if (!matchesHolder(infant, holder)) return false;
+      used.add(key);
+      return true;
+    });
+    return { ...holder, lapInfants };
+  });
+
+  // Em bé chưa gắn được (hiếm) — vẫn hiện riêng nhưng đánh dấu lap infant
+  infants.forEach((infant, index) => {
+    const key = `${infant.passengerName}|${infant.bookingCode}|${index}`;
+    if (used.has(key)) return;
+    groups.push({ ...infant, lapInfants: [] });
+  });
+
+  return groups;
 };
 
 /** GET /trips/{tripId}/passengers — danh sách khách mua vé đúng chuyến (không trộn chiều khứ hồi). */

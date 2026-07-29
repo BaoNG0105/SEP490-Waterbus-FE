@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { BankBinSelect } from "../../../components/BankBinSelect";
 import { useApp } from "../../../context/AppContext";
-import { resendRegisterOtp } from "../../../api/authApi";
 import { cancelMyCharterBooking, fetchMyCharterBookingDetail } from "../../../services/charterBookingService";
-import { refundBookingPayment, requestRefundBookingOtp } from "../../../services/paymentService";
+import {
+  fetchRefundOtpOptions,
+  refundBookingPayment,
+  requestRefundBookingOtp,
+} from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { getRefundPaymentId, isPaymentUuid, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
@@ -71,6 +74,7 @@ const normalizeBooking = (item) => {
   };
 };
 
+/** BE bỏ auto-lookup — FE bắt buộc nhập accountName thủ công. */
 const getRefundValidationMessage = (payload, lang) => {
   if (!/^\d{6}$/.test(payload.bankBin)) {
     return lang === "VN" ? "Vui lòng chọn ngân hàng nhận hoàn từ danh sách." : "Please select a refund bank from the list.";
@@ -78,10 +82,10 @@ const getRefundValidationMessage = (payload, lang) => {
   if (!/^\d{4,20}$/.test(payload.accountNumber)) {
     return lang === "VN" ? "Số tài khoản chỉ gồm 4-20 chữ số." : "Account number must contain 4-20 digits.";
   }
-  if (payload.accountName.trim().length < 3) {
-    return lang === "VN" ? "Tên chủ tài khoản cần có ít nhất 3 ký tự." : "Account name must contain at least 3 characters.";
+  if (String(payload.accountName || "").trim().length < 3) {
+    return lang === "VN" ? "Vui lòng nhập tên chủ tài khoản (ít nhất 3 ký tự)." : "Please enter the account holder name (at least 3 characters).";
   }
-  if (payload.reason.trim().length > 200) {
+  if (String(payload.reason || "").trim().length > 200) {
     return lang === "VN" ? "Lý do hoàn tiền không được vượt quá 200 ký tự." : "Refund reason must not exceed 200 characters.";
   }
   return "";
@@ -89,12 +93,19 @@ const getRefundValidationMessage = (payload, lang) => {
 
 const unwrapOtpChallenge = (response) => ({
   challengeId: String(
-    pick(response, ["challengeId", "id", "otpChallengeId", "data.challengeId"], "") || "",
+    pick(response, ["challengeId", "id", "otpChallengeId", "data.challengeId", "data.otpChallengeId"], "") || "",
   ).trim(),
   maskedDestination: pick(response, ["maskedDestination", "destination", "data.maskedDestination"], "") || "",
   expiresAt: pick(response, ["expiresAt", "data.expiresAt"], "") || null,
   resendAvailableAt: pick(response, ["resendAvailableAt", "data.resendAvailableAt"], "") || null,
 });
+
+const channelLabel = (channel, lang) => {
+  const key = String(channel || "").toLowerCase();
+  if (key === "phone" || key === "sms") return lang === "VN" ? "Số điện thoại" : "Phone";
+  if (key === "email") return lang === "VN" ? "Email" : "Email";
+  return channel || "—";
+};
 
 export function CharterRefund() {
   const { id } = useParams();
@@ -115,12 +126,16 @@ export function CharterRefund() {
   const [otpStep, setOtpStep] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpMeta, setOtpMeta] = useState(null);
+  const [otpOptions, setOtpOptions] = useState(null);
+  const [otpChannel, setOtpChannel] = useState("phone");
   const [pendingRefundPayload, setPendingRefundPayload] = useState(null);
   const [form, setForm] = useState({
     reason: "Hoàn tiền booking bị hủy",
     bankBin: "",
     accountNumber: "",
-    accountName: location.state?.booking?.contactName && location.state.booking.contactName !== "--" ? location.state.booking.contactName : "",
+    accountName: location.state?.booking?.contactName && location.state.booking.contactName !== "--"
+      ? String(location.state.booking.contactName).toUpperCase()
+      : "",
   });
 
   useEffect(() => {
@@ -140,7 +155,10 @@ export function CharterRefund() {
         setPaymentId(getPaymentId(targetPayment || {}));
         setForm((current) => ({
           ...current,
-          accountName: current.accountName || (normalized.contactName && normalized.contactName !== "--" ? normalized.contactName : ""),
+          accountName: current.accountName
+            || (normalized.contactName && normalized.contactName !== "--"
+              ? String(normalized.contactName).toUpperCase()
+              : ""),
         }));
       } catch (error) {
         if (!isMounted) return;
@@ -156,15 +174,40 @@ export function CharterRefund() {
     };
   }, [booking, id, lang]);
 
+  useEffect(() => {
+    let alive = true;
+    const loadOptions = async () => {
+      if (!paymentId) return;
+      try {
+        const options = await fetchRefundOtpOptions(paymentId);
+        if (!alive) return;
+        setOtpOptions(options);
+        const preferred = options.channels.find((item) => item.isDefault)?.channel
+          || options.defaultChannel
+          || options.channels[0]?.channel
+          || "phone";
+        setOtpChannel(preferred === "email" ? "email" : "phone");
+      } catch {
+        if (!alive) return;
+        setOtpOptions(null);
+      }
+    };
+    loadOptions();
+    return () => {
+      alive = false;
+    };
+  }, [paymentId]);
+
   const statusInfo = booking ? getCharterBookingStatusInfo(booking.status, booking.paymentStatus, lang) : null;
   const hasPaidPayment = booking
     && (["paid", "depositpaid"].includes(String(booking.paymentStatus).toLowerCase()) || Number(booking.paidAmount || 0) > 0 || isPaidPayment(payment));
   const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
+  const refundAmountDisplay = Number(otpOptions?.refundAmount || booking?.paidAmount || getPaymentAmount(payment) || 0);
 
   const handleFieldChange = (field) => (event) => {
-    const value = field === "accountNumber"
-      ? event.target.value.replace(/\D/g, "").slice(0, 20)
-      : event.target.value;
+    let value = event.target.value;
+    if (field === "accountNumber") value = value.replace(/\D/g, "").slice(0, 20);
+    if (field === "accountName") value = value.toUpperCase();
     setForm((current) => ({ ...current, [field]: value }));
     setSubmitError("");
   };
@@ -174,14 +217,18 @@ export function CharterRefund() {
     setSubmitError("");
   };
 
-  const sendRefundOtp = async () => {
+  const sendRefundOtp = async (channel = otpChannel) => {
     if (!paymentId) throw new Error("MISSING_PAYMENT");
-    const response = await requestRefundBookingOtp(paymentId);
+    const normalizedChannel = String(channel || "phone").toLowerCase() === "email" ? "email" : "phone";
+    const response = await requestRefundBookingOtp(paymentId, { otpChannel: normalizedChannel });
     const meta = unwrapOtpChallenge(response);
     if (!meta.challengeId) {
       throw new Error("MISSING_CHALLENGE");
     }
-    setOtpMeta(meta);
+    setOtpMeta({
+      ...meta,
+      channel: String(pick(response, ["channel", "data.channel"], normalizedChannel) || normalizedChannel),
+    });
     setOtpCode("");
     setOtpStep(true);
     return meta;
@@ -221,7 +268,7 @@ export function CharterRefund() {
 
       setPendingRefundPayload(payload);
       setIsSendingOtp(true);
-      await sendRefundOtp();
+      await sendRefundOtp(otpChannel);
     } catch (error) {
       if (didCancelBooking) setCancelAlreadySubmitted(true);
       if (error?.message === "MISSING_CHALLENGE") {
@@ -290,24 +337,11 @@ export function CharterRefund() {
   };
 
   const handleResendOtp = async () => {
-    if (!otpMeta?.challengeId && !paymentId) return;
+    if (!paymentId) return;
     try {
       setIsSendingOtp(true);
       setSubmitError("");
-      if (otpMeta?.challengeId) {
-        try {
-          const response = await resendRegisterOtp(otpMeta.challengeId);
-          const meta = unwrapOtpChallenge(response);
-          if (meta.challengeId) {
-            setOtpMeta((prev) => ({ ...prev, ...meta }));
-            setOtpCode("");
-            return;
-          }
-        } catch {
-          // fallback: request new refund OTP
-        }
-      }
-      await sendRefundOtp();
+      await sendRefundOtp(otpChannel);
     } catch (error) {
       setSubmitError(getApiErrorMessage(
         error,
@@ -350,7 +384,7 @@ export function CharterRefund() {
     );
   }
 
-  if (!hasPaidPayment || !paymentId) {
+  if (!hasPaidPayment) {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-30 font-body dark:bg-slate-900">
         <main className="mx-auto max-w-4xl">
@@ -358,8 +392,8 @@ export function CharterRefund() {
             <span className="material-symbols-outlined text-xl">arrow_back</span>
             {lang === "VN" ? "Quay lại chi tiết" : "Back to request"}
           </button>
-          <section className="rounded-3xl border border-slate-100 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-800">
-            <span className="material-symbols-outlined text-4xl text-slate-400">payments</span>
+          <section className="rounded-3xl border border-amber-100 bg-white p-8 text-center dark:border-amber-500/20 dark:bg-slate-800">
+            <span className="material-symbols-outlined text-4xl text-amber-500">info</span>
             <h1 className="mt-3 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
               {lang === "VN" ? "Chưa có khoản thanh toán cần hoàn" : "No refundable payment found"}
             </h1>
@@ -376,17 +410,17 @@ export function CharterRefund() {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-30 font-body dark:bg-slate-900">
         <main className="mx-auto max-w-4xl">
-          <section className="rounded-3xl border border-emerald-100 bg-white p-8 text-center shadow-xl dark:border-emerald-500/20 dark:bg-slate-800">
-            <span className="material-symbols-outlined text-5xl text-emerald-500">check_circle</span>
-            <h1 className="mt-4 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
+          <section className="rounded-3xl border border-emerald-100 bg-white p-8 text-center dark:border-emerald-500/20 dark:bg-slate-800">
+            <span className="material-symbols-outlined text-4xl text-emerald-500">check_circle</span>
+            <h1 className="mt-3 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
               {lang === "VN" ? "Đã gửi yêu cầu hoàn tiền" : "Refund request submitted"}
             </h1>
-            <p className="mx-auto mt-2 max-w-xl text-sm font-bold text-slate-500 dark:text-slate-300">{successMessage}</p>
-            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+            <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">{successMessage}</p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
               <button onClick={() => navigate(`/profile/my-charter-booking/${booking.id}`)} className="rounded-xl bg-[#124757] px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white dark:bg-yellow-400 dark:text-slate-900">
                 {lang === "VN" ? "Xem chi tiết" : "View request"}
               </button>
-              <button onClick={() => navigate("/profile/my-charter-booking")} className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400">
+              <button onClick={() => navigate("/profile/my-charter-booking")} className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                 {lang === "VN" ? "Danh sách booking" : "Booking list"}
               </button>
             </div>
@@ -395,6 +429,10 @@ export function CharterRefund() {
       </div>
     );
   }
+
+  const otpChannels = otpOptions?.channels?.length
+    ? otpOptions.channels
+    : [{ channel: "phone", maskedDestination: "", label: "phone" }];
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-30 font-body dark:bg-slate-900">
@@ -421,13 +459,9 @@ export function CharterRefund() {
                     ? (lang === "VN"
                       ? `Đã gửi mã OTP${otpMeta?.maskedDestination ? ` tới ${otpMeta.maskedDestination}` : ""}. Nhập mã 6 số để xác nhận hoàn tiền.`
                       : `An OTP was sent${otpMeta?.maskedDestination ? ` to ${otpMeta.maskedDestination}` : ""}. Enter the 6-digit code to confirm the refund.`)
-                    : (["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())
-                      ? (lang === "VN"
-                        ? "Yêu cầu đã hủy. Vui lòng nhập ngân hàng, số tài khoản và tên chủ tài khoản để nhận hoàn tiền."
-                        : "This request is cancelled. Please enter your bank, account number, and account holder name to receive the refund.")
-                      : (lang === "VN"
-                        ? "Vui lòng nhập chính xác ngân hàng, số tài khoản và tên chủ tài khoản. Sau khi gửi, hệ thống sẽ hủy yêu cầu và gửi OTP xác nhận hoàn tiền."
-                        : "Please enter your bank, account number, and account name carefully. After submitting, we will cancel the request and send a refund OTP."))}
+                    : (lang === "VN"
+                      ? "Nhập ngân hàng, số tài khoản và tên chủ tài khoản (bắt buộc). Chọn kênh OTP rồi gửi xác nhận."
+                      : "Enter bank, account number, and account holder name (required). Choose an OTP channel, then confirm.")}
                 </p>
               </div>
               {statusInfo && (
@@ -449,7 +483,10 @@ export function CharterRefund() {
                     { label: lang === "VN" ? "Tàu" : "Boat", value: booking.boatName },
                     { label: lang === "VN" ? "Lộ trình" : "Route", value: booking.route },
                     { label: lang === "VN" ? "Khởi hành" : "Departure", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)}` },
-                    { label: lang === "VN" ? "Đã thanh toán" : "Paid amount", value: Number(booking.paidAmount || getPaymentAmount(payment)) > 0 ? currencyFormatter.format(Number(booking.paidAmount || getPaymentAmount(payment))) : "--" },
+                    {
+                      label: lang === "VN" ? "Số tiền hoàn" : "Refund amount",
+                      value: refundAmountDisplay > 0 ? currencyFormatter.format(refundAmountDisplay) : "--",
+                    },
                   ].map((item) => (
                     <div key={item.label} className="flex items-start justify-between gap-3 border-b border-slate-200/70 pb-2 last:border-0 last:pb-0 dark:border-slate-700">
                       <span className="text-xs font-bold text-slate-400">{item.label}</span>
@@ -495,6 +532,43 @@ export function CharterRefund() {
                       placeholder="NGUYEN VAN A"
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold uppercase outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                     />
+                    <p className="mt-1.5 text-[11px] font-medium text-slate-400">
+                      {lang === "VN"
+                        ? "Nhập đúng họ tên trên tài khoản ngân hàng (bắt buộc)."
+                        : "Enter the exact bank account holder name (required)."}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                    {lang === "VN" ? "Kênh nhận OTP" : "OTP channel"}
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {otpChannels.map((item) => {
+                      const active = otpChannel === item.channel;
+                      return (
+                        <button
+                          key={item.channel}
+                          type="button"
+                          onClick={() => setOtpChannel(item.channel)}
+                          className={`rounded-xl border px-4 py-2.5 text-left text-xs font-bold transition ${
+                            active
+                              ? "border-[#124757] bg-[#124757] text-white dark:border-yellow-400 dark:bg-yellow-400 dark:text-slate-900"
+                              : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                          }`}
+                        >
+                          <span className="block font-headline font-black uppercase tracking-wider">
+                            {channelLabel(item.channel, lang)}
+                          </span>
+                          {item.maskedDestination ? (
+                            <span className={`mt-0.5 block text-[10px] ${active ? "opacity-80" : "text-slate-400"}`}>
+                              {item.maskedDestination}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

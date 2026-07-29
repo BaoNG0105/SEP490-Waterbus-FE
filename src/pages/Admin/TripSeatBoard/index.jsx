@@ -2,11 +2,34 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { TripStationSeatBoard } from "../../../components/TripStationSeatBoard";
-import { fetchTripDetail, fetchTripPassengers } from "../../../services/tripService";
+import { fetchTripDetail, fetchTripPassengers, groupTripPassengersForDisplay } from "../../../services/tripService";
+import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { pickDisplayArrival, pickDisplayDeparture } from "../../../utils/tripDelay";
+import { enrichPassengersWithStopTimes } from "../../../utils/tripStationSeatBoard";
 
 const pad2 = (n) => String(n).padStart(2, "0");
+
+/** Tên bến từ string hoặc object BE ({ stationName, name, ... }). */
+const stationLabel = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    return text === "[object Object]" ? "" : text;
+  }
+  if (typeof value === "object") {
+    return String(
+      value.stationName
+      || value.name
+      || value.stationCode
+      || value.code
+      || value.fromStationName
+      || value.toStationName
+      || "",
+    ).trim();
+  }
+  return "";
+};
 
 const formatClock = (value) => {
   if (!value) return "--:--";
@@ -19,11 +42,24 @@ const formatClock = (value) => {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 };
 
-const formatDateTime = (value) => {
-  if (!value) return "—";
-  const ms = Date.parse(String(value));
-  if (Number.isNaN(ms)) return String(value);
-  return new Date(ms).toLocaleString("vi-VN");
+const formatDateOfBirth = (value, birthYear) => {
+  if (value) {
+    const raw = String(value).trim();
+    if (raw) {
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) return raw;
+      const ms = Date.parse(raw);
+      if (!Number.isNaN(ms)) {
+        const d = new Date(ms);
+        return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+      }
+      const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+      return raw;
+    }
+  }
+  const year = Number(birthYear);
+  if (Number.isFinite(year) && year > 1900) return String(year);
+  return "—";
 };
 
 const formatMoney = (value) => {
@@ -32,17 +68,75 @@ const formatMoney = (value) => {
   return `${n.toLocaleString("vi-VN")}đ`;
 };
 
-const ticketTypeLabel = (code, lang) => {
-  const key = String(code || "").toUpperCase();
-  const map = {
-    ADULT: { vn: "Người lớn", en: "Adult" },
-    CHILD: { vn: "Trẻ em", en: "Child" },
-    INFANT: { vn: "Em bé", en: "Infant" },
-    SENIOR: { vn: "NCT", en: "Senior" },
-    DISABLED: { vn: "NKT", en: "Disabled" },
-  };
-  return map[key]?.[lang === "VN" ? "vn" : "en"] || code || "—";
+const formatDateTime = (value) => {
+  if (!value) return "—";
+  const ms = Date.parse(String(value));
+  if (Number.isNaN(ms)) return String(value);
+  return new Date(ms).toLocaleString("vi-VN");
 };
+
+/** Trạng thái lên/xuống tàu từ ticketStatus + checkedInAt/Out. */
+const attendanceOf = (row) => {
+  const raw = String(row?.ticketStatus || "").toLowerCase().replace(/[\s_-]/g, "");
+  if (row?.checkedOutAt || raw.includes("checkout") || raw.includes("used") || raw.includes("complete")) {
+    return "checkedOut";
+  }
+  if (row?.checkedInAt || raw.includes("checkedin")) {
+    return "checkedIn";
+  }
+  if (raw === "active" || raw === "" || raw === "confirmed") {
+    return "pending";
+  }
+  return raw || "pending";
+};
+
+const attendanceBadge = (row, lang) => {
+  const key = attendanceOf(row);
+  if (key === "checkedOut") {
+    return {
+      label: lang === "VN" ? "Đã check-out" : "Checked out",
+      className: "border-slate-400 bg-slate-800 text-white dark:border-slate-500 dark:bg-slate-200 dark:text-slate-900",
+    };
+  }
+  if (key === "checkedIn") {
+    return {
+      label: lang === "VN" ? "Đã check-in" : "Checked in",
+      className: "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-emerald-950",
+    };
+  }
+  return {
+    label: lang === "VN" ? "Chưa check-in" : "Not checked in",
+    className: "border-amber-500 bg-amber-400 text-amber-950 dark:border-amber-400 dark:bg-amber-400 dark:text-amber-950",
+  };
+};
+
+const needsEligibilityVerify = (row) => {
+  const code = String(row?.ticketTypeCode || "").toUpperCase();
+  return ["CHILD", "INFANT", "SENIOR", "DISABLED"].includes(code);
+};
+
+const ticketTypeLabel = (code, lang) => formatTicketTypeLabel(code, lang);
+
+const passengerSearchBlob = (row) => ([
+  row?.passengerName,
+  row?.seatNumber,
+  row?.bookingCode,
+  row?.ticketCode,
+  row?.ticketTypeCode,
+  row?.ticketStatus,
+  row?.dateOfBirth,
+  row?.birthYear,
+  row?.fromStationName,
+  row?.toStationName,
+  ...(Array.isArray(row?.lapInfants)
+    ? row.lapInfants.flatMap((infant) => [
+      infant?.passengerName,
+      infant?.ticketCode,
+      infant?.bookingCode,
+      infant?.dateOfBirth,
+    ])
+    : []),
+].filter(Boolean).join(" ").toLowerCase());
 
 /** Trang đầy đủ: sơ đồ ghế theo bến + danh sách khách của 1 chuyến. */
 export function TripSeatBoardPage() {
@@ -61,6 +155,17 @@ export function TripSeatBoardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [paxError, setPaxError] = useState("");
+  const [expandedPaxKeys, setExpandedPaxKeys] = useState(() => new Set());
+  const [paxQuery, setPaxQuery] = useState("");
+
+  const togglePaxRow = (key) => {
+    setExpandedPaxKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -109,65 +214,139 @@ export function TripSeatBoardPage() {
     };
   }, [tripId, lang]);
 
-  const subtitle = useMemo(() => {
-    if (!trip) return "";
-    const from = trip.fromStationName || trip.fromLocation || "";
-    const to = trip.toStationName || trip.toLocation || trip.destinationStationName || "";
-    return [
-      `${formatClock(pickDisplayDeparture(trip) || trip.departureAt)} → ${formatClock(pickDisplayArrival(trip) || trip.arrivalAt)}`,
-      trip.routeName || trip.routeCode || "",
-      from || to ? `${from || "—"} → ${to || "—"}` : "",
-    ].filter(Boolean).join(" · ");
+  const passengersWithTimes = useMemo(
+    () => enrichPassengersWithStopTimes(passengers, trip?.stops || []),
+    [passengers, trip],
+  );
+
+  const passengerGroups = useMemo(
+    () => groupTripPassengersForDisplay(passengersWithTimes),
+    [passengersWithTimes],
+  );
+
+  const filteredPassengerGroups = useMemo(() => {
+    const q = paxQuery.trim().toLowerCase();
+    if (!q) return passengerGroups;
+    return passengerGroups.filter((row) => passengerSearchBlob(row).includes(q));
+  }, [passengerGroups, paxQuery]);
+
+  const totalPassengerCount = passengersWithTimes.length;
+  const filteredPassengerCount = useMemo(
+    () => filteredPassengerGroups.reduce(
+      (sum, row) => sum + 1 + (Array.isArray(row.lapInfants) ? row.lapInfants.length : 0),
+      0,
+    ),
+    [filteredPassengerGroups],
+  );
+
+  const headerMeta = useMemo(() => {
+    if (!trip) return { subtitle: "", boat: "", route: "", from: "", to: "" };
+    const stops = Array.isArray(trip.stops) ? trip.stops : [];
+    const firstStop = stops[0];
+    const lastStop = stops.length ? stops[stops.length - 1] : null;
+
+    const from = stationLabel(trip.fromStationName)
+      || stationLabel(trip.fromLocation)
+      || stationLabel(trip.fromStation)
+      || stationLabel(firstStop?.stationName)
+      || stationLabel(firstStop);
+
+    const to = stationLabel(trip.toStationName)
+      || stationLabel(trip.toLocation)
+      || stationLabel(trip.destinationStationName)
+      || stationLabel(trip.toStation)
+      || stationLabel(lastStop?.stationName)
+      || stationLabel(lastStop);
+
+    const boat = stationLabel(trip.boatName)
+      || stationLabel(trip.boatCode)
+      || stationLabel(trip.boat?.name)
+      || stationLabel(trip.boat?.code)
+      || "";
+
+    const route = stationLabel(trip.routeName) || stationLabel(trip.routeCode) || "";
+
+    return {
+      subtitle: [
+        `${formatClock(pickDisplayDeparture(trip) || trip.departureAt)} → ${formatClock(pickDisplayArrival(trip) || trip.arrivalAt)}`,
+        from || to ? `${from || "—"} → ${to || "—"}` : "",
+      ].filter(Boolean).join(" · "),
+      boat,
+      route,
+      from,
+      to,
+    };
   }, [trip]);
 
   return (
     <div className="space-y-5 pb-10 font-body">
-      <div className="rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-              {lang === "VN" ? "Ghế theo bến / Manifest" : "Station seats / Manifest"}
-            </p>
-            <h2 className="mt-1 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
-              {trip?.tripCode || tripId || "—"}
-            </h2>
-            {subtitle ? (
-              <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">{subtitle}</p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              to="/admin/staff/ticket-scan"
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#124757] px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
-            >
-              <span className="material-symbols-outlined text-base" aria-hidden>qr_code_scanner</span>
-              {lang === "VN" ? "Quét vé" : "Scan"}
-            </Link>
-            <button
-              type="button"
-              onClick={() => navigate(backTo)}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
-            >
-              {lang === "VN" ? "Quay lại" : "Back"}
-            </button>
+      <div className="overflow-hidden rounded-4xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+        <div className="border-b border-slate-100 bg-gradient-to-br from-[#F4FAFB] via-white to-white px-5 py-5 dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-800 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                {lang === "VN" ? "Vận hành theo bến" : "Station operations"}
+              </p>
+              <h2 className="mt-1 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400 md:text-3xl">
+                {trip?.tripCode || tripId || "—"}
+              </h2>
+              {headerMeta.subtitle ? (
+                <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">{headerMeta.subtitle}</p>
+              ) : null}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {headerMeta.boat ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                    <span className="material-symbols-outlined text-sm" aria-hidden>directions_boat</span>
+                    {headerMeta.boat}
+                  </span>
+                ) : null}
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                  <span className="material-symbols-outlined text-sm" aria-hidden>group</span>
+                  {totalPassengerCount} {lang === "VN" ? "khách" : "pax"}
+                </span>
+                {Array.isArray(trip?.stops) ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                    <span className="material-symbols-outlined text-sm" aria-hidden>pin_drop</span>
+                    {trip.stops.length} {lang === "VN" ? "bến" : "stops"}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/admin/staff/ticket-scan"
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#124757] px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
+              >
+                <span className="material-symbols-outlined text-base" aria-hidden>qr_code_scanner</span>
+                {lang === "VN" ? "Quét vé" : "Scan"}
+              </Link>
+              <button
+                type="button"
+                onClick={() => navigate(backTo)}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+              >
+                {lang === "VN" ? "Quay lại" : "Back"}
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="mt-5 flex gap-2 border-b border-slate-100 dark:border-slate-700">
+        <div className="flex gap-1 px-3 pt-3 sm:px-4">
           {[
-            { id: "seats", vn: "Sơ đồ ghế", en: "Seat board" },
-            { id: "list", vn: "Danh sách khách", en: "Passenger list" },
+            { id: "seats", vn: "Sơ đồ ghế", en: "Seat board", icon: "airline_seat_recline_normal" },
+            { id: "list", vn: "Danh sách khách", en: "Passenger list", icon: "format_list_bulleted" },
           ].map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => setTab(item.id)}
-              className={`rounded-t-xl px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider ${
+              className={`inline-flex items-center gap-1.5 rounded-t-xl px-4 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider ${
                 tab === item.id
                   ? "bg-slate-100 text-[#124757] dark:bg-slate-900 dark:text-yellow-400"
-                  : "text-slate-400"
+                  : "text-slate-400 hover:text-slate-600"
               }`}
             >
+              <span className="material-symbols-outlined text-base" aria-hidden>{item.icon}</span>
               {lang === "VN" ? item.vn : item.en}
             </button>
           ))}
@@ -193,7 +372,7 @@ export function TripSeatBoardPage() {
           ) : null}
           <TripStationSeatBoard
             trip={trip}
-            passengers={passengers}
+            passengers={passengersWithTimes}
             lang={lang}
             initialStationId={initialStationId}
           />
@@ -204,77 +383,237 @@ export function TripSeatBoardPage() {
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
               {paxError}
             </div>
-          ) : passengers.length === 0 ? (
+          ) : passengersWithTimes.length === 0 ? (
             <p className="py-14 text-center text-xs font-bold text-slate-400">
               {lang === "VN" ? "Chuyến này chưa có khách mua vé." : "No ticketed passengers on this trip."}
             </p>
           ) : (
             <div className="space-y-3">
-              <p className="text-[11px] font-bold text-slate-500">
-                {passengers.length} {lang === "VN" ? "khách" : "passenger(s)"}
-              </p>
-              <div className="grid gap-3 lg:grid-cols-2">
-                {passengers.map((row, index) => (
-                  <div
-                    key={`${row.ticketCode || row.bookingCode}-${index}`}
-                    className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40"
-                  >
-                    <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="font-headline font-black text-[#124757] dark:text-yellow-400">
-                          {row.passengerName}
-                        </p>
-                        <p className="text-[11px] font-bold text-slate-500">
-                          {row.bookingCode} · {ticketTypeLabel(row.ticketTypeCode, lang)} · {row.seatNumber || "—"}
-                        </p>
-                      </div>
-                      {row.ticketStatus ? (
-                        <span className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {row.ticketStatus}
-                        </span>
-                      ) : null}
-                    </div>
-                    <dl className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
-                      <div>
-                        <dt className="font-bold uppercase tracking-wider text-slate-400">
-                          {lang === "VN" ? "Ga lên / xuống" : "Boarding / alighting"}
-                        </dt>
-                        <dd className="font-bold text-slate-700 dark:text-slate-200">
-                          {(row.fromStationName || "—")} → {(row.toStationName || "—")}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="font-bold uppercase tracking-wider text-slate-400">
-                          {lang === "VN" ? "Giờ dự kiến" : "Scheduled"}
-                        </dt>
-                        <dd className="font-bold text-slate-700 dark:text-slate-200">
-                          {formatClock(row.scheduledDeparture)} → {formatClock(row.scheduledArrival)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="font-bold uppercase tracking-wider text-slate-400">
-                          {lang === "VN" ? "Giá vé" : "Fare"}
-                        </dt>
-                        <dd className="font-bold text-slate-700 dark:text-slate-200">{formatMoney(row.price)}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-bold uppercase tracking-wider text-slate-400">Ticket</dt>
-                        <dd className="break-all font-bold text-slate-700 dark:text-slate-200">
-                          {row.ticketCode || "—"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="font-bold uppercase tracking-wider text-slate-400">checkedInAt</dt>
-                        <dd className="font-bold text-slate-700 dark:text-slate-200">{formatDateTime(row.checkedInAt)}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-bold uppercase tracking-wider text-slate-400">checkedOutAt</dt>
-                        <dd className="font-bold text-slate-700 dark:text-slate-200">{formatDateTime(row.checkedOutAt)}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                ))}
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[11px] font-bold text-slate-500">
+                  {paxQuery.trim()
+                    ? `${filteredPassengerCount}/${totalPassengerCount}`
+                    : totalPassengerCount}
+                  {" "}
+                  {lang === "VN" ? "khách" : "pax"}
+                  {filteredPassengerGroups.length !== filteredPassengerCount
+                    ? ` · ${filteredPassengerGroups.length} ${lang === "VN" ? "vé/ghế" : "seats"}`
+                    : ""}
+                </p>
+                <label className="relative block w-full sm:max-w-xs">
+                  <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-slate-400" aria-hidden>
+                    search
+                  </span>
+                  <input
+                    type="search"
+                    value={paxQuery}
+                    onChange={(event) => setPaxQuery(event.target.value)}
+                    placeholder={lang === "VN"
+                      ? "Tìm tên, ghế, booking, vé, bến…"
+                      : "Search name, seat, booking, ticket…"}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-xs font-bold text-slate-700 outline-none ring-[#124757]/20 placeholder:font-medium placeholder:text-slate-400 focus:border-[#124757]/40 focus:ring-2 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-yellow-400/50 dark:focus:ring-yellow-400/20"
+                  />
+                </label>
               </div>
+
+              {filteredPassengerGroups.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-xs font-bold text-slate-400 dark:border-slate-600">
+                  {lang === "VN" ? "Không tìm thấy khách phù hợp." : "No matching passengers."}
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-700">
+                  <div className="min-w-[780px]">
+                    <div className="grid grid-cols-[minmax(150px,1.4fr)_56px_minmax(110px,0.9fr)_minmax(150px,1.3fr)_88px_minmax(120px,1fr)_36px] gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 dark:border-slate-700 dark:bg-slate-900/60">
+                      <span>{lang === "VN" ? "Khách" : "Passenger"}</span>
+                      <span>{lang === "VN" ? "Ghế" : "Seat"}</span>
+                      <span>{lang === "VN" ? "Trạng thái" : "Status"}</span>
+                      <span>{lang === "VN" ? "Tuyến" : "Route"}</span>
+                      <span>{lang === "VN" ? "Giờ" : "Time"}</span>
+                      <span>{lang === "VN" ? "Mã vé" : "Ticket"}</span>
+                      <span />
+                    </div>
+
+                    <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+                      {filteredPassengerGroups.map((row, index) => {
+                        const rowKey = `${row.ticketCode || row.bookingCode}-${row.passengerName}-${index}`;
+                        const companions = Array.isArray(row.lapInfants) ? row.lapInfants : [];
+                        const expanded = expandedPaxKeys.has(rowKey);
+                        const badge = attendanceBadge(row, lang);
+                        const dob = formatDateOfBirth(row.dateOfBirth, row.birthYear);
+                        const verifyType = needsEligibilityVerify(row);
+                        const missingDob = verifyType && dob === "—";
+                        const isFree = Number(row.price) === 0;
+
+                        return (
+                          <li key={rowKey} className="bg-white dark:bg-slate-800">
+                            <button
+                              type="button"
+                              onClick={() => togglePaxRow(rowKey)}
+                              className="grid w-full grid-cols-[minmax(150px,1.4fr)_56px_minmax(110px,0.9fr)_minmax(150px,1.3fr)_88px_minmax(120px,1fr)_36px] items-center gap-2 px-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-black text-[#124757] dark:text-yellow-400">
+                                  {row.passengerName}
+                                </p>
+                                <p className={`truncate text-[10px] font-black ${
+                                  verifyType
+                                    ? "text-amber-700 dark:text-amber-300"
+                                    : "text-slate-500 dark:text-slate-400"
+                                }`}>
+                                  {ticketTypeLabel(row.ticketTypeCode, lang)}
+                                  {companions.length > 0
+                                    ? ` · +${companions.length} ${lang === "VN" ? "cùng ghế" : "shared"}`
+                                    : ""}
+                                </p>
+                              </div>
+                              <span className="font-headline text-sm font-black tabular-nums text-[#124757] dark:text-yellow-400">
+                                {row.seatNumber || "—"}
+                              </span>
+                              <span>
+                                <span className={`inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide shadow-sm ${badge.className}`}>
+                                  {badge.label}
+                                </span>
+                              </span>
+                              <span className="truncate text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                {(row.fromStationName || "—")} → {(row.toStationName || "—")}
+                              </span>
+                              <span className="text-[11px] font-black tabular-nums text-slate-700 dark:text-slate-200">
+                                {formatClock(row.scheduledDeparture)}→{formatClock(row.scheduledArrival)}
+                              </span>
+                              <span className="truncate text-[11px] font-black text-slate-800 dark:text-slate-100">
+                                {row.ticketCode || "—"}
+                              </span>
+                              <span className="flex justify-center">
+                                <span
+                                  className={`material-symbols-outlined text-lg text-slate-400 transition ${
+                                    expanded ? "rotate-90" : ""
+                                  }`}
+                                  aria-hidden
+                                >
+                                  chevron_right
+                                </span>
+                              </span>
+                            </button>
+
+                            {expanded ? (
+                              <div className="space-y-3 border-t border-slate-100 bg-slate-50/70 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                                <div>
+                                  <p className="mb-2 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                                    {lang === "VN" ? "Đối chiếu (chi tiết)" : "Verify (details)"}
+                                  </p>
+                                  <div className="grid gap-3 text-[11px] sm:grid-cols-3">
+                                    <div className={missingDob ? "rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-2 dark:border-amber-500/40 dark:bg-amber-500/15" : ""}>
+                                      <p className="font-bold uppercase tracking-wider text-slate-400">
+                                        {lang === "VN" ? "Ngày sinh" : "Date of birth"}
+                                      </p>
+                                      <p className={`mt-0.5 text-sm font-black ${
+                                        missingDob
+                                          ? "text-amber-900 dark:text-amber-100"
+                                          : "text-[#124757] dark:text-yellow-400"
+                                      }`}>
+                                        {missingDob
+                                          ? (lang === "VN" ? "Thiếu — cần đối chiếu" : "Missing — verify")
+                                          : dob}
+                                      </p>
+                                    </div>
+                                    <div className={isFree ? "rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-2 dark:border-amber-500/40 dark:bg-amber-500/15" : ""}>
+                                      <p className="font-bold uppercase tracking-wider text-slate-400">
+                                        {lang === "VN" ? "Giá vé" : "Fare"}
+                                      </p>
+                                      <p className={`mt-0.5 text-sm font-black ${
+                                        isFree
+                                          ? "text-amber-900 dark:text-amber-100"
+                                          : "text-[#124757] dark:text-yellow-400"
+                                      }`}>
+                                        {formatMoney(row.price)}
+                                        {isFree ? (
+                                          <span className="ml-1 text-[10px] uppercase">
+                                            {lang === "VN" ? "· Miễn phí" : "· Free"}
+                                          </span>
+                                        ) : null}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="font-bold uppercase tracking-wider text-slate-400">Booking</p>
+                                      <p className="mt-0.5 break-all text-sm font-black text-slate-800 dark:text-slate-100">
+                                        {row.bookingCode || "—"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <p className="mb-2 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                                    {lang === "VN" ? "Lịch sử lên / xuống" : "Boarding history"}
+                                  </p>
+                                  <div className="grid gap-3 text-[11px] sm:grid-cols-2">
+                                    <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-50 px-3 py-2.5 dark:border-emerald-400/40 dark:bg-emerald-500/15">
+                                      <p className="text-[10px] font-headline font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-200">
+                                        Check-in
+                                      </p>
+                                      <p className="mt-1 font-headline text-base font-black tabular-nums text-emerald-950 dark:text-emerald-50">
+                                        {formatDateTime(row.checkedInAt)}
+                                      </p>
+                                      {row.checkedInByName ? (
+                                        <p className="mt-0.5 text-[11px] font-black text-emerald-900/80 dark:text-emerald-100/80">
+                                          {row.checkedInByName}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                    <div className="rounded-xl border-2 border-slate-400/50 bg-white px-3 py-2.5 dark:border-slate-500 dark:bg-slate-900">
+                                      <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                                        Check-out
+                                      </p>
+                                      <p className="mt-1 font-headline text-base font-black tabular-nums text-slate-900 dark:text-white">
+                                        {formatDateTime(row.checkedOutAt)}
+                                      </p>
+                                      {row.checkedOutByName ? (
+                                        <p className="mt-0.5 text-[11px] font-black text-slate-700 dark:text-slate-200">
+                                          {row.checkedOutByName}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {companions.length > 0 ? (
+                                  <div>
+                                    <p className="mb-2 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                                      {lang === "VN" ? "Đi cùng ghế" : "Shared seat"}
+                                    </p>
+                                    <div className="space-y-1.5">
+                                      {companions.map((infant, infantIndex) => (
+                                        <div
+                                          key={`lap-${infant.passengerName}-${infantIndex}`}
+                                          className="rounded-xl border-2 border-violet-300 bg-violet-50 px-3 py-2 dark:border-violet-500/40 dark:bg-violet-500/15"
+                                        >
+                                          <p className="text-[9px] font-headline font-black uppercase tracking-wider text-violet-800 dark:text-violet-200">
+                                            {String(infant.ticketTypeCode || "").toUpperCase() === "CHILD"
+                                              ? (lang === "VN" ? "Trẻ em" : "Child")
+                                              : (lang === "VN" ? "Em bé" : "Infant")}
+                                          </p>
+                                          <p className="mt-0.5 truncate text-sm font-black text-violet-950 dark:text-violet-50">
+                                            {infant.passengerName}
+                                          </p>
+                                          {formatDateOfBirth(infant.dateOfBirth, infant.birthYear) !== "—" ? (
+                                            <p className="mt-0.5 text-[11px] font-black text-violet-800 dark:text-violet-200">
+                                              {lang === "VN" ? "Ngày sinh" : "DOB"}: {formatDateOfBirth(infant.dateOfBirth, infant.birthYear)}
+                                            </p>
+                                          ) : null}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

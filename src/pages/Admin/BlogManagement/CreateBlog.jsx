@@ -172,11 +172,10 @@ export function CreateBlog() {
 
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Chuyên mục" : "Category"}</label>
-                        <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                        <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
                             {[
                                 { value: BLOG_CATEGORY.NEWS, vn: "Tin tức", en: "News" },
                                 { value: BLOG_CATEGORY.EVENT, vn: "Sự kiện", en: "Event" },
-                                { value: BLOG_CATEGORY.ACTIVITY, vn: "Hoạt động", en: "Activity" },
                             ].map((option) => {
                                 const selected = formData.category === option.value;
                                 return (

@@ -14,6 +14,7 @@ import {
   resolveInsuranceSelected,
 } from "../../../utils/insurancePreview";
 import { INSURANCE_BOOKING_TYPES } from "../../../services/insuranceService";
+import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -87,23 +88,147 @@ const formatDateOnly = (value) => {
   return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
-const normalizeItem = (item) => ({
-  id: pick(item, ["bookingItemId", "id"], ""),
-  tripCode: pick(item, ["tripCode"], ""),
-  passengerName: pick(item, ["passengerName"], "--"),
-  passengerPhone: pick(item, ["passengerPhone"], ""),
-  ticketTypeName: pick(item, ["ticketTypeName", "ticketTypeCode"], ""),
-  seatNumber: pick(item, ["seatNumber"], ""),
-  fromStationName: pick(item, ["fromStationName"], "--"),
-  toStationName: pick(item, ["toStationName"], "--"),
-  scheduledDeparture: pick(item, ["scheduledDeparture"], ""),
-  scheduledArrival: pick(item, ["scheduledArrival"], ""),
-  unitPrice: Number(pick(item, ["unitPrice"], 0)),
-  itemStatus: pick(item, ["itemStatus"], ""),
-  ticketCode: pick(item, ["ticketCode"], ""),
-  ticketQrToken: pick(item, ["ticketQrToken"], ""),
-  ticketStatus: pick(item, ["ticketStatus"], ""),
-});
+/** Chuẩn hoá mã loại vé từ code / tên BE. */
+const resolveItemTicketTypeCode = (item) => {
+  const rawCode = String(pick(item, ["ticketTypeCode"], "")).trim();
+  if (rawCode) {
+    const key = rawCode.toUpperCase().replace(/[\s_-]+/g, "");
+    if (key === "INFANT" || key === "EMBE") return "INFANT";
+    if (key === "CHILD" || key === "TREEM") return "CHILD";
+    if (key === "ADULT" || key === "NGUOILON") return "ADULT";
+    if (key === "SENIOR" || key === "NGUOICAOTUOI" || key === "NCT") return "SENIOR";
+    if (key === "DISABLED" || key === "NGUOIKHUYETTAT" || key === "NKT") return "DISABLED";
+    return key;
+  }
+  const name = String(pick(item, ["ticketTypeName"], "")).trim().toLowerCase();
+  if (!name) return "";
+  if (name.includes("em bé") || name.includes("infant") || name.includes("≤ 2") || name.includes("<= 2")) return "INFANT";
+  if (name.includes("trẻ em") || name.includes("child")) return "CHILD";
+  if (name.includes("cao tuổi") || name.includes("senior")) return "SENIOR";
+  if (name.includes("khuyết") || name.includes("disabled")) return "DISABLED";
+  if (name.includes("người lớn") || name.includes("adult")) return "ADULT";
+  return "";
+};
+
+/** Em bé / vé đi kèm: luôn gộp dưới người lớn — không tin usesCompanionTicket=false từ BE. */
+const isCompanionBookingItem = (item) => {
+  if (!item || typeof item !== "object") return false;
+  if (item.usesCompanionTicket === true || item.UsesCompanionTicket === true) return true;
+
+  const type = resolveItemTicketTypeCode(item);
+  // BE rule: INFANT không ghế, dùng QR người lớn — luôn nest.
+  if (type === "INFANT") return true;
+
+  const seat = String(pick(item, ["seatNumber", "SeatNumber"], "") || item.seatNumber || "").trim();
+  const qr = String(pick(item, ["ticketQrToken", "TicketQrToken"], "") || item.ticketQrToken || "").trim();
+
+  // Legacy CHILD không ghế / không QR.
+  if (type === "CHILD" && !seat && !qr) return true;
+
+  // Fallback: không ghế + không QR + không phải loại có ghế riêng.
+  if (!seat && !qr && !["ADULT", "SENIOR", "DISABLED", "CHILD"].includes(type)) {
+    return true;
+  }
+  return false;
+};
+
+const normalizeItem = (item) => {
+  const ticketTypeCode = resolveItemTicketTypeCode(item) || pick(item, ["ticketTypeCode"], "");
+  const seatNumber = pick(item, ["seatNumber"], "");
+  const ticketQrToken = pick(item, ["ticketQrToken"], "");
+  const normalized = {
+    id: pick(item, ["bookingItemId", "id"], ""),
+    tripCode: pick(item, ["tripCode"], ""),
+    passengerName: pick(item, ["passengerName"], "--"),
+    passengerPhone: pick(item, ["passengerPhone"], ""),
+    ticketTypeCode,
+    ticketTypeName: pick(item, ["ticketTypeName", "ticketTypeCode"], ""),
+    seatNumber,
+    fromStationName: pick(item, ["fromStationName"], "--"),
+    toStationName: pick(item, ["toStationName"], "--"),
+    scheduledDeparture: pick(item, ["scheduledDeparture"], ""),
+    scheduledArrival: pick(item, ["scheduledArrival"], ""),
+    unitPrice: Number(pick(item, ["unitPrice"], 0)),
+    itemStatus: pick(item, ["itemStatus"], ""),
+    ticketCode: pick(item, ["ticketCode"], ""),
+    ticketQrToken,
+    ticketStatus: pick(item, ["ticketStatus"], ""),
+    birthYear: pick(item, ["birthYear", "BirthYear"], ""),
+    companionPassengerName: pick(item, [
+      "companionPassengerName",
+      "CompanionPassengerName",
+      "companionName",
+      "accompaniedByName",
+    ], ""),
+  };
+  return {
+    ...normalized,
+    usesCompanionTicket: isCompanionBookingItem({ ...item, ...normalized }),
+  };
+};
+
+/** Vé có QR riêng (không phải vé đi kèm người lớn). */
+const hasOwnTicketQr = (booking, item) => (
+  isTicketIssued(booking, item)
+  && !item.usesCompanionTicket
+  && Boolean(String(item.ticketQrToken || "").trim())
+);
+
+const normalizePassengerKey = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+const compareSeatLabel = (a, b) => {
+  const sa = String(a || "").trim();
+  const sb = String(b || "").trim();
+  if (!sa && !sb) return 0;
+  if (!sa) return 1;
+  if (!sb) return -1;
+  return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: "base" });
+};
+
+/**
+ * Gộp INFANT dưới đúng người lớn theo companionPassengerName.
+ * Holder sắp theo ghế (giống thứ tự chọn ghế / điền form).
+ */
+const nestCompanionsUnderHolders = (items) => {
+  const list = Array.isArray(items) ? items : [];
+  const holders = list
+    .filter((item) => !item.usesCompanionTicket)
+    .slice()
+    .sort((a, b) => compareSeatLabel(a.seatNumber, b.seatNumber));
+  const companions = list.filter((item) => item.usesCompanionTicket);
+  const used = new Set();
+
+  const nameMatches = (holderName, companionOf) => {
+    const a = normalizePassengerKey(holderName);
+    const b = normalizePassengerKey(companionOf);
+    if (!a || !b) return false;
+    return a === b || a.includes(b) || b.includes(a);
+  };
+
+  const rows = holders.map((holder) => {
+    const matched = companions.filter((companion) => {
+      if (used.has(companion.id || companion)) return false;
+      return nameMatches(holder.passengerName, companion.companionPassengerName);
+    });
+    matched.forEach((companion) => used.add(companion.id || companion));
+    return { holder, companions: matched };
+  });
+
+  const leftover = companions.filter((companion) => !used.has(companion.id || companion));
+  if (leftover.length) {
+    const adultRow = rows.find((row) => String(row.holder?.ticketTypeCode || "").toUpperCase() === "ADULT");
+    const fallback = adultRow || (rows.length === 1 ? rows[0] : null);
+    if (fallback) {
+      fallback.companions.push(...leftover);
+    } else {
+      leftover.forEach((companion) => {
+        rows.push({ holder: null, companions: [companion] });
+      });
+    }
+  }
+
+  return rows;
+};
 
 const normalizePayment = (payment) => ({
   id: pick(payment, ["paymentId", "id"], ""),
@@ -236,6 +361,30 @@ const StatusBadge = ({ status, lang }) => {
   );
 };
 
+/** Em bé / trẻ đi kèm: chỉ tên + năm sinh (không card vé riêng). */
+const CompanionChip = ({ companion, lang }) => {
+  const type = String(companion?.ticketTypeCode || "").toUpperCase();
+  const typeLabel = type === "INFANT"
+    ? (lang === "VN" ? "Em bé" : "Infant")
+    : (formatTicketTypeLabel(companion.ticketTypeCode || companion.ticketTypeName, lang) || (lang === "VN" ? "Đi kèm" : "Companion"));
+
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-xl border border-violet-200/70 bg-white/80 px-3 py-2 dark:border-violet-500/20 dark:bg-slate-900/40">
+      <span className="text-[10px] font-headline font-black uppercase tracking-wider text-violet-600 dark:text-violet-300">
+        {typeLabel}
+      </span>
+      <span className="text-sm font-black text-violet-950 dark:text-violet-50">
+        {companion.passengerName || "—"}
+      </span>
+      {companion.birthYear ? (
+        <span className="text-xs font-bold text-violet-700/80 dark:text-violet-200/80">
+          · {companion.birthYear}
+        </span>
+      ) : null}
+    </div>
+  );
+};
+
 export function BookingDetailPage({ serviceType }) {
   const config = getBookingServiceConfig(serviceType);
   const { lang } = useApp();
@@ -335,12 +484,27 @@ export function BookingDetailPage({ serviceType }) {
       if (!map.has(item.tripCode)) map.set(item.tripCode, []);
       map.get(item.tripCode).push(item);
     });
-    return [...map.entries()].map(([tripCode, items]) => ({
-      tripCode,
-      isReturn: Boolean(booking.returnTripCode) && tripCode === booking.returnTripCode,
-      items,
-    }));
+    return [...map.entries()].map(([tripCode, items]) => {
+      const rows = nestCompanionsUnderHolders(items);
+      const companionCount = rows.reduce((sum, row) => sum + row.companions.length, 0);
+      return {
+        tripCode,
+        isReturn: Boolean(booking.returnTripCode) && tripCode === booking.returnTripCode,
+        rows,
+        ticketCount: rows.filter((row) => row.holder).length,
+        companionCount,
+      };
+    });
   }, [booking]);
+
+  const totalTicketCount = useMemo(
+    () => groupedTrips.reduce((sum, group) => sum + group.ticketCount, 0),
+    [groupedTrips],
+  );
+  const totalCompanionCount = useMemo(
+    () => groupedTrips.reduce((sum, group) => sum + group.companionCount, 0),
+    [groupedTrips],
+  );
 
   // BE: ẩn hoàn tiền cho booking thường + sightseeing. Charter dùng luồng riêng (hủy → nhập STK).
   if (isLoading) {
@@ -405,8 +569,11 @@ export function BookingDetailPage({ serviceType }) {
               </h1>
               <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                 {lang === "VN" ? "Đặt lúc" : "Booked at"} {formatDateTime(booking.bookedAt)}
-                {booking.items.length > 0
-                  ? ` · ${booking.items.length} ${lang === "VN" ? "vé" : "ticket(s)"}`
+                {totalTicketCount > 0
+                  ? ` · ${totalTicketCount} ${lang === "VN" ? "vé" : "ticket(s)"}`
+                  : ""}
+                {totalCompanionCount > 0
+                  ? ` · ${totalCompanionCount} ${lang === "VN" ? "đi kèm" : "companion(s)"}`
                   : ""}
               </p>
             </div>
@@ -436,12 +603,24 @@ export function BookingDetailPage({ serviceType }) {
                     ) : null}
                   </div>
                   <span className="text-xs font-bold text-slate-400">
-                    {group.items.length} {lang === "VN" ? "vé" : "ticket(s)"}
+                    {group.ticketCount} {lang === "VN" ? "vé" : "ticket(s)"}
+                    {group.companionCount > 0
+                      ? ` · ${group.companionCount} ${lang === "VN" ? "đi kèm" : "companion(s)"}`
+                      : ""}
                   </span>
                 </div>
 
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {group.items.map((item) => {
+                  {group.rows.flatMap((row) => {
+                    const item = row.holder;
+                    if (!item) {
+                      return row.companions.map((companion) => (
+                        <article key={companion.id} className="p-5 sm:p-6">
+                          <CompanionChip companion={companion} lang={lang} />
+                        </article>
+                      ));
+                    }
+
                     const isLoopTour = item.fromStationName && item.fromStationName === item.toStationName;
                     const sameDay = formatDateOnly(item.scheduledArrival) === formatDateOnly(item.scheduledDeparture);
                     const routeTitle = isLoopTour
@@ -451,17 +630,15 @@ export function BookingDetailPage({ serviceType }) {
                       : `${item.fromStationName} → ${item.toStationName}`;
                     const timeLine = `${formatDateOnly(item.scheduledDeparture)} · ${formatTime(item.scheduledDeparture)} → ${sameDay ? "" : `${formatDateOnly(item.scheduledArrival)} `}${formatTime(item.scheduledArrival)}`;
 
-                    return (
+                    return [(
                       <article key={item.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:gap-5 sm:p-6">
-                        {isTicketIssued(booking, item) ? (
+                        {hasOwnTicketQr(booking, item) ? (
                           <div className="flex shrink-0 items-start gap-3">
-                            {item.ticketQrToken ? (
-                              <QrCodeBlock
-                                value={item.ticketQrToken}
-                                label={lang === "VN" ? "QR vé" : "Ticket QR"}
-                                size={72}
-                              />
-                            ) : null}
+                            <QrCodeBlock
+                              value={item.ticketQrToken}
+                              label={lang === "VN" ? "QR vé" : "Ticket QR"}
+                              size={72}
+                            />
                           </div>
                         ) : null}
 
@@ -481,11 +658,13 @@ export function BookingDetailPage({ serviceType }) {
                           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
                             <div>
                               <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Ghế" : "Seat"}</dt>
-                              <dd className="font-bold text-[#124757] dark:text-yellow-400">{item.seatNumber || "--"}</dd>
+                              <dd className="font-bold text-[#124757] dark:text-yellow-400">{item.seatNumber || "—"}</dd>
                             </div>
                             <div>
                               <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Loại vé" : "Type"}</dt>
-                              <dd className="font-bold text-slate-700 dark:text-slate-200">{item.ticketTypeName || "--"}</dd>
+                              <dd className="font-bold text-slate-700 dark:text-slate-200">
+                                {formatTicketTypeLabel(item.ticketTypeCode || item.ticketTypeName, lang)}
+                              </dd>
                             </div>
                             <div>
                               <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Giá" : "Fare"}</dt>
@@ -495,12 +674,30 @@ export function BookingDetailPage({ serviceType }) {
                               <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Hành khách" : "Passenger"}</dt>
                               <dd className="font-bold text-slate-700 dark:text-slate-200">
                                 {item.passengerName}
-                                {item.passengerPhone ? ` · ${item.passengerPhone}` : ""}
+                                {item.birthYear ? ` · ${item.birthYear}` : ""}
+                                {item.passengerPhone ? (
+                                  <span className="font-medium text-slate-400">{` · ${item.passengerPhone}`}</span>
+                                ) : null}
                               </dd>
                             </div>
                           </dl>
 
-                          {isTicketIssued(booking, item) && item.ticketCode ? (
+                          {row.companions.length > 0 ? (
+                            <div className="rounded-2xl border border-violet-200/80 bg-violet-50/90 px-3.5 py-3 dark:border-violet-500/25 dark:bg-violet-500/10">
+                              <p className="text-[10px] font-headline font-black uppercase tracking-wider text-violet-700 dark:text-violet-200">
+                                {lang === "VN" ? "Đi kèm (dùng QR vé này)" : "Accompanying (uses this ticket QR)"}
+                              </p>
+                              <ul className="mt-2 space-y-1.5">
+                                {row.companions.map((companion) => (
+                                  <li key={companion.id}>
+                                    <CompanionChip companion={companion} lang={lang} />
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+
+                          {hasOwnTicketQr(booking, item) && item.ticketCode ? (
                             <div>
                               <p className="mb-1 text-[11px] font-bold text-slate-400">
                                 {lang === "VN" ? "Mã vé" : "Ticket code"}
@@ -516,7 +713,7 @@ export function BookingDetailPage({ serviceType }) {
                           ) : null}
                         </div>
                       </article>
-                    );
+                    )];
                   })}
                 </div>
               </section>

@@ -13,6 +13,51 @@ export const FARE_RULE_ROUTE_TYPES = {
 
 export const FARE_RULE_TICKET_CODES = ['ADULT', 'CHILD', 'INFANT', 'SENIOR', 'DISABLED'];
 
+/** Nhãn hiển thị theo locale — ưu tiên hơn ticketTypeName thô từ BE (thường là mã EN). */
+export const TICKET_TYPE_DISPLAY_LABELS = Object.freeze({
+  ADULT: { vn: 'Người lớn', en: 'Adult' },
+  CHILD: { vn: 'Trẻ em (>2–≤12 tuổi)', en: 'Child (>2–≤12)' },
+  INFANT: { vn: 'Em bé (≤ 2 tuổi)', en: 'Infant (≤ 2)' },
+  SENIOR: { vn: 'Người cao tuổi', en: 'Senior' },
+  DISABLED: { vn: 'Người khuyết tật', en: 'Disabled' },
+});
+
+/**
+ * SENIOR / "Senior" / "Người cao tuổi" → nhãn theo lang.
+ * Không để mã EN lộ ra khi UI đang tiếng Việt.
+ */
+export const formatTicketTypeLabel = (codeOrName, lang = 'VN') => {
+  const raw = String(codeOrName || '').trim();
+  if (!raw || raw === '—' || raw === '--') return '—';
+
+  const key = raw.toUpperCase().replace(/[\s_-]+/g, '');
+  const locale = lang === 'VN' ? 'vn' : 'en';
+  const aliases = {
+    ADULT: 'ADULT',
+    NGUOILON: 'ADULT',
+    CHILD: 'CHILD',
+    TREEM: 'CHILD',
+    INFANT: 'INFANT',
+    EMBE: 'INFANT',
+    SENIOR: 'SENIOR',
+    NGUOICAOTUOI: 'SENIOR',
+    NCT: 'SENIOR',
+    DISABLED: 'DISABLED',
+    NGUOIKHUYETTAT: 'DISABLED',
+    NKT: 'DISABLED',
+  };
+  const code = aliases[key]
+    || Object.entries(TICKET_TYPE_DISPLAY_LABELS).find(([, labels]) => (
+      labels.vn.toLowerCase() === raw.toLowerCase()
+      || labels.en.toLowerCase() === raw.toLowerCase()
+    ))?.[0];
+
+  if (code && TICKET_TYPE_DISPLAY_LABELS[code]) {
+    return TICKET_TYPE_DISPLAY_LABELS[code][locale];
+  }
+  return raw;
+};
+
 /** Gợi ý hiển thị — giá trị vẫn lấy từ BE, không hardcode khi tính tiền. */
 export const PRICE_MODIFIER_HINTS = [
   { value: 1, vn: 'Nguyên giá', en: 'Full price' },

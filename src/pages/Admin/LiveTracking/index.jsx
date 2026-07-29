@@ -574,6 +574,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
           const n = Number(value);
           return Number.isFinite(n) && n >= 0 ? n : null;
         };
+        // Chỉ đếm khách đang trên tàu (đã check-in, chưa check-out) — không dùng totalPassengerCount (vé đã bán gồm checkout).
         const lastStopOnboard = (() => {
           const stops = Array.isArray(resolvedTrip?.stops) ? resolvedTrip.stops : [];
           if (!stops.length) return null;
@@ -584,14 +585,14 @@ export function LiveTracking({ viewTabs = null } = {}) {
           }
           return null;
         })();
-        const passengerCount = toPassengerCount(schedule?.totalPassengerCount)
+        const passengerCount = toPassengerCount(schedule?.onboardPassengerCount)
+          ?? toPassengerCount(boat.onboardPassengerCount)
           ?? toPassengerCount(boat.passengerCount)
-          ?? toPassengerCount(schedule?.passengerCount)
-          ?? toPassengerCount(schedule?.onboardPassengerCount)
           ?? lastStopOnboard
-          ?? toPassengerCount(resolvedTrip?.totalPassengerCount)
           ?? toPassengerCount(resolvedTrip?.onboardPassengerCount)
-          ?? toPassengerCount(resolvedTrip?.boardingPassengerCount);
+          ?? toPassengerCount(schedule?.checkedInPassengerCount)
+          ?? toPassengerCount(resolvedTrip?.checkedInPassengerCount)
+          ?? toPassengerCount(schedule?.passengerCount);
 
         const dwellNotice = formatDwellCountdownNotice(dwellCountdown, lang, tick, {
           stops: resolvedTrip?.stops,

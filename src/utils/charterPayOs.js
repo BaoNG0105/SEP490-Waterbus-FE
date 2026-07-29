@@ -11,16 +11,75 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
-/** Số tiền còn thiếu = total − đã trả (làm tròn xuống 0). */
+/**
+ * Số tiền còn thiếu.
+ * Ưu tiên field BE: remainingAmount / additionalInsuranceAmount / requiresAdditionalPayment.
+ * Fallback: totalAmount − paidAmount.
+ */
 export const getCharterBalanceDue = (booking) => {
   if (!booking || typeof booking !== "object") return 0;
+
+  if (booking.remainingAmount !== undefined && booking.remainingAmount !== null && booking.remainingAmount !== "") {
+    const remaining = Number(booking.remainingAmount);
+    if (Number.isFinite(remaining)) return Math.max(remaining, 0);
+  }
+
+  const additional = Number(booking.additionalInsuranceAmount);
+  if (Number.isFinite(additional) && additional > 0) return additional;
+
   const total = Number(booking.totalAmount ?? booking.estimatedPrice ?? booking.finalAmount ?? 0) || 0;
   const paid = Number(booking.paidAmount ?? 0) || 0;
   return Math.max(total - paid, 0);
 };
 
 /** Còn phải thu (BH tăng sau thêm HK, hoặc trả dở). */
-export const hasCharterBalanceDue = (booking) => getCharterBalanceDue(booking) > 0;
+export const hasCharterBalanceDue = (booking) => {
+  if (!booking || typeof booking !== "object") return false;
+  if (booking.requiresAdditionalPayment === true) return true;
+  return getCharterBalanceDue(booking) > 0;
+};
+
+/** Meta thanh toán phụ từ response passenger approve/import/update. */
+export const extractCharterAdditionalPaymentMeta = (payload) => {
+  const root = payload && typeof payload === "object" ? payload : {};
+  const nested = root.data && typeof root.data === "object" && !Array.isArray(root.data) ? root.data : root;
+  const booking = nested.booking && typeof nested.booking === "object" ? nested.booking : nested;
+
+  const requiresAdditionalPayment = Boolean(
+    booking.requiresAdditionalPayment ?? nested.requiresAdditionalPayment ?? root.requiresAdditionalPayment,
+  );
+  const remainingAmount = Number(
+    booking.remainingAmount ?? nested.remainingAmount ?? root.remainingAmount ?? 0,
+  ) || 0;
+  const additionalInsuranceAmount = Number(
+    booking.additionalInsuranceAmount
+    ?? nested.additionalInsuranceAmount
+    ?? root.additionalInsuranceAmount
+    ?? 0,
+  ) || 0;
+  const paymentStatus = String(
+    pick(booking, ["paymentStatus"], "")
+    || pick(nested, ["paymentStatus"], "")
+    || pick(root, ["paymentStatus"], "")
+    || "",
+  );
+  const totalAmount = Number(
+    booking.totalAmount ?? nested.totalAmount ?? root.totalAmount ?? 0,
+  ) || 0;
+  const depositAmount = Number(
+    booking.depositAmount ?? nested.depositAmount ?? root.depositAmount ?? 0,
+  ) || 0;
+
+  return {
+    requiresAdditionalPayment,
+    remainingAmount: Math.max(remainingAmount, additionalInsuranceAmount, 0),
+    additionalInsuranceAmount,
+    paymentStatus,
+    totalAmount,
+    depositAmount,
+    insurance: booking.insurance || nested.insurance || root.insurance || null,
+  };
+};
 
 /**
  * Đã từng thanh toán đủ / đang có dư nợ phụ (vd. phí BH khi thêm người).

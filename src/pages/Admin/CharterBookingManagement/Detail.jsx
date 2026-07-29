@@ -1105,7 +1105,9 @@ export function AdminCharterBookingDetail() {
     ? getRemainingMs(quotePaymentDeadline, nowTick)
     : 0;
   const quoteTotal = Number(booking?.estimatedPrice || 0);
-  const remainingAmount = Math.max(quoteTotal - bookingPaidAmount, 0);
+  const remainingAmount = booking?.remainingAmount !== undefined && booking?.remainingAmount !== null
+    ? Math.max(0, Number(booking.remainingAmount) || 0)
+    : Math.max(quoteTotal - bookingPaidAmount, 0);
   const requestedBoats = Array.isArray(booking.requestedBoats) ? booking.requestedBoats : [];
   const payments = Array.isArray(booking.payments) ? booking.payments : [];
   const tickets = canShowCharterTickets(booking)

@@ -6,6 +6,7 @@ import {
     fetchBlogPostsManagement,
     removeBlogPost,
     publishBlogPostById,
+    unpublishBlogPostById,
     BLOG_STATUS,
     BLOG_CATEGORY,
     labelBlogCategory,
@@ -22,10 +23,6 @@ const STATUS_STYLE = {
     [BLOG_STATUS.PUBLISHED]: {
         dot: "bg-emerald-500",
         badge: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400",
-    },
-    [BLOG_STATUS.ARCHIVED]: {
-        dot: "bg-rose-500",
-        badge: "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400",
     },
 };
 
@@ -90,7 +87,6 @@ export function BlogManagement() {
         total: blogs.length,
         published: blogs.filter((b) => b.status === BLOG_STATUS.PUBLISHED).length,
         draft: blogs.filter((b) => b.status === BLOG_STATUS.DRAFT).length,
-        archived: blogs.filter((b) => b.status === BLOG_STATUS.ARCHIVED).length,
     }), [blogs]);
 
     const filteredBlogs = blogs.filter((blog) => {
@@ -182,17 +178,57 @@ export function BlogManagement() {
         }
     };
 
-    const handleArchive = async (blog) => {
+    const handleUnpublish = async (blog) => {
         const confirmResult = await notify({
-            title: lang === "VN" ? "Lưu trữ bài viết?" : "Archive this post?",
+            title: lang === "VN" ? "Hạ về bản nháp?" : "Move to draft?",
             html: lang === "VN"
-                ? `Bài viết <b>${blog.title}</b> sẽ bị gỡ khỏi trang Blog công khai.`
-                : `Post <b>${blog.title}</b> will be removed from the public Blog page.`,
+                ? `Bài viết <b>${blog.title}</b> sẽ không còn hiển thị công khai.`
+                : `Post <b>${blog.title}</b> will no longer be publicly visible.`,
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonColor: "#124757",
+            cancelButtonColor: "#94a3b8",
+            confirmButtonText: lang === "VN" ? "Về nháp" : "Set draft",
+            cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
+        });
+        if (!confirmResult.isConfirmed) return;
+
+        try {
+            setProcessingId(blog.id);
+            await unpublishBlogPostById(blog.id);
+            notify({
+                toast: true,
+                position: "top-end",
+                icon: "success",
+                title: lang === "VN" ? "Đã về nháp" : "Moved to draft",
+                showConfirmButton: false,
+                timer: 1600,
+            });
+            await loadBlogs();
+        } catch (error) {
+            console.error("Lỗi khi hạ nháp blog:", error);
+            notify({
+                icon: "error",
+                title: lang === "VN" ? "Thất bại" : "Failed",
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể đổi trạng thái bài viết." : "Failed to change post status."),
+                confirmButtonColor: "#124757",
+            });
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleDelete = async (blog) => {
+        const confirmResult = await notify({
+            title: lang === "VN" ? "Xóa bài viết?" : "Delete this post?",
+            html: lang === "VN"
+                ? `Bài viết <b>${blog.title}</b> sẽ bị <b>xóa vĩnh viễn</b> khỏi hệ thống.`
+                : `Post <b>${blog.title}</b> will be <b>permanently deleted</b>.`,
             icon: "warning",
             showCancelButton: true,
             confirmButtonColor: "#d33",
             cancelButtonColor: "#124757",
-            confirmButtonText: lang === "VN" ? "Lưu trữ" : "Archive",
+            confirmButtonText: lang === "VN" ? "Xóa" : "Delete",
             cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
         });
         if (!confirmResult.isConfirmed) return;
@@ -204,17 +240,17 @@ export function BlogManagement() {
                 toast: true,
                 position: "top-end",
                 icon: "success",
-                title: lang === "VN" ? "Đã lưu trữ" : "Archived",
+                title: lang === "VN" ? "Đã xóa" : "Deleted",
                 showConfirmButton: false,
                 timer: 1600,
             });
             await loadBlogs();
         } catch (error) {
-            console.error("Lỗi khi lưu trữ blog:", error);
+            console.error("Lỗi khi xóa blog:", error);
             notify({
                 icon: "error",
                 title: lang === "VN" ? "Thất bại" : "Failed",
-                text: error.response?.data?.message || (lang === "VN" ? "Không thể lưu trữ bài viết này." : "Failed to archive this post."),
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể xóa bài viết này." : "Failed to delete this post."),
                 confirmButtonColor: "#124757",
             });
         } finally {
@@ -263,7 +299,7 @@ export function BlogManagement() {
             )}
 
             {/* KHỐI CARD THỐNG KÊ */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số" : "Total"}</span>
@@ -280,12 +316,6 @@ export function BlogManagement() {
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Bản nháp" : "Draft"}</span>
                         <h3 className="text-xl font-black font-headline text-amber-600 dark:text-amber-400 mt-0.5">{stats.draft}</h3>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đã lưu trữ" : "Archived"}</span>
-                        <h3 className="text-xl font-black font-headline text-rose-500 mt-0.5">{stats.archived}</h3>
                     </div>
                 </div>
             </div>
@@ -312,7 +342,6 @@ export function BlogManagement() {
                         <option value="All">{lang === "VN" ? "Tất cả chuyên mục" : "All Categories"}</option>
                         <option value={BLOG_CATEGORY.NEWS}>{lang === "VN" ? "Tin tức" : "News"}</option>
                         <option value={BLOG_CATEGORY.EVENT}>{lang === "VN" ? "Sự kiện" : "Event"}</option>
-                        <option value={BLOG_CATEGORY.ACTIVITY}>{lang === "VN" ? "Hoạt động" : "Activity"}</option>
                     </select>
 
                     <div className="flex gap-2">
@@ -320,7 +349,6 @@ export function BlogManagement() {
                             { key: "All", vn: "Tất cả trạng thái", en: "All Status" },
                             { key: BLOG_STATUS.PUBLISHED, vn: "Đã xuất bản", en: "Published" },
                             { key: BLOG_STATUS.DRAFT, vn: "Nháp", en: "Draft" },
-                            { key: BLOG_STATUS.ARCHIVED, vn: "Lưu trữ", en: "Archived" },
                         ].map((btn) => (
                             <button
                                 key={btn.key}
@@ -421,7 +449,7 @@ export function BlogManagement() {
                                                     >
                                                         <span className="material-symbols-outlined text-[18px]">edit</span>
                                                     </button>
-                                                    {blog.status !== BLOG_STATUS.PUBLISHED && (
+                                                    {blog.status !== BLOG_STATUS.PUBLISHED ? (
                                                         <button
                                                             onClick={() => handlePublish(blog)}
                                                             disabled={processingId === blog.id}
@@ -434,21 +462,32 @@ export function BlogManagement() {
                                                                 <span className="material-symbols-outlined text-[18px]">publish</span>
                                                             )}
                                                         </button>
-                                                    )}
-                                                    {blog.status !== BLOG_STATUS.ARCHIVED && (
+                                                    ) : (
                                                         <button
-                                                            onClick={() => handleArchive(blog)}
+                                                            onClick={() => handleUnpublish(blog)}
                                                             disabled={processingId === blog.id}
-                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
-                                                            title={lang === "VN" ? "Lưu trữ" : "Archive"}
+                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-amber-500 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-500/20 dark:hover:text-amber-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                            title={lang === "VN" ? "Về nháp" : "Set draft"}
                                                         >
                                                             {processingId === blog.id ? (
                                                                 <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                                                             ) : (
-                                                                <span className="material-symbols-outlined text-[18px]">archive</span>
+                                                                <span className="material-symbols-outlined text-[18px]">unpublished</span>
                                                             )}
                                                         </button>
                                                     )}
+                                                    <button
+                                                        onClick={() => handleDelete(blog)}
+                                                        disabled={processingId === blog.id}
+                                                        className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                        title={lang === "VN" ? "Xóa" : "Delete"}
+                                                    >
+                                                        {processingId === blog.id ? (
+                                                            <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                        ) : (
+                                                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                                                        )}
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
