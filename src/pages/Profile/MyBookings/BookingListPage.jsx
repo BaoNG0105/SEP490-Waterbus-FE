@@ -3,7 +3,10 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchMyBookings } from "../../../services/bookingService";
+import { fetchReviewableTrips, submitTripReview } from "../../../services/reviewService";
 import { BOOKING_SERVICE_CONFIG, getBookingServiceConfig } from "../../../utils/bookingServiceType";
+import { notify } from "../../../utils/swalToast";
+import { normalizeReviewableTrip, TripReviewModal } from "../../../components/TripReview";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -92,6 +95,8 @@ export function BookingListPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [pendingReviews, setPendingReviews] = useState([]);
+  const [reviewModalTrip, setReviewModalTrip] = useState(null);
 
   const highlightBookingId = location.state?.highlightBookingId || "";
   const paymentOutcome = location.state?.paymentOutcome
@@ -132,6 +137,36 @@ export function BookingListPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
     loadBookings();
   }, [loadBookings]);
+
+  const loadPendingReviews = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const data = await fetchReviewableTrips({ page: 1, pageSize: 100 });
+      const list = Array.isArray(data) ? data : (data?.items || []);
+      const normalized = list.map(normalizeReviewableTrip).filter((trip) => !trip.myReview);
+      setPendingReviews(normalized);
+    } catch (error) {
+      console.error("Lỗi khi tải danh sách chuyến có thể đánh giá:", error);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    loadPendingReviews();
+  }, [loadPendingReviews]);
+
+  const handleReviewSubmitted = useCallback(async (tripId, rating, comment) => {
+    await submitTripReview(tripId, { rating, comment });
+    setPendingReviews((prev) => prev.filter((trip) => trip.tripId !== tripId));
+    setReviewModalTrip(null);
+    notify({
+      toast: true,
+      icon: "success",
+      title: lang === "VN" ? "Đã gửi đánh giá" : "Review submitted",
+      text: lang === "VN"
+        ? "Cảm ơn bạn! Đánh giá sẽ hiển thị công khai sau khi được duyệt."
+        : "Thanks! Your review will show publicly once approved.",
+    });
+  }, [lang]);
 
   const handleTabChange = (serviceType) => {
     setSearchTerm("");
@@ -269,8 +304,8 @@ export function BookingListPage() {
                     ? "Bạn đã hủy thanh toán trên PayOS. Booking có thể vẫn ở trạng thái chờ thanh toán."
                     : "You cancelled PayOS checkout. The booking may still be pending payment.")
                   : (lang === "VN"
-                    ? "Đã nhận phản hồi PayOS và đồng bộ thanh toán. Kiểm tra trạng thái booking bên dưới (Paid/Confirmed)."
-                    : "PayOS response received and payment synced. Check booking status below (Paid/Confirmed).")}
+                    ? "Đã thanh toán thành công. Kiểm tra trạng thái booking bên dưới."
+                    : "Payment successful. Check the booking status below.")}
                 {returnedOrderCode ? (
                   <span className="mt-1 block font-mono text-[10px] opacity-70">orderCode: {returnedOrderCode}</span>
                 ) : null}
@@ -284,6 +319,40 @@ export function BookingListPage() {
             )}
           </div>
         </section>
+
+        {pendingReviews.length > 0 ? (
+          <section className="overflow-hidden rounded-3xl border border-[#124757]/20 bg-[#124757]/5 dark:border-yellow-400/20 dark:bg-yellow-400/5">
+            <div className="border-b border-[#124757]/10 px-5 py-3.5 dark:border-yellow-400/10 sm:px-6">
+              <h3 className="font-headline text-sm font-black text-[#124757] dark:text-yellow-400">
+                {lang === "VN"
+                  ? `Bạn có ${pendingReviews.length} chuyến chưa đánh giá`
+                  : `You have ${pendingReviews.length} trip(s) awaiting your review`}
+              </h3>
+            </div>
+            <div className="divide-y divide-[#124757]/10 dark:divide-yellow-400/10">
+              {pendingReviews.map((trip) => (
+                <div key={trip.tripId} className="flex flex-wrap items-center justify-between gap-3 p-5 sm:px-6">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-700 dark:text-slate-200">
+                      {trip.routeName || trip.tripCode}
+                    </p>
+                    <p className="text-[11px] font-medium text-slate-400">
+                      {formatDateTime(trip.departureTime)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReviewModalTrip(trip)}
+                    className="flex shrink-0 items-center gap-2 rounded-xl bg-[#FFD100] px-3.5 py-2 text-xs font-headline font-black uppercase tracking-wide text-slate-900 transition hover:scale-[1.02] active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-base">rate_review</span>
+                    {lang === "VN" ? "Đánh giá" : "Review"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="space-y-3">
           {isLoading ? (
@@ -373,6 +442,14 @@ export function BookingListPage() {
           )}
         </section>
       </main>
+
+      {reviewModalTrip ? (
+        <TripReviewModal
+          lang={lang}
+          onClose={() => setReviewModalTrip(null)}
+          onSubmitted={(rating, comment) => handleReviewSubmitted(reviewModalTrip.tripId, rating, comment)}
+        />
+      ) : null}
     </div>
   );
 }

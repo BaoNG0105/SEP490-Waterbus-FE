@@ -78,18 +78,13 @@ export const ticketTypeAgeHint = (ticketTypeCode, travelYear, lang = "VN") => {
   }
   if (type === "CHILD") {
     return lang === "VN"
-      ? `Trẻ em > 2 đến ≤ 12 tuổi (sinh từ ${y - 12}–${y - 3}). Có ghế riêng + QR riêng; booking cần ≥ 1 ADULT cùng chặng.`
-      : `Child > 2 and ≤ 12 (born ${y - 12}–${y - 3}). Own seat + own QR; booking needs ≥ 1 ADULT on the same leg.`;
+      ? `Trẻ em từ 3 đến 12 tuổi (sinh từ ${y - 12}–${y - 3}). Có ghế riêng. Cần người lớn đi cùng.`
+      : `Child 3–12 years (born ${y - 12}–${y - 3}). Own seat. accompany an adult.`;
   }
   if (type === "SENIOR") {
     return lang === "VN"
-      ? `Người cao tuổi: tuổi tại năm đi ${y} phải ≥ ${SENIOR_MIN_AGE} (sinh ≤ ${y - SENIOR_MIN_AGE}). Bắt buộc năm sinh.`
-      : `Senior: age in travel year ${y} must be ≥ ${SENIOR_MIN_AGE} (born ≤ ${y - SENIOR_MIN_AGE}). Birth year required.`;
-  }
-  if (type === "DISABLED") {
-    return lang === "VN"
-      ? "Người khuyết tật: bắt buộc nhập năm sinh để đối chiếu khi lên tàu."
-      : "Disabled: birth year is required for boarding verification.";
+      ? `Người cao tuổi: dành cho người từ 70 tuổi (sinh từ ${y - SENIOR_MIN_AGE} trở về trước)`
+      : `Senior: for passengers aged 70+ (born in ${y - SENIOR_MIN_AGE} or earlier)`;
   }
   return "";
 };

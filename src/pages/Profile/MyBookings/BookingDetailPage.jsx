@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useApp } from "../../../context/AppContext";
 //import
 import { fetchMyBookingDetail } from "../../../services/bookingService";
+import { fetchReviewableTrips, submitTripReview } from "../../../services/reviewService";
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
 import { MY_BOOKINGS_PATH, getBookingServiceConfig } from "../../../utils/bookingServiceType";
@@ -15,6 +16,8 @@ import {
 } from "../../../utils/insurancePreview";
 import { INSURANCE_BOOKING_TYPES } from "../../../services/insuranceService";
 import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
+import { notify } from "../../../utils/swalToast";
+import { normalizeReviewableTrip, StarRatingDisplay, TripReviewModal } from "../../../components/TripReview";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -266,6 +269,37 @@ const normalizeBookingDetail = (data) => ({
   payments: Array.isArray(data?.payments) ? data.payments.map(normalizePayment) : [],
 });
 
+/** Đánh giá của tôi cho 1 chuyến — CTA nếu chưa đánh giá, card đọc nếu đã gửi. */
+const TripReviewSlot = ({ reviewable, lang, onOpenReview }) => {
+  if (!reviewable) return null;
+
+  if (!reviewable.myReview) {
+    return (
+      <div className="p-5 sm:p-6">
+        <button
+          type="button"
+          onClick={() => onOpenReview(reviewable)}
+          className="flex items-center gap-2 rounded-xl border border-[#124757]/20 bg-[#124757]/5 px-3.5 py-2 text-xs font-headline font-black uppercase tracking-wide text-[#124757] transition hover:bg-[#124757]/10 dark:border-yellow-400/20 dark:bg-yellow-400/5 dark:text-yellow-400"
+        >
+          <span className="material-symbols-outlined text-base">rate_review</span>
+          {lang === "VN" ? "Đánh giá chuyến này" : "Review this trip"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-5 sm:p-6">
+      <StarRatingDisplay rating={reviewable.myReview.rating} size="text-base" />
+      {reviewable.myReview.comment ? (
+        <p className="mt-1.5 text-sm font-medium text-slate-600 dark:text-slate-300">
+          {reviewable.myReview.comment}
+        </p>
+      ) : null}
+    </div>
+  );
+};
+
 function CopyableCode({ value, className = "" }) {
   const [copied, setCopied] = useState(false);
   if (!value) return null;
@@ -352,10 +386,15 @@ const DetailSkeleton = () => (
   </div>
 );
 
-const StatusBadge = ({ status, lang }) => {
+const STATUS_BADGE_SIZES = {
+  sm: "px-2.5 py-1 text-[10px]",
+  lg: "px-8.5 py-4.5 text-xs",
+};
+
+const StatusBadge = ({ status, lang, size = "sm" }) => {
   if (!status) return null;
   return (
-    <span className={`inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(status)}`}>
+    <span className={`inline-flex rounded-lg border font-headline font-black uppercase tracking-wide ${STATUS_BADGE_SIZES[size]} ${getStatusClasses(status)}`}>
       {getStatusLabel(status, lang)}
     </span>
   );
@@ -397,6 +436,8 @@ export function BookingDetailPage({ serviceType }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [reviewableByTripCode, setReviewableByTripCode] = useState({});
+  const [reviewModalTrip, setReviewModalTrip] = useState(null);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),
@@ -435,6 +476,47 @@ export function BookingDetailPage({ serviceType }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
     loadDetail();
   }, [loadDetail]);
+
+  const loadReviewableTrips = useCallback(async () => {
+    try {
+      const data = await fetchReviewableTrips({ page: 1, pageSize: 100 });
+      const list = Array.isArray(data) ? data : (data?.items || data?.data || []);
+      const map = {};
+      list.forEach((trip) => {
+        const normalized = normalizeReviewableTrip(trip);
+        if (normalized.tripCode) map[normalized.tripCode] = normalized;
+      });
+      setReviewableByTripCode(map);
+    } catch (error) {
+      console.error("Lỗi khi tải danh sách chuyến có thể đánh giá:", error);
+    }
+  }, []);
+
+  // Chỉ có chuyến đã hoàn thành mới xuất hiện trong reviewable-trips — Pending/Cancelled sẽ tự không khớp tripCode nào.
+  useEffect(() => {
+    if (!booking) return;
+    loadReviewableTrips();
+  }, [booking, loadReviewableTrips]);
+
+  const handleReviewSubmitted = useCallback(async (tripId, tripCode, rating, comment) => {
+    await submitTripReview(tripId, { rating, comment });
+    setReviewableByTripCode((prev) => ({
+      ...prev,
+      [tripCode]: {
+        ...prev[tripCode],
+        myReview: { rating, comment, status: "Hidden" },
+      },
+    }));
+    setReviewModalTrip(null);
+    notify({
+      toast: true,
+      icon: "success",
+      title: lang === "VN" ? "Đã gửi đánh giá" : "Review submitted",
+      text: lang === "VN"
+        ? "Cảm ơn bạn! Đánh giá sẽ hiển thị công khai sau khi được duyệt."
+        : "Thanks! Your review will show publicly once approved.",
+    });
+  }, [lang]);
 
   const holdExpiresAtMs = booking?.holdExpiresAt
     ? new Date(booking.holdExpiresAt).getTime()
@@ -565,7 +647,7 @@ export function BookingDetailPage({ serviceType }) {
                 {lang === "VN" ? "Chi tiết đặt vé" : "Booking detail"}
               </p>
               <h1 className="mt-1 truncate font-headline text-2xl font-black text-[#124757] dark:text-white">
-                {booking.bookingCode}
+                MÃ ĐẶT CHỖ: {booking.bookingCode}
               </h1>
               <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                 {lang === "VN" ? "Đặt lúc" : "Booked at"} {formatDateTime(booking.bookedAt)}
@@ -578,8 +660,7 @@ export function BookingDetailPage({ serviceType }) {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <StatusBadge status={booking.status} lang={lang} />
-              {booking.paymentStatus ? <StatusBadge status={booking.paymentStatus} lang={lang} /> : null}
+              <StatusBadge status={booking.status} lang={lang} size="lg" />
             </div>
           </div>
         </section>
@@ -587,10 +668,8 @@ export function BookingDetailPage({ serviceType }) {
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
           <div className="space-y-5 lg:col-span-7">
             {groupedTrips.map((group) => (
-              <section
-                key={group.tripCode}
-                className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800"
-              >
+              <div key={group.tripCode} className="space-y-5">
+                <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
@@ -598,9 +677,6 @@ export function BookingDetailPage({ serviceType }) {
                         ? (lang === "VN" ? "Chiều về" : "Return")
                         : (lang === "VN" ? "Chiều đi" : "Departure")}
                     </span>
-                    {group.tripCode ? (
-                      <span className="font-mono text-[11px] font-bold text-slate-400">{group.tripCode}</span>
-                    ) : null}
                   </div>
                   <span className="text-xs font-bold text-slate-400">
                     {group.ticketCount} {lang === "VN" ? "vé" : "ticket(s)"}
@@ -717,6 +793,22 @@ export function BookingDetailPage({ serviceType }) {
                   })}
                 </div>
               </section>
+
+              {reviewableByTripCode[group.tripCode] ? (
+                <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+                  <div className="border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
+                    <h3 className="font-headline text-sm font-black text-[#124757] dark:text-white">
+                      {lang === "VN" ? "Đánh giá chuyến" : "Trip review"}
+                    </h3>
+                  </div>
+                  <TripReviewSlot
+                    reviewable={reviewableByTripCode[group.tripCode]}
+                    lang={lang}
+                    onOpenReview={setReviewModalTrip}
+                  />
+                </section>
+              ) : null}
+              </div>
             ))}
           </div>
 
@@ -894,6 +986,14 @@ export function BookingDetailPage({ serviceType }) {
           </div>
         </div>
       </main>
+
+      {reviewModalTrip ? (
+        <TripReviewModal
+          lang={lang}
+          onClose={() => setReviewModalTrip(null)}
+          onSubmitted={(rating, comment) => handleReviewSubmitted(reviewModalTrip.tripId, reviewModalTrip.tripCode, rating, comment)}
+        />
+      ) : null}
     </div>
   );
 }
