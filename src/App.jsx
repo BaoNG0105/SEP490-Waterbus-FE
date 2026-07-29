@@ -46,6 +46,9 @@ import { InsuranceManagement } from "./pages/Admin/InsuranceManagement";
 import { ReviewManagement } from "./pages/Admin/ReviewManagement";
 import { CreateStation } from "./pages/Admin/StationManagement/CreateStation";
 import { EditStation } from "./pages/Admin/StationManagement/EditStation";
+import { LandmarkManagement } from "./pages/Admin/LandmarkManagement";
+import { CreateLandmark } from "./pages/Admin/LandmarkManagement/CreateLandmark";
+import { EditLandmark } from "./pages/Admin/LandmarkManagement/EditLandmark";
 import { UserManagement } from "./pages/Admin/UserManagement";
 import { ManagerManagement } from "./pages/Admin/ManagerManagement";
 import { CreateManager } from "./pages/Admin/ManagerManagement/CreateManager";
@@ -562,6 +565,35 @@ function App() {
             element={
               <AdminLayout title="Edit Station">
                 <EditStation />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Landmark Managment Page ******* */}
+          <Route
+            path="/admin/landmarks-management"
+            element={
+              <AdminLayout title="Landmarks Management">
+                <LandmarkManagement />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/landmarks-management/create"
+            element={
+              <AdminLayout title="Create Landmark">
+                <CreateLandmark />
+              </AdminLayout>
+            }
+          />
+
+          {/* Edit Landmark Page */}
+          <Route
+            path="/admin/landmarks-management/edit/:id"
+            element={
+              <AdminLayout title="Edit Landmark">
+                <EditLandmark />
               </AdminLayout>
             }
           />

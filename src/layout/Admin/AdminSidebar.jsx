@@ -43,6 +43,7 @@ const MENU_GROUPS = [
       { path: "/admin/operations-schedule", labelVn: "Lịch vận hành", labelEn: "Ops schedule", roles: ["ADMIN", "MANAGER", "STAFF"] },
       { path: "/admin/routes-management", labelVn: "Tuyến", labelEn: "Routes", roles: ["ADMIN"] },
       { path: "/admin/stations-management",labelVn: "Nhà ga", labelEn: "Stations", roles: ["ADMIN", "MANAGER"] },
+      { path: "/admin/landmarks-management",labelVn: "Landmark thuyết minh", labelEn: "Landmarks", roles: ["ADMIN"] },
       { path: "/admin/boats-management",labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN"] },
       { path: "/admin/seat-types",labelVn: "Chính sách giá", labelEn: "Fare Policy", roles: ["ADMIN"] },
       { path: "/admin/live-tracking",labelVn: "Theo dõi / Sự cố", labelEn: "Tracking / Incidents", labelVnStaff: "Theo dõi GPS / Sự cố", labelEnStaff: "GPS / Incidents", roles: ["ADMIN", "MANAGER", "STAFF"] },
