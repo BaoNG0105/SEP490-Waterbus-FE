@@ -67,6 +67,12 @@ export const pickStopDisplayDeparture = (stop) => (
 );
 
 /** Chuẩn hóa 1 stop về field FE quen thuộc + giữ *At gốc. */
+const toStopPassengerCount = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : null;
+};
+
 export const normalizeTripStop = (stop) => {
   if (!stop || typeof stop !== "object") return stop;
   const scheduledArrival = pickStopScheduledArrival(stop);
@@ -106,9 +112,190 @@ export const normalizeTripStop = (stop) => {
     actualDepartureAt: actualDeparture,
     stayDurationMinutes: Number.isFinite(stayN) ? stayN : (stop.stayDurationMinutes ?? null),
     stopStatus: stop.stopStatus ?? stop.StopStatus ?? null,
+    // Contract BE trip detail stops[] — số khách theo bến/đoạn.
+    boardingPassengerCount: toStopPassengerCount(stop.boardingPassengerCount ?? stop.BoardingPassengerCount),
+    alightingPassengerCount: toStopPassengerCount(stop.alightingPassengerCount ?? stop.AlightingPassengerCount),
+    onboardPassengerCount: toStopPassengerCount(stop.onboardPassengerCount ?? stop.OnboardPassengerCount),
+    segmentPassengerCount: toStopPassengerCount(stop.segmentPassengerCount ?? stop.SegmentPassengerCount),
   };
 };
 
 export const normalizeTripStops = (stops) => (
   Array.isArray(stops) ? stops.map(normalizeTripStop).filter(Boolean) : []
 );
+
+/** Cửa sổ lên tàu trước giờ khởi hành/đi bến (đồng bộ rule khóa đặt vé 10 phút). */
+export const STOP_BOARDING_LEAD_MS = 10 * 60 * 1000;
+
+const toMs = (value) => {
+  if (!value) return null;
+  const ms = Date.parse(String(value));
+  return Number.isNaN(ms) ? null : ms;
+};
+
+const normalizeRawStopStatus = (raw) => {
+  const key = String(raw || "").trim().toLowerCase().replace(/[\s_-]/g, "");
+  if (!key) return "";
+  if (key.includes("skip")) return "skipped";
+  if (key.includes("cancel")) return "cancelled";
+  if (key.includes("delay") || key.includes("late")) return "delayed";
+  if (key.includes("depart") || key === "left" || key === "completed") return "departed";
+  if (key.includes("arriv") || key === "atstation" || key === "atberth" || key === "docked") return "arrived";
+  if (key.includes("board")) return "boarding";
+  if (key.includes("schedule") || key === "pending" || key === "upcoming" || key === "waiting") return "scheduled";
+  return key;
+};
+
+/**
+ * Trạng thái từng bến theo giờ lịch + actual (nếu có).
+ * - Giờ chưa tới (>10p) → Chờ — không tin stopStatus/actual sớm từ BE
+ * - Bến đầu: trong 10 phút trước giờ đi → Đang lên tàu; đã rời → Đã rời
+ * - Bến giữa/cuối: tàu đã rời gốc, chưa tới giờ đến → Đang chạy (không hiện Chờ)
+ * - Bến giữa: tới giờ đến → Đã cập; sau giờ đi → Đã rời
+ * - Bến cuối: tới giờ đến → Đã tới đích
+ */
+export const resolveStopStatusKey = (
+  stop,
+  {
+    isFirst = false,
+    isLast = false,
+    tripStatusKey = "",
+    now = Date.now(),
+    boardingLeadMs = STOP_BOARDING_LEAD_MS,
+    /** Fallback giờ khởi hành chuyến khi stop thiếu timestamp parse được. */
+    tripStartAt = null,
+  } = {},
+) => {
+  const tripKey = String(tripStatusKey || "").trim();
+  if (tripKey === "Cancelled") return "cancelled";
+
+  // Chỉ dùng giờ lịch/điều chỉnh — không dùng actual làm mốc (tránh actual sớm làm lệch cửa sổ).
+  const scheduledArrMs = toMs(pickStopAdjustedArrival(stop))
+    ?? toMs(pickStopScheduledArrival(stop));
+  const scheduledDepMs = toMs(pickStopAdjustedDeparture(stop))
+    ?? toMs(pickStopScheduledDeparture(stop))
+    ?? (isFirst ? toMs(tripStartAt) : null);
+  const startMs = toMs(tripStartAt) ?? (isFirst ? scheduledDepMs : null);
+  const eventMs = isFirst
+    ? (scheduledDepMs ?? scheduledArrMs ?? startMs)
+    : (scheduledArrMs ?? scheduledDepMs);
+  // Đã qua giờ khởi hành / BE báo đang chạy → các bến chưa tới hiện "Đang chạy" (Sightseeing 2 bến).
+  const tripLeftOrigin = tripKey === "InProgress"
+    || tripKey === "Delayed"
+    || (startMs != null && now >= startMs);
+
+  // Bến đầu: còn >10p trước giờ đi → luôn Chờ (bỏ qua BE Arrived/Boarding + actual sớm).
+  if (isFirst && eventMs != null && now < eventMs - boardingLeadMs) {
+    return "scheduled";
+  }
+  // Bến khác: chưa tới giờ đến — nếu tàu đã rời gốc → Đang chạy (không để Chờ).
+  if (!isFirst && eventMs != null && now < eventMs) {
+    const rawEarly = normalizeRawStopStatus(stop?.stopStatus || stop?.StopStatus);
+    if (rawEarly === "skipped" || rawEarly === "cancelled" || rawEarly === "delayed") return rawEarly;
+    if (tripLeftOrigin) return "enroute";
+    return "scheduled";
+  }
+
+  const actualArrMs = toMs(pickStopActualArrival(stop));
+  const actualDepMs = toMs(pickStopActualDeparture(stop));
+  const credibleActual = (actualMs, scheduledMs) => {
+    if (actualMs == null || actualMs > now + 60_000) return false;
+    if (scheduledMs != null && actualMs < scheduledMs - boardingLeadMs) return false;
+    return true;
+  };
+  const hasDep = credibleActual(actualDepMs, scheduledDepMs ?? eventMs);
+  const hasArr = credibleActual(actualArrMs, scheduledArrMs ?? eventMs);
+  if (hasDep) return "departed";
+  if (hasArr) {
+    if (isFirst) return "boarding";
+    return "arrived";
+  }
+
+  const rawKey = normalizeRawStopStatus(stop?.stopStatus || stop?.StopStatus);
+  if (rawKey === "skipped" || rawKey === "cancelled" || rawKey === "delayed") return rawKey;
+  if (
+    (rawKey === "boarding" || rawKey === "arrived" || rawKey === "departed")
+    && eventMs != null
+    && now >= eventMs - boardingLeadMs
+  ) {
+    if (rawKey === "arrived" && isFirst) return "boarding";
+    return rawKey;
+  }
+
+  if (tripKey === "Completed") {
+    if (isLast) return "arrived";
+    if (eventMs != null && now >= eventMs) return "departed";
+  }
+
+  if (isFirst) {
+    if (eventMs == null) return "scheduled";
+    if (now < eventMs) return "boarding";
+    return "departed";
+  }
+
+  if (isLast) {
+    if (scheduledArrMs != null && now >= scheduledArrMs) return "arrived";
+    if (tripLeftOrigin) return "enroute";
+    return "scheduled";
+  }
+
+  if (scheduledArrMs != null && now < scheduledArrMs) {
+    return tripLeftOrigin ? "enroute" : "scheduled";
+  }
+  if (scheduledArrMs != null && (scheduledDepMs == null || now < scheduledDepMs)) return "arrived";
+  if (scheduledDepMs != null && now >= scheduledDepMs) return "departed";
+  if (scheduledArrMs != null && now >= scheduledArrMs) return "arrived";
+  return "scheduled";
+};
+
+export const getStopStatusLabel = (stopOrKey, lang = "VN", opts = {}) => {
+  const key = typeof stopOrKey === "string"
+    ? String(stopOrKey).toLowerCase().replace(/[\s_-]/g, "")
+    : resolveStopStatusKey(stopOrKey, opts);
+  const isVn = lang === "VN";
+  switch (key) {
+    case "departed":
+      return isVn ? "Đã rời" : "Departed";
+    case "arrived":
+      return isVn ? (opts.isLast ? "Đã tới đích" : "Đã cập") : (opts.isLast ? "Arrived" : "At berth");
+    case "boarding":
+      return isVn ? "Đang lên tàu" : "Boarding";
+    case "enroute":
+      return isVn ? "Đang chạy" : "En route";
+    case "delayed":
+      return isVn ? "Trễ" : "Delayed";
+    case "skipped":
+      return isVn ? "Bỏ qua" : "Skipped";
+    case "cancelled":
+    case "canceled":
+      return isVn ? "Hủy" : "Cancelled";
+    case "scheduled":
+    default:
+      return isVn ? "Chờ" : "Scheduled";
+  }
+};
+
+export const getStopStatusBadgeClass = (stopOrKey, opts = {}) => {
+  const key = typeof stopOrKey === "string"
+    ? String(stopOrKey).toLowerCase().replace(/[\s_-]/g, "")
+    : resolveStopStatusKey(stopOrKey, opts);
+  switch (key) {
+    case "departed":
+      return "bg-slate-100 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600";
+    case "arrived":
+      return "bg-sky-100 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-400/30";
+    case "boarding":
+      return "bg-amber-100 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/30";
+    case "enroute":
+      return "bg-teal-100 text-teal-700 ring-1 ring-teal-200 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-400/30";
+    case "delayed":
+      return "bg-orange-100 text-orange-700 ring-1 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-400/30";
+    case "skipped":
+    case "cancelled":
+    case "canceled":
+      return "bg-rose-100 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-400/30";
+    case "scheduled":
+    default:
+      return "bg-slate-50 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-600";
+  }
+};

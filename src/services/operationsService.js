@@ -35,7 +35,7 @@ const toIsoDate = (value = new Date()) => {
   return `${y}-${m}-${day}`;
 };
 
-/** Map movementStatus BE → nhãn VN/EN (contract FE). */
+/** Map movementStatus BE → nhãn VN/EN (contract FE Live Tracking). */
 export const getMovementStatusLabel = (status, lang = "VN") => {
   const key = String(status || "").trim().toLowerCase().replace(/[_\s-]/g, "");
   const isVn = lang === "VN";
@@ -46,8 +46,9 @@ export const getMovementStatusLabel = (status, lang = "VN") => {
     case "planned":
       return isVn ? "Chưa chạy" : "Scheduled";
     case "boarding":
+    case "danglenatau":
     case "dangchuanbi":
-      return isVn ? "Đang chuẩn bị" : "Boarding";
+      return isVn ? "Đang lên tàu" : "Boarding";
     case "moving":
     case "bangdichuyen":
     case "dangdichuyen":
@@ -56,27 +57,30 @@ export const getMovementStatusLabel = (status, lang = "VN") => {
     case "running":
       return isVn ? "Đang di chuyển" : "Moving";
     case "arriving":
+    case "saptoiben":
     case "sapcapben":
-      return isVn ? "Sắp cập bến" : "Arriving";
+      return isVn ? "Sắp tới bến" : "Arriving";
     case "atstation":
+    case "dangoben":
     case "arrived":
     case "dacapben":
-      return isVn ? "Đã cập bến" : "Arrived";
+      return isVn ? "Đang ở bến" : "At station";
     case "departed":
     case "departing":
     case "daroiben":
       return isVn ? "Đã rời bến" : "Departed";
     case "delayed":
     case "tre":
-      return isVn ? "Trễ" : "Delayed";
+      return isVn ? "Delay" : "Delayed";
     case "completed":
+    case "dakethuc":
     case "hoantat":
     case "finished":
-      return isVn ? "Hoàn tất" : "Completed";
+      return isVn ? "Đã kết thúc" : "Completed";
     case "cancelled":
     case "canceled":
     case "huy":
-      return isVn ? "Hủy" : "Cancelled";
+      return isVn ? "Đã hủy" : "Cancelled";
     default:
       return status ? String(status) : "";
   }
@@ -330,6 +334,8 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     operationStatus,
     dwellCountdown,
     passengerCount,
+    // Giữ tên contract BE để FE Live Tracking đọc thống nhất.
+    onboardPassengerCount: passengerCount,
     totalPassengerCount: toFiniteNumber(pick(raw, [
       "totalPassengerCount", "TotalPassengerCount",
     ], null)),
@@ -345,22 +351,45 @@ export const normalizeOperationsScheduleEntry = (raw) => {
 export const normalizeOperationsScheduleList = (payload) =>
   unwrapList(payload).map(normalizeOperationsScheduleEntry).filter(Boolean);
 
-/** Index theo boatId + boatCode (upper) — 1 tàu lấy entry “đang chạy” ưu tiên. */
+/** Index theo boatId + boatCode (upper) — ưu tiên chuyến đang chạy / đang ở bến. */
 export const indexOperationsScheduleByBoat = (entries = []) => {
   const rank = (entry) => {
     const key = String(entry?.movementStatus || "").toLowerCase().replace(/[_\s-]/g, "");
-    if (key === "moving" || key === "arriving") return 0;
-    if (key === "boarding" || key === "atstation" || key === "delayed") return 1;
-    if (key === "scheduled") return 2;
+    if (key === "moving" || key === "arriving" || key === "departed" || key === "departing") return 0;
+    if (key === "boarding" || key === "atstation" || key === "arrived" || key === "delayed") return 1;
+    if (entry?.dwellCountdown) return 1;
+    if (key === "scheduled" || key === "inprogress") return 2;
     if (key === "completed" || key === "cancelled" || key === "canceled") return 4;
     return 3;
+  };
+  const paxScore = (entry) => {
+    const onboard = Number(entry?.onboardPassengerCount ?? entry?.passengerCount);
+    const total = Number(entry?.totalPassengerCount);
+    const a = Number.isFinite(onboard) && onboard > 0 ? onboard : 0;
+    const b = Number.isFinite(total) && total > 0 ? total : 0;
+    return Math.max(a, b);
   };
 
   const map = new Map();
   const put = (key, entry) => {
     if (!key) return;
     const prev = map.get(key);
-    if (!prev || rank(entry) < rank(prev)) map.set(key, entry);
+    if (!prev) {
+      map.set(key, entry);
+      return;
+    }
+    const rNext = rank(entry);
+    const rPrev = rank(prev);
+    if (rNext < rPrev) {
+      map.set(key, entry);
+      return;
+    }
+    if (rNext > rPrev) return;
+    // Cùng mức: ưu tiên chuyến còn khách / đang dwell.
+    if (paxScore(entry) > paxScore(prev)) map.set(key, entry);
+    else if (paxScore(entry) === paxScore(prev) && entry?.dwellCountdown && !prev?.dwellCountdown) {
+      map.set(key, entry);
+    }
   };
 
   entries.forEach((entry) => {

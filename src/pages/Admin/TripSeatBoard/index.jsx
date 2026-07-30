@@ -87,10 +87,14 @@ const formatDateTime = (value) => {
   return new Date(ms).toLocaleString("vi-VN");
 };
 
-/** Trạng thái lên/xuống tàu từ ticketStatus + checkedInAt/Out. */
+/** Trạng thái lên/xuống tàu từ ticketStatus + checkedInAt/Out (contract BE). */
 const attendanceOf = (row) => {
   const raw = String(row?.ticketStatus || "").toLowerCase().replace(/[\s_-]/g, "");
-  if (row?.checkedOutAt || raw.includes("checkout") || raw.includes("used") || raw.includes("complete")) {
+  // Used = display status khi Active nhưng chuyến đã xong — terminal, không còn trên tàu.
+  if (raw === "used" || raw.includes("expired") || raw.includes("cancel")) {
+    return "used";
+  }
+  if (row?.checkedOutAt || raw.includes("checkout") || raw.includes("complete")) {
     return "checkedOut";
   }
   if (row?.checkedInAt || raw.includes("checkedin")) {
@@ -104,6 +108,12 @@ const attendanceOf = (row) => {
 
 const attendanceBadge = (row, lang) => {
   const key = attendanceOf(row);
+  if (key === "used") {
+    return {
+      label: lang === "VN" ? "Đã sử dụng" : "Used",
+      className: "border-slate-400 bg-slate-700 text-white dark:border-slate-500 dark:bg-slate-300 dark:text-slate-900",
+    };
+  }
   if (key === "checkedOut") {
     return {
       label: lang === "VN" ? "Đã check-out" : "Checked out",
@@ -185,6 +195,21 @@ export function TripSeatBoardPage() {
     if (routeCode) params.set("routeCode", String(routeCode));
     if (trip.tripId || tripId) params.set("tripId", String(trip.tripId || tripId));
     if (trip.tripCode) params.set("tripCode", String(trip.tripCode));
+    // Seed onboard count từ danh sách khách đang mở (đã check-in, chưa check-out).
+    const onboardSeed = (Array.isArray(passengers) ? passengers : []).reduce((sum, row) => {
+      const status = String(row?.ticketStatus || "").toLowerCase().replace(/[\s_-]/g, "");
+      const checkedOut = Boolean(row?.checkedOutAt)
+        || status.includes("checkout")
+        || status.includes("cancelled")
+        || status.includes("canceled")
+        || status.includes("used")
+        || status.includes("expired")
+        || status.includes("complete");
+      if (checkedOut) return sum;
+      const checkedIn = Boolean(row?.checkedInAt) || status.includes("checkedin");
+      return checkedIn ? sum + 1 : sum;
+    }, 0);
+    params.set("onboard", String(onboardSeed));
     params.set("focus", "1");
     navigate(`/admin/live-tracking?${params.toString()}`);
   };

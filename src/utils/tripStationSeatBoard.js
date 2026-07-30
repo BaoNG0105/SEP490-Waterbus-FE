@@ -82,9 +82,16 @@ const stopMomentMs = (value) => {
 };
 
 const stopMatchesStationHint = (stop, hint) => {
-  const token = norm(hint);
-  if (!token || !stop) return false;
-  return [stop.stationId, stop.stationCode, stop.stationName].some((v) => norm(v) === token);
+  const raw = norm(hint);
+  if (!raw || !stop) return false;
+  const token = raw.replace(/^bến\s+/, "").replace(/^ben\s+/, "").trim();
+  if (!token) return false;
+  return [stop.stationId, stop.stationCode, stop.stationName].some((v) => {
+    const s = norm(v);
+    if (!s) return false;
+    const s2 = s.replace(/^bến\s+/, "").replace(/^ben\s+/, "").trim();
+    return s === raw || s === token || s2 === token || s.includes(token) || token.includes(s2);
+  });
 };
 
 /**
@@ -343,6 +350,222 @@ export const summarizeOccupancy = (occupiedSeats) => {
     through: list.filter((s) => s.occupancyRole === "through").length,
     occupied: list.filter((s) => s.occupancyRole === "occupied").length,
     empty: list.filter((s) => s.occupancyRole === "empty").length,
+  };
+};
+
+/**
+ * Bến dùng để lấy số khách trên Live Tracking (contract BE):
+ * Đang chạy → stops[bến vừa rời].segmentPassengerCount
+ * Không lấy bến đang tới (vd. Linh Đông) — segment đó thường = 0.
+ */
+export const resolveStopForOnVesselCount = (stops = [], trip = null, nowMs = Date.now()) => {
+  const list = sortTripStops(stops);
+  if (!list.length) return { stop: null, underway: false };
+
+  const atBerth = list.find((stop) => {
+    const arrived = pickStopActualArrival(stop);
+    const departed = pickStopActualDeparture(stop);
+    return Boolean(arrived) && !departed;
+  });
+
+  let lastDeparted = null;
+  let lastDepartedMs = -1;
+  list.forEach((stop) => {
+    const departed = pickStopActualDeparture(stop);
+    const ms = stopMomentMs(departed);
+    if (ms == null) return;
+    if (ms >= lastDepartedMs) {
+      lastDepartedMs = ms;
+      lastDeparted = stop;
+    }
+  });
+
+  const hintCurrent = list.find((stop) => (
+    stopMatchesStationHint(stop, trip?.currentStationId)
+    || stopMatchesStationHint(stop, trip?.currentStationCode)
+    || stopMatchesStationHint(stop, trip?.currentStationName)
+  ));
+  const hintNext = list.find((stop) => (
+    stopMatchesStationHint(stop, trip?.nextStationId)
+    || stopMatchesStationHint(stop, trip?.nextStationCode)
+    || stopMatchesStationHint(stop, trip?.nextStationName)
+  ));
+
+  // Đang cập bến → bến hiện tại.
+  if (atBerth) return { stop: atBerth, underway: false };
+
+  // Đang chạy tới bến kế (ops nextStation): lấy bến liền trước = đoạn đang đi.
+  if (hintNext) {
+    const prevByOrder = list.find(
+      (s) => Number(s?.stopOrder) === Number(hintNext.stopOrder) - 1,
+    );
+    if (prevByOrder) return { stop: prevByOrder, underway: true };
+  }
+
+  // Có actualDeparture → bến vừa rời.
+  if (lastDeparted) return { stop: lastDeparted, underway: true };
+
+  if (hintCurrent && pickStopActualDeparture(hintCurrent)) {
+    return { stop: hintCurrent, underway: true };
+  }
+
+  // currentStation đã departed / trùng next → coi như đang chạy, lùi 1 bến.
+  if (hintCurrent && hintNext && hintCurrent === hintNext) {
+    const prev = list.find((s) => Number(s?.stopOrder) === Number(hintCurrent.stopOrder) - 1);
+    if (prev) return { stop: prev, underway: true };
+  }
+
+  if (hintCurrent && !pickStopActualDeparture(hintCurrent)) {
+    return { stop: hintCurrent, underway: false };
+  }
+
+  const live = resolveLiveTripStop(list, trip, nowMs);
+  if (live && hintNext && live === hintNext) {
+    const prev = list.find((s) => Number(s?.stopOrder) === Number(live.stopOrder) - 1);
+    if (prev) return { stop: prev, underway: true };
+  }
+  return { stop: live, underway: Boolean(lastDeparted || hintNext) };
+};
+
+/**
+ * Contract BE: stop.segmentPassengerCount = số khách đi qua đoạn từ bến này tới bến kế.
+ */
+export const pickSegmentPassengerCount = (stop, stops = []) => {
+  if (!stop || typeof stop !== "object") return null;
+  const segment = Number(stop.segmentPassengerCount ?? stop.SegmentPassengerCount);
+  if (Number.isFinite(segment) && segment >= 0) return Math.trunc(segment);
+
+  const onboard = Number(stop.onboardPassengerCount ?? stop.OnboardPassengerCount);
+  if (Number.isFinite(onboard) && onboard >= 0) return Math.trunc(onboard);
+
+  const order = Number(stop.stopOrder) || 0;
+  if (order > 1 && Array.isArray(stops) && stops.length) {
+    const prev = sortTripStops(stops).find((s) => Number(s?.stopOrder) === order - 1);
+    if (prev) {
+      const prevSeg = Number(prev.segmentPassengerCount ?? prev.SegmentPassengerCount);
+      if (Number.isFinite(prevSeg) && prevSeg >= 0) return Math.trunc(prevSeg);
+      const prevOn = Number(prev.onboardPassengerCount ?? prev.OnboardPassengerCount);
+      if (Number.isFinite(prevOn) && prevOn >= 0) return Math.trunc(prevOn);
+    }
+  }
+  return null;
+};
+
+/** Số khách gắn card GPS: ưu tiên segment bến vừa rời; khi cập bến đích cộng khách xuống. */
+export const resolveLiveMapPassengerCount = (stops = [], trip = null, options = {}) => {
+  const list = sortTripStops(stops);
+  const resolved = resolveStopForOnVesselCount(list, trip, options.nowMs || Date.now());
+  const stop = resolved.stop;
+  if (!stop) return { count: null, stop: null, underway: false, boarding: 0, through: 0, alighting: 0 };
+
+  let count = pickSegmentPassengerCount(stop, list);
+  const boarding = Math.max(0, Math.trunc(Number(stop.boardingPassengerCount) || 0));
+  const alighting = Math.max(0, Math.trunc(Number(stop.alightingPassengerCount) || 0));
+  const onboardAfter = Math.max(0, Math.trunc(Number(stop.onboardPassengerCount) || 0));
+
+  // Đang cập / bến đích: segment sau khi rời = 0 nhưng còn khách xuống → vẫn hiện trên tàu.
+  if (!resolved.underway && (count == null || count === 0) && alighting > 0) {
+    count = onboardAfter + alighting;
+  }
+
+  const through = Math.max(0, onboardAfter - boarding);
+  return {
+    count: count != null ? count : null,
+    stop,
+    underway: resolved.underway,
+    boarding,
+    through,
+    alighting,
+  };
+};
+
+/**
+ * Số khách còn trên tàu tại 1 bến — khớp KPI sơ đồ ghế:
+ * chỉ Đi tiếp + Lên (không Xuống, không “occupied” mơ hồ).
+ * - Đang ở bến: boarding + through
+ * - Đã rời bến: fromOrder ≤ bến vừa rời < toOrder
+ */
+export const countOnVesselAtStop = (passengers = [], stop = null, stops = [], options = {}) => {
+  const list = Array.isArray(passengers) ? passengers.filter(Boolean) : [];
+  const holders = list.filter((row) => !row.isLapInfant);
+  const infants = list.filter((row) => row.isLapInfant);
+  const underway = options.underway === true;
+  const order = Number(stop?.stopOrder) || 0;
+
+  let boarding = 0;
+  let through = 0;
+  let alighting = 0;
+  const kept = [];
+
+  holders.forEach((person) => {
+    if (underway && order > 0) {
+      const { fromOrder, toOrder } = resolvePassengerStopOrders(person, stops);
+      // Chỉ đếm khi đủ chặng — tránh cộng khách “occupied” / thiếu dữ liệu.
+      if (fromOrder > 0 && toOrder > 0 && fromOrder <= order && toOrder > order) {
+        through += 1;
+        kept.push({ person, bucket: "through" });
+      }
+      return;
+    }
+
+    if (!stop) return;
+    const role = classifyPassengerAtStop(person, stop, stops);
+    if (role === "alighting") {
+      alighting += 1;
+      return;
+    }
+    if (role === "boarding") {
+      boarding += 1;
+      kept.push({ person, bucket: "boarding" });
+      return;
+    }
+    // Không lấy "occupied" — KPI ghế cũng không tính nhóm này vào Đi tiếp/Lên.
+    if (role === "through") {
+      through += 1;
+      kept.push({ person, bucket: "through" });
+    }
+  });
+
+  const usedInfantKeys = new Set();
+  const infantMatchesHolder = (infant, holder) => {
+    const companionId = String(infant.companionPassengerId || "").trim().toLowerCase();
+    const holderId = String(holder.passengerId || "").trim().toLowerCase();
+    if (companionId && holderId) return companionId === holderId;
+
+    const sameBooking = String(infant.bookingCode || "").trim().toUpperCase()
+      && String(infant.bookingCode || "").trim().toUpperCase()
+        === String(holder.bookingCode || "").trim().toUpperCase();
+    if (!sameBooking) return false;
+
+    const companionTicket = String(infant.companionTicketCode || "").trim().toUpperCase();
+    const holderTicket = String(holder.ticketCode || "").trim().toUpperCase();
+    if (companionTicket && holderTicket) return companionTicket === holderTicket;
+
+    const companionName = String(infant.companionPassengerName || "").trim().toLowerCase();
+    const holderName = String(holder.passengerName || "").trim().toLowerCase();
+    if (companionName && holderName) return companionName === holderName;
+
+    return false;
+  };
+
+  kept.forEach(({ person, bucket }) => {
+    const match = infants.find((infant) => {
+      const key = `${infant.passengerId || infant.passengerName}|${infant.bookingCode || ""}`;
+      if (usedInfantKeys.has(key)) return false;
+      return infantMatchesHolder(infant, person);
+    });
+    if (!match) return;
+    usedInfantKeys.add(`${match.passengerId || match.passengerName}|${match.bookingCode || ""}`);
+    if (bucket === "boarding") boarding += 1;
+    else through += 1;
+  });
+
+  return {
+    boarding,
+    through,
+    alighting,
+    /** Live map theo tàu: Đi tiếp + Lên (+ em bé cùng ghế của họ) */
+    onVessel: boarding + through,
   };
 };
 

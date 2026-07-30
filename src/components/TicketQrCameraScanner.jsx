@@ -65,12 +65,10 @@ export function TicketQrCameraScanner({
             const text = String(decodedText || "").trim();
             if (!text || handledRef.current === text) return;
             handledRef.current = text;
+            // Tra cứu ngay — không chờ stop camera (stop hay chậm vài giây).
+            onScanRef.current?.(text);
             if (pauseOnScan) {
-              stopSafely().finally(() => {
-                onScanRef.current?.(text);
-              });
-            } else {
-              onScanRef.current?.(text);
+              stopSafely().catch(() => {});
             }
           },
           () => {},

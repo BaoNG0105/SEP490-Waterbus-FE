@@ -7,6 +7,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
 import {
   changeTripBoat,
+  cancelTripNoShow,
   fetchTripDetail,
   getTripStatusLabel,
   normalizeTripStatusKey,
@@ -30,7 +31,7 @@ import {
   getSeverityLabel,
 } from "../../../services/incidentService";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../../../utils/charterBookingAdmin";
-import { formatCustomerRouteTitle } from "../../../utils/routeTypes";
+import { formatCustomerRouteTitle, resolveTripKindKey } from "../../../utils/routeTypes";
 import { isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
 import {
   pickStopActualArrival,
@@ -39,6 +40,7 @@ import {
   pickStopAdjustedDeparture,
   pickStopScheduledArrival,
   pickStopScheduledDeparture,
+  getStopStatusLabel,
 } from "../../../utils/tripStopTimes";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { formatDwellCountdownNotice, shouldSuppressDwellCountdown } from "../../../utils/boatTracking";
@@ -714,6 +716,7 @@ export function TripDetail() {
   const [boatOptions, setBoatOptions] = useState([]);
   const [selectedBoatId, setSelectedBoatId] = useState("");
   const [isChangingBoat, setIsChangingBoat] = useState(false);
+  const [isCancelNoShowBusy, setIsCancelNoShowBusy] = useState(false);
 
   const refreshTracking = async (tripId, _boatCode, { silent = false } = {}) => {
     if (!tripId) return;
@@ -945,6 +948,53 @@ export function TripDetail() {
     && Boolean(trip)
     && statusKey !== "Completed"
     && statusKey !== "Cancelled";
+
+  // Spec FE cancel-no-show: Sightseeing + Scheduled/Boarding/Delayed,
+  // chưa có actualDeparture / stopStatus Departed, và checkedInCount === 0 (nếu có field).
+  const tripHasLeftBerth = useMemo(() => {
+    const list = Array.isArray(stops) ? stops : [];
+    return list.some((stop) => {
+      const actualDep = pickStopActualDeparture(stop)
+        || stop?.actualDepartureTime
+        || stop?.ActualDepartureTime;
+      if (actualDep) return true;
+      const raw = String(stop?.stopStatus || stop?.StopStatus || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[_\s-]/g, "");
+      return raw === "departed";
+    });
+  }, [stops]);
+
+  const tripHasCheckedInPassengers = (() => {
+    if (!trip) return false;
+    // Spec: nếu có checkedInCount thì phải === 0
+    if (Object.prototype.hasOwnProperty.call(trip, "checkedInCount")
+      || trip?.checkedInCount != null
+      || trip?.CheckedInCount != null) {
+      const n = Number(trip.checkedInCount ?? trip.CheckedInCount);
+      return Number.isFinite(n) && n > 0;
+    }
+    const checkedIn = Number(
+      trip.checkedInTicketCount
+      ?? trip.checkedInPassengerCount
+      ?? trip.checkedInCount,
+    );
+    const checkedOut = Number(trip.checkedOutTicketCount ?? trip.checkedOutPassengerCount);
+    if (Number.isFinite(checkedIn) && checkedIn > 0) return true;
+    if (Number.isFinite(checkedOut) && checkedOut > 0) return true;
+    return false;
+  })();
+
+  const canCancelSightseeingNoShow = isAdminUser(currentUser)
+    && Boolean(trip)
+    && (
+      String(trip?.routeType || trip?.route?.routeType || "") === "SightseeingLoop"
+      || resolveTripKindKey(trip) === "Sightseeing"
+    )
+    && (statusKey === "Scheduled" || statusKey === "Boarding" || statusKey === "Delayed")
+    && !tripHasLeftBerth
+    && !tripHasCheckedInPassengers;
 
   useEffect(() => {
     const currentId = String(boat?.id || trip?.boatId || "").trim();
@@ -1323,6 +1373,94 @@ export function TripDetail() {
     }
   };
 
+  const handleCancelSightseeingNoShow = async () => {
+    if (isCancelNoShowBusy) return;
+    if (!isAdminUser(currentUser)) {
+      showToast({
+        icon: "error",
+        title: lang === "VN" ? "Không có quyền" : "No permission",
+        text: lang === "VN"
+          ? "Chỉ Admin được hủy chuyến no-show."
+          : "Only Admin can cancel a no-show trip.",
+      });
+      return;
+    }
+    if (!canCancelSightseeingNoShow) return;
+    const tripId = trip?.tripId || id;
+    if (!tripId) return;
+
+    if (tripHasLeftBerth) {
+      showToast({
+        icon: "warning",
+        title: lang === "VN" ? "Không thể hủy" : "Cannot cancel",
+        text: lang === "VN"
+          ? "Tàu đã rời bến nên không thể hủy no-show."
+          : "Boat already left the berth — cannot cancel as no-show.",
+      });
+      return;
+    }
+
+    const result = await notify({
+      dialog: true,
+      icon: "warning",
+      title: lang === "VN" ? "Hủy chuyến no-show?" : "Cancel no-show trip?",
+      html: lang === "VN"
+        ? "Chỉ khi Sightseeing chưa rời bến và chưa có khách check-in.<br/>BE hủy chuyến + vé Active — <b>không đổi booking/payment, không hoàn tiền tự động</b>."
+        : "Only when Sightseeing has not left berth and has no check-ins.<br/>BE cancels trip + Active tickets — <b>booking/payment unchanged, no auto-refund</b>.",
+      input: "text",
+      inputValue: lang === "VN"
+        ? "Hủy chuyến sightseeing do không có khách."
+        : "Cancel sightseeing trip due to no passengers.",
+      inputPlaceholder: lang === "VN" ? "Ghi chú (tuỳ chọn)" : "Note (optional)",
+      showCancelButton: true,
+      confirmButtonText: lang === "VN" ? "Hủy chuyến" : "Cancel trip",
+      cancelButtonText: lang === "VN" ? "Đóng" : "Close",
+      confirmButtonColor: "#B91C1C",
+    });
+    if (!result?.isConfirmed) return;
+
+    setIsCancelNoShowBusy(true);
+    try {
+      await cancelTripNoShow(tripId, {
+        statusNote: String(result.value || "").trim()
+          || (lang === "VN"
+            ? "Hủy chuyến sightseeing do không có khách."
+            : "Cancel sightseeing trip due to no passengers."),
+      });
+      const detail = await fetchTripDetail(tripId);
+      setTrip(detail);
+      setTracking(null);
+      setTrackingAt(null);
+      showToast({
+        icon: "success",
+        title: lang === "VN" ? "Đã hủy chuyến" : "Trip cancelled",
+      });
+    } catch (error) {
+      const status = Number(error?.response?.status);
+      if (status === 401 || status === 403) {
+        showToast({
+          icon: "error",
+          title: lang === "VN" ? "Không có quyền" : "No permission",
+          text: getApiErrorMessage(
+            error,
+            lang === "VN" ? "Chỉ Admin được hủy chuyến no-show." : "Only Admin can cancel a no-show trip.",
+          ),
+        });
+        return;
+      }
+      showToast({
+        icon: "error",
+        title: lang === "VN" ? "Không hủy được chuyến" : "Unable to cancel trip",
+        text: getApiErrorMessage(
+          error,
+          lang === "VN" ? "Tàu đã rời bến nên không thể hủy no-show." : "Boat already left — cannot cancel no-show.",
+        ),
+      });
+    } finally {
+      setIsCancelNoShowBusy(false);
+    }
+  };
+
   const liveLocation = useMemo(() => {
     if (tripGpsFinished) return null;
     const tripLoc = tracking?.latestLocation;
@@ -1475,6 +1613,19 @@ export function TripDetail() {
             >
               <span className="material-symbols-outlined text-[16px]">play_circle</span>
               {lang === "VN" ? "Tiếp tục" : "Resume"}
+            </button>
+          ) : null}
+          {canCancelSightseeingNoShow ? (
+            <button
+              type="button"
+              onClick={handleCancelSightseeingNoShow}
+              disabled={isCancelNoShowBusy || isLoading}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-rose-800 transition hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/40 dark:bg-rose-500/15 dark:text-rose-200"
+            >
+              <span className={`material-symbols-outlined text-[16px] ${isCancelNoShowBusy ? "animate-spin" : ""}`}>
+                {isCancelNoShowBusy ? "progress_activity" : "event_busy"}
+              </span>
+              {lang === "VN" ? "Hủy no-show" : "Cancel no-show"}
             </button>
           ) : null}
           <button
@@ -1734,11 +1885,6 @@ export function TripDetail() {
                         {lang === "VN" ? "Lưu tàu" : "Save boat"}
                       </button>
                     </div>
-                    <p className="mt-2 text-[10px] font-medium text-slate-400">
-                      {lang === "VN"
-                        ? "Tàu mới phải Active, đã setup ghế, khớp loại tuyến và không trùng lịch."
-                        : "New boat must be Active, seats configured, route-compatible, and not busy."}
-                    </p>
                   </div>
                 ) : null}
 
@@ -2039,13 +2185,16 @@ export function TripDetail() {
                   const scheduledDep = isLast ? null : pickStopScheduledDeparture(stop);
                   const adjustedArr = isFirst ? null : pickStopAdjustedArrival(stop);
                   const adjustedDep = isLast ? null : pickStopAdjustedDeparture(stop);
-                  // Bến đầu không dùng giờ đến (kể cả actualArrival BE gửi nhầm).
-                  // Bến cuối không dùng giờ đi.
+                  // Bến đầu không hiện giờ đến. Bến cuối không dùng giờ đi.
                   const actualArr = isFirst ? null : pickStopActualArrival(stop);
                   const actualDep = isLast ? null : pickStopActualDeparture(stop);
                   const onboard = toCount(stop.onboardPassengerCount);
                   const boarding = toCount(stop.boardingPassengerCount) ?? 0;
-                  const alighting = toCount(stop.alightingPassengerCount);
+                  const alighting = toCount(stop.alightingPassengerCount) ?? 0;
+                  // BE onboard/segment = khách SAU KHI RỜI bến (không gồm người xuống tại đây).
+                  // "Trên tàu" trên UI = khách có mặt khi tới/ở bến = còn đi tiếp + lên + xuống tại bến.
+                  // VD: Linh Đông Xuống 3, onboard 0 → vẫn hiện 3 (không hiện 0).
+                  const onBoatHere = (onboard ?? 0) + alighting;
 
                   return (
                     <li key={stop.tripStopId || `${stop.stopOrder}-${stop.stationId || index}`} className="grid gap-4 p-4 sm:grid-cols-[auto_1fr] sm:p-5">
@@ -2075,7 +2224,7 @@ export function TripDetail() {
                             ) : null}
                             {stop.stopStatus ? (
                               <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                                {String(stop.stopStatus)}
+                                {getStopStatusLabel(stop, lang, { isFirst, isLast, tripStatusKey: statusKey })}
                               </span>
                             ) : null}
                           </div>
@@ -2098,13 +2247,13 @@ export function TripDetail() {
                             {lang === "VN" ? "Lên" : "Board"} {boarding}
                           </span>
                           <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 font-bold text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300">
-                            {lang === "VN" ? "Xuống" : "Alight"} {alighting == null ? "—" : alighting}
+                            {lang === "VN" ? "Xuống" : "Alight"} {alighting}
                           </span>
                           <span className="rounded-lg border border-[#124757]/20 bg-[#124757]/5 px-2.5 py-1 font-bold text-[#124757] dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400">
                             {lang === "VN" ? "Trên tàu" : "Onboard"}{" "}
-                            {onboard != null && capacity != null
-                              ? `${onboard}/${capacity}`
-                              : (onboard == null ? "—" : onboard)}
+                            {capacity != null
+                              ? `${onBoatHere}/${capacity}`
+                              : onBoatHere}
                           </span>
                         </div>
                       </div>

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { TicketQrCameraScanner } from "../../../components/TicketQrCameraScanner";
@@ -28,6 +28,64 @@ const pickDeep = (source, keys, fallback = "") => {
     if (value !== undefined && value !== null && value !== "") return value;
   }
   return fallback;
+};
+
+const ticketMatchesToken = (ticket, token) => {
+  const needle = String(token || "").trim().toUpperCase();
+  if (!needle) return false;
+  const candidates = [
+    ticket?.ticketId,
+    ticket?.ticketCode,
+    ticket?.codeOrToken,
+  ].map((v) => String(v || "").trim().toUpperCase()).filter(Boolean);
+  return candidates.includes(needle);
+};
+
+/** Cập nhật UI ngay sau check-in/out — không chờ POST /tickets/scan lại. */
+const applyLocalAttendance = (prev, { token = "", ticketId = "", action = "checkin" } = {}) => {
+  if (!prev) return prev;
+  const isIn = action === "checkin";
+  const nowIso = new Date().toISOString();
+  const patchFields = isIn
+    ? {
+      status: "CheckedIn",
+      canCheckIn: false,
+      canCheckOut: true,
+      checkedInAt: nowIso,
+    }
+    : {
+      status: "CheckedOut",
+      canCheckIn: false,
+      canCheckOut: false,
+      checkedOutAt: nowIso,
+    };
+
+  if (prev.kind === "ticket") {
+    return {
+      ...prev,
+      ...patchFields,
+      checkedInAt: isIn ? (prev.checkedInAt || nowIso) : prev.checkedInAt,
+      checkedOutAt: !isIn ? (prev.checkedOutAt || nowIso) : prev.checkedOutAt,
+    };
+  }
+
+  if (prev.kind === "manifest" && Array.isArray(prev.tickets)) {
+    return {
+      ...prev,
+      tickets: prev.tickets.map((ticket) => {
+        const match = (ticketId && String(ticket.ticketId || "") === String(ticketId))
+          || ticketMatchesToken(ticket, token);
+        if (!match) return ticket;
+        return {
+          ...ticket,
+          ...patchFields,
+          checkedInAt: isIn ? (ticket.checkedInAt || nowIso) : ticket.checkedInAt,
+          checkedOutAt: !isIn ? (ticket.checkedOutAt || nowIso) : ticket.checkedOutAt,
+        };
+      }),
+    };
+  }
+  return prev;
 };
 
 const formatMoney = (value) => {
@@ -116,11 +174,20 @@ const statusTone = (ticket) => {
 
 const statusLabel = (ticket, lang) => {
   const raw = String(ticket?.status || "").toLowerCase().replace(/[\s_-]/g, "");
+  if (raw.includes("used")) {
+    return lang === "VN" ? "Đã sử dụng" : "Used";
+  }
+  if (raw.includes("expired")) {
+    return lang === "VN" ? "Hết hạn" : "Expired";
+  }
+  if (raw.includes("cancel")) {
+    return lang === "VN" ? "Đã hủy" : "Cancelled";
+  }
   if (ticket?.canCheckOut || raw.includes("checkedin")) {
     return lang === "VN" ? "Đã check-in" : "Checked in";
   }
   if (ticket?.canCheckIn || raw === "active") {
-    return lang === "VN" ? "Chờ check-in" : "Ready to check-in";
+    return lang === "VN" ? "Còn hiệu lực" : "Active";
   }
   if (raw.includes("checkout")) return lang === "VN" ? "Đã check-out" : "Checked out";
   return ticket?.status || (lang === "VN" ? "—" : "—");
@@ -328,15 +395,6 @@ const TicketResultCard = ({
                   {ticket.status}
                 </span>
               ) : null}
-              {ticket.canCheckIn != null ? (
-                <span className={`rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${
-                  ticket.canCheckIn
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
-                    : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400"
-                }`}>
-                  canCheckIn: {ticket.canCheckIn ? "true" : "false"}
-                </span>
-              ) : null}
               {needsVerify && ticket.canCheckIn ? (
                 <span className="rounded-xl border border-amber-300 bg-amber-100 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-100">
                   {lang === "VN" ? "Cần đối chiếu giấy tờ" : "Verify ID"}
@@ -352,7 +410,7 @@ const TicketResultCard = ({
                 {passengerTypeCode && passengerTypeCode !== typeCode ? (
                   <span className="ml-1.5 opacity-70">· {passengerTypeCode}</span>
                 ) : null}
-                {Number(ticket.price) === 0 ? (
+                {ticket.price != null && Number(ticket.price) === 0 ? (
                   <span className="ml-1.5 opacity-80">· {lang === "VN" ? "Miễn phí" : "Free"}</span>
                 ) : null}
               </span>
@@ -469,7 +527,7 @@ const TicketResultCard = ({
           </DetailField>
           <DetailField label={lang === "VN" ? "Giá vé" : "Fare"}>
             {formatMoney(ticket.price)}
-            {Number(ticket.price) === 0 ? (
+            {ticket.price != null && Number(ticket.price) === 0 ? (
               <span className="ml-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
                 ({lang === "VN" ? "miễn phí" : "free"})
               </span>
@@ -535,6 +593,17 @@ const TicketActionButtons = ({
   onCheckOut,
   onRejectEligibility,
 }) => {
+  const statusKey = String(ticket?.status || "").toLowerCase().replace(/[\s_-]/g, "");
+  if (statusKey.includes("used") || statusKey.includes("cancelled") || statusKey.includes("canceled")) {
+    return (
+      <p className="text-[11px] font-bold text-slate-400">
+        {statusKey.includes("used")
+          ? (lang === "VN" ? "Vé đã sử dụng — không check-in được." : "Ticket used — check-in disabled.")
+          : (lang === "VN" ? "Vé đã hủy — không có thao tác." : "Ticket cancelled — no actions.")}
+      </p>
+    );
+  }
+
   const concessionCodes = concessionCodesOf(ticket);
   const needsConcessionCheck = ticket.canCheckIn && concessionCodes.length > 0;
 
@@ -625,11 +694,28 @@ export function StaffTicketScanPage() {
   const [isActing, setIsActing] = useState(false);
   const [lastError, setLastError] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
+  const lookupSeqRef = useRef(0);
 
   const isManifest = result?.kind === "manifest";
   const ticket = result?.kind === "ticket" ? result : null;
   const manifest = isManifest ? result : null;
   const isCharterManifest = Boolean(manifest?.isCharter);
+
+  /** Refresh nền — không chặn toast / nút. */
+  const refreshAfterAction = (token = "") => {
+    const trimmed = String(token || "").trim();
+    if (!trimmed) return;
+    Promise.resolve()
+      .then(() => {
+        if (isCharterManifest || String(trimmed).toUpperCase().startsWith("CB") || isManifest) {
+          return refreshManifest(trimmed);
+        }
+        return lookupTicketOrManifest(trimmed).then((data) => setResult(data));
+      })
+      .catch(() => {
+        /* giữ optimistic UI nếu refresh fail */
+      });
+  };
 
   const tripOptions = useMemo(() => {
     if (!manifest) return [];
@@ -689,17 +775,20 @@ export function StaffTicketScanPage() {
       });
       return;
     }
+    const seq = ++lookupSeqRef.current;
     try {
       setIsScanning(true);
-      setResult(null);
+      // Giữ kết quả cũ trên UI khi đang tra — tránh màn hình trống / cảm giác load lâu.
       setSelectedTicketIds([]);
       setLastError("");
       const data = await lookupTicketOrManifest(trimmed);
+      if (seq !== lookupSeqRef.current) return;
       setResult(data);
       if (data.kind === "manifest") {
         setSelectedTripCode(data.selectedTripCode || data.tripCodes[0] || "");
       }
     } catch (error) {
+      if (seq !== lookupSeqRef.current) return;
       setResult(null);
       const message = getApiErrorMessage(
         error,
@@ -713,7 +802,7 @@ export function StaffTicketScanPage() {
         confirmButtonColor: "#124757",
       });
     } finally {
-      setIsScanning(false);
+      if (seq === lookupSeqRef.current) setIsScanning(false);
     }
   }, [lang]);
 
@@ -781,17 +870,18 @@ export function StaffTicketScanPage() {
       }
       const note = needsVerify ? buildEligibilityConfirmNote(eligibilityCodes) : undefined;
       await checkInTicket(trimmed, { note });
-      if (isManifest) await refreshManifest();
-      else {
-        const data = await lookupTicketOrManifest(trimmed);
-        setResult(data);
-      }
+      setResult((prev) => applyLocalAttendance(prev, {
+        token: trimmed,
+        ticketId: row?.ticketId,
+        action: "checkin",
+      }));
       notify({
         icon: "success",
         title: lang === "VN" ? "Check-in thành công" : "Checked in",
         timer: 1400,
         showConfirmButton: false,
       });
+      refreshAfterAction(isManifest ? (manifest?.bookingQrToken || code) : trimmed);
     } catch (error) {
       const message = getApiErrorMessage(error);
       setLastError(message);
@@ -1057,17 +1147,18 @@ export function StaffTicketScanPage() {
         return;
       }
       await checkOutTicket(trimmed);
-      if (isManifest) await refreshManifest();
-      else {
-        const data = await lookupTicketOrManifest(trimmed);
-        setResult(data);
-      }
+      setResult((prev) => applyLocalAttendance(prev, {
+        token: trimmed,
+        ticketId: row?.ticketId,
+        action: "checkout",
+      }));
       notify({
         icon: "success",
         title: lang === "VN" ? "Check-out thành công" : "Checked out",
         timer: 1400,
         showConfirmButton: false,
       });
+      refreshAfterAction(isManifest ? (manifest?.bookingQrToken || code) : trimmed);
     } catch (error) {
       const message = getApiErrorMessage(error);
       setLastError(message);
@@ -1305,6 +1396,12 @@ export function StaffTicketScanPage() {
               : (lang === "VN" ? "Tra cứu" : "Lookup")}
           </button>
         </form>
+
+        {isScanning ? (
+          <p className="mt-3 text-[11px] font-bold text-slate-400">
+            {lang === "VN" ? "Đang tra cứu vé từ máy chủ…" : "Looking up ticket from server…"}
+          </p>
+        ) : null}
 
         {cameraOpen ? (
           <TicketQrCameraScanner

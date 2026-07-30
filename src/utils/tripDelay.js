@@ -175,8 +175,8 @@ export const getTripDelayTooEarlyMessage = (trip, lang = "VN") => {
   });
 
   return lang === "VN"
-    ? `Chuyến chưa tới giờ xuất phát (${timeLabel}). Không thể Delay trước giờ chạy.`
-    : `Trip has not reached departure time (${timeLabel}). Cannot delay before departure.`;
+    ? `Chuyến chưa tới giờ xuất phát . Không thể Delay trước giờ chạy.`
+    : `Trip has not reached departure time. Cannot delay before departure.`;
 };
 
 /** Có thể bấm Delay: chưa xong/hủy, không đang delay, và đã tới giờ xuất phát. */

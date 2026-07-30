@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useApp } from "../../../context/AppContext";
 //import
 import { fetchMyBookingDetail } from "../../../services/bookingService";
+import { fetchTripDetail } from "../../../services/tripService";
 import { fetchReviewableTrips, submitTripReview } from "../../../services/reviewService";
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
@@ -34,34 +35,59 @@ const STATUS_STYLES = {
   cancelled: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600",
   expired: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
   paid: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
+  unpaid: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
+  depositpaid: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
   active: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
   pending: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
-  used: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20",
+  used: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/40 dark:text-slate-300 dark:border-slate-600",
+  checkedin: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20",
+  checkedout: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600",
+  refunded: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
+  partiallyrefunded: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
+  manualrefunded: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
+  failed: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
+  pendingquote: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20",
+  quoted: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
 };
 
 const STATUS_LABELS = {
   pendingpayment: { vn: "Chờ thanh toán", en: "Pending payment" },
   confirmed: { vn: "Đã xác nhận", en: "Confirmed" },
-  completed: { vn: "Hoàn thành", en: "Completed" },
+  completed: { vn: "Hoàn tất", en: "Completed" },
   cancelled: { vn: "Đã hủy", en: "Cancelled" },
   expired: { vn: "Hết hạn", en: "Expired" },
-  paid: { vn: "Đã thanh toán", en: "Paid" },
+  refunded: { vn: "Đã hoàn tiền", en: "Refunded" },
+  pendingquote: { vn: "Chờ báo giá", en: "Pending quote" },
+  quoted: { vn: "Đã báo giá", en: "Quoted" },
+  paid: { vn: "Đã thanh toán đủ", en: "Paid in full" },
+  unpaid: { vn: "Chưa thanh toán", en: "Unpaid" },
+  depositpaid: { vn: "Đã cọc", en: "Deposit paid" },
+  pending: { vn: "Chờ thanh toán", en: "Pending" },
+  failed: { vn: "Thanh toán thất bại", en: "Payment failed" },
+  partiallyrefunded: { vn: "Hoàn một phần", en: "Partially refunded" },
+  manualrefunded: { vn: "Hoàn thủ công", en: "Manual refund" },
   active: { vn: "Còn hiệu lực", en: "Active" },
-  pending: { vn: "Chờ xử lý", en: "Pending" },
   used: { vn: "Đã sử dụng", en: "Used" },
+  checkedin: { vn: "Đã check-in", en: "Checked in" },
+  checkedout: { vn: "Đã check-out", en: "Checked out" },
 };
 
 const getStatusKey = (status) => String(status || "").toLowerCase().replace(/[\s_-]/g, "");
 const getStatusClasses = (status) => STATUS_STYLES[getStatusKey(status)]
   || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600";
 
-/** Rule hiển thị vé thật (QR + mã vé): Confirmed + Paid + ticketCode + ticketQrToken + Active. */
+/** Vé còn hiện QR: Active hoặc đang trên tàu (CheckedIn). Used/CheckedOut/Cancelled/Expired = terminal. */
+const isQrEligibleTicketStatus = (status) => {
+  const key = getStatusKey(status);
+  return key === "active" || key === "checkedin";
+};
+
+/** Booking đã xác nhận + thanh toán + vé còn hiệu lực để hiện QR / mã vé. */
 const isTicketIssued = (booking, item) => (
   getStatusKey(booking?.status || booking?.bookingStatus) === "confirmed"
   && getStatusKey(booking?.paymentStatus) === "paid"
-  && Boolean(String(item?.ticketCode || "").trim())
-  && Boolean(String(item?.ticketQrToken || "").trim())
-  && getStatusKey(item?.ticketStatus || item?.itemStatus) === "active"
+  && (Boolean(String(item?.ticketCode || "").trim()) || Boolean(String(item?.ticketQrToken || "").trim()))
+  && isQrEligibleTicketStatus(item?.ticketStatus || item?.itemStatus)
 );
 
 const getStatusLabel = (status, lang = "VN") => {
@@ -143,7 +169,8 @@ const normalizeItem = (item) => {
     id: pick(item, ["bookingItemId", "id"], ""),
     tripCode: pick(item, ["tripCode"], ""),
     passengerName: pick(item, ["passengerName"], "--"),
-    passengerPhone: pick(item, ["passengerPhone"], ""),
+    passengerPhone: pick(item, ["passengerPhone"], "") || "",
+    passengerEmail: pick(item, ["passengerEmail"], "") || "",
     ticketTypeCode,
     ticketTypeName: pick(item, ["ticketTypeName", "ticketTypeCode"], ""),
     seatNumber,
@@ -156,7 +183,19 @@ const normalizeItem = (item) => {
     ticketCode: pick(item, ["ticketCode"], ""),
     ticketQrToken,
     ticketStatus: pick(item, ["ticketStatus"], ""),
-    birthYear: pick(item, ["birthYear", "BirthYear"], ""),
+    birthYear: (() => {
+      const raw = pick(item, ["birthYear", "BirthYear"], "");
+      if (raw === "" || raw == null) return "";
+      const num = Number(raw);
+      return Number.isFinite(num) && num > 0 ? String(num) : String(raw).trim();
+    })(),
+    boatCode: pick(item, ["boatCode", "BoatCode"], "") || "",
+    boatName: pick(item, ["boatName", "BoatName"], "") || "",
+    tripId: String(pick(item, ["tripId", "TripId"], "") || "").trim(),
+    companionPassengerId: String(pick(item, [
+      "companionPassengerId",
+      "CompanionPassengerId",
+    ], "") || "").trim(),
     companionPassengerName: pick(item, [
       "companionPassengerName",
       "CompanionPassengerName",
@@ -177,6 +216,12 @@ const hasOwnTicketQr = (booking, item) => (
   && Boolean(String(item.ticketQrToken || "").trim())
 );
 
+/** Vé đã phát hành — có ít nhất ticketCode hoặc ticketQrToken, dùng để hiện mã vé / QR. */
+const isTicketVisible = (booking, item) => (
+  isTicketIssued(booking, item)
+  && !item.usesCompanionTicket
+);
+
 const normalizePassengerKey = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 
 const compareSeatLabel = (a, b) => {
@@ -189,8 +234,8 @@ const compareSeatLabel = (a, b) => {
 };
 
 /**
- * Gộp INFANT dưới đúng người lớn theo companionPassengerName.
- * Holder sắp theo ghế (giống thứ tự chọn ghế / điền form).
+ * Gộp INFANT dưới đúng người lớn theo companionPassengerId / companionPassengerName.
+ * Mỗi ADULT tối đa 1 em bé — tin companionPassengerId từ API; không gán lung tung theo ghế.
  */
 const nestCompanionsUnderHolders = (items) => {
   const list = Array.isArray(items) ? items : [];
@@ -200,35 +245,68 @@ const nestCompanionsUnderHolders = (items) => {
     .sort((a, b) => compareSeatLabel(a.seatNumber, b.seatNumber));
   const companions = list.filter((item) => item.usesCompanionTicket);
   const used = new Set();
+  const holderHasCompanion = new Set();
+
+  const companionKey = (companion) => companion.id || companion.passengerId || companion;
 
   const nameMatches = (holderName, companionOf) => {
     const a = normalizePassengerKey(holderName);
     const b = normalizePassengerKey(companionOf);
     if (!a || !b) return false;
-    return a === b || a.includes(b) || b.includes(a);
+    return a === b;
   };
 
-  const rows = holders.map((holder) => {
-    const matched = companions.filter((companion) => {
-      if (used.has(companion.id || companion)) return false;
-      return nameMatches(holder.passengerName, companion.companionPassengerName);
+  const matchStrength = (holder, companion) => {
+    const companionId = String(companion.companionPassengerId || "").trim().toLowerCase();
+    const holderId = String(holder.id || holder.passengerId || "").trim().toLowerCase();
+    // API đã gán companion → chỉ tin id, không fallback tên/ghế.
+    if (companionId) {
+      return holderId && companionId === holderId ? 4 : 0;
+    }
+
+    if (nameMatches(holder.passengerName, companion.companionPassengerName)) return 2;
+
+    // Fallback yếu: ADULT trống cùng trip — chỉ khi đúng 1 ADULT còn slot.
+    const type = String(holder.ticketTypeCode || "").toUpperCase();
+    return type === "ADULT" ? 1 : 0;
+  };
+
+  const rows = holders.map((holder) => ({ holder, companions: [] }));
+  const freeAdultIndexes = () => rows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row, index }) => (
+      !holderHasCompanion.has(index)
+      && String(row.holder?.ticketTypeCode || "").toUpperCase() === "ADULT"
+    ))
+    .map(({ index }) => index);
+
+  const candidates = [];
+  companions.forEach((companion) => {
+    rows.forEach((row, holderIndex) => {
+      const strength = matchStrength(row.holder, companion);
+      if (strength > 0) {
+        candidates.push({ companion, holderIndex, strength });
+      }
     });
-    matched.forEach((companion) => used.add(companion.id || companion));
-    return { holder, companions: matched };
   });
 
-  const leftover = companions.filter((companion) => !used.has(companion.id || companion));
-  if (leftover.length) {
-    const adultRow = rows.find((row) => String(row.holder?.ticketTypeCode || "").toUpperCase() === "ADULT");
-    const fallback = adultRow || (rows.length === 1 ? rows[0] : null);
-    if (fallback) {
-      fallback.companions.push(...leftover);
-    } else {
-      leftover.forEach((companion) => {
-        rows.push({ holder: null, companions: [companion] });
-      });
-    }
-  }
+  candidates
+    .sort((a, b) => b.strength - a.strength || a.holderIndex - b.holderIndex)
+    .forEach(({ companion, holderIndex, strength }) => {
+      const key = companionKey(companion);
+      if (used.has(key) || holderHasCompanion.has(holderIndex)) return;
+      // Strength 1 chỉ khi còn đúng 1 ADULT trống trên chiều này.
+      if (strength === 1 && freeAdultIndexes().length !== 1) return;
+      used.add(key);
+      holderHasCompanion.add(holderIndex);
+      rows[holderIndex].companions.push(companion);
+    });
+
+  companions.forEach((companion) => {
+    const key = companionKey(companion);
+    if (used.has(key)) return;
+    rows.push({ holder: null, companions: [companion] });
+  });
 
   return rows;
 };
@@ -262,12 +340,136 @@ const normalizeBookingDetail = (data) => ({
   bookingQrToken: pick(data, ["bookingQrToken"], ""),
   holdExpiresAt: pick(data, ["holdExpiresAt"], ""),
   returnTripCode: pick(data, ["returnTripCode"], ""),
+  tripId: String(pick(data, ["tripId", "TripId"], "") || "").trim(),
+  boatCode: pick(data, ["boatCode", "BoatCode"], "") || "",
+  boatName: pick(data, ["boatName", "BoatName"], "") || "",
+  returnTripId: String(pick(data, ["returnTripId", "ReturnTripId"], "") || "").trim(),
+  returnBoatCode: pick(data, ["returnBoatCode", "ReturnBoatCode"], "") || "",
+  returnBoatName: pick(data, ["returnBoatName", "ReturnBoatName"], "") || "",
+  contactName: pick(data, ["contactName", "ContactName"], "") || "",
+  contactPhone: pick(data, ["contactPhone", "ContactPhone"], "") || "",
+  contactEmail: pick(data, ["contactEmail", "ContactEmail"], "") || "",
   insuranceSelected: resolveInsuranceSelected(data),
   insurancePackageId: getBookingInsurancePackageId(data),
   insurance: normalizeInsuranceFromBooking(data),
   items: Array.isArray(data?.items) ? data.items.map(normalizeItem) : [],
   payments: Array.isArray(data?.payments) ? data.payments.map(normalizePayment) : [],
 });
+
+const pickTripBoatFields = (trip) => {
+  if (!trip || typeof trip !== "object") return { boatCode: "", boatName: "" };
+  const boat = trip.boat || trip.Boat || {};
+  return {
+    boatCode: String(
+      trip.boatCode
+      || trip.BoatCode
+      || boat.code
+      || boat.boatCode
+      || boat.Code
+      || boat.vesselCode
+      || boat.VesselCode
+      || "",
+    ).trim(),
+    boatName: String(
+      trip.boatName
+      || trip.BoatName
+      || boat.name
+      || boat.boatName
+      || boat.Name
+      || boat.vesselName
+      || boat.VesselName
+      || "",
+    ).trim(),
+  };
+};
+
+/** Nếu booking detail chưa có tàu — bổ sung từ GET /trips/{tripId} (public). */
+const enrichBookingItemsWithBoat = async (booking) => {
+  if (!booking?.items?.length) return booking;
+
+  const tripIdByCode = new Map();
+  if (booking.tripId && booking.items[0]?.tripCode) {
+    tripIdByCode.set(String(booking.items[0].tripCode).trim().toUpperCase(), booking.tripId);
+  }
+  if (booking.returnTripId && booking.returnTripCode) {
+    tripIdByCode.set(String(booking.returnTripCode).trim().toUpperCase(), booking.returnTripId);
+  }
+
+  const boatByTripKey = new Map();
+  const rememberBoat = (key, boat) => {
+    if (!key || (!boat.boatCode && !boat.boatName)) return;
+    boatByTripKey.set(key, boat);
+  };
+
+  if (booking.boatCode || booking.boatName) {
+    rememberBoat(booking.tripId, { boatCode: booking.boatCode, boatName: booking.boatName });
+    if (booking.items[0]?.tripCode) {
+      rememberBoat(String(booking.items[0].tripCode).trim().toUpperCase(), {
+        boatCode: booking.boatCode,
+        boatName: booking.boatName,
+      });
+    }
+  }
+  if (booking.returnBoatCode || booking.returnBoatName) {
+    rememberBoat(booking.returnTripId, {
+      boatCode: booking.returnBoatCode,
+      boatName: booking.returnBoatName,
+    });
+    if (booking.returnTripCode) {
+      rememberBoat(String(booking.returnTripCode).trim().toUpperCase(), {
+        boatCode: booking.returnBoatCode,
+        boatName: booking.returnBoatName,
+      });
+    }
+  }
+
+  booking.items.forEach((item) => {
+    if (item.boatCode || item.boatName) {
+      rememberBoat(item.tripId, { boatCode: item.boatCode, boatName: item.boatName });
+      rememberBoat(String(item.tripCode || "").trim().toUpperCase(), {
+        boatCode: item.boatCode,
+        boatName: item.boatName,
+      });
+    }
+    if (item.tripId && item.tripCode) {
+      tripIdByCode.set(String(item.tripCode).trim().toUpperCase(), item.tripId);
+    }
+  });
+
+  const tripIdsToFetch = [...new Set(
+    booking.items
+      .filter((item) => !(item.boatCode || item.boatName))
+      .map((item) => (
+        item.tripId
+        || tripIdByCode.get(String(item.tripCode || "").trim().toUpperCase())
+        || ""
+      ))
+      .filter(Boolean),
+  )];
+
+  await Promise.all(tripIdsToFetch.map(async (tripId) => {
+    try {
+      const trip = await fetchTripDetail(tripId);
+      const boat = pickTripBoatFields(trip);
+      rememberBoat(tripId, boat);
+      const code = String(trip?.tripCode || trip?.TripCode || "").trim().toUpperCase();
+      if (code) rememberBoat(code, boat);
+    } catch (error) {
+      console.warn(`Không lấy được thông tin tàu cho chuyến ${tripId}:`, error);
+    }
+  }));
+
+  const items = booking.items.map((item) => {
+    if (item.boatCode || item.boatName) return item;
+    const byId = item.tripId ? boatByTripKey.get(item.tripId) : null;
+    const byCode = boatByTripKey.get(String(item.tripCode || "").trim().toUpperCase());
+    const boat = byId || byCode;
+    if (!boat) return item;
+    return { ...item, boatCode: boat.boatCode || "", boatName: boat.boatName || "" };
+  });
+
+  return { ...booking, items };
+};
 
 /** Đánh giá của tôi cho 1 chuyến — CTA nếu chưa đánh giá, card đọc nếu đã gửi. */
 const TripReviewSlot = ({ reviewable, lang, onOpenReview }) => {
@@ -400,25 +602,21 @@ const StatusBadge = ({ status, lang, size = "sm" }) => {
   );
 };
 
-/** Em bé / trẻ đi kèm: chỉ tên + năm sinh (không card vé riêng). */
+/** Người đi kèm: chỉ tên + năm sinh (không lặp nhãn Em bé / Trẻ em). */
 const CompanionChip = ({ companion, lang }) => {
-  const type = String(companion?.ticketTypeCode || "").toUpperCase();
-  const typeLabel = type === "INFANT"
-    ? (lang === "VN" ? "Em bé" : "Infant")
-    : (formatTicketTypeLabel(companion.ticketTypeCode || companion.ticketTypeName, lang) || (lang === "VN" ? "Đi kèm" : "Companion"));
+  const birthYear = companion?.birthYear != null && companion.birthYear !== ""
+    ? String(companion.birthYear)
+    : "";
 
   return (
-    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-xl border border-violet-200/70 bg-white/80 px-3 py-2 dark:border-violet-500/20 dark:bg-slate-900/40">
-      <span className="text-[10px] font-headline font-black uppercase tracking-wider text-violet-600 dark:text-violet-300">
-        {typeLabel}
-      </span>
-      <span className="text-sm font-black text-violet-950 dark:text-violet-50">
+    <div className="rounded-xl border border-violet-200/70 bg-white/80 px-3 py-2 dark:border-violet-500/20 dark:bg-slate-900/40">
+      <p className="text-sm font-black text-violet-950 dark:text-violet-50">
         {companion.passengerName || "—"}
-      </span>
-      {companion.birthYear ? (
-        <span className="text-xs font-bold text-violet-700/80 dark:text-violet-200/80">
-          · {companion.birthYear}
-        </span>
+      </p>
+      {birthYear ? (
+        <p className="mt-0.5 text-[10px] font-medium text-violet-600/75 dark:text-violet-300/70">
+          {lang === "VN" ? "Năm sinh" : "Born"} {birthYear}
+        </p>
       ) : null}
     </div>
   );
@@ -459,7 +657,9 @@ export function BookingDetailPage({ serviceType }) {
         setNotFound(false);
       }
       const data = await fetchMyBookingDetail(id);
-      setBooking(normalizeBookingDetail(data));
+      const normalized = normalizeBookingDetail(data);
+      const enriched = await enrichBookingItemsWithBoat(normalized);
+      setBooking(enriched);
     } catch (error) {
       console.error(`Lỗi tải chi tiết booking ${id}:`, error);
       if (error?.response?.status === 404) {
@@ -569,12 +769,22 @@ export function BookingDetailPage({ serviceType }) {
     return [...map.entries()].map(([tripCode, items]) => {
       const rows = nestCompanionsUnderHolders(items);
       const companionCount = rows.reduce((sum, row) => sum + row.companions.length, 0);
+      const sample = rows.find((row) => row.holder)?.holder
+        || items.find((item) => !item.usesCompanionTicket)
+        || items[0]
+        || null;
       return {
         tripCode,
         isReturn: Boolean(booking.returnTripCode) && tripCode === booking.returnTripCode,
         rows,
         ticketCount: rows.filter((row) => row.holder).length,
         companionCount,
+        fromStationName: sample?.fromStationName || "—",
+        toStationName: sample?.toStationName || "—",
+        scheduledDeparture: sample?.scheduledDeparture || "",
+        scheduledArrival: sample?.scheduledArrival || "",
+        boatCode: sample?.boatCode || "",
+        boatName: sample?.boatName || "",
       };
     });
   }, [booking]);
@@ -587,6 +797,17 @@ export function BookingDetailPage({ serviceType }) {
     () => groupedTrips.reduce((sum, group) => sum + group.companionCount, 0),
     [groupedTrips],
   );
+  // Giá vé = tổng unitPrice các vé có ghế (không gồm INFANT 0đ / bảo hiểm).
+  const ticketFareAmount = useMemo(() => {
+    if (!booking?.items?.length) return 0;
+    return booking.items.reduce((sum, item) => {
+      if (item.usesCompanionTicket) return sum;
+      return sum + (Number(item.unitPrice) || 0);
+    }, 0);
+  }, [booking]);
+  const insuranceAmount = Number(booking?.insurance?.totalAmount) || 0;
+  const insuranceUnit = Number(booking?.insurance?.unitPremiumAmount) || 0;
+  const insuranceQty = Number(booking?.insurance?.quantity) || 0;
 
   // BE: ẩn hoàn tiền cho booking thường + sightseeing. Charter dùng luồng riêng (hủy → nhập STK).
   if (isLoading) {
@@ -708,7 +929,7 @@ export function BookingDetailPage({ serviceType }) {
 
                     return [(
                       <article key={item.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:gap-5 sm:p-6">
-                        {hasOwnTicketQr(booking, item) ? (
+                        {isTicketVisible(booking, item) && item.ticketQrToken ? (
                           <div className="flex shrink-0 items-start gap-3">
                             <QrCodeBlock
                               value={item.ticketQrToken}
@@ -743,17 +964,50 @@ export function BookingDetailPage({ serviceType }) {
                               </dd>
                             </div>
                             <div>
-                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Giá" : "Fare"}</dt>
+                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Giá vé" : "Ticket fare"}</dt>
                               <dd className="font-bold text-slate-700 dark:text-slate-200">{currencyFormatter.format(item.unitPrice)}</dd>
+                            </div>
+                            <div className="col-span-2 sm:col-span-3">
+                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Tàu" : "Boat"}</dt>
+                              <dd className="font-bold text-slate-700 dark:text-slate-200">
+                                {item.boatName || item.boatCode
+                                  ? (
+                                    <>
+                                      {item.boatName || "—"}
+                                      {item.boatCode ? (
+                                        <span className="font-medium text-slate-400">{` · ${item.boatCode}`}</span>
+                                      ) : null}
+                                    </>
+                                  )
+                                  : (
+                                    <span className="font-medium text-slate-400">
+                                      {lang === "VN" ? "Đang cập nhật" : "Updating"}
+                                    </span>
+                                  )}
+                              </dd>
                             </div>
                             <div className="col-span-2 sm:col-span-3">
                               <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Hành khách" : "Passenger"}</dt>
                               <dd className="font-bold text-slate-700 dark:text-slate-200">
                                 {item.passengerName}
-                                {item.birthYear ? ` · ${item.birthYear}` : ""}
-                                {item.passengerPhone ? (
-                                  <span className="font-medium text-slate-400">{` · ${item.passengerPhone}`}</span>
-                                ) : null}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Năm sinh" : "Birth year"}</dt>
+                              <dd className="font-bold text-slate-700 dark:text-slate-200">
+                                {item.birthYear || "—"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "SĐT" : "Phone"}</dt>
+                              <dd className="font-bold text-slate-700 dark:text-slate-200">
+                                {item.passengerPhone || "—"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-[11px] font-bold text-slate-400">Email</dt>
+                              <dd className="font-bold text-slate-700 dark:text-slate-200 break-all">
+                                {item.passengerEmail || "—"}
                               </dd>
                             </div>
                           </dl>
@@ -761,7 +1015,12 @@ export function BookingDetailPage({ serviceType }) {
                           {row.companions.length > 0 ? (
                             <div className="rounded-2xl border border-violet-200/80 bg-violet-50/90 px-3.5 py-3 dark:border-violet-500/25 dark:bg-violet-500/10">
                               <p className="text-[10px] font-headline font-black uppercase tracking-wider text-violet-700 dark:text-violet-200">
-                                {lang === "VN" ? "Đi kèm (dùng QR vé này)" : "Accompanying (uses this ticket QR)"}
+                                {lang === "VN" ? "Đi kèm" : "Accompanying"}
+                              </p>
+                              <p className="mt-0.5 text-[10px] font-medium text-violet-600/80 dark:text-violet-300/70">
+                                {lang === "VN"
+                                  ? "Dùng chung QR với vé người lớn phía trên."
+                                  : "Shares the adult ticket QR above."}
                               </p>
                               <ul className="mt-2 space-y-1.5">
                                 {row.companions.map((companion) => (
@@ -773,20 +1032,49 @@ export function BookingDetailPage({ serviceType }) {
                             </div>
                           ) : null}
 
-                          {hasOwnTicketQr(booking, item) && item.ticketCode ? (
+                          {isTicketVisible(booking, item) && item.ticketCode ? (
                             <div>
                               <p className="mb-1 text-[11px] font-bold text-slate-400">
                                 {lang === "VN" ? "Mã vé" : "Ticket code"}
                               </p>
                               <CopyableCode value={item.ticketCode} />
                             </div>
-                          ) : !isTicketIssued(booking, item) ? (
-                            <p className="text-[11px] font-medium text-slate-400">
-                              {lang === "VN"
-                                ? "Vé điện tử sẽ hiện sau khi thanh toán thành công và vé được kích hoạt."
-                                : "The e-ticket appears after successful payment and ticket activation."}
-                            </p>
-                          ) : null}
+                          ) : (() => {
+                            const ticketKey = getStatusKey(item.ticketStatus || item.itemStatus);
+                            if (ticketKey === "used") {
+                              return (
+                                <p className="text-[11px] font-medium text-slate-400">
+                                  {lang === "VN"
+                                    ? "Vé đã sử dụng / hết chuyến — không còn hiệu lực để check-in."
+                                    : "Ticket used / trip ended — no longer valid for check-in."}
+                                </p>
+                              );
+                            }
+                            if (ticketKey === "checkedout") {
+                              return (
+                                <p className="text-[11px] font-medium text-slate-400">
+                                  {lang === "VN" ? "Đã check-out — hành khách đã rời tàu." : "Checked out — passenger has left the boat."}
+                                </p>
+                              );
+                            }
+                            if (ticketKey === "cancelled" || ticketKey === "expired") {
+                              return (
+                                <p className="text-[11px] font-medium text-slate-400">
+                                  {lang === "VN" ? "Vé không còn hợp lệ." : "Ticket is no longer valid."}
+                                </p>
+                              );
+                            }
+                            if (!isTicketIssued(booking, item)) {
+                              return (
+                                <p className="text-[11px] font-medium text-slate-400">
+                                  {lang === "VN"
+                                    ? "Vé điện tử sẽ hiện sau khi thanh toán thành công và vé được kích hoạt."
+                                    : "The e-ticket appears after successful payment and ticket activation."}
+                                </p>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                       </article>
                     )];
@@ -820,10 +1108,95 @@ export function BookingDetailPage({ serviceType }) {
                 </h3>
               </div>
               <div className="space-y-4 p-5 sm:p-6">
+                {groupedTrips.length > 0 ? (
+                  <div className="space-y-3 border-b border-slate-100 pb-4 dark:border-slate-700">
+                    {groupedTrips.map((group) => {
+                      const isLoopTour = group.fromStationName
+                        && group.fromStationName === group.toStationName;
+                      const sameDay = formatDateOnly(group.scheduledArrival)
+                        === formatDateOnly(group.scheduledDeparture);
+                      const routeTitle = isLoopTour
+                        ? (lang === "VN"
+                          ? `Tour tham quan ${group.fromStationName}`
+                          : `Sightseeing · ${group.fromStationName}`)
+                        : `${group.fromStationName} → ${group.toStationName}`;
+                      const timeLine = [
+                        formatDateOnly(group.scheduledDeparture),
+                        `${formatTime(group.scheduledDeparture)} → ${sameDay ? "" : `${formatDateOnly(group.scheduledArrival)} `}${formatTime(group.scheduledArrival)}`,
+                      ].filter(Boolean).join(" · ");
+                      return (
+                        <div key={`summary-${group.tripCode}`} className="space-y-1">
+                          <p className="text-[11px] font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
+                            {group.isReturn
+                              ? (lang === "VN" ? "Chiều về" : "Return")
+                              : (lang === "VN" ? "Chiều đi" : "Departure")}
+                          </p>
+                          <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                            {routeTitle}
+                          </p>
+                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                            {timeLine}
+                          </p>
+                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                            {lang === "VN" ? "Tàu" : "Boat"}:{" "}
+                            <span className="font-bold text-slate-700 dark:text-slate-200">
+                              {group.boatName || group.boatCode
+                                ? `${group.boatName || "—"}${group.boatCode ? ` · ${group.boatCode}` : ""}`
+                                : (lang === "VN" ? "Đang cập nhật" : "Updating")}
+                            </span>
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {(booking.contactName || booking.contactPhone || booking.contactEmail) ? (
+                  <div className="space-y-1.5 border-b border-slate-100 pb-4 text-sm dark:border-slate-700">
+                    <p className="text-[11px] font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
+                      {lang === "VN" ? "Người đặt vé" : "Booker"}
+                    </p>
+                    {booking.contactName ? (
+                      <p className="font-bold text-slate-800 dark:text-slate-100">{booking.contactName}</p>
+                    ) : null}
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {lang === "VN" ? "SĐT" : "Phone"}:{" "}
+                      <span className="font-bold text-slate-700 dark:text-slate-200">
+                        {booking.contactPhone || "—"}
+                      </span>
+                    </p>
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Email:{" "}
+                      <span className="font-bold text-slate-700 dark:text-slate-200 break-all">
+                        {booking.contactEmail || "—"}
+                      </span>
+                    </p>
+                  </div>
+                ) : null}
+
                 <div className="space-y-2.5 text-sm text-slate-600 dark:text-slate-300">
                   <div className="flex justify-between gap-3">
-                    <span>{lang === "VN" ? "Tạm tính" : "Subtotal"}</span>
-                    <span className="font-bold">{currencyFormatter.format(booking.subtotalAmount)}</span>
+                    <span>{lang === "VN" ? "Tổng số hành khách" : "Passengers"}</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100">
+                      {totalTicketCount + totalCompanionCount}
+                      {totalCompanionCount > 0
+                        ? (
+                          <span className="ml-1 text-xs font-medium text-slate-400">
+                            {lang === "VN"
+                              ? `(${totalTicketCount} vé · ${totalCompanionCount} đi kèm)`
+                              : `(${totalTicketCount} ticket(s) · ${totalCompanionCount} companion(s))`}
+                          </span>
+                        )
+                        : null}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span>{lang === "VN" ? "Giá vé" : "Ticket fare"}</span>
+                    <span className="font-bold">
+                      {ticketFareAmount > 0
+                        ? `+${currencyFormatter.format(ticketFareAmount)}`
+                        : currencyFormatter.format(0)}
+                    </span>
                   </div>
                   <div className={`flex justify-between gap-3 ${booking.discountAmount > 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
                     <span>{lang === "VN" ? "Giảm giá" : "Discount"}</span>
@@ -833,15 +1206,33 @@ export function BookingDetailPage({ serviceType }) {
                         : currencyFormatter.format(0)}
                     </span>
                   </div>
-                  {Number(booking.insurance?.totalAmount) > 0 ? (
+                  {insuranceAmount > 0 ? (
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between gap-3">
+                        <span>{lang === "VN" ? "Bảo hiểm" : "Insurance"}</span>
+                        <span className="font-bold">+{currencyFormatter.format(insuranceAmount)}</span>
+                      </div>
+                      {(insuranceUnit > 0 || insuranceQty > 0) ? (
+                        <p className="text-right text-[11px] font-medium text-slate-400">
+                          {insuranceUnit > 0 && insuranceQty > 0
+                            ? `${currencyFormatter.format(insuranceUnit)}/${lang === "VN" ? "khách" : "pax"} × ${insuranceQty}`
+                            : (insuranceQty > 0
+                              ? `${insuranceQty} ${lang === "VN" ? "khách" : "pax"}`
+                              : "")}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
                     <div className="flex justify-between gap-3">
                       <span>{lang === "VN" ? "Bảo hiểm" : "Insurance"}</span>
-                      <span className="font-bold">{currencyFormatter.format(booking.insurance.totalAmount)}</span>
+                      <span className="font-bold">{currencyFormatter.format(0)}</span>
                     </div>
-                  ) : null}
+                  )}
                   <div className="flex justify-between gap-3">
                     <span>{lang === "VN" ? "Điểm đã dùng" : "Points used"}</span>
-                    <span className="font-bold">{booking.pointsUsed > 0 ? `-${booking.pointsUsed}` : 0}</span>
+                    <span className="font-bold">
+                      {booking.pointsUsed > 0 ? `-${booking.pointsUsed}` : 0}
+                    </span>
                   </div>
                   <div className="flex justify-between gap-3 border-t border-slate-100 pt-3 dark:border-slate-700">
                     <span className="font-headline font-black text-[#124757] dark:text-white">

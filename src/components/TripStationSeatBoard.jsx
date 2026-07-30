@@ -19,21 +19,113 @@ import {
 const stopKeyOf = (stop) =>
   `${stop?.stopOrder || 0}:${stop?.stationId || stop?.stationCode || stop?.stationName}`;
 
-const findSharedSeatCompanions = (holder, allPassengers = []) => {
+const holderMatchesLapInfant = (holder, infant, allPassengers = []) => {
+  if (!holder || !infant || holder.isLapInfant || !infant.isLapInfant) return false;
+
+  const companionId = String(infant.companionPassengerId || "").trim().toLowerCase();
+  const holderId = String(holder.passengerId || "").trim().toLowerCase();
+  // Có id companion → chỉ tin id, không fallback tên (tránh trùng tên khác booking).
+  if (companionId) {
+    return Boolean(holderId && companionId === holderId);
+  }
+
+  const holderBooking = String(holder.bookingCode || "").trim().toUpperCase();
+  const infantBooking = String(infant.bookingCode || "").trim().toUpperCase();
+  const sameBooking = Boolean(
+    holderBooking && infantBooking && holderBooking !== "—" && holderBooking === infantBooking,
+  );
+
+  const holderTicket = String(holder.ticketCode || "").trim().toUpperCase();
+  const companionTicket = String(infant.companionTicketCode || "").trim().toUpperCase();
+  if (companionTicket) {
+    return sameBooking && Boolean(holderTicket && companionTicket === holderTicket);
+  }
+
+  const holderName = String(holder.passengerName || "").trim().toLowerCase();
+  const companionName = String(infant.companionPassengerName || "").trim().toLowerCase();
+  if (companionName) {
+    return sameBooking && Boolean(holderName && companionName === holderName);
+  }
+
+  const infantTicket = String(infant.ticketCode || "").trim().toUpperCase();
+  if (holderTicket && infantTicket && holderTicket === infantTicket) {
+    const type = String(holder.ticketTypeCode || "").toUpperCase();
+    return sameBooking && (type === "ADULT" || !type || type === "—");
+  }
+
+  if (!sameBooking) return false;
+
+  // Fallback: chỉ ADULT cùng booking + cùng chặng (không gắn CHILD/DISABLED).
+  const type = String(holder.ticketTypeCode || "").toUpperCase();
+  if (type && type !== "ADULT" && type !== "—") return false;
+  const sameFrom = !infant.fromStopOrder || !holder.fromStopOrder
+    || Number(infant.fromStopOrder) === Number(holder.fromStopOrder);
+  const sameTo = !infant.toStopOrder || !holder.toStopOrder
+    || Number(infant.toStopOrder) === Number(holder.toStopOrder);
+  if (!sameFrom || !sameTo) return false;
+
+  const adultsInBooking = (Array.isArray(allPassengers) ? allPassengers : []).filter((row) => (
+    row
+    && !row.isLapInfant
+    && String(row.bookingCode || "").trim().toUpperCase() === holderBooking
+    && String(row.ticketTypeCode || "").toUpperCase() === "ADULT"
+    && (!infant.fromStopOrder || !row.fromStopOrder || Number(row.fromStopOrder) === Number(infant.fromStopOrder))
+    && (!infant.toStopOrder || !row.toStopOrder || Number(row.toStopOrder) === Number(infant.toStopOrder))
+  ));
+  if (adultsInBooking.length !== 1) return false;
+  const only = adultsInBooking[0];
+  if (holder.passengerId && only.passengerId) {
+    return String(holder.passengerId) === String(only.passengerId);
+  }
+  return String(holder.ticketCode || "") === String(only.ticketCode || "")
+    && String(holder.passengerName || "") === String(only.passengerName || "");
+};
+
+/** Mỗi ADULT tối đa 1 INFANT; dùng usedInfantKeys để không gắn trùng giữa các ghế. */
+const findSharedSeatCompanions = (holder, allPassengers = [], usedInfantKeys = null) => {
   if (!holder || holder.isLapInfant) return [];
-  const name = String(holder.passengerName || "").trim().toLowerCase();
-  const booking = String(holder.bookingCode || "").trim().toUpperCase();
-  const ticket = String(holder.ticketCode || "").trim().toUpperCase();
-  return (Array.isArray(allPassengers) ? allPassengers : []).filter((row) => {
-    if (!row?.isLapInfant) return false;
-    const companion = String(row.companionPassengerName || "").trim().toLowerCase();
-    if (companion && name && companion === name) return true;
-    const infantBooking = String(row.bookingCode || "").trim().toUpperCase();
-    if (booking && infantBooking && booking !== "—" && booking === infantBooking) return true;
-    const infantTicket = String(row.ticketCode || "").trim().toUpperCase();
-    if (ticket && infantTicket && ticket === infantTicket) return true;
-    return false;
+  const match = (Array.isArray(allPassengers) ? allPassengers : []).find((row) => {
+    if (!row?.isLapInfant || !holderMatchesLapInfant(holder, row, allPassengers)) return false;
+    const key = `${row.passengerId || row.passengerName}|${row.bookingCode || ""}`;
+    if (usedInfantKeys?.has(key)) return false;
+    return true;
   });
+  if (!match) return [];
+  const key = `${match.passengerId || match.passengerName}|${match.bookingCode || ""}`;
+  usedInfantKeys?.add(key);
+  return [match];
+};
+
+/** Tổng người trên ghế (người lớn + em bé cùng ghế) + danh sách tên để tooltip. */
+const getSeatPeopleMeta = (seat, allPassengers = []) => {
+  const holders = [
+    ...(seat?.alighting || []),
+    ...(seat?.boarding || []),
+    ...(seat?.through || []),
+    ...(seat?.occupiedPassengers || []),
+  ];
+  const seen = new Set();
+  const uniqueHolders = [];
+  holders.forEach((person) => {
+    const key = `${person?.passengerId || ""}|${person?.ticketCode || ""}|${person?.passengerName || ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    uniqueHolders.push(person);
+  });
+
+  const usedInfantKeys = new Set();
+  const names = [];
+  uniqueHolders.forEach((person) => {
+    if (person?.passengerName) names.push(person.passengerName);
+    findSharedSeatCompanions(person, allPassengers, usedInfantKeys).forEach((infant) => {
+      if (infant?.passengerName) names.push(infant.passengerName);
+    });
+  });
+
+  return {
+    count: uniqueHolders.length + usedInfantKeys.size,
+    names,
+  };
 };
 
 /** Danh sách theo vai trò: người lớn + lapInfants[]; count = tổng hành khách (gồm trẻ em cùng ghế). */
@@ -45,9 +137,10 @@ const collectActionPeople = (occupiedSeats, allPassengers = []) => {
   let boardingCount = 0;
   let throughCount = 0;
 
+  const usedInfantKeys = new Set();
   const pushGroup = (target, holders, seatNumber, bump) => {
     (holders || []).forEach((person) => {
-      const lapInfants = findSharedSeatCompanions(person, allPassengers).map((child) => ({
+      const lapInfants = findSharedSeatCompanions(person, allPassengers, usedInfantKeys).map((child) => ({
         ...child,
         seatNumber,
         sharesSeat: true,
@@ -311,9 +404,21 @@ export function TripStationSeatBoard({
     return stops.findIndex((s) => stopKeyOf(s) === stopKeyOf(selectedStop));
   }, [stops, selectedStop]);
 
+  // Khi theo dõi GPS, `stops` trong component có thể được refresh (actualArrival/Departure, hoặc thiếu/khác stopOrder).
+  // `passengers` truyền từ parent có thể đang giữ `fromStopOrder/toStopOrder` cũ → phân loại Lên/Xuống/Đi tiếp ra 0.
+  // Bằng cách xoá 2 field này, `resolvePassengerStopOrders` sẽ suy ra lại theo `stops` hiện tại.
+  const passengersForOccupancy = useMemo(
+    () => (Array.isArray(passengers) ? passengers.map((p) => ({
+      ...p,
+      fromStopOrder: null,
+      toStopOrder: null,
+    })) : passengers),
+    [passengers],
+  );
+
   const occupiedSeats = useMemo(
-    () => buildSeatOccupancyAtStop(seats, passengers, selectedStop, stops),
-    [seats, passengers, selectedStop, stops],
+    () => buildSeatOccupancyAtStop(seats, passengersForOccupancy, selectedStop, stops),
+    [seats, passengersForOccupancy, selectedStop, stops],
   );
 
   const decks = useMemo(() => buildDeckLayout(occupiedSeats), [occupiedSeats]);
@@ -356,19 +461,11 @@ export function TripStationSeatBoard({
 
   const lapInfantsForPassenger = (passenger) => {
     if (!passenger || passenger.isLapInfant) return [];
-    const name = String(passenger.passengerName || "").trim().toLowerCase();
-    const booking = String(passenger.bookingCode || "").trim().toUpperCase();
-    const ticket = String(passenger.ticketCode || "").trim().toUpperCase();
-    return passengers.filter((row) => {
-      if (!row?.isLapInfant) return false;
-      const companion = String(row.companionPassengerName || "").trim().toLowerCase();
-      if (companion && name && companion === name) return true;
-      const infantBooking = String(row.bookingCode || "").trim().toUpperCase();
-      if (booking && infantBooking && booking !== "—" && booking === infantBooking) return true;
-      const infantTicket = String(row.ticketCode || "").trim().toUpperCase();
-      if (ticket && infantTicket && ticket === infantTicket) return true;
-      return false;
-    });
+    // Rule nghiệp vụ: mỗi ADULT tối đa 1 INFANT cùng ghế.
+    const match = passengers.find((row) => (
+      row?.isLapInfant && holderMatchesLapInfant(passenger, row, passengers)
+    ));
+    return match ? [match] : [];
   };
 
   const selectSeat = (seatNumber, { keepFocus = false } = {}) => {
@@ -633,12 +730,22 @@ export function TripStationSeatBoard({
                       || (focusRole === "boarding" && role === "boarding")
                       || (focusRole === "through" && role === "through")
                     );
+                    const peopleMeta = getSeatPeopleMeta(seat, passengers);
                     const tipPerson = (arrow, p) => {
                       const type = formatTicketTypeLabel(p.ticketTypeCode || p.ticketTypeName, lang);
-                      return `${arrow} ${p.passengerName}${type && type !== "—" ? ` (${type})` : ""}`;
+                      const infants = findSharedSeatCompanions(p, passengers);
+                      const infantTip = infants.length
+                        ? ` + ${infants.map((infant) => infant.passengerName).join(", ")}`
+                        : "";
+                      return `${arrow} ${p.passengerName}${type && type !== "—" ? ` (${type})` : ""}${infantTip}`;
                     };
                     const tip = [
                       seat.seatNumber,
+                      peopleMeta.count > 1
+                        ? (lang === "VN"
+                          ? `${peopleMeta.count} người: ${peopleMeta.names.join(", ")}`
+                          : `${peopleMeta.count} pax: ${peopleMeta.names.join(", ")}`)
+                        : null,
                       ...(seat.alighting || []).map((p) => tipPerson("↓", p)),
                       ...(seat.boarding || []).map((p) => tipPerson("↑", p)),
                       ...(seat.through || []).map((p) => tipPerson("→", p)),
@@ -667,6 +774,16 @@ export function TripStationSeatBoard({
                           disabled={isBlocked}
                           className="h-[90%] w-[90%]"
                         />
+                        {peopleMeta.count > 1 ? (
+                          <span
+                            className="absolute -right-0.5 -top-0.5 z-20 flex h-4 min-w-4 items-center justify-center rounded-full bg-violet-600 px-1 text-[9px] font-headline font-black leading-none text-white shadow-sm ring-1 ring-white dark:ring-slate-900"
+                            aria-label={lang === "VN"
+                              ? `${peopleMeta.count} người: ${peopleMeta.names.join(", ")}`
+                              : `${peopleMeta.count} people: ${peopleMeta.names.join(", ")}`}
+                          >
+                            {peopleMeta.count}
+                          </span>
+                        ) : null}
                       </button>
                     );
                   })}

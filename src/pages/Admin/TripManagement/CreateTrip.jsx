@@ -122,6 +122,9 @@ const pickRouteTravelMinutes = (route) => (
   || 0
 );
 
+/** Buffer quay đầu cùng tàu giữa 2 chuyến (BE) — không phải thời gian tour Sightseeing. */
+const BOAT_TURNAROUND_BUFFER_MIN = 15;
+
 const formatMinutesLabel = (totalMinutes, lang) => {
   const raw = Number(totalMinutes) || 0;
   const mins = Math.max(0, Math.round(raw)); // làm tròn phút nguyên
@@ -644,6 +647,10 @@ export function CreateTrip() {
     [form.stops],
   );
   const totalPreviewMinutes = routeTravelMinutes > 0 ? routeTravelMinutes + stopStayMinutes : 0;
+  const isSightseeingRoute = String(selectedRoute?.routeType || "") === "SightseeingLoop";
+  const suggestedDepartureIntervalMin = routeTravelMinutes > 0
+    ? Math.ceil(routeTravelMinutes) + BOAT_TURNAROUND_BUFFER_MIN
+    : null;
   const boatOptions = useMemo(
     () => boats.map((b) => ({ value: b.code || b.boatCode, label: `${b.code || b.boatCode} — ${b.name}` })),
     [boats],
@@ -847,15 +854,7 @@ export function CreateTrip() {
               />
             </div>
           </div>
-          <p className="text-[11px] text-slate-400">
-            {isRoundTrip
-              ? (lang === "VN"
-                ? "Tuyến về phải bắt đầu ở bến cuối tuyến đi và kết thúc ở bến đầu tuyến đi."
-                : "Inbound must start at outbound’s end station and end at outbound’s start station.")
-              : (lang === "VN"
-                ? "Muốn tạo 1 chuyến: đặt Từ ngày = Đến ngày và chỉ 1 giờ cố định."
-                : "For 1 trip: set From = To and keep exactly one fixed departure time.")}
-          </p>
+
 
           {showDaysOfWeek && (
             <div>
@@ -1029,6 +1028,13 @@ export function CreateTrip() {
                       </button>
                     ))}
                   </div>
+                  {isSightseeingRoute && suggestedDepartureIntervalMin ? (
+                    <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      {lang === "VN"
+                        ? `Sightseeing: thời gian tour ≈ ${Math.round(routeTravelMinutes)}' (estimatedDurationMin). ${BOAT_TURNAROUND_BUFFER_MIN}' là buffer quay đầu cùng tàu — khoảng giờ khởi hành nên ≥ ${suggestedDepartureIntervalMin}'.`
+                        : `Sightseeing: tour ≈ ${Math.round(routeTravelMinutes)}' (estimatedDurationMin). ${BOAT_TURNAROUND_BUFFER_MIN}' is same-boat turnaround — departure interval should be ≥ ${suggestedDepartureIntervalMin}'.`}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
@@ -1384,9 +1390,18 @@ export function CreateTrip() {
                   {lang === "VN" ? "Tổng thời gian dự kiến" : "Estimated total duration"}
                 </h3>
                 {routeTravelMinutes > 0 ? (
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                    {formatMinutesLabel(totalPreviewMinutes, lang)}
-                  </p>
+                  <>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                      {formatMinutesLabel(totalPreviewMinutes, lang)}
+                    </p>
+                    {isSightseeingRoute ? (
+                      <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        {lang === "VN"
+                          ? `Lấy từ estimatedDurationMin tuyến. ${BOAT_TURNAROUND_BUFFER_MIN} phút buffer giữa 2 chuyến cùng tàu không tính vào thời gian tour.`
+                          : `From route estimatedDurationMin. The ${BOAT_TURNAROUND_BUFFER_MIN}-min same-boat buffer is not tour duration.`}
+                      </p>
+                    ) : null}
+                  </>
                 ) : (
                   <p className="text-xs font-bold text-slate-400">
                     {lang === "VN"
@@ -1398,26 +1413,6 @@ export function CreateTrip() {
             )}
           </>
         )}
-
-        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
-          <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-            {lang === "VN" ? "Giá vé" : "Ticket price"}
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            {lang === "VN"
-              ? "Bạn không cần nhập giá khi tạo chuyến. Hệ thống sẽ tự áp dụng giá ghế, loại vé và phụ thu theo chính sách giá đã cấu hình."
-              : "You don’t need to enter a price when creating trips. Seat fares, ticket types, and surcharges are applied automatically from your configured fare policy."}
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate("/admin/seat-types")}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-[#124757] transition hover:border-[#124757]/30 dark:border-slate-600 dark:bg-slate-900 dark:text-yellow-400"
-          >
-            <span className="material-symbols-outlined text-[16px]">sell</span>
-            {lang === "VN" ? "Xem chính sách giá" : "View fare policy"}
-          </button>
-        </div>
-
         <button
           type="submit"
           disabled={

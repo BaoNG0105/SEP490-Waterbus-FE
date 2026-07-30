@@ -936,11 +936,6 @@ function SightseeingConcessionTab({ lang, onPercentChange }) {
             <p className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
               {lang === "VN" ? "Ưu đãi Sightseeing (CHILD / SENIOR / DISABLED)" : "Sightseeing concession (CHILD / SENIOR / DISABLED)"}
             </p>
-            <p className="mt-0.5 text-[11px] text-slate-400">
-              {lang === "VN"
-                ? "Giảm % trên giá gốc CABIN / RIVER / SKY. Em bé (INFANT) luôn miễn phí."
-                : "Percent off CABIN / RIVER / SKY base price. Infants (INFANT) stay free."}
-            </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative w-24">

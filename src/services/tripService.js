@@ -14,6 +14,7 @@ import {
     releaseTripSeats as apiReleaseTripSeats,
     startTripDelay as apiStartTripDelay,
     resumeTripDelay as apiResumeTripDelay,
+    cancelTripNoShow as apiCancelTripNoShow,
 } from '../api/tripApi';
 import { normalizeTripStops } from '../utils/tripStopTimes';
 
@@ -51,8 +52,8 @@ export const getTripStatusLabel = (status, lang = 'VN') => {
     Scheduled: { vn: 'Đã lên lịch', en: 'Scheduled' },
     Boarding: { vn: 'Đang lên tàu', en: 'Boarding' },
     InProgress: { vn: 'Đang chạy', en: 'In progress' },
-    Delayed: { vn: 'Trễ', en: 'Delayed' },
-    Completed: { vn: 'Hoàn thành', en: 'Completed' },
+    Delayed: { vn: 'Bị delay', en: 'Delayed' },
+    Completed: { vn: 'Đã kết thúc', en: 'Completed' },
     Cancelled: { vn: 'Đã hủy', en: 'Cancelled' },
   };
   const row = map[key];
@@ -151,6 +152,7 @@ export const normalizeTripPayload = (trip) => {
     sellsBySegment: trip.sellsBySegment ?? trip.SellsBySegment ?? null,
     capacitySnapshot: trip.capacitySnapshot ?? trip.CapacitySnapshot ?? null,
     totalPassengerCount: trip.totalPassengerCount ?? trip.TotalPassengerCount ?? null,
+    onboardPassengerCount: trip.onboardPassengerCount ?? trip.OnboardPassengerCount ?? null,
   };
 };
 
@@ -916,43 +918,97 @@ const unwrapPassengerList = (data) => {
   return [];
 };
 
+/**
+ * Một số môi trường BE trả kiểu số:
+ * - 1 = INFANT (em bé)
+ * - 2 = CHILD (trẻ em)
+ */
+const normalizePassengerTypeCode = (value) => {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return "";
+  if (raw === "1") return "INFANT";
+  if (raw === "2") return "CHILD";
+  return raw;
+};
+
 export const normalizeTripPassenger = (item) => {
   if (!item || typeof item !== "object") return null;
   const fromStopOrderRaw = pickPassengerField(item, ["fromStopOrder", "boardingStopOrder"], "");
   const toStopOrderRaw = pickPassengerField(item, ["toStopOrder", "alightingStopOrder"], "");
   const fromStopOrder = Number(fromStopOrderRaw);
   const toStopOrder = Number(toStopOrderRaw);
-  const ticketTypeCode = String(
+  const ticketTypeCode = normalizePassengerTypeCode(
     pickPassengerField(item, ["ticketTypeCode", "ticketType", "passengerType", "type"], "") || "",
-  ).toUpperCase();
+  );
   const seatRaw = String(
     pickPassengerField(item, ["seatNumber", "seatLabel", "seatCode", "seat"], "") || "",
   ).trim();
   const ticketCode = pickPassengerField(item, ["ticketCode", "code"], "") || "";
+  const passengerId = String(
+    pickPassengerField(item, ["passengerId", "id", "bookingPassengerId"], "") || "",
+  ).trim();
+  const companionPassengerId = String(
+    pickPassengerField(item, ["companionPassengerId", "CompanionPassengerId"], "") || "",
+  ).trim();
   const priceRaw = pickPassengerField(item, ["price", "unitPrice", "fareAmount", "ticketPrice"], null);
   const priceNum = priceRaw === null || priceRaw === "" ? null : Number(priceRaw);
   const noSeat = !seatRaw;
   const isLapInfantFlag = Boolean(item?.isLapInfant ?? item?.IsLapInfant);
-  // Không ghế riêng: INFANT / CHILD / giá 0 → vẫn là hành khách, dùng chung ghế người lớn.
+  const usesCompanionTicket = Boolean(
+    item?.usesCompanionTicket ?? item?.UsesCompanionTicket,
+  );
+  const hasCompanionHint = Boolean(
+    companionPassengerId
+    || pickPassengerField(item, [
+      "companionPassengerName",
+      "companionName",
+      "accompaniedBy",
+      "accompaniedByName",
+      "companionTicketCode",
+      "companionTicket",
+      "accompaniedByTicketCode",
+      "accompaniedByTicket",
+      "parentTicketCode",
+    ], ""),
+  );
+  // Chỉ INFANT mới là khách đi kèm/chung ghế.
+  // CHILD luôn xem là vé riêng (kể cả một số bản ghi legacy thiếu seat).
   const isLapInfant = isLapInfantFlag
+    || usesCompanionTicket
     || ticketTypeCode === "INFANT"
-    || (ticketTypeCode === "CHILD" && noSeat)
-    || (noSeat && Number.isFinite(priceNum) && priceNum === 0);
+    || (noSeat && hasCompanionHint && ticketTypeCode !== "CHILD")
+    || (
+      noSeat
+      && Number.isFinite(priceNum)
+      && priceNum === 0
+      && hasCompanionHint
+      && ticketTypeCode !== "CHILD"
+    );
 
   return {
+    passengerId,
     bookingCode: pickPassengerField(item, ["bookingCode", "booking.bookingCode"], "") || "—",
     passengerName: pickPassengerField(item, ["passengerName", "fullName", "name"], "") || "—",
     ticketTypeCode: ticketTypeCode
-      || (isLapInfant ? (priceNum === 0 ? "INFANT" : "CHILD") : "—"),
+      || (isLapInfant ? "INFANT" : "—"),
     ticketTypeName: pickPassengerField(item, ["ticketTypeName"], "") || "",
     seatNumber: isLapInfant ? "" : (seatRaw || "—"),
     isLapInfant,
+    usesCompanionTicket: usesCompanionTicket || isLapInfant,
+    companionPassengerId,
     companionPassengerName: pickPassengerField(item, [
       "companionPassengerName",
       "companionName",
       "accompaniedBy",
       "accompaniedByName",
     ], "") || "",
+    companionTicketCode: String(pickPassengerField(item, [
+      "companionTicketCode",
+      "companionTicket",
+      "accompaniedByTicketCode",
+      "accompaniedByTicket",
+      "parentTicketCode",
+    ], "") || "").trim(),
     fromStationId: pickPassengerField(item, ["fromStationId", "boardingStationId", "fromStation.id"], "") || "",
     toStationId: pickPassengerField(item, ["toStationId", "alightingStationId", "toStation.id"], "") || "",
     fromStationCode: pickPassengerField(item, ["fromStationCode", "boardingStationCode", "fromStation.code"], "") || "",
@@ -1010,48 +1066,114 @@ export const normalizeTripPassenger = (item) => {
 };
 
 /**
- * Gộp trẻ em/em bé đi kèm (isLapInfant — không ghế riêng) vào card người lớn cùng booking / companion.
- * Trả về holders[]; mỗi holder có lapInfants[].
+ * Gộp INFANT đi kèm (không ghế) vào đúng 1 ADULT — tối đa 1 em bé / người lớn.
+ * Ưu tiên: companionPassengerId → companionTicketCode (cùng booking)
+ * → companionPassengerName / ticketCode dùng chung (cùng booking)
+ * → fallback ADULT duy nhất cùng booking/chặng.
  */
 export const groupTripPassengersForDisplay = (passengers = []) => {
   const list = Array.isArray(passengers) ? passengers.filter(Boolean) : [];
   const holders = list.filter((row) => !row.isLapInfant);
   const infants = list.filter((row) => row.isLapInfant);
-  const used = new Set();
+  const infantKey = (infant, index) => (
+    `${infant.passengerId || infant.passengerName}|${infant.bookingCode}|${index}`
+  );
+  const assignedInfantKeys = new Set();
+  const holderHasInfant = new Set();
 
-  const matchesHolder = (infant, holder) => {
-    const companion = String(infant.companionPassengerName || "").trim().toLowerCase();
-    const holderName = String(holder.passengerName || "").trim().toLowerCase();
-    if (companion && holderName && companion === holderName) return true;
-
-    const infantBooking = String(infant.bookingCode || "").trim().toUpperCase();
-    const holderBooking = String(holder.bookingCode || "").trim().toUpperCase();
-    if (infantBooking && holderBooking && infantBooking !== "—" && infantBooking === holderBooking) {
-      return true;
-    }
-
-    const infantTicket = String(infant.ticketCode || "").trim().toUpperCase();
-    const holderTicket = String(holder.ticketCode || "").trim().toUpperCase();
-    if (infantTicket && holderTicket && infantTicket === holderTicket) return true;
-
-    return false;
+  const isAdultHolder = (holder) => {
+    const type = String(holder?.ticketTypeCode || "").toUpperCase();
+    return !type || type === "ADULT" || type === "—";
   };
 
-  const groups = holders.map((holder) => {
-    const lapInfants = infants.filter((infant, index) => {
-      const key = `${infant.passengerName}|${infant.bookingCode}|${index}`;
-      if (used.has(key)) return false;
-      if (!matchesHolder(infant, holder)) return false;
-      used.add(key);
-      return true;
-    });
-    return { ...holder, lapInfants };
-  });
+  const bookingOf = (row) => String(row?.bookingCode || "").trim().toUpperCase();
 
-  // Em bé chưa gắn được (hiếm) — vẫn hiện riêng nhưng đánh dấu lap infant
+  const sameBooking = (infant, holder) => {
+    const a = bookingOf(infant);
+    const b = bookingOf(holder);
+    return Boolean(a && b && a !== "—" && a === b);
+  };
+
+  const sameSegment = (infant, holder) => {
+    const sameFrom = !infant.fromStopOrder || !holder.fromStopOrder
+      || Number(infant.fromStopOrder) === Number(holder.fromStopOrder);
+    const sameTo = !infant.toStopOrder || !holder.toStopOrder
+      || Number(infant.toStopOrder) === Number(holder.toStopOrder);
+    return sameFrom && sameTo;
+  };
+
+  const adultsOnInfantBooking = (infant) => {
+    const infantBooking = bookingOf(infant);
+    if (!infantBooking || infantBooking === "—") return [];
+    return holders.filter((holder) => (
+      isAdultHolder(holder)
+      && bookingOf(holder) === infantBooking
+      && sameSegment(infant, holder)
+    ));
+  };
+
+  const matchStrength = (infant, holder) => {
+    if (!holder || !isAdultHolder(holder)) return 0;
+
+    const companionId = String(infant.companionPassengerId || "").trim().toLowerCase();
+    const holderId = String(holder.passengerId || "").trim().toLowerCase();
+    // Id companion là nguồn sự thật — không cần cùng booking string (vẫn unique theo passenger).
+    if (companionId) {
+      return holderId && companionId === holderId ? 4 : 0;
+    }
+
+    // Các tín hiệu còn lại bắt buộc cùng booking để không gắn nhầm người trùng tên.
+    if (!sameBooking(infant, holder)) return 0;
+
+    const companionTicket = String(infant.companionTicketCode || "").trim().toUpperCase();
+    const holderTicket = String(holder.ticketCode || "").trim().toUpperCase();
+    if (companionTicket && holderTicket && companionTicket === holderTicket) return 3;
+
+    const companion = String(infant.companionPassengerName || "").trim().toLowerCase();
+    const holderName = String(holder.passengerName || "").trim().toLowerCase();
+    if (companion && holderName && companion === holderName) return 2;
+
+    // INFANT dùng chung QR/vé người lớn (BE gán ticketCode = vé ADULT).
+    const infantTicket = String(infant.ticketCode || "").trim().toUpperCase();
+    if (infantTicket && holderTicket && infantTicket === holderTicket) return 2;
+
+    // Fallback yếu: chỉ khi booking/chặng đúng 1 ADULT.
+    const adults = adultsOnInfantBooking(infant);
+    if (adults.length !== 1) return 0;
+    const only = adults[0];
+    const sameId = holder.passengerId && only.passengerId
+      && String(holder.passengerId) === String(only.passengerId);
+    const sameTicket = String(holder.ticketCode || "") === String(only.ticketCode || "")
+      && String(holder.passengerName || "") === String(only.passengerName || "");
+    return (sameId || sameTicket) ? 1 : 0;
+  };
+
+  const groups = holders.map((holder) => ({ ...holder, lapInfants: [] }));
+
+  // Gán theo độ khớp giảm dần; mỗi holder / infant tối đa 1 lần.
+  const candidates = [];
+  infants.forEach((infant, infantIndex) => {
+    holders.forEach((holder, holderIndex) => {
+      const strength = matchStrength(infant, holder);
+      if (strength > 0) {
+        candidates.push({ infant, infantIndex, holderIndex, strength });
+      }
+    });
+  });
+  candidates
+    .sort((a, b) => b.strength - a.strength || a.holderIndex - b.holderIndex || a.infantIndex - b.infantIndex)
+    .forEach(({ infant, infantIndex, holderIndex }) => {
+      const key = infantKey(infant, infantIndex);
+      if (assignedInfantKeys.has(key) || holderHasInfant.has(holderIndex)) return;
+      assignedInfantKeys.add(key);
+      holderHasInfant.add(holderIndex);
+      groups[holderIndex].lapInfants.push(infant);
+    });
+
+  // Em bé chưa gắn được — hiện riêng (không nhét thêm vào ADULT đã có em bé).
   infants.forEach((infant, index) => {
-    const key = `${infant.passengerName}|${infant.bookingCode}|${index}`;
-    if (used.has(key)) return;
+    const key = infantKey(infant, index);
+    if (assignedInfantKeys.has(key)) return;
     groups.push({ ...infant, lapInfants: [] });
   });
 
@@ -1133,6 +1255,20 @@ export const resumeTripDelay = async (tripId, { note } = {}) => {
         return unwrapDelayResponse(data);
     } catch (error) {
         console.error(`Lỗi khi resume delay chuyến ${tripId}:`, error);
+        throw error;
+    }
+};
+
+/** POST /trips/{id}/cancel-no-show — Admin hủy Sightseeing không khách / no-show. */
+export const cancelTripNoShow = async (tripId, { statusNote } = {}) => {
+    const id = String(tripId || '').trim();
+    if (!id) throw new Error('tripId is required');
+    try {
+        const note = String(statusNote || '').trim();
+        const data = await apiCancelTripNoShow(id, note ? { statusNote: note } : {});
+        return unwrapDelayResponse(data);
+    } catch (error) {
+        console.error(`Lỗi khi hủy no-show chuyến ${id}:`, error);
         throw error;
     }
 };

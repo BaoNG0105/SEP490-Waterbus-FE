@@ -2,6 +2,10 @@ export const getApiErrorMessage = (error, fallback) => {
   const status = error?.response?.status;
   const data = error?.response?.data;
 
+  if (error?.code === "ECONNABORTED" || /timeout/i.test(String(error?.message || ""))) {
+    return "Máy chủ phản hồi chậm (timeout). Thử quét lại — nếu vẫn chậm, kiểm tra BE / mạng.";
+  }
+
   if (status === 502 || status === 503 || status === 504) {
     // Gateway/proxy — thường BE crash, restart, hoặc timeout; không phải lỗi payload FE.
     const htmlOrText = typeof data === "string" ? data : "";
