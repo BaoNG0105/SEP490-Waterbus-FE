@@ -57,6 +57,7 @@ const MENU_GROUPS = [
     labelVn: "Đặt chỗ & BH",
     labelEn: "Bookings & Insurance",
     items: [
+      { path: "/admin/booking-pos", labelVn: "Bán vé (POS)", labelEn: "Sell tickets (POS)", roles: ["ADMIN", "MANAGER", "STAFF"] },
       { path: "/admin/bookings", labelVn: "Booking vé", labelEn: "Seat bookings", roles: ["ADMIN"] },
       { path: "/admin/charter-bookings-management", labelVn: "Thuê tàu", labelEn: "Request Booking", roles: ["ADMIN"] },
       { path: "/admin/insurance-management", labelVn: "Bảo hiểm", labelEn: "Insurance", roles: ["ADMIN"] },
@@ -90,6 +91,7 @@ const STAFF_MENU_PATHS = new Set([
   "/admin/staff/my-trips",
   "/admin/staff/ticket-scan",
   "/admin/staff/scan-history",
+  "/admin/booking-pos",
 ]);
 
 const isPathActive = (currentPath, itemPath) => {

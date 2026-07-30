@@ -531,7 +531,7 @@ export function StaffMyTripsPage() {
           <AppDateInput
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="h-9 min-w-[9.5rem] flex-1 rounded-xl border-0 bg-white px-2.5 text-xs font-bold text-[#124757] shadow-sm dark:bg-slate-800 dark:text-yellow-400 sm:flex-none"
+            className="h-9 min-w-38 flex-1 rounded-xl border-0 bg-white px-2.5 text-xs font-bold text-[#124757] shadow-sm dark:bg-slate-800 dark:text-yellow-400 sm:flex-none"
           />
           <button
             type="button"
