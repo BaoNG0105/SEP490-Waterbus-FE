@@ -1,5 +1,23 @@
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { chatWithAssistant } from "../api/assistantApi";
+
+// Style các thẻ markdown cho vừa khung bong bóng chat (không dùng @tailwindcss/typography).
+const markdownComponents = {
+  p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+  strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+  ul: ({ children }) => <ul className="mb-1.5 list-disc space-y-0.5 pl-4 last:mb-0">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-1.5 list-decimal space-y-0.5 pl-4 last:mb-0">{children}</ol>,
+  li: ({ children }) => <li>{children}</li>,
+  a: ({ children, href }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+      {children}
+    </a>
+  ),
+  code: ({ children }) => (
+    <code className="rounded bg-slate-900/10 px-1 py-0.5 text-[12px] dark:bg-white/10">{children}</code>
+  ),
+};
 
 const TEXT = {
   VN: {
@@ -25,7 +43,9 @@ const TEXT = {
 };
 
 export const AIChatbotPanel = ({ lang, onClose }) => {
-  const t = TEXT[lang] || TEXT.VN;
+  // Ngôn ngữ riêng của khung chat (mặc định theo ngôn ngữ toàn site), có thể đổi độc lập bằng nút VN/EN.
+  const [chatLang, setChatLang] = useState(lang === "ENG" ? "ENG" : "VN");
+  const t = TEXT[chatLang] || TEXT.VN;
   const [messages, setMessages] = useState([
     { id: "greeting", from: "bot", text: t.greeting },
   ]);
@@ -36,6 +56,13 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
+
+  // Câu chào là văn bản tĩnh theo ngôn ngữ, không phải do LLM trả về nên cần tự đồng bộ khi đổi VN/EN.
+  useEffect(() => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === "greeting" ? { ...m, text: t.greeting } : m))
+    );
+  }, [chatLang, t.greeting]);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -53,7 +80,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     setIsTyping(true);
 
     try {
-      const data = await chatWithAssistant(history);
+      const data = await chatWithAssistant(history, chatLang);
       const replyText =
         (typeof data === "string" ? data : data?.reply ?? data?.text ?? data?.message ?? data?.answer) ||
         t.errorReply;
@@ -96,6 +123,23 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
             {t.subtitle}
           </p>
         </div>
+        <div className="flex shrink-0 items-center gap-1 rounded-full bg-white/15 p-0.5 dark:bg-yellow-400/15">
+          {["VN", "ENG"].map((code) => (
+            <button
+              key={code}
+              type="button"
+              onClick={() => setChatLang(code)}
+              title={code === "VN" ? "Tiếng Việt" : "English"}
+              className={`rounded-full px-2 py-1 text-[10px] font-black transition-colors ${
+                chatLang === code
+                  ? "bg-white text-[#124757] dark:bg-yellow-400 dark:text-slate-900"
+                  : "text-white/80 hover:text-white dark:text-yellow-400/70 dark:hover:text-yellow-400"
+              }`}
+            >
+              {code === "VN" ? "VN" : "EN"}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={onClose}
@@ -120,7 +164,11 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
                   : "rounded-bl-sm bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-100"
               }`}
             >
-              {m.text}
+              {m.from === "user" ? (
+                m.text
+              ) : (
+                <ReactMarkdown components={markdownComponents}>{m.text}</ReactMarkdown>
+              )}
             </div>
           </div>
         ))}
