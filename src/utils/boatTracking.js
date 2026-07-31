@@ -464,8 +464,8 @@ export const normalizeBoatLocation = (raw) => {
   const seatRaw = Number(
     raw.seatCount ?? raw.SeatCount ?? raw.totalSeats ?? raw.TotalSeats ?? raw.capacity ?? raw.Capacity,
   );
-  // Đừng Number(null) → 0: thiếu field thì để null để map không hiện "0/ghế".
-  // Chỉ đếm khách đang trên tàu — không dùng totalPassengerCount (gồm vé đã checkout).
+  // Contract BE: onboardPassengerCount = đã check-in chưa check-out (gồm INFANT).
+  // Không dùng totalPassengerCount / occupiedSeats (vé đã bán).
   const passengerSource = raw.onboardPassengerCount
     ?? raw.OnboardPassengerCount
     ?? raw.checkedInPassengerCount
@@ -473,9 +473,7 @@ export const normalizeBoatLocation = (raw) => {
     ?? raw.passengerCount
     ?? raw.PassengerCount
     ?? raw.currentPassengers
-    ?? raw.CurrentPassengers
-    ?? raw.occupiedSeats
-    ?? raw.OccupiedSeats;
+    ?? raw.CurrentPassengers;
   const passengerRaw = passengerSource === null || passengerSource === undefined || passengerSource === ""
     ? NaN
     : Number(passengerSource);
@@ -537,11 +535,21 @@ export const normalizeBoatLocation = (raw) => {
   const statusKey = statusRaw.toLowerCase().replace(/[_\s-]/g, "");
   const resolvedMovement = movementStatus
     || (statusKey === "boarding" ? "Boarding" : null)
+    || (statusKey === "atstation" || statusKey === "arrived" ? "AtStation" : null)
+    || (statusKey === "arriving" ? "Arriving" : null)
     || (statusKey === "scheduled" ? "Scheduled" : null);
   const nextStationId = raw.nextStationId ?? raw.NextStationId ?? null;
   const nextStationName = raw.nextStationName ?? raw.NextStationName ?? null;
   const nextStationCode = raw.nextStationCode ?? raw.NextStationCode ?? null;
   const currentStationName = raw.currentStationName ?? raw.CurrentStationName ?? null;
+
+  const tripIdRaw = raw.tripId ?? raw.TripId ?? raw.trip?.id ?? raw.trip?.tripId ?? null;
+  const tripId = tripIdRaw != null && String(tripIdRaw).trim() ? String(tripIdRaw).trim() : null;
+  const tripCodeRaw = raw.tripCode ?? raw.TripCode ?? raw.trip?.tripCode ?? null;
+  const tripCode = tripCodeRaw != null && String(tripCodeRaw).trim() ? String(tripCodeRaw).trim() : null;
+  const totalPassengerRaw = Number(
+    raw.totalPassengerCount ?? raw.TotalPassengerCount ?? raw.occupiedSeatCount ?? raw.OccupiedSeatCount,
+  );
 
   return {
     boatId: boatId || boatCode,
@@ -562,6 +570,11 @@ export const normalizeBoatLocation = (raw) => {
     activeIncidentId,
     seatCount: Number.isFinite(seatRaw) && seatRaw >= 0 ? seatRaw : null,
     passengerCount: Number.isFinite(passengerRaw) && passengerRaw >= 0 ? passengerRaw : null,
+    totalPassengerCount: Number.isFinite(totalPassengerRaw) && totalPassengerRaw >= 0
+      ? totalPassengerRaw
+      : null,
+    tripId,
+    tripCode,
     imageUrl: raw.imageUrl ?? raw.ImageUrl ?? raw.boat?.imageUrl ?? null,
     // GPS/BE có thể gửi kèm (tracking hoặc operations schedule merge).
     movementStatus: resolvedMovement ? String(resolvedMovement) : null,
@@ -804,7 +817,19 @@ export const upsertBoatLocationMap = (prevMap, location) => {
   const stabilized = stabilizeIdleTeleport(prev, normalized);
   const prevLive = prev && !prev.fromSticky ? prev : null;
   const statusLower = String(stabilized.status || prevLive?.status || "").toLowerCase();
-  const tripCleared = ["idle", "stopped", "offline", "sticky"].includes(statusLower);
+  const movementKey = String(
+    stabilized.movementStatus || prevLive?.movementStatus || "",
+  ).toLowerCase().replace(/[_\s-]/g, "");
+  const dockedAtStation = [
+    "atstation",
+    "boarding",
+    "arrived",
+    "arriving",
+  ].includes(movementKey)
+    || Boolean(stabilized.dwellCountdown || prevLive?.dwellCountdown);
+  // Idle khi cập bến ≠ hết chuyến — đừng xóa trip/passenger.
+  const tripCleared = ["idle", "stopped", "offline", "sticky"].includes(statusLower)
+    && !dockedAtStation;
   const APPROACH_KM = 0.4;
 
   const keepStr = (nextVal, prevVal) => {
@@ -907,9 +932,47 @@ export const upsertBoatLocationMap = (prevMap, location) => {
       }
       return prevLive?.dwellCountdown ?? null;
     })(),
-    passengerCount: Number.isFinite(Number(stabilized.passengerCount))
-      ? Number(stabilized.passengerCount)
-      : (tripCleared ? null : (prevLive?.passengerCount ?? null)),
+    passengerCount: (() => {
+      // Number(null)===0 nên không dùng Number.isFinite(Number(...)) — sẽ biến "thiếu data" thành 0 giả.
+      const raw = stabilized.passengerCount;
+      if (raw === null || raw === undefined || raw === "") {
+        return tripCleared ? null : (prevLive?.passengerCount ?? null);
+      }
+      const n = Number(raw);
+      if (!(Number.isFinite(n) && n >= 0)) {
+        return tripCleared ? null : (prevLive?.passengerCount ?? null);
+      }
+      // Cập bến: GPS hay gửi onboard=0 — giữ số trước nếu đã có (schedule/trip poll sẽ chỉnh lại).
+      if (n === 0 && dockedAtStation) {
+        const prevN = Number(prevLive?.passengerCount);
+        if (Number.isFinite(prevN) && prevN > 0) return prevN;
+      }
+      return n;
+    })(),
+    totalPassengerCount: (() => {
+      const raw = stabilized.totalPassengerCount;
+      if (raw === null || raw === undefined || raw === "") {
+        return tripCleared ? null : (prevLive?.totalPassengerCount ?? null);
+      }
+      const n = Number(raw);
+      if (!(Number.isFinite(n) && n >= 0)) {
+        return tripCleared ? null : (prevLive?.totalPassengerCount ?? null);
+      }
+      if (n === 0 && dockedAtStation) {
+        const prevN = Number(prevLive?.totalPassengerCount);
+        if (Number.isFinite(prevN) && prevN > 0) return prevN;
+      }
+      return n;
+    })(),
+    tripId: (() => {
+      const next = stabilized.tripId != null && String(stabilized.tripId).trim()
+        ? String(stabilized.tripId).trim()
+        : null;
+      if (next) return next;
+      if (tripCleared) return null;
+      return prevLive?.tripId ?? null;
+    })(),
+    tripCode: keepStr(stabilized.tripCode, prevLive?.tripCode),
     fromSticky: false,
   };
   saveStickyBoatPosition(merged);

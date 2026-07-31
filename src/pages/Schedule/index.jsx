@@ -11,7 +11,27 @@ import { resolveTripKindKey } from "../../utils/routeTypes";
 import {
   pickStopDisplayArrival,
   pickStopDisplayDeparture,
+  pickStopScheduledArrival,
+  pickStopScheduledDeparture,
+  pickStopAdjustedArrival,
+  pickStopAdjustedDeparture,
+  getStopStatusLabel,
+  getStopStatusBadgeClass,
+  resolveStopStatusKey,
 } from "../../utils/tripStopTimes";
+import { normalizeTripStatusKey } from "../../services/tripService";
+
+/** Giờ hiện trên lịch khách: ưu tiên lịch/điều chỉnh, không lấy actual sớm từ simulator. */
+const pickScheduleBoardArrival = (stop) => (
+  pickStopAdjustedArrival(stop)
+  || pickStopScheduledArrival(stop)
+  || pickStopDisplayArrival(stop)
+);
+const pickScheduleBoardDeparture = (stop) => (
+  pickStopAdjustedDeparture(stop)
+  || pickStopScheduledDeparture(stop)
+  || pickStopDisplayDeparture(stop)
+);
 
 /** Customer: tối đa 7 ngày (hôm nay → +6). */
 const CUSTOMER_SCHEDULE_MAX_DAYS = 7;
@@ -49,15 +69,16 @@ const clockSortMs = (iso) => {
   return Number.isNaN(ms) ? Number.MAX_SAFE_INTEGER : ms;
 };
 
-/** Chuyến đã qua giờ khởi hành (hoặc BE báo hoàn tất/hủy). */
-const isTripEnded = (trip, viewTime) => {
-  const status = String(trip?.movementStatus || trip?.operationStatus || trip?.tripStatus || "")
-    .toLowerCase()
-    .replace(/[_\s-]/g, "");
-  if (status === "completed" || status === "cancelled" || status === "canceled") return true;
-  const ms = Date.parse(String(viewTime || ""));
-  if (Number.isNaN(ms)) return false;
-  return ms < Date.now();
+/** Chỉ ẩn khi chuyến đã kết thúc/hủy — vẫn hiện chờ và đang chạy. */
+const isTripEnded = (trip, endTime) => {
+  const key = normalizeTripStatusKey(
+    trip?.tripStatus || trip?.status || trip?.movementStatus || trip?.operationStatus,
+  );
+  if (key === "Completed" || key === "Cancelled") return true;
+  // Fallback khi BE chưa kịp set Completed: đã qua giờ đến dự kiến điểm cuối.
+  const ms = Date.parse(String(endTime || trip?.displayEndAt || trip?.endAt || ""));
+  if (!Number.isNaN(ms) && ms < Date.now()) return true;
+  return false;
 };
 
 const tripDayKey = (trip) => {
@@ -325,8 +346,8 @@ export function Schedule() {
       .sort((a, b) => clockSortMs(a.viewTime) - clockSortMs(b.viewTime));
   }, [entries, selectedDate, today, maxDate, selectedStation, routeTypeFilter]);
 
-  // Chuyến đã khởi hành thì ẩn khỏi bảng — tính lại mỗi lần render (đồng hồ tick mỗi giây).
-  const visibleTrips = filteredTrips.filter(({ trip, viewTime }) => !isTripEnded(trip, viewTime));
+  // Chỉ ẩn chuyến đã kết thúc/hủy — chờ và đang chạy vẫn hiện.
+  const visibleTrips = filteredTrips.filter(({ trip, endTime }) => !isTripEnded(trip, endTime));
 
   const isOutsideScheduleWindow = Boolean(
     selectedDate && (selectedDate > maxDate || selectedDate < today),
@@ -493,6 +514,9 @@ export function Schedule() {
                       const stops = sortedStops(trip);
                       const hasStops = stops.length > 0;
                       const isExpanded = hasStops && expandedTripKey === tripKey;
+                      const tripStatusKey = normalizeTripStatusKey(
+                        trip?.tripStatus || trip?.status || trip?.movementStatus || trip?.operationStatus,
+                      );
 
                       const firstDeparture = hasStops
                         ? (pickStopDisplayDeparture(stops[0]) || pickStopDisplayArrival(stops[0]))
@@ -500,10 +524,35 @@ export function Schedule() {
                       const lastArrival = hasStops
                         ? (pickStopDisplayArrival(stops[stops.length - 1]) || pickStopDisplayDeparture(stops[stops.length - 1]))
                         : null;
-                      const startMs = Date.parse(String(firstDeparture || trip?.displayStartAt || trip?.startAt || ""));
-                      const endMs = Date.parse(String(lastArrival || trip?.displayEndAt || trip?.endAt || ""));
-                      const durationLabel = (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs)
-                        ? formatDurationLabel(Math.round((endMs - startMs) / 60000), lang)
+                      // Codex/BE: thời gian tour lấy từ departureTime/arrivalTime chuyến — không suy từ buffer 15'.
+                      const tripStartRaw = trip?.displayStartAt
+                        || trip?.startAt
+                        || trip?.departureTime
+                        || trip?.scheduledDepartureAt
+                        || firstDeparture
+                        || viewTime;
+                      const tripEndRaw = trip?.displayEndAt
+                        || trip?.endAt
+                        || trip?.arrivalTime
+                        || trip?.scheduledArrivalAt
+                        || lastArrival;
+                      const startMs = Date.parse(String(tripStartRaw || ""));
+                      const endMs = Date.parse(String(tripEndRaw || ""));
+                      const routeEstMin = Number(
+                        trip?.estimatedDurationMin
+                        ?? trip?.estimatedDurationMinutes
+                        ?? trip?.route?.estimatedDurationMin
+                        ?? trip?.routeEstimatedDurationMin
+                        ?? NaN,
+                      );
+                      const spanMins = (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs)
+                        ? Math.round((endMs - startMs) / 60000)
+                        : null;
+                      const durationMins = (Number.isFinite(spanMins) && spanMins > 0)
+                        ? spanMins
+                        : (Number.isFinite(routeEstMin) && routeEstMin > 0 ? Math.round(routeEstMin) : null);
+                      const durationLabel = durationMins != null
+                        ? formatDurationLabel(durationMins, lang)
                         : null;
 
                       return (
@@ -588,13 +637,14 @@ export function Schedule() {
                                     ) : null}
                                   </div>
                                   <div className="overflow-x-auto">
-                                    <table className="w-full min-w-105 border-collapse text-left text-xs">
+                                    <table className="w-full min-w-120 border-collapse text-left text-xs">
                                       <thead>
                                         <tr className="border-b border-slate-200 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400 dark:border-white/10 dark:text-slate-500">
                                           <th className="px-3 py-2">STT</th>
                                           <th className="px-3 py-2">{lang === "VN" ? "Ga/Bến" : "Station"}</th>
                                           <th className="px-3 py-2">{lang === "VN" ? "Giờ đến" : "Arrival"}</th>
                                           <th className="px-3 py-2">{lang === "VN" ? "Giờ đi" : "Departure"}</th>
+                                          <th className="px-3 py-2">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                                           <th className="hidden px-3 py-2 sm:table-cell">{lang === "VN" ? "Dừng" : "Stop"}</th>
                                         </tr>
                                       </thead>
@@ -605,6 +655,22 @@ export function Schedule() {
                                           const isAlighting = Boolean(toStopKey) && stopKey === toStopKey;
                                           const highlighted = isBoarding || isAlighting;
                                           const stay = Number(stop?.stayDurationMinutes);
+                                          const isFirst = idx === 0;
+                                          const isLast = idx === stops.length - 1;
+                                          const stopOpts = {
+                                            isFirst,
+                                            isLast,
+                                            tripStatusKey,
+                                            now: now.getTime(),
+                                            tripStartAt: trip?.displayStartAt
+                                              || trip?.startAt
+                                              || trip?.scheduledDepartureAt
+                                              || viewTime
+                                              || null,
+                                          };
+                                          const stopStatusKey = resolveStopStatusKey(stop, stopOpts);
+                                          const stopStatusLabel = getStopStatusLabel(stopStatusKey, lang, stopOpts);
+                                          const stopStatusClass = getStopStatusBadgeClass(stopStatusKey, stopOpts);
                                           return (
                                             <tr
                                               key={String(stop.tripStopId || `${tripKey}-${idx}`)}
@@ -625,13 +691,18 @@ export function Schedule() {
                                                 ) : null}
                                               </td>
                                               <td className="px-3 py-2 tabular-nums text-slate-500 dark:text-slate-300">
-                                                {formatClock(pickStopDisplayArrival(stop))}
+                                                {isFirst ? "—" : formatClock(pickScheduleBoardArrival(stop))}
                                               </td>
                                               <td className="px-3 py-2 tabular-nums text-slate-500 dark:text-slate-300">
-                                                {formatClock(pickStopDisplayDeparture(stop))}
+                                                {isLast ? "—" : formatClock(pickScheduleBoardDeparture(stop))}
+                                              </td>
+                                              <td className="px-3 py-2">
+                                                <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-[9px] font-headline font-black uppercase tracking-wide ${stopStatusClass}`}>
+                                                  {stopStatusLabel}
+                                                </span>
                                               </td>
                                               <td className="hidden px-3 py-2 tabular-nums text-slate-400 sm:table-cell">
-                                                {Number.isFinite(stay) && stay > 0 ? `${stay}'` : "—"}
+                                                {isFirst || isLast || !(Number.isFinite(stay) && stay > 0) ? "—" : `${stay}'`}
                                               </td>
                                             </tr>
                                           );

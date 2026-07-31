@@ -68,3 +68,8 @@ export const startTripDelay = (id, payload) =>
 // API: Tiếp tục sau delay — body: { note }. BE tính lan delay theo lịch tàu thật (không còn rule cứng 15 phút).
 export const resumeTripDelay = (id, payload) =>
     api.post(`/trips/${id}/delay/resume`, payload).then(response => response.data);
+
+/** POST /api/trips/{tripId}/cancel-no-show — Admin hủy chuyến Sightseeing không khách / no-show. */
+export const cancelTripNoShow = (tripId, payload = {}) =>
+    api.post(`/trips/${encodeURIComponent(String(tripId || "").trim())}/cancel-no-show`, payload)
+        .then((response) => response.data);

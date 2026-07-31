@@ -709,10 +709,12 @@ export const WaterwayMap = ({
           const dimmed = boat.isOnline === false;
           const imageSrc = getBoatImageUrl(boat, DEFAULT_BOAT_IMAGE);
           const seatCount = (() => {
+            const fromCapacity = Number(boat.capacitySnapshot);
+            if (Number.isFinite(fromCapacity) && fromCapacity > 0) return fromCapacity;
             const n = Number(boat.seatCount);
             return Number.isFinite(n) && n > 0 ? n : null;
           })();
-          // Number(null)===0 nên phải check null/undefined tường minh — tránh hiện giả "0/ghế".
+          // Contract: `${onboardPassengerCount ?? 0}/${capacitySnapshot}`
           const passengerCount = (() => {
             if (boat.passengerCount === null || boat.passengerCount === undefined || boat.passengerCount === "") {
               return null;
@@ -722,8 +724,11 @@ export const WaterwayMap = ({
           })();
           const hasSeats = seatCount != null;
           const hasPassengers = passengerCount != null;
+          const forceOccupancyRatio = Boolean(boat.tripId) || boat.showLiveGps === true;
           const occupancyValue = hasSeats
-            ? (hasPassengers ? `${passengerCount}/${seatCount}` : String(seatCount))
+            ? ((hasPassengers || forceOccupancyRatio)
+              ? `${passengerCount ?? 0}/${seatCount}`
+              : String(seatCount))
             : null;
           const liveStatus = resolveBoatLiveStatus(boat);
           const isIncident = liveStatus.key === "incident";
@@ -775,6 +780,21 @@ export const WaterwayMap = ({
                   />
                   {kindLabel}
                 </p>
+                {/* Số khách luôn hiện khi có capacity — không bị flash “đã rời bến” che. */}
+                {(occupancyValue && markerKind !== "rescue") ? (
+                  <p className="wb-boat-card__seats">
+                    <strong>{occupancyValue}</strong>
+                    {boat.passengerBreakdown?.stopName ? (
+                      <span style={{ display: "block", marginTop: 2, fontSize: 10, fontWeight: 600, color: "#64748B" }}>
+                        {`Đoạn từ ${boat.passengerBreakdown.stopName}`}
+                      </span>
+                    ) : boat.passengerCountSource === "tracking" ? (
+                      <span style={{ display: "block", marginTop: 2, fontSize: 10, fontWeight: 600, color: "#64748B" }}>
+                        Check-in thực tế
+                      </span>
+                    ) : null}
+                  </p>
+                ) : null}
                 {boat.flashNotice ? (
                   <p
                     className="wb-boat-card__note"
@@ -800,10 +820,6 @@ export const WaterwayMap = ({
                   <p className="wb-boat-card__note">Sự cố</p>
                 ) : underMaintenance ? (
                   <p className="wb-boat-card__note">Đang bảo trì</p>
-                ) : (occupancyValue && markerKind !== "rescue") ? (
-                  <p className="wb-boat-card__seats">
-                    <strong>{occupancyValue}</strong>
-                  </p>
                 ) : null}
               </div>
             </div>

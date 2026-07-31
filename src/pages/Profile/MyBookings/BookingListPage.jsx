@@ -32,18 +32,29 @@ const STATUS_STYLES = {
   completed: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20",
   cancelled: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600",
   expired: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
+  refunded: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
+  pendingquote: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20",
+  quoted: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
 };
 
-const getStatusClasses = (status) => STATUS_STYLES[String(status || "").toLowerCase()]
-  || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600";
+const getStatusClasses = (status) => {
+  const key = String(status || "").toLowerCase().replace(/[\s_-]/g, "");
+  return STATUS_STYLES[key]
+    || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600";
+};
 
 const STATUS_LABELS = {
   pendingpayment: { vn: "Chờ thanh toán", en: "Pending payment" },
   confirmed: { vn: "Đã xác nhận", en: "Confirmed" },
-  completed: { vn: "Hoàn thành", en: "Completed" },
+  completed: { vn: "Hoàn tất", en: "Completed" },
   cancelled: { vn: "Đã hủy", en: "Cancelled" },
   expired: { vn: "Hết hạn", en: "Expired" },
-  paid: { vn: "Đã thanh toán", en: "Paid" },
+  refunded: { vn: "Đã hoàn tiền", en: "Refunded" },
+  pendingquote: { vn: "Chờ báo giá", en: "Pending quote" },
+  quoted: { vn: "Đã báo giá", en: "Quoted" },
+  paid: { vn: "Đã thanh toán đủ", en: "Paid" },
+  unpaid: { vn: "Chưa thanh toán", en: "Unpaid" },
+  depositpaid: { vn: "Đã cọc", en: "Deposit paid" },
 };
 
 const getStatusLabel = (status, lang = "VN") => {

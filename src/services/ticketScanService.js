@@ -4,6 +4,7 @@ import {
   checkOutTicket as apiCheckOutTicket,
   rejectTicketConcession as apiRejectTicketConcession,
   getBookingManifestByQr as apiGetBookingManifestByQr,
+  getBookingManifestByCode as apiGetBookingManifestByCode,
   checkInAllBookingManifestByQr as apiCheckInAllBookingManifestByQr,
   checkOutAllBookingManifestByQr as apiCheckOutAllBookingManifestByQr,
 } from '../api/ticketScanApi';
@@ -15,6 +16,12 @@ const pick = (source, keys, fallback = '') => {
     if (value !== undefined && value !== null && value !== '') return value;
   }
   return fallback;
+};
+
+const toFiniteMoney = (raw) => {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 };
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -56,6 +63,10 @@ export const resolveIndividualTicketToken = (row, fallback = '') => {
     row?.raw?.ticket?.ticketCode,
     row?.raw?.ticket?.qrToken,
     row?.raw?.ticket?.code,
+    row?.raw?.ticketPassenger?.ticketCode,
+    row?.raw?.TicketPassenger?.TicketCode,
+    row?.primaryPassenger?.ticketCode,
+    row?.passengers?.[0]?.ticketCode,
     fallback,
   ];
   for (const candidate of candidates) {
@@ -293,14 +304,14 @@ const normalizePassengerList = (source) => {
     const usesCompanionTicket = toBool(
       row?.usesCompanionTicket ?? row?.UsesCompanionTicket,
       // BE: chỉ INFANT (không ghế) dùng QR người lớn. CHILD có QR riêng.
-      typeCode === 'INFANT' || (typeCode === 'CHILD' && !seatCode),
+      typeCode === 'INFANT',
     );
     const isLapInfantFlag = toBool(row?.isLapInfant ?? row?.IsLapInfant, false);
     const isLapInfant = isLapInfantFlag
       || (typeCode === 'INFANT' && !seatCode)
       || (usesCompanionTicket && typeCode === 'INFANT');
 
-    const birthYearRaw = pick(row, ['birthYear', 'BirthYear', 'yearOfBirth'], '');
+    const birthYearRaw = pick(row, ['birthYear', 'BirthYear', 'yearOfBirth', 'passengerBirthYear', 'ticketPassenger.birthYear'], '');
     const birthYearNum = Number(birthYearRaw);
     const birthYear = Number.isFinite(birthYearNum) && birthYearNum > 1900
       ? birthYearNum
@@ -356,10 +367,18 @@ export const normalizeScannedTicket = (item) => {
 
   const status = pick(ticket, ['ticketStatus', 'status', 'attendanceStatus'], '')
     || pick(item, ['ticketStatus', 'TicketStatus', 'status'], '');
-  const statusKey = String(status || '').toLowerCase();
+  const statusNorm = String(status || '').toLowerCase().replace(/[\s_-]/g, '');
   // Fallback khi BE chưa gửi canCheck*: Active → check-in; CheckedIn → check-out.
-  const canCheckInFallback = statusKey === 'active' || statusKey === '';
-  const canCheckOutFallback = statusKey === 'checkedin' || statusKey.includes('checked_in');
+  // Used / Cancelled / Expired / CheckedOut = terminal — không check-in.
+  const isTerminalStatus = statusNorm === 'used'
+    || statusNorm === 'cancelled'
+    || statusNorm === 'canceled'
+    || statusNorm === 'expired'
+    || statusNorm === 'checkedout'
+    || statusNorm === 'complete'
+    || statusNorm === 'completed';
+  const canCheckInFallback = !isTerminalStatus && (statusNorm === 'active' || statusNorm === '');
+  const canCheckOutFallback = statusNorm === 'checkedin';
 
   const fromStationName = pick(item, [
     'fromStationName', 'fromStation', 'boardingStationName',
@@ -381,7 +400,9 @@ export const normalizeScannedTicket = (item) => {
     || pick(item, ['fullName', 'passengerName', 'contactName', 'name'], '')
     || '—';
 
-  const passengerBirthRaw = pick(passenger, ['birthYear', 'BirthYear', 'yearOfBirth'], '')
+  const passengerBirthRaw = pick(passenger, ['birthYear', 'BirthYear', 'yearOfBirth', 'passengerBirthYear'], '')
+    || pick(ticket, ['birthYear', 'BirthYear', 'ticketPassenger.birthYear', 'ticketPassenger.BirthYear'], '')
+    || pick(item, ['birthYear', 'BirthYear', 'passengerBirthYear', 'ticketPassenger.birthYear', 'TicketPassenger.BirthYear'], '')
     || primaryPassenger?.birthYear
     || '';
   const passengerBirthNum = Number(passengerBirthRaw);
@@ -487,8 +508,13 @@ export const normalizeScannedTicket = (item) => {
     eligibilityCodes,
     concessionCodes: eligibilityCodes.filter((code) => CONCESSION_VERIFY_SET.has(code)),
     status,
-    canCheckIn: toBool(canCheckInRaw, canCheckInFallback),
-    canCheckOut: toBool(canCheckOutRaw, canCheckOutFallback),
+    // Terminal statuses luôn khóa check-in/out dù BE còn gửi flag cũ.
+    canCheckIn: isTerminalStatus || statusNorm === 'checkedin'
+      ? false
+      : toBool(canCheckInRaw, canCheckInFallback),
+    canCheckOut: isTerminalStatus
+      ? false
+      : toBool(canCheckOutRaw, canCheckOutFallback),
     tripCode: pick(item, ['tripCode', 'trip.code'], '') || pick(ticket, ['tripCode'], ''),
     legLabel: pick(item, ['leg', 'direction', 'tripDirection', 'legType'], '')
       || pick(ticket, ['leg', 'direction'], ''),
@@ -508,11 +534,35 @@ export const normalizeScannedTicket = (item) => {
     passengerCount: Number(pick(item, ['passengerCount', 'registeredPassengerCount'], '') || 0) || null,
     issuedAt: pick(item, ['issuedAt', 'IssuedAt'], '') || pick(ticket, ['issuedAt'], '') || '',
     price: (() => {
-      const raw = item?.unitPrice ?? item?.price ?? item?.fareAmount
-        ?? ticket?.unitPrice ?? ticket?.price ?? ticket?.fareAmount ?? ticket?.ticketPrice
-        ?? passenger?.unitPrice ?? null;
-      const n = Number(raw);
-      return Number.isFinite(n) ? n : null;
+      // Number(null)===0 — thiếu unitPrice từ scan DTO cũ không được coi là miễn phí.
+      const candidates = [
+        item?.unitPrice,
+        item?.UnitPrice,
+        item?.fareAmount,
+        item?.FareAmount,
+        ticket?.unitPrice,
+        ticket?.UnitPrice,
+        ticket?.fareAmount,
+        ticket?.ticketPrice,
+        passenger?.unitPrice,
+        passenger?.UnitPrice,
+        primaryPassenger?.raw?.unitPrice,
+        primaryPassenger?.raw?.UnitPrice,
+      ];
+      for (const raw of candidates) {
+        const n = toFiniteMoney(raw);
+        if (n != null) return n;
+      }
+      // Fallback: passenger có ghế trong danh sách (người lớn) — bỏ INFANT nếu adult có giá.
+      const seated = passengers.filter((row) => {
+        const code = String(row.ticketTypeCode || '').toUpperCase();
+        return !row.isLapInfant && code !== 'INFANT' && row.raw;
+      });
+      for (const row of seated) {
+        const n = toFiniteMoney(row.raw?.unitPrice ?? row.raw?.UnitPrice);
+        if (n != null) return n;
+      }
+      return null;
     })(),
     scheduledBoardingAt: pick(item, ['scheduledBoardingAt', 'scheduledDeparture'], '')
       || pick(ticket, ['scheduledBoardingAt', 'scheduledDeparture'], '')
@@ -655,12 +705,67 @@ export const normalizeBookingManifest = (item, qrToken = '') => {
   };
 };
 
+const isTransientGatewayError = (error) => {
+  const status = Number(error?.response?.status || 0);
+  if ([502, 503, 504].includes(status)) return true;
+  if (error?.code === 'ECONNABORTED') return true;
+  return /timeout/i.test(String(error?.message || ''));
+};
+
+const wait = (ms) => new Promise((resolve) => {
+  window.setTimeout(resolve, ms);
+});
+
+/**
+ * Scan DTO cũ không có unitPrice → bổ sung từ GET /bookings/manifest/{bookingCode}
+ * (manifest passenger đã có unitPrice).
+ */
+const enrichTicketPriceFromManifest = async (ticket) => {
+  if (!ticket || ticket.price != null) return ticket;
+  const bookingCode = String(ticket.bookingCode || '').trim();
+  if (!bookingCode || bookingCode === '—') return ticket;
+  try {
+    const data = await apiGetBookingManifestByCode(bookingCode);
+    const passengers = Array.isArray(data?.passengers)
+      ? data.passengers
+      : Array.isArray(data?.manifest?.passengers)
+        ? data.manifest.passengers
+        : [];
+    const ticketCode = String(ticket.ticketCode || '').trim().toUpperCase();
+    const seatLabel = String(ticket.seatLabel || '').trim().toUpperCase();
+    const match = passengers.find((row) => {
+      const rowTicket = String(row?.ticketCode || row?.TicketCode || '').trim().toUpperCase();
+      if (ticketCode && rowTicket === ticketCode) return true;
+      const rowSeat = String(row?.seatCode || row?.SeatCode || '').trim().toUpperCase();
+      return Boolean(seatLabel && rowSeat && rowSeat === seatLabel);
+    }) || passengers.find((row) => {
+      const type = String(row?.ticketTypeCode || row?.passengerType || '').toUpperCase();
+      const isInfant = Boolean(row?.isLapInfant) || type === 'INFANT';
+      return !isInfant && toFiniteMoney(row?.unitPrice ?? row?.UnitPrice) != null;
+    });
+    const price = toFiniteMoney(match?.unitPrice ?? match?.UnitPrice);
+    if (price == null) return ticket;
+    return { ...ticket, price };
+  } catch (error) {
+    console.warn('Không bổ sung được giá vé từ manifest:', error);
+    return ticket;
+  }
+};
+
 /** Tra cứu qua POST /tickets/scan — 1 endpoint, BE tự phân vé thường / QR tổng. */
 export const scanTicket = async (codeOrToken, { source = 'Qr' } = {}) => {
   const body = buildTicketScanBody(codeOrToken, { source });
   if (!body) throw new Error('EMPTY_CODE');
   try {
-    const raw = await apiScanTicket(body);
+    let raw;
+    try {
+      raw = await apiScanTicket(body);
+    } catch (firstError) {
+      if (!isTransientGatewayError(firstError)) throw firstError;
+      // Retry 1 lần cho lỗi gateway/timeout tạm thời để giảm false-negative khi BE đang warm up.
+      await wait(350);
+      raw = await apiScanTicket(body);
+    }
     const data = unwrapScanPayload(raw);
     if (looksLikeManifest(data)) {
       return normalizeBookingManifest(data, body.codeOrToken);
@@ -670,7 +775,7 @@ export const scanTicket = async (codeOrToken, { source = 'Qr' } = {}) => {
       console.error('Scan response không nhận diện được TicketScanDto:', raw);
       throw new Error('INVALID_SCAN_RESPONSE');
     }
-    return ticket;
+    return enrichTicketPriceFromManifest(ticket);
   } catch (error) {
     console.error('Lỗi scan vé:', error);
     throw error;
@@ -717,8 +822,13 @@ export const checkInTicket = async (codeOrToken, { source = 'Qr', note } = {}) =
   try {
     return await apiCheckInTicket(body);
   } catch (error) {
-    console.error('Lỗi check-in vé:', error);
-    throw error;
+    // Tương thích BE cũ: một số môi trường chỉ nhận { codeOrToken }.
+    try {
+      return await apiCheckInTicket({ codeOrToken: token });
+    } catch {
+      console.error('Lỗi check-in vé:', error);
+      throw error;
+    }
   }
 };
 
@@ -729,8 +839,13 @@ export const checkOutTicket = async (codeOrToken, { source = 'Qr', note } = {}) 
   try {
     return await apiCheckOutTicket(body);
   } catch (error) {
-    console.error('Lỗi check-out vé:', error);
-    throw error;
+    // Tương thích BE cũ: một số môi trường chỉ nhận { codeOrToken }.
+    try {
+      return await apiCheckOutTicket({ codeOrToken: token });
+    } catch {
+      console.error('Lỗi check-out vé:', error);
+      throw error;
+    }
   }
 };
 

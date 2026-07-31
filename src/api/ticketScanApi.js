@@ -14,7 +14,7 @@ import api from './axios';
  */
 
 export const scanTicket = (payload) =>
-  api.post('/tickets/scan', payload).then((response) => response.data);
+  api.post('/tickets/scan', payload, { timeout: 20000 }).then((response) => response.data);
 
 export const checkInTicket = (payload) =>
   api.post('/tickets/check-in', payload).then((response) => response.data);
@@ -33,6 +33,12 @@ export const rejectTicketConcession = (payload) =>
 export const getBookingManifestByQr = (bookingQrToken) =>
   api
     .get(`/bookings/manifest/qr/${encodeURIComponent(String(bookingQrToken || '').trim())}`)
+    .then((response) => response.data);
+
+/** GET /bookings/manifest/{bookingCode} — staff lấy giá / ghế theo mã BK. */
+export const getBookingManifestByCode = (bookingCode) =>
+  api
+    .get(`/bookings/manifest/${encodeURIComponent(String(bookingCode || '').trim())}`)
     .then((response) => response.data);
 
 /**

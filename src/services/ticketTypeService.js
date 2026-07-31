@@ -16,7 +16,7 @@ export const FARE_RULE_TICKET_CODES = ['ADULT', 'CHILD', 'INFANT', 'SENIOR', 'DI
 /** Nhãn hiển thị theo locale — ưu tiên hơn ticketTypeName thô từ BE (thường là mã EN). */
 export const TICKET_TYPE_DISPLAY_LABELS = Object.freeze({
   ADULT: { vn: 'Người lớn', en: 'Adult' },
-  CHILD: { vn: 'Trẻ em (>2–≤12 tuổi)', en: 'Child (>2–≤12)' },
+  CHILD: { vn: 'Trẻ em (dưới 12 tuổi)', en: 'Child (under 12 age)' },
   INFANT: { vn: 'Em bé (≤ 2 tuổi)', en: 'Infant (≤ 2)' },
   SENIOR: { vn: 'Người cao tuổi', en: 'Senior' },
   DISABLED: { vn: 'Người khuyết tật', en: 'Disabled' },

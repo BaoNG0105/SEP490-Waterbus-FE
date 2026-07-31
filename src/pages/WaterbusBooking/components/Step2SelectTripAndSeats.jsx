@@ -1074,7 +1074,7 @@ export default function Step2SelectTripAndSeats({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="inline-block h-6 w-5"><SeatMapIcon disabled showLabel={false} /></span>
-                  {lang === "VN" ? "Đã khóa" : "Locked"}
+                  {lang === "VN" ? "Đã có khách" : "Occupied"}
                 </div>
                 {seatTypesInMap.map(([code]) => (
                   <div key={code} className="flex items-center gap-1.5">
@@ -1125,7 +1125,7 @@ export default function Step2SelectTripAndSeats({
                           const isLockedByOthers = LOCKED_STATUSES.includes(seat.status) && !isSelected;
                           const seatBlocked = isLockedByOthers || isCurrentBookingClosed || isCurrentMissingKm;
                           const seatStatusLabel = isLockedByOthers
-                            ? (lang === "VN" ? "Đã khóa (chặng giao)" : "Locked (overlap)")
+                            ? (lang === "VN" ? "Đã có khách" : "Occupied")
                             : isCurrentMissingKm
                               ? (lang === "VN" ? "Thiếu km chặng" : "Missing segment km")
                               : isCurrentBookingClosed

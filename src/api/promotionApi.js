@@ -4,9 +4,11 @@ import api from './axios';
 export const getPromotions = (params = {}) =>
     api.get('/promotions', { params }).then(response => response.data);
 
-// API: Danh sách public cho khách (Active + Public)
+// API: Danh sách public cho khách (Active + Public).
+// skipAuth: trang KM / Home luôn hiện mã công khai; điều kiện FirstBookingOnly
+// vẫn được BE kiểm khi validate / áp mã lúc đặt vé.
 export const getPublicPromotions = () =>
-    api.get('/promotions/public').then(response => response.data);
+    api.get('/promotions/public', { skipAuth: true }).then((response) => response.data);
 
 // API: Tạo khuyến mãi mới
 export const createPromotion = (payload) =>
