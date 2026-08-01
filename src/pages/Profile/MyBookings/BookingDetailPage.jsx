@@ -59,7 +59,7 @@ const STATUS_LABELS = {
   refunded: { vn: "Đã hoàn tiền", en: "Refunded" },
   pendingquote: { vn: "Chờ báo giá", en: "Pending quote" },
   quoted: { vn: "Đã báo giá", en: "Quoted" },
-  paid: { vn: "Đã thanh toán đủ", en: "Paid in full" },
+  paid: { vn: "Đã thanh toán ", en: "Paid in full" },
   unpaid: { vn: "Chưa thanh toán", en: "Unpaid" },
   depositpaid: { vn: "Đã cọc", en: "Deposit paid" },
   pending: { vn: "Chờ thanh toán", en: "Pending" },
@@ -786,6 +786,12 @@ export function BookingDetailPage({ serviceType }) {
         boatCode: sample?.boatCode || "",
         boatName: sample?.boatName || "",
       };
+    }).sort((a, b) => {
+      // Chiều đi trước chiều về; cùng chiều thì theo giờ khởi hành.
+      if (a.isReturn !== b.isReturn) return a.isReturn ? 1 : -1;
+      const ta = Date.parse(String(a.scheduledDeparture || "")) || 0;
+      const tb = Date.parse(String(b.scheduledDeparture || "")) || 0;
+      return ta - tb;
     });
   }, [booking]);
 

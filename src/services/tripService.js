@@ -605,6 +605,24 @@ export const normalizeRoundTripPreviewResult = (raw) => {
         return item.departureMs >= nowMs + leadMs;
     });
 
+    const directionRank = (direction) => {
+        const key = String(direction || '').toLowerCase();
+        if (key === 'outbound' || key === 'đi' || key === 'out') return 0;
+        if (key === 'inbound' || key === 'về' || key === 'in' || key === 'return') return 1;
+        return 2;
+    };
+
+    mapped.sort((a, b) => {
+        // Ngày → chiều đi trước chiều về → giờ khởi hành.
+        const da = String(a.operatingDate || '');
+        const db = String(b.operatingDate || '');
+        if (da !== db) return da.localeCompare(db);
+        const ra = directionRank(a.direction);
+        const rb = directionRank(b.direction);
+        if (ra !== rb) return ra - rb;
+        return (a.departureMs ?? 0) - (b.departureMs ?? 0);
+    });
+
     return {
         suggested: mapped.length,
         skippedBoatBusy: Number(src?.skippedBoatBusy) || 0,
@@ -759,31 +777,50 @@ export const scheduleRoundTripSelection = async (args) => {
     return totals;
 };
 
-/** Text tóm tắt skippedItems cho toast admin. */
+/** Text tóm tắt skippedItems cho toast admin — ngắn, không dán nguyên reason BE. */
 export const formatSkippedScheduleItemsText = (skippedItems = [], lang = 'VN') => {
     const list = Array.isArray(skippedItems) ? skippedItems.filter(Boolean) : [];
     if (!list.length) return '';
-    return list.slice(0, 3).map((item) => {
-        const bits = [];
-        if (item.requestedDepartureLabel) bits.push(item.requestedDepartureLabel);
-        if (item.routeCode) bits.push(item.routeCode);
-        if (item.reason) bits.push(item.reason);
-        if (item.earliestAllowedDepartureLabel) {
-            bits.push(
-                lang === 'VN'
-                    ? `sớm nhất ${item.earliestAllowedDepartureLabel}`
-                    : `earliest ${item.earliestAllowedDepartureLabel}`,
-            );
+
+    const isVn = lang === 'VN';
+    const sample = list.slice(0, 4);
+    const times = sample
+        .map((item) => item.requestedDepartureLabel)
+        .filter(Boolean);
+    const earliest = sample.find((item) => item.earliestAllowedDepartureLabel)?.earliestAllowedDepartureLabel
+        || '';
+    const conflict = sample.find((item) => item.conflictTripCode)?.conflictTripCode || '';
+    const routeCode = sample.find((item) => item.routeCode)?.routeCode || '';
+
+    const bits = [];
+    if (times.length) {
+        bits.push(times.join(', '));
+        if (list.length > sample.length) {
+            bits[0] += isVn
+                ? ` (+${list.length - sample.length})`
+                : ` (+${list.length - sample.length} more)`;
         }
-        if (item.conflictTripCode) {
-            bits.push(
-                lang === 'VN'
-                    ? `đụng ${item.conflictTripCode}`
-                    : `conflict ${item.conflictTripCode}`,
-            );
+    }
+    if (routeCode) bits.push(routeCode);
+    if (earliest) {
+        bits.push(isVn ? `sớm nhất ${earliest}` : `earliest ${earliest}`);
+    }
+    if (conflict) {
+        bits.push(isVn ? `đụng ${conflict}` : `conflict ${conflict}`);
+    }
+
+    // Chỉ fallback reason ngắn khi thiếu earliest/conflict (tránh tường chữ quay đầu).
+    if (!earliest && !conflict) {
+        const reason = String(sample[0]?.reason || '').trim();
+        if (reason) {
+            const short = reason.length > 120 ? `${reason.slice(0, 117)}…` : reason;
+            bits.push(short);
         }
-        return bits.join(' · ');
-    }).join('\n');
+    } else if (!bits.length) {
+        bits.push(isVn ? 'Tàu đang bận / chưa đủ thời gian quay đầu.' : 'Boat busy / insufficient turnaround.');
+    }
+
+    return bits.join(' · ');
 };
 
 /** @deprecated Dùng scheduleTripsBatch */
@@ -1054,6 +1091,18 @@ export const normalizeTripPassenger = (item) => {
       const n = Number(raw);
       return Number.isFinite(n) && n > 1900 ? n : null;
     })(),
+    phoneNumber: String(pickPassengerField(item, [
+      "phoneNumber", "PhoneNumber", "phone", "mobile", "passengerPhone",
+    ], "") || "").trim(),
+    contactPhone: String(pickPassengerField(item, [
+      "contactPhone", "ContactPhone", "bookingContactPhone",
+    ], "") || "").trim(),
+    email: String(pickPassengerField(item, [
+      "email", "Email", "passengerEmail",
+    ], "") || "").trim(),
+    contactEmail: String(pickPassengerField(item, [
+      "contactEmail", "ContactEmail", "bookingContactEmail",
+    ], "") || "").trim(),
     ticketCode,
     ticketQrToken: pickPassengerField(item, ["ticketQrToken", "qrToken", "qrCode"], "") || "",
     ticketStatus: pickPassengerField(item, ["ticketStatus", "TicketStatus", "status", "attendanceStatus"], "") || "",

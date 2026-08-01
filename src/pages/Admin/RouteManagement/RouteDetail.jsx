@@ -333,7 +333,7 @@ export function RouteDetail() {
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Thời gian dự kiến (phút)" : "Estimated Duration (min)"}</label>
                         <input
-                            type="number" min={0} value={routeForm.estimatedDurationMin}
+                            type="number" step="any" min={0} value={routeForm.estimatedDurationMin}
                             onChange={(e) => handleRouteFormChange("estimatedDurationMin", e.target.value)}
                             className={inputStyle}
                         />

@@ -150,7 +150,8 @@ const normalizeRawStopStatus = (raw) => {
  * Trạng thái từng bến theo giờ lịch + actual (nếu có).
  * - Giờ chưa tới (>10p) → Chờ — không tin stopStatus/actual sớm từ BE
  * - Bến đầu: trong 10 phút trước giờ đi → Đang lên tàu; đã rời → Đã rời
- * - Bến giữa/cuối: tàu đã rời gốc, chưa tới giờ đến → Đang chạy (không hiện Chờ)
+ * - Chỉ bến SẮP TỚI (isNextApproach) → Đang chạy / Đang tới đích
+ * - Các bến phía sau chưa tới → vẫn Chờ
  * - Bến giữa: tới giờ đến → Đã cập; sau giờ đi → Đã rời
  * - Bến cuối: tới giờ đến → Đã tới đích
  */
@@ -159,6 +160,8 @@ export const resolveStopStatusKey = (
   {
     isFirst = false,
     isLast = false,
+    /** true = đây là bến tiếp theo tàu đang hướng tới (duy nhất được "Đang chạy"). */
+    isNextApproach = false,
     tripStatusKey = "",
     now = Date.now(),
     boardingLeadMs = STOP_BOARDING_LEAD_MS,
@@ -179,7 +182,7 @@ export const resolveStopStatusKey = (
   const eventMs = isFirst
     ? (scheduledDepMs ?? scheduledArrMs ?? startMs)
     : (scheduledArrMs ?? scheduledDepMs);
-  // Đã qua giờ khởi hành / BE báo đang chạy → các bến chưa tới hiện "Đang chạy" (Sightseeing 2 bến).
+  // Đã qua giờ khởi hành / BE báo đang chạy.
   const tripLeftOrigin = tripKey === "InProgress"
     || tripKey === "Delayed"
     || (startMs != null && now >= startMs);
@@ -188,11 +191,11 @@ export const resolveStopStatusKey = (
   if (isFirst && eventMs != null && now < eventMs - boardingLeadMs) {
     return "scheduled";
   }
-  // Bến khác: chưa tới giờ đến — nếu tàu đã rời gốc → Đang chạy (không để Chờ).
+  // Bến khác chưa tới giờ đến: chỉ bến sắp tới → Đang chạy; còn lại → Chờ.
   if (!isFirst && eventMs != null && now < eventMs) {
     const rawEarly = normalizeRawStopStatus(stop?.stopStatus || stop?.StopStatus);
     if (rawEarly === "skipped" || rawEarly === "cancelled" || rawEarly === "delayed") return rawEarly;
-    if (tripLeftOrigin) return "enroute";
+    if (tripLeftOrigin && isNextApproach) return "enroute";
     return "scheduled";
   }
 
@@ -235,17 +238,85 @@ export const resolveStopStatusKey = (
 
   if (isLast) {
     if (scheduledArrMs != null && now >= scheduledArrMs) return "arrived";
-    if (tripLeftOrigin) return "enroute";
+    if (tripLeftOrigin && isNextApproach) return "enroute";
     return "scheduled";
   }
 
   if (scheduledArrMs != null && now < scheduledArrMs) {
-    return tripLeftOrigin ? "enroute" : "scheduled";
+    return (tripLeftOrigin && isNextApproach) ? "enroute" : "scheduled";
   }
   if (scheduledArrMs != null && (scheduledDepMs == null || now < scheduledDepMs)) return "arrived";
   if (scheduledDepMs != null && now >= scheduledDepMs) return "departed";
   if (scheduledArrMs != null && now >= scheduledArrMs) return "arrived";
   return "scheduled";
+};
+
+/**
+ * Index bến tiếp theo tàu đang hướng tới (chưa cập, chưa đang dừng tại bến).
+ * -1 nếu chưa rời gốc / đang dừng tại bến / đã tới đích.
+ */
+export const findNextApproachStopIndex = (
+  stops,
+  {
+    tripStatusKey = "",
+    now = Date.now(),
+    boardingLeadMs = STOP_BOARDING_LEAD_MS,
+    tripStartAt = null,
+  } = {},
+) => {
+  const list = Array.isArray(stops) ? stops : [];
+  if (!list.length) return -1;
+
+  const credibleActual = (actualMs, scheduledMs) => {
+    if (actualMs == null || actualMs > now + 60_000) return false;
+    if (scheduledMs != null && actualMs < scheduledMs - boardingLeadMs) return false;
+    return true;
+  };
+
+  for (let i = 0; i < list.length; i += 1) {
+    const stop = list[i];
+    const isFirst = i === 0;
+    const isLast = i === list.length - 1;
+    const scheduledArrMs = toMs(pickStopAdjustedArrival(stop))
+      ?? toMs(pickStopScheduledArrival(stop));
+    const scheduledDepMs = toMs(pickStopAdjustedDeparture(stop))
+      ?? toMs(pickStopScheduledDeparture(stop))
+      ?? (isFirst ? toMs(tripStartAt) : null);
+    const actualArrMs = toMs(pickStopActualArrival(stop));
+    const actualDepMs = toMs(pickStopActualDeparture(stop));
+    const hasDep = credibleActual(actualDepMs, scheduledDepMs);
+    const hasArr = credibleActual(actualArrMs, scheduledArrMs);
+
+    if (isFirst) {
+      const depMs = scheduledDepMs ?? toMs(tripStartAt);
+      if (hasDep || (depMs != null && now >= depMs)) continue;
+      return -1; // còn ở bến đầu
+    }
+
+    // Đã rời bến này → xét bến sau.
+    if (hasDep || (!isLast && scheduledDepMs != null && now >= scheduledDepMs)) continue;
+
+    // Đang dừng / đã cập bến này → chưa hướng tới bến sau.
+    if (hasArr || (scheduledArrMs != null && now >= scheduledArrMs)) {
+      return -1;
+    }
+
+    // Chưa tới giờ đến → đây là bến đang chạy tới.
+    return i;
+  }
+  return -1;
+};
+
+/** Resolve status key cho cả lộ trình — chỉ 1 bến được đánh dấu isNextApproach. */
+export const resolveTripStopStatusKeys = (stops, opts = {}) => {
+  const list = Array.isArray(stops) ? stops : [];
+  const nextIdx = findNextApproachStopIndex(list, opts);
+  return list.map((stop, index) => resolveStopStatusKey(stop, {
+    ...opts,
+    isFirst: index === 0,
+    isLast: index === list.length - 1,
+    isNextApproach: index === nextIdx,
+  }));
 };
 
 export const getStopStatusLabel = (stopOrKey, lang = "VN", opts = {}) => {
@@ -261,7 +332,10 @@ export const getStopStatusLabel = (stopOrKey, lang = "VN", opts = {}) => {
     case "boarding":
       return isVn ? "Đang lên tàu" : "Boarding";
     case "enroute":
-      return isVn ? "Đang chạy" : "En route";
+      // Bến cuối không "rời" — đang trên đường tới đích, không dùng chữ "Đang chạy".
+      return isVn
+        ? (opts.isLast ? "Đang tới đích" : "Đang chạy")
+        : (opts.isLast ? "Approaching" : "En route");
     case "delayed":
       return isVn ? "Trễ" : "Delayed";
     case "skipped":

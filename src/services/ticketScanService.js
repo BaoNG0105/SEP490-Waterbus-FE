@@ -8,7 +8,10 @@ import {
   checkInAllBookingManifestByQr as apiCheckInAllBookingManifestByQr,
   checkOutAllBookingManifestByQr as apiCheckOutAllBookingManifestByQr,
 } from '../api/ticketScanApi';
+import { getBoatById as apiGetBoatById } from '../api/boatApi';
+import { getTrips as apiGetTrips } from '../api/tripApi';
 import { updateCharterBookingAttendance as apiUpdateCharterAttendance } from '../api/charterBookingApi';
+import { fetchTripPassengers } from './tripService';
 
 const pick = (source, keys, fallback = '') => {
   for (const key of keys) {
@@ -22,6 +25,32 @@ const toFiniteMoney = (raw) => {
   if (raw === null || raw === undefined || raw === '') return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+};
+
+/** Chuẩn hoá ngày từ DateOnly string / object / ISO → dd/MM/yyyy. */
+const formatScanDate = (value) => {
+  if (value == null || value === '') return '';
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const y = Number(value.year ?? value.Year);
+    const m = Number(value.month ?? value.Month);
+    const d = Number(value.day ?? value.Day);
+    if (y > 1900 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+    }
+  }
+  const text = String(value).trim();
+  if (!text) return '';
+  const isoDate = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) return `${isoDate[3]}/${isoDate[2]}/${isoDate[1]}`;
+  const viDate = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (viDate) {
+    return `${String(viDate[1]).padStart(2, '0')}/${String(viDate[2]).padStart(2, '0')}/${viDate[3]}`;
+  }
+  const ms = Date.parse(text);
+  if (!Number.isNaN(ms)) {
+    return new Date(ms).toLocaleDateString('vi-VN');
+  }
+  return '';
 };
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -393,6 +422,24 @@ export const normalizeScannedTicket = (item) => {
     ?? ticket?.canCheckIn ?? ticket?.CanCheckIn;
   const canCheckOutRaw = item?.canCheckOut ?? item?.CanCheckOut
     ?? ticket?.canCheckOut ?? ticket?.CanCheckOut;
+  // BE (tripStops): false khi bến lên chưa Arrived / đã rời / ngoài stayDuration.
+  const hasCanCheckInFlag = canCheckInRaw !== undefined && canCheckInRaw !== null && canCheckInRaw !== '';
+  const hasCanCheckOutFlag = canCheckOutRaw !== undefined && canCheckOutRaw !== null && canCheckOutRaw !== '';
+  const blockedReason = String(
+    pick(item, [
+      'cannotCheckInReason', 'CannotCheckInReason',
+      'checkInBlockedReason', 'CheckInBlockedReason',
+      'actionBlockedReason', 'ActionBlockedReason',
+      'blockedReason', 'BlockedReason',
+      'scanBlockedReason', 'ScanBlockedReason',
+    ], '')
+    || pick(ticket || {}, [
+      'cannotCheckInReason', 'CannotCheckInReason',
+      'checkInBlockedReason', 'CheckInBlockedReason',
+      'actionBlockedReason', 'BlockedReason',
+    ], '')
+    || '',
+  ).trim();
 
   const passengerName = primaryPassenger?.fullName
     || pick(passenger, ['fullName', 'name'], '')
@@ -489,8 +536,12 @@ export const normalizeScannedTicket = (item) => {
     bookingCode: pick(item, ['bookingCode', 'booking.bookingCode'], '')
       || pick(ticket, ['bookingCode'], ''),
     bookingType: pick(item, ['bookingType', 'BookingType'], '') || pick(ticket, ['bookingType'], ''),
-    bookingStatus: pick(item, ['bookingStatus', 'BookingStatus'], '') || '',
-    paymentStatus: pick(item, ['paymentStatus', 'PaymentStatus'], '') || '',
+    bookingStatus: pick(item, ['bookingStatus', 'BookingStatus'], '')
+      || pick(ticket, ['bookingStatus', 'BookingStatus'], '')
+      || '',
+    paymentStatus: pick(item, ['paymentStatus', 'PaymentStatus'], '')
+      || pick(ticket, ['paymentStatus', 'PaymentStatus'], '')
+      || '',
     passengerName,
     passengerPhone,
     passengerEmail,
@@ -509,12 +560,14 @@ export const normalizeScannedTicket = (item) => {
     concessionCodes: eligibilityCodes.filter((code) => CONCESSION_VERIFY_SET.has(code)),
     status,
     // Terminal statuses luôn khóa check-in/out dù BE còn gửi flag cũ.
+    // Có flag từ BE → tin BE (window tripStops); không thì fallback theo status.
     canCheckIn: isTerminalStatus || statusNorm === 'checkedin'
       ? false
-      : toBool(canCheckInRaw, canCheckInFallback),
+      : (hasCanCheckInFlag ? toBool(canCheckInRaw, false) : canCheckInFallback),
     canCheckOut: isTerminalStatus
       ? false
-      : toBool(canCheckOutRaw, canCheckOutFallback),
+      : (hasCanCheckOutFlag ? toBool(canCheckOutRaw, false) : canCheckOutFallback),
+    blockedReason,
     tripCode: pick(item, ['tripCode', 'trip.code'], '') || pick(ticket, ['tripCode'], ''),
     legLabel: pick(item, ['leg', 'direction', 'tripDirection', 'legType'], '')
       || pick(ticket, ['leg', 'direction'], ''),
@@ -529,10 +582,33 @@ export const normalizeScannedTicket = (item) => {
     fromStationId: String(pick(item, ['fromStationId'], '') || ''),
     toStationId: String(pick(item, ['toStationId'], '') || ''),
     seatLabel,
-    departureDate: pick(item, ['departureDate', 'operatingDate'], '') || '',
-    startTime: pick(item, ['startTime'], '') || '',
+    departureDate: formatScanDate(
+      pick(item, ['departureDate', 'DepartureDate', 'operatingDate', 'OperatingDate'], '')
+      || pick(ticket, ['departureDate', 'DepartureDate', 'operatingDate'], '')
+      || '',
+    ) || formatScanDate(
+      pick(item, ['scheduledBoardingAt', 'scheduledDeparture', 'ScheduledDeparture'], '')
+      || pick(ticket, ['scheduledBoardingAt', 'scheduledDeparture'], '')
+      || '',
+    ),
+    startTime: (() => {
+      const raw = pick(item, ['startTime', 'StartTime'], '') || pick(ticket, ['startTime'], '') || '';
+      if (!raw) return '';
+      if (typeof raw === 'object') {
+        const h = Number(raw.hour ?? raw.Hour);
+        const m = Number(raw.minute ?? raw.Minute);
+        if (Number.isFinite(h) && Number.isFinite(m)) {
+          return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
+      }
+      const text = String(raw);
+      const hm = text.match(/(\d{1,2}):(\d{2})/);
+      return hm ? `${String(hm[1]).padStart(2, '0')}:${hm[2]}` : text;
+    })(),
     passengerCount: Number(pick(item, ['passengerCount', 'registeredPassengerCount'], '') || 0) || null,
-    issuedAt: pick(item, ['issuedAt', 'IssuedAt'], '') || pick(ticket, ['issuedAt'], '') || '',
+    issuedAt: pick(item, ['issuedAt', 'IssuedAt'], '')
+      || pick(ticket, ['issuedAt', 'IssuedAt'], '')
+      || '',
     price: (() => {
       // Number(null)===0 — thiếu unitPrice từ scan DTO cũ không được coi là miễn phí.
       const candidates = [
@@ -682,7 +758,25 @@ const collectTripCodes = (source, tickets) => {
 export const normalizeBookingManifest = (item, qrToken = '') => {
   if (!item) return null;
   const root = item?.manifest && typeof item.manifest === 'object' ? item.manifest : item;
-  const tickets = unwrapTicketList(item).map(normalizeScannedTicket).filter(Boolean);
+  const bookingStatus = pick(root, ['bookingStatus', 'BookingStatus'], '')
+    || pick(item, ['bookingStatus', 'BookingStatus'], '')
+    || '';
+  const paymentStatus = pick(root, ['paymentStatus', 'PaymentStatus'], '')
+    || pick(item, ['paymentStatus', 'PaymentStatus'], '')
+    || '';
+  const tickets = unwrapTicketList(item).map((row) => {
+    const normalized = normalizeScannedTicket(row);
+    if (!normalized) return null;
+    return {
+      ...normalized,
+      bookingStatus: normalized.bookingStatus || bookingStatus,
+      paymentStatus: normalized.paymentStatus || paymentStatus,
+      bookingCode: normalized.bookingCode
+        || pick(root, ['bookingCode', 'code'], '')
+        || pick(item, ['bookingCode', 'code'], '')
+        || normalized.bookingCode,
+    };
+  }).filter(Boolean);
   const tripCodes = collectTripCodes(root, tickets);
   const token = String(qrToken || pick(root, ['bookingQrToken', 'qrToken', 'token'], '') || '').trim();
   return {
@@ -690,6 +784,8 @@ export const normalizeBookingManifest = (item, qrToken = '') => {
     isCharter: detectIsCharter(root, token),
     bookingQrToken: token,
     bookingCode: pick(root, ['bookingCode', 'code'], '') || pick(item, ['bookingCode', 'code'], '') || '—',
+    bookingStatus,
+    paymentStatus,
     tripCodes,
     selectedTripCode: tripCodes[0] || '',
     isRoundTrip: tripCodes.length > 1
@@ -717,39 +813,267 @@ const wait = (ms) => new Promise((resolve) => {
 });
 
 /**
- * Scan DTO cũ không có unitPrice → bổ sung từ GET /bookings/manifest/{bookingCode}
- * (manifest passenger đã có unitPrice).
+ * Scan DTO thiếu field → bổ sung từ GET /bookings/manifest/{bookingCode}
+ * (+ boat theo boatId nếu vẫn thiếu tên tàu).
  */
-const enrichTicketPriceFromManifest = async (ticket) => {
-  if (!ticket || ticket.price != null) return ticket;
+const enrichTicketFromManifest = async (ticket) => {
+  if (!ticket) return ticket;
+
+  const missing = {
+    price: ticket.price == null,
+    bookingStatus: !ticket.bookingStatus,
+    paymentStatus: !ticket.paymentStatus,
+    issuedAt: !ticket.issuedAt,
+    boatName: !ticket.boatName,
+    departureDate: !ticket.departureDate,
+    phone: !ticket.passengerPhone,
+    email: !ticket.passengerEmail,
+    birthYear: !ticket.birthYear,
+    checkedIn: !ticket.checkedInAt,
+    checkedOut: !ticket.checkedOutAt,
+  };
+  if (!Object.values(missing).some(Boolean)) return ticket;
+
   const bookingCode = String(ticket.bookingCode || '').trim();
-  if (!bookingCode || bookingCode === '—') return ticket;
-  try {
-    const data = await apiGetBookingManifestByCode(bookingCode);
-    const passengers = Array.isArray(data?.passengers)
-      ? data.passengers
-      : Array.isArray(data?.manifest?.passengers)
-        ? data.manifest.passengers
-        : [];
-    const ticketCode = String(ticket.ticketCode || '').trim().toUpperCase();
-    const seatLabel = String(ticket.seatLabel || '').trim().toUpperCase();
-    const match = passengers.find((row) => {
-      const rowTicket = String(row?.ticketCode || row?.TicketCode || '').trim().toUpperCase();
-      if (ticketCode && rowTicket === ticketCode) return true;
-      const rowSeat = String(row?.seatCode || row?.SeatCode || '').trim().toUpperCase();
-      return Boolean(seatLabel && rowSeat && rowSeat === seatLabel);
-    }) || passengers.find((row) => {
-      const type = String(row?.ticketTypeCode || row?.passengerType || '').toUpperCase();
-      const isInfant = Boolean(row?.isLapInfant) || type === 'INFANT';
-      return !isInfant && toFiniteMoney(row?.unitPrice ?? row?.UnitPrice) != null;
-    });
-    const price = toFiniteMoney(match?.unitPrice ?? match?.UnitPrice);
-    if (price == null) return ticket;
-    return { ...ticket, price };
-  } catch (error) {
-    console.warn('Không bổ sung được giá vé từ manifest:', error);
-    return ticket;
+  let patch = {};
+
+  if (bookingCode && bookingCode !== '—') {
+    try {
+      const data = await apiGetBookingManifestByCode(bookingCode);
+      const root = data?.manifest && typeof data.manifest === 'object' ? data.manifest : data;
+      const passengers = Array.isArray(root?.passengers)
+        ? root.passengers
+        : Array.isArray(data?.passengers)
+          ? data.passengers
+          : [];
+      const ticketCode = String(ticket.ticketCode || '').trim().toUpperCase();
+      const seatLabel = String(ticket.seatLabel || '').trim().toUpperCase();
+      const match = passengers.find((row) => {
+        const rowTicket = String(row?.ticketCode || row?.TicketCode || '').trim().toUpperCase();
+        if (ticketCode && rowTicket === ticketCode) return true;
+        const rowSeat = String(
+          row?.seatCode || row?.SeatCode || row?.seatNumber || row?.SeatNumber || '',
+        ).trim().toUpperCase();
+        return Boolean(seatLabel && rowSeat && rowSeat === seatLabel);
+      }) || passengers.find((row) => {
+        const type = String(row?.ticketTypeCode || row?.passengerType || '').toUpperCase();
+        const isInfant = Boolean(row?.isLapInfant) || type === 'INFANT';
+        return !isInfant;
+      });
+
+      if (missing.price) {
+        const price = toFiniteMoney(match?.unitPrice ?? match?.UnitPrice);
+        if (price != null) patch.price = price;
+      }
+      if (missing.bookingStatus) {
+        const status = pick(root, ['bookingStatus', 'BookingStatus'], '')
+          || pick(data, ['bookingStatus', 'BookingStatus'], '');
+        if (status) patch.bookingStatus = status;
+      }
+      if (missing.paymentStatus) {
+        const payment = pick(root, ['paymentStatus', 'PaymentStatus'], '')
+          || pick(data, ['paymentStatus', 'PaymentStatus'], '');
+        if (payment) patch.paymentStatus = payment;
+      }
+      if (missing.issuedAt) {
+        const issued = pick(match || {}, ['issuedAt', 'IssuedAt'], '')
+          || pick(root || {}, ['issuedAt', 'IssuedAt'], '');
+        if (issued) patch.issuedAt = issued;
+      }
+      if (missing.boatName) {
+        const boat = pick(root, ['boatName', 'BoatName', 'vesselName'], '')
+          || pick(data, ['boatName', 'BoatName'], '');
+        if (boat) patch.boatName = boat;
+      }
+      if (missing.departureDate) {
+        const date = formatScanDate(
+          pick(root, ['operatingDate', 'OperatingDate', 'departureDate', 'DepartureDate'], '')
+          || pick(root, ['departureTime', 'DepartureTime'], '')
+          || pick(match || {}, ['scheduledBoardingAt', 'ScheduledBoardingAt'], '')
+          || '',
+        );
+        if (date) patch.departureDate = date;
+      }
+      if (missing.phone) {
+        const phone = String(
+          pick(match || {}, ['phoneNumber', 'PhoneNumber', 'phone'], '')
+          || pick(root, ['contactPhone', 'ContactPhone'], '')
+          || pick(data, ['contactPhone', 'ContactPhone'], '')
+          || '',
+        ).trim();
+        if (phone) patch.passengerPhone = phone;
+      }
+      if (missing.email) {
+        const email = String(
+          pick(match || {}, ['email', 'Email'], '')
+          || pick(root, ['contactEmail', 'ContactEmail'], '')
+          || pick(data, ['contactEmail', 'ContactEmail'], '')
+          || '',
+        ).trim();
+        if (email) patch.passengerEmail = email;
+      }
+      if (missing.birthYear) {
+        const by = match?.birthYear ?? match?.BirthYear
+          ?? pick(match || {}, ['birthYear', 'BirthYear'], '');
+        const n = Number(by);
+        if (Number.isFinite(n) && n > 1900) patch.birthYear = n;
+      }
+      if (missing.checkedIn) {
+        const checkedIn = pick(match || {}, ['checkedInAt', 'CheckedInAt'], '');
+        if (checkedIn) {
+          patch.checkedInAt = checkedIn;
+          patch.checkedInByName = pick(match || {}, ['checkedInByName', 'CheckedInByName'], '')
+            || ticket.checkedInByName
+            || '';
+        }
+      }
+      if (missing.checkedOut) {
+        const checkedOut = pick(match || {}, ['checkedOutAt', 'CheckedOutAt'], '');
+        if (checkedOut) {
+          patch.checkedOutAt = checkedOut;
+          patch.checkedOutByName = pick(match || {}, ['checkedOutByName', 'CheckedOutByName'], '')
+            || ticket.checkedOutByName
+            || '';
+        }
+      }
+      if (!ticket.status && match) {
+        const status = pick(match, ['ticketStatus', 'TicketStatus', 'status'], '');
+        if (status) patch.status = status;
+      }
+      if (!ticket.contactName) {
+        const contact = pick(root, ['contactName', 'ContactName'], '');
+        if (contact) patch.contactName = contact;
+      }
+      // Đồng bộ canCheck* từ manifest (BE cập nhật theo tripStops).
+      if (match) {
+        const ci = match.canCheckIn ?? match.CanCheckIn;
+        const co = match.canCheckOut ?? match.CanCheckOut;
+        if (ci !== undefined && ci !== null && ci !== '') {
+          patch.canCheckIn = toBool(ci, false);
+        }
+        if (co !== undefined && co !== null && co !== '') {
+          patch.canCheckOut = toBool(co, false);
+        }
+        const reason = String(
+          pick(match, [
+            'cannotCheckInReason', 'CannotCheckInReason',
+            'checkInBlockedReason', 'CheckInBlockedReason',
+            'actionBlockedReason', 'BlockedReason',
+          ], '') || '',
+        ).trim();
+        if (reason) patch.blockedReason = reason;
+      }
+    } catch (error) {
+      console.warn('Không bổ sung được thông tin vé từ manifest:', error);
+    }
   }
+
+  // Fallback tên tàu theo boatId nếu manifest chưa có.
+  if ((missing.boatName && !patch.boatName) && ticket.boatId) {
+    try {
+      const boat = await apiGetBoatById(ticket.boatId);
+      const name = boat?.name || boat?.boatName || boat?.data?.name || '';
+      if (name) patch.boatName = name;
+    } catch {
+      // ignore — không chặn hiển thị vé
+    }
+  }
+
+  // Fallback theo mã chuyến: GET /trips?operatingDate → boatName / boatId / tripId
+  // rồi GET passengers để lấy SĐT / năm sinh / contact.
+  const needTripEnrich = (missing.boatName && !patch.boatName)
+    || (missing.phone && !patch.passengerPhone)
+    || (missing.email && !patch.passengerEmail)
+    || (missing.birthYear && !patch.birthYear);
+  const tripCode = String(ticket.tripCode || '').trim();
+  if (needTripEnrich && tripCode) {
+    try {
+      const operatingDate = patch.departureDate || ticket.departureDate || formatScanDate(ticket.scheduledBoardingAt || '');
+      const tripListRaw = await apiGetTrips(operatingDate ? { operatingDate } : undefined);
+      const tripList = Array.isArray(tripListRaw)
+        ? tripListRaw
+        : (tripListRaw?.items || tripListRaw?.data || tripListRaw?.trips || []);
+      const needle = tripCode.toUpperCase();
+      const tripRow = tripList.find((row) => (
+        String(row?.tripCode || row?.TripCode || '').trim().toUpperCase() === needle
+      ));
+      if (tripRow) {
+        if (missing.boatName && !patch.boatName) {
+          const boatName = pick(tripRow, [
+            'boatName', 'BoatName', 'boat.name', 'vesselName', 'boat.boatName',
+          ], '');
+          if (boatName) patch.boatName = boatName;
+        }
+        const tripBoatId = String(
+          tripRow?.boatId || tripRow?.BoatId || tripRow?.boat?.id || tripRow?.boat?.boatId || '',
+        ).trim();
+        if (tripBoatId && !ticket.boatId) patch.boatId = tripBoatId;
+        if (missing.boatName && !patch.boatName && tripBoatId) {
+          try {
+            const boat = await apiGetBoatById(tripBoatId);
+            const name = boat?.name || boat?.boatName || boat?.data?.name || '';
+            if (name) patch.boatName = name;
+          } catch {
+            // ignore
+          }
+        }
+
+        const tripId = String(tripRow?.tripId || tripRow?.id || tripRow?.TripId || '').trim();
+        if (tripId && (
+          (missing.phone && !patch.passengerPhone)
+          || (missing.email && !patch.passengerEmail)
+          || (missing.birthYear && !patch.birthYear)
+        )) {
+          try {
+            const pax = await fetchTripPassengers(tripId);
+            const ticketCode = String(ticket.ticketCode || '').trim().toUpperCase();
+            const seatLabel = String(ticket.seatLabel || '').trim().toUpperCase();
+            const hit = (Array.isArray(pax) ? pax : []).find((row) => {
+              const rowTicket = String(row?.ticketCode || '').trim().toUpperCase();
+              if (ticketCode && rowTicket === ticketCode) return true;
+              const rowSeat = String(row?.seatNumber || row?.seatCode || '').trim().toUpperCase();
+              return Boolean(seatLabel && rowSeat && rowSeat === seatLabel);
+            });
+            if (hit) {
+              if (missing.phone && !patch.passengerPhone) {
+                const phone = String(
+                  hit.phoneNumber || hit.contactPhone || hit.passengerPhone || '',
+                ).trim();
+                if (phone) patch.passengerPhone = phone;
+              }
+              if (missing.email && !patch.passengerEmail) {
+                const email = String(hit.email || hit.contactEmail || '').trim();
+                if (email) patch.passengerEmail = email;
+              }
+              if (missing.birthYear && !patch.birthYear) {
+                const n = Number(hit.birthYear);
+                if (Number.isFinite(n) && n > 1900) patch.birthYear = n;
+              }
+            }
+            // Contact booking-level nếu chưa có SĐT cá nhân
+            if (missing.phone && !patch.passengerPhone) {
+              const anyContact = (Array.isArray(pax) ? pax : [])
+                .map((row) => String(row?.contactPhone || '').trim())
+                .find(Boolean);
+              if (anyContact) patch.passengerPhone = anyContact;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Không bổ sung được thông tin từ trip list:', error);
+    }
+  }
+
+  // Ngày từ giờ lên nếu vẫn thiếu.
+  if (missing.departureDate && !patch.departureDate) {
+    const fromBoard = formatScanDate(ticket.scheduledBoardingAt || ticket.scheduledAlightingAt || '');
+    if (fromBoard) patch.departureDate = fromBoard;
+  }
+
+  return Object.keys(patch).length ? { ...ticket, ...patch } : ticket;
 };
 
 /** Tra cứu qua POST /tickets/scan — 1 endpoint, BE tự phân vé thường / QR tổng. */
@@ -775,7 +1099,7 @@ export const scanTicket = async (codeOrToken, { source = 'Qr' } = {}) => {
       console.error('Scan response không nhận diện được TicketScanDto:', raw);
       throw new Error('INVALID_SCAN_RESPONSE');
     }
-    return enrichTicketPriceFromManifest(ticket);
+    return enrichTicketFromManifest(ticket);
   } catch (error) {
     console.error('Lỗi scan vé:', error);
     throw error;

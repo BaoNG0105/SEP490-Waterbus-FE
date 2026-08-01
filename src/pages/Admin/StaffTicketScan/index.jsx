@@ -154,10 +154,17 @@ const statusTone = (ticket) => {
       strip: "border-emerald-200 bg-emerald-50/80 dark:border-emerald-500/30 dark:bg-emerald-500/10",
     };
   }
-  if (ticket?.canCheckIn || raw === "active") {
+  // Chỉ highlight sẵn sàng khi BE cho phép check-in (đã cập bến lên / trong khung dừng).
+  if (ticket?.canCheckIn) {
     return {
       badge: "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-200",
       strip: "border-sky-200 bg-sky-50/70 dark:border-sky-500/30 dark:bg-sky-500/10",
+    };
+  }
+  if (raw === "active") {
+    return {
+      badge: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200",
+      strip: "border-amber-100 bg-amber-50/50 dark:border-amber-500/20 dark:bg-amber-500/5",
     };
   }
   if (raw.includes("checkout") || raw.includes("used") || raw.includes("complete")) {
@@ -183,14 +190,59 @@ const statusLabel = (ticket, lang) => {
   if (raw.includes("cancel")) {
     return lang === "VN" ? "Đã hủy" : "Cancelled";
   }
+  // checkedout trước checkedin — "checkedout".includes("checkedin") === false nhưng dễ nhầm thứ tự.
+  if (raw.includes("checkedout") || raw === "checkout") {
+    return lang === "VN" ? "Đã check-out" : "Checked out";
+  }
   if (ticket?.canCheckOut || raw.includes("checkedin")) {
     return lang === "VN" ? "Đã check-in" : "Checked in";
   }
-  if (ticket?.canCheckIn || raw === "active") {
-    return lang === "VN" ? "Còn hiệu lực" : "Active";
+  if (ticket?.canCheckIn) {
+    return lang === "VN" ? "Sẵn sàng check-in" : "Ready to check in";
   }
-  if (raw.includes("checkout")) return lang === "VN" ? "Đã check-out" : "Checked out";
-  return ticket?.status || (lang === "VN" ? "—" : "—");
+  if (raw === "active") {
+    return lang === "VN" ? "Chờ cập bến" : "Waiting at berth";
+  }
+  return ticket?.status || "—";
+};
+
+const statusKeyOf = (value) => String(value || "").toLowerCase().replace(/[\s_-]/g, "");
+
+const bookingStatusLabel = (value, lang) => {
+  const key = statusKeyOf(value);
+  if (!key) return "—";
+  const map = {
+    pendingpayment: { vn: "Chờ thanh toán", en: "Pending payment" },
+    pending: { vn: "Chờ xử lý", en: "Pending" },
+    confirmed: { vn: "Đã xác nhận", en: "Confirmed" },
+    completed: { vn: "Hoàn tất", en: "Completed" },
+    cancelled: { vn: "Đã hủy", en: "Cancelled" },
+    canceled: { vn: "Đã hủy", en: "Cancelled" },
+    expired: { vn: "Hết hạn", en: "Expired" },
+    refunded: { vn: "Đã hoàn tiền", en: "Refunded" },
+  };
+  const row = map[key];
+  if (!row) return String(value);
+  return lang === "VN" ? row.vn : row.en;
+};
+
+const paymentStatusLabel = (value, lang) => {
+  const key = statusKeyOf(value);
+  if (!key) return "—";
+  const map = {
+    paid: { vn: "Đã thanh toán", en: "Paid" },
+    unpaid: { vn: "Chưa thanh toán", en: "Unpaid" },
+    pending: { vn: "Chờ thanh toán", en: "Pending" },
+    pendingpayment: { vn: "Chờ thanh toán", en: "Pending payment" },
+    depositpaid: { vn: "Đã cọc", en: "Deposit paid" },
+    failed: { vn: "Thanh toán thất bại", en: "Failed" },
+    refunded: { vn: "Đã hoàn tiền", en: "Refunded" },
+    partiallyrefunded: { vn: "Hoàn một phần", en: "Partially refunded" },
+    manualrefunded: { vn: "Hoàn thủ công", en: "Manual refund" },
+  };
+  const row = map[key];
+  if (!row) return String(value);
+  return lang === "VN" ? row.vn : row.en;
 };
 
 const ticketTypeTone = (code) => {
@@ -390,11 +442,6 @@ const TicketResultCard = ({
               <span className={`rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${tone.badge}`}>
                 {statusLabel(ticket, lang)}
               </span>
-              {ticket.status ? (
-                <span className="rounded-xl border border-slate-200 bg-white/80 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-900">
-                  {ticket.status}
-                </span>
-              ) : null}
               {needsVerify && ticket.canCheckIn ? (
                 <span className="rounded-xl border border-amber-300 bg-amber-100 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-100">
                   {lang === "VN" ? "Cần đối chiếu giấy tờ" : "Verify ID"}
@@ -442,19 +489,19 @@ const TicketResultCard = ({
           {lang === "VN" ? "Thông tin hành khách" : "Passenger details"}
         </p>
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <DetailField label={lang === "VN" ? "Họ và tên (ticketPassenger)" : "Full name (ticketPassenger)"}>
+          <DetailField label={lang === "VN" ? "Họ và tên" : "Full name"}>
             {ticket.passengerName || primary?.fullName || "—"}
           </DetailField>
-          <DetailField label="passengerType">
+          <DetailField label={lang === "VN" ? "Loại vé" : "Ticket type"}>
             <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-headline font-black ${ticketTypeTone(passengerTypeCode || typeCode)}`}>
               {ticketTypeLabel(passengerTypeCode || typeCode, lang, ticket.ticketTypeName)}
             </span>
           </DetailField>
-          <DetailField label={lang === "VN" ? "Năm sinh (birthYear)" : "Birth year"}>
+          <DetailField label={lang === "VN" ? "Năm sinh" : "Birth year"}>
             {birthYear || "—"}
           </DetailField>
-          <DetailField label="ticketStatus">
-            {ticket.status || "—"}
+          <DetailField label={lang === "VN" ? "Trạng thái vé" : "Ticket status"}>
+            {statusLabel(ticket, lang)}
           </DetailField>
           <DetailField label={lang === "VN" ? "Số điện thoại" : "Phone"}>
             {phone || "—"}
@@ -534,13 +581,22 @@ const TicketResultCard = ({
             ) : null}
           </DetailField>
           <DetailField label={lang === "VN" ? "Trạng thái booking" : "Booking status"}>
-            {ticket.bookingStatus || "—"}
+            {bookingStatusLabel(
+              ticket.bookingStatus
+              || ticket.raw?.bookingStatus
+              || ticket.raw?.BookingStatus
+              || "",
+              lang,
+            )}
           </DetailField>
           <DetailField label={lang === "VN" ? "Thanh toán" : "Payment"}>
-            {ticket.paymentStatus || "—"}
-          </DetailField>
-          <DetailField label={lang === "VN" ? "Phát hành vé" : "Issued at"} className="sm:col-span-2">
-            {ticket.issuedAt ? formatDateTime(ticket.issuedAt) : "—"}
+            {paymentStatusLabel(
+              ticket.paymentStatus
+              || ticket.raw?.paymentStatus
+              || ticket.raw?.PaymentStatus
+              || "",
+              lang,
+            )}
           </DetailField>
         </dl>
       </div>
@@ -670,9 +726,18 @@ const TicketActionButtons = ({
       </button>
     );
   }
+
+  const statusKeyIdle = String(ticket?.status || "").toLowerCase().replace(/[\s_-]/g, "");
+  const waitingBerth = statusKeyIdle === "active" || statusKeyIdle === "";
+  const hint = String(ticket?.blockedReason || "").trim();
   return (
-    <p className="text-[11px] font-bold text-slate-400">
-      {lang === "VN" ? "Không có thao tác khả dụng." : "No actions available."}
+    <p className="text-[11px] font-bold leading-relaxed text-slate-500 dark:text-slate-400">
+      {hint
+        || (waitingBerth
+          ? (lang === "VN"
+            ? "Chưa thể check-in — tàu chưa cập bến lên hoặc ngoài khung dừng."
+            : "Check-in unavailable — boat not at boarding stop or outside stay window.")
+          : (lang === "VN" ? "Không có thao tác khả dụng." : "No actions available."))}
     </p>
   );
 };
@@ -1451,10 +1516,10 @@ export function StaffTicketScanPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2">
-              {!isCharterManifest && tripOptions.length > 0 ? (
+              {!isCharterManifest && manifest.isRoundTrip && tripOptions.length > 1 ? (
                 <label className="block space-y-1">
                   <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
-                    tripCode {manifest.isRoundTrip ? (lang === "VN" ? "(bắt buộc khứ hồi)" : "(required for RT)") : ""}
+                    {lang === "VN" ? "Chiều chuyến (khứ hồi)" : "Trip leg (round-trip)"}
                   </span>
                   <select
                     value={selectedTripCode}

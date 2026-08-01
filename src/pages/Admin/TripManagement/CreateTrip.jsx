@@ -7,7 +7,6 @@ import {
   buildRoundTripPreviewPayload,
   buildScheduleTripsPayload,
   filterRoundTripPreviewByTimeWindow,
-  formatSkippedScheduleItemsText,
   getTripCreateLeadTimeError,
   isSingleTripCreateCase,
   previewRoundTripScheduleBatch,
@@ -495,35 +494,22 @@ export function CreateTrip() {
         });
 
         if (result.created >= 1) {
-          const requested = Number(result.requested) || selectedItems.length;
-          const partial = result.created < requested || (result.skippedItems || []).length > 0;
-          const skipText = formatSkippedScheduleItemsText(result.skippedItems, lang);
           notify({
-            icon: partial ? "warning" : "success",
-            title: partial
-              ? (lang === "VN"
-                ? `Đã tạo ${result.created}/${requested} chuyến`
-                : `Created ${result.created}/${requested} trips`)
-              : (lang === "VN" ? "Tạo chuyến thành công!" : "Trip created successfully!"),
-            text: partial
-              ? (skipText
-                || (lang === "VN"
-                  ? "Một số khung bị bỏ. Xem reason / sớm nhất / chuyến đụng từ BE."
-                  : "Some slots were skipped. See BE reason / earliest / conflict."))
-              : undefined,
+            icon: "success",
+            title: lang === "VN"
+              ? `Đã tạo ${result.created} chuyến thành công`
+              : `Successfully created ${result.created} trips`,
             confirmButtonColor: "#124757",
           }).then(() => navigate(`/admin/trips-management?date=${encodeURIComponent(form.fromDate)}`));
           return;
         }
 
-        const skipText = formatSkippedScheduleItemsText(result.skippedItems, lang);
         notify({
           icon: "warning",
           title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
-          text: skipText
-            || (lang === "VN"
-              ? "Các khung giờ đã chọn không tạo được. Đổi lựa chọn rồi thử lại."
-              : "Selected slots could not be created. Change selection and retry."),
+          text: lang === "VN"
+            ? "Các khung giờ đã chọn không tạo được. Đổi lựa chọn rồi thử lại."
+            : "Selected slots could not be created. Change selection and retry.",
           confirmButtonColor: "#124757",
         });
       } catch (error) {
@@ -581,32 +567,22 @@ export function CreateTrip() {
       const result = await scheduleTripsBatch(buildScheduleTripsPayload(form));
 
       if (result.created >= 1) {
-        const skipText = formatSkippedScheduleItemsText(result.skippedItems, lang);
-        const partial = (result.skippedItems || []).length > 0 || result.skipped > 0;
         notify({
-          icon: partial ? "warning" : "success",
-          title: partial
-            ? (lang === "VN"
-              ? `Đã tạo ${result.created} · bỏ qua ${result.skipped || result.skippedItems.length}`
-              : `Created ${result.created} · skipped ${result.skipped || result.skippedItems.length}`)
-            : (lang === "VN" ? "Tạo chuyến thành công!" : "Trip created successfully!"),
-          text: partial ? (skipText || undefined) : undefined,
+          icon: "success",
+          title: lang === "VN"
+            ? `Đã tạo ${result.created} chuyến thành công`
+            : `Successfully created ${result.created} trips`,
           confirmButtonColor: "#124757",
         }).then(() => navigate(`/admin/trips-management?date=${encodeURIComponent(form.fromDate)}`));
         return;
       }
 
-      // created = 0 (không có chuyến nào được tạo)
-      const skipText = formatSkippedScheduleItemsText(result.skippedItems, lang);
-      const firstSkip = result.skippedItems?.[0];
       notify({
         icon: "warning",
         title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
-        text: skipText
-          || firstSkip?.reason
-          || (lang === "VN"
-          ? `Bỏ qua ${result.skipped} (tàu bận ${result.skippedBoatBusy} · bến bận ${result.skippedStationBusy} · quá giờ ${result.skippedPast} · thiếu crew ${result.skippedMissingOnBoardStaff}). Đổi tàu / giờ / ngày rồi thử lại.`
-          : `Skipped ${result.skipped} (boat busy ${result.skippedBoatBusy} · station busy ${result.skippedStationBusy} · past ${result.skippedPast} · missing crew ${result.skippedMissingOnBoardStaff}). Change boat/time/dates and retry.`),
+        text: lang === "VN"
+          ? "Đổi tàu / giờ / ngày rồi thử lại."
+          : "Change boat/time/dates and retry.",
         confirmButtonColor: "#124757",
       });
     } catch (error) {

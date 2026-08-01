@@ -4,15 +4,18 @@ import { trackingHub } from "../services/trackingHubClient";
 import { upsertBoatLocationMap, loadStickyBoatLocationMap } from "../utils/boatTracking";
 
 /**
- * GPS sim ~1s. FE poll 500ms + SignalR song song để không chậm hơn GPS >~0.5–1s.
- * Không skip REST khi hub "live" — nhiều lúc Azure chỉ cập nhật latest, ít đẩy boatLocation.
+ * Azure SoT:
+ * - SignalR boatLocation = chính (áp ngay)
+ * - REST /tracking/boats/latest = fallback / đồng bộ
+ * - Không đọc Neon / Live /api/snapshot
  */
-const POLL_MS = 500;
+const POLL_WHEN_HUB_LIVE_MS = 5000;
+const POLL_WHEN_HUB_DOWN_MS = 3000;
 /** List /boats/latest hay thiếu ETA — bổ sung GET /boats/{code}/latest cho tàu đang chạy. */
-const ETA_ENRICH_MS = 2000;
+const ETA_ENRICH_MS = 8000;
 
 /**
- * Live boat positions: REST poll nhanh + SignalR boatLocation (áp ngay).
+ * Live boat positions: SignalR chính + REST poll chậm hơn + dừng khi tab ẩn.
  */
 export function useLiveBoatTracking({ enabled = true } = {}) {
   const [boatsById, setBoatsById] = useState(() => loadStickyBoatLocationMap());
@@ -39,7 +42,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
     });
   }, []);
 
-  /** Hub: apply ngay, không đợi rAF (giảm ~1 frame). */
+  /** Hub: apply ngay, không đợi rAF. */
   const applyOneLocation = useCallback((payload) => {
     const items = Array.isArray(payload)
       ? payload
@@ -61,6 +64,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
 
   const loadLatest = useCallback(async ({ silent = false } = {}) => {
     if (inFlightRef.current) return null;
+    if (typeof document !== "undefined" && document.hidden) return null;
     inFlightRef.current = true;
     try {
       const list = await fetchLatestBoatLocations();
@@ -82,6 +86,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
   /** Lấy ETA/nextStation từ GPS qua endpoint từng tàu (list thường null). */
   const enrichMovingEtaFromGps = useCallback(async () => {
     if (etaInFlightRef.current || !activeRef.current) return;
+    if (typeof document !== "undefined" && document.hidden) return;
     const rows = [...boatsByIdRef.current.values()].filter((b) => {
       if (b?.fromSticky) return false;
       const moving = String(b?.status || "").toLowerCase() === "moving"
@@ -89,7 +94,6 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
       if (!moving) return false;
       const code = String(b?.boatCode || "").trim();
       if (!code) return false;
-      // Luôn refresh ETA từ GPS cho tàu đang chạy (list hay thiếu field).
       return true;
     });
     if (!rows.length) return;
@@ -122,9 +126,18 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
     }
   }, []);
 
+  const resolvePollMs = useCallback(
+    () => (hubLiveRef.current ? POLL_WHEN_HUB_LIVE_MS : POLL_WHEN_HUB_DOWN_MS),
+    [],
+  );
+
   const startPolling = useCallback((intervalMs) => {
     stopPolling();
+    if (typeof document !== "undefined" && document.hidden) return;
+
+    const ms = Number(intervalMs) > 0 ? Number(intervalMs) : resolvePollMs();
     const tick = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       loadLatest({ silent: true }).catch(() => {
         if (activeRef.current && !hubLiveRef.current) {
           setConnectionMode("offline");
@@ -132,12 +145,13 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
       });
     };
     tick();
-    pollTimerRef.current = window.setInterval(tick, intervalMs);
+    pollTimerRef.current = window.setInterval(tick, ms);
     enrichMovingEtaFromGps();
     etaTimerRef.current = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
       enrichMovingEtaFromGps();
     }, ETA_ENRICH_MS);
-  }, [loadLatest, stopPolling, enrichMovingEtaFromGps]);
+  }, [loadLatest, stopPolling, enrichMovingEtaFromGps, resolvePollMs]);
 
   useEffect(() => {
     if (!enabled) {
@@ -161,11 +175,11 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
         hubLiveRef.current = true;
         setConnectionMode("live");
         setErrorMsg("");
-        startPolling(POLL_MS);
+        startPolling(POLL_WHEN_HUB_LIVE_MS);
       } else if (status === "reconnecting" || status === "offline") {
         hubLiveRef.current = false;
         setConnectionMode("polling");
-        startPolling(POLL_MS);
+        startPolling(POLL_WHEN_HUB_DOWN_MS);
       }
     });
 
@@ -183,8 +197,8 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
 
       if (cancelled || !activeRef.current) return;
 
-      // Poll ngay — không phụ thuộc hub.
-      startPolling(POLL_MS);
+      // Poll fallback ngay; khi hub live sẽ nới interval lên 5s.
+      startPolling(POLL_WHEN_HUB_DOWN_MS);
 
       try {
         await trackingHub.acquire();
@@ -194,6 +208,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
         }
         hubLiveRef.current = true;
         setConnectionMode("live");
+        startPolling(POLL_WHEN_HUB_LIVE_MS);
       } catch (error) {
         const aborted = error?.name === "AbortError"
           || /stop\(\) was called|cancelled|aborted/i.test(String(error?.message || error));
@@ -203,6 +218,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
         if (!cancelled && activeRef.current) {
           hubLiveRef.current = false;
           setConnectionMode("polling");
+          startPolling(POLL_WHEN_HUB_DOWN_MS);
         }
       }
     };
@@ -211,10 +227,17 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
 
     const onFocus = () => {
       if (!activeRef.current) return;
+      if (document.hidden) return;
       loadLatest({ silent: true }).catch(() => {});
+      startPolling(resolvePollMs());
     };
     const onVisibility = () => {
-      if (document.visibilityState === "visible") onFocus();
+      if (!activeRef.current) return;
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+        return;
+      }
+      onFocus();
     };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
@@ -229,7 +252,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
       document.removeEventListener("visibilitychange", onVisibility);
       trackingHub.release();
     };
-  }, [enabled, applyOneLocation, loadLatest, startPolling, stopPolling]);
+  }, [enabled, applyOneLocation, loadLatest, startPolling, stopPolling, resolvePollMs]);
 
   const boats = useMemo(
     () => [...boatsById.values()].sort((a, b) =>

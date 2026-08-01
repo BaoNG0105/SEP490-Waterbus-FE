@@ -577,6 +577,10 @@ export function StaffMyTripsPage() {
                 const arrive = pickDisplayArrival(trip) || trip.arrivalAt || trip.endAt;
                 const fromName = formatStationLabel(trip.fromStationName || trip.stationName || "");
                 const toName = formatStationLabel(trip.toStationName || "");
+                const routeLabel = String(trip.routeName || "").trim();
+                const titleLabel = (routeLabel && routeLabel !== "—")
+                  ? routeLabel
+                  : `${fromName} → ${toName}`;
                 const boatLabel = trip.boatName || trip.boatCode || "";
                 const bucket = tripStatusBucket(trip);
                 const statusRaw = tripStatusRaw(trip);
@@ -605,7 +609,7 @@ export function StaffMyTripsPage() {
 
                         <div className="min-w-0 space-y-1">
                           <p className="truncate text-sm font-black text-slate-800 dark:text-slate-100">
-                            {fromName} → {toName}
+                            {titleLabel}
                           </p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wide ${tone}`}>
