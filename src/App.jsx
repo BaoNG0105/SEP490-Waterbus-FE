@@ -66,6 +66,7 @@ import { PromotionManagement } from "./pages/Admin/PromotionManagement";
 import { CreatePromotion } from "./pages/Admin/PromotionManagement/CreatePromotion";
 import { EditPromotion } from "./pages/Admin/PromotionManagement/EditPromotion";
 import { ViewPromotion } from "./pages/Admin/PromotionManagement/ViewPromotion";
+import { BookingPOS } from "./pages/Admin/BookingPOS";
 import { StaffTicketScanPage } from "./pages/Admin/StaffTicketScan";
 import { StaffMyTripsPage } from "./pages/Admin/StaffMyTrips";
 import { StaffScanHistoryPage } from "./pages/Admin/StaffScanHistory";
@@ -756,6 +757,16 @@ function App() {
             element={
               <AdminLayout title="Scan History">
                 <StaffScanHistoryPage />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Booking POS: quầy bán vé Waterbus/Sightseeing tại chỗ (Staff/Manager/Admin) ******* */}
+          <Route
+            path="/admin/booking-pos"
+            element={
+              <AdminLayout title="Ticket POS">
+                <BookingPOS />
               </AdminLayout>
             }
           />

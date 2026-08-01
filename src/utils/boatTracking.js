@@ -99,6 +99,18 @@ const stabilizeIdleTeleport = (prev, next) => {
 
   const speedKmh = Number.isFinite(Number(next.speed)) ? Math.max(0, Number(next.speed)) : 0;
   const status = String(next.status || "").toLowerCase().replace(/[_\s-]/g, "");
+  const moveKey = String(next.movementStatus || "").toLowerCase().replace(/[_\s-]/g, "");
+  const stopKey = String(next.lastStopEvent || "").toLowerCase().replace(/[_\s-]/g, "");
+  const kmLeft = Number(next.remainingDistanceKmToNextStation);
+  // Cập bến / ArrivedAtStation: chấp nhận nhảy lớn (kéo về Bạch Đằng, v.v.) — không chờ 2 packet.
+  const dockSnap = ["atstation", "arrived", "boarding", "arriving"].includes(moveKey)
+    || ["atstation", "arrived", "docked"].includes(status)
+    || stopKey === "arrived"
+    || (Number.isFinite(kmLeft) && kmLeft <= 0.1 && speedKmh < MOVING_SPEED_KMH);
+  if (dockSnap) {
+    return { ...next, gpsCandidateLatitude: null, gpsCandidateLongitude: null };
+  }
+
   // Chỉ coi idle khi BE/GPS nói rõ đứng yên — status rỗng không chặn cập nhật.
   const idleLike = speedKmh < 1.2 && (
     status === "idle" || status === "stopped" || status === "docked" || status === "stationary"
@@ -244,6 +256,76 @@ export const loadStickyBoatLocationMap = () => {
     }
   });
   return map;
+};
+
+/**
+ * Quyết định tọa độ hiển thị cho marker tàu khi BE không gửi GPS packet
+ * (tàu chưa có trip chạy, hoặc tàu UnderMaintenance đậu tại bến).
+ *
+ * Trả về:
+ *   { latitude, longitude, source: "live" | "sticky" | "none", recordedAt }
+ *
+ * Freshness tính theo BE rule: isOnline = now - ReceivedAt <= 60s.
+ * FE ưu tiên receivedAt (lúc BE nhận packet), fallback sang recordedAt (lúc GPS ghi)
+ * khi BE không gửi receivedAt — cover được case GPS offline batch upload.
+ *
+ * - "live"   → isOnline=true HOẶC (receivedAt/recordedAt) trong grace 60s → marker full style.
+ * - "sticky" → có lat/lng nhưng stale ≥60s + isOnline=false → marker muted + tooltip "(vị trí cuối)".
+ *              HOẶC boat.fromSticky=true (seed từ localStorage TTL 12h).
+ * - "none"   → không có lat/lng → marker không vẽ trên map, hiển thị ở sidebar off-map.
+ *
+ * Lưu ý: BE hiện tại KHÔNG tự clear lat/lng khi GPS ngừng gửi — vẫn trả last known location
+ * kèm isOnline=false. FE dựa vào receivedAt/recordedAt + isOnline để quyết định marker
+ * còn "live" hay đã là "vị trí cuối", không cần mở ticket BE riêng cho chuyện clear lat/lng.
+ */
+export const STALE_GPS_MS = 60 * 1000; // Mirror BE rule: isOnline khi ReceivedAt <= 60s.
+
+export const resolveDisplayPosition = (boat) => {
+  if (!boat || typeof boat !== "object") {
+    return { latitude: null, longitude: null, source: "none", recordedAt: null };
+  }
+  const lat = Number(boat.latitude);
+  const lng = Number(boat.longitude);
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+
+  // 1) Sticky seed từ localStorage cache — luôn ưu tiên "vị trí cuối" vì hook đã verify trong TTL.
+  if (boat.fromSticky === true && hasCoords) {
+    return {
+      latitude: lat,
+      longitude: lng,
+      source: "sticky",
+      recordedAt: boat.recordedAt || boat.RecordedAt || null,
+    };
+  }
+
+  if (!hasCoords) {
+    return { latitude: null, longitude: null, source: "none", recordedAt: null };
+  }
+
+  // 2) Có lat/lng từ BE → check freshness theo BE rule.
+  //    BE tính isOnline = now - ReceivedAt <= 60s; FE mirror bằng receivedAt ?? recordedAt.
+  const isOnline = boat.isOnline === true || boat.IsOnline === true;
+  const recordedAt = boat.recordedAt || boat.RecordedAt || null;
+  const freshnessRaw = boat.receivedAt || boat.ReceivedAt || recordedAt;
+  const freshnessTs = freshnessRaw ? Date.parse(freshnessRaw) : NaN;
+  const ageMs = Number.isFinite(freshnessTs) ? Date.now() - freshnessTs : Infinity;
+  const isFresh = isOnline || ageMs < STALE_GPS_MS;
+
+  if (!isFresh) {
+    return {
+      latitude: lat,
+      longitude: lng,
+      source: "sticky",
+      recordedAt,
+    };
+  }
+
+  return {
+    latitude: lat,
+    longitude: lng,
+    source: "live",
+    recordedAt,
+  };
 };
 
 /**
@@ -542,6 +624,7 @@ export const normalizeBoatLocation = (raw) => {
   const nextStationName = raw.nextStationName ?? raw.NextStationName ?? null;
   const nextStationCode = raw.nextStationCode ?? raw.NextStationCode ?? null;
   const currentStationName = raw.currentStationName ?? raw.CurrentStationName ?? null;
+  const currentStationId = raw.currentStationId ?? raw.CurrentStationId ?? null;
 
   const tripIdRaw = raw.tripId ?? raw.TripId ?? raw.trip?.id ?? raw.trip?.tripId ?? null;
   const tripId = tripIdRaw != null && String(tripIdRaw).trim() ? String(tripIdRaw).trim() : null;
@@ -584,6 +667,7 @@ export const normalizeBoatLocation = (raw) => {
     currentStationName: currentStationName != null && currentStationName !== ""
       ? String(currentStationName)
       : null,
+    currentStationId: currentStationId ? String(currentStationId) : null,
     remainingDistanceKmToNextStation: (() => {
       if (Number.isFinite(remainingKmRaw) && remainingKmRaw >= 0) return remainingKmRaw;
       if (Number.isFinite(remainingMetersRaw) && remainingMetersRaw >= 0) {

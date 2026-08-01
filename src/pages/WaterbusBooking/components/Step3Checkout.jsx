@@ -14,6 +14,7 @@ import {
   findInsurancePackageById,
   getInsurancePackageId,
   isSameInsurancePackageId,
+  buildInsuranceConditionsHtml,
   INSURANCE_BOOKING_TYPES,
 } from "../../../services/insuranceService";
 import { PROMOTION_BOOKING_TYPES, checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
@@ -96,7 +97,7 @@ const formatHoldDeadline = (value) => {
   return date.toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" });
 };
 
-export default function Step3Checkout({ bookingData, onBack, onExpire, onBookingCreated }) {
+export default function Step3Checkout({ bookingData, onBack, onExpire, onBookingCreated, hideUseAccountInfo = false }) {
   const { lang } = useApp();
   const navigate = useNavigate();
   const {
@@ -854,17 +855,19 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
             <h3 className="text-xl font-headline font-bold text-[#124757] dark:text-white">
               {lang === "VN" ? "Thông tin liên hệ (Người đặt)" : "Contact Details"}
             </h3>
-            <button
-              type="button"
-              onClick={handleUseAccountInfo}
-              disabled={isLoadingAccountInfo}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
-            >
-              <span className={`material-symbols-outlined text-sm ${isLoadingAccountInfo ? "animate-spin" : ""}`}>
-                {isLoadingAccountInfo ? "progress_activity" : "person"}
-              </span>
-              {lang === "VN" ? "Dùng thông tin tài khoản" : "Use account info"}
-            </button>
+            {!hideUseAccountInfo && (
+              <button
+                type="button"
+                onClick={handleUseAccountInfo}
+                disabled={isLoadingAccountInfo}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
+              >
+                <span className={`material-symbols-outlined text-sm ${isLoadingAccountInfo ? "animate-spin" : ""}`}>
+                  {isLoadingAccountInfo ? "progress_activity" : "person"}
+                </span>
+                {lang === "VN" ? "Dùng thông tin tài khoản" : "Use account info"}
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1231,16 +1234,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                 .replaceAll(">", "&gt;")
                 .replaceAll('"', "&quot;")
                 .replaceAll("'", "&#39;");
-              const conditions = (Array.isArray(pkg.conditions) ? pkg.conditions : [])
-                .map((item) => String(item || "").trim())
-                .filter(Boolean);
               const name = pkg.providerName || (lang === "VN" ? "Nhà cung cấp bảo hiểm" : "Insurance provider");
               const logoHtml = pkg.providerLogoUrl
                 ? `<img src="${escapeHtml(pkg.providerLogoUrl)}" alt="${escapeHtml(name)}" style="width:72px;height:72px;object-fit:contain;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;margin:0 auto 12px;" />`
                 : "";
-              const conditionsHtml = conditions.length > 0
-                ? `<ul style="text-align:left;margin:12px 0 0;padding-left:18px;color:#64748b;font-size:12px;line-height:1.7;">${conditions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-                : `<p style="margin:12px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có điều kiện chi tiết trên hệ thống." : "No detailed conditions on file."}</p>`;
+              const conditionsHtml = buildInsuranceConditionsHtml(pkg.conditions, { lang, escapeHtml });
               const termsHtml = pkg.termsUrl
                 ? `<a href="${escapeHtml(pkg.termsUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 14px;border-radius:12px;background:#124757;color:#fff;font-weight:800;font-size:12px;text-decoration:none;">${lang === "VN" ? "Mở điều khoản đầy đủ" : "Open full terms"}</a>`
                 : `<p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có link điều khoản." : "No terms link available."}</p>`;

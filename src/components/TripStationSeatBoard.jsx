@@ -12,6 +12,7 @@ import {
   normalizeSeatKeys,
   resolveLiveTripStop,
   rowLetterToIndex,
+  seatsReferSame,
   sortTripStops,
   summarizeOccupancy,
 } from "../utils/tripStationSeatBoard";
@@ -138,15 +139,35 @@ const collectActionPeople = (occupiedSeats, allPassengers = []) => {
   let throughCount = 0;
 
   const usedInfantKeys = new Set();
+  const usedHolderKeys = new Set();
+
+  const holderKey = (person, seatNumber) => {
+    const id = String(person?.passengerId || "").trim().toLowerCase();
+    const ticket = String(person?.ticketCode || "").trim().toUpperCase();
+    if (id) return `id:${id}`;
+    if (ticket) return `tk:${ticket}`;
+    return `seat:${String(seatNumber || "").toUpperCase()}|${String(person?.passengerName || "").toLowerCase()}`;
+  };
+
   const pushGroup = (target, holders, seatNumber, bump) => {
     (holders || []).forEach((person) => {
+      const key = holderKey(person, seatNumber);
+      if (usedHolderKeys.has(key)) return;
+      usedHolderKeys.add(key);
       const lapInfants = findSharedSeatCompanions(person, allPassengers, usedInfantKeys).map((child) => ({
         ...child,
         seatNumber,
         sharesSeat: true,
         companionPassengerName: child.companionPassengerName || person.passengerName,
       }));
-      target.push({ ...person, seatNumber, sharesSeat: false, lapInfants });
+      // Giữ đúng mã ghế của ghế đang gắn (có tầng), không lấy seatNumber lệch từ passenger raw.
+      const seatLabel = seatNumber || person.seatNumber || "—";
+      target.push({
+        ...person,
+        seatNumber: seatLabel,
+        sharesSeat: false,
+        lapInfants,
+      });
       bump(1 + lapInfants.length);
     });
   };
@@ -442,6 +463,7 @@ export function TripStationSeatBoard({
   const seatByNumber = useMemo(() => {
     const map = new Map();
     occupiedSeats.forEach((seat) => {
+      // Chỉ index theo key của đúng ghế — không để alias tầng đè ghế khác.
       normalizeSeatKeys(seat.seatNumber).forEach((key) => {
         if (!map.has(key)) map.set(key, seat);
       });
@@ -450,7 +472,16 @@ export function TripStationSeatBoard({
   }, [occupiedSeats]);
 
   const resolveSeat = (seatNumber) => {
-    for (const key of normalizeSeatKeys(seatNumber)) {
+    const trimmed = String(seatNumber || "").trim();
+    if (!trimmed) return null;
+    // Ưu tiên khớp đúng mã ghế (kèm tầng): 2-E3 ≠ 1-E3.
+    const exact = occupiedSeats.find(
+      (seat) => String(seat.seatNumber || "").trim().toUpperCase() === trimmed.toUpperCase(),
+    );
+    if (exact) return exact;
+    const same = occupiedSeats.find((seat) => seatsReferSame(seat.seatNumber, trimmed));
+    if (same) return same;
+    for (const key of normalizeSeatKeys(trimmed)) {
       const found = seatByNumber.get(key);
       if (found) return found;
     }
@@ -560,11 +591,7 @@ export function TripStationSeatBoard({
             <p className="text-xs font-bold text-slate-500">
               {formatTripClock(selectedStop?.scheduledDeparture || selectedStop?.scheduledArrival)}
             </p>
-            <p className="mt-0.5 text-[10px] font-medium text-slate-400">
-              {isManualBrowse
-                ? (lang === "VN" ? "Đang xem tay — tới bến mới sẽ tự nhảy lại." : "Manual view — auto-jumps on next arrival.")
-                : (lang === "VN" ? "Tự theo bến tàu đang tới / đang cập." : "Following the live stop.")}
-            </p>
+           
           </div>
           {isManualBrowse ? (
             <button
@@ -720,9 +747,7 @@ export function TripStationSeatBoard({
                 >
                   {activeDeckData.seats.map((seat) => {
                     const role = seat.occupancyRole || "empty";
-                    const selected = normalizeSeatKeys(selectedSeatNumber).some((key) =>
-                      normalizeSeatKeys(seat.seatNumber).includes(key),
-                    );
+                    const selected = seatsReferSame(selectedSeatNumber, seat.seatNumber);
                     const tone = seatToneFromOccupancyRole(role);
                     const isBlocked = role === "blocked";
                     const dimmed = focusRole !== "all" && !(

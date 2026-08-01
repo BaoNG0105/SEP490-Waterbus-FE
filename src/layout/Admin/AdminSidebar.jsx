@@ -46,7 +46,7 @@ const MENU_GROUPS = [
       { path: "/admin/landmarks-management",labelVn: "Landmark thuyết minh", labelEn: "Landmarks", roles: ["ADMIN"] },
       { path: "/admin/boats-management",labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN"] },
       { path: "/admin/seat-types",labelVn: "Chính sách giá", labelEn: "Fare Policy", roles: ["ADMIN"] },
-      { path: "/admin/live-tracking",labelVn: "Theo dõi / Sự cố", labelEn: "Tracking / Incidents", labelVnStaff: "Theo dõi GPS / Sự cố", labelEnStaff: "GPS / Incidents", roles: ["ADMIN", "MANAGER", "STAFF"] },
+      { path: "/admin/live-tracking", labelVn: "Theo dõi tàu", labelEn: "Boat tracking", labelVnStaff: "Theo dõi tàu", labelEnStaff: "Boat tracking", roles: ["ADMIN", "MANAGER", "STAFF"] },
       { path: "/admin/staff/my-trips",labelVn: "Chuyến của tôi", labelEn: "My trips", roles: ["STAFF"] },
       { path: "/admin/staff/ticket-scan",labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
       { path: "/admin/staff/scan-history",labelVn: "Lịch sử quét", labelEn: "Scan history", roles: ["STAFF"] },
@@ -57,6 +57,7 @@ const MENU_GROUPS = [
     labelVn: "Đặt chỗ & BH",
     labelEn: "Bookings & Insurance",
     items: [
+      { path: "/admin/booking-pos", labelVn: "Bán vé (POS)", labelEn: "Sell tickets (POS)", roles: ["ADMIN", "MANAGER", "STAFF"] },
       { path: "/admin/bookings", labelVn: "Booking vé", labelEn: "Seat bookings", roles: ["ADMIN"] },
       { path: "/admin/charter-bookings-management", labelVn: "Thuê tàu", labelEn: "Request Booking", roles: ["ADMIN"] },
       { path: "/admin/insurance-management", labelVn: "Bảo hiểm", labelEn: "Insurance", roles: ["ADMIN"] },
@@ -90,6 +91,7 @@ const STAFF_MENU_PATHS = new Set([
   "/admin/staff/my-trips",
   "/admin/staff/ticket-scan",
   "/admin/staff/scan-history",
+  "/admin/booking-pos",
 ]);
 
 const isPathActive = (currentPath, itemPath) => {

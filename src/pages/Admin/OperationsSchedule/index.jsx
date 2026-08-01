@@ -345,7 +345,10 @@ export function OperationsSchedulePage() {
               const status = trip.movementStatus || trip.operationStatus || "";
               const statusLabel = getMovementStatusLabel(status, lang) || status || "—";
               const stopCount = Array.isArray(trip.stops) ? trip.stops.length : 0;
-              const meta = [trip.boatCode, trip.routeName || trip.routeCode]
+              const routeLabel = String(trip.routeName || "").trim();
+              const titleLabel = routeLabel
+                || `${trip.fromLocation || "—"} → ${dest}`;
+              const meta = [trip.boatCode, !routeLabel ? (trip.routeCode || "") : ""]
                 .filter(Boolean)
                 .join(" · ");
               const rowKey = String(
@@ -372,7 +375,7 @@ export function OperationsSchedulePage() {
 
                     <div className="min-w-0 space-y-1">
                       <p className="truncate text-sm font-black text-slate-800 dark:text-slate-100">
-                        {(trip.fromLocation || "—")} → {dest}
+                        {titleLabel}
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wide ${getMovementStatusTone(status)}`}>

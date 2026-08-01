@@ -11,7 +11,10 @@ import {
 
 const norm = (value) => String(value || "").trim().toLowerCase();
 
-/** Chuẩn hoá mã ghế để khớp "1-A1" / "A1" / "1A1". */
+/** Chuẩn hoá mã ghế để khớp "1-A1" / "A1" / "1A1".
+ * Ghế có prefix tầng ≥2 giữ nguyên tầng — không alias về "A1" kẻo đụng tầng 1.
+ * Chỉ tầng 1 mới thêm alias không tầng (dữ liệu cũ / tàu 1 tầng).
+ */
 export const normalizeSeatKeys = (value) => {
   const raw = String(value || "").trim().toUpperCase();
   if (!raw || raw === "—" || raw === "-") return [];
@@ -21,9 +24,17 @@ export const normalizeSeatKeys = (value) => {
 
   const withDeck = raw.match(/^(\d+)[-_]([A-Z]+)(\d+)$/);
   if (withDeck) {
-    keys.add(`${withDeck[1]}-${withDeck[2]}${withDeck[3]}`);
-    keys.add(`${withDeck[2]}${withDeck[3]}`);
-    keys.add(`${withDeck[2]}-${withDeck[3]}`);
+    const deck = Number(withDeck[1]);
+    const row = withDeck[2];
+    const num = withDeck[3];
+    keys.add(`${deck}-${row}${num}`);
+    keys.add(`${deck}${row}${num}`);
+    // Alias bỏ tầng chỉ cho tầng 1 — tránh 1-E3 và 2-E3 cùng map vào "E3".
+    if (deck === 1) {
+      keys.add(`${row}${num}`);
+      keys.add(`${row}-${num}`);
+    }
+    return [...keys].filter(Boolean);
   }
 
   const plain = raw.match(/^([A-Z]+)(\d+)$/);
@@ -33,6 +44,29 @@ export const normalizeSeatKeys = (value) => {
   }
 
   return [...keys].filter(Boolean);
+};
+
+/** So khớp ghế có phân tầng: 1-E3 ≠ 2-E3. */
+export const seatsReferSame = (a, b) => {
+  const left = String(a || "").trim().toUpperCase();
+  const right = String(b || "").trim().toUpperCase();
+  if (!left || !right || left === "—" || right === "—") return false;
+
+  const parseDeck = (value) => {
+    const m = value.match(/^(\d+)[-_]([A-Z]+)(\d+)$/);
+    if (!m) return null;
+    return { deck: Number(m[1]), row: m[2], num: m[3] };
+  };
+
+  const pa = parseDeck(left);
+  const pb = parseDeck(right);
+  if (pa && pb) {
+    return pa.deck === pb.deck && pa.row === pb.row && pa.num === pb.num;
+  }
+
+  const ka = normalizeSeatKeys(left);
+  const kb = normalizeSeatKeys(right);
+  return ka.some((key) => kb.includes(key));
 };
 
 export const seatKey = (value) => normalizeSeatKeys(value)[0] || "";
@@ -284,11 +318,52 @@ export const classifyPassengerAtStop = (passenger, stop, stops = []) => {
 
 const emptyGroups = () => ({ alighting: [], boarding: [], through: [], occupied: [] });
 
+/** Key gắn khách↔ghế: tàu nhiều tầng không dùng alias bỏ tầng (tránh 1-E3 đụng 2-E3). */
+const occupancyKeysForCode = (value, { multiDeck = false, deckHint = null } = {}) => {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw || raw === "—" || raw === "-") return [];
+
+  const withDeck = raw.match(/^(\d+)[-_]([A-Z]+)(\d+)$/);
+  if (withDeck) {
+    const deck = Number(withDeck[1]);
+    const row = withDeck[2];
+    const num = withDeck[3];
+    const keys = [`${deck}-${row}${num}`, `${deck}${row}${num}`];
+    // Tàu 1 tầng / legacy: cho phép "A1" khớp "1-A1".
+    if (!multiDeck && deck === 1) {
+      keys.push(`${row}${num}`, `${row}-${num}`);
+    }
+    return keys;
+  }
+
+  const plain = raw.match(/^([A-Z]+)(\d+)$/);
+  if (plain) {
+    const row = plain[1];
+    const num = plain[2];
+    if (multiDeck) {
+      const deck = Number(deckHint);
+      if (Number.isFinite(deck) && deck > 0) {
+        return [`${deck}-${row}${num}`, `${deck}${row}${num}`];
+      }
+      // Không biết tầng — không phát tán sang mọi tầng.
+      return [];
+    }
+    return [`${row}${num}`, `${row}-${num}`];
+  }
+
+  return normalizeSeatKeys(raw);
+};
+
 /** Gắn khách vào từng ghế theo bến đang chọn — ghế đã đặt luôn trả về, không ẩn. */
 export const buildSeatOccupancyAtStop = (seats, passengers, stop, stops = []) => {
   const bySeat = new Map();
+  const seatList = Array.isArray(seats) ? seats : [];
+  const multiDeck = new Set(
+    seatList.map((seat) => Number(seat?.deck) || 1),
+  ).size > 1;
 
   const ensureSeat = (keys) => {
+    if (!keys.length) return emptyGroups();
     for (const key of keys) {
       if (bySeat.has(key)) return bySeat.get(key);
     }
@@ -297,9 +372,24 @@ export const buildSeatOccupancyAtStop = (seats, passengers, stop, stops = []) =>
     return groups;
   };
 
+  const displaySeatNumber = (seat) => {
+    const deck = Number(seat?.deck) || 1;
+    const raw = String(seat?.seatNumber || seat?.seatCode || seat?.code || "").trim();
+    const withDeck = raw.toUpperCase().match(/^(\d+)[-_]([A-Z]+)(\d+)$/);
+    if (withDeck) return `${Number(withDeck[1])}-${withDeck[2]}${withDeck[3]}`;
+    const plain = raw.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+    if (plain && multiDeck) return `${deck}-${plain[1]}${plain[2]}`;
+    return raw || "";
+  };
+
+  const seatLookupKeys = (seat) => occupancyKeysForCode(
+    seat?.seatNumber || seat?.seatCode || seat?.code || "",
+    { multiDeck, deckHint: Number(seat?.deck) || 1 },
+  );
+
   (Array.isArray(passengers) ? passengers : []).forEach((passenger) => {
     if (passenger?.isLapInfant) return; // Em bé đi kèm không chiếm ghế
-    const keys = normalizeSeatKeys(passenger?.seatNumber);
+    const keys = occupancyKeysForCode(passenger?.seatNumber, { multiDeck });
     if (!keys.length) return;
     const role = classifyPassengerAtStop(passenger, stop, stops);
     if (role === "other") return;
@@ -308,10 +398,11 @@ export const buildSeatOccupancyAtStop = (seats, passengers, stop, stops = []) =>
     groups[bucket].push(passenger);
   });
 
-  return (Array.isArray(seats) ? seats : []).map((seat) => {
-    const keys = normalizeSeatKeys(seat?.seatNumber || seat?.seatCode || seat?.code);
+  return seatList.map((seat) => {
+    const keys = seatLookupKeys(seat);
     const groups = keys.map((k) => bySeat.get(k)).find(Boolean) || emptyGroups();
     const status = String(seat?.status || "").toLowerCase();
+    const seatNumber = displaySeatNumber(seat);
 
     let role = "empty";
     if (groups.boarding.length) {
@@ -332,7 +423,7 @@ export const buildSeatOccupancyAtStop = (seats, passengers, stop, stops = []) =>
 
     return {
       ...seat,
-      seatNumber: seat?.seatNumber || seat?.seatCode || keys[0] || "",
+      seatNumber,
       occupancyRole: role,
       alighting: groups.alighting,
       boarding: groups.boarding,

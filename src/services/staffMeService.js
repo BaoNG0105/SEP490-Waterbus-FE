@@ -108,18 +108,6 @@ const parseRouteEndpoints = (routeName) => {
     return { from: '', to: '' };
 };
 
-/**
- * BB-20260728-WATERBUS-LINH DONG-BACH DANG-1709 → LINH DONG / BACH DANG
- * BB-20260728-WB-BD-LB-1900 → BD / LB
- */
-const parseEndpointsFromTripCode = (tripCode) => {
-    const raw = String(tripCode || '').trim();
-    if (!raw) return { from: '', to: '' };
-    const match = raw.match(/^[A-Za-z]{1,6}-\d{8}-(.+)-(\d{3,4})$/);
-    if (match?.[1]) return parseRouteEndpoints(match[1]);
-    return parseRouteEndpoints(raw);
-};
-
 const resolveRouteName = (item) => {
     const direct = pick(item, ['routeName', 'RouteName', 'route.name'], '');
     if (typeof direct === 'string' && direct.trim() && direct.trim() !== '—') {
@@ -161,7 +149,6 @@ export const normalizeStaffTrip = (item) => {
     const tripCode = pick(item, ['tripCode', 'TripCode', 'code'], '');
     const routeName = resolveRouteName(item) || '—';
     const routeEnds = parseRouteEndpoints(routeName);
-    const codeEnds = parseEndpointsFromTripCode(tripCode);
 
     const fromStationName = coerceStationLabel(pick(item, [
         'fromStationName', 'FromStationName',
@@ -172,7 +159,6 @@ export const normalizeStaffTrip = (item) => {
     ], ''))
         || stopStationLabel(firstStop)
         || routeEnds.from
-        || codeEnds.from
         || '';
 
     const toStationName = coerceStationLabel(pick(item, [
@@ -185,7 +171,6 @@ export const normalizeStaffTrip = (item) => {
     ], ''))
         || stopStationLabel(lastStop)
         || routeEnds.to
-        || codeEnds.to
         || '';
 
     return {

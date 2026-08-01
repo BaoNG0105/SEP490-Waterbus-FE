@@ -168,7 +168,6 @@ export function TripSeatBoardPage() {
   const { lang } = useApp();
 
   const tripId = String(tripIdParam || "").trim();
-  const backTo = searchParams.get("from") || "/admin/staff/my-trips";
   const initialStationId = searchParams.get("stationId") || "";
 
   const [tab, setTab] = useState("seats");
@@ -369,13 +368,6 @@ export function TripSeatBoardPage() {
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => navigate(backTo)}
-                className="inline-flex items-center whitespace-nowrap rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
-              >
-                {lang === "VN" ? "Quay lại" : "Back"}
-              </button>
               {showLiveGpsButton ? (
                 <button
                   type="button"

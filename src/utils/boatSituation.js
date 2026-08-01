@@ -53,6 +53,135 @@ export const findNearestStation = (boat, stations = []) => {
   return best;
 };
 
+/** Cùng code bến (ST-BD / ST-TD / ST-BD/...) giữa BE báo và station list — chuẩn hoá. */
+const normalizeStationCodeKey = (code) => {
+  const raw = String(code || "").trim().toUpperCase();
+  if (!raw) return "";
+  return raw.replace(/^ST[-_\s]*/i, "");
+};
+
+const STATION_MATCH_METERS = 80;
+
+/**
+ * BE đã drop currentStationCode khi packet lệch GPS >80m, nhưng cache/sticky code cũ vẫn có thể
+ * trả cho client (response 10(s) vẫn dùng bản ghi cũ). FE tự validate theo GPS:
+ *   1. Nếu `reportedCode` resolve tới 1 station ∈ stations và cách GPS ≤80m → giữ nguyên.
+ *   2. Nếu >80m đối với station resolve từ reportedCode → drop stale code.
+ *   3. Nếu GPS ≤80m của bất cứ station nào → fill nearest (kể cả khi BE không gửi).
+ *   4. Không có → trả null hết (không fill bừa).
+ */
+export const resolveStationAgainstGps = ({
+  stations = [],
+  lat,
+  lng,
+  reportedCode = null,
+  reportedName = null,
+  reportedId = null,
+  matchMeters = STATION_MATCH_METERS,
+} = {}) => {
+  const gpsLat = Number(lat);
+  const gpsLng = Number(lng);
+  const hasGps = Number.isFinite(gpsLat) && Number.isFinite(gpsLng);
+  const list = Array.isArray(stations) ? stations : [];
+  const codeKey = normalizeStationCodeKey(reportedCode);
+
+  const closest = hasGps
+    ? findNearestStation({ latitude: gpsLat, longitude: gpsLng }, list)
+    : null;
+
+  const reportedStation = codeKey
+    ? list.find((station) => normalizeStationCodeKey(station?.stationCode || station?.code) === codeKey)
+    : null;
+
+  const reportedDistance = (reportedStation && hasGps)
+    ? haversineMeters(gpsLat, gpsLng, Number(reportedStation.latitude), Number(reportedStation.longitude))
+    : null;
+
+  if (reportedStation && Number.isFinite(reportedDistance) && reportedDistance <= matchMeters) {
+    return {
+      id: String(reportedStation.stationId || reportedStation.id || reportedId || "").trim() || null,
+      code: String(reportedStation.stationCode || reportedStation.code || reportedCode || "").trim() || null,
+      name: String(reportedStation.stationName || reportedStation.name || reportedName || "").trim() || null,
+      distance: Math.round(reportedDistance),
+      source: "reported",
+    };
+  }
+
+  if (closest && Number.isFinite(closest.meters) && closest.meters <= matchMeters) {
+    const station = closest.station;
+    return {
+      id: String(station?.stationId || station?.id || "").trim() || null,
+      code: String(station?.stationCode || station?.code || "").trim() || null,
+      name: String(station?.stationName || station?.name || "").trim() || null,
+      distance: Math.round(closest.meters),
+      source: "nearest",
+    };
+  }
+
+  return {
+    id: null,
+    code: null,
+    name: null,
+    distance: null,
+    source: "none",
+  };
+};
+
+/** Tìm bến theo id/code/name — chỉ khớp chặt (có lat/lng để đối chiếu). */
+export const findStationByRef = (stations = [], ref = {}) => {
+  const id = String(ref?.id || "").trim().toLowerCase();
+  const codeRaw = String(ref?.code || "").trim().toUpperCase();
+  const code = shortStationCode(codeRaw).toUpperCase();
+  const name = String(ref?.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!id && !code && !name) return null;
+
+  const list = Array.isArray(stations) ? stations : [];
+  let best = null;
+
+  list.forEach((station) => {
+    const sLat = Number(station?.latitude ?? station?.lat);
+    const sLng = Number(station?.longitude ?? station?.lng ?? station?.lon);
+    if (!Number.isFinite(sLat) || !Number.isFinite(sLng)) return;
+
+    const sid = String(station?.stationId || station?.id || "").trim().toLowerCase();
+    const scodeRaw = String(station?.stationCode || station?.code || "").trim().toUpperCase();
+    const scode = shortStationCode(scodeRaw).toUpperCase();
+    const sname = String(station?.stationName || station?.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+    let score = 0;
+    let matchBy = "";
+    if (id && sid && id === sid) {
+      score = 100;
+      matchBy = "stationId";
+    } else if (code && scode && (code === scode || codeRaw === scodeRaw)) {
+      score = 80;
+      matchBy = "stationCode";
+    } else if (name && sname && name === sname) {
+      score = 60;
+      matchBy = "stationName";
+    } else if (name && sname && (sname.endsWith(name) || name.endsWith(sname)) && Math.min(name.length, sname.length) >= 6) {
+      // "Bạch Đằng" ↔ "Bến Bạch Đằng" — không dùng includes lỏng.
+      score = 40;
+      matchBy = "stationNameSuffix";
+    }
+    if (!score) return;
+    if (!best || score > best.score) {
+      best = {
+        station,
+        stationId: sid,
+        stationCode: scodeRaw || scode,
+        stationName: station?.stationName || station?.name || "",
+        latitude: sLat,
+        longitude: sLng,
+        score,
+        matchBy,
+      };
+    }
+  });
+
+  return best;
+};
+
 export const DOCK_METERS_EXPORT = DOCK_METERS;
 
 const resolveMinutesUntilDeparture = (boat) => {
