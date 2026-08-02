@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { fetchStationDetail } from "../../services/stationService";
+import { ImageWithFallback } from "../../components/ImageWithFallback";
 
 export function StationDetail() {
     const { lang } = useApp();
@@ -48,10 +49,11 @@ export function StationDetail() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
                 {/* Khối Trái: Ảnh bìa nhà ga bến tàu */}
                 <div className="aspect-16/10 rounded-[2.5rem] overflow-hidden shadow-sm bg-slate-100 relative group">
-                    <img 
-                        src={station?.imageUrl || "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg"} 
-                        alt={station?.stationName} 
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    <ImageWithFallback
+                        src={station?.imageUrl}
+                        alt={station?.stationName}
+                        className="w-full h-full"
+                        imgClassName="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                     {/* BADGE TRẠM CHÍNH THỨC HOẶC VỆ TINH */}
                     {station?.isWaterbusStation ? (

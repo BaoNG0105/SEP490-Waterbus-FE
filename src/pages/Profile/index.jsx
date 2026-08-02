@@ -6,6 +6,7 @@ import { logout } from "../../redux/authSlice";
 import { fetchCurrentUserProfile } from "../../services/authService";
 import { fetchMyPoints, getPointTransactionLabel } from "../../services/pointService";
 import { notify } from "../../utils/swalToast";
+import { UserAvatar } from "../../components/UserAvatar";
 
 export const Profile = () => {
   const { lang } = useApp();
@@ -39,7 +40,7 @@ export const Profile = () => {
           dob: data.dateOfBirth || "",
           gender: data.gender === "Male" ? "Nam" : (data.gender === "Female" ? "Nữ" : "Khác"),
           nationality: data.nationality || "Vietnam",
-          avatarUrl: data.avatarUrl || "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp",
+          avatarUrl: data.avatarUrl || "",
           roleName: data.roles?.[0]?.displayName || "Khách hàng"
         });
       } catch (error) {
@@ -126,15 +127,18 @@ export const Profile = () => {
           <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-4xl overflow-hidden shadow-xl border border-slate-100 dark:border-slate-700/50 mb-8 animate-fade-in-up">
             <div className="h-40 sm:h-48 bg-[#124757] dark:bg-slate-900 relative overflow-hidden">
               <div className="absolute inset-0 bg-black/20 z-10"></div>
-              <img src="https://res.cloudinary.com/dygipvoal/image/upload/v1776188850/vpool5lgwmjfocldit1q.png" alt="Cover" className="w-full h-full object-cover opacity-80" />
+              <img src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/logo.jpg" alt="Cover" className="w-full h-full object-cover opacity-80" />
             </div>
 
             <div className="px-6 sm:px-10 pb-8 relative">
               <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 -mt-16 sm:-mt-20 relative z-20">
                 <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 text-center sm:text-left">
-                  <div className="w-32 h-32 rounded-4xl border-4 border-white dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-700 shadow-lg shrink-0">
-                    <img src={profileData.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                  </div>
+                  <UserAvatar
+                    avatarUrl={profileData.avatarUrl}
+                    alt="Avatar"
+                    className="w-32 h-32 rounded-4xl border-4 border-white dark:border-slate-800 overflow-hidden shadow-lg shrink-0"
+                    iconClassName="w-16 h-16"
+                  />
                   <div className="pb-2">
                     <h1 className="text-2xl sm:text-3xl font-black font-headline text-white leading-tight">
                       {profileData.fullName}
@@ -166,12 +170,18 @@ export const Profile = () => {
               </div>
 
               <div className="mt-10 pt-8 border-t border-slate-100 dark:border-slate-700">
-                <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-[#124757] to-[#0b323d] dark:from-slate-900 dark:to-slate-950 p-6 sm:p-8 shadow-lg border border-[#124757]/20 dark:border-slate-700">
-                  <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-[140px] text-white/5 select-none">paid</span>
+                <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-[#124757] via-[#0f3d49] to-[#0a2830] dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 p-6 sm:p-8 shadow-lg border border-[#124757]/20 dark:border-slate-700">
                   <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6">
-                    <div>
-                      <p className="text-xs text-white/70 font-bold uppercase tracking-widest mb-1">{lang === "VN" ? "Điểm tích lũy hiện có" : "Reward Points Balance"}</p>
-                      <h3 className="text-4xl font-black text-white leading-none">{pointsData.pointBalance.toLocaleString()}</h3>
+                    <div className="flex items-center gap-4 sm:gap-5">
+                      <div>
+                        <p className="text-xs text-white/60 font-bold uppercase tracking-widest mb-1.5">{lang === "VN" ? "Điểm tích lũy hiện có" : "Reward Points Balance"}</p>
+                        <div className="flex items-baseline gap-2">
+                          <h3 className="text-5xl sm:text-6xl font-black text-yellow-400 leading-none tracking-tight [text-shadow:0_0_24px_rgba(250,204,21,0.35)]">
+                            {pointsData.pointBalance.toLocaleString()}
+                          </h3>
+                          <span className="text-sm font-bold text-white/50 uppercase tracking-wide">{lang === "VN" ? "điểm" : "pts"}</span>
+                        </div>
+                      </div>
                     </div>
                     <button
                       type="button"

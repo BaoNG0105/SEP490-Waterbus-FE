@@ -3,8 +3,7 @@ import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchUserList } from "../../../services/userService";
 import { getRoleSystemName, isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
-
-const DEFAULT_AVATAR = "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp";
+import { UserAvatar } from "../../../components/UserAvatar";
 
 export function UserManagement() {
     const { lang } = useApp();
@@ -213,14 +212,11 @@ export function UserManagement() {
                                     <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
                                         <td className="py-4 px-6">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 rounded-full overflow-hidden border bg-slate-100 dark:bg-slate-700 shadow-sm shrink-0">
-                                                    <img
-                                                        src={item.avatarUrl || DEFAULT_AVATAR}
-                                                        alt={item.fullName}
-                                                        className="w-full h-full object-cover"
-                                                        onError={(e) => { e.target.src = DEFAULT_AVATAR; }}
-                                                    />
-                                                </div>
+                                                <UserAvatar
+                                                    avatarUrl={item.avatarUrl}
+                                                    alt={item.fullName}
+                                                    className="w-10 h-10 rounded-full overflow-hidden border shadow-sm shrink-0"
+                                                />
                                                 <div className="space-y-0.5">
                                                     <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">
                                                         {item.fullName || "--"}

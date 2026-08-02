@@ -670,7 +670,7 @@ export const WaterwayMap = ({
                   </Tooltip>
                 ) : null}
                 <Popup>
-                  <div className="min-w-[11.5rem] max-w-[15rem] space-y-2 p-1 font-body text-center">
+                  <div className="min-w-46 max-w-60 space-y-2 p-1 font-body text-center">
                     {showStationImages ? (
                       <img
                         src={stationImage}

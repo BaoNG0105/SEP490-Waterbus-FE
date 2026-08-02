@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { chatWithAssistant } from "../api/assistantApi";
+import logo from "../assets/logo-1.png";
 
 // Style các thẻ markdown cho vừa khung bong bóng chat (không dùng @tailwindcss/typography).
 const markdownComponents = {
@@ -114,7 +115,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
       {/* Header */}
       <div className="flex items-center gap-3 bg-[#124757] px-4 py-3.5 text-white dark:bg-slate-800 dark:text-yellow-400">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/15 dark:bg-yellow-400/15">
-          <span className="material-symbols-outlined text-xl">smart_toy</span>
+          <img src={logo} alt="" className="h-57 w-57 object-contain" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-headline font-black">{t.title}</p>

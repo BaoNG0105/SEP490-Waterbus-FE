@@ -5,6 +5,7 @@ import { fetchAllBoats, modifyBoatStatus, deleteBoat, fetchBoatDetail, fetchBoat
 import { getActivateBoatBlockReason } from "../../../utils/boatDocuments";
 import { BoatSeatLayoutPreviewModal } from "../../../components/BoatLayoutPreview";
 import { FormSelect } from "../../../components/FormSelect";
+import { ImageWithFallback } from "../../../components/ImageWithFallback";
 import { notify } from "../../../utils/swalToast";
 
 const BOAT_STATUS_OPTIONS = [
@@ -472,14 +473,13 @@ export function BoatManagement() {
 
                                             {/* "imageUrl": Ảnh tàu */}
                                             <td className="py-4 px-4">
-                                                <div className="w-16 h-10 rounded-xl overflow-hidden shadow-sm border dark:border-slate-600 bg-slate-100 shrink-0">
-                                                    <img
-                                                        src={boat.imageUrl || DEFAULT_BOAT_IMAGE}
-                                                        alt={boat.name}
-                                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                                        onError={(e) => { e.target.src = DEFAULT_BOAT_IMAGE; }}
-                                                    />
-                                                </div>
+                                                <ImageWithFallback
+                                                    src={boat.imageUrl}
+                                                    alt={boat.name}
+                                                    className="w-16 h-10 rounded-xl overflow-hidden shadow-sm border dark:border-slate-600 shrink-0"
+                                                    imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                                    iconClassName="w-4 h-4"
+                                                />
                                             </td>
 
                                             {/* "name": Tên tàu + Cảnh báo chưa cấu hình ghế */}

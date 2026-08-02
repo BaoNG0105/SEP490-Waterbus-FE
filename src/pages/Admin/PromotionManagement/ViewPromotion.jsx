@@ -8,6 +8,7 @@ import {
 } from "../../../services/promotionService";
 import { fetchAllRoutes } from "../../../services/routeService";
 import { notify } from "../../../utils/swalToast";
+import { ImageWithFallback } from "../../../components/ImageWithFallback";
 
 const formatMoney = (value) =>
   value == null ? "—" : `${Number(value).toLocaleString("vi-VN")}đ`;
@@ -164,11 +165,14 @@ export function ViewPromotion() {
         </button>
       </div>
 
-      {promo.imageUrl ? (
-        <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
-          <img src={promo.imageUrl} alt={promo.promotionName} className="w-full max-h-72 object-cover" />
-        </div>
-      ) : null}
+      <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
+        <ImageWithFallback
+          src={promo.imageUrl}
+          alt={promo.promotionName}
+          className="w-full h-72"
+          imgClassName="w-full h-full object-cover"
+        />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">

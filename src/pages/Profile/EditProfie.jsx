@@ -10,6 +10,7 @@ import {
 import "flag-icons/css/flag-icons.min.css";
 import { notify, showValidationMessage } from "../../utils/swalToast";
 import { AppDateInput } from "../../components/AppDateInput";
+import { UserAvatar } from "../../components/UserAvatar";
 import Swal from "sweetalert2";
 
 import countries from "i18n-iso-countries";
@@ -85,7 +86,7 @@ export const EditProfile = () => {
                     dob: convertDateForInput(data.dateOfBirth),
                     gender: data.gender || "Male",
                     nationality: userNationality,
-                    avatarUrl: data.avatarUrl || "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp",
+                    avatarUrl: data.avatarUrl || "",
                 };
 
                 setProfileData(formattedData);
@@ -356,8 +357,12 @@ export const EditProfile = () => {
                 <form onSubmit={handleSaveProfile} className="space-y-8">
 
                     <div className="flex flex-col sm:flex-row items-center gap-5 bg-slate-50/50 dark:bg-slate-800/30 p-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-                        <div className="w-20 h-24 rounded-2xl border-2 border-[#124757] dark:border-yellow-400 overflow-hidden bg-slate-100 dark:bg-slate-700 relative group cursor-pointer shadow-md shrink-0">
-                            <img src={profileData.avatarUrl} alt="Avatar" className="w-full h-full object-cover group-hover:opacity-40 transition-opacity" />
+                        <div className="w-20 h-24 rounded-2xl border-2 border-[#124757] dark:border-yellow-400 overflow-hidden relative group cursor-pointer shadow-md shrink-0">
+                            <UserAvatar
+                                avatarUrl={profileData.avatarUrl}
+                                alt="Avatar"
+                                className="w-full h-full group-hover:opacity-40 transition-opacity"
+                            />
                             <label className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[#124757] dark:text-yellow-400 cursor-pointer bg-black/10">
                                 <span className="material-symbols-outlined">photo_camera</span>
                                 <input type="file" accept="image/jpeg, image/png, image/webp" onChange={handleAvatarChange} className="hidden" />

@@ -9,9 +9,9 @@ import { fetchPublicPromotions } from "../../services/promotionService";
 import { fetchPublicReviews } from "../../services/reviewService";
 import { StarRatingDisplay } from "../../components/TripReview";
 import { ContactForm } from "../../components/ContactForm";
+import { ImageWithFallback } from "../../components/ImageWithFallback";
 
-const heroVideo = "https://res.cloudinary.com/dygipvoal/video/upload/v1783865624/q7gde8dluohboeqjzdtx.mp4";
-const fallbackPromoImg = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
+const heroVideo = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/Ng%E1%BA%AFm%20C%E1%BA%A3nh%20Th%C3%A0nh%20Ph%E1%BB%91%20Tr%C3%AAn%20S%C3%B4ng%20-%20SAIGON%20WATER%20BUS%20B%E1%BA%A0CH%20%C4%90%E1%BA%B0NG%202021%20l%204K%20Live%20Wallpaper%20-%20N%C6%A1i%20M%C3%ACnh%20S%E1%BB%91ng.mp4";
 
 import {
   appImages,
@@ -329,7 +329,7 @@ export const Home = () => {
           {/* Khối Hình Ảnh Bên Phải */}
           <div className="relative rounded-3xl overflow-hidden shadow-2xl aspect-video lg:aspect-square">
             <img
-              src="https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg"
+              src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/introduction.png"
               alt="Waterbus Mission Visual"
               className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
             />
@@ -359,7 +359,7 @@ export const Home = () => {
             >
               <div className="relative aspect-4/3 overflow-hidden shrink-0">
                 <img
-                  src="https://res.cloudinary.com/dygipvoal/image/upload/v1783792724/cqi2n26pl7etht4ad5q3.webp"
+                  src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus.webp"
                   alt={lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
@@ -394,7 +394,7 @@ export const Home = () => {
             >
               <div className="relative aspect-4/3 overflow-hidden shrink-0">
                 <img
-                  src="https://res.cloudinary.com/dygipvoal/image/upload/v1783792723/qozuixs81skui0fwokvm.webp"
+                  src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-sightseeing.webp"
                   alt={lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
@@ -429,7 +429,7 @@ export const Home = () => {
             >
               <div className="relative aspect-4/3 overflow-hidden shrink-0">
                 <img
-                  src="https://res.cloudinary.com/dygipvoal/image/upload/v1784048440/vmxcyra8r6ykzkonjbaz.jpg"
+                  src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/charter.jpg"
                   alt={lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
@@ -610,10 +610,11 @@ export const Home = () => {
                   to={`/promotions/${promo.promotionCode}`}
                   className="group relative aspect-3/4 overflow-hidden shadow-lg block"
                 >
-                  <img
-                    src={promo.imageUrl || fallbackPromoImg}
+                  <ImageWithFallback
+                    src={promo.imageUrl}
                     alt={promo.promotionName}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                   />
                   {/* Lớp phủ chỉ hiện tên khuyến mãi khi hover */}
                   <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/60 transition-colors duration-300 flex items-center justify-center p-8">
@@ -702,10 +703,11 @@ export const Home = () => {
                 </div>
                 {/* KHỐI PHẢI (7/12): ẢNH */}
                 <div className="order-1 lg:order-2 lg:col-span-7 relative aspect-16/10 sm:aspect-video w-full overflow-hidden shadow-md group-hover:shadow-xl transition-all duration-500">
-                  <img
-                    src={blogs[heroSlide].imageUrl || "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png"}
+                  <ImageWithFallback
+                    src={blogs[heroSlide].imageUrl}
                     alt={blogs[heroSlide].title}
-                    className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
                   />
                   <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent pointer-events-none" />
                 </div>
@@ -1022,12 +1024,13 @@ export const Home = () => {
               </button>
               <div className="relative w-full aspect-4/5 bg-slate-100 dark:bg-slate-800">
                 {promoPosterSlides.map((promo, index) => (
-                  <img
+                  <ImageWithFallback
                     key={promo.promotionCode}
                     src={promo.imageUrl}
                     alt={promo.promotionName}
-                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${index === promoSlide ? "opacity-100 z-10" : "opacity-0 z-0"
+                    className={`absolute inset-0 w-full h-full transition-opacity duration-700 ${index === promoSlide ? "opacity-100 z-10" : "opacity-0 z-0"
                       }`}
+                    imgClassName="w-full h-full object-cover"
                   />
                 ))}
                 <div className="absolute inset-0 bg-linear-to-t from-slate-900/90 via-slate-900/20 to-transparent z-20"></div>

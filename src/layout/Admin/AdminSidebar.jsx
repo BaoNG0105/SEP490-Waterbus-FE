@@ -5,6 +5,7 @@ import { useApp } from "../../context/AppContext";
 import { fetchCurrentUserProfile } from "../../services/authService";
 import { hasRole, isAdminUser, isManagerUser, isStaffUser } from "../../utils/roleHelpers";
 import { logout, updateUserProfile } from "../../redux/authSlice";
+import { UserAvatar } from "../../components/UserAvatar";
 
 // Nhóm sidebar theo nghiệp vụ — header chỉ là nhãn, luôn hiện mục con.
 const MENU_GROUPS = [
@@ -106,7 +107,6 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
   const dispatch = useDispatch();
   const { isAuthenticated, user } = useSelector((state) => state.auth);
 
-  const defaultAvatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Admin";
   const displayName = user?.fullName || (lang === "VN" ? "Quản trị viên" : "Admin");
   const displayAvatar = user?.avatarUrl || "";
   const primaryRole = user?.roles?.find((role) =>
@@ -180,20 +180,12 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
       >
         <div className="p-5 border-b border-white/10 dark:border-slate-800 flex flex-col items-center text-center space-y-3 shrink-0 bg-white/5 select-none">
           <div className="relative group">
-            <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-dashed border-[#FFD100] flex items-center justify-center text-white shadow-md overflow-hidden transition-transform duration-500 group-hover:rotate-45">
-              {displayAvatar ? (
-                <img
-                  src={displayAvatar}
-                  alt={displayName}
-                  className="w-full h-full object-cover"
-                  onError={(event) => {
-                    event.currentTarget.src = defaultAvatar;
-                  }}
-                />
-              ) : (
-                <span className="material-symbols-outlined text-[32px] fill-1 text-white">account_circle</span>
-              )}
-            </div>
+            <UserAvatar
+              avatarUrl={displayAvatar}
+              alt={displayName}
+              className="w-16 h-16 rounded-full border-2 border-dashed border-[#FFD100] shadow-md overflow-hidden transition-transform duration-500 group-hover:rotate-45 bg-white/10! text-white!"
+              iconClassName="w-8 h-8"
+            />
             <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-[#124757] dark:border-slate-900"></span>

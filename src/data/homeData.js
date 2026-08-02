@@ -26,7 +26,7 @@ export const heroSlides = [
 export const guidelines = [
     {
         id: 1,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570508/hi4eokbj9cwae9p6kghd.png",
+        image: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/b1.png",
         titleVn: "Chọn hành trình mong muốn",
         titleEn: "Choose Your Desired Route",
         descVn: "Bắt đầu bằng việc chọn chuyến đi yêu thích, ngày giờ và loại vé phù hợp với nhu cầu di chuyển của bạn.",
@@ -34,7 +34,7 @@ export const guidelines = [
     },
     {
         id: 2,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570509/fphxlsflzplexebwbas0.png",
+        image: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/b2.png",
         titleVn: "Chọn vị trí ngồi",
         titleEn: "Select Seat Location",
         descVn: "Lựa chọn vị trí ghế ngồi yêu thích trên sơ đồ tàu.",
@@ -42,7 +42,7 @@ export const guidelines = [
     },
     {
         id: 3,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570508/pgee4jcvkxksuoigvefk.png",
+        image: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/b3.png",
         titleVn: "Nhập thông tin hành khác & thanh toán an toàn",
         titleEn: "Enter passenger information and safe payment",
         descVn: "Nhập thông tin hành khách chính xác và thực hiện thanh toán nhanh chóng và bảo mật qua PayOS.",

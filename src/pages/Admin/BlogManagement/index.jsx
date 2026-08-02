@@ -14,6 +14,7 @@ import {
 } from "../../../services/blogService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
+import { ImageWithFallback } from "../../../components/ImageWithFallback";
 
 const STATUS_STYLE = {
     [BLOG_STATUS.DRAFT]: {
@@ -394,18 +395,12 @@ export function BlogManagement() {
                                             {/* Cột 1: Thông tin bài viết */}
                                             <td className="py-4 px-6">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center">
-                                                        {(blog.imageUrl || blog.imageUrls?.[0]) ? (
-                                                            <img
-                                                                src={blog.imageUrl || blog.imageUrls?.[0]}
-                                                                alt={blog.imageAltText || blog.title}
-                                                                className="w-full h-full object-cover"
-                                                                onError={(e) => { e.target.style.display = "none"; }}
-                                                            />
-                                                        ) : (
-                                                            <span className="material-symbols-outlined text-xl text-slate-300 dark:text-slate-600">image</span>
-                                                        )}
-                                                    </div>
+                                                    <ImageWithFallback
+                                                        src={blog.imageUrl || blog.imageUrls?.[0]}
+                                                        alt={blog.imageAltText || blog.title}
+                                                        className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0"
+                                                        iconClassName="w-6 h-6"
+                                                    />
                                                     <div className="space-y-1 min-w-0">
                                                         <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug line-clamp-1">
                                                             {blog.title}

@@ -2,12 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllStations } from "../../../services/stationService";
+import { ImageWithFallback } from "../../../components/ImageWithFallback";
 
 export function StationManagement() {
     const { lang } = useApp();
     const navigate = useNavigate();
-
-    const DEFAULT_STATION_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
 
     const [stations, setStations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -233,14 +232,13 @@ export function StationManagement() {
                                         {/* Cột 1: Thông tin Trạm bến */}
                                         <td className="py-4 px-6">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-14 h-10 rounded-xl overflow-hidden border bg-slate-100 dark:bg-slate-700 shadow-sm shrink-0">
-                                                    <img
-                                                        src={station.imageUrl || (station.imageUrls && station.imageUrls[0]) || DEFAULT_STATION_IMAGE}
-                                                        alt="Station"
-                                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                                        onError={(e) => { e.target.src = DEFAULT_STATION_IMAGE; }}
-                                                    />
-                                                </div>
+                                                <ImageWithFallback
+                                                    src={station.imageUrl || (station.imageUrls && station.imageUrls[0])}
+                                                    alt="Station"
+                                                    className="w-14 h-10 rounded-xl overflow-hidden border shadow-sm shrink-0"
+                                                    imgClassName="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                    iconClassName="w-4 h-4"
+                                                />
                                                 <div className="space-y-1">
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">

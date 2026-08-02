@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { fetchPublicPromotions, PROMOTION_TYPE } from "../../services/promotionService";
+import { ImageWithFallback } from "../../components/ImageWithFallback";
 
 const formatDiscount = (promo, lang) => {
   if (promo.promotionType === PROMOTION_TYPE.PERCENT) {
@@ -11,9 +12,6 @@ const formatDiscount = (promo, lang) => {
     ? `Giảm ${(Number(promo.discountValue) || 0).toLocaleString("vi-VN")}đ`
     : `${(Number(promo.discountValue) || 0).toLocaleString("en-US")} VND off`;
 };
-
-const fallbackImg =
-  "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
 export const Promotions = () => {
   const { lang } = useApp();
@@ -85,10 +83,11 @@ export const Promotions = () => {
                 }`}
               >
                 <div className="absolute inset-0">
-                  <img
+                  <ImageWithFallback
+                    src={slide.imageUrl}
                     alt={slide.promotionName}
-                    className="w-full h-full object-cover scale-105 group-hover:scale-100 transition-transform duration-[10s]"
-                    src={slide.imageUrl || fallbackImg}
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover scale-105 group-hover:scale-100 transition-transform duration-[10s]"
                   />
                   <div className="absolute inset-0 bg-linear-to-r from-slate-900/90 via-slate-900/50 to-transparent" />
                 </div>
@@ -162,10 +161,11 @@ export const Promotions = () => {
                 to={`/promotions/${promo.promotionCode}`}
                 className="group relative aspect-3/4 overflow-hidden shadow-lg block"
               >
-                <img
-                  src={promo.imageUrl || fallbackImg}
+                <ImageWithFallback
+                  src={promo.imageUrl}
                   alt={promo.promotionName}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                  className="w-full h-full"
+                  imgClassName="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/60 transition-colors duration-300 flex flex-col items-center justify-center gap-3 p-8 text-center">
                   <h3 className="text-xl md:text-2xl font-headline font-bold text-white opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
