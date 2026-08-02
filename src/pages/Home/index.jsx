@@ -284,7 +284,7 @@ export const Home = () => {
       </section>
 
       {/* ===== MiSSON SECTION ===== */}
-      <section className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300">
+      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Khối Nội Dung Bên Trái */}
           <div className="space-y-6">
@@ -339,7 +339,7 @@ export const Home = () => {
       </section>
 
       {/* ===== SERVICES SECTION ===== */}
-      <section id="services-section" className="py-24 bg-surface dark:bg-slate-900 transition-colors duration-300 select-none">
+      <section id="services-section" className="py-24 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 select-none">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
@@ -357,7 +357,7 @@ export const Home = () => {
               to="/waterbus-booking"
               className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
             >
-              <div className="relative aspect-4/3 overflow-hidden shrink-0">
+              <div className="relative aspect-square overflow-hidden shrink-0">
                 <img
                   src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus.webp"
                   alt={lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
@@ -365,7 +365,7 @@ export const Home = () => {
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
               </div>
-              <div className="flex flex-col justify-between flex-1 p-7 space-y-3">
+              <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
                 <div className="space-y-3">
                   <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
                     {lang === "VN" ? "Tuyến cố định" : "Scheduled Route"}
@@ -392,7 +392,7 @@ export const Home = () => {
               to="/watersightseeing-booking"
               className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
             >
-              <div className="relative aspect-4/3 overflow-hidden shrink-0">
+              <div className="relative aspect-square overflow-hidden shrink-0">
                 <img
                   src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-sightseeing.webp"
                   alt={lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
@@ -400,7 +400,7 @@ export const Home = () => {
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
               </div>
-              <div className="flex flex-col justify-between flex-1 p-7 space-y-3">
+              <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
                 <div className="space-y-3">
                   <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
                     {lang === "VN" ? "Trải nghiệm ngắm cảnh" : "Scenic Experience"}
@@ -427,7 +427,7 @@ export const Home = () => {
               to="/charter-booking"
               className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
             >
-              <div className="relative aspect-4/3 overflow-hidden shrink-0">
+              <div className="relative aspect-square overflow-hidden shrink-0">
                 <img
                   src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/charter.jpg"
                   alt={lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
@@ -435,7 +435,7 @@ export const Home = () => {
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
               </div>
-              <div className="flex flex-col justify-between flex-1 p-7 space-y-3">
+              <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
                 <div className="space-y-3">
                   <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
                     {lang === "VN" ? "Riêng tư & Linh hoạt" : "Private & Flexible"}
@@ -493,7 +493,7 @@ export const Home = () => {
       </section>
 
       {/* ===== SCHEDULE SECTION ===== */}
-      <section className="py-24 bg-surface-container-low dark:bg-slate-900 transition-colors duration-300 select-none">
+      <section className="py-24 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 select-none">
         <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           {/* Khối Thông Tin Bên Trái */}
           <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-32">
@@ -640,7 +640,7 @@ export const Home = () => {
       </section>
 
       {/* ===== BLOG SECTIONS ===== */}
-      <section className="py-24 bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300 overflow-hidden">
+      <section className="py-24 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
@@ -885,14 +885,9 @@ export const Home = () => {
                     <p className="text-lg md:text-xl font-medium font-body text-slate-700 dark:text-slate-200 leading-relaxed max-w-3xl italic">
                       "{item.comment}"
                     </p>
-                    {/* Số sao + tuyến đường — không hiển thị tên khách hàng */}
+                    {/* Số sao — không hiển thị tên khách hàng */}
                     <div className="flex flex-col items-center gap-1.5 pt-4">
                       <StarRatingDisplay rating={item.rating} size="text-xl" />
-                      {item.routeName ? (
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                          {lang === "VN" ? `Đánh giá về chuyến ${item.routeName}` : `Reviewed trip: ${item.routeName}`}
-                        </p>
-                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -932,7 +927,7 @@ export const Home = () => {
       )}
 
       {/* ===== CONTACT SECTION ===== */}
-      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none">
+      <section className="py-24 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 select-none">
         <div className="max-w-7xl mx-auto px-6 md:px-12">
           {/* Khối tiêu đề chính & phụ căn giữa hệ thống */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">

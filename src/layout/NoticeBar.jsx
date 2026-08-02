@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { useApp } from "../context/AppContext"; // Đi lên 1 cấp ra src/ rồi vào context
-import { fetchNotifications, fetchUnreadNotificationCount, markNotificationRead } from "../services/notificationService";
+import { useApp } from "../context/AppContext"; 
+import { fetchNotifications, fetchUnreadNotificationCount, markNotificationRead, NOTIFICATION_READ_EVENT } from "../services/notificationService";
 import { normalizeNotification, resolveNotificationLink } from "../utils/notifications";
 
 const POLL_INTERVAL_MS = 60000;
@@ -29,7 +29,7 @@ export const NoticeBar = ({ isVisible, setVisible }) => {
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
     try {
       const [list, unread] = await Promise.all([
-        fetchNotifications({ page: 1, pageSize: 5 }),
+        fetchNotifications({ page: 1, pageSize: 5, unreadOnly: true }),
         fetchUnreadNotificationCount(),
       ]);
       const items = Array.isArray(list?.items) ? list.items.map(normalizeNotification) : [];
@@ -90,18 +90,37 @@ export const NoticeBar = ({ isVisible, setVisible }) => {
     const current = notifications[noticeIndex];
     if (!current) return;
 
-    if (!current.isRead) {
-      try {
-        await markNotificationRead(current.id);
-        setNotifications((prev) => prev.map((n) => (n.id === current.id ? { ...n, isRead: true } : n)));
-        setUnreadCount((prev) => Math.max(0, prev - 1));
-      } catch (error) {
-        console.error("Lỗi đánh dấu đã đọc:", error);
-      }
+    try {
+      // markNotificationRead phát sự kiện NOTIFICATION_READ_EVENT khi thành công — listener bên dưới
+      // sẽ tự bỏ mục này khỏi danh sách, nên không cập nhật state trùng lặp ở đây.
+      await markNotificationRead(current.id);
+    } catch (error) {
+      console.error("Lỗi đánh dấu đã đọc:", error);
     }
 
     navigate(resolveNotificationLink(current) || "/notifications");
   };
+
+  // Đồng bộ với trang Thông báo (và với chính thanh này): bất cứ khi nào có thông báo được
+  // đánh dấu đã đọc (một cái hoặc tất cả), cập nhật ngay mà không cần đợi tới lượt poll kế tiếp.
+  useEffect(() => {
+    const onExternalRead = (event) => {
+      const { id, all } = event.detail || {};
+      if (all) {
+        setNotifications([]);
+        setUnreadCount(0);
+        return;
+      }
+      if (id == null) return;
+      setNotifications((prev) => {
+        if (!prev.some((n) => n.id === id)) return prev;
+        return prev.filter((n) => n.id !== id);
+      });
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    };
+    window.addEventListener(NOTIFICATION_READ_EVENT, onExternalRead);
+    return () => window.removeEventListener(NOTIFICATION_READ_EVENT, onExternalRead);
+  }, []);
 
   if (!isVisible) return null;
   if (isLoaded && notifications.length === 0) return null;
