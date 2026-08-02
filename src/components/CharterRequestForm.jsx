@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { fetchAllStations } from "../services/stationService";
-import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId, INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
+import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId, buildInsuranceConditionsHtml, INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
 import { fetchCurrentUserProfile } from "../services/authService";
 import { updateUserProfile } from "../redux/authSlice";
 import {
@@ -1211,9 +1211,6 @@ export function CharterRequestForm({
                   .replaceAll('"', "&quot;")
                   .replaceAll("'", "&#39;");
 
-                const conditions = (Array.isArray(pkg.conditions) ? pkg.conditions : [])
-                  .map((item) => String(item || "").trim())
-                  .filter(Boolean);
                 const name = pkg.providerName || (lang === "VN" ? "Nhà cung cấp bảo hiểm" : "Insurance provider");
                 const safeName = escapeHtml(name);
                 const safeLogoUrl = escapeHtml(pkg.providerLogoUrl || "");
@@ -1221,9 +1218,7 @@ export function CharterRequestForm({
                 const logoHtml = pkg.providerLogoUrl
                   ? `<img src="${safeLogoUrl}" alt="${safeName}" style="width:72px;height:72px;object-fit:contain;border-radius:16px;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;margin:0 auto 12px;" />`
                   : "";
-                const conditionsHtml = conditions.length > 0
-                  ? `<ul style="text-align:left;margin:12px 0 0;padding-left:18px;color:#64748b;font-size:12px;line-height:1.7;">${conditions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-                  : `<p style="margin:12px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có điều kiện chi tiết trên hệ thống." : "No detailed conditions on file."}</p>`;
+                const conditionsHtml = buildInsuranceConditionsHtml(pkg.conditions, { lang, escapeHtml });
                 const termsHtml = pkg.termsUrl
                   ? `<a href="${safeTermsUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 14px;border-radius:12px;background:#124757;color:#fff;font-weight:800;font-size:12px;text-decoration:none;">${lang === "VN" ? "Mở điều khoản đầy đủ" : "Open full terms"}</a>`
                   : `<p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có link điều khoản." : "No terms link available."}</p>`;

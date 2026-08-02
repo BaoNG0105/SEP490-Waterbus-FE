@@ -47,7 +47,7 @@ const MENU_GROUPS = [
       { path: "/admin/landmarks-management",labelVn: "Landmark thuyết minh", labelEn: "Landmarks", roles: ["ADMIN"] },
       { path: "/admin/boats-management",labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN"] },
       { path: "/admin/seat-types",labelVn: "Chính sách giá", labelEn: "Fare Policy", roles: ["ADMIN"] },
-      { path: "/admin/live-tracking",labelVn: "Theo dõi / Sự cố", labelEn: "Tracking / Incidents", labelVnStaff: "Theo dõi GPS / Sự cố", labelEnStaff: "GPS / Incidents", roles: ["ADMIN", "MANAGER", "STAFF"] },
+      { path: "/admin/live-tracking", labelVn: "Theo dõi tàu", labelEn: "Boat tracking", labelVnStaff: "Theo dõi tàu", labelEnStaff: "Boat tracking", roles: ["ADMIN", "MANAGER", "STAFF"] },
       { path: "/admin/staff/my-trips",labelVn: "Chuyến của tôi", labelEn: "My trips", roles: ["STAFF"] },
       { path: "/admin/staff/ticket-scan",labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
       { path: "/admin/staff/scan-history",labelVn: "Lịch sử quét", labelEn: "Scan history", roles: ["STAFF"] },

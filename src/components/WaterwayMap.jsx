@@ -25,6 +25,16 @@ const isValidLatLng = (lat, lng) => (
   && Math.abs(Number(lng)) <= 180
 );
 
+/** Format thời điểm GPS cuối → "HH:mm" theo local time cho tooltip vị trí cuối. */
+const formatStickyRecordedAt = (raw) => {
+  if (!raw) return "";
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return "";
+  const hh = String(dt.getHours()).padStart(2, "0");
+  const mm = String(dt.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+};
+
 const safeMapAction = (map, action) => {
   try {
     if (!map || !map._loaded || typeof map.getContainer !== "function") return;
@@ -706,7 +716,8 @@ export const WaterwayMap = ({
         {visibleBoats.map((boat) => {
           const selected = String(selectedBoatId) === String(boat.boatId);
           const underMaintenance = isBoatUnderMaintenance(boat);
-          const dimmed = boat.isOnline === false;
+          const isSticky = boat.positionSource === "sticky";
+          const dimmed = boat.isOnline === false || isSticky;
           const imageSrc = getBoatImageUrl(boat, DEFAULT_BOAT_IMAGE);
           const seatCount = (() => {
             const fromCapacity = Number(boat.capacitySnapshot);
@@ -820,6 +831,11 @@ export const WaterwayMap = ({
                   <p className="wb-boat-card__note">Sự cố</p>
                 ) : underMaintenance ? (
                   <p className="wb-boat-card__note">Đang bảo trì</p>
+                ) : isSticky ? (
+                  <p className="wb-boat-card__note" style={{ color: "#94A3B8" }}>
+                    Vị trí cuối
+                    {boat.recordedAt ? ` (${formatStickyRecordedAt(boat.recordedAt)})` : ""}
+                  </p>
                 ) : null}
               </div>
             </div>

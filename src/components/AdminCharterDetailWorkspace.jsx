@@ -922,14 +922,6 @@ export function AdminBookingOverviewTab({
             />
           </div>
 
-          {(booking.requiresAdditionalPayment || Number(booking.additionalInsuranceAmount) > 0) ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
-              {lang === "VN"
-                ? `Cần thanh toán thêm phí bảo hiểm${Number(booking.additionalInsuranceAmount) > 0 ? ` (${currencyFormatter.format(Number(booking.additionalInsuranceAmount))})` : ""}. Boarding pass / export / check-in chỉ mở khi paymentStatus = Paid.`
-                : `Additional insurance payment required${Number(booking.additionalInsuranceAmount) > 0 ? ` (${currencyFormatter.format(Number(booking.additionalInsuranceAmount))})` : ""}. Boarding pass / export / check-in unlock only when paymentStatus = Paid.`}
-            </div>
-          ) : null}
-
           {bookingQuotePreview?.boats?.length > 0 ? (
             <CharterQuotePreviewTable
               preview={bookingQuotePreview}

@@ -1645,7 +1645,7 @@ export function CharterDetail() {
     if (String(booking.paymentStatus).toLowerCase() !== "paid") {
       showAlertDialog({
         icon: "info",
-        title: lang === "VN" ? "Chưa thanh toán đủ" : "Not fully paid",
+        title: lang === "VN" ? "Chưa thanh toán" : "Not fully paid",
         text: lang === "VN" ? "Chỉ thêm hành khách sau khi đã thanh toán đủ." : "Passengers can only be added after the booking is fully paid.",
       });
       return false;

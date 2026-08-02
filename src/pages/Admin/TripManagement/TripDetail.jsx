@@ -41,6 +41,7 @@ import {
   pickStopScheduledArrival,
   pickStopScheduledDeparture,
   getStopStatusLabel,
+  findNextApproachStopIndex,
 } from "../../../utils/tripStopTimes";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { formatDwellCountdownNotice, shouldSuppressDwellCountdown } from "../../../utils/boatTracking";
@@ -2164,7 +2165,12 @@ export function TripDetail() {
               </p>
             ) : (
               <ol className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                {stops.map((stop, index) => {
+                {(() => {
+                  const nextApproachIdx = findNextApproachStopIndex(stops, {
+                    tripStatusKey: statusKey,
+                    tripStartAt: trip?.startAt || trip?.scheduledDepartureAt || trip?.departureTime || null,
+                  });
+                  return stops.map((stop, index) => {
                   const isFirst = index === 0;
                   const isLast = index === lastStopIndex;
                   const sid = String(stop.stationId || stop.station?.stationId || "").trim();
@@ -2224,7 +2230,13 @@ export function TripDetail() {
                             ) : null}
                             {stop.stopStatus ? (
                               <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                                {getStopStatusLabel(stop, lang, { isFirst, isLast, tripStatusKey: statusKey })}
+                                {getStopStatusLabel(stop, lang, {
+                                  isFirst,
+                                  isLast,
+                                  isNextApproach: index === nextApproachIdx,
+                                  tripStatusKey: statusKey,
+                                  tripStartAt: trip?.startAt || trip?.scheduledDepartureAt || trip?.departureTime || null,
+                                })}
                               </span>
                             ) : null}
                           </div>
@@ -2259,7 +2271,8 @@ export function TripDetail() {
                       </div>
                     </li>
                   );
-                })}
+                  });
+                })()}
               </ol>
             )}
           </section>

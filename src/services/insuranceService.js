@@ -181,3 +181,48 @@ export const fetchActiveInsurancePackage = async (bookingType) => {
     const activePackages = await fetchActiveInsurancePackages(bookingType);
     return activePackages[0] || null;
 };
+
+/** Chuẩn hóa điều kiện gói BH thành mảng dòng sạch (bỏ bullet cũ, sửa typo thường gặp). */
+export const normalizeInsuranceConditions = (raw) => {
+    const chunks = [];
+    if (Array.isArray(raw)) {
+        raw.forEach((item) => chunks.push(String(item ?? '')));
+    } else if (raw != null && String(raw).trim()) {
+        chunks.push(String(raw));
+    }
+
+    return chunks
+        .flatMap((chunk) => chunk.split(/\r?\n+/))
+        .map((line) => line
+            .replace(/^[\s•●▪◦\-\*\u2022\u00B7]+/u, '')
+            .replace(/^ó(\s+hiệu\s+lực)/iu, 'Có$1')
+            .trim())
+        .filter(Boolean);
+};
+
+/** HTML danh sách điều kiện cho dialog SweetAlert (chấm rõ, không phụ thuộc list-style Tailwind). */
+export const buildInsuranceConditionsHtml = (rawConditions, {
+    emptyVn = 'Chưa có điều kiện chi tiết trên hệ thống.',
+    emptyEn = 'No detailed conditions on file.',
+    lang = 'VN',
+    escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;'),
+} = {}) => {
+    const conditions = normalizeInsuranceConditions(rawConditions);
+    if (!conditions.length) {
+        return `<p style="margin:12px 0 0;color:#94a3b8;font-size:12px;">${lang === 'VN' ? emptyVn : emptyEn}</p>`;
+    }
+
+    const rows = conditions.map((item) => (
+        `<div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px;text-align:left;color:#64748b;font-size:12px;line-height:1.65;">`
+        + `<span style="flex-shrink:0;width:1em;font-weight:900;color:#124757;line-height:1.65;" aria-hidden="true">•</span>`
+        + `<span style="min-width:0;flex:1;">${escapeHtml(item)}</span>`
+        + `</div>`
+    )).join('');
+
+    return `<div style="margin:10px 0 0;text-align:left;">${rows}</div>`;
+};

@@ -18,6 +18,7 @@ import {
   getStopStatusLabel,
   getStopStatusBadgeClass,
   resolveStopStatusKey,
+  findNextApproachStopIndex,
 } from "../../utils/tripStopTimes";
 import { normalizeTripStatusKey } from "../../services/tripService";
 
@@ -649,7 +650,19 @@ export function Schedule() {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {stops.map((stop, idx) => {
+                                        {(() => {
+                                          const tripStartAt = trip?.displayStartAt
+                                            || trip?.startAt
+                                            || trip?.scheduledDepartureAt
+                                            || viewTime
+                                            || null;
+                                          const statusOptsBase = {
+                                            tripStatusKey,
+                                            now: now.getTime(),
+                                            tripStartAt,
+                                          };
+                                          const nextApproachIdx = findNextApproachStopIndex(stops, statusOptsBase);
+                                          return stops.map((stop, idx) => {
                                           const stopKey = legStopKey(stop);
                                           const isBoarding = Boolean(fromStopKey) && stopKey === fromStopKey;
                                           const isAlighting = Boolean(toStopKey) && stopKey === toStopKey;
@@ -658,15 +671,10 @@ export function Schedule() {
                                           const isFirst = idx === 0;
                                           const isLast = idx === stops.length - 1;
                                           const stopOpts = {
+                                            ...statusOptsBase,
                                             isFirst,
                                             isLast,
-                                            tripStatusKey,
-                                            now: now.getTime(),
-                                            tripStartAt: trip?.displayStartAt
-                                              || trip?.startAt
-                                              || trip?.scheduledDepartureAt
-                                              || viewTime
-                                              || null,
+                                            isNextApproach: idx === nextApproachIdx,
                                           };
                                           const stopStatusKey = resolveStopStatusKey(stop, stopOpts);
                                           const stopStatusLabel = getStopStatusLabel(stopStatusKey, lang, stopOpts);
@@ -706,7 +714,8 @@ export function Schedule() {
                                               </td>
                                             </tr>
                                           );
-                                        })}
+                                          });
+                                        })()}
                                       </tbody>
                                     </table>
                                   </div>

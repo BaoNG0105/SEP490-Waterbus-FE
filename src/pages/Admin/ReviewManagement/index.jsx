@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
+import { FormSelect } from "../../../components/FormSelect";
 import { fetchAdminReviews, changeReviewStatus } from "../../../services/reviewService";
 import { StarRatingDisplay } from "../../../components/TripReview";
 import { notify } from "../../../utils/swalToast";
@@ -197,8 +198,8 @@ export function ReviewManagement() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-center">
-        <div className="w-full xl:flex-1 relative flex items-center">
+      <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-stretch xl:items-center">
+        <div className="w-full xl:flex-1 relative flex items-center min-w-0">
           <span className="material-symbols-outlined absolute left-4 text-slate-400 text-lg pointer-events-none">search</span>
           <input
             type="text"
@@ -209,19 +210,24 @@ export function ReviewManagement() {
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto overflow-x-auto shrink-0">
-          <select
-            value={ratingFilter}
-            onChange={(e) => setRatingFilter(e.target.value)}
-            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 outline-none cursor-pointer shadow-inner shrink-0"
-          >
-            <option value="All">{lang === "VN" ? "Tất cả số sao" : "All ratings"}</option>
-            {[5, 4, 3, 2, 1].map((star) => (
-              <option key={star} value={star}>{star} {lang === "VN" ? "sao" : "star(s)"}</option>
-            ))}
-          </select>
+        <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto shrink-0">
+          <div className="w-full sm:w-44 shrink-0">
+            <FormSelect
+              value={ratingFilter}
+              onChange={setRatingFilter}
+              fullWidth
+              options={[
+                { value: "All", label: lang === "VN" ? "Tất cả số sao" : "All ratings" },
+                ...[5, 4, 3, 2, 1].map((star) => ({
+                  value: String(star),
+                  label: lang === "VN" ? `${star} sao` : `${star} star${star > 1 ? "s" : ""}`,
+                })),
+              ]}
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 outline-none cursor-pointer shadow-inner focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400"
+            />
+          </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 overflow-x-auto">
             {[
               { key: "All", vn: "Tất cả", en: "All" },
               { key: REVIEW_STATUS.HIDDEN, vn: "Chờ duyệt", en: "Hidden" },
