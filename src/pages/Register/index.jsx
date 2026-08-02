@@ -325,8 +325,8 @@ export const Register = () => {
       <div className="hidden lg:block relative bg-slate-900 overflow-hidden">
         <div className="absolute inset-0 bg-black/30 z-10"></div>
         <img 
-          src="https://res.cloudinary.com/dygipvoal/image/upload/v1776092653/ywbwjyftzirzdqf2igte.jpg" 
-          alt="Waterbus" 
+          src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/register.png" 
+          alt="Register Banner" 
           className="absolute inset-0 w-full h-full object-cover object-center"
         />
         <div className="absolute bottom-12 left-12 right-12 z-20 text-yellow-400 animate-fade-in-up">

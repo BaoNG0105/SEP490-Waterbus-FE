@@ -339,14 +339,21 @@ export const Home = () => {
       </section>
 
       {/* ===== SERVICES SECTION ===== */}
-      <section id="services-section" className="py-24 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 select-none">
-        <div className="max-w-7xl mx-auto px-6 md:px-12">
+      <section
+        id="services-section"
+        className="relative py-24 bg-cover bg-center transition-colors duration-300 select-none overflow-hidden"
+        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus-on-the-Saigon-River_1738411382.webp')" }}
+      >
+        {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
+        <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+
+        <div className="relative max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-400">
               {lang === "VN" ? "Đặt vé trực tuyến" : "Online Booking"}
             </p>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white">
               {lang === "VN" ? "Hành trình dành riêng cho bạn" : "Journeys Crafted For You"}
             </h2>
           </div>
@@ -927,26 +934,32 @@ export const Home = () => {
       )}
 
       {/* ===== CONTACT SECTION ===== */}
-      <section className="py-24 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 select-none">
-        <div className="max-w-7xl mx-auto px-6 md:px-12">
+      <section
+        className="relative py-24 bg-cover bg-center transition-colors duration-300 select-none overflow-hidden"
+        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/home-slide-4.jpg')" }}
+      >
+        {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
+        <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+
+        <div className="relative max-w-7xl mx-auto px-6 md:px-12">
           {/* Khối tiêu đề chính & phụ căn giữa hệ thống */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-400">
               {lang === "VN" ? "Liên hệ với chúng tôi" : "Get In Touch"}
             </p>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white">
               {lang === "VN" ? "Luôn lắng nghe, luôn đồng hành cùng bạn" : "Always Here, Always Listening"}
             </h2>
           </div>
           {/* Chia layout 2 cột bất đối xứng */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
-            {/* CỘT TRÁI (Tỷ lệ 5/12): THÔNG TIN LIÊN HỆ TRỰC TIẾP */}
-            <div className="lg:col-span-5 space-y-8">
+            {/* CỘT TRÁI (Tỷ lệ 5/12): THÔNG TIN LIÊN HỆ TRỰC TIẾP — đặt trong khung kính để nổi bật trên nền ảnh tối */}
+            <div className="lg:col-span-5 space-y-8 bg-white/10 backdrop-blur-xl border border-white/15 rounded-4xl p-8 shadow-2xl">
               <div className="space-y-4">
-                <h3 className="text-2xl font-headline font-bold text-slate-800 dark:text-white">
+                <h3 className="text-2xl font-headline font-bold text-white">
                   {lang === "VN" ? "Thông tin liên hệ" : "Contact Information"}
                 </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 font-body leading-relaxed max-w-sm">
+                <p className="text-sm text-white/70 font-body leading-relaxed max-w-sm">
                   {lang === "VN"
                     ? "Mọi thắc mắc, phản hồi hoặc yêu cầu hỗ trợ kỹ thuật đặt vé, xin vui lòng kết nối trực tiếp với tổng đài đắc lực của chúng tôi."
                     : "For any inquiries, feedback, or technical assistance with booking, please feel free to reach out to our dedicated support center."}
@@ -956,42 +969,42 @@ export const Home = () => {
               <div className="space-y-6">
                 {/* Hotline hỗ trợ */}
                 <div className="flex items-center gap-4 group">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400 shrink-0 shadow-sm transition-colors group-hover:bg-yellow-400 group-hover:text-[#124757]">
+                  <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-yellow-400 shrink-0 shadow-sm transition-colors group-hover:bg-yellow-400 group-hover:text-[#124757]">
                     <span className="material-symbols-outlined text-[22px]">call</span>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    <p className="text-xs font-bold text-white/50 uppercase tracking-wider">
                       {lang === "VN" ? "Hotline hỗ trợ 24/7" : "Support Hotline"}
                     </p>
-                    <p className="text-lg font-headline font-black text-[#124757] dark:text-white">
+                    <p className="text-lg font-headline font-black text-white">
                       {COMPANY_HOTLINE}
                     </p>
                   </div>
                 </div>
                 {/* Hộp thư điện tử */}
                 <div className="flex items-center gap-4 group">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400 shrink-0 shadow-sm transition-colors group-hover:bg-yellow-400 group-hover:text-[#124757]">
+                  <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-yellow-400 shrink-0 shadow-sm transition-colors group-hover:bg-yellow-400 group-hover:text-[#124757]">
                     <span className="material-symbols-outlined text-[22px]">mail</span>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    <p className="text-xs font-bold text-white/50 uppercase tracking-wider">
                       {lang === "VN" ? "Email giao dịch" : "Email Address"}
                     </p>
-                    <p className="text-base font-semibold text-slate-700 dark:text-slate-300">
+                    <p className="text-base font-semibold text-white/90">
                       {COMPANY_EMAIL}
                     </p>
                   </div>
                 </div>
                 {/* Trụ sở chính */}
                 <div className="flex items-start gap-4 group">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400 shrink-0 shadow-sm transition-colors group-hover:bg-yellow-400 group-hover:text-[#124757] mt-0.5">
+                  <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-yellow-400 shrink-0 shadow-sm transition-colors group-hover:bg-yellow-400 group-hover:text-[#124757] mt-0.5">
                     <span className="material-symbols-outlined text-[22px]">location_on</span>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    <p className="text-xs font-bold text-white/50 uppercase tracking-wider">
                       {lang === "VN" ? "Trụ sở điều hành chính" : "Main Office"}
                     </p>
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed max-w-xs">
+                    <p className="text-sm font-medium text-white/90 leading-relaxed max-w-xs">
                       {lang === "VN" ? COMPANY_ADDRESS_VN : COMPANY_ADDRESS_EN}
                     </p>
                   </div>
