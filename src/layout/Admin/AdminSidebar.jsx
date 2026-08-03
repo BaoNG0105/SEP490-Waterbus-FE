@@ -79,7 +79,7 @@ const MENU_GROUPS = [
         labelEnStaff: "Blog / News",
         roles: ["ADMIN"],
       },
-      { path: "/admin/ai-data", labelVn: "AI data", labelEn: "AI Data", roles: ["ADMIN"] },
+      { path: "/admin/knowledge-management", labelVn: "Cơ sở tri thức", labelEn: "Knowledge Base", roles: ["ADMIN"] },
     ],
   },
 ];

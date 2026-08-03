@@ -26,9 +26,17 @@ export const Footer = () => {
   return (
     <footer className="w-full select-none border-t border-white/10 bg-[#0b2f39] px-6 py-5 font-body text-white transition-colors duration-300 dark:border-slate-800 dark:bg-slate-950 md:px-10 md:py-6">
       <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-5 md:grid-cols-3">
-        <p className="text-center text-[11px] font-medium uppercase tracking-[0.18em] text-white/70 md:text-left">
-          © 2026 Waterbus
-        </p>
+        <div className="flex flex-col items-center gap-1 md:items-start">
+          <p className="text-center text-[11px] font-medium uppercase tracking-[0.18em] text-white/70 md:text-left">
+            © 2026 Waterbus
+          </p>
+          <Link
+            to="/terms-and-policy"
+            className="text-[11px] font-medium text-white/60 underline-offset-2 transition-colors hover:text-yellow-400 hover:underline"
+          >
+            {lang === "VN" ? "Điều khoản & Chính sách" : "Terms & Policy"}
+          </Link>
+        </div>
 
         <div className="flex justify-center">
           <Link to="/" className="inline-flex">

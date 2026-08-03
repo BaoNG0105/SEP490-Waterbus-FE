@@ -575,11 +575,21 @@ export const Register = () => {
                   />
                   <span className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
                     {lang === "VN" ? "Tôi đồng ý với " : "I agree to the "}
-                    <a href="#" className="font-bold text-[#124757] dark:text-yellow-400 hover:underline">
+                    <a
+                      href="/terms-and-policy"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-[#124757] dark:text-yellow-400 hover:underline"
+                    >
                       {lang === "VN" ? "Điều khoản dịch vụ" : "Terms of Service"}
                     </a>
                     {lang === "VN" ? " và " : " and "}
-                    <a href="#" className="font-bold text-[#124757] dark:text-yellow-400 hover:underline">
+                    <a
+                      href="/terms-and-policy"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-[#124757] dark:text-yellow-400 hover:underline"
+                    >
                       {lang === "VN" ? "Chính sách bảo mật" : "Privacy Policy"}
                     </a>.
                   </span>

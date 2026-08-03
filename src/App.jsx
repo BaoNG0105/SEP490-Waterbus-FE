@@ -19,6 +19,7 @@ import { StationDetail } from "./pages/Station/StationDetail";
 import { Promotions } from "./pages/Promotions";
 import { PromotionDetail } from "./pages/Promotions/PromotionDetail";
 import { Contact } from "./pages/Contact";
+import { TermsAndPolicy } from "./pages/TermsAndPolicy";
 import { Schedule } from "./pages/Schedule";
 import { DeparturesBoard } from "./pages/DeparturesBoard";
 import { Profile } from "./pages/Profile";
@@ -75,6 +76,7 @@ import { TripSeatBoardPage } from "./pages/Admin/TripSeatBoard";
 import { BlogManagement } from "./pages/Admin/BlogManagement";
 import { CreateBlog } from "./pages/Admin/BlogManagement/CreateBlog";
 import { EditBlog } from "./pages/Admin/BlogManagement/EditBlog";
+import { KnowledgeManagement } from "./pages/Admin/KnowledgeManagement";
 
 function App() {
   return (
@@ -160,6 +162,16 @@ function App() {
           element={
             <MainLayout>
               <Contact />
+            </MainLayout>
+          }
+        />
+
+        {/* Terms & Policy Page — GET /knowledge-entries (public) */}
+        <Route
+          path="/terms-and-policy"
+          element={
+            <MainLayout>
+              <TermsAndPolicy />
             </MainLayout>
           }
         />
@@ -797,6 +809,16 @@ function App() {
             element={
               <AdminLayout title="Edit Blog Post">
                 <EditBlog />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Knowledge Base: nguồn dữ liệu chatbot + trang Điều khoản & Chính sách ******* */}
+          <Route
+            path="/admin/knowledge-management"
+            element={
+              <AdminLayout title="Knowledge Base">
+                <KnowledgeManagement />
               </AdminLayout>
             }
           />
