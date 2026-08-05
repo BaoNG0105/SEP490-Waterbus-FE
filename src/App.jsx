@@ -14,14 +14,12 @@ import { Register } from "./pages/Register";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { BlogList } from "./pages/Blog";
 import { BlogDetail } from "./pages/Blog/BlogDetail";
-// import { Station } from "./pages/Station";
 import { StationDetail } from "./pages/Station/StationDetail";
 import { Promotions } from "./pages/Promotions";
 import { PromotionDetail } from "./pages/Promotions/PromotionDetail";
 import { Contact } from "./pages/Contact";
 import { TermsAndPolicy } from "./pages/TermsAndPolicy";
 import { Schedule } from "./pages/Schedule";
-import { DeparturesBoard } from "./pages/DeparturesBoard";
 import { Profile } from "./pages/Profile";
 import { Notifications } from "./pages/Notifications";
 import { EditProfile } from "./pages/Profile/EditProfie";
@@ -133,25 +131,22 @@ function App() {
           }
         />
 
-        {/* Lịch khởi hành (customer) — GET /operations/schedule?serviceType=booking */}
-        <Route
-          path="/schedule"
-          element={
-            <MainLayout>
-              <Schedule />
-            </MainLayout>
-          }
-        />
-
-        {/* Bảng điện tử khởi hành trong ngày (FIDS) */}
-        <Route path="/departures" element={<DeparturesBoard />} />
-
         {/* Promotion Detail Page */}
         <Route
           path="/promotions/:code"
           element={
             <MainLayout>
               <PromotionDetail />
+            </MainLayout>
+          }
+        />
+
+        {/* Lịch khởi hành (customer)*/}
+        <Route
+          path="/schedule"
+          element={
+            <MainLayout>
+              <Schedule />
             </MainLayout>
           }
         />
@@ -166,7 +161,7 @@ function App() {
           }
         />
 
-        {/* Terms & Policy Page — GET /knowledge-entries (public) */}
+        {/* Terms & Policy Page (public) */}
         <Route
           path="/terms-and-policy"
           element={
