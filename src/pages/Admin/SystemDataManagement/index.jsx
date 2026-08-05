@@ -1,46 +1,34 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import {
   fetchKnowledgeEntriesAdmin,
-  addKnowledgeEntry,
-  modifyKnowledgeEntry,
   changeKnowledgeEntryStatus,
   removeKnowledgeEntry,
-  buildKnowledgeEntryPayload,
-  validateKnowledgeEntryForm,
   labelKnowledgeStatus,
   getKnowledgeCategoryLabel,
   KNOWLEDGE_STATUS,
   KNOWLEDGE_CATEGORY_ORDER,
-  KNOWLEDGE_CONTENT_AI_LIMIT,
 } from "../../../services/knowledgeEntryService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
+import { FormSelect } from "../../../components/FormSelect";
 
 const STATUS_STYLE = {
   [KNOWLEDGE_STATUS.DRAFT]: {
     dot: "bg-slate-400",
-    badge: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-500/10 dark:text-slate-400 dark:border-slate-500/20",
+    badge: "text-slate-500 dark:text-slate-400",
   },
   [KNOWLEDGE_STATUS.PUBLISHED]: {
     dot: "bg-emerald-500",
-    badge: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400",
+    badge: "text-emerald-600 dark:text-emerald-400",
   },
 };
 
-const emptyForm = () => ({
-  title: "",
-  content: "",
-  category: KNOWLEDGE_CATEGORY_ORDER[0],
-  keywords: [""],
-  status: KNOWLEDGE_STATUS.DRAFT,
-  displayOrder: 1,
-});
-
-export function KnowledgeManagement() {
+export function SystemDataManagement() {
   const { lang } = useApp();
+  const navigate = useNavigate();
   const { user: currentUser } = useSelector((state) => state.auth);
   const canManage = isAdminUser(currentUser);
 
@@ -56,14 +44,6 @@ export function KnowledgeManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 8;
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState(emptyForm());
-  const [isSaving, setIsSaving] = useState(false);
-
-  const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
-  const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
-
   const loadEntries = async () => {
     try {
       setIsLoading(true);
@@ -71,12 +51,12 @@ export function KnowledgeManagement() {
       const data = await fetchKnowledgeEntriesAdmin();
       setEntries(data || []);
     } catch (error) {
-      console.error("Lỗi khi tải danh sách kiến thức:", error);
+      console.error("Lỗi khi tải danh sách dữ liệu hệ thống:", error);
       const status = error?.response?.status;
       setErrorMsg(
         status === 403
-          ? (lang === "VN" ? "Chỉ Admin được quản lý cơ sở tri thức." : "Only Admin can manage the knowledge base.")
-          : (lang === "VN" ? "Không tải được danh sách mục kiến thức." : "Failed to load knowledge entries.")
+          ? (lang === "VN" ? "Chỉ Admin được quản lý dữ liệu hệ thống." : "Only Admin can manage the system data.")
+          : (lang === "VN" ? "Không tải được danh sách mục dữ liệu." : "Failed to load system data entries.")
       );
     } finally {
       setIsLoading(false);
@@ -140,96 +120,6 @@ export function KnowledgeManagement() {
     return pages;
   };
 
-  const openCreateModal = () => {
-    setEditingId(null);
-    setForm(emptyForm());
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (entry) => {
-    setEditingId(entry.knowledgeEntryId);
-    setForm({
-      title: entry.title || "",
-      content: entry.content || "",
-      category: entry.category || KNOWLEDGE_CATEGORY_ORDER[0],
-      keywords: Array.isArray(entry.keywords) && entry.keywords.length > 0 ? entry.keywords : [""],
-      status: entry.status || KNOWLEDGE_STATUS.DRAFT,
-      displayOrder: Number(entry.displayOrder) || 1,
-    });
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    if (isSaving) return;
-    setIsModalOpen(false);
-    setEditingId(null);
-  };
-
-  const updateField = (field, value) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const updateKeyword = (index, value) => {
-    setForm((prev) => ({
-      ...prev,
-      keywords: prev.keywords.map((k, i) => (i === index ? value : k)),
-    }));
-  };
-
-  const addKeyword = () => {
-    setForm((prev) => ({ ...prev, keywords: [...prev.keywords, ""] }));
-  };
-
-  const removeKeyword = (index) => {
-    setForm((prev) => ({
-      ...prev,
-      keywords: prev.keywords.length <= 1 ? [""] : prev.keywords.filter((_, i) => i !== index),
-    }));
-  };
-
-  const handleSave = async () => {
-    const validationError = validateKnowledgeEntryForm(form, lang);
-    if (validationError) {
-      notify({
-        icon: "warning",
-        title: lang === "VN" ? "Thiếu thông tin" : "Missing information",
-        text: validationError,
-      });
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      const payload = buildKnowledgeEntryPayload(form);
-      if (editingId) {
-        await modifyKnowledgeEntry(editingId, payload);
-      } else {
-        await addKnowledgeEntry(payload);
-      }
-      setIsModalOpen(false);
-      setEditingId(null);
-      await loadEntries();
-
-      notify({
-        toast: true,
-        icon: "success",
-        title: editingId
-          ? (lang === "VN" ? "Đã cập nhật mục kiến thức" : "Entry updated")
-          : (lang === "VN" ? "Đã tạo mục kiến thức" : "Entry created"),
-        showConfirmButton: false,
-        timer: 1800,
-      });
-    } catch (error) {
-      notify({
-        icon: "error",
-        title: lang === "VN" ? "Lưu thất bại" : "Save failed",
-        text: error.response?.data?.message || (lang === "VN" ? "Không thể lưu mục kiến thức." : "Could not save the entry."),
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleToggleStatus = async (entry) => {
     const nextStatus = entry.status === KNOWLEDGE_STATUS.PUBLISHED
       ? KNOWLEDGE_STATUS.DRAFT
@@ -237,7 +127,7 @@ export function KnowledgeManagement() {
 
     const confirmResult = await notify({
       title: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
-        ? (lang === "VN" ? "Xuất bản mục kiến thức?" : "Publish this entry?")
+        ? (lang === "VN" ? "Xuất bản mục dữ liệu?" : "Publish this entry?")
         : (lang === "VN" ? "Hạ về bản nháp?" : "Move to draft?"),
       html: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
         ? (lang === "VN"
@@ -283,7 +173,7 @@ export function KnowledgeManagement() {
 
   const handleDelete = async (entry) => {
     const confirmResult = await notify({
-      title: lang === "VN" ? "Xóa mục kiến thức?" : "Delete this entry?",
+      title: lang === "VN" ? "Xóa mục dữ liệu?" : "Delete this entry?",
       html: lang === "VN"
         ? `Mục <b>${entry.title}</b> sẽ bị <b>xóa vĩnh viễn</b> khỏi hệ thống.`
         : `Entry <b>${entry.title}</b> will be <b>permanently deleted</b>.`,
@@ -330,7 +220,7 @@ export function KnowledgeManagement() {
       <div className="flex flex-col sm:flex-row bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-            {lang === "VN" ? "Cơ sở tri thức" : "Knowledge Base"}
+            {lang === "VN" ? "Quản lý dữ liệu hệ thống" : "System Data Management"}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
@@ -340,7 +230,7 @@ export function KnowledgeManagement() {
         </div>
         <button
           type="button"
-          onClick={openCreateModal}
+          onClick={() => navigate("/admin/system-data/create")}
           className="px-5 py-3 bg-yellow-400 text-slate-900 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 shrink-0"
         >
           <span className="material-symbols-outlined text-sm font-bold">add_circle</span>
@@ -381,38 +271,36 @@ export function KnowledgeManagement() {
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto overflow-x-auto shrink-0">
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 outline-none cursor-pointer shadow-inner shrink-0"
-          >
-            <option value="All">{lang === "VN" ? "Tất cả chuyên mục" : "All Categories"}</option>
-            {KNOWLEDGE_CATEGORY_ORDER.map((category) => (
-              <option key={category} value={category}>
-                {getKnowledgeCategoryLabel(category, lang)}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto justify-end overflow-visible">
+          <div className="relative z-20 flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Chuyên mục:" : "Category:"}</span>
+            <FormSelect
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              options={[
+                { value: "All", label: lang === "VN" ? "Tất cả chuyên mục" : "All Categories" },
+                ...KNOWLEDGE_CATEGORY_ORDER.map((category) => ({
+                  value: category,
+                  label: getKnowledgeCategoryLabel(category, lang),
+                })),
+              ]}
+              className="min-w-45 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+            />
+          </div>
 
-          <div className="flex gap-2">
-            {[
-              { key: "All", vn: "Tất cả trạng thái", en: "All Status" },
-              { key: KNOWLEDGE_STATUS.PUBLISHED, vn: "Đã xuất bản", en: "Published" },
-              { key: KNOWLEDGE_STATUS.DRAFT, vn: "Nháp", en: "Draft" },
-            ].map((btn) => (
-              <button
-                key={btn.key}
-                type="button"
-                onClick={() => setStatusFilter(btn.key)}
-                className={`px-5 py-3.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider border transition-all shrink-0 ${statusFilter === btn.key
-                  ? " border-transparent bg-yellow-400 text-slate-900 shadow-md"
-                  : "bg-white text-slate-500 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
-                  }`}
-              >
-                {lang === "VN" ? btn.vn : btn.en}
-              </button>
-            ))}
+          <div className="relative z-10 flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
+            <FormSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              menuAlign="right"
+              options={[
+                { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
+                { value: KNOWLEDGE_STATUS.PUBLISHED, label: lang === "VN" ? "Đã xuất bản" : "Published" },
+                { value: KNOWLEDGE_STATUS.DRAFT, label: lang === "VN" ? "Nháp" : "Draft" },
+              ]}
+              className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+            />
           </div>
         </div>
       </div>
@@ -433,7 +321,7 @@ export function KnowledgeManagement() {
               {currentEntries.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
-                    {lang === "VN" ? "Không có mục kiến thức nào." : "No knowledge entries found."}
+                    {lang === "VN" ? "Không có mục dữ liệu nào." : "No system data entries found."}
                   </td>
                 </tr>
               ) : (
@@ -453,7 +341,7 @@ export function KnowledgeManagement() {
                         )}
                       </td>
                       <td className="py-4 px-4">
-                        <span className="text-[10px] font-headline font-black tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 inline-block uppercase">
+                        <span className="text-[10px] font-headline font-black tracking-wide text-slate-700 dark:text-slate-200 uppercase">
                           {getKnowledgeCategoryLabel(entry.category, lang)}
                         </span>
                       </td>
@@ -461,7 +349,7 @@ export function KnowledgeManagement() {
                         <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{Number(entry.displayOrder) || 0}</span>
                       </td>
                       <td className="py-4 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusStyle.badge}`}>
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${statusStyle.badge}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`}></span>
                           {labelKnowledgeStatus(entry.status, lang)}
                         </span>
@@ -469,7 +357,7 @@ export function KnowledgeManagement() {
                       <td className="py-4 px-6 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <button
-                            onClick={() => openEditModal(entry)}
+                            onClick={() => navigate(`/admin/system-data/edit/${entry.knowledgeEntryId}`, { state: { entry } })}
                             className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
                             title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
                           >
@@ -567,179 +455,6 @@ export function KnowledgeManagement() {
             >
               <span className="material-symbols-outlined text-base">chevron_right</span>
             </button>
-          </div>
-        </div>
-      )}
-
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Close overlay"
-            className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]"
-            onClick={closeModal}
-            disabled={isSaving}
-          />
-          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-4xl border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:border-slate-700 dark:bg-slate-800">
-            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5 bg-white dark:bg-slate-800 dark:border-slate-700">
-              <div>
-                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
-                  {lang === "VN" ? "Mục kiến thức" : "Knowledge entry"}
-                </p>
-                <h3 className="mt-1 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                  {editingId ? (lang === "VN" ? "Sửa mục kiến thức" : "Edit entry") : (lang === "VN" ? "Thêm mục kiến thức" : "Add entry")}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={closeModal}
-                disabled={isSaving}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:hover:text-slate-200"
-              >
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className={labelStyle}>{lang === "VN" ? "Tiêu đề / Câu hỏi (*)" : "Title / Question (*)"}</label>
-                <input
-                  value={form.title}
-                  onChange={(e) => updateField("title", e.target.value)}
-                  className={inputStyle}
-                  placeholder={lang === "VN" ? "VD: Chính sách hoàn vé như thế nào?" : "e.g. What is the refund policy?"}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Chuyên mục (*)" : "Category (*)"}</label>
-                  <select
-                    value={form.category}
-                    onChange={(e) => updateField("category", e.target.value)}
-                    className={inputStyle}
-                  >
-                    {KNOWLEDGE_CATEGORY_ORDER.map((category) => (
-                      <option key={category} value={category}>
-                        {getKnowledgeCategoryLabel(category, lang)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Thứ tự hiển thị" : "Display order"}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.displayOrder}
-                    onChange={(e) => updateField("displayOrder", e.target.value)}
-                    className={inputStyle}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
-                    {lang === "VN" ? "Nội dung (*)" : "Content (*)"}
-                  </label>
-                  <span className={`text-[10px] font-bold ${form.content.length > KNOWLEDGE_CONTENT_AI_LIMIT ? "text-amber-500" : "text-slate-400"}`}>
-                    {form.content.length}/{KNOWLEDGE_CONTENT_AI_LIMIT}
-                    {form.content.length > KNOWLEDGE_CONTENT_AI_LIMIT
-                      ? (lang === "VN" ? " — trợ lý chỉ đọc phần đầu" : " — assistant reads the first part only")
-                      : ""}
-                  </span>
-                </div>
-                <textarea
-                  value={form.content}
-                  onChange={(e) => updateField("content", e.target.value)}
-                  rows={10}
-                  className={`${inputStyle} resize-y leading-relaxed`}
-                  placeholder={lang === "VN" ? "Nội dung câu trả lời đầy đủ, khách và trợ lý AI sẽ đọc." : "Full answer content — shown to customers and read by the AI assistant."}
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
-                    {lang === "VN" ? "Từ khóa tìm kiếm (*)" : "Search keywords (*)"}
-                  </label>
-                  <button type="button" onClick={addKeyword} className="text-[10px] font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400 inline-flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">add</span>
-                    {lang === "VN" ? "Thêm" : "Add"}
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 mb-2">
-                  {lang === "VN"
-                    ? "Liệt kê mọi cách khách hay hỏi về chủ đề này để trợ lý AI khớp đúng mục."
-                    : "List every way customers might ask about this topic so the assistant matches it correctly."}
-                </p>
-                <div className="space-y-2">
-                  {form.keywords.map((keyword, index) => (
-                    <div key={`keyword-${index}`} className="flex gap-2">
-                      <input
-                        value={keyword}
-                        onChange={(e) => updateKeyword(index, e.target.value)}
-                        className={inputStyle}
-                        placeholder={lang === "VN" ? "VD: hoàn vé, trả lại vé" : "e.g. refund, cancel ticket"}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeKeyword(index)}
-                        className="px-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 hover:bg-red-100 transition-all shrink-0"
-                      >
-                        <span className="material-symbols-outlined text-base">close</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
-                <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                  {[
-                    { value: KNOWLEDGE_STATUS.DRAFT, labelVn: "Nháp", labelEn: "Draft" },
-                    { value: KNOWLEDGE_STATUS.PUBLISHED, labelVn: "Xuất bản", labelEn: "Published" },
-                  ].map((option) => {
-                    const selected = form.status === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => updateField("status", option.value)}
-                        className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
-                          ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                          : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                          }`}
-                      >
-                        {lang === "VN" ? option.labelVn : option.labelEn}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-slate-100 px-6 py-4 bg-white sm:flex-row sm:justify-end dark:border-slate-700 dark:bg-slate-800">
-              <button
-                type="button"
-                onClick={closeModal}
-                disabled={isSaving}
-                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-              >
-                {lang === "VN" ? "Hủy" : "Cancel"}
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving}
-                className="rounded-2xl bg-[#124757] px-6 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300 inline-flex items-center justify-center gap-2"
-              >
-                {isSaving && <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
-                {editingId ? (lang === "VN" ? "Lưu thay đổi" : "Save changes") : (lang === "VN" ? "Tạo mục" : "Create")}
-              </button>
-            </div>
           </div>
         </div>
       )}

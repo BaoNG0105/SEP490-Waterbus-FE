@@ -20,7 +20,6 @@ export function EditStation() {
 
     // DANH SÁCH NHÂN SỰ ĐANG ĐƯỢC GẮN VỚI NHÀ GA (READ-ONLY)
     const [managers, setManagers] = useState([]);
-    const [staff, setStaff] = useState([]);
 
     const [formData, setFormData] = useState({
         stationCode: "",
@@ -66,7 +65,6 @@ export function EditStation() {
 
                 // Đồng bộ mảng danh sách nhân sự
                 setManagers(data.managers || []);
-                setStaff(data.staff || []);
 
                 let existingImages = [];
                 if (data.imageUrls && data.imageUrls.length > 0) {
@@ -411,7 +409,7 @@ export function EditStation() {
                         </h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">{lang === "VN" ? "Quản lý (Managers)" : "Managers"}</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">{lang === "VN" ? "Quản lý" : "Managers"}</span>
                                 {managers.length === 0 ? (
                                     <p className="text-xs text-slate-400 italic font-medium">{lang === "VN" ? "Chưa chỉ định quản lý bến." : "No manager assigned."}</p>
                                 ) : (
@@ -420,21 +418,6 @@ export function EditStation() {
                                             const label = typeof m === "string" ? m : (m?.fullName || m?.name || m?.email || "--");
                                             return (
                                                 <span key={m?.userId || m?.id || i} className="px-2.5 py-1 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 text-[10px] font-bold rounded-lg border border-amber-100 dark:border-amber-500/20">{label}</span>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                            <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">{lang === "VN" ? "Nhân viên trực bến (Staff)" : "Active Staff"}</span>
-                                {staff.length === 0 ? (
-                                    <p className="text-xs text-slate-400 italic font-medium">{lang === "VN" ? "Chưa phân phối nhân viên trực." : "No shift staff logs."}</p>
-                                ) : (
-                                    <div className="flex flex-wrap gap-2">
-                                        {staff.map((s, i) => {
-                                            const label = typeof s === "string" ? s : (s?.fullName || s?.name || s?.email || "--");
-                                            return (
-                                                <span key={s?.userId || s?.id || i} className="px-2.5 py-1 bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-600">{label}</span>
                                             );
                                         })}
                                     </div>

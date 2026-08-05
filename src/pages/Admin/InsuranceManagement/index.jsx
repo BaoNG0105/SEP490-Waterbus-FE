@@ -8,6 +8,7 @@ import {
   INSURANCE_BOOKING_TYPES,
 } from "../../../services/insuranceService";
 import { notify } from "../../../utils/swalToast";
+import { FormSelect } from "../../../components/FormSelect";
 
 const emptyForm = () => ({
   code: "",
@@ -71,6 +72,7 @@ export function InsuranceManagement() {
 
   useEffect(() => {
     loadPackages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
   const filteredPackages = useMemo(() => {
@@ -275,14 +277,14 @@ export function InsuranceManagement() {
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
-              ? "Gói PassengerInsurance dùng chung đặt vé / thuê tàu. Phí = đơn giá × số hành khách."
-              : "Shared PassengerInsurance package for seat & booking request. Fee = unit × passenger count."}
+              ? "Quản lý các gói bảo hiểm hành khách"
+              : "Manage passenger insurance packages"}
           </p>
         </div>
         <button
           type="button"
           onClick={openCreateModal}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 px-5 py-3 text-[11px] font-headline font-black uppercase tracking-wider hover:brightness-110 transition-all shadow-md shrink-0"
+          className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 text-slate-900 px-5 py-3 text-[11px] font-headline font-black uppercase tracking-wider hover:brightness-110 transition-all shadow-md shrink-0"
         >
           <span className="material-symbols-outlined text-base">add</span>
           {lang === "VN" ? "Thêm gói" : "Add package"}
@@ -301,15 +303,20 @@ export function InsuranceManagement() {
               className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400"
             />
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2.5 text-xs font-bold text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400"
-          >
-            <option value="all">{lang === "VN" ? "Trạng thái: Tất cả" : "Status: All"}</option>
-            <option value="Active">{lang === "VN" ? "Đang bật" : "Active"}</option>
-            <option value="Inactive">{lang === "VN" ? "Đang tắt" : "Inactive"}</option>
-          </select>
+          <div className="relative z-10 flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
+            <FormSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              menuAlign="right"
+              options={[
+                { value: "all", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
+                { value: "Active", label: lang === "VN" ? "Đang bật" : "Active" },
+                { value: "Inactive", label: lang === "VN" ? "Đang tắt" : "Inactive" },
+              ]}
+              className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+            />
+          </div>
         </div>
       </div>
 
@@ -388,31 +395,17 @@ export function InsuranceManagement() {
 
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-bold">
-                    <span className="material-symbols-outlined text-[13px]">category</span>
                     {getBookingTypeLabel(pkg.bookingType)}
                   </span>
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-bold">
-                    <span className="material-symbols-outlined text-[13px]">sort</span>
                     {lang === "VN" ? "Thứ tự" : "Order"}: {Number(pkg.displayOrder) || 0}
                   </span>
                   {pkg.providerName && (
                     <span className="inline-flex items-center gap-1 font-bold">
-                      <span className="material-symbols-outlined text-[13px]">business</span>
                       {pkg.providerName}
                     </span>
                   )}
                 </div>
-
-                {Array.isArray(pkg.conditions) && pkg.conditions.length > 0 && (
-                  <ul className="space-y-1 border-t border-slate-100 dark:border-slate-700 pt-3">
-                    {pkg.conditions.slice(0, 2).map((condition) => (
-                      <li key={condition} className="flex items-start gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                        <span className="material-symbols-outlined text-[13px] text-emerald-500 mt-0.5">check</span>
-                        <span>{condition}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
 
                 <div className="flex gap-2 pt-1">
                   <button

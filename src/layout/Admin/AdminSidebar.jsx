@@ -59,7 +59,6 @@ const MENU_GROUPS = [
     labelEn: "Bookings & Insurance",
     items: [
       { path: "/admin/booking-pos", labelVn: "Bán vé (POS)", labelEn: "Sell tickets (POS)", roles: ["ADMIN", "MANAGER", "STAFF"] },
-      { path: "/admin/bookings", labelVn: "Booking vé", labelEn: "Seat bookings", roles: ["ADMIN"] },
       { path: "/admin/charter-bookings-management", labelVn: "Thuê tàu", labelEn: "Request Booking", roles: ["ADMIN"] },
       { path: "/admin/insurance-management", labelVn: "Bảo hiểm", labelEn: "Insurance", roles: ["ADMIN"] },
       { path: "/admin/reviews-management", labelVn: "Đánh giá", labelEn: "Reviews", roles: ["ADMIN"] },
@@ -79,7 +78,7 @@ const MENU_GROUPS = [
         labelEnStaff: "Blog / News",
         roles: ["ADMIN"],
       },
-      { path: "/admin/knowledge-management", labelVn: "Cơ sở tri thức", labelEn: "Knowledge Base", roles: ["ADMIN"] },
+      { path: "/admin/system-data", labelVn: "Dữ liệu hệ thống", labelEn: "System Data", roles: ["ADMIN"] },
     ],
   },
 ];

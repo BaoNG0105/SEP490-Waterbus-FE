@@ -1052,9 +1052,9 @@ export function AdminCharterBookingDetail() {
     const tabs = [];
     const closedBooking = ["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || ""));
     if (capabilities.canQuote) {
-      tabs.push({ id: "actions", icon: "edit_square", label: lang === "VN" ? "Thao tác" : "Actions" });
+      tabs.push({ id: "actions", label: lang === "VN" ? "Thao tác" : "Actions" });
     }
-    tabs.push({ id: "overview", icon: "dashboard", label: lang === "VN" ? "Tổng quan" : "Overview" });
+    tabs.push({ id: "overview", label: lang === "VN" ? "Tổng quan" : "Overview" });
     if (capabilities.canAssignManager && !closedBooking) {
       tabs.push({
         id: "assignment",
@@ -1069,13 +1069,12 @@ export function AdminCharterBookingDetail() {
     if (capabilities.canViewPayments) {
       tabs.push({
         id: "payments",
-        icon: "payments",
         label: lang === "VN" ? "Thanh toán" : "Payments",
         badge: paymentList.length || (booking && bookingNeedsRefundAttention(booking) ? "!" : ""),
       });
     }
     if (capabilities.canViewTickets) {
-      tabs.push({ id: "tickets", icon: "confirmation_number", label: lang === "VN" ? "Vé/khách" : "Tickets", badge: ticketList.length || "" });
+      tabs.push({ id: "tickets", label: lang === "VN" ? "Vé/khách" : "Tickets", badge: ticketList.length || "" });
     }
     return tabs;
   }, [booking, capabilities, lang]);
@@ -1176,7 +1175,6 @@ export function AdminCharterBookingDetail() {
                     : "text-slate-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"
                 }`}
               >
-                <span className="material-symbols-outlined text-base">{tab.icon}</span>
                 <span className="truncate">{tab.label}</span>
                 {showBadge ? (
                   <span className={`absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-black ${

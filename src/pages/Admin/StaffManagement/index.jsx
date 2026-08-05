@@ -71,6 +71,7 @@ export function StaffManagement({ viewTabs = null }) {
   const [scopeFilter, setScopeFilter] = useState(SCOPE.STATION);
   const [stationFilter, setStationFilter] = useState("");
   const [boatFilter, setBoatFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 8;
 
@@ -193,7 +194,7 @@ export function StaffManagement({ viewTabs = null }) {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, scopeFilter, stationFilter, boatFilter]);
+  }, [searchTerm, scopeFilter, stationFilter, boatFilter, statusFilter]);
 
   useEffect(() => {
     if (scopeFilter !== SCOPE.STATION) setStationFilter("");
@@ -274,7 +275,9 @@ export function StaffManagement({ viewTabs = null }) {
       }
     }
 
-    return matchesSearch;
+    const matchesStatus = statusFilter === "All" || item.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
   });
 
   const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
@@ -464,6 +467,21 @@ export function StaffManagement({ viewTabs = null }) {
               )}
             </div>
           ) : null}
+
+          <div className="relative z-10 flex items-center gap-2 shrink-0">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
+            <FormSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              menuAlign="right"
+              options={[
+                { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
+                { value: "Active", label: lang === "VN" ? "Hoạt động" : "Active" },
+                { value: "Inactive", label: lang === "VN" ? "Ngưng hoạt động" : "Inactive" },
+              ]}
+              className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+            />
+          </div>
         </div>
       </div>
 
@@ -521,9 +539,9 @@ export function StaffManagement({ viewTabs = null }) {
                       </td>
                       <td className="py-4 px-4 text-center">
                         {staffType && (
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${staffType === "OnBoard"
-                            ? "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20"
-                            : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600"
+                          <span className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${staffType === "OnBoard"
+                            ? "text-teal-700 dark:text-teal-300"
+                            : "text-slate-500 dark:text-slate-400"
                             }`}>
                             {staffType === "OnBoard"
                               ? (lang === "VN" ? "Trên tàu" : "Onboard")
@@ -550,12 +568,14 @@ export function StaffManagement({ viewTabs = null }) {
                         </td>
                       )}
                       <td className="py-4 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${item.status === "Active"
-                          ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400"
-                          : "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400"
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${item.status === "Active"
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-rose-500 dark:text-rose-400"
                           }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${item.status === "Active" ? "bg-emerald-500" : "bg-rose-500"}`}></span>
-                          {item.status || "Inactive"}
+                          {item.status === "Active"
+                            ? (lang === "VN" ? "Hoạt động" : "Active")
+                            : (lang === "VN" ? "Ngưng hoạt động" : "Inactive")}
                         </span>
                       </td>
                       <td className="py-4 px-6 text-center">

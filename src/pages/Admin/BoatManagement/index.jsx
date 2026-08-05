@@ -242,31 +242,31 @@ export function BoatManagement() {
             case "active":
                 return {
                     label: lang === "VN" ? "Hoạt động" : "Active",
-                    classes: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
+                    classes: "text-emerald-600 dark:text-emerald-400",
                     dot: "bg-emerald-500"
                 };
             case "inactive":
                 return {
                     label: lang === "VN" ? "Chưa hoạt động" : "Inactive",
-                    classes: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+                    classes: "text-slate-600 dark:text-slate-400",
                     dot: "bg-slate-400"
                 };
             case "retired":
                 return {
                     label: lang === "VN" ? "Dừng hoạt động" : "Retired",
-                    classes: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400",
+                    classes: "text-rose-600 dark:text-rose-400",
                     dot: "bg-rose-500"
                 };
             case "undermaintenance":
                 return {
                     label: lang === "VN" ? "Bảo trì" : "UnderMaintenance",
-                    classes: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400",
+                    classes: "text-amber-600 dark:text-amber-400",
                     dot: "bg-amber-500"
                 };
             default:
                 return {
                     label: statusValue || (lang === "VN" ? "Không rõ" : "Unknown"),
-                    classes: "bg-slate-100 text-slate-400",
+                    classes: "text-slate-400",
                     dot: "bg-slate-300"
                 };
         }
@@ -419,11 +419,11 @@ export function BoatManagement() {
                             menuAlign="right"
                             options={[
                                 { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
-                                { value: "Active", label: lang === "VN" ? "Active (Hoạt động)" : "Active" },
-                                { value: "Inactive", label: lang === "VN" ? "Inactive (Chưa hoạt động)" : "Inactive" },
-                                { value: "UnderMaintenance", label: lang === "VN" ? "UnderMaintenance (Bảo trì)" : "UnderMaintenance" },
-                                { value: "Incident", label: lang === "VN" ? "Incident (Sự cố)" : "Incident" },
-                                { value: "Retired", label: lang === "VN" ? "Retired (Dừng hoạt động)" : "Retired" },
+                                { value: "Active", label: lang === "VN" ? "Hoạt động" : "Active" },
+                                { value: "Inactive", label: lang === "VN" ? "Chưa hoạt động" : "Inactive" },
+                                { value: "UnderMaintenance", label: lang === "VN" ? "Bảo trì" : "UnderMaintenance" },
+                                { value: "Incident", label: lang === "VN" ? "Sự cố" : "Incident" },
+                                { value: "Retired", label: lang === "VN" ? "Dừng hoạt động" : "Retired" },
                             ]}
                             className="min-w-50 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                         />
@@ -503,14 +503,14 @@ export function BoatManagement() {
 
                                             {/* "numberOfDecks": Số tầng */}
                                             <td className="py-4 px-6 text-center">
-                                                <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
                                                     {boat.numberOfDecks}
                                                 </span>
                                             </td>
 
                                             {/* "status": Trạng thái */}
                                             <td className="py-4 px-6 text-center">
-                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-headline font-black uppercase tracking-wider shadow-inner ${statusConfig.classes}`}>
+                                                <span className={`inline-flex items-center gap-1.5 text-[11px] font-headline font-black uppercase tracking-wider ${statusConfig.classes}`}>
                                                     <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
                                                     {statusConfig.label}
                                                 </span>

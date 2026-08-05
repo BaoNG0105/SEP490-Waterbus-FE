@@ -15,15 +15,16 @@ import {
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 import { ImageWithFallback } from "../../../components/ImageWithFallback";
+import { FormSelect } from "../../../components/FormSelect";
 
 const STATUS_STYLE = {
     [BLOG_STATUS.DRAFT]: {
         dot: "bg-slate-400",
-        badge: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-500/10 dark:text-slate-400 dark:border-slate-500/20",
+        badge: "text-slate-500 dark:text-slate-400",
     },
     [BLOG_STATUS.PUBLISHED]: {
         dot: "bg-emerald-500",
-        badge: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400",
+        badge: "text-emerald-600 dark:text-emerald-400",
     },
 };
 
@@ -334,35 +335,34 @@ export function BlogManagement() {
                     />
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto overflow-x-auto shrink-0">
-                    <select
-                        value={categoryFilter}
-                        onChange={(e) => setCategoryFilter(e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 outline-none cursor-pointer shadow-inner shrink-0"
-                    >
-                        <option value="All">{lang === "VN" ? "Tất cả chuyên mục" : "All Categories"}</option>
-                        <option value={BLOG_CATEGORY.NEWS}>{lang === "VN" ? "Tin tức" : "News"}</option>
-                        <option value={BLOG_CATEGORY.EVENT}>{lang === "VN" ? "Sự kiện" : "Event"}</option>
-                    </select>
+                <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto justify-end overflow-visible">
+                    <div className="relative z-20 flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Chuyên mục:" : "Category:"}</span>
+                        <FormSelect
+                            value={categoryFilter}
+                            onChange={setCategoryFilter}
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả chuyên mục" : "All Categories" },
+                                { value: BLOG_CATEGORY.NEWS, label: lang === "VN" ? "Tin tức" : "News" },
+                                { value: BLOG_CATEGORY.EVENT, label: lang === "VN" ? "Sự kiện" : "Event" },
+                            ]}
+                            className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
+                    </div>
 
-                    <div className="flex gap-2">
-                        {[
-                            { key: "All", vn: "Tất cả trạng thái", en: "All Status" },
-                            { key: BLOG_STATUS.PUBLISHED, vn: "Đã xuất bản", en: "Published" },
-                            { key: BLOG_STATUS.DRAFT, vn: "Nháp", en: "Draft" },
-                        ].map((btn) => (
-                            <button
-                                key={btn.key}
-                                type="button"
-                                onClick={() => setStatusFilter(btn.key)}
-                                className={`px-5 py-3.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider border transition-all shrink-0 ${statusFilter === btn.key
-                                        ? " border-transparent bg-yellow-400 text-slate-900 shadow-md"
-                                        : "bg-white text-slate-500 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
-                                    }`}
-                            >
-                                {lang === "VN" ? btn.vn : btn.en}
-                            </button>
-                        ))}
+                    <div className="relative z-10 flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
+                        <FormSelect
+                            value={statusFilter}
+                            onChange={setStatusFilter}
+                            menuAlign="right"
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
+                                { value: BLOG_STATUS.PUBLISHED, label: lang === "VN" ? "Đã xuất bản" : "Published" },
+                                { value: BLOG_STATUS.DRAFT, label: lang === "VN" ? "Nháp" : "Draft" },
+                            ]}
+                            className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
                     </div>
                 </div>
             </div>
@@ -414,7 +414,7 @@ export function BlogManagement() {
 
                                             {/* Cột 2: Chuyên mục */}
                                             <td className="py-4 px-4">
-                                                <span className="text-[10px] font-headline font-black tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 inline-block uppercase">
+                                                <span className="text-[10px] font-headline font-black tracking-wide text-slate-700 dark:text-slate-200 uppercase">
                                                     {labelBlogCategory(blog.category, lang)}
                                                 </span>
                                             </td>
@@ -428,7 +428,7 @@ export function BlogManagement() {
 
                                             {/* Cột 4: Trạng thái */}
                                             <td className="py-4 px-4 text-center">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusStyle.badge}`}>
+                                                <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${statusStyle.badge}`}>
                                                     <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`}></span>
                                                     {labelBlogStatus(blog.status, lang)}
                                                 </span>

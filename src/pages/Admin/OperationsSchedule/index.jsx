@@ -174,7 +174,7 @@ function ServiceTypeMultiSelect({
     : null;
 
   return (
-    <div ref={rootRef} className={`relative w-full ${isOpen ? "z-[60]" : ""}`}>
+    <div ref={rootRef} className={`relative w-full ${isOpen ? "z-60" : ""}`}>
       <button
         type="button"
         aria-haspopup="listbox"
@@ -298,7 +298,7 @@ export function OperationsSchedulePage() {
         </h2>
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-          <div className="min-w-[11rem]">
+          <div className="min-w-44">
             <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
               {lang === "VN" ? "Ngày" : "Date"}
             </label>
@@ -308,7 +308,7 @@ export function OperationsSchedulePage() {
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-[#124757] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
             />
           </div>
-          <div className="min-w-[14rem]">
+          <div className="min-w-56">
             <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-slate-400">
               {lang === "VN" ? "Loại dịch vụ" : "Service type"}
             </label>
@@ -348,13 +348,13 @@ export function OperationsSchedulePage() {
               const routeLabel = String(trip.routeName || "").trim();
               const titleLabel = routeLabel
                 || `${trip.fromLocation || "—"} → ${dest}`;
-              const meta = [trip.boatCode, !routeLabel ? (trip.routeCode || "") : ""]
+              const meta = [trip.boatName, !routeLabel ? (trip.routeCode || "") : ""]
                 .filter(Boolean)
                 .join(" · ");
               const rowKey = String(
                 trip.tripId
                 || trip.tripCode
-                || `${trip.boatCode || "boat"}-${trip.displayStartAt || trip.startAt || index}`,
+                || `${trip.boatName || "boat"}-${trip.displayStartAt || trip.startAt || index}`,
               );
 
               return (
@@ -362,14 +362,15 @@ export function OperationsSchedulePage() {
                   <button
                     type="button"
                     onClick={() => openSeatBoard(trip)}
-                    className="grid w-full cursor-pointer grid-cols-[5.5rem_1fr_auto] items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900/40 sm:gap-4 sm:px-5"
+                    className="grid w-full cursor-pointer grid-cols-[8.5rem_1fr_auto] items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900/40 sm:gap-4 sm:px-5"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex items-center gap-1.5 whitespace-nowrap">
                       <p className="font-headline text-base font-black tabular-nums leading-tight text-[#124757] dark:text-yellow-400 sm:text-lg">
                         {formatTripClock(trip.displayStartAt || trip.startAt)}
                       </p>
-                      <p className="mt-0.5 text-[11px] font-bold tabular-nums text-slate-400">
-                        → {formatTripClock(trip.displayEndAt || trip.endAt)}
+                      <span className="font-headline text-base font-black tabular-nums leading-tight text-slate-400 sm:text-lg">→</span>
+                      <p className="font-headline text-base font-black tabular-nums leading-tight text-[#124757] dark:text-yellow-400 sm:text-lg">
+                        {formatTripClock(trip.displayEndAt || trip.endAt)}
                       </p>
                     </div>
 

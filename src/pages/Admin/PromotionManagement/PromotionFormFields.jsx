@@ -158,11 +158,6 @@ export function PromotionFormFields({
             onChange={handleImagePick}
             className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-[#124757] file:px-3 file:py-2 file:text-[10px] file:font-black file:uppercase file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900"
           />
-          <p className="text-[10px] text-slate-400 mt-1">
-            {lang === "VN"
-              ? "JPEG / PNG / WebP. Upload qua PUT /promotions/{id}/image sau khi tạo."
-              : "JPEG / PNG / WebP. Uploaded via PUT /promotions/{id}/image after create."}
-          </p>
           {formData.imagePreviewUrl ? (
             <img
               src={formData.imagePreviewUrl}
@@ -378,12 +373,12 @@ export function PromotionFormFields({
 
       <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-          {lang === "VN" ? "Phạm vi áp dụng (scope)" : "Scope"}
+          {lang === "VN" ? "Phạm vi áp dụng" : "Scope"}
         </h3>
         <p className="text-[10px] text-slate-400 font-semibold">
           {lang === "VN"
-            ? "Để trống toàn bộ = scope null (áp dụng mọi nơi)."
-            : "Leave all empty = scope null (applies everywhere)."}
+            ? "Để trống toàn bộ = áp dụng mọi nơi."
+            : "Leave all empty = applies everywhere."}
         </p>
 
         <div>

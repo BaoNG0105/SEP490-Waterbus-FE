@@ -96,11 +96,6 @@ export function CreatePromotion() {
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
             {lang === "VN" ? "Thêm khuyến mãi mới" : "Add New Promotion"}
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {lang === "VN"
-              ? "POST /promotions → (optional) PUT /promotions/{id}/image"
-              : "POST /promotions → (optional) PUT /promotions/{id}/image"}
-          </p>
         </div>
       </div>
 

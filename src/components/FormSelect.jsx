@@ -61,10 +61,9 @@ export function FormSelect({
   };
 
   useLayoutEffect(() => {
-    if (!isOpen) {
-      setMenuPos(null);
-      return undefined;
-    }
+    // Đóng menu: không setState ở đây — `isOpen && menuPos` bên dưới đã ẩn menu,
+    // menuPos cũ còn lại vô hại và tránh cascading render khi effect này chạy lại.
+    if (!isOpen) return undefined;
     updateMenuPos();
     window.addEventListener("resize", updateMenuPos);
     window.addEventListener("scroll", updateMenuPos, true);
@@ -75,13 +74,10 @@ export function FormSelect({
   }, [isOpen, menuAlign, searchable, filtered.length]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setQuery("");
-      return undefined;
-    }
+    if (!isOpen) return undefined;
     const onDoc = (e) => {
       if (rootRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
-      setIsOpen(false);
+      closeMenu();
     };
     document.addEventListener("mousedown", onDoc);
     if (searchable) {
@@ -90,10 +86,21 @@ export function FormSelect({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [isOpen, searchable]);
 
-  const pick = (next) => {
-    onChange(next);
+  // Đóng menu ở đúng nơi trigger (click nút, click ngoài, Escape, chọn option)
+  // thay vì trong effect — tránh setState kéo theo render tầng trong useEffect.
+  const closeMenu = () => {
     setIsOpen(false);
     setQuery("");
+  };
+
+  const toggleMenu = () => {
+    if (isOpen) closeMenu();
+    else setIsOpen(true);
+  };
+
+  const pick = (next) => {
+    onChange(next);
+    closeMenu();
   };
 
   const menu =
@@ -119,7 +126,7 @@ export function FormSelect({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Escape") setIsOpen(false);
+                    if (e.key === "Escape") closeMenu();
                     if (e.key === "Enter" && filtered[0]) {
                       e.preventDefault();
                       pick(filtered[0].value);
@@ -181,7 +188,7 @@ export function FormSelect({
         aria-expanded={isOpen}
         aria-required={required || undefined}
         title={selected ? String(selected.label) : undefined}
-        onClick={() => !disabled && setIsOpen((v) => !v)}
+        onClick={() => !disabled && toggleMenu()}
         className={`flex min-w-0 items-center justify-between gap-1.5 overflow-hidden text-left ${fullWidth ? "w-full max-w-full" : "w-auto"} ${className}`}
       >
         <span className={`flex min-w-0 flex-1 items-center gap-2 text-left ${selected ? "" : "text-slate-400"}`}>

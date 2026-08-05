@@ -74,7 +74,9 @@ import { TripSeatBoardPage } from "./pages/Admin/TripSeatBoard";
 import { BlogManagement } from "./pages/Admin/BlogManagement";
 import { CreateBlog } from "./pages/Admin/BlogManagement/CreateBlog";
 import { EditBlog } from "./pages/Admin/BlogManagement/EditBlog";
-import { KnowledgeManagement } from "./pages/Admin/KnowledgeManagement";
+import { SystemDataManagement } from "./pages/Admin/SystemDataManagement";
+import { CreateSystemData } from "./pages/Admin/SystemDataManagement/CreateSystemData";
+import { EditSystemData } from "./pages/Admin/SystemDataManagement/EditSystemData";
 
 function App() {
   return (
@@ -808,12 +810,32 @@ function App() {
             }
           />
 
-          {/* ******* Knowledge Base: nguồn dữ liệu chatbot + trang Điều khoản & Chính sách ******* */}
+          {/* ******* System Data Management: nguồn dữ liệu chatbot + trang Điều khoản & Chính sách ******* */}
           <Route
-            path="/admin/knowledge-management"
+            path="/admin/system-data"
             element={
-              <AdminLayout title="Knowledge Base">
-                <KnowledgeManagement />
+              <AdminLayout title="System Data Management">
+                <SystemDataManagement />
+              </AdminLayout>
+            }
+          />
+
+          {/* System Data Management: Create Page */}
+          <Route
+            path="/admin/system-data/create"
+            element={
+              <AdminLayout title="New System Data Entry">
+                <CreateSystemData />
+              </AdminLayout>
+            }
+          />
+
+          {/* System Data Management: Edit Page */}
+          <Route
+            path="/admin/system-data/edit/:id"
+            element={
+              <AdminLayout title="Edit System Data Entry">
+                <EditSystemData />
               </AdminLayout>
             }
           />

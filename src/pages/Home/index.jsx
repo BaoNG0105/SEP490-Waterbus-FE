@@ -50,7 +50,6 @@ export const Home = () => {
 
   // Khai báo state quản lý danh sách nhà ga gọi từ API
   const [stationPoints, setStationPoints] = useState([]);
-  const [isLoadingStations, setIsLoadingStations] = useState(true);
 
   // Khối xử lý lọc riêng các trạm Waterbus chính thức (isWaterbusStation: true)
   const waterbusStations = useMemo(() => {
@@ -100,13 +99,10 @@ export const Home = () => {
   useEffect(() => {
     const loadStationsData = async () => {
       try {
-        setIsLoadingStations(true);
         const data = await fetchAllStations();
         setStationPoints(data || []);
       } catch (error) {
         console.error("Lỗi tải sơ đồ nhà ga trang chủ:", error);
-      } finally {
-        setIsLoadingStations(false);
       }
     };
     loadStationsData();
@@ -284,44 +280,49 @@ export const Home = () => {
       </section>
 
       {/* ===== MiSSON SECTION ===== */}
-      <section className="relative py-24 bg-white dark:bg-slate-900 transition-colors duration-300 overflow-hidden">
+      <section
+        className="relative py-24 bg-cover bg-center transition-colors duration-300 overflow-hidden"
+        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/background-section.png')" }}
+      >
+        {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
+        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
         <ScrollBoat />
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Khối Nội Dung Bên Trái */}
           <div className="space-y-6">
-            <span className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+            <span className="text-sm font-bold uppercase tracking-widest text-yellow-400">
               {lang === "VN" ? "Sứ mệnh của chúng tôi" : "Our Mission"}
             </span>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white leading-tight">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white leading-tight">
               {lang === "VN"
                 ? "Kiến tạo chuẩn mực mới cho di chuyển đô thị"
                 : "Redefining The Standard Of Urban Mobility"}
             </h2>
-            <p className="text-slate-600 dark:text-slate-400 font-body text-base leading-relaxed">
+            <p className="text-white/70 font-body text-base leading-relaxed">
               {lang === "VN"
                 ? "Waterbus đang định hình lại tương lai của giao thông đô thị bằng cách khai phá tiềm năng to lớn của mạng lưới sông ngòi Sài Gòn. Chúng tôi không chỉ cung cấp một phương tiện đi lại thông thường, mà mang đến một giải pháp di chuyển xanh, bền vững, giúp giảm tải ùn tắc đường bộ nghiêm trọng, tiết kiệm thời gian quý báu của hành khách và kiến tạo những trải nghiệm hành trình thư thái, kết nối sâu sắc con người với cảnh quan thiên nhiên tráng lệ của thành phố."
                 : "Waterbus is reshaping the future of urban transportation by unlocking the immense potential of Saigon's river network. We don't just provide a standard transit method; we offer a green, sustainable mobility solution that alleviates severe road congestion, saves precious passenger time, and creates relaxed journey experiences that deeply connect people with the magnificent natural landscapes of the city."}
             </p>
             <div className="grid grid-cols-2 gap-8 pt-6">
               <div className="space-y-2">
-                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400">
+                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-400">
                   15min
                 </div>
-                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                <p className="text-sm font-bold text-white">
                   {lang === "VN" ? "Tần suất cao điểm" : "Peak frequency"}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-white/60">
                   {lang === "VN" ? "Các chuyến tàu chạy liên tục không lo chờ đợi" : "Continuous trips with zero waiting time"}
                 </p>
               </div>
               <div className="space-y-2">
-                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400">
+                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-400">
                   100%
                 </div>
-                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                <p className="text-sm font-bold text-white">
                   {lang === "VN" ? "Năng lượng sạch" : "Clean energy"}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-white/60">
                   {lang === "VN" ? "Hướng tới hệ sinh thái giao thông không phát thải" : "Towards a zero-emission transit ecosystem"}
                 </p>
               </div>
@@ -346,7 +347,7 @@ export const Home = () => {
         style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus-on-the-Saigon-River_1738411382.webp')" }}
       >
         {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
-        <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
 
         <div className="relative max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
@@ -475,35 +476,32 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* STATION SECTION */}
-      <section className="relative py-24 bg-white dark:bg-slate-900 transition-colors duration-300 overflow-hidden">
-        <ScrollBoat />
-        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12">
-          {/* Tiêu đề & Subtitle */}
-          <div className="flex flex-col items-center text-center mb-16 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+      {/* STATION SECTION — bản đồ phủ toàn bộ làm nền, tiêu đề nổi trên lớp gradient tối */}
+      <section className="relative h-160 md:h-180 overflow-hidden">
+        {/* Bản đồ số truyền mảng dữ liệu động từ API trạm bến — làm nền cho cả section */}
+        <div className="absolute inset-0">
+          <WaterwayMap
+            stationsList={waterbusStations}
+            stationAsFlag
+            showStationLabels
+            showStationImages
+            interactionGate
+            className="h-full"
+          />
+        </div>
+
+        {/* Gradient tối phía trên để tiêu đề luôn nổi bật — không chặn thao tác bản đồ bên dưới */}
+        <div className="absolute inset-x-0 top-0 z-10 h-64 bg-linear-to-b from-[#0a2129]/70 via-[#0a2129]/25 to-transparent pointer-events-none" />
+
+        {/* Tiêu đề & Subtitle */}
+        <div className="relative z-20 pt-16 md:pt-20 px-6 md:px-12 pointer-events-none">
+          <div className="max-w-7xl mx-auto flex flex-col items-center text-center space-y-4">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-400">
               {lang === "VN" ? "Mạng lưới bến tàu" : "Operational Grid"}
             </p>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white drop-shadow-lg">
               {lang === "VN" ? "Mạng lưới bến tàu kết nối khắp thành phố" : "A City-Wide Network Of Waterway Stations"}
             </h2>
-          </div>
-          {/* Bản đồ */}
-          <div className="w-full h-125 md:h-145 relative">
-            {isLoadingStations ? (
-              <div className="w-full h-full bg-slate-50 dark:bg-slate-800 rounded-[2.5rem] flex items-center justify-center border border-dashed border-slate-200">
-                <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
-              </div>
-            ) : (
-              // Gọi tấm bản đồ số truyền mảng dữ liệu động từ API trạm bến
-              <WaterwayMap
-                stationsList={waterbusStations}
-                stationAsFlag
-                showStationLabels
-                showStationImages
-                interactionGate
-              />
-            )}
           </div>
         </div>
       </section>
@@ -514,7 +512,7 @@ export const Home = () => {
         style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/schedule.jpg')" }}
       >
         {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
-        <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           {/* Khối Thông Tin Bên Trái */}
@@ -605,7 +603,6 @@ export const Home = () => {
 
       {/* ===== PROMOTION SECTIONS ===== */}
       <section className="relative py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden">
-        <ScrollBoat />
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
@@ -668,7 +665,7 @@ export const Home = () => {
         style={blogs.length > 0 ? { backgroundImage: `url('${blogs[heroSlide]?.imageUrl || ""}')` } : undefined}
       >
         {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh bài viết */}
-        <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
 
         <div className="relative max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
@@ -877,7 +874,7 @@ export const Home = () => {
           style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/feedback.jpg')" }}
         >
           {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
-          <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+          <div className="absolute inset-0 bg-[#0a2129]/55"></div>
           <div className="relative z-10 max-w-5xl mx-auto px-6 md:px-12 flex flex-col items-center">
             {/* Khối tiêu đề căn giữa đồng bộ */}
             <div className="text-center mb-16 space-y-4">
@@ -955,7 +952,7 @@ export const Home = () => {
         style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/home-slide-4.jpg')" }}
       >
         {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
-        <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
 
         <div className="relative max-w-7xl mx-auto px-6 md:px-12">
           {/* Khối tiêu đề chính & phụ căn giữa hệ thống */}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { AIChatbotPanel } from "../components/AIChatbotPanel";
+import logo from "../assets/logo-1.png";
 
 export const FloatingActions = () => {
   // Nhúng Context để hỗ trợ đa ngôn ngữ cho các Tooltip (tiêu đề khi trỏ chuột vào)
@@ -20,18 +21,21 @@ export const FloatingActions = () => {
           type="button"
           onClick={() => setIsChatOpen((prev) => !prev)}
           title={lang === "VN" ? "Trợ lý ảo AI" : "AI Assistant"}
-          className="group relative w-34 h-34 pointer-events-auto"
+          className="group relative w-20 h-20 pointer-events-auto"
         >
           {/* Vòng phát sáng nhấp nháy */}
           {!isChatOpen && (
             <span className="absolute inset-0 rounded-full bg-yellow-400/50 animate-ping" />
           )}
 
-          <img
-            src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/wtb-icon.png"
-            alt={lang === "VN" ? "Trợ lý ảo AI" : "AI Assistant"}
-            className="relative h-full w-full object-contain transition-transform duration-300 group-hover:scale-110 group-active:scale-95"
-          />
+          {/* Nút tròn: xanh (light mode) / vàng (dark mode), logo header/footer bên trong */}
+          <span className="relative flex h-full w-full items-center justify-center rounded-full bg-[#124757] p-3.5 shadow-lg shadow-[#124757]/40 transition-all duration-300 group-hover:scale-110 group-active:scale-95 dark:bg-yellow-400 dark:shadow-yellow-500/30">
+            <img
+              src={logo}
+              alt={lang === "VN" ? "Trợ lý ảo AI" : "AI Assistant"}
+              className="h-full w-full object-contain"
+            />
+          </span>
 
           {/* Chấm báo online */}
           {!isChatOpen && (

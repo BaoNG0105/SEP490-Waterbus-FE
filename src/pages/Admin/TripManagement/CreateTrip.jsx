@@ -905,7 +905,6 @@ export function CreateTrip() {
                     en: "Fixed times",
                     descVn: "Thêm từng giờ khởi hành cụ thể.",
                     descEn: "Add specific departure times.",
-                    icon: "schedule",
                   },
                   {
                     id: "interval",
@@ -913,7 +912,6 @@ export function CreateTrip() {
                     en: "Interval",
                     descVn: "Tự tạo giờ theo chu kỳ trong khung.",
                     descEn: "Generate times by interval in a window.",
-                    icon: "timelapse",
                   },
                 ].map((item) => {
                   const active = form.mode === item.id;
@@ -927,13 +925,6 @@ export function CreateTrip() {
                         : "border-slate-200 bg-slate-50/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/40"
                         }`}
                     >
-                      <span className={`material-symbols-outlined mt-0.5 text-[22px] ${active
-                        ? "text-[#124757] dark:text-yellow-400"
-                        : "text-slate-400"
-                        }`}
-                      >
-                        {item.icon}
-                      </span>
                       <span className="min-w-0">
                         <span className={`block text-xs font-black uppercase tracking-wider ${active
                           ? "text-[#124757] dark:text-yellow-400"
@@ -1015,7 +1006,7 @@ export function CreateTrip() {
               ) : (
                 <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
                   <div className="flex flex-wrap items-end gap-3">
-                    <div className="min-w-[150px] flex-1 sm:flex-none sm:w-[160px]">
+                    <div className="min-w-37.5 flex-1 sm:flex-none sm:w-40">
                       <label className={labelStyle}>{lang === "VN" ? "Giờ mới" : "New time"}</label>
                       <input
                         type="time"
@@ -1069,9 +1060,6 @@ export function CreateTrip() {
                           className="flex items-center justify-between gap-3 px-3.5 py-2.5"
                         >
                           <span className="inline-flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-white">
-                            <span className="material-symbols-outlined text-[18px] text-[#124757] dark:text-yellow-400">
-                              departure_board
-                            </span>
                             {time}
                           </span>
                           <button
@@ -1281,7 +1269,7 @@ export function CreateTrip() {
                                   {lang === "VN" ? "Tạo được" : "OK"}
                                 </span>
                               ) : (
-                                <div className="max-w-[260px] space-y-1">
+                                <div className="max-w-65 space-y-1">
                                   <span className="block text-[11px] font-bold text-amber-700 dark:text-amber-300" title={item.reason || ""}>
                                     {item.reason || (lang === "VN" ? "Không tạo được" : "Cannot create")}
                                   </span>

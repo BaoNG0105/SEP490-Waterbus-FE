@@ -229,14 +229,15 @@ export function RouteManagement() {
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Request (Charter)</span>
-                    <h3 className="text-xl font-black font-headline text-amber-600 dark:text-amber-400 mt-0.5">{isLoading ? "..." : stats.charter}</h3>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Waterbus</span>
+                    <h3 className="text-xl font-black font-headline text-teal-600 dark:text-teal-400 mt-0.5">{isLoading ? "..." : stats.bus}</h3>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Bus</span>
-                    <h3 className="text-xl font-black font-headline text-teal-600 dark:text-teal-400 mt-0.5">{isLoading ? "..." : stats.bus}</h3>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Request</span>
+                    <h3 className="text-xl font-black font-headline text-amber-600 dark:text-amber-400 mt-0.5">{isLoading ? "..." : stats.charter}</h3>
                 </div>
+
             </div>
 
             {/* THANH TÌM KIẾM + BỘ LỌC */}
@@ -266,7 +267,7 @@ export function RouteManagement() {
                                 { value: "nameAsc", label: lang === "VN" ? "Tên A → Z" : "Name A → Z" },
                                 { value: "nameDesc", label: lang === "VN" ? "Tên Z → A" : "Name Z → A" },
                             ]}
-                            className="min-w-[150px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                            className="min-w-37.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                         />
                     </div>
 
@@ -284,7 +285,7 @@ export function RouteManagement() {
                                 { value: "Regular", label: getRouteKindLabel("Regular", lang) },
                                 { value: "SightseeingLoop", label: getRouteKindLabel("SightseeingLoop", lang) },
                             ]}
-                            className="min-w-[160px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                            className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                         />
                     </div>
 
@@ -298,10 +299,10 @@ export function RouteManagement() {
                             menuAlign="right"
                             options={[
                                 { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All status" },
-                                { value: "Active", label: "Active" },
-                                { value: "Inactive", label: "Inactive" },
+                                { value: "Active", label: lang === "VN" ? "Hoạt động" : "Active" },
+                                { value: "Inactive", label: lang === "VN" ? "Ngưng hoạt động" : "Inactive" },
                             ]}
-                            className="min-w-[150px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                            className="min-w-37.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                         />
                     </div>
                 </div>
@@ -336,9 +337,6 @@ export function RouteManagement() {
                                         {/* Cột 1: Thông tin Tuyến */}
                                         <td className="py-4 px-6">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[#124757] dark:text-yellow-400 shrink-0 shadow-sm">
-                                                    <span className="material-symbols-outlined text-xl">alt_route</span>
-                                                </div>
                                                 <div className="space-y-1">
                                                     <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">
                                                         {route.routeName}
@@ -354,10 +352,10 @@ export function RouteManagement() {
                                         </td>
 
                                         {/* Cột 2: Mã tuyến */}
-                                        <td className="py-4 px-4 max-w-[11rem]">
+                                        <td className="py-4 px-4 max-w-44">
                                             <span
                                                 title={route.routeCode || ""}
-                                                className="inline-block max-w-full truncate align-middle font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700"
+                                                className="inline-block max-w-full truncate align-middle font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200"
                                             >
                                                 {route.routeCode}
                                             </span>
@@ -379,12 +377,14 @@ export function RouteManagement() {
 
                                         {/* Cột 5: Trạng thái */}
                                         <td className="py-4 px-4 text-center">
-                                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${route.status === "Active"
-                                                    ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400"
-                                                    : "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400"
+                                            <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${route.status === "Active"
+                                                ? "text-emerald-600 dark:text-emerald-400"
+                                                : "text-rose-500 dark:text-rose-400"
                                                 }`}>
                                                 <span className={`w-1.5 h-1.5 rounded-full ${route.status === "Active" ? "bg-emerald-500" : "bg-rose-500"}`}></span>
-                                                {route.status || "Inactive"}
+                                                {route.status === "Active"
+                                                    ? (lang === "VN" ? "Hoạt động" : "Active")
+                                                    : (lang === "VN" ? "Ngưng hoạt động" : "Inactive")}
                                             </span>
                                         </td>
 
@@ -396,7 +396,7 @@ export function RouteManagement() {
                                                     className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#124757] hover:bg-slate-50 dark:hover:bg-slate-700 dark:hover:text-yellow-400 hover:border-slate-300 transition-all shadow-sm"
                                                     title={lang === "VN" ? "Xem chi tiết tuyến" : "View Route Detail"}
                                                 >
-                                                    <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                                    <span className="material-symbols-outlined text-[18px]">edit</span>
                                                 </button>
                                                 <button
                                                     onClick={() => handleDeleteRoute(route)}
@@ -433,8 +433,8 @@ export function RouteManagement() {
                             onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                             disabled={currentPage === 1}
                             className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === 1
-                                    ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
-                                    : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
                                 }`}
                         >
                             <span className="material-symbols-outlined text-base">chevron_left</span>
@@ -454,8 +454,8 @@ export function RouteManagement() {
                                     type="button"
                                     onClick={() => setCurrentPage(item)}
                                     className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-black font-headline text-xs transition-all ${currentPage === item
-                                            ? "bg-[#124757] text-white shadow-md border-transparent dark:bg-yellow-400 dark:text-slate-900"
-                                            : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 hover:bg-slate-50"
+                                        ? "bg-[#124757] text-white shadow-md border-transparent dark:bg-yellow-400 dark:text-slate-900"
+                                        : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 hover:bg-slate-50"
                                         }`}
                                 >
                                     {item}
@@ -468,8 +468,8 @@ export function RouteManagement() {
                             onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                             disabled={currentPage === totalPages}
                             className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === totalPages
-                                    ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
-                                    : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
                                 }`}
                         >
                             <span className="material-symbols-outlined text-base">chevron_right</span>
