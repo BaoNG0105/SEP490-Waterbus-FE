@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { AdminLayout } from "./layout/Admin/AdminLayout";
 import { MainLayout } from "./layout/MainLayout";
 import { NotFound } from "./pages/NotFound";
+import { ScrollToTop } from "./components/ScrollToTop";
 
 //Phân quyền
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
@@ -81,6 +82,7 @@ import { EditSystemData } from "./pages/Admin/SystemDataManagement/EditSystemDat
 function App() {
   return (
     <Router>
+      <ScrollToTop />
       <Routes>
         {/* ============= Client Page ============= */}
         {/* Home Page */}
