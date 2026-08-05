@@ -1,5 +1,3 @@
-// src/data/homeData.js
-
 // THÔNG TIN LIÊN HỆ CÔNG KHAI — dùng chung Home / Contact / form email
 export const COMPANY_HOTLINE = '1900 636830';
 export const COMPANY_HOTLINE_TEL = '1900636830';
@@ -8,19 +6,6 @@ export const COMPANY_ADDRESS_VN =
     '7 Đ. D1, Long Thạnh Mỹ, Tăng Nhơn Phú, Thành phố Hồ Chí Minh, Việt Nam';
 export const COMPANY_ADDRESS_EN =
     '7 D1 Street, Long Thanh My, Tang Nhon Phu, Ho Chi Minh City, Vietnam';
-
-// DỮ LIỆU SLIDE HERO
-export const heroSlides = [
-    {
-        src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png",
-    },
-    {
-        src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg",
-    },
-    {
-        src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075336/wkzbfwc5xyfby9ueute1.png",
-    },
-];
 
 // DỮ LIỆU HƯỚNG DẪN ĐẶT VÉ
 export const guidelines = [

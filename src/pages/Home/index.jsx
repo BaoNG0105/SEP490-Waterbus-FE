@@ -10,6 +10,8 @@ import { fetchPublicReviews } from "../../services/reviewService";
 import { StarRatingDisplay } from "../../components/TripReview";
 import { ContactForm } from "../../components/ContactForm";
 import { ImageWithFallback } from "../../components/ImageWithFallback";
+import { ScrollBoat } from "../../components/ScrollBoat";
+import { RevealOnScroll } from "../../components/RevealOnScroll";
 
 const heroVideo = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/Ng%E1%BA%AFm%20C%E1%BA%A3nh%20Th%C3%A0nh%20Ph%E1%BB%91%20Tr%C3%AAn%20S%C3%B4ng%20-%20SAIGON%20WATER%20BUS%20B%E1%BA%A0CH%20%C4%90%E1%BA%B0NG%202021%20l%204K%20Live%20Wallpaper%20-%20N%C6%A1i%20M%C3%ACnh%20S%E1%BB%91ng.mp4";
 
@@ -268,11 +270,10 @@ export const Home = () => {
           aria-label={lang === "VN" ? "Khám phá dịch vụ" : "Explore Services"}
           aria-hidden={!showScrollHint}
           tabIndex={showScrollHint ? 0 : -1}
-          className={`absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2 text-white/80 transition-all duration-300 hover:text-yellow-400 md:bottom-10 ${
-            showScrollHint
-              ? "pointer-events-auto translate-y-0 opacity-100"
-              : "pointer-events-none translate-y-3 opacity-0"
-          }`}
+          className={`absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2 text-white/80 transition-all duration-300 hover:text-yellow-400 md:bottom-10 ${showScrollHint
+            ? "pointer-events-auto translate-y-0 opacity-100"
+            : "pointer-events-none translate-y-3 opacity-0"
+            }`}
         >
           <span className="flex h-11 w-7 justify-center rounded-full border-2 border-current pt-2">
             <span className="h-2 w-1 rounded-full bg-current animate-scroll-wheel"></span>
@@ -284,8 +285,9 @@ export const Home = () => {
       </section>
 
       {/* ===== MiSSON SECTION ===== */}
-      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+      <section className="relative py-24 bg-white dark:bg-slate-900 transition-colors duration-300 overflow-hidden">
+        <ScrollBoat />
+        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Khối Nội Dung Bên Trái */}
           <div className="space-y-6">
             <span className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
@@ -358,119 +360,126 @@ export const Home = () => {
             </h2>
           </div>
           {/* Grid 3 thẻ điều hướng dịch vụ đặt vé */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 gsap-reveal">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Thẻ điều hướng: Đặt vé Waterbus*/}
-            <Link
-              to="/waterbus-booking"
-              className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
-            >
-              <div className="relative aspect-square overflow-hidden shrink-0">
-                <img
-                  src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus.webp"
-                  alt={lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
-              </div>
-              <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
-                <div className="space-y-3">
-                  <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-                    {lang === "VN" ? "Tuyến cố định" : "Scheduled Route"}
-                  </span>
-                  <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
-                    {lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {lang === "VN"
-                      ? "Di chuyển nhanh chóng theo lịch trình cố định giữa các bến tàu."
-                      : "Travel quickly along fixed schedules between wharves."}
-                  </p>
+            <RevealOnScroll delayMs={0}>
+              <Link
+                to="/waterbus-booking"
+                className="group flex h-full flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
+              >
+                <div className="relative aspect-square overflow-hidden shrink-0">
+                  <img
+                    src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus.webp"
+                    alt={lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
                 </div>
-                <div className="pt-5 flex items-center gap-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                    {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
-                  </span>
-                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
+                  <div className="space-y-3">
+                    <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+                      {lang === "VN" ? "Tuyến cố định" : "Scheduled Route"}
+                    </span>
+                    <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
+                      {lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                      {lang === "VN"
+                        ? "Di chuyển nhanh chóng theo lịch trình cố định giữa các bến tàu."
+                        : "Travel quickly along fixed schedules between wharves."}
+                    </p>
+                  </div>
+                  <div className="pt-5 flex items-center gap-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                      {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
+                    </span>
+                    <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            </RevealOnScroll>
             {/* Thẻ điều hướng: Đặt vé WaterSightseeing */}
-            <Link
-              to="/watersightseeing-booking"
-              className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
-            >
-              <div className="relative aspect-square overflow-hidden shrink-0">
-                <img
-                  src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-sightseeing.webp"
-                  alt={lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
-              </div>
-              <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
-                <div className="space-y-3">
-                  <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-                    {lang === "VN" ? "Trải nghiệm ngắm cảnh" : "Scenic Experience"}
-                  </span>
-                  <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
-                    {lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {lang === "VN"
-                      ? "Tận hưởng hành trình ngắm cảnh thành phố dọc theo dòng sông."
-                      : "Enjoy a leisurely sightseeing journey along the river."}
-                  </p>
+            <RevealOnScroll delayMs={150}>
+              <Link
+                to="/watersightseeing-booking"
+                className="group flex h-full flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
+              >
+                <div className="relative aspect-square overflow-hidden shrink-0">
+                  <img
+                    src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-sightseeing.webp"
+                    alt={lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
                 </div>
-                <div className="pt-5 flex items-center gap-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                    {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
-                  </span>
-                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
+                  <div className="space-y-3">
+                    <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+                      {lang === "VN" ? "Trải nghiệm ngắm cảnh" : "Scenic Experience"}
+                    </span>
+                    <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
+                      {lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                      {lang === "VN"
+                        ? "Tận hưởng hành trình ngắm cảnh thành phố dọc theo dòng sông."
+                        : "Enjoy a leisurely sightseeing journey along the river."}
+                    </p>
+                  </div>
+                  <div className="pt-5 flex items-center gap-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                      {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
+                    </span>
+                    <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            </RevealOnScroll>
             {/* Thẻ điều hướng: Dịch vụ thuê tàu (Charter) */}
-            <Link
-              to="/charter-booking"
-              className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
-            >
-              <div className="relative aspect-square overflow-hidden shrink-0">
-                <img
-                  src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/charter.jpg"
-                  alt={lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
-              </div>
-              <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
-                <div className="space-y-3">
-                  <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-                    {lang === "VN" ? "Riêng tư & Linh hoạt" : "Private & Flexible"}
-                  </span>
-                  <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
-                    {lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {lang === "VN"
-                      ? "Thiết kế hành trình riêng theo yêu cầu cho nhóm hoặc sự kiện."
-                      : "Design a private journey tailored for groups or events."}
-                  </p>
+            <RevealOnScroll delayMs={300}>
+              <Link
+                to="/charter-booking"
+                className="group flex h-full flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
+              >
+                <div className="relative aspect-square overflow-hidden shrink-0">
+                  <img
+                    src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/charter.jpg"
+                    alt={lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
                 </div>
-                <div className="pt-5 flex items-center gap-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                    {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
-                  </span>
-                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
+                  <div className="space-y-3">
+                    <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+                      {lang === "VN" ? "Riêng tư & Linh hoạt" : "Private & Flexible"}
+                    </span>
+                    <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
+                      {lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                      {lang === "VN"
+                        ? "Thiết kế hành trình riêng theo yêu cầu cho nhóm hoặc sự kiện."
+                        : "Design a private journey tailored for groups or events."}
+                    </p>
+                  </div>
+                  <div className="pt-5 flex items-center gap-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                      {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
+                    </span>
+                    <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            </RevealOnScroll>
           </div>
         </div>
       </section>
 
       {/* STATION SECTION */}
-      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-6 md:px-12">
+      <section className="relative py-24 bg-white dark:bg-slate-900 transition-colors duration-300 overflow-hidden">
+        <ScrollBoat />
+        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
             <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
@@ -493,6 +502,7 @@ export const Home = () => {
                 stationAsFlag
                 showStationLabels
                 showStationImages
+                interactionGate
               />
             )}
           </div>
@@ -500,19 +510,25 @@ export const Home = () => {
       </section>
 
       {/* ===== SCHEDULE SECTION ===== */}
-      <section className="py-24 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 select-none">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+      <section
+        className="relative py-24 bg-cover bg-center transition-colors duration-300 select-none overflow-hidden"
+        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/schedule.jpg')" }}
+      >
+        {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
+        <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+
+        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           {/* Khối Thông Tin Bên Trái */}
           <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-32">
-            <span className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+            <span className="text-sm font-bold uppercase tracking-widest text-yellow-400">
               {lang === "VN" ? "Thời gian hoạt động" : "Operation Hours"}
             </span>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white leading-tight">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white leading-tight">
               {lang === "VN"
                 ? "Lịch trình linh hoạt, sẵn sàng cho mọi hành trình"
                 : "Flexible Schedules, Ready For Every Journey"}
             </h2>
-            <p className="text-slate-600 dark:text-slate-400 font-body text-base leading-relaxed">
+            <p className="text-white/70 font-body text-base leading-relaxed">
               {lang === "VN"
                 ? "Hệ thống vận hành liên tục từ sáng sớm đến tối muộn với tần suất tối ưu, đảm bảo đáp ứng trọn vẹn mọi nhu cầu di chuyển đi làm hay tham quan ngắm cảnh của quý khách."
                 : "The system operates continuously from early morning until late at night with optimized frequency, fully meeting your daily commuting or sightseeing needs."}
@@ -530,7 +546,7 @@ export const Home = () => {
             </div>
           </div>
           {/* CỘT PHẢI: CÁC KHỐI SỐ LIỆU */}
-          <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6 gsap-reveal">
+          <div className="relative z-10 lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* Khối 1: Giờ Cao Điểm */}
             <div className="sm:col-span-2 bg-linear-to-br from-[#124757] to-[#1a657c] dark:from-yellow-400 dark:to-yellow-600 p-8 md:p-10 rounded-[2.5rem] shadow-xl text-white dark:text-slate-900 flex flex-col justify-between relative overflow-hidden group hover:scale-[1.02] transition-transform duration-500 cursor-default">
               <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-20 transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-12">
@@ -589,8 +605,9 @@ export const Home = () => {
       </section>
 
       {/* ===== PROMOTION SECTIONS ===== */}
-      <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none">
-        <div className="max-w-7xl mx-auto px-6 md:px-12">
+      <section className="relative py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden">
+        <ScrollBoat />
+        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
             <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
@@ -647,35 +664,40 @@ export const Home = () => {
       </section>
 
       {/* ===== BLOG SECTIONS ===== */}
-      <section className="py-24 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 md:px-12">
+      <section
+        className="relative py-24 bg-[#0a2129] bg-cover bg-center transition-colors duration-300 overflow-hidden"
+        style={blogs.length > 0 ? { backgroundImage: `url('${blogs[heroSlide]?.imageUrl || ""}')` } : undefined}
+      >
+        {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh bài viết */}
+        <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+
+        <div className="relative max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-400">
               {lang === "VN" ? "Tin tức & Sự kiện" : "News & Events"}
             </p>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white">
               {lang === "VN" ? "Những câu chuyện đáng đọc" : "Stories Worth Reading"}
             </h2>
           </div>
 
           {isLoadingBlogs ? (
             <div className="flex justify-center items-center py-20">
-              <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+              <div className="w-10 h-10 border-4 border-white/20 border-t-yellow-400 rounded-full animate-spin"></div>
             </div>
           ) : blogs.length === 0 ? (
-            <div className="text-center py-10 text-slate-400 font-medium">
+            <div className="text-center py-10 text-white/60 font-medium">
               {lang === "VN" ? "Hiện chưa có bài viết nào được xuất bản." : "No published articles available at the moment."}
             </div>
           ) : (
             <div className="relative group">
-              {/* KHỐI SLIDER CHÍNH */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12 items-center min-h-100">
-                {/* KHỐI TRÁI (5/12): TIÊU ĐỀ, TÓM TẮT, ACTION BUTTON */}
-                <div className="order-2 lg:order-1 lg:col-span-5 flex flex-col justify-center space-y-6 animate-fade-in duration-500">
+              {/* KHỐI SLIDER CHÍNH — nội dung đặt trong khung kính để nổi bật trên ảnh bài viết */}
+              <div className="min-h-100 flex items-center">
+                <div className="max-w-xl w-full bg-white/10 backdrop-blur-xl border border-white/15 rounded-4xl p-8 md:p-10 shadow-2xl space-y-6 animate-fade-in duration-500">
                   <div className="space-y-3">
-                    <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
-                      <span className="inline-flex items-center gap-1 bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2.5 py-1 rounded-md uppercase tracking-wider text-[10px]">
+                    <div className="flex items-center gap-3 text-xs font-bold text-white/60">
+                      <span className="inline-flex items-center gap-1 bg-yellow-400/15 text-yellow-300 px-2.5 py-1 rounded-md uppercase tracking-wider text-[10px] border border-yellow-400/20">
                         {labelBlogCategory(blogs[heroSlide].category, lang)}
                       </span>
                       <span>•</span>
@@ -685,21 +707,21 @@ export const Home = () => {
                       </span>
                     </div>
                     {/* Tiêu đề */}
-                    <h3 className="text-2xl md:text-4xl font-headline font-black text-[#124757] dark:text-white leading-tight tracking-tight hover:text-yellow-500 transition-colors">
+                    <h3 className="text-2xl md:text-4xl font-headline font-black text-white leading-tight tracking-tight hover:text-yellow-400 transition-colors">
                       <Link to={`/blog/${blogs[heroSlide].slug}`}>
                         {blogs[heroSlide].title}
                       </Link>
                     </h3>
                   </div>
                   {/* Summary */}
-                  <p className="text-slate-600 dark:text-slate-400 font-body text-sm md:text-base leading-relaxed line-clamp-4">
+                  <p className="text-white/70 font-body text-sm md:text-base leading-relaxed line-clamp-4">
                     {blogs[heroSlide].summary}
                   </p>
                   {/* Nút xem chi tiết */}
                   <div className="pt-2">
                     <Link
                       to={`/blog/${blogs[heroSlide].slug}`}
-                      className="inline-flex items-center gap-2 font-headline font-black text-[#124757] dark:text-yellow-400 group/btn transition-colors w-max uppercase tracking-wider text-xs"
+                      className="inline-flex items-center gap-2 font-headline font-black text-yellow-400 group/btn transition-colors w-max uppercase tracking-wider text-xs"
                     >
                       <span>{lang === "VN" ? "Xem chi tiết" : "Read Full Story"}</span>
                       <span className="material-symbols-outlined text-lg transition-transform duration-300 group-hover/btn:translate-x-1.5">
@@ -708,30 +730,20 @@ export const Home = () => {
                     </Link>
                   </div>
                 </div>
-                {/* KHỐI PHẢI (7/12): ẢNH */}
-                <div className="order-1 lg:order-2 lg:col-span-7 relative aspect-16/10 sm:aspect-video w-full overflow-hidden shadow-md group-hover:shadow-xl transition-all duration-500">
-                  <ImageWithFallback
-                    src={blogs[heroSlide].imageUrl}
-                    alt={blogs[heroSlide].title}
-                    className="w-full h-full"
-                    imgClassName="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
-                  />
-                  <div className="absolute inset-0 bg-linear-to-t from-black/20 to-transparent pointer-events-none" />
-                </div>
               </div>
 
               {/* THANH ĐIỀU HƯỚNG DƯỚI ĐÁY: PHÂN TRANG DOTS VÀ NÚT NEXT/PREV */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 pt-8 border-t border-slate-200/60 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 pt-8 border-t border-white/15">
                 {/* Các dấu chấm chỉ số slide (Dots indicator) */}
-                <div className="flex gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-full shadow-inner">
+                <div className="flex gap-2 bg-white/10 border border-white/15 p-1.5 rounded-full shadow-inner">
                   {blogs.slice(0, 6).map((_, index) => (
                     <button
                       key={index}
                       type="button"
                       onClick={() => setHeroSlide(index)}
                       className={`h-2 rounded-full transition-all duration-300 ${index === heroSlide
-                        ? "w-6 bg-[#124757] dark:bg-yellow-400"
-                        : "w-2 bg-slate-300 dark:bg-slate-600 hover:bg-slate-400"
+                        ? "w-6 bg-yellow-400"
+                        : "w-2 bg-white/30 hover:bg-white/50"
                         }`}
                       aria-label={`Go to slide ${index + 1}`}
                     />
@@ -742,14 +754,14 @@ export const Home = () => {
                   <button
                     type="button"
                     onClick={() => setHeroSlide((prev) => (prev === 0 ? blogs.length - 1 : prev - 1))}
-                    className="w-11 h-11 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center transition-all shadow-sm active:scale-95"
+                    className="w-11 h-11 rounded-xl bg-white/10 text-white hover:bg-yellow-400 hover:text-[#124757] border border-white/20 flex items-center justify-center transition-all shadow-sm active:scale-95"
                   >
                     <span className="material-symbols-outlined font-bold">chevron_left</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setHeroSlide((prev) => (prev === blogs.length - 1 ? 0 : prev + 1))}
-                    className="w-11 h-11 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center transition-all shadow-sm active:scale-95"
+                    className="w-11 h-11 rounded-xl bg-white/10 text-white hover:bg-yellow-400 hover:text-[#124757] border border-white/20 flex items-center justify-center transition-all shadow-sm active:scale-95"
                   >
                     <span className="material-symbols-outlined font-bold">chevron_right</span>
                   </button>
@@ -861,14 +873,19 @@ export const Home = () => {
 
       {/* ===== Testimonials Section ===== */}
       {reviews.length > 0 && (
-        <section className="py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden">
-          <div className="max-w-5xl mx-auto px-6 md:px-12 flex flex-col items-center">
+        <section
+          className="relative py-24 bg-cover bg-center transition-colors duration-300 select-none overflow-hidden"
+          style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/feedback.jpg')" }}
+        >
+          {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
+          <div className="absolute inset-0 bg-[#0a2129]/75"></div>
+          <div className="relative z-10 max-w-5xl mx-auto px-6 md:px-12 flex flex-col items-center">
             {/* Khối tiêu đề căn giữa đồng bộ */}
             <div className="text-center mb-16 space-y-4">
-              <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+              <p className="text-sm font-bold uppercase tracking-widest text-yellow-400">
                 {lang === "VN" ? "Đánh giá từ hành khách" : "Passenger Reviews"}
               </p>
-              <h2 className="text-4xl md:text-5xl lg:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+              <h2 className="text-4xl md:text-5xl lg:text-5xl font-headline font-bold text-white">
                 {lang === "VN" ? "Tiếng nói từ những hành khách của chúng tôi" : "Voices Of Our Passengers"}
               </h2>
             </div>
