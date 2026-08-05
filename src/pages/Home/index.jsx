@@ -13,14 +13,13 @@ import { ImageWithFallback } from "../../components/ImageWithFallback";
 import { ScrollBoat } from "../../components/ScrollBoat";
 import { RevealOnScroll } from "../../components/RevealOnScroll";
 
-const heroVideo = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/Ng%E1%BA%AFm%20C%E1%BA%A3nh%20Th%C3%A0nh%20Ph%E1%BB%91%20Tr%C3%AAn%20S%C3%B4ng%20-%20SAIGON%20WATER%20BUS%20B%E1%BA%A0CH%20%C4%90%E1%BA%B0NG%202021%20l%204K%20Live%20Wallpaper%20-%20N%C6%A1i%20M%C3%ACnh%20S%E1%BB%91ng.mp4";
-
 import {
   appImages,
   COMPANY_ADDRESS_EN,
   COMPANY_ADDRESS_VN,
   COMPANY_EMAIL,
   COMPANY_HOTLINE,
+  heroVideo,
 } from "../../data/homeData";
 
 
@@ -697,7 +696,7 @@ export const Home = () => {
                 <div className="max-w-xl w-full bg-white/10 backdrop-blur-xl border border-white/15 rounded-4xl p-8 md:p-10 shadow-2xl space-y-6 animate-fade-in duration-500">
                   <div className="space-y-3">
                     <div className="flex items-center gap-3 text-xs font-bold text-white/60">
-                      <span className="inline-flex items-center gap-1 bg-yellow-400/15 text-yellow-300 px-2.5 py-1 rounded-md uppercase tracking-wider text-[10px] border border-yellow-400/20">
+                      <span className="inline-flex items-center gap-1 text-yellow-300 uppercase tracking-wider text-[10px]">
                         {labelBlogCategory(blogs[heroSlide].category, lang)}
                       </span>
                       <span>•</span>

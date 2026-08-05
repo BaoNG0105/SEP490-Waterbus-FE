@@ -131,68 +131,58 @@ export const Profile = () => {
             </div>
 
             <div className="px-6 sm:px-10 pb-8 relative">
-              <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 -mt-16 sm:-mt-20 relative z-20">
-                <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 text-center sm:text-left">
+              <div className="flex flex-col items-center text-center -mt-16 sm:-mt-20 relative z-20">
+                <div className="relative shrink-0">
                   <UserAvatar
                     avatarUrl={profileData.avatarUrl}
                     alt="Avatar"
-                    className="w-32 h-32 rounded-4xl border-4 border-white dark:border-slate-800 overflow-hidden shadow-lg shrink-0"
+                    className="w-32 h-32 rounded-4xl border-4 border-white dark:border-slate-800 overflow-hidden shadow-lg"
                     iconClassName="w-16 h-16"
                   />
-                  <div className="pb-2">
-                    <h1 className="text-2xl sm:text-3xl font-black font-headline text-white leading-tight">
-                      {profileData.fullName}
-                    </h1>
-                    <p className="text-white  font-medium text-sm mt-1">
-                      {profileData.phoneNumber} {profileData.email ? `• ${profileData.email}` : ""}
-                    </p>
-                    <div className="flex items-center gap-2 justify-center sm:justify-start mt-2">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-200">
-                        <span className="material-symbols-outlined text-[14px]">verified</span>
-                        {lang === "VN" ? "Đã xác thực" : "Verified"}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-bold border border-indigo-200">
-                        {profileData.roleName}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 w-full sm:w-auto pb-2">
                   <button
                     onClick={() => navigate("/profile/edit")}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-yellow-400 text-slate-900 font-bold text-xs uppercase tracking-widest hover:brightness-110 transition-all shadow-md"
+                    title={lang === "VN" ? "Chỉnh sửa" : "Edit Profile"}
+                    aria-label={lang === "VN" ? "Chỉnh sửa" : "Edit Profile"}
+                    className="absolute -bottom-1 -right-1 flex items-center justify-center w-10 h-10 rounded-full bg-yellow-400 text-slate-900 border-4 border-white dark:border-slate-800 shadow-md hover:brightness-110 transition-all"
                   >
-                    <span className="material-symbols-outlined text-base">edit</span>
-                    {lang === "VN" ? "Chỉnh sửa" : "Edit Profile"}
+                    <span className="material-symbols-outlined text-lg">edit</span>
                   </button>
                 </div>
-              </div>
 
-              <div className="mt-10 pt-8 border-t border-slate-100 dark:border-slate-700">
-                <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-[#124757] via-[#0f3d49] to-[#0a2830] dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 p-6 sm:p-8 shadow-lg border border-[#124757]/20 dark:border-slate-700">
-                  <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6">
-                    <div className="flex items-center gap-4 sm:gap-5">
-                      <div>
-                        <p className="text-xs text-white/60 font-bold uppercase tracking-widest mb-1.5">{lang === "VN" ? "Điểm tích lũy hiện có" : "Reward Points Balance"}</p>
-                        <div className="flex items-baseline gap-2">
-                          <h3 className="text-5xl sm:text-6xl font-black text-yellow-400 leading-none tracking-tight [text-shadow:0_0_24px_rgba(250,204,21,0.35)]">
-                            {pointsData.pointBalance.toLocaleString()}
-                          </h3>
-                          <span className="text-sm font-bold text-white/50 uppercase tracking-wide">{lang === "VN" ? "điểm" : "pts"}</span>
-                        </div>
-                      </div>
+                <div className="mt-4">
+                  <h1 className="text-2xl sm:text-3xl font-black font-headline text-slate-900 dark:text-white leading-tight">
+                    {profileData.fullName}
+                  </h1>
+                  <p className="text-slate-500 dark:text-slate-300 font-medium text-sm mt-1">
+                    {profileData.phoneNumber} {profileData.email ? `• ${profileData.email}` : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="max-w-4xl mx-auto mb-8">
+            <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-[#124757] via-[#0f3d49] to-[#0a2830] dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 p-6 sm:p-8 shadow-xl border border-[#124757]/20 dark:border-slate-700">
+              <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6">
+                <div className="flex items-center gap-4 sm:gap-5">
+                  <div>
+                    <p className="text-xs text-white/60 font-bold uppercase tracking-widest mb-1.5">{lang === "VN" ? "Điểm tích lũy hiện có" : "Reward Points Balance"}</p>
+                    <div className="flex items-baseline gap-2">
+                      <h3 className="text-5xl sm:text-6xl font-black text-yellow-400 leading-none tracking-tight [text-shadow:0_0_24px_rgba(250,204,21,0.35)]">
+                        {pointsData.pointBalance.toLocaleString()}
+                      </h3>
+                      <span className="text-sm font-bold text-white/50 uppercase tracking-wide">{lang === "VN" ? "điểm" : "pts"}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowPointsModal(true)}
-                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-widest border border-white/20 transition-all"
-                    >
-                      <span className="material-symbols-outlined text-base">history</span>
-                      {lang === "VN" ? "Xem lịch sử" : "View History"}
-                    </button>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPointsModal(true)}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-widest border border-white/20 transition-all"
+                >
+                  <span className="material-symbols-outlined text-base">history</span>
+                  {lang === "VN" ? "Xem lịch sử" : "View History"}
+                </button>
               </div>
             </div>
           </div>

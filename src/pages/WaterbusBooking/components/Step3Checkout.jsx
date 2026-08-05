@@ -907,7 +907,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
             {lang === "VN" ? "Thông tin hành khách" : "Passenger Informations"}
           </h3>
 
-          <div className="max-h-[500px] space-y-5 overflow-y-auto pr-2 custom-scrollbar">
+          <div className="max-h-125 space-y-5 overflow-y-auto pr-2 custom-scrollbar">
             {passengers.map((passenger, index) => (
               <div key={index} className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
 
@@ -1129,7 +1129,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-100 bg-slate-50/90 p-4 dark:border-slate-700 dark:bg-slate-900/50">
             <div className="mb-2 flex items-center justify-between">
-              <span className="rounded-md bg-[#124757]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-[#124757] dark:text-yellow-400">
                 {isLoopRoute
                   ? (lang === "VN" ? "Chuyến tham quan" : "Sightseeing")
                   : (lang === "VN" ? "Chiều đi" : "Outbound")}
@@ -1171,7 +1171,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
           {isRoundTrip && (
             <div className="rounded-2xl border border-slate-100 bg-slate-50/90 p-4 dark:border-slate-700 dark:bg-slate-900/50">
               <div className="mb-2 flex items-center justify-between">
-                <span className="rounded-md bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-[#124757] dark:text-yellow-400">
                   {lang === "VN" ? "Chiều về" : "Return"}
                 </span>
                 <span className="text-[11px] font-medium text-slate-400">{returnDate || "—"}</span>
@@ -1533,9 +1533,6 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
               <div>
                 <p className="text-[11px] font-medium text-slate-400">
                   {lang === "VN" ? "Tổng tiền thanh toán" : "Amount to pay"}
-                </p>
-                <p className="text-[10px] text-slate-400">
-                  {lang === "VN" ? "Ước tính trước PayOS" : "Estimate before PayOS"}
                 </p>
               </div>
               <p className="font-headline text-2xl font-black tabular-nums text-[#124757] dark:text-yellow-400">

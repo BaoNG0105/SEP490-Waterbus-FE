@@ -27,20 +27,20 @@ const normalizeBooking = (item) => ({
 });
 
 const STATUS_STYLES = {
-  pendingpayment: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
-  confirmed: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
-  completed: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20",
-  cancelled: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600",
-  expired: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
-  refunded: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
-  pendingquote: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20",
-  quoted: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
+  pendingpayment: "text-amber-700 dark:text-amber-300",
+  confirmed: "text-emerald-700 dark:text-emerald-300",
+  completed: "text-sky-700 dark:text-sky-300",
+  cancelled: "text-slate-500 dark:text-slate-400",
+  expired: "text-rose-600 dark:text-rose-300",
+  refunded: "text-teal-700 dark:text-teal-300",
+  pendingquote: "text-violet-700 dark:text-violet-300",
+  quoted: "text-indigo-700 dark:text-indigo-300",
 };
 
 const getStatusClasses = (status) => {
   const key = String(status || "").toLowerCase().replace(/[\s_-]/g, "");
   return STATUS_STYLES[key]
-    || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600";
+    || "text-slate-500 dark:text-slate-400";
 };
 
 const STATUS_LABELS = {
@@ -104,6 +104,7 @@ export function BookingListPage() {
   const [allBookings, setAllBookings] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [sortOrder, setSortOrder] = useState("newest");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [pendingReviews, setPendingReviews] = useState([]);
@@ -203,12 +204,20 @@ export function BookingListPage() {
     return ["All", ...distinct];
   }, [bookingsForTab]);
 
-  const filteredBookings = useMemo(() => bookingsForTab.filter((booking) => {
-    const searchValue = searchTerm.toLowerCase();
-    const matchesSearch = booking.bookingCode.toLowerCase().includes(searchValue);
-    const matchesStatus = statusFilter === "All" || booking.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  }), [bookingsForTab, searchTerm, statusFilter]);
+  const filteredBookings = useMemo(() => {
+    const filtered = bookingsForTab.filter((booking) => {
+      const searchValue = searchTerm.toLowerCase();
+      const matchesSearch = booking.bookingCode.toLowerCase().includes(searchValue);
+      const matchesStatus = statusFilter === "All" || booking.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+    const sorted = [...filtered].sort((a, b) => {
+      const aMs = Date.parse(a.bookedAt) || 0;
+      const bMs = Date.parse(b.bookedAt) || 0;
+      return sortOrder === "oldest" ? aMs - bMs : bMs - aMs;
+    });
+    return sorted;
+  }, [bookingsForTab, searchTerm, statusFilter, sortOrder]);
 
   const hasFilters = searchTerm || statusFilter !== "All";
   const emptyMessage = bookingsForTab.length === 0
@@ -279,7 +288,7 @@ export function BookingListPage() {
           </div>
 
           <div className="space-y-4 p-6 md:p-8">
-            <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+            <div className="grid gap-3 md:grid-cols-[1fr_200px_200px]">
               <div className="relative">
                 <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-400">search</span>
                 <input
@@ -301,6 +310,14 @@ export function BookingListPage() {
                       : getStatusLabel(status, lang)}
                   </option>
                 ))}
+              </select>
+              <select
+                value={sortOrder}
+                onChange={(event) => setSortOrder(event.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-headline font-black uppercase text-[#124757] outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+              >
+                <option value="newest">{lang === "VN" ? "Mới nhất" : "Newest first"}</option>
+                <option value="oldest">{lang === "VN" ? "Cũ nhất" : "Oldest first"}</option>
               </select>
             </div>
 
@@ -413,7 +430,7 @@ export function BookingListPage() {
                       <span className="font-headline text-lg font-black text-[#124757] dark:text-white">
                         {booking.bookingCode}
                       </span>
-                      <span className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.status)}`}>
+                      <span className={`text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.status)}`}>
                         {getStatusLabel(booking.status, lang)}
                       </span>
                     </div>

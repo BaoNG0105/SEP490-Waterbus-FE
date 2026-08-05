@@ -100,14 +100,14 @@ const ROUTE_TYPE_TO_KIND = {
   SightseeingLoop: "Sightseeing",
 };
 
-const kindBadgeClass = (kind) => {
+const kindTextClass = (kind) => {
   if (kind === "Sightseeing") {
-    return "bg-violet-100 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:ring-violet-400/30";
+    return "text-violet-700 dark:text-violet-300";
   }
   if (kind === "Bus") {
-    return "bg-teal-100 text-teal-700 ring-1 ring-teal-200 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-400/30";
+    return "text-teal-700 dark:text-teal-300";
   }
-  return "bg-slate-100 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-400/20";
+  return "text-slate-600 dark:text-slate-300";
 };
 
 const formatDurationLabel = (mins, lang) => {
@@ -508,8 +508,8 @@ export function Schedule() {
                         ? (lang === "VN" ? `Trễ ${delayMins} phút` : `Delayed ${delayMins} min`)
                         : (lang === "VN" ? "Đúng giờ" : "On time");
                       const statusClass = isDelayed
-                        ? "bg-amber-100 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/30"
-                        : "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30";
+                        ? "text-amber-700 dark:text-amber-300"
+                        : "text-emerald-700 dark:text-emerald-300";
 
                       const tripKey = String(trip.tripId || trip.tripCode || `${fromLabel}-${viewTime}`);
                       const stops = sortedStops(trip);
@@ -582,7 +582,7 @@ export function Schedule() {
                               </span>
                             </td>
                             <td className="px-4 py-5">
-                              <span className={`inline-flex rounded-md px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide ${kindBadgeClass(kind)}`}>
+                              <span className={`text-[11px] font-bold uppercase tracking-wide ${kindTextClass(kind)}`}>
                                 {kind || "—"}
                               </span>
                             </td>
@@ -609,7 +609,7 @@ export function Schedule() {
                               {boatLabel}
                             </td>
                             <td className="px-4 py-5">
-                              <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-headline font-black uppercase tracking-wide ${statusClass}`}>
+                              <span className={`whitespace-nowrap text-[11px] font-headline font-black uppercase tracking-wide ${statusClass}`}>
                                 {statusLabel}
                               </span>
                             </td>
@@ -632,7 +632,7 @@ export function Schedule() {
                                       {lang === "VN" ? "Lộ trình chi tiết" : "Full itinerary"}
                                     </p>
                                     {durationLabel ? (
-                                      <span className="inline-flex rounded-full bg-teal-50 px-3 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-teal-700 ring-1 ring-teal-200 dark:bg-[#124757]/40 dark:text-teal-200 dark:ring-teal-400/20">
+                                      <span className="text-[10px] font-headline font-black uppercase tracking-wide text-teal-700 dark:text-teal-200">
                                         {lang === "VN" ? `Thời gian hành trình: ${durationLabel}` : `Trip duration: ${durationLabel}`}
                                       </span>
                                     ) : null}
@@ -688,12 +688,12 @@ export function Schedule() {
                                               <td className={`px-3 py-2 font-bold ${highlighted ? "text-[#124757] dark:text-[#FFD100]" : "text-slate-800 dark:text-white"}`}>
                                                 {stopStationName(stop) || "—"}
                                                 {isBoarding ? (
-                                                  <span className="ml-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30">
+                                                  <span className="ml-2 text-[9px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                                                     {lang === "VN" ? "Lên" : "Board"}
                                                   </span>
                                                 ) : null}
                                                 {isAlighting ? (
-                                                  <span className="ml-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/30">
+                                                  <span className="ml-2 text-[9px] font-black uppercase tracking-wide text-amber-700 dark:text-amber-300">
                                                     {lang === "VN" ? "Xuống" : "Alight"}
                                                   </span>
                                                 ) : null}
@@ -705,7 +705,7 @@ export function Schedule() {
                                                 {isLast ? "—" : formatClock(pickScheduleBoardDeparture(stop))}
                                               </td>
                                               <td className="px-3 py-2">
-                                                <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-[9px] font-headline font-black uppercase tracking-wide ${stopStatusClass}`}>
+                                                <span className={`whitespace-nowrap text-[9px] font-headline font-black uppercase tracking-wide ${stopStatusClass}`}>
                                                   {stopStatusLabel}
                                                 </span>
                                               </td>
