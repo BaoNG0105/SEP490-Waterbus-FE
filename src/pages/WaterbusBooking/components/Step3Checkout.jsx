@@ -97,7 +97,7 @@ const formatHoldDeadline = (value) => {
   return date.toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" });
 };
 
-export default function Step3Checkout({ bookingData, onBack, onExpire, onBookingCreated, hideUseAccountInfo = false }) {
+export default function Step3Checkout({ bookingData, onBack, onExpire, onBookingCreated }) {
   const { lang } = useApp();
   const navigate = useNavigate();
   const {
@@ -855,19 +855,17 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
             <h3 className="text-xl font-headline font-bold text-[#124757] dark:text-white">
               {lang === "VN" ? "Thông tin liên hệ (Người đặt)" : "Contact Details"}
             </h3>
-            {!hideUseAccountInfo && (
-              <button
-                type="button"
-                onClick={handleUseAccountInfo}
-                disabled={isLoadingAccountInfo}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
-              >
-                <span className={`material-symbols-outlined text-sm ${isLoadingAccountInfo ? "animate-spin" : ""}`}>
-                  {isLoadingAccountInfo ? "progress_activity" : "person"}
-                </span>
-                {lang === "VN" ? "Dùng thông tin tài khoản" : "Use account info"}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleUseAccountInfo}
+              disabled={isLoadingAccountInfo}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/20 dark:border-yellow-400/20 bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:bg-[#124757]/10 disabled:opacity-50"
+            >
+              <span className={`material-symbols-outlined text-sm ${isLoadingAccountInfo ? "animate-spin" : ""}`}>
+                {isLoadingAccountInfo ? "progress_activity" : "person"}
+              </span>
+              {lang === "VN" ? "Dùng thông tin tài khoản" : "Use account info"}
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

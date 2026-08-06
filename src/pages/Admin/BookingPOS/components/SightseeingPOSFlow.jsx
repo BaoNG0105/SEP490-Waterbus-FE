@@ -6,7 +6,7 @@ import { releaseHeldBookingSeats } from "../../../../utils/bookingWizardGuard";
 
 import Step1SearchSightseeing from "../../../WatersightseeingBooking/components/Step1SearchSightseeing";
 import Step2SelectTripAndSeats from "../../../WaterbusBooking/components/Step2SelectTripAndSeats";
-import Step3Checkout from "../../../WaterbusBooking/components/Step3Checkout";
+import Step3CounterCheckout from "./Step3CounterCheckout";
 import { PosStepStrip } from "./PosStepStrip";
 import { OrderSummaryRail } from "./OrderSummaryRail";
 
@@ -45,7 +45,6 @@ export function SightseeingPOSFlow({ active }) {
     clearBookingDraft(DRAFT_KEY);
     setBookingData(initialBookingData());
     setCurrentStep(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingData]);
 
   return (
@@ -79,7 +78,7 @@ export function SightseeingPOSFlow({ active }) {
           />
         )}
         {currentStep === 3 && (
-          <Step3Checkout
+          <Step3CounterCheckout
             bookingData={bookingData}
             onBack={() => setCurrentStep(2)}
             onExpire={() => {
@@ -87,7 +86,7 @@ export function SightseeingPOSFlow({ active }) {
               setCurrentStep(1);
             }}
             onBookingCreated={() => clearBookingDraft(DRAFT_KEY)}
-            hideUseAccountInfo
+            onSaleCompleted={handleNewSale}
           />
         )}
       </div>
