@@ -712,8 +712,8 @@ export default function Step2SelectTripAndSeats({
         setSeatMapByLeg((prev) => ({ ...prev, departure: refreshed?.seats || [] }));
         setSeatMapError(
           lang === "VN"
-            ? `Ghế ${departureFailed.join(", ")} (chiều đi) vừa được giữ trên chặng giao nhau hoặc bởi người khác. Vui lòng chọn lại.`
-            : `Seat(s) ${departureFailed.join(", ")} (departure) were held on an overlapping segment or by someone else. Please reselect.`
+            ? `Ghế ${departureFailed.join(", ")} (chiều đi) vừa được đặt bởi người khác. Vui lòng chọn lại.`
+            : `Seat(s) ${departureFailed.join(", ")} (departure) were held by someone else. Please reselect.`
         );
         return;
       }
@@ -744,8 +744,8 @@ export default function Step2SelectTripAndSeats({
           setSeatMapByLeg((prev) => ({ ...prev, return: refreshed?.seats || [] }));
           setSeatMapError(
             lang === "VN"
-              ? `Ghế ${returnFailed.join(", ")} (chiều về) vừa được giữ trên chặng giao nhau hoặc bởi người khác. Vui lòng chọn lại.`
-              : `Seat(s) ${returnFailed.join(", ")} (return) were held on an overlapping segment or by someone else. Please reselect.`
+              ? `Ghế ${returnFailed.join(", ")} (chiều về) vừa được đặt bởi người khác. Vui lòng chọn lại.`
+              : `Seat(s) ${returnFailed.join(", ")} (return) were held by someone else. Please reselect.`
           );
           return;
         }

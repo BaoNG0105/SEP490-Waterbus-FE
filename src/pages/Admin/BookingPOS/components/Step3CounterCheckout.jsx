@@ -91,7 +91,6 @@ const formatHoldDeadline = (value) => {
 
 const PAYMENT_METHODS = [
   { id: "Cash", labelVn: "Tiền mặt", labelEn: "Cash", icon: "payments" },
-  { id: "BankTransfer", labelVn: "Chuyển khoản", labelEn: "Bank transfer", icon: "account_balance" },
   { id: "PayOS", labelVn: "PayOS (QR)", labelEn: "PayOS (QR)", icon: "qr_code_2" },
 ];
 
@@ -100,7 +99,7 @@ const PAYMENT_METHODS = [
  * POST /api/bookings + /api/payments. Khác Step3Checkout (khách tự đặt) ở 3 điểm:
  *  - Thông tin liên hệ tra cứu/nhập tay cho KHÁCH, không kéo từ tài khoản đang đăng nhập (nhân viên).
  *  - Không có mã khuyến mãi tại quầy; điểm tích lũy dùng/tích theo khách đã tra cứu (không phải nhân viên).
- *  - Chọn phương thức thu tiền tại quầy: Cash / BankTransfer / PayOS.
+ *  - Chọn phương thức thu tiền tại quầy: Cash / PayOS.
  * Toàn bộ quy tắc giá vé/tuổi/bảo hiểm tái sử dụng đúng service/util của luồng khách hàng.
  */
 export default function Step3CounterCheckout({ bookingData, onBack, onExpire, onBookingCreated, onSaleCompleted }) {
@@ -675,7 +674,6 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
               <div className="min-w-0">
                 <p className="flex items-center gap-1.5 text-sm font-black text-emerald-800 dark:text-emerald-300">
-                  <span className="material-symbols-outlined text-base">verified</span>
                   {linkedCustomer.fullName || "--"}
                 </p>
                 <p className="mt-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
@@ -1188,7 +1186,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
         {/* Phương thức thu tiền */}
         <div className="space-y-2">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{lang === "VN" ? "Phương thức thu tiền" : "Payment method"}</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {PAYMENT_METHODS.map((method) => (
               <button
                 key={method.id}
@@ -1224,9 +1222,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
           >
             {isSubmitting ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            ) : (
-              <span className="material-symbols-outlined text-lg">point_of_sale</span>
-            )}
+            ) : null}
             <span>
               {isSubmitting
                 ? (lang === "VN" ? "Đang xử lý..." : "Processing...")
