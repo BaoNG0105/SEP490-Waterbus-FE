@@ -93,7 +93,7 @@ export const Dashboard = () => {
       descVnStaff: "Xem vị trí tàu realtime và ghi nhận sự cố trên tuyến.",
       descEnStaff: "View live boat GPS and log on-route incidents.",
       color: "from-blue-500/10 to-indigo-500/10 text-blue-600 dark:text-blue-400",
-      roles: ["ADMIN", "MANAGER", "STAFF"],
+      roles: ["ADMIN"],
     },
     {
       path: "/admin/incidents",
