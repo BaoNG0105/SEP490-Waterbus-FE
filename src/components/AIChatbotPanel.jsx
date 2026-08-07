@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { chatWithAssistant } from "../api/assistantApi";
-import logo from "../assets/logo-1.png";
+import { logoUrl as logo } from "../data/homeData";
 
 // Style các thẻ markdown cho vừa khung bong bóng chat (không dùng @tailwindcss/typography).
 const markdownComponents = {

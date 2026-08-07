@@ -108,13 +108,12 @@ export const Home = () => {
     loadStationsData();
   }, []);
 
-  // useEffect tự động gọi API lấy Blog khi vào trang Home
+  // useEffect tự động gọi API lấy Blog (Chế độ công khai) khi vào trang Home
   useEffect(() => {
     const loadBlogs = async () => {
       try {
         setIsLoadingBlogs(true);
         const data = await fetchPublishedBlogPosts();
-        // API đã trả về đúng các bài viết mới nhất (theo PublishedAt), nên ta chỉ việc set state
         setBlogs(data || []);
       } catch (error) {
         console.error("Lỗi khi tải danh sách blog:", error);
@@ -260,8 +259,14 @@ export const Home = () => {
         </div>
 
         {/* Mũi tên chuột cuộn xuống — neo đáy hero, biến mất khi scroll */}
-        <a
-          href="/#services-section"
+        <button
+          type="button"
+          onClick={() =>
+            document.getElementById("services-section")?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            })
+          }
           aria-label={lang === "VN" ? "Khám phá dịch vụ" : "Explore Services"}
           aria-hidden={!showScrollHint}
           tabIndex={showScrollHint ? 0 : -1}
@@ -276,7 +281,7 @@ export const Home = () => {
           <span className="material-symbols-outlined text-xl">
             keyboard_arrow_down
           </span>
-        </a>
+        </button>
       </section>
 
       {/* ===== MiSSON SECTION ===== */}
@@ -348,6 +353,7 @@ export const Home = () => {
       >
         {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
         <div className="absolute inset-0 bg-[#0a2129]/55"></div>
+        <ScrollBoat variant="sightseeing" reverse />
 
         <div className="relative max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
@@ -602,24 +608,36 @@ export const Home = () => {
       </section>
 
       {/* ===== PROMOTION SECTIONS ===== */}
-      <section className="relative py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden">
+      <section className="relative py-24 transition-colors duration-300 select-none overflow-hidden">
+        {/* Video nền — tắt tiếng, tự phát, chạy liên tục */}
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/video-river.mp4"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        {/* Lớp phủ tối để chữ luôn nổi bật trên video nền */}
+        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
+        <ScrollBoat variant="top" reverse />
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-400">
               {lang === "VN" ? "Chương trình ưu đãi" : "Exclusive Offers"}
             </p>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white">
               {lang === "VN" ? "Đặc quyền dành riêng cho hành khách" : "Exclusive Privileges For Our Passengers"}
             </h2>
           </div>
           {/* Grid danh sách các thẻ Khuyến mại (dữ liệu thật từ API getPublicPromotions) */}
           {isLoadingPromotions ? (
             <div className="flex justify-center items-center py-20">
-              <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
+              <div className="w-10 h-10 border-4 border-white/20 border-t-yellow-400 rounded-full animate-spin"></div>
             </div>
           ) : promotions.length === 0 ? (
-            <div className="text-center py-10 text-slate-400 font-medium">
+            <div className="text-center py-10 text-white/60 font-medium">
               {lang === "VN" ? "Hiện chưa có khuyến mãi công khai." : "No public promotions right now."}
             </div>
           ) : (

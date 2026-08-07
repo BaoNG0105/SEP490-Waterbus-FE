@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import logo from "../assets/logo-1.png";
+import { logoUrl as logo } from "../data/homeData";
 
 const FacebookIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">

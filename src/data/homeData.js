@@ -7,7 +7,10 @@ export const COMPANY_ADDRESS_VN =
 export const COMPANY_ADDRESS_EN =
     '7 D1 Street, Long Thanh My, Tang Nhon Phu, Ho Chi Minh City, Vietnam';
 
-// VIDEO NỀN HERO TRANG CHỦ
+// LOGO
+export const logoUrl = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/logo-2.png";
+
+// VIDEO HERO TRANG CHỦ
 export const heroVideo = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/Ng%E1%BA%AFm%20C%E1%BA%A3nh%20Th%C3%A0nh%20Ph%E1%BB%91%20Tr%C3%AAn%20S%C3%B4ng%20-%20SAIGON%20WATER%20BUS%20B%E1%BA%A0CH%20%C4%90%E1%BA%B0NG%202021%20l%204K%20Live%20Wallpaper%20-%20N%C6%A1i%20M%C3%ACnh%20S%E1%BB%91ng.mp4";
 
 // DỮ LIỆU HƯỚNG DẪN ĐẶT VÉ

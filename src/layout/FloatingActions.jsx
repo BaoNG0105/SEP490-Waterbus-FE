@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { AIChatbotPanel } from "../components/AIChatbotPanel";
-import logo from "../assets/logo-1.png";
+import { logoUrl as logo } from "../data/homeData";
 
 export const FloatingActions = () => {
   // Nhúng Context để hỗ trợ đa ngôn ngữ cho các Tooltip (tiêu đề khi trỏ chuột vào)

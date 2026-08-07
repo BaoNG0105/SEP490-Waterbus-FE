@@ -5,9 +5,8 @@ import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../redux/authSlice";
 import { notify } from "../utils/swalToast";
 
-// Import file ảnh logo từ thư mục assets
-import logo from "../assets/logo-1.png";
 import { UserAvatar } from "../components/UserAvatar";
+import { logoUrl as logo } from "../data/homeData";
 
 export const Header = ({ isNoticeVisible }) => {
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
