@@ -27,6 +27,7 @@ import {
   resolveIncidentOnboardCount,
 } from "../../../services/incidentService";
 import { notify, showToast } from "../../../utils/swalToast";
+import { fetchOperationsSchedule, toOperationsScheduleDate } from "../../../services/operationsService";
 
 const pickTripPassengerHint = (trip) => {
   if (!trip || typeof trip !== "object") return null;
@@ -276,11 +277,16 @@ export function IncidentManagement({
   const enrichedIncidents = useMemo(
     () => incidents.map((incident) => {
       const boat = boatById.get(String(incident.boatId || ""));
-      if (!boat) return incident;
+      const rescueBoat = boatById.get(String(incident.rescueBoatId || ""));
+      const replacementBoat = boatById.get(String(incident.replacementBoatId || ""));
       return {
         ...incident,
-        boatCode: incident.boatCode || boat.boatCode || boat.code || "",
-        boatName: incident.boatName || boat.boatName || boat.name || "",
+        boatCode: incident.boatCode || boat?.boatCode || boat?.code || "",
+        boatName: incident.boatName || boat?.boatName || boat?.name || "",
+        rescueBoatCode: incident.rescueBoatCode || rescueBoat?.boatCode || rescueBoat?.code || "",
+        rescueBoatName: incident.rescueBoatName || rescueBoat?.boatName || rescueBoat?.name || "",
+        replacementBoatCode: incident.replacementBoatCode || replacementBoat?.boatCode || replacementBoat?.code || "",
+        replacementBoatName: incident.replacementBoatName || replacementBoat?.boatName || replacementBoat?.name || "",
       };
     }),
     [incidents, boatById],
@@ -289,11 +295,16 @@ export function IncidentManagement({
   const enrichedHistory = useMemo(
     () => historyIncidents.map((incident) => {
       const boat = boatById.get(String(incident.boatId || ""));
-      if (!boat) return incident;
+      const rescueBoat = boatById.get(String(incident.rescueBoatId || ""));
+      const replacementBoat = boatById.get(String(incident.replacementBoatId || ""));
       return {
         ...incident,
-        boatCode: incident.boatCode || boat.boatCode || boat.code || "",
-        boatName: incident.boatName || boat.boatName || boat.name || "",
+        boatCode: incident.boatCode || boat?.boatCode || boat?.code || "",
+        boatName: incident.boatName || boat?.boatName || boat?.name || "",
+        rescueBoatCode: incident.rescueBoatCode || rescueBoat?.boatCode || rescueBoat?.code || "",
+        rescueBoatName: incident.rescueBoatName || rescueBoat?.boatName || rescueBoat?.name || "",
+        replacementBoatCode: incident.replacementBoatCode || replacementBoat?.boatCode || replacementBoat?.code || "",
+        replacementBoatName: incident.replacementBoatName || replacementBoat?.boatName || replacementBoat?.name || "",
       };
     }),
     [historyIncidents, boatById],
@@ -483,12 +494,25 @@ export function IncidentManagement({
     setBusyId(rescueForm.incidentId);
     try {
       const delayRaw = Number(rescueForm.delayMinutes);
+      const lookupBoatCode = (boatId) => {
+        if (!boatId) return null;
+        const boat = (boats || []).find(
+          (item) => String(item?.boatId ?? item?.id) === String(boatId),
+        );
+        return boat?.boatCode ?? boat?.code ?? null;
+      };
+      const includeReplacement = needsReplacementBoat || Boolean(rescueForm.replacementBoatId);
+      const hasRescue = Boolean(rescueForm.rescueBoatId);
+      const rescueBoatCode = lookupBoatCode(rescueForm.rescueBoatId);
+      const replacementBoatCode = includeReplacement
+        ? lookupBoatCode(rescueForm.replacementBoatId)
+        : null;
       await dispatchReplacementBoat(rescueForm.incidentId, {
-        rescueBoatId: rescueForm.rescueBoatId,
-        replacementBoatId: (needsReplacementBoat || rescueForm.replacementBoatId)
-          ? (rescueForm.replacementBoatId || null)
-          : null,
-        delayMinutes: (needsReplacementBoat || rescueForm.replacementBoatId)
+        rescueBoatId: hasRescue ? rescueForm.rescueBoatId : null,
+        rescueBoatCode: hasRescue ? rescueBoatCode : null,
+        replacementBoatId: includeReplacement ? (rescueForm.replacementBoatId || null) : null,
+        replacementBoatCode: includeReplacement ? replacementBoatCode : null,
+        delayMinutes: includeReplacement
           ? (Number.isFinite(delayRaw) ? Math.trunc(delayRaw) : 30)
           : 0,
         note: rescueForm.note.trim() || (needsReplacementBoat
@@ -924,27 +948,47 @@ export function IncidentManagement({
                           </p>
                         </div>
                         {listTab === "open" ? (
-                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              {lang === "VN" ? "Khách ảnh hưởng" : "Passengers"}
-                            </p>
-                            <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                              {(lang === "VN" ? "Vé" : "Tickets")}: {item.activeTicketCount ?? 0}
-                              {" · "}
-                              {(lang === "VN" ? "Trên tàu" : "Onboard")}: {resolveIncidentOnboardCount(item)}
-                              {" · "}
-                              {(lang === "VN" ? "Chặng sau" : "Later")}: {item.futurePassengerCount ?? 0}
-                            </p>
-                          </div>
+                          <>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                {lang === "VN" ? "Người báo" : "Reporter"}
+                              </p>
+                              <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                {item.reportedByUserName || (item.reportedByUserId ? String(item.reportedByUserId).slice(0, 8) : "—")}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                {lang === "VN" ? "Khách ảnh hưởng" : "Passengers"}
+                              </p>
+                              <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                {(lang === "VN" ? "Vé" : "Tickets")}: {item.activeTicketCount ?? 0}
+                                {" · "}
+                                {(lang === "VN" ? "Trên tàu" : "Onboard")}: {resolveIncidentOnboardCount(item)}
+                                {" · "}
+                                {(lang === "VN" ? "Chặng sau" : "Later")}: {item.futurePassengerCount ?? 0}
+                              </p>
+                            </div>
+                          </>
                         ) : (
-                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:col-span-2 dark:border-slate-700 dark:bg-slate-800">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              {lang === "VN" ? "Ghi chú đóng" : "Resolution note"}
-                            </p>
-                            <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                              {item.resolutionNote || "—"}
-                            </p>
-                          </div>
+                          <>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:col-span-2 dark:border-slate-700 dark:bg-slate-800">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                {lang === "VN" ? "Ghi chú đóng" : "Resolution note"}
+                              </p>
+                              <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                {item.resolutionNote || "—"}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                {lang === "VN" ? "Người đóng" : "Resolved by"}
+                              </p>
+                              <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                {item.resolvedByUserName || (item.resolvedByUserId ? String(item.resolvedByUserId).slice(0, 8) : "—")}
+                              </p>
+                            </div>
+                          </>
                         )}
                       </div>
                     </div>
@@ -1325,6 +1369,7 @@ export function IncidentManagement({
                   <option value="Incident">Incident</option>
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
+                  <option value="Retired">Retired</option>
                 </select>
               </label>
               <label className="block space-y-1.5">
