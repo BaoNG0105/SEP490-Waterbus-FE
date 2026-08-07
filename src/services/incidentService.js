@@ -61,6 +61,10 @@ export const normalizeIncident = (raw) => {
     resolutionNote: pick(raw, ["resolutionNote", "ResolutionNote"], ""),
     managerUserId: pick(raw, ["managerUserId", "assignedManagerId", "manager.id"], ""),
     managerName: pick(raw, ["managerName", "assignedManagerName", "manager.fullName"], ""),
+    reportedByUserId: pick(raw, ["reportedByUserId", "ReportedByUserId"], ""),
+    reportedByUserName: pick(raw, ["reportedByUserName", "ReportedByUserName"], ""),
+    resolvedByUserId: pick(raw, ["resolvedByUserId", "ResolvedByUserId"], ""),
+    resolvedByUserName: pick(raw, ["resolvedByUserName", "ResolvedByUserName"], ""),
     activeTicketCount: Number(pick(raw, ["activeTicketCount", "ActiveTicketCount"], 0)) || 0,
     onboardPassengerCount: (() => {
       const n = Number(pick(raw, [
