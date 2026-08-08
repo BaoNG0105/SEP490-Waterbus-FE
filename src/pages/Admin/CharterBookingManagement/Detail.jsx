@@ -707,7 +707,7 @@ export function AdminCharterBookingDetail() {
       setRouteCandidatesError(
         hasEmptyRouteCandidateLegs(legs)
           ? (beErrorMessage || (lang === "VN"
-            ? "Không có Route GPS nào chứa đủ 2 stationId đúng chiều cho mọi chặng. Kiểm tra stops của HN/HCM…"
+            ? "Không có tuyến GPS nào chứa đủ 2 bến đúng chiều cho mọi chặng. Kiểm tra lại"
             : "No GPS route contains both stationIds (correct order) for every leg. Check route stops."))
           : ""
       );
