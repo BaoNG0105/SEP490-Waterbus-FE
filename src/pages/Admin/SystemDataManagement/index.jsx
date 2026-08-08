@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { FormSelect } from "../../../components/FormSelect";
 import { useApp } from "../../../context/AppContext";
 import {
-  fetchKnowledgeEntriesAdmin,
   changeKnowledgeEntryStatus,
-  removeKnowledgeEntry,
-  labelKnowledgeStatus,
+  fetchKnowledgeEntriesAdmin,
+  fetchKnowledgeEntryMetadata,
   getKnowledgeCategoryLabel,
-  KNOWLEDGE_STATUS,
   KNOWLEDGE_CATEGORY_ORDER,
+  KNOWLEDGE_STATUS,
+  labelKnowledgeStatus,
+  removeKnowledgeEntry,
+  runKnowledgeSearchTest,
 } from "../../../services/knowledgeEntryService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
-import { FormSelect } from "../../../components/FormSelect";
 
 const STATUS_STYLE = {
   [KNOWLEDGE_STATUS.DRAFT]: {
@@ -26,98 +28,146 @@ const STATUS_STYLE = {
   },
 };
 
+const PAGE_SIZE = 8;
+
+const emptyMetadata = {
+  categories: KNOWLEDGE_CATEGORY_ORDER,
+  statuses: [KNOWLEDGE_STATUS.DRAFT, KNOWLEDGE_STATUS.PUBLISHED],
+  maxKeywords: 30,
+  maxKeywordLength: 100,
+  maxContentChars: 4000,
+  maxTotalContentChars: 8000,
+  defaultSearchTake: 3,
+  maxSearchTake: 5,
+};
+
 export function SystemDataManagement() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { user: currentUser } = useSelector((state) => state.auth);
   const canManage = isAdminUser(currentUser);
 
+  const [metadata, setMetadata] = useState(emptyMetadata);
   const [entries, setEntries] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [stats, setStats] = useState({ total: 0, published: 0, draft: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [processingId, setProcessingId] = useState(null);
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
-
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 8;
 
-  const loadEntries = async () => {
-    try {
-      setIsLoading(true);
-      setErrorMsg("");
-      const data = await fetchKnowledgeEntriesAdmin();
-      setEntries(data || []);
-    } catch (error) {
-      console.error("Lỗi khi tải danh sách dữ liệu hệ thống:", error);
-      const status = error?.response?.status;
-      setErrorMsg(
-        status === 403
-          ? (lang === "VN" ? "Chỉ Admin được quản lý dữ liệu hệ thống." : "Only Admin can manage the system data.")
-          : (lang === "VN" ? "Không tải được danh sách mục dữ liệu." : "Failed to load system data entries.")
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [testQuery, setTestQuery] = useState("");
+  const [testResult, setTestResult] = useState(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testError, setTestError] = useState("");
+
+  const categoryOptions = useMemo(() => (
+    metadata.categories || KNOWLEDGE_CATEGORY_ORDER
+  ).map((category) => ({
+    value: category,
+    label: getKnowledgeCategoryLabel(category, lang),
+  })), [lang, metadata.categories]);
+
+  const statusOptions = useMemo(() => (
+    metadata.statuses || [KNOWLEDGE_STATUS.DRAFT, KNOWLEDGE_STATUS.PUBLISHED]
+  ).map((status) => ({
+    value: status,
+    label: labelKnowledgeStatus(status, lang),
+  })), [lang, metadata.statuses]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const startIndex = totalCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const endIndex = Math.min(currentPage * PAGE_SIZE, totalCount);
 
   useEffect(() => {
     if (!canManage) return;
-    loadEntries();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    const loadMetadata = async () => {
+      try {
+        setMetadata(await fetchKnowledgeEntryMetadata());
+      } catch (error) {
+        console.error("Failed to load knowledge metadata:", error);
+      }
+    };
+
+    loadMetadata();
   }, [canManage]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, categoryFilter]);
+  }, [keyword, statusFilter, categoryFilter]);
 
-  const stats = useMemo(() => ({
-    total: entries.length,
-    published: entries.filter((e) => e.status === KNOWLEDGE_STATUS.PUBLISHED).length,
-    draft: entries.filter((e) => e.status === KNOWLEDGE_STATUS.DRAFT).length,
-  }), [entries]);
+  useEffect(() => {
+    if (!canManage) return undefined;
 
-  const filteredEntries = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    return entries
-      .filter((entry) => {
-        const matchesSearch =
-          !term ||
-          (entry.title?.toLowerCase() || "").includes(term) ||
-          (entry.keywords || []).some((k) => k.toLowerCase().includes(term));
-        const matchesStatus = statusFilter === "All" || entry.status === statusFilter;
-        const matchesCategory = categoryFilter === "All" || entry.category === categoryFilter;
-        return matchesSearch && matchesStatus && matchesCategory;
-      })
-      .sort((a, b) => {
-        if (a.category !== b.category) return String(a.category).localeCompare(String(b.category));
-        return (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
-      });
-  }, [entries, searchTerm, statusFilter, categoryFilter]);
+    const timer = setTimeout(async () => {
+      try {
+        setIsLoading(true);
+        setErrorMsg("");
 
-  const totalPages = Math.ceil(filteredEntries.length / ITEMS_PER_PAGE);
-  const currentEntries = filteredEntries.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-  const startIndex = filteredEntries.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
-  const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, filteredEntries.length);
+        const params = {
+          page: currentPage,
+          pageSize: PAGE_SIZE,
+          keyword: keyword.trim() || undefined,
+          status: statusFilter === "All" ? undefined : statusFilter,
+          category: categoryFilter === "All" ? undefined : categoryFilter,
+        };
+
+        const [pageResult, allResult, publishedResult, draftResult] = await Promise.all([
+          fetchKnowledgeEntriesAdmin(params),
+          fetchKnowledgeEntriesAdmin({ page: 1, pageSize: 1 }),
+          fetchKnowledgeEntriesAdmin({ status: KNOWLEDGE_STATUS.PUBLISHED, page: 1, pageSize: 1 }),
+          fetchKnowledgeEntriesAdmin({ status: KNOWLEDGE_STATUS.DRAFT, page: 1, pageSize: 1 }),
+        ]);
+
+        setEntries(pageResult.items || []);
+        setTotalCount(pageResult.totalCount || 0);
+        setStats({
+          total: allResult.totalCount || 0,
+          published: publishedResult.totalCount || 0,
+          draft: draftResult.totalCount || 0,
+        });
+      } catch (error) {
+        console.error("Failed to load knowledge entries:", error);
+        const status = error?.response?.status;
+        setErrorMsg(
+          status === 403
+            ? (lang === "VN" ? "Chỉ quản trị viên được quản lý dữ liệu kiến thức." : "Only Admin can manage knowledge entries.")
+            : (lang === "VN" ? "Không tải được danh sách kiến thức." : "Failed to load knowledge entries.")
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [canManage, categoryFilter, currentPage, keyword, lang, statusFilter]);
 
   if (!canManage) {
     return <Navigate to="/admin" replace />;
   }
 
+  const reloadCurrentPage = async () => {
+    const result = await fetchKnowledgeEntriesAdmin({
+      page: currentPage,
+      pageSize: PAGE_SIZE,
+      keyword: keyword.trim() || undefined,
+      status: statusFilter === "All" ? undefined : statusFilter,
+      category: categoryFilter === "All" ? undefined : categoryFilter,
+    });
+    setEntries(result.items || []);
+    setTotalCount(result.totalCount || 0);
+  };
+
   const getPaginationGroup = () => {
-    let pages = [];
-    if (totalPages <= 5) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else if (currentPage <= 3) {
-      pages = [1, 2, 3, 4, "...", totalPages];
-    } else if (currentPage >= totalPages - 2) {
-      pages = [1, "...", totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-    } else {
-      pages = [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
-    }
-    return pages;
+    if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (currentPage <= 3) return [1, 2, 3, 4, "...", totalPages];
+    if (currentPage >= totalPages - 2) return [1, "...", totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
   };
 
   const handleToggleStatus = async (entry) => {
@@ -127,36 +177,39 @@ export function SystemDataManagement() {
 
     const confirmResult = await notify({
       title: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
-        ? (lang === "VN" ? "Xuất bản mục dữ liệu?" : "Publish this entry?")
-        : (lang === "VN" ? "Hạ về bản nháp?" : "Move to draft?"),
+        ? (lang === "VN" ? "Xuất bản mục kiến thức?" : "Publish this entry?")
+        : (lang === "VN" ? "Chuyển về bản nháp?" : "Move to draft?"),
       html: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
         ? (lang === "VN"
-          ? `Mục <b>${entry.title}</b> sẽ hiển thị công khai trên trang Điều khoản & Chính sách và trợ lý AI có thể sử dụng.`
-          : `Entry <b>${entry.title}</b> will become publicly visible on the Terms & Policy page and usable by the assistant.`)
+          ? `Mục <b>${entry.title}</b> sẽ được chatbot sử dụng ngay.`
+          : `Entry <b>${entry.title}</b> will be available to the chatbot immediately.`)
         : (lang === "VN"
-          ? `Mục <b>${entry.title}</b> sẽ không còn hiển thị công khai và trợ lý AI sẽ ngừng dùng.`
-          : `Entry <b>${entry.title}</b> will no longer be public and the assistant will stop using it.`),
+          ? `Mục <b>${entry.title}</b> sẽ không còn được chatbot sử dụng.`
+          : `Entry <b>${entry.title}</b> will no longer be used by the chatbot.`),
       icon: "question",
       showCancelButton: true,
       confirmButtonText: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
         ? (lang === "VN" ? "Xuất bản" : "Publish")
-        : (lang === "VN" ? "Về nháp" : "Set draft"),
-      cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
+        : (lang === "VN" ? "Chuyển về nháp" : "Set draft"),
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
     });
     if (!confirmResult.isConfirmed) return;
 
     try {
       setProcessingId(entry.knowledgeEntryId);
       await changeKnowledgeEntryStatus(entry.knowledgeEntryId, nextStatus);
-      setEntries((prev) => prev.map((e) => (
-        e.knowledgeEntryId === entry.knowledgeEntryId ? { ...e, status: nextStatus } : e
-      )));
+      await reloadCurrentPage();
+      setStats((prev) => ({
+        ...prev,
+        published: prev.published + (nextStatus === KNOWLEDGE_STATUS.PUBLISHED ? 1 : -1),
+        draft: prev.draft + (nextStatus === KNOWLEDGE_STATUS.DRAFT ? 1 : -1),
+      }));
       notify({
         toast: true,
         icon: "success",
         title: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
           ? (lang === "VN" ? "Đã xuất bản" : "Published")
-          : (lang === "VN" ? "Đã về nháp" : "Moved to draft"),
+          : (lang === "VN" ? "Đã chuyển về bản nháp" : "Moved to draft"),
         showConfirmButton: false,
         timer: 1600,
       });
@@ -173,21 +226,27 @@ export function SystemDataManagement() {
 
   const handleDelete = async (entry) => {
     const confirmResult = await notify({
-      title: lang === "VN" ? "Xóa mục dữ liệu?" : "Delete this entry?",
+      title: lang === "VN" ? "Xóa mục kiến thức?" : "Delete this entry?",
       html: lang === "VN"
-        ? `Mục <b>${entry.title}</b> sẽ bị <b>xóa vĩnh viễn</b> khỏi hệ thống.`
+        ? `Mục <b>${entry.title}</b> sẽ bị <b>xóa vĩnh viễn</b>.`
         : `Entry <b>${entry.title}</b> will be <b>permanently deleted</b>.`,
       icon: "warning",
       tone: "danger",
       showCancelButton: true,
       confirmButtonText: lang === "VN" ? "Xóa" : "Delete",
-      cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
     });
     if (!confirmResult.isConfirmed) return;
 
     try {
       setProcessingId(entry.knowledgeEntryId);
       await removeKnowledgeEntry(entry.knowledgeEntryId);
+      await reloadCurrentPage();
+      setStats((prev) => ({
+        total: Math.max(0, prev.total - 1),
+        published: entry.status === KNOWLEDGE_STATUS.PUBLISHED ? Math.max(0, prev.published - 1) : prev.published,
+        draft: entry.status === KNOWLEDGE_STATUS.DRAFT ? Math.max(0, prev.draft - 1) : prev.draft,
+      }));
       notify({
         toast: true,
         icon: "success",
@@ -195,7 +254,6 @@ export function SystemDataManagement() {
         showConfirmButton: false,
         timer: 1600,
       });
-      await loadEntries();
     } catch (error) {
       notify({
         icon: "error",
@@ -207,25 +265,41 @@ export function SystemDataManagement() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64 w-full">
-        <div className="w-10 h-10 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
-      </div>
-    );
-  }
+  const handleTestSearch = async (event) => {
+    event.preventDefault();
+    const query = testQuery.trim();
+    if (!query) {
+      setTestError(lang === "VN" ? "Nhập câu hỏi cần kiểm tra." : "Enter a query to test.");
+      return;
+    }
+
+    try {
+      setIsTesting(true);
+      setTestError("");
+      setTestResult(await runKnowledgeSearchTest({
+        query,
+        take: metadata.defaultSearchTake || 3,
+      }));
+    } catch (error) {
+      console.error("Failed to test knowledge search:", error);
+      setTestResult(null);
+      setTestError(error.response?.data?.message || (lang === "VN" ? "Không thể kiểm tra tìm kiếm." : "Could not run search test."));
+    } finally {
+      setIsTesting(false);
+    }
+  };
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
       <div className="flex flex-col sm:flex-row bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-            {lang === "VN" ? "Quản lý dữ liệu hệ thống" : "System Data Management"}
+            {lang === "VN" ? "Quản lý kiến thức AI" : "AI Knowledge Management"}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
-              ? "Nội dung chính sách, quy định — trợ lý AI dùng để trả lời và trang Điều khoản & Chính sách hiển thị công khai."
-              : "Policy & rules content — used by the AI assistant and shown publicly on the Terms & Policy page."}
+              ? "Quản lý chính sách, quy định và hướng dẫn mà chatbot có thể tra cứu."
+              : "Manage policies, rules and guidance that the chatbot can retrieve."}
           </p>
         </div>
         <button
@@ -244,192 +318,179 @@ export function SystemDataManagement() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số" : "Total"}</span>
-          <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">{stats.total}</h3>
-        </div>
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đã xuất bản" : "Published"}</span>
-          <h3 className="text-xl font-black font-headline text-emerald-600 dark:text-emerald-400 mt-0.5">{stats.published}</h3>
-        </div>
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Bản nháp" : "Draft"}</span>
-          <h3 className="text-xl font-black font-headline text-amber-600 dark:text-amber-400 mt-0.5">{stats.draft}</h3>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { label: lang === "VN" ? "Tổng số" : "Total", value: stats.total, tone: "text-[#124757] dark:text-white" },
+          { label: lang === "VN" ? "Đã xuất bản" : "Published", value: stats.published, tone: "text-emerald-600 dark:text-emerald-400" },
+          { label: lang === "VN" ? "Bản nháp" : "Draft", value: stats.draft, tone: "text-amber-600 dark:text-amber-400" },
+        ].map((card) => (
+          <div key={card.label} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
+            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{card.label}</span>
+            <h3 className={`text-xl font-black font-headline mt-0.5 ${card.tone}`}>{card.value}</h3>
+          </div>
+        ))}
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-center">
-        <div className="w-full xl:flex-1 relative flex items-center">
-          <span className="material-symbols-outlined absolute left-4 text-slate-400 text-lg pointer-events-none">search</span>
-          <input
-            type="text"
-            placeholder={lang === "VN" ? "Tìm theo tiêu đề hoặc từ khóa..." : "Search by title or keyword..."}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-11 pr-4 py-3.5 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
-          />
-        </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-5">
+        <div className="space-y-5 min-w-0">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-center">
+            <div className="w-full xl:flex-1 relative flex items-center">
+              <span className="material-symbols-outlined absolute left-4 text-slate-400 text-lg pointer-events-none">search</span>
+              <input
+                type="text"
+                placeholder={lang === "VN" ? "Tìm tiêu đề, nội dung hoặc từ khóa..." : "Search title, content or keyword..."}
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-11 pr-4 py-3.5 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+              />
+            </div>
 
-        <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto justify-end overflow-visible">
-          <div className="relative z-20 flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Chuyên mục:" : "Category:"}</span>
-            <FormSelect
-              value={categoryFilter}
-              onChange={setCategoryFilter}
-              options={[
-                { value: "All", label: lang === "VN" ? "Tất cả chuyên mục" : "All Categories" },
-                ...KNOWLEDGE_CATEGORY_ORDER.map((category) => ({
-                  value: category,
-                  label: getKnowledgeCategoryLabel(category, lang),
-                })),
-              ]}
-              className="min-w-45 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
-            />
+            <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto justify-end">
+              <FormSelect
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+                options={[
+                  { value: "All", label: lang === "VN" ? "Tất cả chuyên mục" : "All categories" },
+                  ...categoryOptions,
+                ]}
+                className="min-w-45 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              />
+              <FormSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                menuAlign="right"
+                options={[
+                  { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All status" },
+                  ...statusOptions,
+                ]}
+                className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              />
+            </div>
           </div>
 
-          <div className="relative z-10 flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
-            <FormSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              menuAlign="right"
-              options={[
-                { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
-                { value: KNOWLEDGE_STATUS.PUBLISHED, label: lang === "VN" ? "Đã xuất bản" : "Published" },
-                { value: KNOWLEDGE_STATUS.DRAFT, label: lang === "VN" ? "Nháp" : "Draft" },
-              ]}
-              className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
-                <th className="py-4 px-6">{lang === "VN" ? "Tiêu đề" : "Title"}</th>
-                <th className="py-4 px-4">{lang === "VN" ? "Chuyên mục" : "Category"}</th>
-                <th className="py-4 px-4 text-center">{lang === "VN" ? "Thứ tự" : "Order"}</th>
-                <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
-                <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
-              {currentEntries.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
-                    {lang === "VN" ? "Không có mục dữ liệu nào." : "No system data entries found."}
-                  </td>
-                </tr>
-              ) : (
-                currentEntries.map((entry) => {
-                  const statusStyle = STATUS_STYLE[entry.status] || STATUS_STYLE[KNOWLEDGE_STATUS.DRAFT];
-                  const isPublished = entry.status === KNOWLEDGE_STATUS.PUBLISHED;
-                  return (
-                    <tr key={entry.knowledgeEntryId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
-                      <td className="py-4 px-6 max-w-xs">
-                        <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug line-clamp-1">
-                          {entry.title}
-                        </h4>
-                        {Array.isArray(entry.keywords) && entry.keywords.length > 0 && (
-                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                            {entry.keywords.slice(0, 4).join(", ")}
-                          </p>
-                        )}
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-[10px] font-headline font-black tracking-wide text-slate-700 dark:text-slate-200 uppercase">
-                          {getKnowledgeCategoryLabel(entry.category, lang)}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4 text-center">
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{Number(entry.displayOrder) || 0}</span>
-                      </td>
-                      <td className="py-4 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${statusStyle.badge}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`}></span>
-                          {labelKnowledgeStatus(entry.status, lang)}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => navigate(`/admin/system-data/edit/${entry.knowledgeEntryId}`, { state: { entry } })}
-                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
-                            title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
-                          >
-                            <span className="material-symbols-outlined text-[18px]">edit</span>
-                          </button>
-                          <button
-                            onClick={() => handleToggleStatus(entry)}
-                            disabled={processingId === entry.knowledgeEntryId}
-                            className={`w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center transition-all shadow-sm disabled:opacity-50 ${isPublished
-                              ? "text-amber-500 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-500/20 dark:hover:text-amber-400"
-                              : "text-emerald-500 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400"
-                              }`}
-                            title={isPublished ? (lang === "VN" ? "Về nháp" : "Set draft") : (lang === "VN" ? "Xuất bản" : "Publish")}
-                          >
-                            {processingId === entry.knowledgeEntryId ? (
-                              <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <span className="material-symbols-outlined text-[18px]">{isPublished ? "unpublished" : "publish"}</span>
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(entry)}
-                            disabled={processingId === entry.knowledgeEntryId}
-                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
-                            title={lang === "VN" ? "Xóa" : "Delete"}
-                          >
-                            {processingId === entry.knowledgeEntryId ? (
-                              <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <span className="material-symbols-outlined text-[18px]">delete</span>
-                            )}
-                          </button>
-                        </div>
+          <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
+                    <th className="py-4 px-6">{lang === "VN" ? "Tiêu đề" : "Title"}</th>
+                    <th className="py-4 px-4">{lang === "VN" ? "Chuyên mục" : "Category"}</th>
+                    <th className="py-4 px-4 text-center">{lang === "VN" ? "Thứ tự" : "Order"}</th>
+                    <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                    <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-14">
+                        <div className="mx-auto w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin"></div>
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  ) : entries.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                        {lang === "VN" ? "Không có mục kiến thức nào." : "No knowledge entries found."}
+                      </td>
+                    </tr>
+                  ) : (
+                    entries.map((entry) => {
+                      const statusStyle = STATUS_STYLE[entry.status] || STATUS_STYLE[KNOWLEDGE_STATUS.DRAFT];
+                      const isPublished = entry.status === KNOWLEDGE_STATUS.PUBLISHED;
+                      return (
+                        <tr key={entry.knowledgeEntryId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
+                          <td className="py-4 px-6 max-w-xs">
+                            <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug line-clamp-1">
+                              {entry.title}
+                            </h4>
+                            {Array.isArray(entry.keywords) && entry.keywords.length > 0 && (
+                              <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                                {entry.keywords.slice(0, 4).join(", ")}
+                              </p>
+                            )}
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className="text-[10px] font-headline font-black tracking-wide text-slate-700 dark:text-slate-200 uppercase">
+                              {getKnowledgeCategoryLabel(entry.category, lang)}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-center">
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{Number(entry.displayOrder) || 0}</span>
+                          </td>
+                          <td className="py-4 px-4 text-center">
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${statusStyle.badge}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`}></span>
+                              {labelKnowledgeStatus(entry.status, lang)}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => navigate(`/admin/system-data/edit/${entry.knowledgeEntryId}`, { state: { entry } })}
+                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
+                                title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">edit</span>
+                              </button>
+                              <button
+                                onClick={() => handleToggleStatus(entry)}
+                                disabled={processingId === entry.knowledgeEntryId}
+                                className={`w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center transition-all shadow-sm disabled:opacity-50 ${isPublished
+                                  ? "text-amber-500 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-500/20 dark:hover:text-amber-400"
+                                  : "text-emerald-500 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400"
+                                }`}
+                                title={isPublished ? (lang === "VN" ? "Chuyển về nháp" : "Set draft") : (lang === "VN" ? "Xuất bản" : "Publish")}
+                              >
+                                {processingId === entry.knowledgeEntryId ? (
+                                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <span className="material-symbols-outlined text-[18px]">{isPublished ? "unpublished" : "publish"}</span>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleDelete(entry)}
+                                disabled={processingId === entry.knowledgeEntryId}
+                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                title={lang === "VN" ? "Xóa" : "Delete"}
+                              >
+                                {processingId === entry.knowledgeEntryId ? (
+                                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-      {totalPages > 0 && (
-        <div className="flex bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between flex-col sm:flex-row gap-4">
-          <span className="text-xs font-bold text-slate-400">
-            {lang === "VN"
-              ? `Hiển thị ${startIndex}-${endIndex} trong số ${filteredEntries.length} kết quả`
-              : `Showing ${startIndex}-${endIndex} of ${filteredEntries.length} entries`}
-          </span>
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-            <button
-              type="button"
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === 1
-                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
-                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
-                }`}
-            >
-              <span className="material-symbols-outlined text-base">chevron_left</span>
-            </button>
+          <div className="flex bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between flex-col sm:flex-row gap-4">
+            <span className="text-xs font-bold text-slate-400">
+              {lang === "VN"
+                ? `Hiển thị ${startIndex}-${endIndex} trong ${totalCount} kết quả`
+                : `Showing ${startIndex}-${endIndex} of ${totalCount} entries`}
+            </span>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all bg-white text-slate-500 border border-slate-200 hover:border-slate-400 disabled:bg-slate-50 disabled:text-slate-300 disabled:cursor-not-allowed dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+              >
+                <span className="material-symbols-outlined text-base">chevron_left</span>
+              </button>
 
-            {getPaginationGroup().map((item, index) => {
-              if (item === "...") {
-                return (
-                  <span key={`ellipsis-${index}`} className="w-8 h-8 flex items-center justify-center text-slate-400 font-bold tracking-widest shrink-0">
-                    ...
-                  </span>
-                );
-              }
-              return (
+              {getPaginationGroup().map((item, index) => item === "..." ? (
+                <span key={`ellipsis-${index}`} className="w-8 h-8 flex items-center justify-center text-slate-400 font-bold tracking-widest shrink-0">
+                  ...
+                </span>
+              ) : (
                 <button
                   key={item}
                   type="button"
@@ -437,27 +498,130 @@ export function SystemDataManagement() {
                   className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-black font-headline text-xs transition-all ${currentPage === item
                     ? "bg-[#124757] text-white shadow-md border-transparent dark:bg-yellow-400 dark:text-slate-900"
                     : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 hover:bg-slate-50"
-                    }`}
+                  }`}
                 >
                   {item}
                 </button>
-              );
-            })}
+              ))}
 
-            <button
-              type="button"
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === totalPages
-                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
-                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
-                }`}
-            >
-              <span className="material-symbols-outlined text-base">chevron_right</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all bg-white text-slate-500 border border-slate-200 hover:border-slate-400 disabled:bg-slate-50 disabled:text-slate-300 disabled:cursor-not-allowed dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+              >
+                <span className="material-symbols-outlined text-base">chevron_right</span>
+              </button>
+            </div>
           </div>
         </div>
-      )}
+
+        <aside className="space-y-4 min-w-0">
+          <form onSubmit={handleTestSearch} className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+            <div>
+              <h3 className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
+                {lang === "VN" ? "Kiểm tra tìm kiếm chatbot" : "Test chatbot search"}
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {lang === "VN"
+                  ? "Nhập câu hỏi của khách để xem AI tìm thấy mục đã xuất bản nào."
+                  : "Enter a customer question to see which Published entries match."}
+              </p>
+            </div>
+
+            <textarea
+              value={testQuery}
+              onChange={(e) => setTestQuery(e.target.value)}
+              rows={3}
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner resize-y"
+              placeholder={lang === "VN" ? "Ví dụ: Tôi muốn trả lại vé" : "e.g. What is your refund policy?"}
+            />
+
+            {testError && (
+              <p className="text-xs font-bold text-red-500">{testError}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isTesting}
+              className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3 rounded-xl shadow-md disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            >
+              {isTesting ? (
+                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <span className="material-symbols-outlined text-base">psychology</span>
+              )}
+              {lang === "VN" ? "Chạy kiểm tra" : "Run test"}
+            </button>
+          </form>
+
+          {testResult && (
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                  {lang === "VN" ? "Từ khóa phân tích" : "Tokens"}
+                </p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {(testResult.tokens || []).length === 0 ? (
+                    <span className="text-xs text-slate-400">{lang === "VN" ? "Không có từ khóa phù hợp" : "No usable token"}</span>
+                  ) : (
+                    testResult.tokens.map((token) => (
+                      <span key={token} className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                        {token}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="text-xs font-bold text-slate-500 dark:text-slate-300">
+                {lang === "VN"
+                  ? `Tổng số kết quả: ${testResult.totalMatched || 0}`
+                  : `Total matched: ${testResult.totalMatched || 0}`}
+              </div>
+
+              <div className="space-y-3">
+                {(testResult.hits || []).length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-4 text-xs font-bold text-slate-400 text-center">
+                    {lang === "VN" ? "Không tìm thấy mục đã xuất bản nào." : "No Published entry matched."}
+                  </div>
+                ) : (
+                  testResult.hits.map((hit) => (
+                    <article key={hit.knowledgeEntryId} className="rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/30 p-4 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-black text-slate-800 dark:text-white line-clamp-2">
+                            {hit.title}
+                          </h4>
+                          <p className="text-[11px] font-bold text-slate-400">
+                            {getKnowledgeCategoryLabel(hit.category, lang)} · {lang === "VN" ? "thứ tự" : "order"} {hit.displayOrder}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-xl bg-[#124757]/10 dark:bg-yellow-400/10 px-2 py-1 text-[10px] font-black text-[#124757] dark:text-yellow-400">
+                          {hit.score} {lang === "VN" ? "điểm" : "pts"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
+                        <span className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 text-emerald-600 dark:text-emerald-400">
+                          {lang === "VN" ? "Từ khóa khớp" : "Matched tokens"}: {hit.matchedTokens}
+                        </span>
+                        {hit.hasStrongKeywordHit && (
+                          <span className="rounded-lg bg-amber-50 dark:bg-amber-500/10 px-2 py-1 text-amber-600 dark:text-amber-400">
+                            {lang === "VN" ? "Từ khóa khớp mạnh" : "Strong keyword"}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-5">
+                        {hit.contentSeenByAssistant}
+                      </p>
+                    </article>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

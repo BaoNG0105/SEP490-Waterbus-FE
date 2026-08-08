@@ -1,6 +1,8 @@
 import {
   getKnowledgeEntries as apiGetKnowledgeEntries,
   getKnowledgeEntriesAdmin as apiGetKnowledgeEntriesAdmin,
+  getKnowledgeEntryMetadata as apiGetKnowledgeEntryMetadata,
+  testKnowledgeSearch as apiTestKnowledgeSearch,
   createKnowledgeEntry as apiCreateKnowledgeEntry,
   updateKnowledgeEntry as apiUpdateKnowledgeEntry,
   updateKnowledgeEntryStatus as apiUpdateKnowledgeEntryStatus,
@@ -17,10 +19,8 @@ export const labelKnowledgeStatus = (status, lang = "VN") => {
   return lang === "VN" ? "Bản nháp" : "Draft";
 };
 
-/** Giới hạn nội dung mà trợ lý AI đọc — phần dư khách vẫn thấy trên web bình thường. */
 export const KNOWLEDGE_CONTENT_AI_LIMIT = 4000;
 
-/** Thứ tự hiển thị category trên trang Điều khoản & Chính sách. */
 export const KNOWLEDGE_CATEGORY_ORDER = [
   "Booking",
   "Payment",
@@ -67,10 +67,6 @@ const sortByCategoryOrder = (a, b) => {
   return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
 };
 
-/**
- * Public: Điều khoản & Chính sách — nhóm entry Published theo category,
- * sắp xếp trong nhóm theo displayOrder (mục chính displayOrder nhỏ nhất lên đầu).
- */
 export const fetchKnowledgeEntries = async () => {
   const data = await apiGetKnowledgeEntries();
   const rows = extractRows(data);
@@ -91,20 +87,54 @@ export const fetchKnowledgeEntries = async () => {
     .map((category) => ({ category, entries: grouped.get(category) }));
 };
 
-/**
- * Admin: toàn bộ mục kiến thức (kể cả Draft), không phân trang.
- * params: status? (Draft | Published), category?
- */
 export const fetchKnowledgeEntriesAdmin = async (params = {}) => {
   const data = await apiGetKnowledgeEntriesAdmin(params);
-  return extractRows(data);
+  if (Array.isArray(data)) {
+    return {
+      totalCount: data.length,
+      page: Number(params.page) || 1,
+      pageSize: Number(params.pageSize) || data.length,
+      items: data,
+    };
+  }
+
+  return {
+    totalCount: Number(data?.totalCount) || 0,
+    page: Number(data?.page) || Number(params.page) || 1,
+    pageSize: Number(data?.pageSize) || Number(params.pageSize) || 20,
+    items: extractRows(data),
+  };
 };
+
+export const fetchKnowledgeEntryMetadata = async () => {
+  const data = await apiGetKnowledgeEntryMetadata();
+  return {
+    categories: Array.isArray(data?.categories) && data.categories.length
+      ? data.categories
+      : KNOWLEDGE_CATEGORY_ORDER,
+    statuses: Array.isArray(data?.statuses) && data.statuses.length
+      ? data.statuses
+      : [KNOWLEDGE_STATUS.DRAFT, KNOWLEDGE_STATUS.PUBLISHED],
+    maxKeywords: Number(data?.maxKeywords) || 30,
+    maxKeywordLength: Number(data?.maxKeywordLength) || 100,
+    maxContentChars: Number(data?.maxContentChars) || KNOWLEDGE_CONTENT_AI_LIMIT,
+    maxTotalContentChars: Number(data?.maxTotalContentChars) || 8000,
+    defaultSearchTake: Number(data?.defaultSearchTake) || 3,
+    maxSearchTake: Number(data?.maxSearchTake) || 5,
+  };
+};
+
+export const runKnowledgeSearchTest = async ({ query, take } = {}) =>
+  apiTestKnowledgeSearch({
+    query: String(query || "").trim(),
+    take: Number(take) || 3,
+  });
 
 export const addKnowledgeEntry = async (payload) => {
   try {
     return await apiCreateKnowledgeEntry(payload);
   } catch (error) {
-    console.error("Lỗi khi tạo mục kiến thức:", error);
+    console.error("Failed to create knowledge entry:", error);
     throw error;
   }
 };
@@ -113,7 +143,7 @@ export const modifyKnowledgeEntry = async (id, payload) => {
   try {
     return await apiUpdateKnowledgeEntry(id, payload);
   } catch (error) {
-    console.error(`Lỗi khi cập nhật mục kiến thức ${id}:`, error);
+    console.error(`Failed to update knowledge entry ${id}:`, error);
     throw error;
   }
 };
@@ -122,7 +152,7 @@ export const changeKnowledgeEntryStatus = async (id, status) => {
   try {
     return await apiUpdateKnowledgeEntryStatus(id, status);
   } catch (error) {
-    console.error(`Lỗi khi đổi trạng thái mục kiến thức ${id}:`, error);
+    console.error(`Failed to change knowledge entry ${id} status:`, error);
     throw error;
   }
 };
@@ -131,7 +161,7 @@ export const removeKnowledgeEntry = async (id) => {
   try {
     return await apiDeleteKnowledgeEntry(id);
   } catch (error) {
-    console.error(`Lỗi khi xóa mục kiến thức ${id}:`, error);
+    console.error(`Failed to delete knowledge entry ${id}:`, error);
     throw error;
   }
 };

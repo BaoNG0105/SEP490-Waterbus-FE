@@ -5,6 +5,10 @@ import api from './axios';
 export const createBooking = (data) =>
     api.post('/bookings', data).then(response => response.data);
 
+// Validate and calculate the current server-side booking total without creating a booking.
+export const previewBooking = (data) =>
+    api.post('/bookings/preview', data).then(response => response.data);
+
 // API: Lịch sử đặt vé của tôi (mới nhất trước). itemCount = số vé còn hiệu lực (chưa bị cancel).
 export const getMyBookings = () =>
     api.get('/bookings').then(response => response.data);

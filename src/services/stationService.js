@@ -44,7 +44,11 @@ const normalizeStationManager = (item) => {
 export const fetchAllStations = async () => {
     try {
         const data = await apiGetStations();
-        return data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.items)) return data.items;
+        if (Array.isArray(data?.data)) return data.data;
+        if (Array.isArray(data?.stations)) return data.stations;
+        return [];
     } catch (error) {
         console.error('Lỗi khi lấy danh sách nhà ga từ Service:', error);
         throw error;

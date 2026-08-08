@@ -18,6 +18,14 @@ export const getKnowledgeEntries = (params = {}) =>
 export const getKnowledgeEntriesAdmin = (params = {}) =>
   api.get("/knowledge-entries/admin", { params }).then((response) => response.data);
 
+/** GET /api/knowledge-entries/metadata — Options/gioi han cho man Admin. Quyen: Admin. */
+export const getKnowledgeEntryMetadata = () =>
+  api.get("/knowledge-entries/metadata").then((response) => response.data);
+
+/** POST /api/knowledge-entries/admin/test-search — Test chatbot match knowledge nao. Quyen: Admin. */
+export const testKnowledgeSearch = (data) =>
+  api.post("/knowledge-entries/admin/test-search", data).then((response) => response.data);
+
 /** POST /api/knowledge-entries — Tạo mục kiến thức. Quyền: Admin. */
 export const createKnowledgeEntry = (data) =>
   api.post("/knowledge-entries", data).then((response) => response.data);

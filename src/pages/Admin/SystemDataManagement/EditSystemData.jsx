@@ -58,8 +58,8 @@ export function EditSystemData() {
         }
 
         // Không có API lấy chi tiết 1 mục — list admin đã trả đủ content nên dùng lại.
-        const entries = await fetchKnowledgeEntriesAdmin();
-        const found = (entries || []).find((e) => String(e.knowledgeEntryId) === String(id));
+        const result = await fetchKnowledgeEntriesAdmin({ page: 1, pageSize: 100 });
+        const found = (result.items || []).find((e) => String(e.knowledgeEntryId) === String(id));
         if (!found) {
           notify({
             icon: "error",

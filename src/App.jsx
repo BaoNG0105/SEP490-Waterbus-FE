@@ -814,9 +814,18 @@ function App() {
 
           {/* ******* System Data Management: nguồn dữ liệu chatbot + trang Điều khoản & Chính sách ******* */}
           <Route
+            path="/admin/knowledge-entries"
+            element={
+              <AdminLayout title="AI Knowledge Management">
+                <SystemDataManagement />
+              </AdminLayout>
+            }
+          />
+
+          <Route
             path="/admin/system-data"
             element={
-              <AdminLayout title="System Data Management">
+              <AdminLayout title={{ vn: "Quản lý dữ liệu hệ thống", en: "System Data Management" }}>
                 <SystemDataManagement />
               </AdminLayout>
             }
