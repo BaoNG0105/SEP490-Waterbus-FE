@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { chatWithAssistant, getAssistantConversation, updateAssistantBookingDraft } from "../api/assistantApi";
+import {
+  chatWithAssistant,
+  closeAssistantConversation,
+  getAssistantConversation,
+  updateAssistantBookingDraft,
+} from "../api/assistantApi";
 import ChatBookingFlow from "./ChatBookingFlow";
 import { logoUrl as logo } from "../data/homeData";
 
@@ -48,9 +53,17 @@ const TEXT = {
   },
 };
 
+const mapServerMessage = (message) => ({
+  id: message.id,
+  from: message.role === "user" ? "user" : "bot",
+  text: message.text,
+  suggestedQuestions: Array.isArray(message.suggestedQuestions) ? message.suggestedQuestions : [],
+  actions: Array.isArray(message.actions) ? message.actions : [],
+});
+
 export const AIChatbotPanel = ({ lang, onClose }) => {
-  // Ngôn ngữ riêng của khung chat (mặc định theo ngôn ngữ toàn site), có thể đổi độc lập bằng nút VN/EN.
-  const [chatLang, setChatLang] = useState(lang === "ENG" ? "ENG" : "VN");
+  // Khung chat dùng chung ngôn ngữ với toàn site; không tạo switch VN/EN riêng.
+  const chatLang = lang === "ENG" ? "ENG" : "VN";
   const t = TEXT[chatLang] || TEXT.VN;
   const quickQuestions = t.quickQuestions;
   const navigate = useNavigate();
@@ -76,7 +89,9 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
   const [isConversationClosed, setIsConversationClosed] = useState(false);
   const [bookingFlow, setBookingFlow] = useState(false);
   const [bookingDraft, setBookingDraft] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const bottomRef = useRef(null);
+  const conversationVersionRef = useRef(0);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -95,11 +110,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     getAssistantConversation(conversationId, clientSessionId)
       .then((data) => {
         if (cancelled || !data?.messages) return;
-        const restored = data.messages.map((m) => ({
-          id: m.id,
-          from: m.role === "user" ? "user" : "bot",
-          text: m.text,
-        }));
+        const restored = data.messages.map(mapServerMessage);
         setMessages([{ id: "greeting", from: "bot", text: t.greeting, suggestedQuestions: quickQuestions }, ...restored]);
         setIsConversationClosed(data.status !== "Open");
         if (data.bookingDraft) {
@@ -125,7 +136,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
           if (!data?.messages) return;
           setMessages((prev) => {
             const greeting = prev.find((m) => m.id === "greeting") || { id: "greeting", from: "bot", text: t.greeting, suggestedQuestions: quickQuestions };
-            return [greeting, ...data.messages.map((m) => ({ id: m.id, from: m.role === "user" ? "user" : "bot", text: m.text }))];
+            return [greeting, ...data.messages.map(mapServerMessage)];
           });
           if (data.status !== "Open") setIsConversationClosed(true);
           if (data.bookingDraft) {
@@ -138,7 +149,17 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     return () => window.clearInterval(timer);
   }, [conversationId, clientSessionId, isConversationClosed, t.greeting, quickQuestions]);
 
-  const startNewConversation = () => {
+  const startNewConversation = async () => {
+    conversationVersionRef.current += 1;
+    const previousConversationId = conversationId;
+    setIsRefreshing(true);
+    if (previousConversationId) {
+      try {
+        await closeAssistantConversation(previousConversationId, clientSessionId);
+      } catch {
+        // Vẫn tạo hội thoại mới nếu hội thoại cũ đã hết hạn hoặc API tạm thời lỗi.
+      }
+    }
     try { window.localStorage.removeItem("waterbus.chat.conversationId"); } catch { /* ignore */ }
     try { window.localStorage.removeItem("waterbus.chat.bookingDraft"); } catch { /* ignore */ }
     setConversationId(null);
@@ -146,6 +167,9 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     setBookingFlow(false);
     setBookingDraft(null);
     setMessages([{ id: "greeting", from: "bot", text: t.greeting, suggestedQuestions: quickQuestions }]);
+    setDraft("");
+    setIsTyping(false);
+    setIsRefreshing(false);
   };
 
   const startBookingFlow = () => {
@@ -155,7 +179,8 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
   };
 
   const handleRequireLogin = () => {
-    navigate(`/login?redirect=${encodeURIComponent("/")}`);
+    const redirect = `${window.location.pathname}${window.location.search}`;
+    navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
   };
 
   const handleBookingDraftChange = async (nextDraft) => {
@@ -171,6 +196,8 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
   const sendText = async (text, draftOverride = bookingDraft) => {
     if (!text || isTyping || isConversationClosed) return;
 
+    const requestVersion = conversationVersionRef.current;
+
     const userMessage = { id: `u-${Date.now()}`, from: "user", text };
     setMessages((prev) => [...prev, userMessage]);
     setDraft("");
@@ -184,6 +211,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
         clientSessionId,
         draftOverride,
       );
+      if (requestVersion !== conversationVersionRef.current) return;
       if (data?.conversationId && data.conversationId !== conversationId) {
         setConversationId(data.conversationId);
         try { window.localStorage.setItem("waterbus.chat.conversationId", data.conversationId); } catch { /* ignore */ }
@@ -197,12 +225,13 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
           id: `b-${Date.now()}`,
           from: "bot",
           text: replyText,
-          suggestedQuestions: data?.suggestedQuestions || [],
-          actions: data?.actions || [],
+          suggestedQuestions: Array.isArray(data?.suggestedQuestions) ? data.suggestedQuestions : [],
+          actions: Array.isArray(data?.actions) ? data.actions : [],
         },
       ]);
       if (data?.bookingDraft) setBookingDraft(data.bookingDraft);
     } catch (error) {
+      if (requestVersion !== conversationVersionRef.current) return;
       if (error?.response?.status === 409) {
         setIsConversationClosed(true);
       }
@@ -248,23 +277,16 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
             {t.subtitle}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1 rounded-full bg-white/15 p-0.5 dark:bg-yellow-400/15">
-          {["VN", "ENG"].map((code) => (
-            <button
-              key={code}
-              type="button"
-              onClick={() => setChatLang(code)}
-              title={code === "VN" ? "Tiếng Việt" : "English"}
-              className={`rounded-full px-2 py-1 text-[10px] font-black transition-colors ${
-                chatLang === code
-                  ? "bg-white text-[#124757] dark:bg-yellow-400 dark:text-slate-900"
-                  : "text-white/80 hover:text-white dark:text-yellow-400/70 dark:hover:text-yellow-400"
-              }`}
-            >
-              {code === "VN" ? "VN" : "EN"}
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          onClick={() => void startNewConversation()}
+          disabled={isRefreshing}
+          title={chatLang === "VN" ? "Làm mới cuộc trò chuyện" : "Refresh conversation"}
+          aria-label={chatLang === "VN" ? "Làm mới cuộc trò chuyện" : "Refresh conversation"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/10 disabled:opacity-50"
+        >
+          <span className="material-symbols-outlined text-lg">refresh</span>
+        </button>
         <button
           type="button"
           onClick={onClose}
@@ -315,6 +337,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
                         <button
                           key={`${action.type}-${action.route}-${action.label}`}
                           type="button"
+                          disabled={isTyping || isConversationClosed || isRefreshing}
                           onClick={() => {
                             if (action.type === "booking" || action.route === "/waterbus-booking") {
                               startBookingFlow();
@@ -374,7 +397,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
       {isConversationClosed && (
         <div className="flex items-center justify-between gap-2 border-t border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
           <span>{chatLang === "VN" ? "Hội thoại đã đóng." : "This conversation is closed."}</span>
-          <button type="button" onClick={startNewConversation} className="rounded-full bg-[#124757] px-3 py-1.5 text-white">
+          <button type="button" onClick={() => void startNewConversation()} className="rounded-full bg-[#124757] px-3 py-1.5 text-white">
             {chatLang === "VN" ? "Chat mới" : "New chat"}
           </button>
         </div>
@@ -390,12 +413,12 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t.placeholder}
-          disabled={isTyping || isConversationClosed}
+          disabled={isTyping || isConversationClosed || isRefreshing}
           className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-yellow-400"
         />
         <button
           type="submit"
-          disabled={!draft.trim() || isTyping || isConversationClosed}
+          disabled={!draft.trim() || isTyping || isConversationClosed || isRefreshing}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#124757] text-white transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-yellow-400 dark:text-slate-900"
         >
           <span className="material-symbols-outlined text-lg">send</span>

@@ -112,12 +112,7 @@ const ChatBookingFlow = ({
 }) => {
   const vn = lang !== "ENG";
   const [draft, setDraft] = useState(() => {
-    try {
-      const saved = window.localStorage.getItem("waterbus.chat.bookingDraft");
-      return { ...EMPTY_DRAFT, ...(saved ? JSON.parse(saved) : {}), ...(initialDraft || {}) };
-    } catch {
-      return { ...EMPTY_DRAFT, ...(initialDraft || {}) };
-    }
+    return { ...EMPTY_DRAFT, ...(initialDraft || {}) };
   });
   const [stations, setStations] = useState([]);
   const [seatMap, setSeatMap] = useState([]);
@@ -151,12 +146,6 @@ const ChatBookingFlow = ({
   }, [user]);
 
   useEffect(() => {
-    try {
-      if (draft.stage === "Completed") window.localStorage.removeItem("waterbus.chat.bookingDraft");
-      else window.localStorage.setItem("waterbus.chat.bookingDraft", JSON.stringify(draft));
-    } catch {
-      // Local persistence is a convenience; server conversation persistence remains authoritative.
-    }
     const timer = window.setTimeout(() => onDraftChange?.(draft), 250);
     return () => window.clearTimeout(timer);
   }, [draft, onDraftChange]);
@@ -417,7 +406,7 @@ const ChatBookingFlow = ({
       {draft.isRoundTrip && <label>{vn ? "Ngày về" : "Return date"}<input type="date" min={draft.departureDate || getTodayDateString()} value={draft.returnDate} onChange={(e) => update({ returnDate: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label>}
       <div className="grid grid-cols-2 gap-2"><label>{vn ? "Bến đi" : "From"}<select value={draft.fromStationId} onChange={(e) => selectStation("from", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800"><option value="">—</option>{stationOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>{vn ? "Bến đến" : "To"}<select value={draft.toStationId} onChange={(e) => selectStation("to", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800"><option value="">—</option>{stationOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label></div>
       <div className="grid grid-cols-3 gap-2"><label>{vn ? "Người lớn" : "Adults"}<input type="number" min="1" max="10" value={draft.adultCount} onChange={(e) => update({ adultCount: Math.max(1, Math.min(10, Number(e.target.value) || 1)) })} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label><label>{vn ? "Trẻ em" : "Children"}<input type="number" min="0" max="9" value={draft.childCount} onChange={(e) => update({ childCount: Math.max(0, Math.min(9, Number(e.target.value) || 0)) })} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label><label>{vn ? "Em bé" : "Infants"}<input type="number" min="0" max="9" value={draft.infantCount} onChange={(e) => update({ infantCount: Math.max(0, Math.min(9, Number(e.target.value) || 0)) })} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label></div>
-      <button type="button" disabled={loading || !isAuthenticated} onClick={searchTrips} className="w-full rounded-xl bg-[#124757] px-3 py-2.5 font-bold text-white disabled:opacity-50">{loading ? "…" : vn ? "Tìm chuyến" : "Find trips"}</button>
+      <button type="button" disabled={loading} onClick={searchTrips} className="w-full rounded-xl bg-[#124757] px-3 py-2.5 font-bold text-white disabled:opacity-50">{loading ? "…" : vn ? "Tìm chuyến" : "Find trips"}</button>
     </div>}
     {draft.stage === "SelectingTrip" && <div className="space-y-2"><div className="font-bold">{draft.selectedDepartureTrip ? (draft.isRoundTrip ? (draft.selectedReturnTrip ? (vn ? "Chọn ghế" : "Choose seats") : (vn ? "Chọn chuyến về" : "Choose return trip")) : (vn ? "Đã chọn chuyến đi" : "Outbound selected")) : (vn ? "Chọn chuyến đi" : "Choose outbound trip")}</div>{!draft.selectedDepartureTrip && <div className="space-y-1.5">{draft.departureTrips.map((trip) => renderTrip(trip, "departure"))}</div>}{draft.selectedDepartureTrip && draft.isRoundTrip && !draft.selectedReturnTrip && <div className="space-y-1.5">{draft.returnTrips.map((trip) => renderTrip(trip, "return"))}</div>}{draft.selectedDepartureTrip && !draft.isRoundTrip && <button type="button" onClick={() => { update({ stage: "SelectingSeats" }); setSeatLeg("departure"); loadSeats("departure"); }} className="w-full rounded-xl bg-[#124757] px-3 py-2 font-bold text-white">{vn ? "Chọn ghế" : "Choose seats"}</button>}{draft.selectedDepartureTrip && draft.selectedReturnTrip && <button type="button" onClick={() => { update({ stage: "SelectingSeats" }); setSeatLeg("departure"); loadSeats("departure"); }} className="w-full rounded-xl bg-[#124757] px-3 py-2 font-bold text-white">{vn ? "Chọn ghế chiều đi" : "Choose outbound seats"}</button>}</div>}
     {draft.stage === "SelectingSeats" && <div className="space-y-2">{seatMap.length ? renderSeatPicker() : <button type="button" disabled={loading} onClick={() => loadSeats(seatLeg)} className="w-full rounded-xl border border-[#124757] px-3 py-2 font-bold text-[#124757]">{loading ? "…" : vn ? "Tải sơ đồ ghế" : "Load seat map"}</button>}<button type="button" disabled={loading || selectedSeats.length !== requiredSeatCount} onClick={holdSelectedSeats} className="w-full rounded-xl bg-[#124757] px-3 py-2 font-bold text-white disabled:opacity-50">{vn ? "Giữ ghế và tiếp tục" : "Hold seats and continue"}</button>{holdSeconds !== null && <div className="text-center text-[10px] text-amber-700">{vn ? "Ghế được giữ còn" : "Seat hold expires in"} {Math.floor(holdSeconds / 60)}:{String(holdSeconds % 60).padStart(2, "0")}</div>}</div>}
