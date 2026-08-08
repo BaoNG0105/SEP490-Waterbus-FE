@@ -61,6 +61,113 @@ const mapServerMessage = (message) => ({
   actions: Array.isArray(message.actions) ? message.actions : [],
 });
 
+const EMPTY_BOOKING_CONTEXT = {
+  departureDate: "",
+  fromStationName: "",
+  toStationName: "",
+  adultCount: null,
+  childCount: 0,
+  infantCount: 0,
+  passengerCountConfirmed: false,
+};
+
+const toDateString = (year, month, day) => {
+  const candidate = new Date(Number(year), Number(month) - 1, Number(day));
+  if (candidate.getFullYear() !== Number(year) || candidate.getMonth() !== Number(month) - 1 || candidate.getDate() !== Number(day)) return "";
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+};
+
+const parseBookingDate = (text) => {
+  if (/(hôm nay|hom nay|today)/i.test(text)) {
+    const today = new Date();
+    return toDateString(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  }
+  if (/(ngày mai|ngay mai|tomorrow)/i.test(text)) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return toDateString(tomorrow.getFullYear(), tomorrow.getMonth() + 1, tomorrow.getDate());
+  }
+  const iso = text.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
+  if (iso) return toDateString(iso[1], iso[2], iso[3]);
+  const local = text.match(/\b(\d{1,2})[-/](\d{1,2})[-/](20\d{2})\b/);
+  return local ? toDateString(local[3], local[2], local[1]) : "";
+};
+
+const parseBookingContext = (text, current = EMPTY_BOOKING_CONTEXT) => {
+  const next = { ...EMPTY_BOOKING_CONTEXT, ...current };
+  const date = parseBookingDate(text);
+  if (date) next.departureDate = date;
+
+  const route = text.match(/(?:từ|from)\s+(.+?)\s*(?:đến|tới|to|->|[-–—])\s*(.+?)(?=\s+(?:ngày|on|cho|với|lúc|at|for|with)\b|\s+(?:và|and)\s+\d+\b|[,.!?]|$)/i);
+  if (route) {
+    next.fromStationName = route[1].trim();
+    next.toStationName = route[2].replace(/^>\s*/, "").trim();
+  }
+
+  const adult = text.match(/(\d+)\s*(?:người\s*lớn|adult(?:s)?)/i);
+  const child = text.match(/(\d+)\s*(?:trẻ\s*em|children?|kids?)/i);
+  const infant = text.match(/(\d+)\s*(?:em\s*b[eé]|trẻ\s*sơ\s*sinh|infants?)/i);
+  const generic = text.match(/(?:đi|cho|for)\s+(\d+)\s*(?:người|khách|people|persons)\b/i)
+    || text.match(/\b(\d+)\s*(?:người|khách)\b/i);
+  if (adult || generic) {
+    next.adultCount = Number(adult?.[1] || generic?.[1]);
+    next.passengerCountConfirmed = true;
+  }
+  if (child) {
+    next.childCount = Number(child[1]);
+    next.passengerCountConfirmed = true;
+  } else if (/(?:không|khong|no)\s+(?:có\s+)?(?:trẻ\s*em|children?|kids?)/i.test(text)) {
+    next.childCount = 0;
+    next.passengerCountConfirmed = true;
+  }
+  if (infant) {
+    next.infantCount = Number(infant[1]);
+    next.passengerCountConfirmed = true;
+  } else if (/(?:không|khong|no)\s+(?:có\s+)?(?:em\s*b[eé]|trẻ\s*sơ\s*sinh|infants?)/i.test(text)) {
+    next.infantCount = 0;
+    next.passengerCountConfirmed = true;
+  }
+  return next;
+};
+
+const hasBookingIntent = (text) => /(đặt\s+vé|mua\s+vé|book(?:ing)?\s+(?:a\s+)?ticket|ticket\s+booking)/i.test(text);
+const isBookingContextComplete = (context) => Boolean(
+  context?.departureDate
+  && context?.fromStationName
+  && context?.toStationName
+  && context?.passengerCountConfirmed
+  && Number(context?.adultCount || 0) >= 1,
+);
+
+const bookingDraftFromContext = (context) => ({
+  stage: "CollectingInfo",
+  isRoundTrip: false,
+  departureDate: context.departureDate,
+  returnDate: "",
+  fromStationId: "",
+  toStationId: "",
+  fromStationCode: "",
+  toStationCode: "",
+  fromStationName: context.fromStationName,
+  toStationName: context.toStationName,
+  adultCount: context.adultCount,
+  childCount: context.childCount || 0,
+  infantCount: context.infantCount || 0,
+  passengerCountConfirmed: true,
+  departureTrips: [],
+  returnTrips: [],
+  selectedDepartureTrip: null,
+  selectedReturnTrip: null,
+  selectedSeatsDeparture: [],
+  selectedSeatsReturn: [],
+  passengers: [],
+  contact: { name: "", phone: "", email: "" },
+  insuranceSelected: false,
+  promotionCode: "",
+  holdExpiresAt: null,
+  preview: null,
+});
+
 export const AIChatbotPanel = ({ lang, onClose }) => {
   // Khung chat dùng chung ngôn ngữ với toàn site; không tạo switch VN/EN riêng.
   const chatLang = lang === "ENG" ? "ENG" : "VN";
@@ -89,9 +196,13 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
   const [isConversationClosed, setIsConversationClosed] = useState(false);
   const [bookingFlow, setBookingFlow] = useState(false);
   const [bookingDraft, setBookingDraft] = useState(null);
+  const [bookingIntent, setBookingIntent] = useState(false);
+  const [bookingContext, setBookingContext] = useState(EMPTY_BOOKING_CONTEXT);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const bottomRef = useRef(null);
   const conversationVersionRef = useRef(0);
+  const bookingDraftSyncVersionRef = useRef(0);
+  const bookingDraftWriteRef = useRef(Promise.resolve());
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -115,7 +226,6 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
         setIsConversationClosed(data.status !== "Open");
         if (data.bookingDraft) {
           setBookingDraft(data.bookingDraft);
-          if (data.bookingDraft.stage && data.bookingDraft.stage !== "Completed") setBookingFlow(true);
         }
       })
       .catch(() => {
@@ -141,7 +251,6 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
           if (data.status !== "Open") setIsConversationClosed(true);
           if (data.bookingDraft) {
             setBookingDraft(data.bookingDraft);
-            if (data.bookingDraft.stage && data.bookingDraft.stage !== "Completed") setBookingFlow(true);
           }
         })
         .catch(() => undefined);
@@ -166,16 +275,27 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     setIsConversationClosed(false);
     setBookingFlow(false);
     setBookingDraft(null);
+    setBookingIntent(false);
+    setBookingContext(EMPTY_BOOKING_CONTEXT);
+    bookingDraftSyncVersionRef.current += 1;
     setMessages([{ id: "greeting", from: "bot", text: t.greeting, suggestedQuestions: quickQuestions }]);
     setDraft("");
     setIsTyping(false);
     setIsRefreshing(false);
   };
 
-  const startBookingFlow = () => {
+  const startBookingIntent = () => {
     if (isConversationClosed) return;
+    setBookingFlow(false);
+    setBookingDraft(null);
+    setBookingIntent(true);
+    void sendText(chatLang === "VN" ? "Tôi muốn đặt vé trong chat." : "I want to book a ticket in chat.", null);
+  };
+
+  const openBookingForm = () => {
+    if (isConversationClosed || !isBookingContextComplete(bookingContext)) return;
+    setBookingDraft(bookingDraftFromContext(bookingContext));
     setBookingFlow(true);
-    setBookingDraft((current) => current || { stage: "CollectingInfo" });
   };
 
   const handleRequireLogin = () => {
@@ -184,19 +304,36 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
   };
 
   const handleBookingDraftChange = async (nextDraft) => {
+    const syncVersion = ++bookingDraftSyncVersionRef.current;
     setBookingDraft(nextDraft);
     if (!conversationId) return;
-    try {
-      await updateAssistantBookingDraft(conversationId, nextDraft, clientSessionId);
-    } catch {
-      // The local draft remains usable if persistence is temporarily unavailable.
-    }
+    bookingDraftWriteRef.current = bookingDraftWriteRef.current
+      .catch(() => undefined)
+      .then(() => updateAssistantBookingDraft(conversationId, nextDraft, clientSessionId));
+    try { await bookingDraftWriteRef.current; } catch { /* local draft remains usable */ }
+    if (syncVersion !== bookingDraftSyncVersionRef.current) return;
   };
 
   const sendText = async (text, draftOverride = bookingDraft) => {
     if (!text || isTyping || isConversationClosed) return;
 
     const requestVersion = conversationVersionRef.current;
+    const formWasOpen = bookingFlow;
+    const startsOrContinuesBooking = bookingIntent || hasBookingIntent(text);
+    const contextBase = formWasOpen ? EMPTY_BOOKING_CONTEXT : bookingContext;
+    const nextBookingContext = startsOrContinuesBooking
+      ? parseBookingContext(text, contextBase)
+      : formWasOpen ? EMPTY_BOOKING_CONTEXT : bookingContext;
+
+    if (formWasOpen) {
+      // A free-text correction invalidates the route/seat draft currently shown.
+      // Unmount it immediately and clear the persisted draft before asking the AI again.
+      setBookingFlow(false);
+      setBookingDraft(null);
+      bookingDraftSyncVersionRef.current += 1;
+    }
+    if (hasBookingIntent(text)) setBookingIntent(true);
+    if (startsOrContinuesBooking || formWasOpen) setBookingContext(nextBookingContext);
 
     const userMessage = { id: `u-${Date.now()}`, from: "user", text };
     setMessages((prev) => [...prev, userMessage]);
@@ -204,12 +341,20 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     setIsTyping(true);
 
     try {
+      if (formWasOpen && conversationId) {
+        try {
+          await bookingDraftWriteRef.current;
+          await updateAssistantBookingDraft(conversationId, null, clientSessionId);
+        } catch {
+          // The chat request below also sends null, so a temporary clear failure is recoverable.
+        }
+      }
       const data = await chatWithAssistant(
         [{ role: "user", text }],
         chatLang,
         conversationId,
         clientSessionId,
-        draftOverride,
+        formWasOpen ? draftOverride : null,
       );
       if (requestVersion !== conversationVersionRef.current) return;
       if (data?.conversationId && data.conversationId !== conversationId) {
@@ -219,6 +364,15 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
       const replyText =
         (typeof data === "string" ? data : data?.reply ?? data?.text ?? data?.message ?? data?.answer) ||
         t.errorReply;
+      const apiActions = Array.isArray(data?.actions) ? data.actions : [];
+      const confirmationAction = startsOrContinuesBooking
+        && isBookingContextComplete(nextBookingContext)
+        ? [{
+          type: "booking-confirm",
+          route: "/waterbus-booking",
+          label: chatLang === "VN" ? "Xác nhận thông tin & mở form" : "Confirm details & open form",
+        }]
+        : [];
       setMessages((prev) => [
         ...prev,
         {
@@ -226,10 +380,13 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
           from: "bot",
           text: replyText,
           suggestedQuestions: Array.isArray(data?.suggestedQuestions) ? data.suggestedQuestions : [],
-          actions: Array.isArray(data?.actions) ? data.actions : [],
+          actions: [
+            ...apiActions.filter((action) => !(startsOrContinuesBooking && action.type === "booking")),
+            ...confirmationAction,
+          ],
         },
       ]);
-      if (data?.bookingDraft) setBookingDraft(data.bookingDraft);
+      if (data?.bookingDraft && !formWasOpen) setBookingDraft(data.bookingDraft);
     } catch (error) {
       if (requestVersion !== conversationVersionRef.current) return;
       if (error?.response?.status === 409) {
@@ -339,8 +496,10 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
                           type="button"
                           disabled={isTyping || isConversationClosed || isRefreshing}
                           onClick={() => {
-                            if (action.type === "booking" || action.route === "/waterbus-booking") {
-                              startBookingFlow();
+                            if (action.type === "booking-confirm") {
+                              openBookingForm();
+                            } else if (action.type === "booking" || action.route === "/waterbus-booking") {
+                              startBookingIntent();
                             } else if (action.type === "navigate" && action.route?.startsWith("/")) {
                               navigate(action.route);
                             }

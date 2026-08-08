@@ -10,7 +10,7 @@ const STAGES = ["CollectingInfo", "SelectingTrip", "SelectingSeats", "EnteringPa
 const EMPTY_DRAFT = {
   stage: "CollectingInfo",
   isRoundTrip: false,
-  departureDate: getTodayDateString(),
+  departureDate: "",
   returnDate: "",
   fromStationId: "",
   toStationId: "",
@@ -18,9 +18,10 @@ const EMPTY_DRAFT = {
   toStationCode: "",
   fromStationName: "",
   toStationName: "",
-  adultCount: 1,
+  adultCount: null,
   childCount: 0,
   infantCount: 0,
+  passengerCountConfirmed: false,
   departureTrips: [],
   returnTrips: [],
   selectedDepartureTrip: null,
@@ -33,6 +34,14 @@ const EMPTY_DRAFT = {
   promotionCode: "",
   holdExpiresAt: null,
   preview: null,
+};
+
+const normalizeInitialDraft = (source) => {
+  const merged = { ...EMPTY_DRAFT, ...(source || {}) };
+  if (!merged.passengerCountConfirmed) {
+    return { ...merged, adultCount: null, childCount: 0, infantCount: 0, passengerCountConfirmed: false };
+  }
+  return merged;
 };
 
 const pick = (source, keys, fallback = "") => {
@@ -55,6 +64,13 @@ const stationValue = (station, kind) => {
   if (kind === "id") return String(pick(station, ["stationId", "id", "StationId"], ""));
   if (kind === "name") return String(pick(station, ["stationName", "name", "Name"], ""));
   return String(pick(station, ["stationCode", "code", "Code"], ""));
+};
+
+const stationNameMatches = (option, value) => {
+  const normalize = (text) => String(text || "").toLowerCase().replace(/^bến\s+/, "").trim();
+  const target = normalize(value);
+  const candidate = normalize(option?.name);
+  return Boolean(target && candidate && (target === candidate || target.includes(candidate) || candidate.includes(target)));
 };
 
 const tripLabel = (trip) => String(pick(trip, ["tripCode", "TripCode", "code", "id", "tripId"], ""));
@@ -112,7 +128,7 @@ const ChatBookingFlow = ({
 }) => {
   const vn = lang !== "ENG";
   const [draft, setDraft] = useState(() => {
-    return { ...EMPTY_DRAFT, ...(initialDraft || {}) };
+    return normalizeInitialDraft(initialDraft);
   });
   const [stations, setStations] = useState([]);
   const [seatMap, setSeatMap] = useState([]);
@@ -120,6 +136,7 @@ const ChatBookingFlow = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [holdSeconds, setHoldSeconds] = useState(null);
+  const stationOptions = useMemo(() => stations.map((s) => ({ id: stationValue(s, "id"), code: stationValue(s, "code"), name: stationValue(s, "name") })).filter((s) => s.id && s.name), [stations]);
 
   useEffect(() => {
     fetchAllStations().then((items) => setStations((items || []).filter((s) => String(s.status || "Active").toLowerCase() !== "inactive"))).catch(() => setError(vn ? "Không tải được danh sách bến." : "Unable to load stations."));
@@ -127,8 +144,29 @@ const ChatBookingFlow = ({
 
   useEffect(() => {
     if (!initialDraft) return;
-    setDraft((current) => ({ ...current, ...initialDraft, contact: { ...current.contact, ...(initialDraft.contact || {}) } }));
+    setDraft((current) => {
+      const normalized = normalizeInitialDraft(initialDraft);
+      return { ...current, ...normalized, contact: { ...current.contact, ...(normalized.contact || {}) } };
+    });
   }, [initialDraft]);
+
+  useEffect(() => {
+    if (!stationOptions.length) return;
+    setDraft((current) => {
+      const from = current.fromStationId
+        ? stationOptions.find((item) => item.id === String(current.fromStationId))
+        : stationOptions.find((item) => stationNameMatches(item, current.fromStationName) || stationNameMatches(item, current.fromStationCode));
+      const to = current.toStationId
+        ? stationOptions.find((item) => item.id === String(current.toStationId))
+        : stationOptions.find((item) => stationNameMatches(item, current.toStationName) || stationNameMatches(item, current.toStationCode));
+      if (!from && !to) return current;
+      return {
+        ...current,
+        ...(from ? { fromStationId: from.id, fromStationCode: from.code, fromStationName: from.name } : {}),
+        ...(to ? { toStationId: to.id, toStationCode: to.code, toStationName: to.name } : {}),
+      };
+    });
+  }, [stationOptions]);
 
   useEffect(() => {
     if (!user) return;
@@ -165,7 +203,6 @@ const ChatBookingFlow = ({
     return () => window.clearInterval(timer);
   }, [draft.holdExpiresAt, vn]);
 
-  const stationOptions = useMemo(() => stations.map((s) => ({ id: stationValue(s, "id"), code: stationValue(s, "code"), name: stationValue(s, "name") })).filter((s) => s.id && s.name), [stations]);
   const selectedSeats = seatLeg === "departure" ? draft.selectedSeatsDeparture : draft.selectedSeatsReturn;
   const requiredSeatCount = Number(draft.adultCount || 0) + Number(draft.childCount || 0);
   const passengerRows = useMemo(() => buildPassengerRows(draft), [draft]);
@@ -173,11 +210,12 @@ const ChatBookingFlow = ({
   const receivedFields = [
     draft.departureDate && (vn ? "Ngày đi" : "Departure date"),
     draft.fromStationName && draft.toStationName && (vn ? "Bến đi/đến" : "Stations"),
-    (Number(draft.adultCount || 0) + Number(draft.childCount || 0) + Number(draft.infantCount || 0)) > 0 && (vn ? "Số hành khách" : "Passenger count"),
+    draft.passengerCountConfirmed && Number(draft.adultCount || 0) > 0 && (vn ? "Số hành khách" : "Passenger count"),
   ].filter(Boolean);
   const missingFields = [
     !draft.departureDate && (vn ? "Ngày đi" : "Departure date"),
     (!draft.fromStationId || !draft.toStationId) && (vn ? "Bến đi/đến" : "Stations"),
+    (!draft.passengerCountConfirmed || Number(draft.adultCount || 0) < 1) && (vn ? "Số hành khách" : "Passenger count"),
   ].filter(Boolean);
 
   const update = (patch) => setDraft((current) => ({ ...current, ...patch }));
@@ -190,8 +228,8 @@ const ChatBookingFlow = ({
 
   const searchTrips = async () => {
     setError("");
-    if (!draft.fromStationId || !draft.toStationId || !draft.departureDate) {
-      setError(vn ? "Vui lòng chọn ngày đi, bến đi và bến đến." : "Choose a date, departure station and arrival station.");
+    if (!draft.fromStationId || !draft.toStationId || !draft.departureDate || !draft.passengerCountConfirmed || Number(draft.adultCount || 0) < 1) {
+      setError(vn ? "Vui lòng chọn ngày, bến đi, bến đến và xác nhận số hành khách (ít nhất 1 người lớn)." : "Choose a date, stations and confirm the passenger count (at least one adult).");
       return;
     }
     if (draft.fromStationId === draft.toStationId) {
@@ -405,7 +443,7 @@ const ChatBookingFlow = ({
       <div className="grid grid-cols-2 gap-2"><label>{vn ? "Ngày đi" : "Departure date"}<input type="date" min={getTodayDateString()} value={draft.departureDate} onChange={(e) => update({ departureDate: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label><label className="flex items-end gap-1.5 pb-2"><input type="checkbox" checked={draft.isRoundTrip} onChange={(e) => update({ isRoundTrip: e.target.checked })} />{vn ? "Khứ hồi" : "Round trip"}</label></div>
       {draft.isRoundTrip && <label>{vn ? "Ngày về" : "Return date"}<input type="date" min={draft.departureDate || getTodayDateString()} value={draft.returnDate} onChange={(e) => update({ returnDate: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label>}
       <div className="grid grid-cols-2 gap-2"><label>{vn ? "Bến đi" : "From"}<select value={draft.fromStationId} onChange={(e) => selectStation("from", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800"><option value="">—</option>{stationOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>{vn ? "Bến đến" : "To"}<select value={draft.toStationId} onChange={(e) => selectStation("to", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800"><option value="">—</option>{stationOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label></div>
-      <div className="grid grid-cols-3 gap-2"><label>{vn ? "Người lớn" : "Adults"}<input type="number" min="1" max="10" value={draft.adultCount} onChange={(e) => update({ adultCount: Math.max(1, Math.min(10, Number(e.target.value) || 1)) })} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label><label>{vn ? "Trẻ em" : "Children"}<input type="number" min="0" max="9" value={draft.childCount} onChange={(e) => update({ childCount: Math.max(0, Math.min(9, Number(e.target.value) || 0)) })} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label><label>{vn ? "Em bé" : "Infants"}<input type="number" min="0" max="9" value={draft.infantCount} onChange={(e) => update({ infantCount: Math.max(0, Math.min(9, Number(e.target.value) || 0)) })} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label></div>
+      <div className="grid grid-cols-3 gap-2"><label>{vn ? "Người lớn" : "Adults"}<input type="number" min="0" max="10" value={draft.adultCount ?? ""} onChange={(e) => { const value = e.target.value === "" ? null : Math.max(0, Math.min(10, Number(e.target.value))); update({ adultCount: value, passengerCountConfirmed: value !== null }); }} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label><label>{vn ? "Trẻ em" : "Children"}<input type="number" min="0" max="9" value={draft.childCount} onChange={(e) => { const value = Math.max(0, Math.min(9, Number(e.target.value) || 0)); update({ childCount: value, passengerCountConfirmed: true }); }} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label><label>{vn ? "Em bé" : "Infants"}<input type="number" min="0" max="9" value={draft.infantCount} onChange={(e) => { const value = Math.max(0, Math.min(9, Number(e.target.value) || 0)); update({ infantCount: value, passengerCountConfirmed: true }); }} className="mt-1 w-full rounded-lg border border-slate-200 p-2 dark:border-slate-700 dark:bg-slate-800" /></label></div>
       <button type="button" disabled={loading} onClick={searchTrips} className="w-full rounded-xl bg-[#124757] px-3 py-2.5 font-bold text-white disabled:opacity-50">{loading ? "…" : vn ? "Tìm chuyến" : "Find trips"}</button>
     </div>}
     {draft.stage === "SelectingTrip" && <div className="space-y-2"><div className="font-bold">{draft.selectedDepartureTrip ? (draft.isRoundTrip ? (draft.selectedReturnTrip ? (vn ? "Chọn ghế" : "Choose seats") : (vn ? "Chọn chuyến về" : "Choose return trip")) : (vn ? "Đã chọn chuyến đi" : "Outbound selected")) : (vn ? "Chọn chuyến đi" : "Choose outbound trip")}</div>{!draft.selectedDepartureTrip && <div className="space-y-1.5">{draft.departureTrips.map((trip) => renderTrip(trip, "departure"))}</div>}{draft.selectedDepartureTrip && draft.isRoundTrip && !draft.selectedReturnTrip && <div className="space-y-1.5">{draft.returnTrips.map((trip) => renderTrip(trip, "return"))}</div>}{draft.selectedDepartureTrip && !draft.isRoundTrip && <button type="button" onClick={() => { update({ stage: "SelectingSeats" }); setSeatLeg("departure"); loadSeats("departure"); }} className="w-full rounded-xl bg-[#124757] px-3 py-2 font-bold text-white">{vn ? "Chọn ghế" : "Choose seats"}</button>}{draft.selectedDepartureTrip && draft.selectedReturnTrip && <button type="button" onClick={() => { update({ stage: "SelectingSeats" }); setSeatLeg("departure"); loadSeats("departure"); }} className="w-full rounded-xl bg-[#124757] px-3 py-2 font-bold text-white">{vn ? "Chọn ghế chiều đi" : "Choose outbound seats"}</button>}</div>}
