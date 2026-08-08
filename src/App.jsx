@@ -75,6 +75,7 @@ import { TripSeatBoardPage } from "./pages/Admin/TripSeatBoard";
 import { BlogManagement } from "./pages/Admin/BlogManagement";
 import { CreateBlog } from "./pages/Admin/BlogManagement/CreateBlog";
 import { EditBlog } from "./pages/Admin/BlogManagement/EditBlog";
+import { ReplanPreviewPage } from "./pages/Admin/ReplanPreview";
 
 function App() {
   return (
@@ -797,6 +798,16 @@ function App() {
             element={
               <AdminLayout title="Edit Blog Post">
                 <EditBlog />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Trip Replan Preview (Admin only) ******* */}
+          <Route
+            path="/admin/trips/:tripId/replan"
+            element={
+              <AdminLayout title="Trip Replan">
+                <ReplanPreviewPage />
               </AdminLayout>
             }
           />
