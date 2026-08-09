@@ -7,7 +7,7 @@ import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../utils/charterBookingAdmi
 import { isBoatUnderMaintenance, resolveBoatLiveStatus } from "../utils/boatTracking";
 
 const DEFAULT_STATION_IMAGE =
-  "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
+    "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&q=80";
 
 const getStationImageUrl = (station) => {
   const primary = String(station?.imageUrl || "").trim();

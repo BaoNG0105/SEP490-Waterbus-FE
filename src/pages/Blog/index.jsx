@@ -7,7 +7,7 @@ export function BlogList() {
     const { lang } = useApp();
     const [blogs, setBlogs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const DEFAULT_BLOG_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
+    const DEFAULT_BLOG_IMAGE = "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&q=80";
 
     useEffect(() => {
         const loadAllBlogs = async () => {

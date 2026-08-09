@@ -7,7 +7,7 @@ export function StationManagement() {
     const { lang } = useApp();
     const navigate = useNavigate();
 
-    const DEFAULT_STATION_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
+    const DEFAULT_STATION_IMAGE = "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&q=80";
 
     const [stations, setStations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);

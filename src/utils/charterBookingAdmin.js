@@ -57,7 +57,7 @@ export const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
-export const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
+export const DEFAULT_BOAT_IMAGE = "https://images.unsplash.com/photo-1605281317010-fe5ffe798166?w=800&q=80";
 
 export const getBoatImageUrl = (boat, fallback = DEFAULT_BOAT_IMAGE) => {
   if (!boat) return fallback;
