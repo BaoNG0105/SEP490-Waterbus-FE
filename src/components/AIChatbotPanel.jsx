@@ -100,7 +100,8 @@ const parseBookingContext = (text, current = EMPTY_BOOKING_CONTEXT) => {
 
   const routePatterns = [
     /(?:từ|from|đi|di)\s+(.+?)\s*(?:đến|tới|to|->|→|[-–—])\s*(.+?)(?=\s+(?:ngày|on|cho|với|lúc|at|for|with)\b|\s+(?:và|and)\s+\d+\b|[,.!?]|$)/i,
-    /(?:^|\s)(?:bến\s+)?(.+?)\s*(?:->|→|[-–—])\s*(?:bến\s+)?(.+?)(?=\s+(?:ngày|on|cho|với|lúc|at|for|with)\b|\s+(?:và|and)\s+\d+\b|[,.!?]|$)/i,
+    /(?:^|\s)bến\s+(.+?)\s*(?:đến|tới|to|->|→|[-–—])\s*bến\s+(.+?)(?=\s+(?:ngày|on|cho|với|lúc|at|for|with)\b|\s+(?:và|and)\s+\d+\b|[,.!?]|$)/i,
+    /(?:^|\s)([^\d\s][^,!?]{1,40}?)\s*(?:->|→)\s*([^,!?]{1,40}?)(?=\s+(?:ngày|on|cho|với|lúc|at|for|with)\b|\s+(?:và|and)\s+\d+\b|[,.!?]|$)/i,
   ];
   const route = routePatterns.map((pattern) => text.match(pattern)).find(Boolean);
   if (route) {
@@ -294,9 +295,17 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
 
   const startBookingIntent = () => {
     if (isConversationClosed) return;
+    setBookingIntent(true);
+    // When the conversation already contains a complete booking request,
+    // open the embedded form immediately and seed it from that context. This
+    // keeps the user from having to repeat the date, route, or passenger count.
+    if (isBookingContextComplete(bookingContext)) {
+      setBookingDraft(bookingDraftFromContext(bookingContext));
+      setBookingFlow(true);
+      return;
+    }
     setBookingFlow(false);
     setBookingDraft(null);
-    setBookingIntent(true);
     void sendText(chatLang === "VN" ? "Tôi muốn đặt vé trong chat." : "I want to book a ticket in chat.", null);
   };
 
