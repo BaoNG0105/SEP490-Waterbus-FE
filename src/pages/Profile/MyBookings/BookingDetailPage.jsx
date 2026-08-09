@@ -6,7 +6,7 @@ import { useApp } from "../../../context/AppContext";
 //import
 import { fetchMyBookingDetail } from "../../../services/bookingService";
 import { fetchTripDetail } from "../../../services/tripService";
-import { fetchReviewableTrips, submitTripReview } from "../../../services/reviewService";
+import { fetchReviewableTrips, submitBookingReview } from "../../../services/reviewService";
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
 import { MY_BOOKINGS_PATH, getBookingServiceConfig } from "../../../utils/bookingServiceType";
@@ -627,8 +627,8 @@ export function BookingDetailPage({ serviceType }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
-  const [reviewableByTripCode, setReviewableByTripCode] = useState({});
-  const [reviewModalTrip, setReviewModalTrip] = useState(null);
+  const [bookingReviewable, setBookingReviewable] = useState(null);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),
@@ -670,37 +670,32 @@ export function BookingDetailPage({ serviceType }) {
     loadDetail();
   }, [loadDetail]);
 
+  // Review giờ tính theo booking (không phải trip) — chỉ cần tìm entry có bookingId khớp booking đang xem.
   const loadReviewableTrips = useCallback(async () => {
+    if (!booking?.id) return;
     try {
       const data = await fetchReviewableTrips({ page: 1, pageSize: 100 });
       const list = Array.isArray(data) ? data : (data?.items || data?.data || []);
-      const map = {};
-      list.forEach((trip) => {
-        const normalized = normalizeReviewableTrip(trip);
-        if (normalized.tripCode) map[normalized.tripCode] = normalized;
-      });
-      setReviewableByTripCode(map);
+      const match = list
+        .map(normalizeReviewableTrip)
+        .find((trip) => trip.bookingId === booking.id);
+      setBookingReviewable(match || null);
     } catch (error) {
       console.error("Lỗi khi tải danh sách chuyến có thể đánh giá:", error);
     }
-  }, []);
+  }, [booking?.id]);
 
-  // Chỉ có chuyến đã hoàn thành mới xuất hiện trong reviewable-trips — Pending/Cancelled sẽ tự không khớp tripCode nào.
+  // Chỉ có booking đã hoàn tất dịch vụ mới xuất hiện trong reviewable-trips.
   useEffect(() => {
     if (!booking) return;
     loadReviewableTrips();
   }, [booking, loadReviewableTrips]);
 
-  const handleReviewSubmitted = useCallback(async (tripId, tripCode, rating, comment) => {
-    await submitTripReview(tripId, { rating, comment });
-    setReviewableByTripCode((prev) => ({
-      ...prev,
-      [tripCode]: {
-        ...prev[tripCode],
-        myReview: { rating, comment, status: "Hidden" },
-      },
-    }));
-    setReviewModalTrip(null);
+  const handleReviewSubmitted = useCallback(async (rating, comment) => {
+    if (!bookingReviewable?.bookingId) return;
+    await submitBookingReview(bookingReviewable.bookingId, { rating, comment });
+    setBookingReviewable((prev) => (prev ? { ...prev, myReview: { rating, comment, status: "Hidden" } } : prev));
+    setReviewModalOpen(false);
     notify({
       toast: true,
       icon: "success",
@@ -709,7 +704,7 @@ export function BookingDetailPage({ serviceType }) {
         ? "Cảm ơn bạn! Đánh giá sẽ hiển thị công khai sau khi được duyệt."
         : "Thanks! Your review will show publicly once approved.",
     });
-  }, [lang]);
+  }, [bookingReviewable, lang]);
 
   const holdExpiresAtMs = booking?.holdExpiresAt
     ? new Date(booking.holdExpiresAt).getTime()
@@ -1064,23 +1059,23 @@ export function BookingDetailPage({ serviceType }) {
                   })}
                 </div>
               </section>
-
-              {reviewableByTripCode[group.tripCode] ? (
-                <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-                  <div className="border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
-                    <h3 className="font-headline text-sm font-black text-[#124757] dark:text-white">
-                      {lang === "VN" ? "Đánh giá chuyến" : "Trip review"}
-                    </h3>
-                  </div>
-                  <TripReviewSlot
-                    reviewable={reviewableByTripCode[group.tripCode]}
-                    lang={lang}
-                    onOpenReview={setReviewModalTrip}
-                  />
-                </section>
-              ) : null}
               </div>
             ))}
+
+            {bookingReviewable ? (
+              <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+                <div className="border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
+                  <h3 className="font-headline text-sm font-black text-[#124757] dark:text-white">
+                    {lang === "VN" ? "Đánh giá của bạn" : "Your review"}
+                  </h3>
+                </div>
+                <TripReviewSlot
+                  reviewable={bookingReviewable}
+                  lang={lang}
+                  onOpenReview={() => setReviewModalOpen(true)}
+                />
+              </section>
+            ) : null}
           </div>
 
           <div className="space-y-5 lg:sticky lg:top-28 lg:col-span-5">
@@ -1359,11 +1354,11 @@ export function BookingDetailPage({ serviceType }) {
         </div>
       </main>
 
-      {reviewModalTrip ? (
+      {reviewModalOpen ? (
         <TripReviewModal
           lang={lang}
-          onClose={() => setReviewModalTrip(null)}
-          onSubmitted={(rating, comment) => handleReviewSubmitted(reviewModalTrip.tripId, reviewModalTrip.tripCode, rating, comment)}
+          onClose={() => setReviewModalOpen(false)}
+          onSubmitted={(rating, comment) => handleReviewSubmitted(rating, comment)}
         />
       ) : null}
     </div>

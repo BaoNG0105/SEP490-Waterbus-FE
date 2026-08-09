@@ -1,7 +1,7 @@
 import {
     getPublicReviews as apiGetPublicReviews,
     getReviewableTrips as apiGetReviewableTrips,
-    createTripReview as apiCreateTripReview,
+    createBookingReview as apiCreateBookingReview,
     getAdminReviews as apiGetAdminReviews,
     updateReviewStatus as apiUpdateReviewStatus,
 } from '../api/reviewApi';
@@ -26,12 +26,12 @@ export const fetchReviewableTrips = async (params) => {
     }
 };
 
-// Service: Gửi đánh giá cho 1 chuyến đã hoàn thành
-export const submitTripReview = async (tripId, payload) => {
+// Service: Gửi đánh giá cho 1 booking đã hoàn thành dịch vụ
+export const submitBookingReview = async (bookingId, payload) => {
     try {
-        return await apiCreateTripReview(tripId, payload);
+        return await apiCreateBookingReview(bookingId, payload);
     } catch (error) {
-        console.error(`Lỗi khi gửi đánh giá chuyến ${tripId}:`, error);
+        console.error(`Lỗi khi gửi đánh giá booking ${bookingId}:`, error);
         throw error;
     }
 };
