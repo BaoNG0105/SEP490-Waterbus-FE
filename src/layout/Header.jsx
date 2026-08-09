@@ -7,6 +7,7 @@ import { notify } from "../utils/swalToast";
 
 import { UserAvatar } from "../components/UserAvatar";
 import { logoUrl as logo } from "../data/homeData";
+import { getDefaultAdminLandingPath } from "../config/adminNav";
 
 export const Header = ({ isNoticeVisible }) => {
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
@@ -42,6 +43,9 @@ export const Header = ({ isNoticeVisible }) => {
   // Kiểm tra quyền quản trị để hiển thị nút chuyển đến trang Admin Dashboard
   const adminRoles = ["ADMIN", "STAFF", "MANAGER"];
   const isAdminUser = isAuthenticated && user?.roles?.some((role) => adminRoles.includes(role.systemName));
+  // Dashboard "/admin" giờ chỉ dành riêng Admin — Manager/Staff bấm nút này vào thẳng trang
+  // quản lý đầu tiên họ có quyền xem (xem src/config/adminNav.js).
+  const adminEntryPath = getDefaultAdminLandingPath(user);
 
   // Logic tự động đăng xuất sau 30p bảo mật
   useEffect(() => {
@@ -208,7 +212,7 @@ export const Header = ({ isNoticeVisible }) => {
           <div className="flex items-center gap-2 lg:pl-4 lg:border-l border-white/20 dark:border-slate-700">
             {isAdminUser && (
               <Link
-                to="/admin"
+                to={adminEntryPath}
                 className="hidden sm:flex items-center justify-center w-8 h-8 rounded-full bg-white/10 dark:bg-slate-800 border border-white/10 dark:border-slate-700 hover:border-yellow-400 dark:hover:border-yellow-400 transition-colors text-white hover:text-yellow-400 shrink-0"
                 title={lang === "VN" ? "Trang quản trị" : "Admin Dashboard"}
                 aria-label={lang === "VN" ? "Trang quản trị" : "Admin Dashboard"}
@@ -359,7 +363,7 @@ export const Header = ({ isNoticeVisible }) => {
 
           {isAdminUser && (
             <Link
-              to="/admin"
+              to={adminEntryPath}
               className="flex items-center gap-2 font-bold text-base text-white hover:text-yellow-400 transition-colors"
               onClick={closeMobileMenu}
             >
