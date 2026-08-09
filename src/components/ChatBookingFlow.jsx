@@ -67,7 +67,13 @@ const stationValue = (station, kind) => {
 };
 
 const stationNameMatches = (option, value) => {
-  const normalize = (text) => String(text || "").toLowerCase().replace(/^bến\s+/, "").trim();
+  const normalize = (text) => String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/^(ben|ga)\s+/i, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
   const target = normalize(value);
   const candidate = normalize(option?.name);
   return Boolean(target && candidate && (target === candidate || target.includes(candidate) || candidate.includes(target)));
