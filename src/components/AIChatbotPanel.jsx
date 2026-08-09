@@ -114,7 +114,7 @@ const parseBookingContext = (text, current = EMPTY_BOOKING_CONTEXT) => {
   }
 
   const adult = text.match(/(\d+)\s*(?:người\s*lớn|adult(?:s)?)/i);
-  const child = text.match(/(\d+)\s*(?:trẻ\s*em|children?|kids?)/i);
+  const child = text.match(/(\d+)\s*(?:trẻ\s*em|trẻ\s*nhỏ|children?|kids?)/i);
   const infant = text.match(/(\d+)\s*(?:em\s*b[eé]|trẻ\s*sơ\s*sinh|infants?)/i);
   const generic = text.match(/(?:đi|cho|for)\s+(\d+)\s*(?:người|khách|people|persons)\b/i)
     || text.match(/\b(\d+)\s*(?:người|khách)\b/i);
@@ -295,12 +295,19 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
 
   const startBookingIntent = () => {
     if (isConversationClosed) return;
+    // Rebuild the context from all user turns before opening the flow. The
+    // assistant may have summarized route/date/passenger details in its reply,
+    // while the local context was built before an earlier turn was persisted.
+    const rebuiltContext = messages
+      .filter((message) => message.from === "user")
+      .reduce((context, message) => parseBookingContext(message.text, context), bookingContext);
+    setBookingContext(rebuiltContext);
     setBookingIntent(true);
     // When the conversation already contains a complete booking request,
     // open the embedded form immediately and seed it from that context. This
     // keeps the user from having to repeat the date, route, or passenger count.
-    if (isBookingContextComplete(bookingContext)) {
-      setBookingDraft(bookingDraftFromContext(bookingContext));
+    if (isBookingContextComplete(rebuiltContext)) {
+      setBookingDraft(bookingDraftFromContext(rebuiltContext));
       setBookingFlow(true);
       return;
     }
