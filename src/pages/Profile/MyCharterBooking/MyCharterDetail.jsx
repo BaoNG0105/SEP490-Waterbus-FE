@@ -1193,7 +1193,19 @@ export function CharterDetail() {
           ? null
           : (String(paymentPromotionCode || "").trim() || null),
       };
+      console.log("🔵 [DEBUG] createPayment payload:", JSON.stringify(paymentPayload, null, 2));
+      console.log("🔵 [DEBUG] paymentSelectValue:", paymentSelectValue);
+      console.log("🔵 [DEBUG] normalizedPaymentOption:", normalizedPaymentOption);
+      console.log("🔵 [DEBUG] booking.hasDepositPaid:", booking.hasDepositPaid);
+      console.log("🔵 [DEBUG] needsBalancePayment:", needsBalancePayment);
+      console.log("🔵 [DEBUG] remainingAmount:", remainingAmount);
+      console.log("🔵 [DEBUG] depositPaymentAmount:", depositPaymentAmount);
+      console.log("🔵 [DEBUG] selectedPaymentAmount:", selectedPaymentAmount);
+      console.log("🔵 [DEBUG] booking.requiresAdditionalPayment:", booking.requiresAdditionalPayment);
+      console.log("🔵 [DEBUG] booking.additionalInsuranceAmount:", booking.additionalInsuranceAmount);
+      console.log("🔵 [DEBUG] effectivePaidAmount:", effectivePaidAmount);
       const payment = await createBookingPayment(paymentPayload);
+      console.log("🟢 [DEBUG] createPayment response:", JSON.stringify(payment, null, 2));
       const applied = applyCreatedPayOsPayment(payment, {
         fallbackAmount: selectedPaymentAmount,
         openCheckout: true,
@@ -1883,9 +1895,9 @@ export function CharterDetail() {
   const remainingAmount = booking.remainingAmount !== undefined && booking.remainingAmount !== null
     ? Math.max(0, Number(booking.remainingAmount) || 0)
     : computedRemaining;
-  const needsBalancePayment = Boolean(booking.requiresAdditionalPayment)
-    || (remainingAmount > 0 && effectivePaidAmount > 0)
-    || (Number(booking.additionalInsuranceAmount) > 0);
+  const needsBalancePayment = Boolean(booking.requiresAdditionalPayment && booking.hasDepositPaid)
+    || (remainingAmount > 0 && effectivePaidAmount > 0 && booking.hasDepositPaid)
+    || (Number(booking.additionalInsuranceAmount) > 0 && booking.hasDepositPaid);
   const normalizedPaymentOption = (needsBalancePayment || booking.hasDepositPaid)
     ? "Remaining"
     : paymentOption === "Remaining"
@@ -1895,29 +1907,31 @@ export function CharterDetail() {
     {
       id: "Deposit",
       label: lang === "VN" ? "Đặt cọc" : "Deposit",
-      disabled: booking.hasDepositPaid || depositPaymentAmount <= 0 || needsBalancePayment,
+      disabled: booking.hasDepositPaid || depositPaymentAmount <= 0,
       amount: depositPaymentAmount,
       originalAmount: promoApplied ? quoteDepositAmount : null,
     },
     {
       id: "Full",
       label: lang === "VN" ? "Thanh toán đủ" : "Full",
-      disabled: needsBalancePayment,
-      amount: booking.hasDepositPaid || needsBalancePayment ? remainingAmount : payableQuoteTotal,
-      originalAmount: promoApplied && !booking.hasDepositPaid && !needsBalancePayment ? quoteTotal : null,
+      disabled: booking.hasDepositPaid, // Full chỉ chọn được khi chưa đặt cọc
+      amount: booking.hasDepositPaid ? remainingAmount : payableQuoteTotal,
+      originalAmount: promoApplied && !booking.hasDepositPaid ? quoteTotal : null,
     },
     {
       id: "Remaining",
       label: lang === "VN" ? "Phần còn lại" : "Remaining",
-      disabled: !(booking.hasDepositPaid || needsBalancePayment),
+      // Chỉ hiển thị và chọn được khi ĐÃ đặt cọc
+      disabled: !booking.hasDepositPaid,
       amount: remainingAmount,
-      originalAmount: promoApplied && (booking.hasDepositPaid || needsBalancePayment)
+      originalAmount: promoApplied && booking.hasDepositPaid
         ? Math.max(quoteTotal - effectivePaidAmount, 0)
         : null,
     },
   ];
-  const selectablePaymentChoices = (needsBalancePayment || booking.hasDepositPaid)
-    ? paymentChoices.filter((choice) => choice.id === "Remaining")
+  // Chỉ hiển thị Remaining khi đã đặt cọc
+  const selectablePaymentChoices = booking.hasDepositPaid
+    ? paymentChoices
     : paymentChoices.filter((choice) => choice.id !== "Remaining");
   const paymentSelectValue = selectablePaymentChoices.some((choice) => choice.id === normalizedPaymentOption)
     ? normalizedPaymentOption
@@ -2313,7 +2327,7 @@ export function CharterDetail() {
                   {quoteBoatRows.map((boat) => (
                     <div key={`${boat.boatOrder}-${boat.name}`} className="flex items-center gap-4 px-5 py-4">
                       <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-2xl bg-slate-200 dark:bg-slate-800">
-                        <img src={boat.imageUrl || DEFAULT_BOAT_IMAGE} alt={boat.name} className="h-full w-full object-cover" />
+                        <img src={boat.imageUrl} alt={boat.name} className="h-full w-full object-cover" />
                         <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg bg-[#124757] text-[10px] font-headline font-black text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900">
                           {boat.boatOrder}
                         </span>
@@ -2324,13 +2338,13 @@ export function CharterDetail() {
                           <BoatSeatLayoutPreviewButton
                             boatId={boat.boatId}
                             boatName={boat.name}
-                            boatImageUrl={boat.imageUrl || DEFAULT_BOAT_IMAGE}
+                            boatImageUrl={boat.imageUrl}
                             lang={lang}
                             boatMeta={{
                               seatCount: boat.seatCount,
                               numberOfDecks: boat.numberOfDecks,
                               seatSetupType: boat.seatSetupType,
-                              imageUrl: boat.imageUrl || DEFAULT_BOAT_IMAGE,
+                              imageUrl: boat.imageUrl,
                             }}
                           />
                         </div>

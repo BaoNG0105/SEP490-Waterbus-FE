@@ -7,7 +7,7 @@ import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../utils/charterBookingAdmi
 import { isBoatUnderMaintenance, resolveBoatLiveStatus } from "../utils/boatTracking";
 
 const DEFAULT_STATION_IMAGE =
-  "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
+    "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&q=80";
 
 const getStationImageUrl = (station) => {
   const primary = String(station?.imageUrl || "").trim();
@@ -769,20 +769,29 @@ export const WaterwayMap = ({
             const n = Number(boat.seatCount);
             return Number.isFinite(n) && n > 0 ? n : null;
           })();
-          // Contract: `${onboardPassengerCount ?? 0}/${capacitySnapshot}`
-          const passengerCount = (() => {
-            if (boat.passengerCount === null || boat.passengerCount === undefined || boat.passengerCount === "") {
-              return null;
-            }
-            const n = Number(boat.passengerCount);
+          // BE contract (2026-08-08):
+          //   totalPassengerCount       = tổng booking (kể cả chưa checkin)
+          //   onboardPassengerCount     = số khách ĐÃ CHECKIN trên tàu
+          //   alightedPassengerCount    = số khách đã xuống bến
+          // FE chỉ hiển thị ratio khi onboardPassengerCount > 0.
+          const totalPassenger = (() => {
+            const n = Number(boat.totalPassengerCount);
+            return Number.isFinite(n) && n >= 0 ? n : null;
+          })();
+          const onboardPassenger = (() => {
+            const n = Number(boat.onboardPassengerCount);
+            return Number.isFinite(n) && n >= 0 ? n : null;
+          })();
+          const alightedPassenger = (() => {
+            const n = Number(boat.alightedPassengerCount);
             return Number.isFinite(n) && n >= 0 ? n : null;
           })();
           const hasSeats = seatCount != null;
-          const hasPassengers = passengerCount != null;
-          const forceOccupancyRatio = Boolean(boat.tripId) || boat.showLiveGps === true;
+          // Đã checkin = có onboardPassenger > 0 (BE confirm)
+          const hasCheckedIn = onboardPassenger != null && onboardPassenger > 0;
           const occupancyValue = hasSeats
-            ? ((hasPassengers || forceOccupancyRatio)
-              ? `${passengerCount ?? 0}/${seatCount}`
+            ? (hasCheckedIn
+              ? `${onboardPassenger}/${seatCount}`
               : String(seatCount))
             : null;
           const liveStatus = resolveBoatLiveStatus(boat);
@@ -843,7 +852,7 @@ export const WaterwayMap = ({
                       <span style={{ display: "block", marginTop: 2, fontSize: 10, fontWeight: 600, color: "#64748B" }}>
                         {`Đoạn từ ${boat.passengerBreakdown.stopName}`}
                       </span>
-                    ) : boat.passengerCountSource === "tracking" ? (
+                    ) : hasCheckedIn ? (
                       <span style={{ display: "block", marginTop: 2, fontSize: 10, fontWeight: 600, color: "#64748B" }}>
                         Check-in thực tế
                       </span>
