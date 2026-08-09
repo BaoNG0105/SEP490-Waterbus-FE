@@ -389,8 +389,13 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
         (typeof data === "string" ? data : data?.reply ?? data?.text ?? data?.message ?? data?.answer) ||
         t.errorReply;
       const apiActions = Array.isArray(data?.actions) ? data.actions : [];
+      // The assistant often summarizes the complete route/date/passenger
+      // details in its reply. Merge that summary back into the local context
+      // so the “Đặt vé” action can open a prefilled form.
+      const replyBookingContext = parseBookingContext(data?.text || "", nextBookingContext);
+      setBookingContext(replyBookingContext);
       const confirmationAction = startsOrContinuesBooking
-        && isBookingContextComplete(nextBookingContext)
+        && isBookingContextComplete(replyBookingContext)
         ? [{
           type: "booking-confirm",
           route: "/waterbus-booking",
