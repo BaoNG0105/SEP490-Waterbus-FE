@@ -7,7 +7,7 @@ import { notify } from "../utils/swalToast";
 
 import { UserAvatar } from "../components/UserAvatar";
 import { logoUrl as logo } from "../data/homeData";
-import { getDefaultAdminLandingPath } from "../config/adminNav";
+import { getDefaultAdminLandingPath } from "./Admin/AdminSidebar";
 
 export const Header = ({ isNoticeVisible }) => {
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
@@ -44,7 +44,7 @@ export const Header = ({ isNoticeVisible }) => {
   const adminRoles = ["ADMIN", "STAFF", "MANAGER"];
   const isAdminUser = isAuthenticated && user?.roles?.some((role) => adminRoles.includes(role.systemName));
   // Dashboard "/admin" giờ chỉ dành riêng Admin — Manager/Staff bấm nút này vào thẳng trang
-  // quản lý đầu tiên họ có quyền xem (xem src/config/adminNav.js).
+  // quản lý đầu tiên họ có quyền xem (xem AdminSidebar.jsx).
   const adminEntryPath = getDefaultAdminLandingPath(user);
 
   // Logic tự động đăng xuất sau 30p bảo mật
