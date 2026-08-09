@@ -355,21 +355,21 @@ export const getStopStatusBadgeClass = (stopOrKey, opts = {}) => {
     : resolveStopStatusKey(stopOrKey, opts);
   switch (key) {
     case "departed":
-      return "bg-slate-100 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600";
+      return "text-slate-600 dark:text-slate-300";
     case "arrived":
-      return "bg-sky-100 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-400/30";
+      return "text-sky-700 dark:text-sky-300";
     case "boarding":
-      return "bg-amber-100 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/30";
+      return "text-amber-700 dark:text-amber-300";
     case "enroute":
-      return "bg-teal-100 text-teal-700 ring-1 ring-teal-200 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-400/30";
+      return "text-teal-700 dark:text-teal-300";
     case "delayed":
-      return "bg-orange-100 text-orange-700 ring-1 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-400/30";
+      return "text-orange-700 dark:text-orange-300";
     case "skipped":
     case "cancelled":
     case "canceled":
-      return "bg-rose-100 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-400/30";
+      return "text-rose-700 dark:text-rose-300";
     case "scheduled":
     default:
-      return "bg-slate-50 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-600";
+      return "text-slate-500 dark:text-slate-400";
   }
 };

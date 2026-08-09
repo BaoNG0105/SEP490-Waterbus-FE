@@ -7,9 +7,7 @@ import {
   PROMOTION_BOOKING_TYPES,
 } from "../../services/promotionService";
 import { notify } from "../../utils/swalToast";
-
-const fallbackImg =
-  "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
+import { ImageWithFallback } from "../../components/ImageWithFallback";
 
 const formatCurrency = (value, lang) =>
   (Number(value) || 0).toLocaleString(lang === "VN" ? "vi-VN" : "en-US") + (lang === "VN" ? "đ" : " VND");
@@ -126,10 +124,11 @@ export function PromotionDetail() {
           {/* CỘT TRÁI: ẢNH BANNER */}
           <div className="lg:col-span-6">
             <div className="w-full aspect-square overflow-hidden shadow-xl bg-slate-50 dark:bg-slate-800">
-              <img
-                src={promo.imageUrl || fallbackImg}
+              <ImageWithFallback
+                src={promo.imageUrl}
                 alt={promo.promotionName}
-                className="w-full h-full object-cover"
+                className="w-full h-full"
+                iconClassName="w-1/4 h-1/4"
               />
             </div>
           </div>

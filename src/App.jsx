@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { AdminLayout } from "./layout/Admin/AdminLayout";
 import { MainLayout } from "./layout/MainLayout";
 import { NotFound } from "./pages/NotFound";
+import { ScrollToTop } from "./components/ScrollToTop";
 
 //Phân quyền
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
@@ -14,13 +15,12 @@ import { Register } from "./pages/Register";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { BlogList } from "./pages/Blog";
 import { BlogDetail } from "./pages/Blog/BlogDetail";
-// import { Station } from "./pages/Station";
 import { StationDetail } from "./pages/Station/StationDetail";
 import { Promotions } from "./pages/Promotions";
 import { PromotionDetail } from "./pages/Promotions/PromotionDetail";
 import { Contact } from "./pages/Contact";
+import { TermsAndPolicy } from "./pages/TermsAndPolicy";
 import { Schedule } from "./pages/Schedule";
-import { DeparturesBoard } from "./pages/DeparturesBoard";
 import { Profile } from "./pages/Profile";
 import { Notifications } from "./pages/Notifications";
 import { EditProfile } from "./pages/Profile/EditProfie";
@@ -75,11 +75,14 @@ import { TripSeatBoardPage } from "./pages/Admin/TripSeatBoard";
 import { BlogManagement } from "./pages/Admin/BlogManagement";
 import { CreateBlog } from "./pages/Admin/BlogManagement/CreateBlog";
 import { EditBlog } from "./pages/Admin/BlogManagement/EditBlog";
-import { ReplanPreviewPage } from "./pages/Admin/ReplanPreview";
+import { SystemDataManagement } from "./pages/Admin/SystemDataManagement";
+import { CreateSystemData } from "./pages/Admin/SystemDataManagement/CreateSystemData";
+import { EditSystemData } from "./pages/Admin/SystemDataManagement/EditSystemData";
 
 function App() {
   return (
     <Router>
+      <ScrollToTop />
       <Routes>
         {/* ============= Client Page ============= */}
         {/* Home Page */}
@@ -132,19 +135,6 @@ function App() {
           }
         />
 
-        {/* Lịch khởi hành (customer) — GET /operations/schedule?serviceType=booking */}
-        <Route
-          path="/schedule"
-          element={
-            <MainLayout>
-              <Schedule />
-            </MainLayout>
-          }
-        />
-
-        {/* Bảng điện tử khởi hành trong ngày (FIDS) */}
-        <Route path="/departures" element={<DeparturesBoard />} />
-
         {/* Promotion Detail Page */}
         <Route
           path="/promotions/:code"
@@ -155,12 +145,32 @@ function App() {
           }
         />
 
+        {/* Lịch khởi hành (customer)*/}
+        <Route
+          path="/schedule"
+          element={
+            <MainLayout>
+              <Schedule />
+            </MainLayout>
+          }
+        />
+
         {/* Contact Page */}
         <Route
           path="/contact"
           element={
             <MainLayout>
               <Contact />
+            </MainLayout>
+          }
+        />
+
+        {/* Terms & Policy Page (public) */}
+        <Route
+          path="/terms-and-policy"
+          element={
+            <MainLayout>
+              <TermsAndPolicy />
             </MainLayout>
           }
         />
@@ -802,12 +812,41 @@ function App() {
             }
           />
 
-          {/* ******* Trip Replan Preview (Admin only) ******* */}
+          {/* ******* System Data Management: nguồn dữ liệu chatbot + trang Điều khoản & Chính sách ******* */}
           <Route
-            path="/admin/trips/:tripId/replan"
+            path="/admin/knowledge-entries"
             element={
-              <AdminLayout title="Trip Replan">
-                <ReplanPreviewPage />
+              <AdminLayout title="AI Knowledge Management">
+                <SystemDataManagement />
+              </AdminLayout>
+            }
+          />
+
+          <Route
+            path="/admin/system-data"
+            element={
+              <AdminLayout title={{ vn: "Quản lý dữ liệu hệ thống", en: "System Data Management" }}>
+                <SystemDataManagement />
+              </AdminLayout>
+            }
+          />
+
+          {/* System Data Management: Create Page */}
+          <Route
+            path="/admin/system-data/create"
+            element={
+              <AdminLayout title="New System Data Entry">
+                <CreateSystemData />
+              </AdminLayout>
+            }
+          />
+
+          {/* System Data Management: Edit Page */}
+          <Route
+            path="/admin/system-data/edit/:id"
+            element={
+              <AdminLayout title="Edit System Data Entry">
+                <EditSystemData />
               </AdminLayout>
             }
           />

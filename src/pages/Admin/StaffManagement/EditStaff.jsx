@@ -10,6 +10,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { NationalitySelect } from "../../../components/NationalitySelect";
 import { canAssignStations } from "../../../components/StationAssignField";
+import { UserAvatar } from "../../../components/UserAvatar";
 import { promptResetManagedPassword } from "../../../utils/managedPasswordReset";
 import { notify } from "../../../utils/swalToast";
 
@@ -22,8 +23,6 @@ const isAllowedEmail = (email) => {
     if (at < 1 || at === trimmed.length - 1) return false;
     return ALLOWED_EMAIL_DOMAINS.includes(trimmed.slice(at + 1));
 };
-
-const DEFAULT_AVATAR = "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp";
 
 // Chuyển đổi chuỗi ngày sinh trả về từ BE (có thể là ISO hoặc dd/MM/yyyy) sang định dạng yyyy-MM-dd cho input HTML5
 const toInputDate = (value) => {
@@ -332,14 +331,11 @@ export function EditStaff() {
                     <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
                 </button>
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-12 h-12 rounded-full overflow-hidden border bg-slate-100 dark:bg-slate-700 shadow-sm shrink-0">
-                        <img
-                            src={userInfo.avatarUrl || DEFAULT_AVATAR}
-                            alt={userInfo.fullName}
-                            className="w-full h-full object-cover"
-                            onError={(e) => { e.target.src = DEFAULT_AVATAR; }}
-                        />
-                    </div>
+                    <UserAvatar
+                        avatarUrl={userInfo.avatarUrl}
+                        alt={userInfo.fullName}
+                        className="w-12 h-12 rounded-full overflow-hidden border shadow-sm shrink-0"
+                    />
                     <div className="min-w-0">
                         <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide truncate">
                             {lang === "VN" ? `Chỉnh sửa: ${userInfo.code}` : `Edit: ${userInfo.code}`}

@@ -13,6 +13,20 @@ import {
 } from "../../../services/promotionService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
+import { FormSelect } from "../../../components/FormSelect";
+
+const STATUS_LABELS = {
+    [PROMOTION_STATUS.DRAFT]: { vn: "Nháp", en: "Draft" },
+    [PROMOTION_STATUS.ACTIVE]: { vn: "Đang hoạt động", en: "Active" },
+    [PROMOTION_STATUS.PAUSED]: { vn: "Tạm dừng", en: "Paused" },
+    [PROMOTION_STATUS.ARCHIVED]: { vn: "Đã lưu trữ", en: "Archived" },
+};
+
+const getStatusLabel = (status, lang) => {
+    const entry = STATUS_LABELS[status];
+    if (!entry) return status || "--";
+    return lang === "VN" ? entry.vn : entry.en;
+};
 
 const formatCurrency = (value) => `${(Number(value) || 0).toLocaleString("vi-VN")}đ`;
 
@@ -305,37 +319,36 @@ export function PromotionManagement() {
                     />
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto overflow-x-auto shrink-0">
-                    <select
-                        value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 outline-none cursor-pointer shadow-inner shrink-0"
-                    >
-                        <option value="All">{lang === "VN" ? "Tất cả loại" : "All Types"}</option>
-                        <option value={PROMOTION_TYPE.PERCENT}>{lang === "VN" ? "Giảm theo %" : "Percent"}</option>
-                        <option value={PROMOTION_TYPE.FIXED}>{lang === "VN" ? "Giảm số tiền" : "Fixed"}</option>
-                    </select>
+                <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto justify-end overflow-visible">
+                    <div className="relative z-20 flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Loại:" : "Type:"}</span>
+                        <FormSelect
+                            value={typeFilter}
+                            onChange={setTypeFilter}
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả loại" : "All Types" },
+                                { value: PROMOTION_TYPE.PERCENT, label: lang === "VN" ? "Giảm theo %" : "Percent" },
+                                { value: PROMOTION_TYPE.FIXED, label: lang === "VN" ? "Giảm số tiền" : "Fixed" },
+                            ]}
+                            className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
+                    </div>
 
-                    <div className="flex gap-2">
-                        {[
-                            { key: "All", vn: "Tất cả", en: "All" },
-                            { key: PROMOTION_STATUS.DRAFT, vn: "Draft", en: "Draft" },
-                            { key: PROMOTION_STATUS.ACTIVE, vn: "Active", en: "Active" },
-                            { key: PROMOTION_STATUS.PAUSED, vn: "Paused", en: "Paused" },
-                            { key: PROMOTION_STATUS.ARCHIVED, vn: "Archived", en: "Archived" },
-                        ].map((btn) => (
-                            <button
-                                key={btn.key}
-                                type="button"
-                                onClick={() => setStatusFilter(btn.key)}
-                                className={`px-5 py-3.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider border transition-all shrink-0 ${statusFilter === btn.key
-                                        ? " border-transparent bg-yellow-400 text-slate-900 shadow-md"
-                                        : "bg-white text-slate-500 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
-                                    }`}
-                            >
-                                {lang === "VN" ? btn.vn : btn.en}
-                            </button>
-                        ))}
+                    <div className="relative z-10 flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
+                        <FormSelect
+                            value={statusFilter}
+                            onChange={setStatusFilter}
+                            menuAlign="right"
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All statuses" },
+                                { value: PROMOTION_STATUS.DRAFT, label: getStatusLabel(PROMOTION_STATUS.DRAFT, lang) },
+                                { value: PROMOTION_STATUS.ACTIVE, label: getStatusLabel(PROMOTION_STATUS.ACTIVE, lang) },
+                                { value: PROMOTION_STATUS.PAUSED, label: getStatusLabel(PROMOTION_STATUS.PAUSED, lang) },
+                                { value: PROMOTION_STATUS.ARCHIVED, label: getStatusLabel(PROMOTION_STATUS.ARCHIVED, lang) },
+                            ]}
+                            className="min-w-45 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
                     </div>
                 </div>
             </div>
@@ -435,14 +448,14 @@ export function PromotionManagement() {
 
                                             {/* Cột 5: Trạng thái */}
                                             <td className="py-4 px-4 text-center">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${
+                                                <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${
                                                     promo.status === PROMOTION_STATUS.ACTIVE
-                                                        ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400"
+                                                        ? "text-emerald-600 dark:text-emerald-400"
                                                         : promo.status === PROMOTION_STATUS.DRAFT
-                                                            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400"
+                                                            ? "text-amber-700 dark:text-amber-400"
                                                             : promo.status === PROMOTION_STATUS.PAUSED
-                                                                ? "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400"
-                                                                : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400"
+                                                                ? "text-sky-700 dark:text-sky-400"
+                                                                : "text-slate-500 dark:text-slate-400"
                                                     }`}>
                                                     <span className={`w-1.5 h-1.5 rounded-full ${
                                                         promo.status === PROMOTION_STATUS.ACTIVE
@@ -453,7 +466,7 @@ export function PromotionManagement() {
                                                                     ? "bg-sky-500"
                                                                     : "bg-slate-400"
                                                     }`}></span>
-                                                    {promo.status}
+                                                    {getStatusLabel(promo.status, lang)}
                                                 </span>
                                             </td>
 

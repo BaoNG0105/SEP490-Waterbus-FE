@@ -4,6 +4,9 @@ import { useApp } from "../../context/AppContext";
 export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
   // Lấy các state và hàm từ AppContext
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
+  const localizedTitle = typeof title === "object"
+    ? (lang === "VN" ? title.vn : title.en)
+    : title;
 
   return (
     <header className="fixed top-0 w-full z-40 flex justify-between items-center px-6 h-16 bg-[#124757] dark:bg-slate-900/80 text-white dark:text-slate-200 backdrop-blur-xl shadow-md border-b border-white/10 dark:border-slate-700 transition-colors duration-300">
@@ -24,7 +27,7 @@ export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
         {/* Tiêu đề trang: Sẽ đứng ngay cạnh mép phải của Sidebar trên Desktop */}
         <div className="flex items-center">
           <h1 className="font-headline font-black text-sm sm:text-base md:text-lg uppercase tracking-wider text-white dark:text-yellow-400 select-none whitespace-nowrap">
-            {title}
+            {localizedTitle}
           </h1>
         </div>
       </div>

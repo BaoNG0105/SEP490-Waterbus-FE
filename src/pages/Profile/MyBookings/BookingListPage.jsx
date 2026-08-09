@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchMyBookings } from "../../../services/bookingService";
-import { fetchReviewableTrips, submitTripReview } from "../../../services/reviewService";
+import { fetchReviewableTrips, submitBookingReview } from "../../../services/reviewService";
 import { BOOKING_SERVICE_CONFIG, getBookingServiceConfig } from "../../../utils/bookingServiceType";
 import { notify } from "../../../utils/swalToast";
 import { normalizeReviewableTrip, TripReviewModal } from "../../../components/TripReview";
@@ -27,20 +27,20 @@ const normalizeBooking = (item) => ({
 });
 
 const STATUS_STYLES = {
-  pendingpayment: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
-  confirmed: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
-  completed: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20",
-  cancelled: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600",
-  expired: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
-  refunded: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
-  pendingquote: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20",
-  quoted: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
+  pendingpayment: "text-amber-700 dark:text-amber-300",
+  confirmed: "text-emerald-700 dark:text-emerald-300",
+  completed: "text-sky-700 dark:text-sky-300",
+  cancelled: "text-slate-500 dark:text-slate-400",
+  expired: "text-rose-600 dark:text-rose-300",
+  refunded: "text-teal-700 dark:text-teal-300",
+  pendingquote: "text-violet-700 dark:text-violet-300",
+  quoted: "text-indigo-700 dark:text-indigo-300",
 };
 
 const getStatusClasses = (status) => {
   const key = String(status || "").toLowerCase().replace(/[\s_-]/g, "");
   return STATUS_STYLES[key]
-    || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600";
+    || "text-slate-500 dark:text-slate-400";
 };
 
 const STATUS_LABELS = {
@@ -104,10 +104,11 @@ export function BookingListPage() {
   const [allBookings, setAllBookings] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [sortOrder, setSortOrder] = useState("newest");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [pendingReviews, setPendingReviews] = useState([]);
-  const [reviewModalTrip, setReviewModalTrip] = useState(null);
+  const [reviewModalBooking, setReviewModalBooking] = useState(null);
 
   const highlightBookingId = location.state?.highlightBookingId || "";
   const paymentOutcome = location.state?.paymentOutcome
@@ -149,12 +150,21 @@ export function BookingListPage() {
     loadBookings();
   }, [loadBookings]);
 
+  // Review giờ tính theo booking — round-trip có 2 dòng (đi/về) cùng bookingId, chỉ giữ 1 dòng đại diện mỗi booking.
   const loadPendingReviews = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
       const data = await fetchReviewableTrips({ page: 1, pageSize: 100 });
       const list = Array.isArray(data) ? data : (data?.items || []);
-      const normalized = list.map(normalizeReviewableTrip).filter((trip) => !trip.myReview);
+      const seenBookingIds = new Set();
+      const normalized = list
+        .map(normalizeReviewableTrip)
+        .filter((trip) => !trip.myReview && trip.bookingId)
+        .filter((trip) => {
+          if (seenBookingIds.has(trip.bookingId)) return false;
+          seenBookingIds.add(trip.bookingId);
+          return true;
+        });
       setPendingReviews(normalized);
     } catch (error) {
       console.error("Lỗi khi tải danh sách chuyến có thể đánh giá:", error);
@@ -165,10 +175,10 @@ export function BookingListPage() {
     loadPendingReviews();
   }, [loadPendingReviews]);
 
-  const handleReviewSubmitted = useCallback(async (tripId, rating, comment) => {
-    await submitTripReview(tripId, { rating, comment });
-    setPendingReviews((prev) => prev.filter((trip) => trip.tripId !== tripId));
-    setReviewModalTrip(null);
+  const handleReviewSubmitted = useCallback(async (bookingId, rating, comment) => {
+    await submitBookingReview(bookingId, { rating, comment });
+    setPendingReviews((prev) => prev.filter((trip) => trip.bookingId !== bookingId));
+    setReviewModalBooking(null);
     notify({
       toast: true,
       icon: "success",
@@ -203,12 +213,28 @@ export function BookingListPage() {
     return ["All", ...distinct];
   }, [bookingsForTab]);
 
-  const filteredBookings = useMemo(() => bookingsForTab.filter((booking) => {
-    const searchValue = searchTerm.toLowerCase();
-    const matchesSearch = booking.bookingCode.toLowerCase().includes(searchValue);
-    const matchesStatus = statusFilter === "All" || booking.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  }), [bookingsForTab, searchTerm, statusFilter]);
+  const filteredBookings = useMemo(() => {
+    const filtered = bookingsForTab.filter((booking) => {
+      const searchValue = searchTerm.toLowerCase();
+      const matchesSearch = booking.bookingCode.toLowerCase().includes(searchValue);
+      const matchesStatus = statusFilter === "All" || booking.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+    const sorted = [...filtered].sort((a, b) => {
+      const aMs = Date.parse(a.bookedAt) || 0;
+      const bMs = Date.parse(b.bookedAt) || 0;
+      return sortOrder === "oldest" ? aMs - bMs : bMs - aMs;
+    });
+    return sorted;
+  }, [bookingsForTab, searchTerm, statusFilter, sortOrder]);
+
+  const pendingReviewsByBookingCode = useMemo(() => {
+    const map = {};
+    pendingReviews.forEach((trip) => {
+      if (trip.bookingCode) map[trip.bookingCode] = trip;
+    });
+    return map;
+  }, [pendingReviews]);
 
   const hasFilters = searchTerm || statusFilter !== "All";
   const emptyMessage = bookingsForTab.length === 0
@@ -279,7 +305,7 @@ export function BookingListPage() {
           </div>
 
           <div className="space-y-4 p-6 md:p-8">
-            <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+            <div className="grid gap-3 md:grid-cols-[1fr_200px_200px]">
               <div className="relative">
                 <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-400">search</span>
                 <input
@@ -301,6 +327,14 @@ export function BookingListPage() {
                       : getStatusLabel(status, lang)}
                   </option>
                 ))}
+              </select>
+              <select
+                value={sortOrder}
+                onChange={(event) => setSortOrder(event.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-headline font-black uppercase text-[#124757] outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+              >
+                <option value="newest">{lang === "VN" ? "Mới nhất" : "Newest first"}</option>
+                <option value="oldest">{lang === "VN" ? "Cũ nhất" : "Oldest first"}</option>
               </select>
             </div>
 
@@ -330,40 +364,6 @@ export function BookingListPage() {
             )}
           </div>
         </section>
-
-        {pendingReviews.length > 0 ? (
-          <section className="overflow-hidden rounded-3xl border border-[#124757]/20 bg-[#124757]/5 dark:border-yellow-400/20 dark:bg-yellow-400/5">
-            <div className="border-b border-[#124757]/10 px-5 py-3.5 dark:border-yellow-400/10 sm:px-6">
-              <h3 className="font-headline text-sm font-black text-[#124757] dark:text-yellow-400">
-                {lang === "VN"
-                  ? `Bạn có ${pendingReviews.length} chuyến chưa đánh giá`
-                  : `You have ${pendingReviews.length} trip(s) awaiting your review`}
-              </h3>
-            </div>
-            <div className="divide-y divide-[#124757]/10 dark:divide-yellow-400/10">
-              {pendingReviews.map((trip) => (
-                <div key={trip.tripId} className="flex flex-wrap items-center justify-between gap-3 p-5 sm:px-6">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-slate-700 dark:text-slate-200">
-                      {trip.routeName || trip.tripCode}
-                    </p>
-                    <p className="text-[11px] font-medium text-slate-400">
-                      {formatDateTime(trip.departureTime)}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setReviewModalTrip(trip)}
-                    className="flex shrink-0 items-center gap-2 rounded-xl bg-[#FFD100] px-3.5 py-2 text-xs font-headline font-black uppercase tracking-wide text-slate-900 transition hover:scale-[1.02] active:scale-95"
-                  >
-                    <span className="material-symbols-outlined text-base">rate_review</span>
-                    {lang === "VN" ? "Đánh giá" : "Review"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
 
         <section className="space-y-3">
           {isLoading ? (
@@ -413,7 +413,7 @@ export function BookingListPage() {
                       <span className="font-headline text-lg font-black text-[#124757] dark:text-white">
                         {booking.bookingCode}
                       </span>
-                      <span className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.status)}`}>
+                      <span className={`text-[10px] font-headline font-black uppercase tracking-wide ${getStatusClasses(booking.status)}`}>
                         {getStatusLabel(booking.status, lang)}
                       </span>
                     </div>
@@ -448,17 +448,37 @@ export function BookingListPage() {
                     <span className="material-symbols-outlined text-slate-300 transition-transform group-hover:translate-x-0.5 dark:text-slate-600">chevron_right</span>
                   </div>
                 </div>
+
+                {pendingReviewsByBookingCode[booking.bookingCode] ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#124757]/10 bg-[#124757]/5 px-5 py-3.5 dark:border-yellow-400/10 dark:bg-yellow-400/5 sm:px-6">
+                    <p className="text-[11px] font-bold text-[#124757] dark:text-yellow-400">
+                      {lang === "VN" ? "Chuyến đã hoàn thành — hãy chia sẻ trải nghiệm của bạn." : "Trip completed — share your experience."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setReviewModalBooking(pendingReviewsByBookingCode[booking.bookingCode]);
+                      }}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      className="flex shrink-0 items-center gap-2 rounded-xl bg-[#FFD100] px-3.5 py-2 text-xs font-headline font-black uppercase tracking-wide text-slate-900 transition hover:scale-[1.02] active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-base">rate_review</span>
+                      {lang === "VN" ? "Đánh giá" : "Review"}
+                    </button>
+                  </div>
+                ) : null}
               </article>
             ))
           )}
         </section>
       </main>
 
-      {reviewModalTrip ? (
+      {reviewModalBooking ? (
         <TripReviewModal
           lang={lang}
-          onClose={() => setReviewModalTrip(null)}
-          onSubmitted={(rating, comment) => handleReviewSubmitted(reviewModalTrip.tripId, rating, comment)}
+          onClose={() => setReviewModalBooking(null)}
+          onSubmitted={(rating, comment) => handleReviewSubmitted(reviewModalBooking.bookingId, rating, comment)}
         />
       ) : null}
     </div>

@@ -86,6 +86,7 @@ export const Contact = () => {
                 </div>
               </div>
             </div>
+
             {/* Google Maps Embed */}
             <div className="relative max-w-sm pt-2">
               <div className="w-full rounded-4xl shadow-xl overflow-hidden aspect-video bg-slate-200 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">

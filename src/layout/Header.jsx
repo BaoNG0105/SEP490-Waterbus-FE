@@ -5,8 +5,8 @@ import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../redux/authSlice";
 import { notify } from "../utils/swalToast";
 
-// Import file ảnh logo từ thư mục assets
-import logo from "../assets/logo-1.png";
+import { UserAvatar } from "../components/UserAvatar";
+import { logoUrl as logo } from "../data/homeData";
 
 export const Header = ({ isNoticeVisible }) => {
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
@@ -36,8 +36,7 @@ export const Header = ({ isNoticeVisible }) => {
   const { isAuthenticated, user } = useSelector((state) => state.auth);
 
   // logic hiển thị tên và ảnh đại diện
-  const defaultAvatar = "https://res.cloudinary.com/dygipvoal/image/upload/v1782985383/piwocu1i25ijlua88bn0.webp";
-  const displayAvatar = user?.avatarUrl || defaultAvatar;
+  const displayAvatar = user?.avatarUrl || "";
   const displayUserName = user?.fullName || (lang === "VN" ? "Thành viên" : "Member");
 
   // Kiểm tra quyền quản trị để hiển thị nút chuyển đến trang Admin Dashboard
@@ -224,9 +223,12 @@ export const Header = ({ isNoticeVisible }) => {
                 title={displayUserName}
                 aria-label={lang === "VN" ? "Hồ sơ của tôi" : "My Profile"}
               >
-                <div className="w-8 h-8 rounded-full bg-white/20 overflow-hidden">
-                  <img alt="" className="w-full h-full object-cover" src={displayAvatar} />
-                </div>
+                <UserAvatar
+                  avatarUrl={displayAvatar}
+                  alt=""
+                  className="w-8 h-8 rounded-full overflow-hidden bg-white/20!"
+                  iconClassName="w-4 h-4 text-white/80!"
+                />
               </Link>
             ) : (
               <Link

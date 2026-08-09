@@ -129,12 +129,9 @@ export function CharterBooking() {
       {/* ===== SECTION 1: HERO ===== */}
       <section
         className="relative bg-[#124757] dark:bg-slate-950 overflow-hidden pt-32 pb-20 bg-cover bg-center"
-        style={{ backgroundImage: "url('https://res.cloudinary.com/dygipvoal/image/upload/v1783792723/leebii37uxivwywdzuic.jpg')" }}
+        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/charter.jpg')" }}
       >
         <div className="absolute inset-0 bg-[#124757]/70 dark:bg-slate-950/70 pointer-events-none"></div>
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
-          <span className="material-symbols-outlined text-[420px] absolute -right-16 -top-16 text-white">directions_boat</span>
-        </div>
         <div className="relative max-w-5xl mx-auto px-6 md:px-12 text-center space-y-6">
           <h1 className="text-4xl md:text-6xl font-headline font-black text-white leading-tight">
             {lang === "VN" ? "Dịch vụ thuê tàu WaterBus" : "WaterBus Request Booking"}
@@ -197,4 +194,3 @@ export function CharterBooking() {
     </div>
   );
 }
-///

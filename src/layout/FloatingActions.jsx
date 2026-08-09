@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { AIChatbotPanel } from "../components/AIChatbotPanel";
+import { logoUrl as logo } from "../data/homeData";
 
 export const FloatingActions = () => {
   // Nhúng Context để hỗ trợ đa ngôn ngữ cho các Tooltip (tiêu đề khi trỏ chuột vào)
@@ -20,26 +21,25 @@ export const FloatingActions = () => {
           type="button"
           onClick={() => setIsChatOpen((prev) => !prev)}
           title={lang === "VN" ? "Trợ lý ảo AI" : "AI Assistant"}
-          className="group relative w-14 h-14 pointer-events-auto"
+          className="group relative w-20 h-20 pointer-events-auto"
         >
           {/* Vòng phát sáng nhấp nháy */}
           {!isChatOpen && (
             <span className="absolute inset-0 rounded-full bg-yellow-400/50 animate-ping" />
           )}
 
-          <span
-            className={`relative flex h-full w-full items-center justify-center rounded-full bg-[#124757] text-white shadow-lg shadow-[#124757]/40 transition-all duration-300 group-hover:scale-110 group-active:scale-95 dark:bg-yellow-400 dark:text-slate-900 dark:shadow-yellow-500/30 ${
-              isChatOpen ? "rotate-90" : ""
-            }`}
-          >
-            <span className="material-symbols-outlined text-2xl transition-transform duration-300">
-              {isChatOpen ? "close" : "smart_toy"}
-            </span>
+          {/* Nút tròn: xanh (light mode) / vàng (dark mode), logo header/footer bên trong */}
+          <span className="relative flex h-full w-full items-center justify-center rounded-full bg-[#124757] p-3.5 shadow-lg shadow-[#124757]/40 transition-all duration-300 group-hover:scale-110 group-active:scale-95 dark:bg-yellow-400 dark:shadow-yellow-500/30">
+            <img
+              src={logo}
+              alt={lang === "VN" ? "Trợ lý ảo AI" : "AI Assistant"}
+              className="h-full w-full object-contain"
+            />
           </span>
 
           {/* Chấm báo online */}
           {!isChatOpen && (
-            <span className="absolute right-0 top-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
+            <span className="absolute right-1 top-1 h-4 w-4 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
           )}
         </button>
       </div>

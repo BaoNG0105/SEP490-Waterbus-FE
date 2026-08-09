@@ -6,7 +6,7 @@ import { useApp } from "../../../context/AppContext";
 //import
 import { fetchMyBookingDetail } from "../../../services/bookingService";
 import { fetchTripDetail } from "../../../services/tripService";
-import { fetchReviewableTrips, submitTripReview } from "../../../services/reviewService";
+import { fetchReviewableTrips, submitBookingReview } from "../../../services/reviewService";
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
 import { MY_BOOKINGS_PATH, getBookingServiceConfig } from "../../../utils/bookingServiceType";
@@ -29,25 +29,25 @@ const pick = (source, keys, fallback = "") => {
 };
 
 const STATUS_STYLES = {
-  pendingpayment: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
-  confirmed: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
-  completed: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20",
-  cancelled: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600",
-  expired: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
-  paid: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
-  unpaid: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
-  depositpaid: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
-  active: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
-  pending: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
-  used: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700/40 dark:text-slate-300 dark:border-slate-600",
-  checkedin: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20",
-  checkedout: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600",
-  refunded: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
-  partiallyrefunded: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
-  manualrefunded: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
-  failed: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20",
-  pendingquote: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20",
-  quoted: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
+  pendingpayment: "text-amber-700 dark:text-amber-300",
+  confirmed: "text-emerald-700 dark:text-emerald-300",
+  completed: "text-sky-700 dark:text-sky-300",
+  cancelled: "text-slate-500 dark:text-slate-400",
+  expired: "text-rose-600 dark:text-rose-300",
+  paid: "text-emerald-700 dark:text-emerald-300",
+  unpaid: "text-amber-700 dark:text-amber-300",
+  depositpaid: "text-indigo-700 dark:text-indigo-300",
+  active: "text-emerald-700 dark:text-emerald-300",
+  pending: "text-amber-700 dark:text-amber-300",
+  used: "text-slate-600 dark:text-slate-300",
+  checkedin: "text-sky-700 dark:text-sky-300",
+  checkedout: "text-slate-500 dark:text-slate-400",
+  refunded: "text-teal-700 dark:text-teal-300",
+  partiallyrefunded: "text-teal-700 dark:text-teal-300",
+  manualrefunded: "text-teal-700 dark:text-teal-300",
+  failed: "text-rose-600 dark:text-rose-300",
+  pendingquote: "text-violet-700 dark:text-violet-300",
+  quoted: "text-indigo-700 dark:text-indigo-300",
 };
 
 const STATUS_LABELS = {
@@ -74,7 +74,7 @@ const STATUS_LABELS = {
 
 const getStatusKey = (status) => String(status || "").toLowerCase().replace(/[\s_-]/g, "");
 const getStatusClasses = (status) => STATUS_STYLES[getStatusKey(status)]
-  || "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600";
+  || "text-slate-500 dark:text-slate-400";
 
 /** Vé còn hiện QR: Active hoặc đang trên tàu (CheckedIn). Used/CheckedOut/Cancelled/Expired = terminal. */
 const isQrEligibleTicketStatus = (status) => {
@@ -208,13 +208,6 @@ const normalizeItem = (item) => {
     usesCompanionTicket: isCompanionBookingItem({ ...item, ...normalized }),
   };
 };
-
-/** Vé có QR riêng (không phải vé đi kèm người lớn). */
-const hasOwnTicketQr = (booking, item) => (
-  isTicketIssued(booking, item)
-  && !item.usesCompanionTicket
-  && Boolean(String(item.ticketQrToken || "").trim())
-);
 
 /** Vé đã phát hành — có ít nhất ticketCode hoặc ticketQrToken, dùng để hiện mã vé / QR. */
 const isTicketVisible = (booking, item) => (
@@ -589,14 +582,14 @@ const DetailSkeleton = () => (
 );
 
 const STATUS_BADGE_SIZES = {
-  sm: "px-2.5 py-1 text-[10px]",
-  lg: "px-8.5 py-4.5 text-xs",
+  sm: "text-[10px]",
+  lg: "text-sm",
 };
 
 const StatusBadge = ({ status, lang, size = "sm" }) => {
   if (!status) return null;
   return (
-    <span className={`inline-flex rounded-lg border font-headline font-black uppercase tracking-wide ${STATUS_BADGE_SIZES[size]} ${getStatusClasses(status)}`}>
+    <span className={`font-headline font-black uppercase tracking-wide ${STATUS_BADGE_SIZES[size]} ${getStatusClasses(status)}`}>
       {getStatusLabel(status, lang)}
     </span>
   );
@@ -634,8 +627,8 @@ export function BookingDetailPage({ serviceType }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
-  const [reviewableByTripCode, setReviewableByTripCode] = useState({});
-  const [reviewModalTrip, setReviewModalTrip] = useState(null);
+  const [bookingReviewable, setBookingReviewable] = useState(null);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),
@@ -677,37 +670,32 @@ export function BookingDetailPage({ serviceType }) {
     loadDetail();
   }, [loadDetail]);
 
+  // Review giờ tính theo booking (không phải trip) — chỉ cần tìm entry có bookingId khớp booking đang xem.
   const loadReviewableTrips = useCallback(async () => {
+    if (!booking?.id) return;
     try {
       const data = await fetchReviewableTrips({ page: 1, pageSize: 100 });
       const list = Array.isArray(data) ? data : (data?.items || data?.data || []);
-      const map = {};
-      list.forEach((trip) => {
-        const normalized = normalizeReviewableTrip(trip);
-        if (normalized.tripCode) map[normalized.tripCode] = normalized;
-      });
-      setReviewableByTripCode(map);
+      const match = list
+        .map(normalizeReviewableTrip)
+        .find((trip) => trip.bookingId === booking.id);
+      setBookingReviewable(match || null);
     } catch (error) {
       console.error("Lỗi khi tải danh sách chuyến có thể đánh giá:", error);
     }
-  }, []);
+  }, [booking?.id]);
 
-  // Chỉ có chuyến đã hoàn thành mới xuất hiện trong reviewable-trips — Pending/Cancelled sẽ tự không khớp tripCode nào.
+  // Chỉ có booking đã hoàn tất dịch vụ mới xuất hiện trong reviewable-trips.
   useEffect(() => {
     if (!booking) return;
     loadReviewableTrips();
   }, [booking, loadReviewableTrips]);
 
-  const handleReviewSubmitted = useCallback(async (tripId, tripCode, rating, comment) => {
-    await submitTripReview(tripId, { rating, comment });
-    setReviewableByTripCode((prev) => ({
-      ...prev,
-      [tripCode]: {
-        ...prev[tripCode],
-        myReview: { rating, comment, status: "Hidden" },
-      },
-    }));
-    setReviewModalTrip(null);
+  const handleReviewSubmitted = useCallback(async (rating, comment) => {
+    if (!bookingReviewable?.bookingId) return;
+    await submitBookingReview(bookingReviewable.bookingId, { rating, comment });
+    setBookingReviewable((prev) => (prev ? { ...prev, myReview: { rating, comment, status: "Hidden" } } : prev));
+    setReviewModalOpen(false);
     notify({
       toast: true,
       icon: "success",
@@ -716,7 +704,7 @@ export function BookingDetailPage({ serviceType }) {
         ? "Cảm ơn bạn! Đánh giá sẽ hiển thị công khai sau khi được duyệt."
         : "Thanks! Your review will show publicly once approved.",
     });
-  }, [lang]);
+  }, [bookingReviewable, lang]);
 
   const holdExpiresAtMs = booking?.holdExpiresAt
     ? new Date(booking.holdExpiresAt).getTime()
@@ -874,7 +862,7 @@ export function BookingDetailPage({ serviceType }) {
                 {lang === "VN" ? "Chi tiết đặt vé" : "Booking detail"}
               </p>
               <h1 className="mt-1 truncate font-headline text-2xl font-black text-[#124757] dark:text-white">
-                MÃ ĐẶT CHỖ: {booking.bookingCode}
+                {lang === "VN" ? "MÃ ĐẶT CHỖ" : "BOOKING CODE"}: {booking.bookingCode}
               </h1>
               <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                 {lang === "VN" ? "Đặt lúc" : "Booked at"} {formatDateTime(booking.bookedAt)}
@@ -928,8 +916,8 @@ export function BookingDetailPage({ serviceType }) {
                     const sameDay = formatDateOnly(item.scheduledArrival) === formatDateOnly(item.scheduledDeparture);
                     const routeTitle = isLoopTour
                       ? (lang === "VN"
-                        ? `Tour tham quan ${item.fromStationName}`
-                        : `Sightseeing tour · ${item.fromStationName}`)
+                        ? `Tour tham quan sông Sài Gòn`
+                        : `Sightseeing tour on Saigon River`)
                       : `${item.fromStationName} → ${item.toStationName}`;
                     const timeLine = `${formatDateOnly(item.scheduledDeparture)} · ${formatTime(item.scheduledDeparture)} → ${sameDay ? "" : `${formatDateOnly(item.scheduledArrival)} `}${formatTime(item.scheduledArrival)}`;
 
@@ -976,20 +964,11 @@ export function BookingDetailPage({ serviceType }) {
                             <div className="col-span-2 sm:col-span-3">
                               <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Tàu" : "Boat"}</dt>
                               <dd className="font-bold text-slate-700 dark:text-slate-200">
-                                {item.boatName || item.boatCode
-                                  ? (
-                                    <>
-                                      {item.boatName || "—"}
-                                      {item.boatCode ? (
-                                        <span className="font-medium text-slate-400">{` · ${item.boatCode}`}</span>
-                                      ) : null}
-                                    </>
-                                  )
-                                  : (
-                                    <span className="font-medium text-slate-400">
-                                      {lang === "VN" ? "Đang cập nhật" : "Updating"}
-                                    </span>
-                                  )}
+                                {item.boatName || (
+                                  <span className="font-medium text-slate-400">
+                                    {lang === "VN" ? "Đang cập nhật" : "Updating"}
+                                  </span>
+                                )}
                               </dd>
                             </div>
                             <div className="col-span-2 sm:col-span-3">
@@ -1038,14 +1017,7 @@ export function BookingDetailPage({ serviceType }) {
                             </div>
                           ) : null}
 
-                          {isTicketVisible(booking, item) && item.ticketCode ? (
-                            <div>
-                              <p className="mb-1 text-[11px] font-bold text-slate-400">
-                                {lang === "VN" ? "Mã vé" : "Ticket code"}
-                              </p>
-                              <CopyableCode value={item.ticketCode} />
-                            </div>
-                          ) : (() => {
+                          {isTicketVisible(booking, item) && item.ticketCode ? null : (() => {
                             const ticketKey = getStatusKey(item.ticketStatus || item.itemStatus);
                             if (ticketKey === "used") {
                               return (
@@ -1087,23 +1059,23 @@ export function BookingDetailPage({ serviceType }) {
                   })}
                 </div>
               </section>
-
-              {reviewableByTripCode[group.tripCode] ? (
-                <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-                  <div className="border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
-                    <h3 className="font-headline text-sm font-black text-[#124757] dark:text-white">
-                      {lang === "VN" ? "Đánh giá chuyến" : "Trip review"}
-                    </h3>
-                  </div>
-                  <TripReviewSlot
-                    reviewable={reviewableByTripCode[group.tripCode]}
-                    lang={lang}
-                    onOpenReview={setReviewModalTrip}
-                  />
-                </section>
-              ) : null}
               </div>
             ))}
+
+            {bookingReviewable ? (
+              <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+                <div className="border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
+                  <h3 className="font-headline text-sm font-black text-[#124757] dark:text-white">
+                    {lang === "VN" ? "Đánh giá của bạn" : "Your review"}
+                  </h3>
+                </div>
+                <TripReviewSlot
+                  reviewable={bookingReviewable}
+                  lang={lang}
+                  onOpenReview={() => setReviewModalOpen(true)}
+                />
+              </section>
+            ) : null}
           </div>
 
           <div className="space-y-5 lg:sticky lg:top-28 lg:col-span-5">
@@ -1123,8 +1095,8 @@ export function BookingDetailPage({ serviceType }) {
                         === formatDateOnly(group.scheduledDeparture);
                       const routeTitle = isLoopTour
                         ? (lang === "VN"
-                          ? `Tour tham quan ${group.fromStationName}`
-                          : `Sightseeing · ${group.fromStationName}`)
+                          ? `Tour tham quan sông Sài Gòn`
+                          : `Sightseeing tour on Saigon River`)
                         : `${group.fromStationName} → ${group.toStationName}`;
                       const timeLine = [
                         formatDateOnly(group.scheduledDeparture),
@@ -1146,9 +1118,7 @@ export function BookingDetailPage({ serviceType }) {
                           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                             {lang === "VN" ? "Tàu" : "Boat"}:{" "}
                             <span className="font-bold text-slate-700 dark:text-slate-200">
-                              {group.boatName || group.boatCode
-                                ? `${group.boatName || "—"}${group.boatCode ? ` · ${group.boatCode}` : ""}`
-                                : (lang === "VN" ? "Đang cập nhật" : "Updating")}
+                              {group.boatName || (lang === "VN" ? "Đang cập nhật" : "Updating")}
                             </span>
                           </p>
                         </div>
@@ -1182,7 +1152,7 @@ export function BookingDetailPage({ serviceType }) {
 
                 <div className="space-y-2.5 text-sm text-slate-600 dark:text-slate-300">
                   <div className="flex justify-between gap-3">
-                    <span>{lang === "VN" ? "Tổng số hành khách" : "Passengers"}</span>
+                    <span>{lang === "VN" ? "Tổng số vé" : "Total tickets"}</span>
                     <span className="font-bold text-slate-800 dark:text-slate-100">
                       {totalTicketCount + totalCompanionCount}
                       {totalCompanionCount > 0
@@ -1384,11 +1354,11 @@ export function BookingDetailPage({ serviceType }) {
         </div>
       </main>
 
-      {reviewModalTrip ? (
+      {reviewModalOpen ? (
         <TripReviewModal
           lang={lang}
-          onClose={() => setReviewModalTrip(null)}
-          onSubmitted={(rating, comment) => handleReviewSubmitted(reviewModalTrip.tripId, reviewModalTrip.tripCode, rating, comment)}
+          onClose={() => setReviewModalOpen(false)}
+          onSubmitted={(rating, comment) => handleReviewSubmitted(rating, comment)}
         />
       ) : null}
     </div>

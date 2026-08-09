@@ -1,5 +1,3 @@
-// src/data/homeData.js
-
 // THÔNG TIN LIÊN HỆ CÔNG KHAI — dùng chung Home / Contact / form email
 export const COMPANY_HOTLINE = '1900 636830';
 export const COMPANY_HOTLINE_TEL = '1900636830';
@@ -9,24 +7,17 @@ export const COMPANY_ADDRESS_VN =
 export const COMPANY_ADDRESS_EN =
     '7 D1 Street, Long Thanh My, Tang Nhon Phu, Ho Chi Minh City, Vietnam';
 
-// DỮ LIỆU SLIDE HERO
-export const heroSlides = [
-    {
-        src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png",
-    },
-    {
-        src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg",
-    },
-    {
-        src: "https://res.cloudinary.com/dygipvoal/image/upload/v1776075336/wkzbfwc5xyfby9ueute1.png",
-    },
-];
+// LOGO
+export const logoUrl = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/logo-2.png";
+
+// VIDEO HERO TRANG CHỦ
+export const heroVideo = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/Ng%E1%BA%AFm%20C%E1%BA%A3nh%20Th%C3%A0nh%20Ph%E1%BB%91%20Tr%C3%AAn%20S%C3%B4ng%20-%20SAIGON%20WATER%20BUS%20B%E1%BA%A0CH%20%C4%90%E1%BA%B0NG%202021%20l%204K%20Live%20Wallpaper%20-%20N%C6%A1i%20M%C3%ACnh%20S%E1%BB%91ng.mp4";
 
 // DỮ LIỆU HƯỚNG DẪN ĐẶT VÉ
 export const guidelines = [
     {
         id: 1,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570508/hi4eokbj9cwae9p6kghd.png",
+        image: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/b1.png",
         titleVn: "Chọn hành trình mong muốn",
         titleEn: "Choose Your Desired Route",
         descVn: "Bắt đầu bằng việc chọn chuyến đi yêu thích, ngày giờ và loại vé phù hợp với nhu cầu di chuyển của bạn.",
@@ -34,7 +25,7 @@ export const guidelines = [
     },
     {
         id: 2,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570509/fphxlsflzplexebwbas0.png",
+        image: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/b2.png",
         titleVn: "Chọn vị trí ngồi",
         titleEn: "Select Seat Location",
         descVn: "Lựa chọn vị trí ghế ngồi yêu thích trên sơ đồ tàu.",
@@ -42,7 +33,7 @@ export const guidelines = [
     },
     {
         id: 3,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570508/pgee4jcvkxksuoigvefk.png",
+        image: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/b3.png",
         titleVn: "Nhập thông tin hành khác & thanh toán an toàn",
         titleEn: "Enter passenger information and safe payment",
         descVn: "Nhập thông tin hành khách chính xác và thực hiện thanh toán nhanh chóng và bảo mật qua PayOS.",

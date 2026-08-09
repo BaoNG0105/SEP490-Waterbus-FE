@@ -5,6 +5,7 @@ import { useApp } from "../../context/AppContext";
 import { fetchCurrentUserProfile } from "../../services/authService";
 import { hasRole, isAdminUser, isManagerUser, isStaffUser } from "../../utils/roleHelpers";
 import { logout, updateUserProfile } from "../../redux/authSlice";
+import { UserAvatar } from "../../components/UserAvatar";
 
 // Nhóm sidebar theo nghiệp vụ — header chỉ là nhãn, luôn hiện mục con.
 const MENU_GROUPS = [
@@ -46,7 +47,7 @@ const MENU_GROUPS = [
       { path: "/admin/landmarks-management",labelVn: "Landmark thuyết minh", labelEn: "Landmarks", roles: ["ADMIN"] },
       { path: "/admin/boats-management",labelVn: "Tàu", labelEn: "Boats", roles: ["ADMIN"] },
       { path: "/admin/seat-types",labelVn: "Chính sách giá", labelEn: "Fare Policy", roles: ["ADMIN"] },
-      { path: "/admin/live-tracking", labelVn: "Theo dõi tàu", labelEn: "Boat tracking", labelVnStaff: "Theo dõi tàu", labelEnStaff: "Boat tracking", roles: ["ADMIN", "MANAGER", "STAFF"] },
+      { path: "/admin/live-tracking", labelVn: "Theo dõi tàu", labelEn: "Boat tracking", labelVnStaff: "Theo dõi tàu", labelEnStaff: "Boat tracking", roles: ["ADMIN"] },
       { path: "/admin/staff/my-trips",labelVn: "Chuyến của tôi", labelEn: "My trips", roles: ["STAFF"] },
       { path: "/admin/staff/ticket-scan",labelVn: "Quét vé", labelEn: "Ticket scan", roles: ["STAFF"] },
       { path: "/admin/staff/scan-history",labelVn: "Lịch sử quét", labelEn: "Scan history", roles: ["STAFF"] },
@@ -57,8 +58,7 @@ const MENU_GROUPS = [
     labelVn: "Đặt chỗ & BH",
     labelEn: "Bookings & Insurance",
     items: [
-      { path: "/admin/booking-pos", labelVn: "Bán vé (POS)", labelEn: "Sell tickets (POS)", roles: ["ADMIN", "MANAGER", "STAFF"] },
-      { path: "/admin/bookings", labelVn: "Booking vé", labelEn: "Seat bookings", roles: ["ADMIN"] },
+      { path: "/admin/booking-pos", labelVn: "Bán vé (POS)", labelEn: "Sell tickets (POS)", roles: ["MANAGER", "STAFF"] },
       { path: "/admin/charter-bookings-management", labelVn: "Thuê tàu", labelEn: "Request Booking", roles: ["ADMIN"] },
       { path: "/admin/insurance-management", labelVn: "Bảo hiểm", labelEn: "Insurance", roles: ["ADMIN"] },
       { path: "/admin/reviews-management", labelVn: "Đánh giá", labelEn: "Reviews", roles: ["ADMIN"] },
@@ -78,7 +78,7 @@ const MENU_GROUPS = [
         labelEnStaff: "Blog / News",
         roles: ["ADMIN"],
       },
-      { path: "/admin/ai-data", labelVn: "AI data", labelEn: "AI Data", roles: ["ADMIN"] },
+      { path: "/admin/system-data", labelVn: "Dữ liệu hệ thống", labelEn: "System Data", roles: ["ADMIN"] },
     ],
   },
 ];
@@ -106,7 +106,6 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
   const dispatch = useDispatch();
   const { isAuthenticated, user } = useSelector((state) => state.auth);
 
-  const defaultAvatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=Admin";
   const displayName = user?.fullName || (lang === "VN" ? "Quản trị viên" : "Admin");
   const displayAvatar = user?.avatarUrl || "";
   const primaryRole = user?.roles?.find((role) =>
@@ -180,20 +179,12 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
       >
         <div className="p-5 border-b border-white/10 dark:border-slate-800 flex flex-col items-center text-center space-y-3 shrink-0 bg-white/5 select-none">
           <div className="relative group">
-            <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-dashed border-[#FFD100] flex items-center justify-center text-white shadow-md overflow-hidden transition-transform duration-500 group-hover:rotate-45">
-              {displayAvatar ? (
-                <img
-                  src={displayAvatar}
-                  alt={displayName}
-                  className="w-full h-full object-cover"
-                  onError={(event) => {
-                    event.currentTarget.src = defaultAvatar;
-                  }}
-                />
-              ) : (
-                <span className="material-symbols-outlined text-[32px] fill-1 text-white">account_circle</span>
-              )}
-            </div>
+            <UserAvatar
+              avatarUrl={displayAvatar}
+              alt={displayName}
+              className="w-16 h-16 rounded-full border-2 border-dashed border-[#FFD100] shadow-md overflow-hidden transition-transform duration-500 group-hover:rotate-45 bg-white/10! text-white!"
+              iconClassName="w-8 h-8"
+            />
             <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-[#124757] dark:border-slate-900"></span>

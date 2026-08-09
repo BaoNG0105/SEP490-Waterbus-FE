@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { fetchPublishedBlogPosts, labelBlogCategory } from "../../services/blogService";
+import { ImageWithFallback } from "../../components/ImageWithFallback";
 
 export function BlogList() {
     const { lang } = useApp();
     const [blogs, setBlogs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const DEFAULT_BLOG_IMAGE = "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&q=80";
 
     useEffect(() => {
         const loadAllBlogs = async () => {
@@ -63,11 +63,11 @@ export function BlogList() {
                             >
                                 {/* Khung chứa ảnh thu nhỏ */}
                                 <div className="relative aspect-16/10 overflow-hidden bg-slate-100 dark:bg-slate-900 shrink-0">
-                                    <img
-                                        src={blog.imageUrl || blog.imageUrls?.[0] || DEFAULT_BLOG_IMAGE}
+                                    <ImageWithFallback
+                                        src={blog.imageUrl || blog.imageUrls?.[0]}
                                         alt={blog.imageAltText || blog.title}
-                                        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-                                        onError={(e) => { e.target.src = DEFAULT_BLOG_IMAGE; }}
+                                        className="w-full h-full"
+                                        imgClassName="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
                                     />
                                     <span className="absolute top-4 left-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur shadow-sm px-3 py-1 rounded-xl text-[10px] font-headline font-black uppercase text-yellow-600 dark:text-yellow-400 tracking-wide">
                                         {labelBlogCategory(blog.category, lang)}

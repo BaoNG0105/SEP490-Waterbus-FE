@@ -325,8 +325,8 @@ export const Register = () => {
       <div className="hidden lg:block relative bg-slate-900 overflow-hidden">
         <div className="absolute inset-0 bg-black/30 z-10"></div>
         <img 
-          src="https://res.cloudinary.com/dygipvoal/image/upload/v1776092653/ywbwjyftzirzdqf2igte.jpg" 
-          alt="Waterbus" 
+          src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/register.png" 
+          alt="Register Banner" 
           className="absolute inset-0 w-full h-full object-cover object-center"
         />
         <div className="absolute bottom-12 left-12 right-12 z-20 text-yellow-400 animate-fade-in-up">
@@ -575,11 +575,21 @@ export const Register = () => {
                   />
                   <span className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
                     {lang === "VN" ? "Tôi đồng ý với " : "I agree to the "}
-                    <a href="#" className="font-bold text-[#124757] dark:text-yellow-400 hover:underline">
+                    <a
+                      href="/terms-and-policy"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-[#124757] dark:text-yellow-400 hover:underline"
+                    >
                       {lang === "VN" ? "Điều khoản dịch vụ" : "Terms of Service"}
                     </a>
                     {lang === "VN" ? " và " : " and "}
-                    <a href="#" className="font-bold text-[#124757] dark:text-yellow-400 hover:underline">
+                    <a
+                      href="/terms-and-policy"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-[#124757] dark:text-yellow-400 hover:underline"
+                    >
                       {lang === "VN" ? "Chính sách bảo mật" : "Privacy Policy"}
                     </a>.
                   </span>

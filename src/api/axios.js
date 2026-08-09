@@ -1,9 +1,14 @@
 import axios from "axios";
 import { notify } from "../utils/swalToast";
 
+// Backend production đã deploy trên Azure. Vercel vẫn có thể override bằng
+// VITE_API_BASE_URL; fallback giúp bản build không bị gọi nhầm API local khi
+// biến môi trường của project deploy chưa được cấu hình.
+const deployedApiBaseUrl = "https://sgwaterbus-c5gkf4fbfbfbbkh9.eastasia-01.azurewebsites.net/api";
+
 // 1. Khởi tạo instance của Axios với baseURL
 const api = axios.create({
-    baseURL: import.meta.env.DEV ? "/api" : import.meta.env.VITE_API_BASE_URL,
+    baseURL: import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_BASE_URL || deployedApiBaseUrl),
 });
 
 // Danh sách các endpoint KHÔNG cần token (Public Routes)

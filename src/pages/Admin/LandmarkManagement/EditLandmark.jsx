@@ -256,11 +256,6 @@ export function EditLandmark() {
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
                         {lang === "VN" ? `Cấu hình landmark: ${formData.landmarkName}` : `Configure Landmark: ${formData.landmarkName}`}
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN"
-                            ? "Cập nhật full replace — mọi field bỏ trống sẽ bị ghi đè."
-                            : "This is a full replace — any field left blank will be overwritten."}
-                    </p>
                 </div>
             </div>
 

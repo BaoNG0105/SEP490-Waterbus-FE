@@ -1,5 +1,32 @@
 import { useEffect, useRef, useState } from "react";
-import { chatWithAssistant } from "../api/assistantApi";
+import ReactMarkdown from "react-markdown";
+import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
+import {
+  chatWithAssistant,
+  closeAssistantConversation,
+  getAssistantConversation,
+  updateAssistantBookingDraft,
+} from "../api/assistantApi";
+import ChatBookingFlow from "./ChatBookingFlow";
+import { logoUrl as logo } from "../data/homeData";
+
+// Style các thẻ markdown cho vừa khung bong bóng chat (không dùng @tailwindcss/typography).
+const markdownComponents = {
+  p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+  strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+  ul: ({ children }) => <ul className="mb-1.5 list-disc space-y-0.5 pl-4 last:mb-0">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-1.5 list-decimal space-y-0.5 pl-4 last:mb-0">{children}</ol>,
+  li: ({ children }) => <li>{children}</li>,
+  a: ({ children, href }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+      {children}
+    </a>
+  ),
+  code: ({ children }) => (
+    <code className="rounded bg-slate-900/10 px-1 py-0.5 text-[12px] dark:bg-white/10">{children}</code>
+  ),
+};
 
 const TEXT = {
   VN: {
@@ -11,6 +38,7 @@ const TEXT = {
     errorReply:
       "Xin lỗi, mình đang gặp sự cố kết nối. Bạn vui lòng thử lại sau ít phút nhé.",
     close: "Đóng",
+    quickQuestions: ["Hôm nay có những chuyến nào?", "Giá vé Waterbus là bao nhiêu?"],
   },
   ENG: {
     title: "Waterbus AI Assistant",
@@ -21,47 +49,192 @@ const TEXT = {
     errorReply:
       "Sorry, I'm having connection trouble right now. Please try again in a few minutes.",
     close: "Close",
+    quickQuestions: ["What trips are available today?", "How much is a Waterbus ticket?"],
   },
 };
 
+const mapServerMessage = (message) => ({
+  id: message.id,
+  from: message.role === "user" ? "user" : "bot",
+  text: message.text,
+  suggestedQuestions: Array.isArray(message.suggestedQuestions) ? message.suggestedQuestions : [],
+  actions: Array.isArray(message.actions) ? message.actions : [],
+});
+
 export const AIChatbotPanel = ({ lang, onClose }) => {
-  const t = TEXT[lang] || TEXT.VN;
+  // Khung chat dùng chung ngôn ngữ với toàn site; không tạo switch VN/EN riêng.
+  const chatLang = lang === "ENG" ? "ENG" : "VN";
+  const t = TEXT[chatLang] || TEXT.VN;
+  const quickQuestions = t.quickQuestions;
+  const navigate = useNavigate();
+  const { isAuthenticated, user } = useSelector((state) => state.auth || {});
   const [messages, setMessages] = useState([
-    { id: "greeting", from: "bot", text: t.greeting },
+    { id: "greeting", from: "bot", text: t.greeting, suggestedQuestions: quickQuestions },
   ]);
   const [draft, setDraft] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [conversationId, setConversationId] = useState(() => {
+    try { return window.localStorage.getItem("waterbus.chat.conversationId"); } catch { return null; }
+  });
+  const [clientSessionId] = useState(() => {
+    try {
+      const key = "waterbus.chat.clientSessionId";
+      const existing = window.localStorage.getItem(key);
+      if (existing) return existing;
+      const created = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      window.localStorage.setItem(key, created);
+      return created;
+    } catch { return `session-${Date.now()}`; }
+  });
+  const [isConversationClosed, setIsConversationClosed] = useState(false);
+  const [bookingFlow, setBookingFlow] = useState(false);
+  const [bookingDraft, setBookingDraft] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const bottomRef = useRef(null);
+  const conversationVersionRef = useRef(0);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    const text = draft.trim();
-    if (!text || isTyping) return;
+  // Câu chào là văn bản tĩnh theo ngôn ngữ, không phải do LLM trả về nên cần tự đồng bộ khi đổi VN/EN.
+  useEffect(() => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === "greeting" ? { ...m, text: t.greeting, suggestedQuestions: quickQuestions } : m))
+    );
+  }, [chatLang, t.greeting, quickQuestions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!conversationId) return undefined;
+    getAssistantConversation(conversationId, clientSessionId)
+      .then((data) => {
+        if (cancelled || !data?.messages) return;
+        const restored = data.messages.map(mapServerMessage);
+        setMessages([{ id: "greeting", from: "bot", text: t.greeting, suggestedQuestions: quickQuestions }, ...restored]);
+        setIsConversationClosed(data.status !== "Open");
+        if (data.bookingDraft) {
+          setBookingDraft(data.bookingDraft);
+          if (data.bookingDraft.stage && data.bookingDraft.stage !== "Completed") setBookingFlow(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          try { window.localStorage.removeItem("waterbus.chat.conversationId"); } catch { /* ignore */ }
+          setConversationId(null);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [conversationId, clientSessionId, t.greeting, quickQuestions]);
+
+  // Poll để hiển thị tin nhắn tự động đóng sau 30 phút ngay cả khi user vẫn mở widget.
+  useEffect(() => {
+    if (!conversationId || isConversationClosed) return undefined;
+    const timer = window.setInterval(() => {
+      getAssistantConversation(conversationId, clientSessionId)
+        .then((data) => {
+          if (!data?.messages) return;
+          setMessages((prev) => {
+            const greeting = prev.find((m) => m.id === "greeting") || { id: "greeting", from: "bot", text: t.greeting, suggestedQuestions: quickQuestions };
+            return [greeting, ...data.messages.map(mapServerMessage)];
+          });
+          if (data.status !== "Open") setIsConversationClosed(true);
+          if (data.bookingDraft) {
+            setBookingDraft(data.bookingDraft);
+            if (data.bookingDraft.stage && data.bookingDraft.stage !== "Completed") setBookingFlow(true);
+          }
+        })
+        .catch(() => undefined);
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [conversationId, clientSessionId, isConversationClosed, t.greeting, quickQuestions]);
+
+  const startNewConversation = async () => {
+    conversationVersionRef.current += 1;
+    const previousConversationId = conversationId;
+    setIsRefreshing(true);
+    if (previousConversationId) {
+      try {
+        await closeAssistantConversation(previousConversationId, clientSessionId);
+      } catch {
+        // Vẫn tạo hội thoại mới nếu hội thoại cũ đã hết hạn hoặc API tạm thời lỗi.
+      }
+    }
+    try { window.localStorage.removeItem("waterbus.chat.conversationId"); } catch { /* ignore */ }
+    try { window.localStorage.removeItem("waterbus.chat.bookingDraft"); } catch { /* ignore */ }
+    setConversationId(null);
+    setIsConversationClosed(false);
+    setBookingFlow(false);
+    setBookingDraft(null);
+    setMessages([{ id: "greeting", from: "bot", text: t.greeting, suggestedQuestions: quickQuestions }]);
+    setDraft("");
+    setIsTyping(false);
+    setIsRefreshing(false);
+  };
+
+  const startBookingFlow = () => {
+    if (isConversationClosed) return;
+    setBookingFlow(true);
+    setBookingDraft((current) => current || { stage: "CollectingInfo" });
+  };
+
+  const handleRequireLogin = () => {
+    const redirect = `${window.location.pathname}${window.location.search}`;
+    navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
+  };
+
+  const handleBookingDraftChange = async (nextDraft) => {
+    setBookingDraft(nextDraft);
+    if (!conversationId) return;
+    try {
+      await updateAssistantBookingDraft(conversationId, nextDraft, clientSessionId);
+    } catch {
+      // The local draft remains usable if persistence is temporarily unavailable.
+    }
+  };
+
+  const sendText = async (text, draftOverride = bookingDraft) => {
+    if (!text || isTyping || isConversationClosed) return;
+
+    const requestVersion = conversationVersionRef.current;
 
     const userMessage = { id: `u-${Date.now()}`, from: "user", text };
-    // Lịch sử gửi lên server: bỏ câu chào mặc định (không phải do LLM sinh ra).
-    const history = [...messages, userMessage]
-      .filter((m) => m.id !== "greeting")
-      .map((m) => ({ role: m.from === "user" ? "user" : "assistant", text: m.text }));
-
     setMessages((prev) => [...prev, userMessage]);
     setDraft("");
     setIsTyping(true);
 
     try {
-      const data = await chatWithAssistant(history);
+      const data = await chatWithAssistant(
+        [{ role: "user", text }],
+        chatLang,
+        conversationId,
+        clientSessionId,
+        draftOverride,
+      );
+      if (requestVersion !== conversationVersionRef.current) return;
+      if (data?.conversationId && data.conversationId !== conversationId) {
+        setConversationId(data.conversationId);
+        try { window.localStorage.setItem("waterbus.chat.conversationId", data.conversationId); } catch { /* ignore */ }
+      }
       const replyText =
         (typeof data === "string" ? data : data?.reply ?? data?.text ?? data?.message ?? data?.answer) ||
         t.errorReply;
       setMessages((prev) => [
         ...prev,
-        { id: `b-${Date.now()}`, from: "bot", text: replyText },
+        {
+          id: `b-${Date.now()}`,
+          from: "bot",
+          text: replyText,
+          suggestedQuestions: Array.isArray(data?.suggestedQuestions) ? data.suggestedQuestions : [],
+          actions: Array.isArray(data?.actions) ? data.actions : [],
+        },
       ]);
-    } catch {
+      if (data?.bookingDraft) setBookingDraft(data.bookingDraft);
+    } catch (error) {
+      if (requestVersion !== conversationVersionRef.current) return;
+      if (error?.response?.status === 409) {
+        setIsConversationClosed(true);
+      }
       setMessages((prev) => [
         ...prev,
         { id: `b-${Date.now()}`, from: "bot", text: t.errorReply },
@@ -69,6 +242,14 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text) return;
+    setDraft("");
+    await sendText(text);
   };
 
   return (
@@ -87,7 +268,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
       {/* Header */}
       <div className="flex items-center gap-3 bg-[#124757] px-4 py-3.5 text-white dark:bg-slate-800 dark:text-yellow-400">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/15 dark:bg-yellow-400/15">
-          <span className="material-symbols-outlined text-xl">smart_toy</span>
+          <img src={logo} alt="" className="h-57 w-57 object-contain" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-headline font-black">{t.title}</p>
@@ -96,6 +277,16 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
             {t.subtitle}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => void startNewConversation()}
+          disabled={isRefreshing}
+          title={chatLang === "VN" ? "Làm mới cuộc trò chuyện" : "Refresh conversation"}
+          aria-label={chatLang === "VN" ? "Làm mới cuộc trò chuyện" : "Refresh conversation"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/10 disabled:opacity-50"
+        >
+          <span className="material-symbols-outlined text-lg">refresh</span>
+        </button>
         <button
           type="button"
           onClick={onClose}
@@ -120,10 +311,72 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
                   : "rounded-bl-sm bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-100"
               }`}
             >
-              {m.text}
+              {m.from === "user" ? (
+                m.text
+              ) : (
+                <>
+                  <ReactMarkdown components={markdownComponents}>{m.text}</ReactMarkdown>
+                  {m.suggestedQuestions?.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {m.suggestedQuestions.map((question) => (
+                        <button
+                          key={question}
+                          type="button"
+                          onClick={() => sendText(question)}
+                          disabled={isTyping || isConversationClosed}
+                          className="rounded-full border border-[#124757]/30 px-2.5 py-1 text-left text-[11px] font-bold text-[#124757] transition-colors hover:bg-[#124757]/10 disabled:opacity-50 dark:border-yellow-400/40 dark:text-yellow-300"
+                        >
+                          {question}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {m.actions?.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {m.actions.map((action) => (
+                        <button
+                          key={`${action.type}-${action.route}-${action.label}`}
+                          type="button"
+                          disabled={isTyping || isConversationClosed || isRefreshing}
+                          onClick={() => {
+                            if (action.type === "booking" || action.route === "/waterbus-booking") {
+                              startBookingFlow();
+                            } else if (action.type === "navigate" && action.route?.startsWith("/")) {
+                              navigate(action.route);
+                            }
+                          }}
+                          className="rounded-full bg-[#124757] px-2.5 py-1 text-[11px] font-bold text-white transition-transform hover:scale-[1.02] dark:bg-yellow-400 dark:text-slate-900"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         ))}
+
+        {bookingFlow && !isConversationClosed && (
+          <ChatBookingFlow
+            lang={chatLang}
+            initialDraft={bookingDraft}
+            isAuthenticated={Boolean(isAuthenticated)}
+            user={user}
+            onRequireLogin={handleRequireLogin}
+            onDraftChange={handleBookingDraftChange}
+            onDone={(booking) => {
+              setMessages((prev) => [...prev, {
+                id: `b-booking-${Date.now()}`,
+                from: "bot",
+                text: chatLang === "VN"
+                  ? `Đã tạo booking ${booking?.bookingCode || ""}. Bạn có thể tiếp tục theo dõi thanh toán.`
+                  : `Booking ${booking?.bookingCode || ""} was created. You can continue with payment.`,
+              }]);
+            }}
+          />
+        )}
 
         {isTyping && (
           <div className="flex justify-start">
@@ -141,6 +394,15 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
         <div ref={bottomRef} />
       </div>
 
+      {isConversationClosed && (
+        <div className="flex items-center justify-between gap-2 border-t border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+          <span>{chatLang === "VN" ? "Hội thoại đã đóng." : "This conversation is closed."}</span>
+          <button type="button" onClick={() => void startNewConversation()} className="rounded-full bg-[#124757] px-3 py-1.5 text-white">
+            {chatLang === "VN" ? "Chat mới" : "New chat"}
+          </button>
+        </div>
+      )}
+
       {/* Input */}
       <form
         onSubmit={handleSend}
@@ -151,12 +413,12 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={t.placeholder}
-          disabled={isTyping}
+          disabled={isTyping || isConversationClosed || isRefreshing}
           className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-800 outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-yellow-400"
         />
         <button
           type="submit"
-          disabled={!draft.trim() || isTyping}
+          disabled={!draft.trim() || isTyping || isConversationClosed || isRefreshing}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#124757] text-white transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-yellow-400 dark:text-slate-900"
         >
           <span className="material-symbols-outlined text-lg">send</span>

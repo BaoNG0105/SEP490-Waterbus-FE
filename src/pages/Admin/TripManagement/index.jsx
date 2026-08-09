@@ -35,19 +35,19 @@ const pickDateFromSearch = (params) => {
 const tripStatusBadgeClass = (status) => {
     switch (normalizeTripStatusKey(status)) {
         case "Scheduled":
-            return "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400";
+            return "text-blue-600 dark:text-blue-400";
         case "Boarding":
-            return "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400";
+            return "text-amber-600 dark:text-amber-400";
         case "InProgress":
-            return "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300";
+            return "text-teal-700 dark:text-teal-300";
         case "Delayed":
-            return "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400";
+            return "text-orange-600 dark:text-orange-400";
         case "Completed":
-            return "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400";
+            return "text-emerald-600 dark:text-emerald-400";
         case "Cancelled":
-            return "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400";
+            return "text-rose-500 dark:text-rose-400";
         default:
-            return "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400";
+            return "text-slate-500 dark:text-slate-400";
     }
 };
 
@@ -603,9 +603,9 @@ export function TripManagement() {
 
                                             <td className="py-3.5 px-4 align-middle">
                                                 <div className="flex min-w-0 items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
-                                                    <span className="max-w-[6.5rem] truncate" title={fromLabel}>{fromLabel}</span>
+                                                    <span className="max-w-26 truncate" title={fromLabel}>{fromLabel}</span>
                                                     <span className="material-symbols-outlined shrink-0 text-[14px] text-[#FFD100]">arrow_forward</span>
-                                                    <span className="max-w-[6.5rem] truncate" title={toLabel}>{toLabel}</span>
+                                                    <span className="max-w-26 truncate" title={toLabel}>{toLabel}</span>
                                                 </div>
                                             </td>
 
@@ -621,14 +621,14 @@ export function TripManagement() {
                                                     const affectedLine = formatAffectedTripLine(trip, lang);
                                                     if (active) {
                                                         return (
-                                                            <p className="mt-1 max-w-[11rem] text-[10px] font-bold leading-snug text-amber-700 dark:text-amber-300">
+                                                            <p className="mt-1 max-w-44 text-[10px] font-bold leading-snug text-amber-700 dark:text-amber-300">
                                                                 {formatActiveDelayLine(trip, { lang, stops: trip.stops })}
                                                             </p>
                                                         );
                                                     }
                                                     if (affectedLine) {
                                                         return (
-                                                            <p className="mt-1 max-w-[11rem] text-[10px] font-bold leading-snug text-orange-700 dark:text-orange-300">
+                                                            <p className="mt-1 max-w-44 text-[10px] font-bold leading-snug text-orange-700 dark:text-orange-300">
                                                                 {affectedLine}
                                                             </p>
                                                         );
@@ -645,7 +645,7 @@ export function TripManagement() {
                                             </td>
 
                                             <td className="py-3.5 px-3 align-middle">
-                                                <span className="inline-flex rounded-lg border bg-slate-100 px-2.5 py-1 text-xs font-black tabular-nums text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400">
+                                                <span className="text-xs font-black tabular-nums text-[#124757] dark:text-yellow-400">
                                                     {resolvePaxLabel(trip)}
                                                 </span>
                                             </td>
@@ -654,7 +654,7 @@ export function TripManagement() {
                                                 <div className="flex flex-col items-start gap-1">
                                                     <span
                                                         title={trip.statusNote || ""}
-                                                        className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${tripStatusBadgeClass(trip.tripStatus)}`}
+                                                        className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${tripStatusBadgeClass(trip.tripStatus)}`}
                                                     >
                                                         <span className={`h-1.5 w-1.5 rounded-full ${tripStatusDotClass(trip.tripStatus)}`} />
                                                         {getTripStatusLabel(trip.tripStatus, lang)}

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { fetchBlogPostDetail, getBlogCoverUrl, getBlogDisplayHtml } from "../../services/blogService";
+import { ImageWithFallback } from "../../components/ImageWithFallback";
 
 export function BlogDetail() {
     const { lang } = useApp();
@@ -81,15 +82,13 @@ export function BlogDetail() {
                     </div>
                 </div>
 
-                {coverUrl ? (
-                    <div className="w-full aspect-video overflow-hidden shadow-sm bg-slate-50 dark:bg-slate-800">
-                        <img 
-                            src={coverUrl} 
-                            alt={blog.imageAltText || blog.title} 
-                            className="w-full h-full object-cover"
-                        />
-                    </div>
-                ) : null}
+                <div className="w-full aspect-video overflow-hidden shadow-sm bg-slate-50 dark:bg-slate-800">
+                    <ImageWithFallback
+                        src={coverUrl}
+                        alt={blog.imageAltText || blog.title}
+                        className="w-full h-full"
+                    />
+                </div>
 
                 {gallery.length > 1 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

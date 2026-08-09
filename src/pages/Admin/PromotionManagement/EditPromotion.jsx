@@ -136,11 +136,6 @@ export function EditPromotion() {
               ? `Chỉnh sửa khuyến mãi: ${formData.promotionCode}`
               : `Edit Promotion: ${formData.promotionCode}`}
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {lang === "VN"
-              ? "Mã và loại giảm không đổi. Ảnh upload bằng PUT .../image."
-              : "Code and discount type locked. Image via PUT .../image."}
-          </p>
         </div>
       </div>
 

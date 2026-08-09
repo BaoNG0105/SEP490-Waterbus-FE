@@ -11,7 +11,7 @@ const pick = (source, keys, fallback = "") => {
 
 export const REVIEW_COMMENT_MAX_LENGTH = 1000;
 
-/** Chuẩn hoá 1 dòng của GET /reviews/my/reviewable-trips. */
+/** Chuẩn hoá 1 dòng của GET /reviews/my/reviewable-trips. Review giờ tính theo booking (bookingId), không phải theo trip. */
 export const normalizeReviewableTrip = (trip) => {
   const myReviewRaw = trip?.myReview ?? trip?.MyReview ?? null;
   return {
@@ -20,6 +20,9 @@ export const normalizeReviewableTrip = (trip) => {
     routeName: pick(trip, ["routeName"], ""),
     departureTime: pick(trip, ["departureTime"], ""),
     arrivalTime: pick(trip, ["arrivalTime"], ""),
+    bookingId: String(pick(trip, ["bookingId"], "")),
+    bookingCode: pick(trip, ["bookingCode"], ""),
+    isRoundTrip: Boolean(trip?.isRoundTrip),
     myReview: myReviewRaw
       ? {
         rating: Number(pick(myReviewRaw, ["rating"], 0)),
@@ -75,7 +78,7 @@ export const StarRatingInput = ({ value, onChange, lang }) => {
   );
 };
 
-/** Modal gửi đánh giá 1 chuyến (POST /reviews/trips/{tripId}). */
+/** Modal gửi đánh giá 1 booking đã hoàn thành dịch vụ (POST /reviews/bookings/{bookingId}). */
 export function TripReviewModal({ lang, onClose, onSubmitted }) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");

@@ -79,13 +79,13 @@ export const getRouteKindLabel = (routeTypeOrRoute, lang = "VN") => {
   const isVn = lang === "VN";
   switch (key) {
     case "Bus":
-      return isVn ? "Tuyến bán vé thường" : "Regular ticket route";
+      return isVn ? "Tuyến Waterbus" : "Waterbus route";
     case "GPS":
-      return isVn ? "Route nguồn GPS" : "GPS source route";
+      return isVn ? "Tuyến nguồn GPS" : "GPS source route";
     case "Sightseeing":
-      return isVn ? "Tour tham quan" : "Sightseeing tour";
+      return isVn ? "Tuyến Sightseeing" : "Sightseeing route";
     case "Charter":
-      return isVn ? "Route charter" : "Charter route";
+      return isVn ? "Tuyến Request" : "Request route";
     default:
       return key || "—";
   }

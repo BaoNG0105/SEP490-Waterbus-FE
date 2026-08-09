@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
@@ -45,6 +45,27 @@ const safeMapAction = (map, action) => {
     // Leaflet crash khi map bị unmount giữa lúc zoom/pan — bỏ qua an toàn.
     console.warn("WaterwayMap: skipped map action", error);
   }
+};
+
+/**
+ * Đồng bộ trạng thái "đã kích hoạt tương tác" với Leaflet: bật/tắt scrollWheelZoom
+ * và dragging theo `active` — dùng cho interactionGate (chặn cuộn trang bị nuốt vào
+ * zoom/kéo bản đồ khi map chỉ là 1 khối nhúng giữa trang đang cuộn dài).
+ */
+const InteractionGateSync = ({ active }) => {
+  const map = useMap();
+  useEffect(() => {
+    safeMapAction(map, (activeMap) => {
+      if (active) {
+        activeMap.scrollWheelZoom.enable();
+        activeMap.dragging.enable();
+      } else {
+        activeMap.scrollWheelZoom.disable();
+        activeMap.dragging.disable();
+      }
+    });
+  }, [map, active]);
+  return null;
 };
 
 // Tự động căn chỉnh góc nhìn — preferFocus = luôn khóa camera theo tàu.
@@ -512,10 +533,14 @@ export const WaterwayMap = ({
   routeOverlays = [],
   /** Class vị trí nhãn tên tuyến (mặc định góc phải trên). */
   nameOverlayClassName = "absolute top-4 right-4 z-[1000]",
+  /** true = map chỉ nhận scroll-zoom/kéo sau khi người dùng bấm/chạm vào — tránh
+   *  nuốt thao tác cuộn trang khi map chỉ là 1 khối nhúng giữa trang dài (VD: Home). */
+  interactionGate = false,
   className = "",
 }) => {
   const navigate = useNavigate();
   const { lang } = useApp();
+  const [mapActivated, setMapActivated] = useState(!interactionGate);
   const polylinePositions = (coordinates || [])
     .filter((point) => isValidLatLng(point?.latitude, point?.longitude))
     .map((point) => [point.latitude, point.longitude]);
@@ -565,7 +590,10 @@ export const WaterwayMap = ({
     : visibleStations;
 
   return (
-    <div className={`relative z-10 h-full min-h-0 w-full overflow-hidden border-0 ${className}`}>
+    <div
+      className={`relative z-10 h-full min-h-0 w-full overflow-hidden border-0 ${className}`}
+      onMouseLeave={interactionGate ? () => setMapActivated(false) : undefined}
+    >
 
       {waterwayName && (
         <div className={`${nameOverlayClassName} pointer-events-none max-w-[min(100%-2rem,20rem)] rounded-xl bg-white/90 px-4 py-2 shadow-sm backdrop-blur dark:bg-slate-800/90`}>
@@ -578,12 +606,28 @@ export const WaterwayMap = ({
         </div>
       )}
 
+      {/* Chặn cuộn trang bị nuốt vào zoom/kéo bản đồ — bấm/chạm 1 lần để kích hoạt tương tác. */}
+      {interactionGate && !mapActivated && (
+        <button
+          type="button"
+          onClick={() => setMapActivated(true)}
+          className="absolute inset-0 z-1100 flex cursor-pointer items-center justify-center bg-slate-900/20 backdrop-blur-[1px] transition-opacity hover:bg-slate-900/30"
+        >
+          <span className="rounded-full bg-white/95 px-4 py-2 text-xs font-bold text-[#124757] shadow-md dark:bg-slate-800/95 dark:text-yellow-400">
+            {lang === "VN" ? "Nhấn để tương tác với bản đồ" : "Click to interact with the map"}
+          </span>
+        </button>
+      )}
+
       <MapContainer
         center={focusPoint || centerPoint}
         zoom={preferFocus && focusPoint ? 16 : 13}
         className="w-full h-full"
         zoomControl={false}
+        scrollWheelZoom={mapActivated}
+        dragging={mapActivated}
       >
+        {interactionGate && <InteractionGateSync active={mapActivated} />}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -680,7 +724,7 @@ export const WaterwayMap = ({
                   </Tooltip>
                 ) : null}
                 <Popup>
-                  <div className="min-w-[11.5rem] max-w-[15rem] space-y-2 p-1 font-body text-center">
+                  <div className="min-w-46 max-w-60 space-y-2 p-1 font-body text-center">
                     {showStationImages ? (
                       <img
                         src={stationImage}

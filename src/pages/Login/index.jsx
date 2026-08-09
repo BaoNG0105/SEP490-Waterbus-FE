@@ -194,8 +194,8 @@ export const Login = () => {
       {/* CỘT TRÁI: BANNER HÌNH ẢNH  */}
       <div className="w-1/2 h-screen top-0 hidden md:block relative overflow-hidden shrink-0 select-none">
         <img
-          src="https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png"
-          alt="Waterbus Fullscreen Banner"
+          src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/login.png"
+          alt="Login Banner"
           className="w-full h-full object-cover transform scale-100 hover:scale-[1.01] transition-transform duration-700 ease-out"
         />
         {/* Lớp phủ chuyển màu Gradient xanh đặc trưng giúp hiển thị chữ rõ nét */}

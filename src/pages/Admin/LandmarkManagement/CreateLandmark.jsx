@@ -91,11 +91,6 @@ export function CreateLandmark() {
                     <h2 className="font-headline text-xl font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400 md:text-2xl">
                         {lang === "VN" ? "Thêm landmark mới" : "Add New Landmark"}
                     </h2>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                        {lang === "VN"
-                            ? "Landmark không gắn tuyến — định danh bằng tọa độ, dùng chung mọi tuyến đi ngang qua."
-                            : "Landmarks aren't tied to a route — they're identified by coordinates and shared across every route passing through."}
-                    </p>
                 </div>
             </div>
 
@@ -169,12 +164,6 @@ export function CreateLandmark() {
                                 />
                             </div>
                         </div>
-
-                        <p className="mt-auto rounded-xl border border-slate-100 bg-slate-50 p-3 text-[11px] font-medium text-slate-400 dark:border-slate-700/60 dark:bg-slate-900">
-                            {lang === "VN"
-                                ? "displayOrder chỉ dùng để sắp xếp ở màn admin; triggerRadiusMeters là bán kính kích hoạt phát audio."
-                                : "displayOrder is only used for sorting in the admin screen; triggerRadiusMeters is the playback trigger radius."}
-                        </p>
                     </div>
 
                     <div className="flex h-145 min-h-145 flex-col rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 lg:h-auto">
