@@ -98,10 +98,18 @@ const parseBookingContext = (text, current = EMPTY_BOOKING_CONTEXT) => {
   const date = parseBookingDate(text);
   if (date) next.departureDate = date;
 
-  const route = text.match(/(?:từ|from)\s+(.+?)\s*(?:đến|tới|to|->|[-–—])\s*(.+?)(?=\s+(?:ngày|on|cho|với|lúc|at|for|with)\b|\s+(?:và|and)\s+\d+\b|[,.!?]|$)/i);
+  const routePatterns = [
+    /(?:từ|from|đi|di)\s+(.+?)\s*(?:đến|tới|to|->|→|[-–—])\s*(.+?)(?=\s+(?:ngày|on|cho|với|lúc|at|for|with)\b|\s+(?:và|and)\s+\d+\b|[,.!?]|$)/i,
+    /(?:^|\s)(?:bến\s+)?(.+?)\s*(?:->|→|[-–—])\s*(?:bến\s+)?(.+?)(?=\s+(?:ngày|on|cho|với|lúc|at|for|with)\b|\s+(?:và|and)\s+\d+\b|[,.!?]|$)/i,
+  ];
+  const route = routePatterns.map((pattern) => text.match(pattern)).find(Boolean);
   if (route) {
-    next.fromStationName = route[1].trim();
-    next.toStationName = route[2].replace(/^>\s*/, "").trim();
+    const cleanStation = (value) => String(value || "")
+      .replace(/^bến\s+/i, "")
+      .replace(/\s+(?:ngày|on|cho|với|lúc|at|for|with)\b.*$/i, "")
+      .trim();
+    next.fromStationName = cleanStation(route[1]);
+    next.toStationName = cleanStation(route[2].replace(/^>\s*/, ""));
   }
 
   const adult = text.match(/(\d+)\s*(?:người\s*lớn|adult(?:s)?)/i);
@@ -153,7 +161,7 @@ const bookingDraftFromContext = (context) => ({
   adultCount: context.adultCount,
   childCount: context.childCount || 0,
   infantCount: context.infantCount || 0,
-  passengerCountConfirmed: true,
+  passengerCountConfirmed: Boolean(context.passengerCountConfirmed),
   departureTrips: [],
   returnTrips: [],
   selectedDepartureTrip: null,
@@ -321,9 +329,9 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     const formWasOpen = bookingFlow;
     const startsOrContinuesBooking = bookingIntent || hasBookingIntent(text);
     const contextBase = formWasOpen ? EMPTY_BOOKING_CONTEXT : bookingContext;
-    const nextBookingContext = startsOrContinuesBooking
-      ? parseBookingContext(text, contextBase)
-      : formWasOpen ? EMPTY_BOOKING_CONTEXT : bookingContext;
+    // Parse every message so route/date/passenger details mentioned before the
+    // user presses “Đặt vé” are retained and prefilled in the booking form.
+    const nextBookingContext = parseBookingContext(text, contextBase);
 
     if (formWasOpen) {
       // A free-text correction invalidates the route/seat draft currently shown.
@@ -333,7 +341,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
       bookingDraftSyncVersionRef.current += 1;
     }
     if (hasBookingIntent(text)) setBookingIntent(true);
-    if (startsOrContinuesBooking || formWasOpen) setBookingContext(nextBookingContext);
+    setBookingContext(nextBookingContext);
 
     const userMessage = { id: `u-${Date.now()}`, from: "user", text };
     setMessages((prev) => [...prev, userMessage]);
