@@ -33,7 +33,7 @@ const getPaymentAmount = (payment) =>
 const getPaymentId = (payment) => getRefundPaymentId(payment);
 
 const isPaidPayment = (payment) =>
-  ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(payment?.paymentStatus).toLowerCase());
+  ["paid", "depositpaid"].includes(String(payment?.paymentStatus || "").toLowerCase());
 
 const getRefundablePayment = (booking) => {
   const payments = Array.isArray(booking?.payments) ? booking.payments : [];

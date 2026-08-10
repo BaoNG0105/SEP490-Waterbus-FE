@@ -19,21 +19,20 @@ export const getWorkflowStepIndex = (status) => {
 };
 
 const isPaidLike = (paymentStatus) =>
-  ["paid", "depositpaid", "success", "succeeded", "completed", "partiallyrefunded", "partially_refunded"].includes(
+  ["paid", "depositpaid", "partiallyrefunded", "partially_refunded"].includes(
     String(paymentStatus || "").toLowerCase(),
   );
 
 const isRefundFailedPayment = (payment) => {
-  const paymentStatus = String(payment?.paymentStatus || "").toLowerCase();
   const refundStatus = String(payment?.refundStatus || payment?.refund?.status || "").toLowerCase();
-  return paymentStatus === "refundfailed" || paymentStatus === "refund_failed" || ["failed", "error", "rejected"].includes(refundStatus);
+  return ["failed", "error", "rejected"].includes(refundStatus);
 };
 
 const isRefundSettledPayment = (payment) => {
   const paymentStatus = String(payment?.paymentStatus || "").toLowerCase();
   const refundStatus = String(payment?.refundStatus || payment?.refund?.status || "").toLowerCase();
   return paymentStatus === "refunded"
-    || ["success", "succeeded", "completed", "refunded", "paid", "manualrefunded", "manual_refunded"].includes(refundStatus);
+    || ["success", "succeeded", "completed", "refunded", "paid"].includes(refundStatus);
 };
 
 const isRefundInFlightPayment = (payment) =>
@@ -62,7 +61,7 @@ export const bookingWaitsCustomerRefundInfo = (booking) => {
     || Number(booking?.paidAmount || 0) > 0
     || payments.some((payment) => {
       const ps = String(payment?.paymentStatus || "").toLowerCase();
-      return ["paid", "depositpaid", "success", "succeeded", "completed"].includes(ps)
+      return ["paid", "depositpaid"].includes(ps)
         || Number(payment?.amount || payment?.paymentAmount || 0) > 0;
     });
   if (!hasCollectedMoney) return false;

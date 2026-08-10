@@ -57,7 +57,7 @@ export const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
-export const DEFAULT_BOAT_IMAGE = "https://images.unsplash.com/photo-1605281317010-fe5ffe798166?w=800&q=80";
+export const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
 export const getBoatImageUrl = (boat, fallback = DEFAULT_BOAT_IMAGE) => {
   if (!boat) return fallback;
@@ -553,15 +553,9 @@ export const getPaymentStatusInfo = (status, lang) => {
     case "depositpaid":
       return { label: lang === "VN" ? "Đã đặt cọc" : "Deposit Paid", classes: "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20" };
     case "refunded":
-    case "manualrefunded":
       return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
     case "partiallyrefunded":
       return { label: lang === "VN" ? "Hoàn tiền một phần" : "Partially refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
-    case "refundpending":
-    case "refundprocessing":
-      return { label: lang === "VN" ? "Đang hoàn tiền" : "Refund Processing", classes: "bg-cyan-50 text-cyan-600 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20" };
-    case "refundfailed":
-      return { label: lang === "VN" ? "Hoàn tiền lỗi" : "Refund Failed", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20" };
     case "failed":
       return { label: lang === "VN" ? "Thanh toán thất bại" : "Failed", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20" };
     case "cancelled":
@@ -638,8 +632,6 @@ const COMPLETED_REFUND_STATUSES = new Set([
   "succeeded",
   "completed",
   "refunded",
-  "manualrefunded",
-  "manual_refunded",
 ]);
 
 /** Booking/payment đã hoàn xong (kể cả BE vẫn để PaymentStatus = Paid). */
@@ -647,7 +639,7 @@ export const isRefundDone = (payment) => {
   if (!payment || typeof payment !== "object") return false;
   const paymentStatus = String(pick(payment, ["paymentStatus", "PaymentStatus", "status"], "")).toLowerCase().replace(/[_-\s]/g, "");
   const refundStatus = String(getRefundStatus(payment) || "").toLowerCase().replace(/[_-\s]/g, "");
-  if (paymentStatus === "refunded" || paymentStatus === "manualrefunded") return true;
+  if (paymentStatus === "refunded") return true;
   if (COMPLETED_REFUND_STATUSES.has(refundStatus)) return true;
   // Một số list DTO chỉ có số tiền đã hoàn, không có refundStatus.
   const refunded = getRefundAmount(payment);
@@ -660,7 +652,7 @@ export const isRefundDone = (payment) => {
 export const hasCompletedCharterRefund = (item) => {
   if (!item || typeof item !== "object") return false;
   const topPayment = String(pick(item, ["paymentStatus", "PaymentStatus"], "") || "").toLowerCase().replace(/[_-\s]/g, "");
-  if (["refunded", "manualrefunded", "partiallyrefunded"].includes(topPayment)) return true;
+  if (["refunded", "partiallyrefunded"].includes(topPayment)) return true;
 
   const topRefund = String(pick(item, [
     "refundStatus",
@@ -718,12 +710,10 @@ export const resolveCharterPaymentStatus = (item) => {
     return keys.some((key) => set.has(key) || String(top || "").toLowerCase() === key);
   };
 
-  if (hasCompletedCharterRefund(item) || has("refunded", "manualrefunded", "manual_refunded")) {
+  if (hasCompletedCharterRefund(item) || has("refunded")) {
     return "Refunded";
   }
   if (has("partiallyrefunded", "partially_refunded")) return "PartiallyRefunded";
-  if (has("refundpending", "refund_pending", "refundprocessing", "refund_processing")) return "RefundPending";
-  if (has("refundfailed", "refund_failed")) return "RefundFailed";
   if (top) return top;
   if (paymentStatuses.includes("paid")) return "Paid";
   if (paymentStatuses.includes("depositpaid")) return "DepositPaid";
@@ -812,25 +802,24 @@ export const getRefundStatusInfo = (payment, lang) => {
   if (paymentStatus === "refunded") {
     return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
   }
-  if (["success", "succeeded", "completed", "refunded", "paid", "manualrefunded", "manual_refunded"].includes(refundStatus)) {
+  if (["success", "succeeded", "completed", "refunded", "paid"].includes(refundStatus)) {
     return { label: lang === "VN" ? "Đã hoàn tiền" : "Refunded", classes: "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20" };
   }
   if (["pending", "processing", "requested", "created"].includes(refundStatus)) {
     return { label: lang === "VN" ? "Đang hoàn tiền" : "Refund Processing", classes: "bg-cyan-50 text-cyan-600 border-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20" };
   }
-  if (["failed", "error", "cancelled", "rejected"].includes(refundStatus) || paymentStatus === "refundfailed" || paymentStatus === "refund_failed") {
+  if (["failed", "error", "cancelled", "rejected"].includes(refundStatus)) {
     return { label: lang === "VN" ? "Hoàn tiền lỗi" : "Refund Failed", classes: "bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20" };
   }
   return { label: "--", classes: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700" };
 };
 export const isPaidPayment = (payment) =>
-  ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(pick(payment, ["paymentStatus", "PaymentStatus"], "")).toLowerCase());
+  ["paid", "depositpaid"].includes(String(pick(payment, ["paymentStatus", "PaymentStatus"], "")).toLowerCase());
 export const isRefundProcessing = (payment) =>
   ["pending", "processing", "requested", "created"].includes(String(getRefundStatus(payment)).toLowerCase());
 export const isRefundFailed = (payment) => {
-  const paymentStatus = String(pick(payment, ["paymentStatus"], "")).toLowerCase();
   const refundStatus = String(getRefundStatus(payment)).toLowerCase();
-  return paymentStatus === "refundfailed" || paymentStatus === "refund_failed" || ["failed", "error", "cancelled", "rejected"].includes(refundStatus);
+  return ["failed", "error", "cancelled", "rejected"].includes(refundStatus);
 };
 export const getRemainingRefundAmount = (payment) => {
   const heldAmount = isRefundProcessing(payment) ? Math.max(getRefundAmount(payment), getRefundRequestedAmount(payment)) : getRefundAmount(payment);
