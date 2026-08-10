@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { AdminCharterAssignmentPanel } from "../../../components/AdminCharterAssignmentPanel";
 import {
   AdminBookingActionsTab,
   AdminBookingOverviewTab,
@@ -121,7 +120,7 @@ export function AdminCharterBookingDetail() {
   const [routeCandidateLegs, setRouteCandidateLegs] = useState([]);
   const [routePlanSelections, setRoutePlanSelections] = useState({});
   const [routeCandidatesLoaded, setRouteCandidatesLoaded] = useState(false);
-  const [gpsCatalogRoutes, setGpsCatalogRoutes] = useState([]);
+  const [, setGpsCatalogRoutes] = useState([]);
   const [isRouteCandidatesLoading, setIsRouteCandidatesLoading] = useState(false);
   const [routeCandidatesError, setRouteCandidatesError] = useState("");
   const [quotePreview, setQuotePreview] = useState(null);
@@ -337,15 +336,6 @@ export function AdminCharterBookingDetail() {
       setActiveTab(location.state.tab);
     }
   }, [location.state?.tab]);
-
-  useEffect(() => {
-    if (
-      activeTab === "assignment"
-      && ["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || ""))
-    ) {
-      setActiveTab("overview");
-    }
-  }, [activeTab, booking?.status]);
 
   useEffect(() => {
     setAcknowledgedBadges(readAcknowledgedTabBadges(id));
@@ -1050,18 +1040,10 @@ export function AdminCharterBookingDetail() {
 
   const workspaceTabs = useMemo(() => {
     const tabs = [];
-    const closedBooking = ["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || ""));
     if (capabilities.canQuote) {
       tabs.push({ id: "actions", label: lang === "VN" ? "Thao tác" : "Actions" });
     }
     tabs.push({ id: "overview", label: lang === "VN" ? "Tổng quan" : "Overview" });
-    if (capabilities.canAssignManager && !closedBooking) {
-      tabs.push({
-        id: "assignment",
-        icon: "group",
-        label: lang === "VN" ? "Gán quản lý" : "Assign manager",
-      });
-    }
     const paymentList = Array.isArray(booking?.payments) ? booking.payments : [];
     const ticketList = canShowCharterTickets(booking)
       ? (Array.isArray(booking?.tickets) ? booking.tickets : [])
@@ -1151,7 +1133,7 @@ export function AdminCharterBookingDetail() {
         </div>
       </div>
 
-      <div className="sticky top-4 z-20 rounded-3xl border border-slate-100 bg-white/95 p-2 shadow-lg backdrop-blur dark:border-slate-700/60 dark:bg-slate-800/95">
+      <div className="sticky top-20 z-20 rounded-3xl border border-slate-100 bg-white/95 p-2 shadow-lg backdrop-blur dark:border-slate-700/60 dark:bg-slate-800/95">
         <div className={`grid grid-cols-2 gap-2 ${
           workspaceTabs.length >= 5
             ? "md:grid-cols-5"
@@ -1350,18 +1332,6 @@ export function AdminCharterBookingDetail() {
         />
       )}
 
-      {activeTab === "assignment"
-        && capabilities.canAssignManager
-        && !["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || "")) && (
-        <AdminCharterAssignmentPanel
-          lang={lang}
-          booking={booking}
-          capabilities={capabilities}
-          isSubmitting={isSubmitting}
-          onReload={loadDetail}
-        />
-      )}
-
       {activeTab === "payments" && capabilities.canViewPayments && (
       <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -1378,7 +1348,7 @@ export function AdminCharterBookingDetail() {
           </span>
         </div>
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[920px] table-fixed text-xs">
+          <table className="w-full min-w-230 table-fixed text-xs">
             <colgroup>
               <col className="w-[18%]" />
               <col className="w-[18%]" />

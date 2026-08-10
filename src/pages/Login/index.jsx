@@ -5,6 +5,7 @@ import { GoogleLogin } from "@react-oauth/google";
 import { loginWithGoogle, loginWithPhoneEmail } from "../../services/authService";
 import { useDispatch, useSelector } from "react-redux";
 import { loginSuccess } from "../../redux/authSlice";
+import { getDefaultAdminLandingPath } from "../../layout/Admin/AdminSidebar";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -59,7 +60,9 @@ export const Login = () => {
       (role) => allowedRoles.includes(role.code) || allowedRoles.includes(role.systemName)
     );
     if (isManagerOrAdmin) {
-      navigate("/admin", { replace: true }); // Quyền cao -> Vào thẳng Admin
+      // Quyền cao -> vào thẳng trang quản lý đầu tiên họ có quyền xem
+      // (Dashboard "/admin" giờ chỉ dành riêng cho Admin, xem AdminSidebar.jsx).
+      navigate(getDefaultAdminLandingPath(userData), { replace: true });
     } else {
       navigate("/", { replace: true }); // Khách hàng -> Về trang chủ công cộng
     }

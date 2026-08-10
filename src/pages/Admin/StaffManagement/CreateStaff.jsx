@@ -131,7 +131,7 @@ export function CreateStaff() {
             const id = getStationId(s);
             const code = s.stationCode || s.code || "";
             const name = s.stationName || s.name || "";
-            return { value: id, label: [code, name].filter(Boolean).join(" · ") || id };
+            return { value: id, label: name || code || id, searchText: `${code} ${name}` };
         }),
         [allStations]
     );
@@ -405,7 +405,7 @@ export function CreateStaff() {
                                                 ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...")
                                                 : (lang === "VN" ? "-- Chọn bến --" : "-- Select station --")
                                         }
-                                        searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
+                                        searchPlaceholder={lang === "VN" ? "Tìm tên bến..." : "Search station name..."}
                                         emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
                                         className={selectStyle}
                                     />
@@ -439,16 +439,10 @@ export function CreateStaff() {
                             ) : (
                                 <>
                                     <div className={`${inputStyle} flex items-center gap-2 font-bold text-[#124757] dark:text-yellow-400`}>
-                                        <span className="material-symbols-outlined text-base">storefront</span>
                                         {managerStations.length > 0
                                             ? managerStations.map((s) => s.stationName).filter(Boolean).join(", ")
                                             : (lang === "VN" ? "Bạn chưa được gắn bến nào." : "You are not assigned to any station.")}
                                     </div>
-                                    <p className="mt-1 text-[10px] text-slate-400">
-                                        {lang === "VN"
-                                            ? "Nhân viên sẽ tự động được gắn vào bến bạn đang phụ trách."
-                                            : "Staff will automatically be assigned to the station you manage."}
-                                    </p>
                                 </>
                             )}
                         </div>

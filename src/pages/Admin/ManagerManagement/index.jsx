@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { fetchUserList, deleteUser } from "../../../services/userService";
+import { fetchUserList, fetchUserStations, deleteUser } from "../../../services/userService";
+import { fetchAllStations } from "../../../services/stationService";
 import { canResetManagedUserPassword, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
 import { promptResetManagedPassword } from "../../../utils/managedPasswordReset";
 import { notify } from "../../../utils/swalToast";
@@ -15,11 +16,14 @@ export function ManagerManagement() {
     const { user: currentUser } = useSelector((state) => state.auth);
 
     const [users, setUsers] = useState([]);
+    const [stations, setStations] = useState([]);
+    const [stationIdsByUser, setStationIdsByUser] = useState({});
     const [isLoading, setIsLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
 
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("All");
+    const [stationFilter, setStationFilter] = useState("All");
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 8;
 
@@ -29,8 +33,12 @@ export function ManagerManagement() {
         try {
             setIsLoading(true);
             setErrorMsg("");
-            const data = await fetchUserList({ force: true });
+            const [data, stationRows] = await Promise.all([
+                fetchUserList({ force: true }),
+                fetchAllStations().catch(() => []),
+            ]);
             setUsers(Array.isArray(data) ? data : []);
+            setStations(Array.isArray(stationRows) ? stationRows : (stationRows?.items || stationRows?.data || []));
         } catch (error) {
             console.error("Lỗi khi tải danh sách quản lý:", error);
             setErrorMsg(
@@ -51,18 +59,71 @@ export function ManagerManagement() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, statusFilter]);
+    }, [searchTerm, statusFilter, stationFilter]);
 
     const managers = useMemo(
         () => users.filter((u) => (u.roles || []).some((r) => getRoleSystemName(r) === "MANAGER")),
         [users]
     );
 
+    // Gắn bến phụ trách cho từng manager để hiển thị trong bảng.
+    useEffect(() => {
+        let cancelled = false;
+        if (managers.length === 0) {
+            setStationIdsByUser({});
+            return undefined;
+        }
+
+        (async () => {
+            const entries = await Promise.all(
+                managers.map(async (user) => {
+                    const id = String(user.id || "");
+                    try {
+                        const ids = await fetchUserStations(id);
+                        return [id, ids];
+                    } catch {
+                        return [id, []];
+                    }
+                })
+            );
+            if (cancelled) return;
+            setStationIdsByUser(Object.fromEntries(entries));
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [managers]);
+
+    const stationNameById = useMemo(() => {
+        const map = new Map();
+        stations.forEach((s) => {
+            const sid = String(s?.stationId || s?.id || "");
+            if (sid) map.set(sid, s.stationName || s.name || s.stationCode || sid);
+        });
+        return map;
+    }, [stations]);
+
     const stats = useMemo(() => ({
         total: managers.length,
         active: managers.filter((u) => u.status === "Active").length,
         inactive: managers.filter((u) => u.status !== "Active").length,
     }), [managers]);
+
+    const stationOptions = useMemo(
+        () => [
+            { value: "All", label: lang === "VN" ? "Tất cả bến" : "All Stations" },
+            ...stations
+                .filter((s) => s?.isWaterbusStation === true)
+                .map((s) => ({
+                    value: String(s?.stationId || s?.id || ""),
+                    label: s.stationName || s.name || s.stationCode || "",
+                }))
+                .filter((o) => o.value)
+                .sort((a, b) => a.label.localeCompare(b.label, "vi")),
+        ],
+        [stations, lang]
+    );
 
     const filteredUsers = managers.filter((item) => {
         const term = searchTerm.trim().toLowerCase();
@@ -75,7 +136,11 @@ export function ManagerManagement() {
 
         const matchesStatus = statusFilter === "All" || item.status === statusFilter;
 
-        return matchesSearch && matchesStatus;
+        const matchesStation =
+            stationFilter === "All" ||
+            (stationIdsByUser[String(item.id || "")] || []).map(String).includes(stationFilter);
+
+        return matchesSearch && matchesStatus && matchesStation;
     });
 
     const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
@@ -236,6 +301,17 @@ export function ManagerManagement() {
                         className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                     />
                 </div>
+
+                <div className="relative z-10 flex items-center gap-2 w-full xl:w-auto justify-end">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Bến:" : "Station:"}</span>
+                    <FormSelect
+                        value={stationFilter}
+                        onChange={setStationFilter}
+                        menuAlign="right"
+                        options={stationOptions}
+                        className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                    />
+                </div>
             </div>
 
             {/* BẢNG DANH SÁCH QUẢN LÝ */}
@@ -246,6 +322,7 @@ export function ManagerManagement() {
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
                                 <th className="py-4 px-6">{lang === "VN" ? "Thông tin quản lý" : "Manager Information"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Liên hệ" : "Contact"}</th>
+                                <th className="py-4 px-4">{lang === "VN" ? "Bến quản lý" : "Managed Stations"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
                             </tr>
@@ -253,7 +330,7 @@ export function ManagerManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {currentUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         {lang === "VN" ? "Không có quản lý nào." : "No records found."}
                                     </td>
                                 </tr>
@@ -282,6 +359,22 @@ export function ManagerManagement() {
                                                 <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{item.phoneNumber || "--"}</p>
                                                 <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-45">{item.email || "--"}</p>
                                             </div>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            {(() => {
+                                                const userId = String(item.id || "");
+                                                const ids = stationIdsByUser[userId] || [];
+                                                const names = ids.map((sid) => stationNameById.get(String(sid))).filter(Boolean);
+                                                return names.length > 0 ? (
+                                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                                        {names.join(", ")}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                                        {lang === "VN" ? "Chưa gắn bến" : "No station"}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="py-4 px-4 text-center">
                                             <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${item.status === "Active"

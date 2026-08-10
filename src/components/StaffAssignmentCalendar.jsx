@@ -20,9 +20,7 @@ const getTargetLabel = (row) => {
     const name = row.boat?.boatName || "";
     return [code, name].filter(Boolean).join(" · ") || "Boat";
   }
-  const code = row.station?.stationCode || "";
-  const name = row.station?.stationName || "";
-  return [code, name].filter(Boolean).join(" · ") || "Station";
+  return row.station?.stationName || row.station?.stationCode || "Station";
 };
 
 const getBoatKey = (row) => {
@@ -77,8 +75,6 @@ export function StaffAssignmentCalendar({
   mode = "month", // day | week | month
   onModeChange,
   layout = "calendar", // calendar | byBoat
-  onLayoutChange,
-  showLayoutToggle = true,
   anchorDate,
   onAnchorChange,
   isLoading = false,
@@ -161,7 +157,9 @@ export function StaffAssignmentCalendar({
       const key = getBoatKey(row);
       if (!key) return;
       if (!map.has(key)) {
-        map.set(key, { key, label: getTargetLabel(row) });
+        // Cột "Tàu" trong lưới byBoat: chỉ hiện tên tàu, không kèm mã tàu.
+        const label = row.boat?.boatName || row.boat?.boatCode || "Boat";
+        map.set(key, { key, label });
       }
     });
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
@@ -175,7 +173,7 @@ export function StaffAssignmentCalendar({
     const boatOrStation =
       row.assignmentType === ASSIGNMENT_TYPE.BOAT
         ? (row.boat?.boatCode || row.boat?.boatName || "")
-        : (row.station?.stationCode || row.station?.stationName || "");
+        : (row.station?.stationName || row.station?.stationCode || "");
     const title = [
       row.staffName,
       getTargetLabel(row),
@@ -257,11 +255,11 @@ export function StaffAssignmentCalendar({
             <h3 className="font-headline font-black text-sm uppercase tracking-wide text-[#124757] dark:text-yellow-400">
               {layout === "byBoat"
                 ? lang === "VN"
-                  ? "Lịch tổng theo tàu"
-                  : "Master schedule by boat"
+                  ? "Lịch phân công theo tàu"
+                  : "Assignment schedule by boat"
                 : lang === "VN"
-                  ? "Lịch phân công"
-                  : "Assignment calendar"}
+                  ? "Lịch phân công theo bến"
+                  : "Assignment schedule by station"}
             </h3>
             <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5 capitalize">{title}</p>
           </div>

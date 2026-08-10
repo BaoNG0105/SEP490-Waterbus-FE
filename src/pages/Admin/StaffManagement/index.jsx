@@ -203,14 +203,16 @@ export function StaffManagement({ viewTabs = null }) {
 
   const stationOptions = useMemo(
     () => [
-      { value: "", label: lang === "VN" ? "Tất cả bến" : "All stations" },
+      { value: "", label: lang === "VN" ? "Tất cả bến" : "All Stations" },
       ...stations
+        .filter((s) => s?.isWaterbusStation === true)
         .filter((s) => !isManagerOnly || managerStationIds.includes(String(s.stationId || s.id || "")))
         .map((s) => ({
           value: String(s.stationId || s.id || ""),
-          label: `${s.stationCode || s.code || ""} · ${s.stationName || s.name || ""}`.trim(),
+          label: s.stationName || s.name || s.stationCode || "",
         }))
-        .filter((o) => o.value),
+        .filter((o) => o.value)
+        .sort((a, b) => a.label.localeCompare(b.label, "vi")),
     ],
     [stations, lang, isManagerOnly, managerStationIds]
   );
@@ -242,9 +244,10 @@ export function StaffManagement({ viewTabs = null }) {
       ...boats
         .map((b) => ({
           value: String(b.boatId || b.id || ""),
-          label: `${b.boatCode || b.code || ""} · ${b.boatName || b.name || ""}`.trim(),
+          label: b.boatName || b.name || b.boatCode || "",
         }))
-        .filter((o) => o.value),
+        .filter((o) => o.value)
+        .sort((a, b) => a.label.localeCompare(b.label, "vi")),
     ],
     [boats, lang]
   );
@@ -342,9 +345,6 @@ export function StaffManagement({ viewTabs = null }) {
     ...(isManagerOnly ? [] : [{ key: SCOPE.BOAT, vn: "Theo tàu", en: "By boat" }]),
   ];
 
-  const filterInputStyle =
-    "h-11 w-full min-w-0 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400";
-
   if (!canAccessPage) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
@@ -440,33 +440,31 @@ export function StaffManagement({ viewTabs = null }) {
             ))}
           </div>
 
-          {scopeFilter === SCOPE.STATION || scopeFilter === SCOPE.BOAT ? (
-            <div className="w-full min-w-0 sm:max-w-xs sm:flex-1">
-              {scopeFilter === SCOPE.STATION ? (
-                <FormSelect
-                  value={stationFilter}
-                  onChange={(value) => setStationFilter(String(value ?? ""))}
-                  options={stationOptions}
-                  searchable
-                  placeholder={lang === "VN" ? "Chọn bến" : "Select station"}
-                  searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
-                  emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
-                  className={filterInputStyle}
-                />
-              ) : (
-                <FormSelect
-                  value={boatFilter}
-                  onChange={(value) => setBoatFilter(String(value ?? ""))}
-                  options={boatOptions}
-                  searchable
-                  placeholder={lang === "VN" ? "Chọn tàu" : "Select boat"}
-                  searchPlaceholder={lang === "VN" ? "Tìm tàu..." : "Search boat..."}
-                  emptyLabel={lang === "VN" ? "Không có tàu" : "No boats"}
-                  className={filterInputStyle}
-                />
-              )}
+          {scopeFilter === SCOPE.STATION && (
+            <div className="relative z-10 flex items-center gap-2 shrink-0">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Bến:" : "Station:"}</span>
+              <FormSelect
+                value={stationFilter}
+                onChange={(value) => setStationFilter(String(value ?? ""))}
+                menuAlign="right"
+                options={stationOptions}
+                className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              />
             </div>
-          ) : null}
+          )}
+
+          {scopeFilter === SCOPE.BOAT && (
+            <div className="relative z-10 flex items-center gap-2 shrink-0">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Tàu:" : "Boat:"}</span>
+              <FormSelect
+                value={boatFilter}
+                onChange={(value) => setBoatFilter(String(value ?? ""))}
+                menuAlign="right"
+                options={boatOptions}
+                className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              />
+            </div>
+          )}
 
           <div className="relative z-10 flex items-center gap-2 shrink-0">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>

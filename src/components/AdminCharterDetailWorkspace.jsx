@@ -837,8 +837,6 @@ export function AdminBookingOverviewTab({
   remainingAmount,
   requestedBoats,
   selectedBoats,
-  capabilities,
-  onNavigateTab,
   routeDrawRequest = null,
   isRouteDrawSubmitting = false,
   canRequestRouteDraw = false,
@@ -1009,14 +1007,11 @@ export function AdminBookingOverviewTab({
                 label={lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}
                 value={booking.specialRequests || (lang === "VN" ? "Không có" : "None")}
               />
-              {(booking.assignedManagerId || (capabilities?.canAssignManager && !["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || "")))) ? (
+              {booking.assignedManagerId ? (
                 <OverviewField
                   icon="supervisor_account"
                   label={lang === "VN" ? "Quản lý phụ trách" : "Assigned manager"}
                   value={booking.assignedManagerName || (lang === "VN" ? "Chưa gán" : "Not assigned")}
-                  hint={capabilities?.canAssignManager && !["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || ""))
-                    ? (lang === "VN" ? "Gán ở tab Gán quản lý" : "Assign from Assign manager tab")
-                    : undefined}
                 />
               ) : null}
               <CharterInsuranceInfo
@@ -1024,17 +1019,6 @@ export function AdminBookingOverviewTab({
                 lang={lang}
                 currencyFormatter={currencyFormatter}
               />
-              {capabilities?.canAssignManager
-                && onNavigateTab
-                && !["Cancelled", "Expired", "Refunded"].includes(String(booking?.status || "")) ? (
-                <button
-                  type="button"
-                  onClick={() => onNavigateTab("assignment")}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
-                >
-                  {lang === "VN" ? "Mở tab gán quản lý" : "Open assign manager"}
-                </button>
-              ) : null}
             </div>
           </div>
         </div>

@@ -16,7 +16,6 @@ import {
     getAdminCharterBookingRouteCandidates as apiGetAdminCharterBookingRouteCandidates,
     previewAdminCharterBookingQuote as apiPreviewAdminCharterBookingQuote,
     quoteAdminCharterBooking as apiQuoteAdminCharterBooking,
-    assignAdminCharterBookingManager as apiAssignAdminCharterBookingManager,
     createAdminCharterBookingTrip as apiCreateAdminCharterBookingTrip,
     requestAdminCharterRouteDraw as apiRequestAdminCharterRouteDraw,
     getAdminRouteDrawRequests as apiGetAdminRouteDrawRequests,
@@ -175,16 +174,6 @@ export const previewAdminCharterBookingQuote = async (id, quotePayload) => {
         return await apiPreviewAdminCharterBookingQuote(id, quotePayload);
     } catch (error) {
         console.error(`Lỗi khi preview giá charter booking ${id}:`, error);
-        throw error;
-    }
-};
-
-export const assignAdminCharterBookingManager = async (id, managerPayload) => {
-    const managerUserId = managerPayload?.managerUserId ?? managerPayload?.managerId ?? null;
-    try {
-        return await apiAssignAdminCharterBookingManager(id, { managerUserId });
-    } catch (error) {
-        console.error(`Lỗi khi gán manager charter booking ${id}:`, error);
         throw error;
     }
 };
