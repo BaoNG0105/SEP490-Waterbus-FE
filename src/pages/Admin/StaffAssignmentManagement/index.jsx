@@ -37,7 +37,7 @@ import { notify } from "../../../utils/swalToast";
 const pad2 = (n) => String(n).padStart(2, "0");
 
 /** Ca Full ngày — khớp cửa sổ vận hành charter/ngày (BE). */
-const FULL_DAY_START_TIME = "07:40";
+const FULL_DAY_START_TIME = "06:00";
 const FULL_DAY_END_TIME = "23:00";
 const FULL_DAY_DAYS_OF_WEEK = [1, 2, 3, 4, 5, 6, 7];
 
