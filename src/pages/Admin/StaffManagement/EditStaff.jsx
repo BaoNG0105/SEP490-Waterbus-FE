@@ -199,7 +199,7 @@ export function EditStaff() {
             const sid = String(s?.stationId || s?.id || "");
             const code = s.stationCode || s.code || "";
             const name = s.stationName || s.name || "";
-            return { value: sid, label: [code, name].filter(Boolean).join(" · ") || sid };
+            return { value: sid, label: name || code || sid, searchText: `${code} ${name}` };
         }),
         [stations]
     );
@@ -445,7 +445,7 @@ export function EditStaff() {
                                     options={stationOptions}
                                     searchable
                                     placeholder={lang === "VN" ? "-- Chọn bến --" : "-- Select station --"}
-                                    searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
+                                    searchPlaceholder={lang === "VN" ? "Tìm tên bến..." : "Search station name..."}
                                     emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
                                     className={selectStyle}
                                 />

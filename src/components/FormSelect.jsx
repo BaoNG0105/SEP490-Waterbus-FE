@@ -44,7 +44,16 @@ export function FormSelect({
     const rect = el.getBoundingClientRect();
     const menuMaxH = 240;
     const gap = 6;
-    const spaceBelow = Math.max(120, window.innerHeight - rect.bottom - 12);
+
+    // Nếu trigger cuộn khuất một phần sau header cố định (AdminHeader/Header), menu vẫn có thể
+    // tính top nhỏ hơn chiều cao header → menu (z cao) đè/chồng lên header. Kẹp top tối thiểu
+    // bằng mép dưới của header cố định gần nhất để menu luôn bung ra bên dưới nó.
+    const fixedHeader = document.querySelector("header, nav.fixed");
+    const headerBottom = fixedHeader ? fixedHeader.getBoundingClientRect().bottom : 0;
+    const minTop = Math.max(gap, headerBottom + gap);
+    const top = Math.max(rect.bottom + gap, minTop);
+
+    const spaceBelow = Math.max(120, window.innerHeight - top - 12);
     const width = Math.max(rect.width, searchable ? 220 : rect.width);
     const left =
       menuAlign === "right"
@@ -54,7 +63,7 @@ export function FormSelect({
     setMenuPos({
       left,
       width,
-      top: rect.bottom + gap,
+      top,
       bottom: undefined,
       maxHeight: Math.min(menuMaxH, spaceBelow),
     });

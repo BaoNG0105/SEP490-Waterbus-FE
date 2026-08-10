@@ -26,7 +26,6 @@ import {
   resolveShiftState,
   validateBulkAssignmentForm,
 } from "../../../services/staffAssignmentService";
-import { fetchAllTrips, fetchTripDetail, toOperatingDateQuery } from "../../../services/tripService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getUserId, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
@@ -92,8 +91,6 @@ const emptyCreateForm = (assignmentType = ASSIGNMENT_TYPE.STATION) => {
     staffUserId: "",
     boatId: "",
     stationId: "",
-    tripId: "",
-    tripStopId: "",
     startAt: toLocal(start),
     endAt: toLocal(end),
     fromDate: today,
@@ -187,6 +184,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
   const [stations, setStations] = useState([]);
   const [onBoardStaff, setOnBoardStaff] = useState([]);
   const [groundStaff, setGroundStaff] = useState([]);
+  const [groundStaffStationIds, setGroundStaffStationIds] = useState({});
   const [managerStationIds, setManagerStationIds] = useState([]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -204,10 +202,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
   });
   const [replaceError, setReplaceError] = useState("");
   const [isReplacing, setIsReplacing] = useState(false);
-  const [gateTrips, setGateTrips] = useState([]);
-  const [gateStops, setGateStops] = useState([]);
-  const [isLoadingGateTrips, setIsLoadingGateTrips] = useState(false);
-  const [isLoadingGateStops, setIsLoadingGateStops] = useState(false);
 
   // list | schedule — mặc định Lịch (Tuần; Admin xem theo tàu)
   const [displayMode, setDisplayMode] = useState("schedule");
@@ -215,63 +209,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
   const [calendarLayout] = useState(canCreateBoat ? "byBoat" : "calendar");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [expandedListGroups, setExpandedListGroups] = useState(() => new Set());
-
-  // Gate scan: tải chuyến theo fromDate khi chọn bến.
-  useEffect(() => {
-    if (!isCreateOpen || createForm.assignmentType !== ASSIGNMENT_TYPE.STATION || !createForm.fromDate) {
-      setGateTrips([]);
-      return undefined;
-    }
-    let active = true;
-    const load = async () => {
-      try {
-        setIsLoadingGateTrips(true);
-        const list = await fetchAllTrips({ operatingDate: toOperatingDateQuery(createForm.fromDate) });
-        if (!active) return;
-        setGateTrips(Array.isArray(list) ? list : []);
-      } catch (error) {
-        console.error("Lỗi tải trips cho gate assignment:", error);
-        if (active) setGateTrips([]);
-      } finally {
-        if (active) setIsLoadingGateTrips(false);
-      }
-    };
-    load();
-    return () => {
-      active = false;
-    };
-  }, [isCreateOpen, createForm.assignmentType, createForm.fromDate]);
-
-  // Gate scan: chọn trip → load stops, lọc theo stationId nếu có.
-  useEffect(() => {
-    if (!isCreateOpen || createForm.assignmentType !== ASSIGNMENT_TYPE.STATION || !createForm.tripId) {
-      setGateStops([]);
-      return undefined;
-    }
-    let active = true;
-    const load = async () => {
-      try {
-        setIsLoadingGateStops(true);
-        const detail = await fetchTripDetail(createForm.tripId);
-        if (!active) return;
-        const stops = Array.isArray(detail?.stops) ? detail.stops : [];
-        const stationId = String(createForm.stationId || "");
-        const filtered = stationId
-          ? stops.filter((s) => String(s.stationId || s.station?.stationId || "") === stationId)
-          : stops;
-        setGateStops(filtered.length > 0 ? filtered : stops);
-      } catch (error) {
-        console.error("Lỗi tải trip stops cho gate assignment:", error);
-        if (active) setGateStops([]);
-      } finally {
-        if (active) setIsLoadingGateStops(false);
-      }
-    };
-    load();
-    return () => {
-      active = false;
-    };
-  }, [isCreateOpen, createForm.assignmentType, createForm.tripId, createForm.stationId]);
 
   useEffect(() => {
     if (displayMode !== "schedule") return;
@@ -311,17 +248,22 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
       const name = s.stationName || s.name || "";
       return {
         value: id,
-        label: [code, name].filter(Boolean).join(" · ") || id,
+        label: name || code || id,
         searchText: `${code} ${name} ${id}`,
       };
     });
   }, [usableStations]);
 
-  const stationLabelById = useMemo(() => {
+  // Chỉ tên bến (không kèm mã), tra trên toàn bộ danh sách bến — dùng cho các ô hiển thị đơn giản.
+  const stationNameById = useMemo(() => {
     const map = new Map();
-    stationSelectOptions.forEach((o) => map.set(String(o.value), o.label));
+    stations.forEach((s) => {
+      const id = getStationId(s);
+      if (!id) return;
+      map.set(id, s.stationName || s.name || s.stationCode || id);
+    });
     return map;
-  }, [stationSelectOptions]);
+  }, [stations]);
 
   const stationFilterOptions = useMemo(
     () => [
@@ -331,10 +273,45 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
     [stationSelectOptions, lang],
   );
 
+  // Manager chỉ chọn được nhân viên bến thuộc (các) bến mình đang quản lý.
+  useEffect(() => {
+    if (!canCreateStation || groundStaff.length === 0) {
+      setGroundStaffStationIds({});
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        groundStaff.map(async (s) => {
+          const id = getStaffId(s);
+          if (!id) return [id, []];
+          try {
+            const ids = await fetchUserStations(id);
+            return [id, ids];
+          } catch {
+            return [id, []];
+          }
+        })
+      );
+      if (cancelled) return;
+      setGroundStaffStationIds(Object.fromEntries(entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canCreateStation, groundStaff]);
+
   const staffOptionsForCreate = useMemo(() => {
     if (createForm.assignmentType === ASSIGNMENT_TYPE.BOAT) return onBoardStaff;
+    if (canCreateStation && managerStationIds.length > 0) {
+      const allowed = new Set(managerStationIds.map(String));
+      return groundStaff.filter((s) => {
+        const ids = groundStaffStationIds[getStaffId(s)] || [];
+        return ids.some((sid) => allowed.has(String(sid)));
+      });
+    }
     return groundStaff;
-  }, [createForm.assignmentType, onBoardStaff, groundStaff]);
+  }, [createForm.assignmentType, onBoardStaff, groundStaff, canCreateStation, managerStationIds, groundStaffStationIds]);
 
   // Nhân viên bến đã có sẵn bến làm việc cố định → tự lấy bến đó, không cho chọn tay.
   useEffect(() => {
@@ -636,8 +613,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
         next.staffUserId = "";
         next.boatId = "";
         next.stationId = "";
-        next.tripId = "";
-        next.tripStopId = "";
         // Chỉ còn Full ngày — luôn khóa giờ + đủ 7 thứ.
         next.mode = "fullDay";
         next.startTime = FULL_DAY_START_TIME;
@@ -647,13 +622,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
       if (field === "staffUserId" && prev.assignmentType === ASSIGNMENT_TYPE.STATION) {
         // Bến sẽ được tự nạp lại theo nhân viên vừa chọn (xem effect loadStaffStation).
         next.stationId = "";
-      }
-      if (field === "stationId" || field === "fromDate") {
-        next.tripId = "";
-        next.tripStopId = "";
-      }
-      if (field === "tripId") {
-        next.tripStopId = "";
       }
       return next;
     });
@@ -1037,7 +1005,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                 options={stationFilterOptions}
                 searchable
                 placeholder={lang === "VN" ? "Tất cả bến" : "All stations"}
-                searchPlaceholder={lang === "VN" ? "Tìm mã / tên bến..." : "Search station..."}
+                searchPlaceholder={lang === "VN" ? "Tìm tên bến..." : "Search station name..."}
                 emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
                 className={filterInputStyle}
               />
@@ -1345,15 +1313,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                   })()}
                 </div>
 
-                <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 dark:border-sky-500/20 dark:bg-sky-500/10">
-                  <p className="text-[10px] font-headline font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">
-                    {lang === "VN" ? "Giờ làm việc" : "Working hours"}
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-sky-800 dark:text-sky-200">
-                    {FULL_DAY_START_TIME} → {FULL_DAY_END_TIME}
-                  </p>
-                </div>
-
                 <div>
                   <label className={labelStyle}>
                     {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT
@@ -1394,12 +1353,13 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                       options={boats
                         .map((b) => ({
                           value: getBoatId(b),
-                          label: `${b.boatCode || b.code} · ${b.boatName || b.name}`,
+                          label: b.boatName || b.name || b.boatCode || b.code || "",
+                          searchText: `${b.boatCode || b.code || ""} ${b.boatName || b.name || ""}`,
                         }))
                         .filter((o) => o.value)}
                       searchable
                       placeholder={lang === "VN" ? "-- Chọn tàu --" : "-- Select boat --"}
-                      searchPlaceholder={lang === "VN" ? "Tìm mã / tên tàu..." : "Search boat..."}
+                      searchPlaceholder={lang === "VN" ? "Tìm tên tàu..." : "Search boat name..."}
                       emptyLabel={lang === "VN" ? "Không có tàu" : "No boats"}
                       className={inputStyle}
                     />
@@ -1414,55 +1374,9 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                           : isLoadingStaffStation
                             ? (lang === "VN" ? "Đang tải..." : "Loading...")
                             : createForm.stationId
-                              ? stationLabelById.get(String(createForm.stationId)) || createForm.stationId
+                              ? stationNameById.get(String(createForm.stationId)) || (lang === "VN" ? "Bến không xác định" : "Unknown station")
                               : (lang === "VN" ? "Nhân viên chưa được gắn bến." : "Staff has no station assigned.")}
                       </div>
-                    </div>
-                    <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Chuyến (*)" : "Trip (*)"}</label>
-                      <FormSelect
-                        required
-                        value={createForm.tripId}
-                        onChange={(value) => handleCreateField("tripId", String(value ?? ""))}
-                        options={gateTrips.map((t) => ({
-                          value: String(t.tripId || t.id || ""),
-                          label: `${t.tripCode || t.tripId} · ${t.routeName || t.routeCode || ""}`.trim(),
-                        })).filter((o) => o.value)}
-                        searchable
-                        disabled={isLoadingGateTrips || !createForm.fromDate}
-                        placeholder={lang === "VN" ? "-- Chọn chuyến --" : "-- Select trip --"}
-                        emptyLabel={lang === "VN" ? "Không có chuyến" : "No trips"}
-                        className={inputStyle}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelStyle}>
-                        {lang === "VN" ? "Điểm dừng quét vé (*)" : "Ticket scan stop (*)"}
-                      </label>
-                      <FormSelect
-                        required
-                        value={createForm.tripStopId}
-                        onChange={(value) => handleCreateField("tripStopId", String(value ?? ""))}
-                        options={gateStops.map((s) => {
-                          const id = String(s.tripStopId || s.id || s.stopId || "");
-                          const order = s.stopOrder ?? s.order ?? "";
-                          const name = s.stationName || s.station?.stationName || s.stationCode || "";
-                          return {
-                            value: id,
-                            label: `#${order} · ${name}`.trim(),
-                          };
-                        }).filter((o) => o.value)}
-                        searchable
-                        disabled={isLoadingGateStops || !createForm.tripId}
-                        placeholder={lang === "VN" ? "-- Chọn điểm dừng --" : "-- Select stop --"}
-                        emptyLabel={lang === "VN" ? "Không có điểm dừng" : "No stops"}
-                        className={inputStyle}
-                      />
-                      <p className="mt-1 text-[10px] text-slate-400">
-                        {lang === "VN"
-                          ? "Chọn điểm dừng nhân viên sẽ đứng quét vé cho khách."
-                          : "Pick the stop where staff will scan passenger tickets."}
-                      </p>
                     </div>
                   </>
                 )}
