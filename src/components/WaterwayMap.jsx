@@ -789,11 +789,12 @@ export const WaterwayMap = ({
           const hasSeats = seatCount != null;
           // Đã checkin = có onboardPassenger > 0 (BE confirm)
           const hasCheckedIn = onboardPassenger != null && onboardPassenger > 0;
+          // Hiện số khách: có seatCount → "onboard/seatCount", không có → chỉ hiện số khách onboard
           const occupancyValue = hasSeats
             ? (hasCheckedIn
               ? `${onboardPassenger}/${seatCount}`
               : String(seatCount))
-            : null;
+            : (onboardPassenger != null ? String(onboardPassenger) : null);
           const liveStatus = resolveBoatLiveStatus(boat);
           const isIncident = liveStatus.key === "incident";
           const markerKind = resolveBoatMarkerKind(boat);
