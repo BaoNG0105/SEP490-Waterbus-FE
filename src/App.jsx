@@ -38,6 +38,7 @@ import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
+import { Revenue } from "./pages/Admin/Revenue";
 import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor, BoatCrewSchedule } from "./pages/Admin/BoatManagement";
 import { TripManagement, CreateTrip, TripDetail } from "./pages/Admin/TripManagement";
 import { SeatTypeManagement } from "./pages/Admin/SeatTypeManagement";
@@ -360,6 +361,16 @@ function App() {
             element={
               <AdminLayout title="Dashboard">
                 <Dashboard />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Revenue Report Page ******* */}
+          <Route
+            path="/admin/revenue"
+            element={
+              <AdminLayout title="Revenue">
+                <Revenue />
               </AdminLayout>
             }
           />
