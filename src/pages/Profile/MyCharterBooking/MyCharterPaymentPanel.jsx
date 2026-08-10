@@ -125,7 +125,7 @@ export function MyCharterPaymentPanel({
                   : (lang === "VN" ? "Đã hoàn tiền" : "Refunded")}
             </h4>
             <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-              {booking.status === "Cancelled" && ["depositpaid", "paid"].includes(String(booking.paymentStatus || "").toLowerCase())
+              {booking.status === "Cancelled" && ["depositpaid", "paid", "partiallyrefunded"].includes(String(booking.paymentStatus || "").toLowerCase())
                 ? (lang === "VN"
                   ? "Booking đã hủy. Nếu chưa hoàn xong, hãy nhập thông tin ngân hàng để nhận hoàn tiền."
                   : "Booking cancelled. If refund is not finished, enter bank details to receive the refund.")

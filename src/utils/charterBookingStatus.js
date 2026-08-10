@@ -56,10 +56,10 @@ export const getCharterCancelledPaymentSubLabel = (paymentStatus, lang) => {
   const payment = String(paymentStatus || "").toLowerCase().replace(/[_-\s]/g, "");
   const isVn = lang === "VN";
 
-  if (["refunded", "partiallyrefunded"].includes(payment)) {
+  if (["refunded", "partiallyrefunded", "manualrefunded"].includes(payment)) {
     return isVn ? "Đã hoàn tiền" : "Refunded";
   }
-  if (["paid", "depositpaid"].includes(payment)) {
+  if (["paid", "depositpaid", "refundpending", "refundprocessing", "refundfailed"].includes(payment)) {
     return isVn ? "Chưa hoàn tiền" : "Not refunded";
   }
   return isVn ? "Chưa thanh toán" : "Unpaid";
@@ -70,7 +70,8 @@ export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang) 
   const payment = String(paymentStatus || "").toLowerCase().replace(/[_-\s]/g, "");
   const isVn = lang === "VN";
   const isCancelled = ["cancelled", "canceled", "cancel"].includes(status);
-  const isRefundedPayment = ["refunded", "partiallyrefunded"].includes(payment);
+  const isRefundedPayment = ["refunded", "partiallyrefunded", "manualrefunded"].includes(payment);
+  const isRefundProcessing = ["refundpending", "refundprocessing"].includes(payment);
   const cancelledLabel = isVn ? "Đã hủy" : "Cancelled";
 
   // Trạng thái chính luôn "Đã hủy"; chi tiết thanh toán/hoàn tiền ở dòng phụ.
@@ -83,6 +84,13 @@ export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang) 
   }
   if (status === "expired") {
     return { label: isVn ? "Hết hạn" : "Expired", ...baseClasses.expired };
+  }
+  if (isRefundProcessing) {
+    return {
+      label: cancelledLabel,
+      subLabel: getCharterCancelledPaymentSubLabel(paymentStatus, lang),
+      ...baseClasses.cancelled,
+    };
   }
   if (status === "completed") {
     return { label: isVn ? "Hoàn tất" : "Completed", ...baseClasses.completed };

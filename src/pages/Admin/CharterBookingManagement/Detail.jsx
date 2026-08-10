@@ -965,7 +965,7 @@ export function AdminCharterBookingDetail() {
 
     let cancelNote = "";
     if (nextStatus === "Cancelled") {
-      const hasPaid = hasRefundablePayment(booking) || ["depositpaid", "paid"].includes(
+      const hasPaid = hasRefundablePayment(booking) || ["depositpaid", "paid", "partiallyrefunded"].includes(
         String(booking.paymentStatus || "").toLowerCase(),
       );
       const bookingCode = String(booking.bookingCode || "--");
@@ -1021,7 +1021,7 @@ export function AdminCharterBookingDetail() {
       await loadDetail();
       const waitsCustomer = nextStatus === "Cancelled" && (
         hasRefundablePayment(booking)
-        || ["depositpaid", "paid"].includes(String(booking.paymentStatus || "").toLowerCase())
+        || ["depositpaid", "paid", "partiallyrefunded"].includes(String(booking.paymentStatus || "").toLowerCase())
       );
       showToast({
         icon: "success",

@@ -4,34 +4,18 @@ import { fetchBoatDetail } from "../services/boatService";
 import { getApiErrorMessage } from "../utils/apiError";
 import { SeatMapIcon, seatToneFromCode, resolveSeatTypeCode } from "./SeatMapIcon";
 import { BoatBowLabel } from "./ShipWheelIcon";
-import { getBoatImageUrl } from "../utils/charterBookingAdmin";
 
-const DEFAULT_BOAT_IMAGE = "";
-
+const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
 
 function collectBoatImages(boat, fallbackUrl = "") {
   const urls = [];
-const push = (url) => {
-  const value = String(url || "").trim();
-  if (!value) return;
+  const push = (url) => {
+    const value = String(url || "").trim();
+    if (value && !urls.includes(value)) urls.push(value);
+  };
 
-  const resolvedUrl = getBoatImageUrl(value);
-
-  if (resolvedUrl && !urls.includes(resolvedUrl)) {
-    urls.push(resolvedUrl);
-  }
-};
-
- 
   if (Array.isArray(boat?.imageUrls)) boat.imageUrls.forEach(push);
-
   push(boat?.imageUrl);
-
-  push(boat?.boat?.imageUrl);
-  
-  push(boat?.thumbnailUrl);
-  push(boat?.boat?.thumbnailUrl);
-
   if (Array.isArray(fallbackUrl)) fallbackUrl.forEach(push);
   else push(fallbackUrl);
 
@@ -269,9 +253,9 @@ export function BoatSeatLayoutPreviewModal({
         if (cancelled) return;
         setLayout(null);
         if (err?.response?.status === 403) {
-          // 403: BE chặn customer xem seat layout → vẫn hiện ảnh & thông tin cơ bản từ boatMeta
-          setBoatImages(boatMetaRef.current ? collectBoatImages(boatMetaRef.current, boatImageUrl) : [boatImageUrl || DEFAULT_BOAT_IMAGE]);
-          setError(""); // Không hiện lỗi, vẫn show modal với thông tin có sẵn
+          setError(lang === "VN"
+            ? "Tài khoản khách chưa được phép xem sơ đồ ghế. Vui lòng thử lại sau khi hệ thống cập nhật quyền."
+            : "Customer accounts cannot view seat layouts yet. Please try again after permissions are updated.");
         } else {
           setError(getApiErrorMessage(
             err,
@@ -314,16 +298,13 @@ export function BoatSeatLayoutPreviewModal({
     [layout, boatMeta],
   );
 
-  const imageSrc = boatImages[activeImageIndex] || boatImages[0] || boatImageUrl || boatMeta?.imageUrl || DEFAULT_BOAT_IMAGE;
+  const imageSrc = boatImages[activeImageIndex] || boatImages[0] || boatImageUrl || DEFAULT_BOAT_IMAGE;
 
-  // Hiện subtitle dựa trên variant và có layout hay không
   const subtitle = variant === "admin"
     ? (lang === "VN"
       ? "Xem ảnh tàu, sơ đồ, tổng ghế và các kiểu ghế."
       : "View boat photos, seat map, capacity and seat types.")
-    : (layout
-      ? (lang === "VN" ? "Sơ đồ ghế và thông tin tàu." : "Seat layout and boat info.")
-      : (lang === "VN" ? "Thông tin tàu thuê." : "Charter boat info."));
+    : "";
 
   return (
     <div
@@ -380,14 +361,11 @@ export function BoatSeatLayoutPreviewModal({
                   className="group relative block w-full overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-sm dark:border-slate-700 dark:bg-slate-900"
                   title={lang === "VN" ? "Bấm để xem lớn" : "Click to enlarge"}
                 >
-                 <img
-                      src={imageSrc}
-                      alt={boatName || boatCode || "Boat"}
-                      className="h-48 w-full object-cover transition duration-300 group-hover:scale-[1.02] sm:h-64"
-                      onError={(e) => {
-                        e.currentTarget.src = "";
-                      }}
-                    />
+                  <img
+                    src={imageSrc}
+                    alt={boatName || boatCode || "Boat"}
+                    className="h-48 w-full object-cover transition duration-300 group-hover:scale-[1.02] sm:h-64"
+                  />
                   <span className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-slate-900/70 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
                     <span className="material-symbols-outlined text-sm">zoom_in</span>
                     {lang === "VN" ? "Xem lớn" : "Enlarge"}
@@ -415,48 +393,12 @@ export function BoatSeatLayoutPreviewModal({
               </div>
 
               {decks.length === 0 ? (
-                boatMeta && (boatMeta.seatCount || boatMeta.numberOfDecks || boatMeta.seatSetupType) ? (
-                  // Có boatMeta nhưng không load được layout → hiện thông tin cơ bản
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {boatMeta.seatCount ? (
-                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
-                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                          {lang === "VN" ? "Sức chứa" : "Capacity"}
-                        </p>
-                        <p className="mt-0.5 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                          {boatMeta.seatCount} {lang === "VN" ? "ghế" : "seats"}
-                        </p>
-                      </div>
-                    ) : null}
-                    {boatMeta.numberOfDecks ? (
-                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
-                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                          {lang === "VN" ? "Số tầng" : "Decks"}
-                        </p>
-                        <p className="mt-0.5 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                          {boatMeta.numberOfDecks}
-                        </p>
-                      </div>
-                    ) : null}
-                    {boatMeta.seatSetupType ? (
-                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
-                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                          {lang === "VN" ? "Cấu hình" : "Setup"}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs font-black text-[#124757] dark:text-yellow-400">
-                          {boatMeta.seatSetupType}
-                        </p>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center dark:border-slate-700">
-                    <span className="material-symbols-outlined text-4xl text-slate-300">event_seat</span>
-                    <p className="mt-2 text-sm font-bold text-slate-500">
-                      {lang === "VN" ? "Tàu chưa có sơ đồ ghế." : "This boat has no seat layout yet."}
-                    </p>
-                  </div>
-                )
+                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center dark:border-slate-700">
+                  <span className="material-symbols-outlined text-4xl text-slate-300">event_seat</span>
+                  <p className="mt-2 text-sm font-bold text-slate-500">
+                    {lang === "VN" ? "Tàu chưa có sơ đồ ghế." : "This boat has no seat layout yet."}
+                  </p>
+                </div>
               ) : (
                 <>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
