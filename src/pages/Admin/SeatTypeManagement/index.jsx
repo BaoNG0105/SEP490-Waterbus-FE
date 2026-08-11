@@ -239,7 +239,7 @@ function SeatTypesTab({ lang, onGoToDistanceTab, deckMode = "deck1", concessionP
                   return (
                     <tr key={row.code} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/30">
                       <td className="px-5 py-3.5">
-                        <span className="rounded-lg bg-[#124757]/8 px-2 py-1 font-headline text-[11px] font-black text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
+                        <span className="font-headline text-[11px] font-black text-[#124757] dark:text-yellow-400">
                           {row.code}
                         </span>
                       </td>
@@ -701,7 +701,7 @@ function SurchargeTab({ lang }) {
               </p>
             </div>
             <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="w-[120px]">
+              <div className="w-30">
                 <label className={labelStyle}>{lang === "VN" ? "Mức phụ thu" : "Surcharge"}</label>
                 <div className="relative">
                   <input
@@ -733,7 +733,7 @@ function SurchargeTab({ lang }) {
                 {lang === "VN" ? "Ngày lễ" : "Holiday"}
               </p>
               <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-[150px] flex-1">
+                <div className="min-w-37.5 flex-1">
                   <label className={labelStyle}>{lang === "VN" ? "Ngày" : "Date"}</label>
                   <AppDateInput
                     required
@@ -742,7 +742,7 @@ function SurchargeTab({ lang }) {
                     className={inputStyle}
                   />
                 </div>
-                <div className="min-w-[140px] flex-1">
+                <div className="min-w-35 flex-1">
                   <label className={labelStyle}>{lang === "VN" ? "Tên" : "Name"}</label>
                   <input
                     type="text"
@@ -753,7 +753,7 @@ function SurchargeTab({ lang }) {
                     className={inputStyle}
                   />
                 </div>
-                <div className="w-[120px]">
+                <div className="w-30">
                   <label className={labelStyle}>{lang === "VN" ? "Mức phụ thu" : "Surcharge"}</label>
                   <div className="relative">
                     <input
@@ -934,7 +934,7 @@ function SightseeingConcessionTab({ lang, onPercentChange }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
-              {lang === "VN" ? "Ưu đãi Sightseeing (CHILD / SENIOR / DISABLED)" : "Sightseeing concession (CHILD / SENIOR / DISABLED)"}
+              {lang === "VN" ? "Ưu đãi WaterSightseeing (Trẻ em / Người lớn tuổi / Người khuyết tật)" : "Sightseeing concession (CHILD / SENIOR / DISABLED)"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -978,16 +978,12 @@ const RENTAL_SERVICE_GROUPS = [
     id: "waterbus",
     vn: "Giá thuê tàu Waterbus",
     en: "Waterbus request booking rates",
-    hintVn: "Tàu Waterbus · Giờ / Ngày — dùng khi báo giá thuê tàu.",
-    hintEn: "Waterbus boats · Hour / Day — used for booking request quotes.",
   },
   {
     decks: 2,
     id: "sightseeing",
     vn: "Giá thuê tàu Sightseeing",
     en: "Sightseeing request booking rates",
-    hintVn: "Tàu Sightseeing · Giờ / Ngày — dùng khi báo giá thuê tàu.",
-    hintEn: "Sightseeing boats · Hour / Day — used for booking request quotes.",
   },
 ];
 
@@ -1109,8 +1105,8 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
     const draft = drafts[row.charterBoatRentalPricePolicyId] || {};
     const busy = savingKey === row.charterBoatRentalPricePolicyId;
     const unitLabel = row.rentalUnit === RENTAL_PRICE_UNITS.DAY
-      ? (lang === "VN" ? "Ngày (Day)" : "Day")
-      : (lang === "VN" ? "Giờ (Hour)" : "Hour");
+      ? (lang === "VN" ? "Ngày" : "Day")
+      : (lang === "VN" ? "Giờ" : "Hour");
 
     return (
       <tr key={row.charterBoatRentalPricePolicyId}>
@@ -1124,12 +1120,12 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
             suffix=""
           />
         </td>
-        <td className="w-[72px] px-4 py-3">
-          <span className="inline-flex h-[42px] w-14 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-[11px] font-black uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-400">
+        <td className="w-18 px-4 py-3">
+          <span className="inline-flex h-10.5 w-14 items-center justify-center text-[11px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {draft.currency || "VND"}
           </span>
         </td>
-        <td className="w-[88px] px-4 py-3 text-right">
+        <td className="w-22 px-4 py-3 text-right">
           <button
             type="button"
             disabled={busy}
@@ -1170,9 +1166,6 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
                 <h4 className="font-headline text-sm font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
                   {lang === "VN" ? group.vn : group.en}
                 </h4>
-                <p className="mt-0.5 text-[11px] text-slate-400">
-                  {lang === "VN" ? group.hintVn : group.hintEn}
-                </p>
               </div>
               {groupRows.length === 0 ? (
                 <p className="p-6 text-center text-xs text-slate-400">
@@ -1184,8 +1177,8 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
                     <colgroup>
                       <col className="w-[28%]" />
                       <col className="w-[42%]" />
-                      <col className="w-[72px]" />
-                      <col className="w-[88px]" />
+                      <col className="w-18" />
+                      <col className="w-22" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 dark:border-slate-700 dark:bg-slate-900/40">
@@ -1216,31 +1209,26 @@ function Deck2PricingSection({ lang }) {
     <section className="space-y-4">
       <div className="flex items-center gap-3">
         <span className="rounded-lg bg-[#124757] px-2.5 py-1 font-headline text-[10px] font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-[#124757]">
-          Sightseeing
+          WaterSightseeing
         </span>
         <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
         <p className="text-[11px] font-medium text-slate-400">
           CABIN / RIVER / SKY
         </p>
       </div>
-      <SectionLabel lang={lang} vn="CABIN · RIVER · SKY" en="CABIN · RIVER · SKY" />
+      <SectionLabel lang={lang} vn="GIÁ THEO GHẾ" en="PRICE BY SEAT" />
       <SeatTypesTab lang={lang} deckMode="deck2" concessionPercent={concessionPercent} />
       <SightseeingConcessionTab lang={lang} onPercentChange={setConcessionPercent} />
     </section>
   );
 }
 
-function SectionLabel({ lang, vn, en, hintVn, hintEn }) {
+function SectionLabel({ lang, vn, en }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
       <h3 className="font-headline text-sm font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
         {lang === "VN" ? vn : en}
       </h3>
-      {hintVn || hintEn ? (
-        <p className="text-[11px] font-medium text-slate-400">
-          {lang === "VN" ? hintVn : hintEn}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -1338,15 +1326,13 @@ export function SeatTypeManagement() {
                   </span>
                   <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
                   <p className="text-[11px] font-medium text-slate-400">
-                    {lang === "VN" ? "STANDARD theo km" : "STANDARD by km"}
+                    {lang === "VN" ? "STANDARD" : "STANDARD"}
                   </p>
                 </div>
                 <SectionLabel
                   lang={lang}
-                  vn="Công thức giá theo km"
+                  vn="Giá theo km"
                   en="Distance formula"
-                  hintVn="Ghế STANDARD tính theo quãng đường: giá cơ bản + giá mỗi km."
-                  hintEn="STANDARD seats are priced by distance: base fare + price per km."
                 />
                 <div id="distance-fare-section">
                   <DistanceFareTab lang={lang} />
