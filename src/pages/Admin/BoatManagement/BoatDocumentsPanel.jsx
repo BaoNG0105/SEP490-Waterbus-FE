@@ -237,7 +237,7 @@ export function BoatDocumentsPanel({
               {lang === "VN" ? "Hồ sơ pháp lý tàu" : "Boat Legal Documents"}
             </h3>
           </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+          <div className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
             <span className="material-symbols-outlined text-sm">folder_open</span>
             {uploadedCount}/4 {lang === "VN" ? "đã nộp" : "uploaded"}
           </div>
@@ -307,7 +307,7 @@ export function BoatDocumentsPanel({
                     {lang === "VN" ? "Cần cập nhật sau bảo trì" : "Needs update after maintenance"}
                   </span>
                 ) : doc.isUploaded ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20 shrink-0">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-300 shrink-0">
                     <span className="material-symbols-outlined text-[13px]">check_circle</span>
                     {lang === "VN" ? "Đã nộp" : "Uploaded"}
                   </span>

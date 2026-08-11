@@ -292,7 +292,8 @@ export function StationManagement() {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
-                                <th className="py-4 px-6">{lang === "VN" ? "Thông tin nhà ga" : "Pier Information"}</th>
+                                <th className="py-4 px-6">{lang === "VN" ? "Hình ảnh" : "Image"}</th>
+                                <th className="py-4 px-4">{lang === "VN" ? "Tên / Địa chỉ nhà ga" : "Name / Address"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Phân loại" : "Type"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Mã nhà ga" : "Station Code"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
@@ -302,7 +303,7 @@ export function StationManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {currentStations.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={6} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         <span className="material-symbols-outlined text-4xl block mb-2">wrong_location</span>
                                         {lang === "VN" ? "Không có dữ liệu nhà ga nào phù hợp bộ lọc." : "No records found matching filters."}
                                     </td>
@@ -311,37 +312,39 @@ export function StationManagement() {
                                 currentStations.map((station) => (
                                     <tr key={station.stationId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
 
-                                        {/* Cột 1: Thông tin Trạm bến */}
+                                        {/* Cột 1: Hình ảnh */}
                                         <td className="py-4 px-6">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-14 h-10 rounded-xl overflow-hidden border bg-slate-100 dark:bg-slate-700 shadow-sm shrink-0 flex items-center justify-center">
-                                                    {(() => {
-                                                        const imgSrc = station.imageUrl || (station.imageUrls && station.imageUrls[0]);
-                                                        const showImage = imgSrc && !brokenImageIds.has(station.stationId);
-                                                        return showImage ? (
-                                                            <img
-                                                                src={imgSrc}
-                                                                alt="Station"
-                                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                                                onError={() => markImageBroken(station.stationId)}
-                                                            />
-                                                        ) : (
-                                                            <NullImageIcon className="h-5 w-5 text-slate-400 dark:text-slate-500" />
-                                                        );
-                                                    })()}
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">
-                                                        {station.stationName}
-                                                    </h4>
-                                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block max-w-sm truncate">
-                                                        {station.address || (lang === "VN" ? "Chưa thiết lập địa chỉ" : "Address unassigned")}
-                                                    </span>
-                                                </div>
+                                            <div className="w-14 h-10 rounded-xl overflow-hidden border bg-slate-100 dark:bg-slate-700 shadow-sm shrink-0 flex items-center justify-center">
+                                                {(() => {
+                                                    const imgSrc = station.imageUrl || (station.imageUrls && station.imageUrls[0]);
+                                                    const showImage = imgSrc && !brokenImageIds.has(station.stationId);
+                                                    return showImage ? (
+                                                        <img
+                                                            src={imgSrc}
+                                                            alt="Station"
+                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                            onError={() => markImageBroken(station.stationId)}
+                                                        />
+                                                    ) : (
+                                                        <NullImageIcon className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+                                                    );
+                                                })()}
                                             </div>
                                         </td>
 
-                                        {/* Cột 2: Phân loại trạm */}
+                                        {/* Cột 2: Tên / Địa chỉ nhà ga */}
+                                        <td className="py-4 px-4">
+                                            <div className="space-y-1">
+                                                <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">
+                                                    {station.stationName}
+                                                </h4>
+                                                <span className="text-[10px] text-slate-400 dark:text-slate-500 block max-w-sm truncate">
+                                                    {station.address || (lang === "VN" ? "Chưa thiết lập địa chỉ" : "Address unassigned")}
+                                                </span>
+                                            </div>
+                                        </td>
+
+                                        {/* Cột 3: Phân loại trạm */}
                                         <td className="py-4 px-4 text-center">
                                             {station.isWaterbusStation !== false ? (
                                                 <span className="text-[#124757] dark:text-yellow-400 text-[10px] uppercase font-black tracking-widest" title={lang === "VN" ? "Trạm Waterbus Chính Thức" : "Official Waterbus Pier"}>
@@ -354,14 +357,14 @@ export function StationManagement() {
                                             )}
                                         </td>
 
-                                        {/* Cột 3: Mã nhà ga */}
+                                        {/* Cột 4: Mã nhà ga */}
                                         <td className="py-4 px-4">
                                             <span className="font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200">
                                                 {station.stationCode}
                                             </span>
                                         </td>
 
-                                        {/* Cột 4: Trạng thái */}
+                                        {/* Cột 5: Trạng thái */}
                                         <td className="py-4 px-4 text-center">
                                             <span className={`inline-flex items-center gap-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${station.status === "Active"
                                                     ? "text-emerald-600 dark:text-emerald-400"
@@ -372,7 +375,7 @@ export function StationManagement() {
                                             </span>
                                         </td>
 
-                                        {/* Cột 5: Nút Hành động */}
+                                        {/* Cột 6: Nút Hành động */}
                                         <td className="py-4 px-6 text-center">
                                             <div className="flex items-center justify-center gap-2">
                                                 <button

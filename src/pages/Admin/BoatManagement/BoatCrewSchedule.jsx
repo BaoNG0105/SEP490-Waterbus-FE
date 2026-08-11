@@ -4,6 +4,8 @@ import { useApp } from "../../../context/AppContext";
 import { fetchBoatDetail } from "../../../services/boatService";
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
 import { AppDateInput } from "../../../components/AppDateInput";
+import { FormSelect } from "../../../components/FormSelect";
+import { UserAvatar } from "../../../components/UserAvatar";
 import {
   ASSIGNMENT_STATUS,
   ASSIGNMENT_TYPE,
@@ -47,35 +49,25 @@ const formatDateTime = (value, lang) => {
 const statusTone = (status) => {
   switch (status) {
     case ASSIGNMENT_STATUS.SCHEDULED:
-      return "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400";
+      return "text-sky-700 dark:text-sky-400";
     case ASSIGNMENT_STATUS.CANCELLED:
-      return "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400";
+      return "text-rose-500 dark:text-rose-400";
     default:
-      return "bg-slate-100 text-slate-500 border-slate-200";
+      return "text-slate-500 dark:text-slate-400";
   }
 };
 
 const shiftStateTone = (state) => {
   switch (state) {
     case SHIFT_STATE.ACTIVE:
-      return "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400";
+      return "text-emerald-600 dark:text-emerald-400";
     case SHIFT_STATE.COMPLETED:
-      return "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300";
+      return "text-slate-600 dark:text-slate-300";
     case SHIFT_STATE.UPCOMING:
-      return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300";
+      return "text-amber-700 dark:text-amber-300";
     default:
-      return "bg-slate-100 text-slate-500 border-slate-200";
+      return "text-slate-500 dark:text-slate-400";
   }
-};
-
-const getInitials = (name) => {
-  const parts = String(name || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
 /**
@@ -217,17 +209,19 @@ export function BoatDutyRosterPanel({ boatId }) {
             />
           </div>
         )}
-        <div className="w-37">
+        <div className="w-37 relative z-10">
           <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={inputStyle}>
-            <option value="All">{lang === "VN" ? "Tất cả" : "All"}</option>
-            <option value={ASSIGNMENT_STATUS.SCHEDULED}>
-              {labelAssignmentStatus(ASSIGNMENT_STATUS.SCHEDULED, lang)}
-            </option>
-            <option value={ASSIGNMENT_STATUS.CANCELLED}>
-              {labelAssignmentStatus(ASSIGNMENT_STATUS.CANCELLED, lang)}
-            </option>
-          </select>
+          <FormSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            menuAlign="right"
+            options={[
+              { value: "All", label: lang === "VN" ? "Tất cả" : "All" },
+              { value: ASSIGNMENT_STATUS.SCHEDULED, label: labelAssignmentStatus(ASSIGNMENT_STATUS.SCHEDULED, lang) },
+              { value: ASSIGNMENT_STATUS.CANCELLED, label: labelAssignmentStatus(ASSIGNMENT_STATUS.CANCELLED, lang) },
+            ]}
+            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+          />
         </div>
       </div>
 
@@ -286,9 +280,12 @@ export function BoatDutyRosterPanel({ boatId }) {
                   <tr key={row.assignmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20">
                     <td className="py-3 px-5">
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-9 h-9 rounded-full bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 flex items-center justify-center text-[11px] font-black shrink-0">
-                          {getInitials(row.staffName)}
-                        </span>
+                        <UserAvatar
+                          avatarUrl={row.staffAvatarUrl}
+                          alt={row.staffName}
+                          className="w-9 h-9 rounded-full overflow-hidden shrink-0"
+                          iconClassName="w-1/2 h-1/2"
+                        />
                         <div className="min-w-0">
                           <p className="font-bold text-slate-800 dark:text-white truncate">{row.staffName}</p>
                         </div>
@@ -302,7 +299,7 @@ export function BoatDutyRosterPanel({ boatId }) {
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span
-                        className={`inline-flex px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusTone(row.status)}`}
+                        className={`text-[10px] font-headline font-black uppercase tracking-wide ${statusTone(row.status)}`}
                       >
                         {labelAssignmentStatus(row.status, lang)}
                       </span>
@@ -310,7 +307,7 @@ export function BoatDutyRosterPanel({ boatId }) {
                     <td className="py-3 px-4 text-center">
                       {resolveShiftState(row) ? (
                         <span
-                          className={`inline-flex px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${shiftStateTone(resolveShiftState(row))}`}
+                          className={`text-[10px] font-headline font-black uppercase tracking-wide ${shiftStateTone(resolveShiftState(row))}`}
                         >
                           {labelShiftState(resolveShiftState(row), lang)}
                         </span>

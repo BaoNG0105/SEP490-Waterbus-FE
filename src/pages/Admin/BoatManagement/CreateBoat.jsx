@@ -290,7 +290,7 @@ export function CreateBoat() {
               </div>
             </div>
 
-            <div className="relative z-40">
+            <div className="relative z-10">
               <label className={labelStyle}>{lang === "VN" ? "Loại dịch vụ (*)" : "Service type (*)"}</label>
               <FormSelect
                 value={formData.serviceType}
@@ -447,10 +447,8 @@ export function CreateBoat() {
               disabled={isSubmitting}
               className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
             >
-              {isSubmitting ? (
+              {isSubmitting && (
                 <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <span className="material-symbols-outlined text-lg">save</span>
               )}
               {lang === "VN"
                 ? (pendingDocCount > 0 ? `Lưu tàu & ${pendingDocCount} hồ sơ` : "Lưu tàu")

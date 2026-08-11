@@ -5,7 +5,30 @@ import { fetchAllBoats, modifyBoatStatus, deleteBoat, fetchBoatDetail, fetchBoat
 import { getActivateBoatBlockReason } from "../../../utils/boatDocuments";
 import { BoatSeatLayoutPreviewModal } from "../../../components/BoatLayoutPreview";
 import { FormSelect } from "../../../components/FormSelect";
+import { NullImageIcon } from "../../../components/NullImageIcon";
 import { notify } from "../../../utils/swalToast";
+
+// Ảnh thu nhỏ của tàu; hiển thị icon "no image" khi imageUrl từ API trả về null hoặc ảnh lỗi
+function BoatThumbnail({ src, alt }) {
+    const [hasError, setHasError] = useState(false);
+
+    if (!src || hasError) {
+        return (
+            <div className="w-full h-full flex items-center justify-center text-slate-400">
+                <NullImageIcon className="h-5 w-5" />
+            </div>
+        );
+    }
+
+    return (
+        <img
+            src={src}
+            alt={alt}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={() => setHasError(true)}
+        />
+    );
+}
 
 const BOAT_STATUS_OPTIONS = [
     { value: "Active", labelVn: "Hoạt động", labelEn: "Active", hintVn: "Sẵn sàng vận hành", hintEn: "Ready for operation", tone: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", ring: "border-emerald-200 dark:border-emerald-500/30" },
@@ -21,9 +44,6 @@ export function BoatManagement() {
     const { lang } = useApp();
     const navigate = useNavigate();
 
-    // Link ảnh mặc định phòng trường hợp imageUrl từ API trả về null
-    const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1782999909/xpsin48malhqhy5c53oi.png";
-
     // STATE QUẢN LÝ DỮ LIỆU ĐỘI TÀU TỪ API
     const [boats, setBoats] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -33,6 +53,7 @@ export function BoatManagement() {
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("All");
     const [deckFilter, setDeckFilter] = useState("All");
+    const [serviceTypeFilter, setServiceTypeFilter] = useState("All");
     const [statusModalBoat, setStatusModalBoat] = useState(null);
     const [selectedStatus, setSelectedStatus] = useState("");
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
@@ -197,7 +218,7 @@ export function BoatManagement() {
     const retiredBoats = boats.filter(v => v.status?.toLowerCase() === "retired").length;
     const maintenanceBoats = boats.filter(v => v.status?.toLowerCase() === "undermaintenance").length;
 
-    // Xử lý logic Tìm kiếm + Lọc trạng thái + Lọc số tầng
+    // Xử lý logic Tìm kiếm + Lọc trạng thái + Lọc số tầng + Lọc loại dịch vụ
     const filteredBoats = boats.filter(boats => {
         const nameMatch = boats.name?.toLowerCase().includes(searchTerm.toLowerCase());
         const codeMatch = boats.code?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -205,14 +226,15 @@ export function BoatManagement() {
 
         const matchesStatus = statusFilter === "All" || boats.status?.toLowerCase() === statusFilter.toLowerCase();
         const matchesDeck = deckFilter === "All" || Number(boats.numberOfDecks) === Number(deckFilter);
+        const matchesServiceType = serviceTypeFilter === "All" || boats.serviceType?.toLowerCase() === serviceTypeFilter.toLowerCase();
 
-        return matchesSearch && matchesStatus && matchesDeck;
+        return matchesSearch && matchesStatus && matchesDeck && matchesServiceType;
     });
 
     // Reset về trang 1 mỗi khi bộ lọc/tìm kiếm thay đổi
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, statusFilter, deckFilter]);
+    }, [searchTerm, statusFilter, deckFilter, serviceTypeFilter]);
 
     // Phân trang: mỗi trang chỉ hiển thị ITEMS_PER_PAGE tàu
     const totalPages = Math.ceil(filteredBoats.length / ITEMS_PER_PAGE);
@@ -411,6 +433,20 @@ export function BoatManagement() {
                     </div>
 
                     <div className="relative z-20 flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Dịch vụ:" : "Service:"}</span>
+                        <FormSelect
+                            value={serviceTypeFilter}
+                            onChange={setServiceTypeFilter}
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả dịch vụ" : "All Services" },
+                                { value: "Passenger", label: lang === "VN" ? "Chở khách" : "Passenger" },
+                                { value: "Rescue", label: lang === "VN" ? "Cứu hộ / kéo tàu" : "Rescue" },
+                            ]}
+                            className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
+                    </div>
+
+                    <div className="relative z-10 flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
                         <FormSelect
                             value={statusFilter}
@@ -418,11 +454,11 @@ export function BoatManagement() {
                             menuAlign="right"
                             options={[
                                 { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
-                                { value: "Active", label: lang === "VN" ? "Active (Hoạt động)" : "Active" },
-                                { value: "Inactive", label: lang === "VN" ? "Inactive (Chưa hoạt động)" : "Inactive" },
-                                { value: "UnderMaintenance", label: lang === "VN" ? "UnderMaintenance (Bảo trì)" : "UnderMaintenance" },
-                                { value: "Incident", label: lang === "VN" ? "Incident (Sự cố)" : "Incident" },
-                                { value: "Retired", label: lang === "VN" ? "Retired (Dừng hoạt động)" : "Retired" },
+                                { value: "Active", label: lang === "VN" ? "Hoạt động" : "Active" },
+                                { value: "Inactive", label: lang === "VN" ? "Chưa hoạt động" : "Inactive" },
+                                { value: "UnderMaintenance", label: lang === "VN" ? "Bảo trì" : "UnderMaintenance" },
+                                { value: "Incident", label: lang === "VN" ? "Sự cố" : "Incident" },
+                                { value: "Retired", label: lang === "VN" ? "Dừng hoạt động" : "Retired" },
                             ]}
                             className="min-w-50 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                         />
@@ -436,9 +472,10 @@ export function BoatManagement() {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-700 text-xs font-headline font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">
-                                <th className="py-4 px-6">{lang === "VN" ? "Số hiệu tàu" : "Boat Code"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Hình ảnh" : "Image"}</th>
+                                <th className="py-4 px-6">{lang === "VN" ? "Số hiệu tàu" : "Boat Code"}</th>
                                 <th className="py-4 px-6">{lang === "VN" ? "Tên tàu" : "Boat Name"}</th>
+                                <th className="py-4 px-6">{lang === "VN" ? "Dịch vụ" : "Service"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Sức chứa" : "Capacity"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Số tầng" : "Decks"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
@@ -448,14 +485,14 @@ export function BoatManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40 text-sm font-medium">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="7" className="text-center py-16 text-slate-400 font-medium">
+                                    <td colSpan="8" className="text-center py-16 text-slate-400 font-medium">
                                         <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] rounded-full animate-spin mx-auto mb-2"></div>
                                         <p className="text-xs tracking-wider animate-pulse">{lang === "VN" ? "Đang đồng bộ dữ liệu đội tàu thủy..." : "Synchronizing boats database..."}</p>
                                     </td>
                                 </tr>
                             ) : errorMsg ? (
                                 <tr>
-                                    <td colSpan="7" className="text-center py-16 text-red-500 font-bold text-xs">
+                                    <td colSpan="8" className="text-center py-16 text-red-500 font-bold text-xs">
                                         <span className="material-symbols-outlined text-3xl mb-1 block">error</span>
                                         {errorMsg}
                                     </td>
@@ -465,29 +502,21 @@ export function BoatManagement() {
                                     const statusConfig = getStatusInfo(boat.status);
                                     return (
                                         <tr key={boat.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors group">
+                                            {/* "imageUrl": Ảnh tàu */}
+                                            <td className="py-4 px-4">
+                                                <div className="w-16 h-10 rounded-xl overflow-hidden shadow-sm border dark:border-slate-600 bg-slate-100 dark:bg-slate-900 shrink-0">
+                                                    <BoatThumbnail src={boat.imageUrl} alt={boat.name} />
+                                                </div>
+                                            </td>
+
                                             {/* "code": Số hiệu tàu */}
                                             <td className="py-4 px-6 font-headline font-black text-[#124757] dark:text-yellow-400">
                                                 {boat.code}
                                             </td>
 
-                                            {/* "imageUrl": Ảnh tàu */}
-                                            <td className="py-4 px-4">
-                                                <div className="w-16 h-10 rounded-xl overflow-hidden shadow-sm border dark:border-slate-600 bg-slate-100 shrink-0">
-                                                    <img
-                                                        src={boat.imageUrl || DEFAULT_BOAT_IMAGE}
-                                                        alt={boat.name}
-                                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                                        onError={(e) => { e.target.src = DEFAULT_BOAT_IMAGE; }}
-                                                    />
-                                                </div>
-                                            </td>
-
                                             {/* "name": Tên tàu + Cảnh báo chưa cấu hình ghế */}
                                             <td className="py-4 px-6">
                                                 <p className="font-bold text-slate-800 dark:text-white">{boat.name}</p>
-                                                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                                    {String(boat.serviceType || "Passenger")}
-                                                </p>
                                                 {!boat.seatsConfigured && (
                                                     <p className="text-[10px] font-bold text-amber-500 mt-1 flex items-center gap-1">
                                                         <span className="material-symbols-outlined text-[14px]">warning</span>
@@ -496,21 +525,26 @@ export function BoatManagement() {
                                                 )}
                                             </td>
 
+                                            {/* "serviceType": Loại dịch vụ */}
+                                            <td className="py-4 px-6 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                                {boat.serviceType === "Rescue"
+                                                    ? (lang === "VN" ? "Cứu hộ / kéo tàu" : "Rescue")
+                                                    : (lang === "VN" ? "Chở khách" : "Passenger")}
+                                            </td>
+
                                             {/* "seatCount": Sức chứa */}
                                             <td className="py-4 px-6 text-center font-headline font-black text-slate-700 dark:text-slate-200">
                                                 {boat.seatCount || 0} <span className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "ghế" : "pax"}</span>
                                             </td>
 
                                             {/* "numberOfDecks": Số tầng */}
-                                            <td className="py-4 px-6 text-center">
-                                                <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border dark:border-slate-700 text-slate-600 dark:text-slate-300">
-                                                    {boat.numberOfDecks}
-                                                </span>
+                                            <td className="py-4 px-6 text-center text-sm font-bold text-slate-600 dark:text-slate-300">
+                                                {boat.numberOfDecks}
                                             </td>
 
                                             {/* "status": Trạng thái */}
                                             <td className="py-4 px-6 text-center">
-                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-headline font-black uppercase tracking-wider shadow-inner ${statusConfig.classes}`}>
+                                                <span className={`inline-flex items-center gap-1.5 text-[11px] font-headline font-black uppercase tracking-wider ${statusConfig.classes.split(" ").filter((c) => c.includes("text")).join(" ")}`}>
                                                     <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
                                                     {statusConfig.label}
                                                 </span>
@@ -586,7 +620,7 @@ export function BoatManagement() {
                                 })
                             ) : (
                                 <tr>
-                                    <td colSpan="7" className="text-center py-12 text-slate-400 font-medium text-xs">
+                                    <td colSpan="8" className="text-center py-12 text-slate-400 font-medium text-xs">
                                         <span className="material-symbols-outlined text-3xl mb-1 opacity-60 block">database_off</span>
                                         {lang === "VN" ? "Không có dữ liệu tàu thủy nào khớp với từ khóa tìm kiếm." : "No boats records found matching the specifications."}
                                     </td>
@@ -798,14 +832,14 @@ export function BoatManagement() {
                     boatId={seatPreviewBoat.id}
                     boatName={seatPreviewBoat.name}
                     boatCode={seatPreviewBoat.code}
-                    boatImageUrl={seatPreviewBoat.imageUrl || seatPreviewBoat.imageUrls?.[0] || DEFAULT_BOAT_IMAGE}
+                    boatImageUrl={seatPreviewBoat.imageUrl || seatPreviewBoat.imageUrls?.[0] || ""}
                     lang={lang}
                     variant="admin"
                     boatMeta={{
                         seatCount: seatPreviewBoat.seatCount,
                         numberOfDecks: seatPreviewBoat.numberOfDecks,
                         seatSetupType: seatPreviewBoat.seatSetupType,
-                        imageUrl: seatPreviewBoat.imageUrl || seatPreviewBoat.imageUrls?.[0] || DEFAULT_BOAT_IMAGE,
+                        imageUrl: seatPreviewBoat.imageUrl || seatPreviewBoat.imageUrls?.[0] || "",
                     }}
                     onClose={() => setSeatPreviewBoat(null)}
                 />

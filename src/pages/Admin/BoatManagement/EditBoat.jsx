@@ -1,5 +1,5 @@
 //react common
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 //api
@@ -35,7 +35,7 @@ export function EditBoat() {
   const [errorMsg, setErrorMsg] = useState("");
   const [activeTab, setActiveTab] = useState("specs");
 
-  const loadBoatAndSeatsData = async () => {
+  const loadBoatAndSeatsData = useCallback(async () => {
     try {
       setIsLoading(true);
       setErrorMsg("");
@@ -98,11 +98,11 @@ export function EditBoat() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id, lang, navigate]);
 
   useEffect(() => {
     loadBoatAndSeatsData();
-  }, [id, lang]);
+  }, [loadBoatAndSeatsData]);
 
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -296,8 +296,8 @@ export function EditBoat() {
     { value: "StandardAndVip", label: "Water Sightseeing" },
   ];
   const serviceTypeOptions = [
-    { value: "Passenger", label: lang === "VN" ? "Passenger — chở khách" : "Passenger" },
-    { value: "Rescue", label: lang === "VN" ? "Rescue — cứu hộ / kéo tàu" : "Rescue — tow / rescue" },
+    { value: "Passenger", label: lang === "VN" ? "Chở khách" : "Passenger" },
+    { value: "Rescue", label: lang === "VN" ? "Cứu hộ / kéo tàu" : "Rescue — tow / rescue" },
   ];
   const disabledStyle = "opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-900/40"; 
 
@@ -397,7 +397,7 @@ export function EditBoat() {
             </div>
           </div>
 
-          <div className="relative z-40">
+          <div className="relative z-10">
             <label className={labelStyle}>{lang === "VN" ? "Loại dịch vụ (*)" : "Service type (*)"}</label>
             <FormSelect
               value={formData.serviceType || "Passenger"}

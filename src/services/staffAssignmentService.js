@@ -127,6 +127,7 @@ export const normalizeStaffAssignment = (item) => {
         assignmentId: String(pick(item, ['assignmentId', 'id'], '')),
         staffUserId: String(pick(item, ['staffUserId', 'staff.id', 'staffId'], '')),
         staffName: pick(item, ['staffName', 'staff.fullName', 'staff.name', 'fullName'], '—'),
+        staffAvatarUrl: pick(item, ['staffAvatarUrl', 'avatarUrl', 'staff.avatarUrl'], '') || null,
         staffType: pick(item, ['staffType', 'staff.staffType'], ''),
         assignmentType,
         workingDate: pick(item, ['workingDate'], '') || null,

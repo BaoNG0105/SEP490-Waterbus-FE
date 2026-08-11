@@ -782,7 +782,7 @@ export function CreateTrip() {
 
           {isRoundTrip ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 overflow-visible">
-              <div className="relative z-40">
+              <div className="relative z-30">
                 <label className={labelStyle}>{lang === "VN" ? "Tuyến đi (*)" : "Outbound route (*)"}</label>
                 <FormSelect
                   value={form.outboundRouteCode}
@@ -796,7 +796,7 @@ export function CreateTrip() {
                   className={selectStyle}
                 />
               </div>
-              <div className="relative z-30">
+              <div className="relative z-20">
                 <label className={labelStyle}>{lang === "VN" ? "Tuyến về (*)" : "Inbound route (*)"}</label>
                 <FormSelect
                   value={form.inboundRouteCode}
@@ -810,7 +810,7 @@ export function CreateTrip() {
                   className={selectStyle}
                 />
               </div>
-              <div className="relative z-20 sm:col-span-2">
+              <div className="relative z-10 sm:col-span-2">
                 <label className={labelStyle}>{lang === "VN" ? "Tàu (*)" : "Boat (*)"}</label>
                 <FormSelect
                   value={form.boatCode}
