@@ -83,7 +83,7 @@ export const getRouteKindLabel = (routeTypeOrRoute, lang = "VN") => {
     case "GPS":
       return isVn ? "Tuyến nguồn GPS" : "GPS source route";
     case "Sightseeing":
-      return isVn ? "Tuyến Sightseeing" : "Sightseeing route";
+      return isVn ? "Tuyến WaterSightseeing" : "WaterSightseeing route";
     case "Charter":
       return isVn ? "Tuyến Request" : "Request route";
     default:

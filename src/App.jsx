@@ -57,7 +57,6 @@ import { EditManager } from "./pages/Admin/ManagerManagement/EditManager";
 import { CreateStaff } from "./pages/Admin/StaffManagement/CreateStaff";
 import { EditStaff } from "./pages/Admin/StaffManagement/EditStaff";
 import { StaffHub } from "./pages/Admin/StaffHub";
-import { Waterway } from "./pages/Admin/RouteManagement/Waterway";
 import { RouteManagement } from "./pages/Admin/RouteManagement";
 import { RouteDetail } from "./pages/Admin/RouteManagement/RouteDetail";
 import { MergeGpsRoutes } from "./pages/Admin/RouteManagement/MergeGpsRoutes";
@@ -667,16 +666,6 @@ function App() {
             element={
               <AdminLayout title="Review Management">
                 <ReviewManagement />
-              </AdminLayout>
-            }
-          />
-
-          {/* Waterways Page : Để test */}
-          <Route
-            path="/admin/waterways-management"
-            element={
-              <AdminLayout title="Waterways Management">
-                <Waterway />
               </AdminLayout>
             }
           />

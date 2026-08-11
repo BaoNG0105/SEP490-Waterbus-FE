@@ -10,24 +10,8 @@ import { fetchAllStations } from "../../../services/stationService";
 import { fetchWaterwayDetail } from "../../../services/waterwayService";
 import { WaterwayMap } from "../../../components/WaterwayMap";
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
-import { getRouteKindLabel, getRouteShortLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
+import { getRouteKindLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
-
-const routeKindBadgeClass = (route) => {
-    const key = getRouteShortLabel(route);
-    switch (key) {
-        case "GPS":
-            return "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20";
-        case "Charter":
-            return "bg-[#EAF3F5] text-[#124757] border-[#124757]/20 dark:bg-yellow-400/10 dark:text-yellow-400 dark:border-yellow-400/20";
-        case "Sightseeing":
-            return "bg-violet-50 text-violet-700 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20";
-        case "Bus":
-            return "bg-teal-50 text-teal-700 border-teal-100 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20";
-        default:
-            return "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600";
-    }
-};
 
 export function RouteDetail() {
     const { lang } = useApp();
@@ -234,22 +218,26 @@ export function RouteDetail() {
                 </button>
                 <div className="flex-1">
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-                        {lang === "VN" ? `Chi tiết tuyến: ${route.routeCode}` : `Route Detail: ${route.routeCode}`}
+                        {lang === "VN" ? `Chi tiết tuyến: ${route.routeName}` : `Route Detail: ${route.routeName}`}
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                        {route.routeName}
-                    </p>
                 </div>
-                <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border shrink-0 ${route.status === "Active"
-                        ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400"
-                        : "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400"
-                    }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${route.status === "Active" ? "bg-emerald-500" : "bg-rose-500"}`}></span>
-                    {route.status || "Inactive"}
-                </span>
-                <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border shrink-0 ${routeKindBadgeClass(route)}`}>
-                    {getRouteKindLabel(route, lang)}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                        {lang === "VN" ? "Trạng thái" : "Status"}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => handleRouteFormChange("status", routeForm.status === "Active" ? "Inactive" : "Active")}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-300 ease-in-out border-2 border-transparent focus:outline-none ${routeForm.status === "Active" ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
+                    >
+                        <span className={`pointer-events-none inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow transition duration-300 ease-in-out ${routeForm.status === "Active" ? 'translate-x-5' : 'translate-x-0'
+                            }`} />
+                    </button>
+                    <span className={`text-xs font-black uppercase tracking-wider ${routeForm.status === "Active" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500"}`}>
+                        {routeForm.status}
+                    </span>
+                </div>
                 <button
                     type="button"
                     onClick={handleDeleteRoute}
@@ -269,38 +257,21 @@ export function RouteDetail() {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Khoảng cách" : "Base Distance"}</span>
-                        <h3 className="text-xl font-black font-headline text-blue-600 dark:text-blue-400 mt-0.5">{route.baseDistanceKm != null ? `${route.baseDistanceKm} km` : "—"}</h3>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Thời gian di chuyển ước tính" : "Estimated Duration"}</span>
-                        <h3 className="text-xl font-black font-headline text-emerald-600 dark:text-emerald-400 mt-0.5">{route.estimatedDurationMin != null ? `${route.estimatedDurationMin} ${lang === "VN" ? "phút" : "min"}` : "—"}</h3>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số bến dừng" : "Total Stops"}</span>
-                        <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">{sortedStops.length}</h3>
-                    </div>
-                </div>
-            </div>
-
             <form onSubmit={handleSaveRouteInfo} className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
                 <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">
                     {lang === "VN" ? "Chỉnh sửa thông tin tuyến" : "Edit Route Info"}
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Mã tuyến" : "Route Code"}</label>
                         <input type="text" disabled value={route.routeCode} className={`${inputStyle} opacity-60 cursor-not-allowed`} />
+                    </div>
+                    <div>
+                        <label className={labelStyle}>{lang === "VN" ? "Loại tuyến" : "Route Type"}</label>
+                        <div className={`${inputStyle} opacity-60 cursor-not-allowed flex items-center`}>
+                            {getRouteKindLabel(route, lang)}
+                        </div>
                     </div>
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Tên tuyến đường (*)" : "Route Name (*)"}</label>
@@ -326,34 +297,18 @@ export function RouteDetail() {
                         <label className={labelStyle}>{lang === "VN" ? "Khoảng cách (km)" : "Base Distance (km)"}</label>
                         <input
                             type="number" step="any" min={0} value={routeForm.baseDistanceKm}
-                            onChange={(e) => handleRouteFormChange("baseDistanceKm", e.target.value)}
-                            className={inputStyle}
+                            disabled
+                            className={`${inputStyle} opacity-60 cursor-not-allowed`}
                         />
                     </div>
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Thời gian dự kiến (phút)" : "Estimated Duration (min)"}</label>
                         <input
                             type="number" step="any" min={0} value={routeForm.estimatedDurationMin}
-                            onChange={(e) => handleRouteFormChange("estimatedDurationMin", e.target.value)}
-                            className={inputStyle}
+                            disabled
+                            className={`${inputStyle} opacity-60 cursor-not-allowed`}
                         />
                     </div>
-                </div>
-
-                <div className="flex items-center gap-3 pt-1">
-                    <span className={labelStyle + " mb-0"}>{lang === "VN" ? "Trạng thái" : "Status"}</span>
-                    <button
-                        type="button"
-                        onClick={() => handleRouteFormChange("status", routeForm.status === "Active" ? "Inactive" : "Active")}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-300 ease-in-out border-2 border-transparent focus:outline-none ${routeForm.status === "Active" ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
-                            }`}
-                    >
-                        <span className={`pointer-events-none inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow transition duration-300 ease-in-out ${routeForm.status === "Active" ? 'translate-x-5' : 'translate-x-0'
-                            }`} />
-                    </button>
-                    <span className={`text-xs font-black uppercase tracking-wider ${routeForm.status === "Active" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500"}`}>
-                        {routeForm.status}
-                    </span>
                 </div>
 
                 <button type="submit" disabled={isSavingRouteInfo} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
@@ -429,7 +384,7 @@ export function RouteDetail() {
 
                 <div className="lg:col-span-3 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col h-145">
                     <div>
-                        <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider">{lang === "VN" ? "Bản đồ lộ trình (GIS Map)" : "Route GIS Mapping"}</h3>
+                        <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider">{lang === "VN" ? "Bản đồ lộ trình" : "Route Mapping"}</h3>
                         <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-0.5 mb-4">
                             {lang === "VN" ? "Vị trí các bến dừng của tuyến đường trên bản đồ." : "Visual placement of this route's stops on the map."}
                         </p>

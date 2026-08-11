@@ -29,7 +29,7 @@ export function MergeGpsRoutes() {
   const [formData, setFormData] = useState({
     routeCode: "",
     routeName: "",
-    description: lang === "VN" ? "Ghép từ route GPS" : "Merged from GPS routes",
+    description: lang === "VN" ? "Ghép từ tuyến GPS" : "Merged from GPS routes",
   });
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export function MergeGpsRoutes() {
     if (route && !canSelectForMerge(route)) {
       setErrorMsg(
         lang === "VN"
-          ? "Chỉ chọn Route nguồn GPS để ghép (không chọn Vòng tham quan / Tuyến booking)."
+          ? "Chỉ chọn tuyến nguồn GPS để ghép (không chọn Vòng tham quan / Tuyến booking)."
           : "Only GPS source routes can be merged (not sightseeing / booking)."
       );
       return;
@@ -266,7 +266,7 @@ export function MergeGpsRoutes() {
 
         <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
           <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">
-            {lang === "VN" ? `Route nguồn GPS (${selectedIds.length} đã chọn)` : `GPS source routes (${selectedIds.length} selected)`}
+            {lang === "VN" ? `Tuyến nguồn GPS (${selectedIds.length} đã chọn)` : `GPS source routes (${selectedIds.length} selected)`}
           </h3>
           <p className="text-[10px] text-slate-400 font-semibold">
             {lang === "VN"
@@ -351,7 +351,7 @@ export function MergeGpsRoutes() {
           className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
-          {lang === "VN" ? "Ghép tuyến (POST /routes/from-routes)" : "Merge routes (POST /routes/from-routes)"}
+          {lang === "VN" ? "Ghép tuyến" : "Merge routes"}
         </button>
       </form>
     </div>

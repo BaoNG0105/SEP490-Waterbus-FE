@@ -3,24 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, removeRoute } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
-import { getRouteKindLabel, getRouteShortLabel, resolveRouteLabelKey } from "../../../utils/routeTypes";
+import { getRouteKindLabel, resolveRouteLabelKey } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
-
-const routeKindBadgeClass = (route) => {
-    const key = getRouteShortLabel(route);
-    switch (key) {
-        case "GPS":
-            return "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300";
-        case "Charter":
-            return "bg-[#EAF3F5] text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400";
-        case "Sightseeing":
-            return "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300";
-        case "Bus":
-            return "bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300";
-        default:
-            return "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400";
-    }
-};
 
 const getRouteTime = (route) => {
     const raw = route?.updatedAt || route?.modifiedAt || route?.createdAt || route?.createdDate || "";
@@ -285,7 +269,7 @@ export function RouteManagement() {
                                 { value: "Regular", label: getRouteKindLabel("Regular", lang) },
                                 { value: "SightseeingLoop", label: getRouteKindLabel("SightseeingLoop", lang) },
                             ]}
-                            className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                            className="min-w-52 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                         />
                     </div>
 
@@ -316,6 +300,7 @@ export function RouteManagement() {
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
                                 <th className="py-4 px-6">{lang === "VN" ? "Thông tin tuyến đường" : "Route Information"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Mã tuyến" : "Route Code"}</th>
+                                <th className="py-4 px-4 text-center">{lang === "VN" ? "Loại" : "Type"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Khoảng cách" : "Distance"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Thời gian" : "Duration"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
@@ -325,7 +310,7 @@ export function RouteManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {currentRoutes.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         <span className="material-symbols-outlined text-4xl block mb-2">route</span>
                                         {lang === "VN" ? "Không có dữ liệu tuyến đường nào phù hợp." : "No records found matching filters."}
                                     </td>
@@ -344,9 +329,6 @@ export function RouteManagement() {
                                                     <span className="text-[10px] text-slate-400 dark:text-slate-500 block max-w-sm truncate">
                                                         {route.description || (lang === "VN" ? "Chưa có mô tả" : "No description")}
                                                     </span>
-                                                    <span className={`inline-flex mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${routeKindBadgeClass(route)}`}>
-                                                        {getRouteKindLabel(route, lang)}
-                                                    </span>
                                                 </div>
                                             </div>
                                         </td>
@@ -361,21 +343,28 @@ export function RouteManagement() {
                                             </span>
                                         </td>
 
-                                        {/* Cột 3: Khoảng cách */}
+                                        {/* Cột 3: Loại tuyến */}
+                                        <td className="py-4 px-4 text-center">
+                                            <span className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300">
+                                                {getRouteKindLabel(route, lang)}
+                                            </span>
+                                        </td>
+
+                                        {/* Cột 4: Khoảng cách */}
                                         <td className="py-4 px-4 text-center">
                                             <span className="font-bold text-slate-600 dark:text-slate-300">
                                                 {route.baseDistanceKm != null ? `${route.baseDistanceKm} km` : "—"}
                                             </span>
                                         </td>
 
-                                        {/* Cột 4: Thời gian */}
+                                        {/* Cột 5: Thời gian */}
                                         <td className="py-4 px-4 text-center">
                                             <span className="font-bold text-slate-600 dark:text-slate-300">
                                                 {route.estimatedDurationMin != null ? `${route.estimatedDurationMin} ${lang === "VN" ? "phút" : "min"}` : "—"}
                                             </span>
                                         </td>
 
-                                        {/* Cột 5: Trạng thái */}
+                                        {/* Cột 6: Trạng thái */}
                                         <td className="py-4 px-4 text-center">
                                             <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${route.status === "Active"
                                                 ? "text-emerald-600 dark:text-emerald-400"
@@ -388,7 +377,7 @@ export function RouteManagement() {
                                             </span>
                                         </td>
 
-                                        {/* Cột 6: Nút Hành động */}
+                                        {/* Cột 7: Nút Hành động */}
                                         <td className="py-4 px-6 text-center">
                                             <div className="flex items-center justify-center gap-2">
                                                 <button
