@@ -6,6 +6,7 @@ import {
   AdminBookingOverviewTab,
   AdminBookingTicketsTab,
 } from "../../../components/AdminCharterDetailWorkspace";
+
 import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
 import { PageLoading } from "../../../components/PageLoading";
 import { useApp } from "../../../context/AppContext";
@@ -1117,18 +1118,13 @@ export function AdminCharterBookingDetail() {
           </button>
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 md:text-3xl">{booking.bookingCode}</h2>
-            <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${statusInfo.classes}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot}`}></span>
+            <span className={`inline-flex items-center gap-1.5 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.text}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${statusInfo}`}></span>
               {statusInfo.label}
             </span>
           </div>
           <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">
-            {[
-              booking.customerName,
-              booking.fromStationName && booking.toStationName
-                ? `${booking.fromStationName} → ${booking.toStationName}`
-                : null,
-            ].filter(Boolean).join(" · ") || "--"}
+            {lang === "VN" ? "Khách hàng: " : "Customer: "}{booking.customerName || "--"}
           </p>
         </div>
       </div>
@@ -1269,8 +1265,6 @@ export function AdminCharterBookingDetail() {
           bookingPaidAmount={bookingPaidAmount}
           selectedBoats={selectedBoats}
           payments={payments}
-          manualStatusOptions={manualStatusOptions}
-          getStatusInfo={getStatusInfo}
           onSubmitQuote={handleDetailSubmitQuote}
           onQuoteBoatChange={handleDetailQuoteBoatChange}
           onRoutePlanChange={handleDetailRoutePlanChange}
@@ -1339,11 +1333,11 @@ export function AdminCharterBookingDetail() {
             <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Theo dõi thanh toán" : "Payment Monitoring"}</h3>
             <p className="mt-1 text-xs font-bold text-slate-400">
               {lang === "VN"
-                ? "Hiển thị các giao dịch thanh toán của booking: trạng thái, hạn thanh toán và đường dẫn PayOS để quản trị kiểm tra."
-                : "Shows booking payment transactions: status, payment deadline, and PayOS link for admin review."}
+                ? "Hiển thị các giao dịch thanh toán của booking: trạng thái, hạn thanh toán và đường dẫn cổng thanh toán để quản trị kiểm tra."
+                : "Shows booking payment transactions: status, payment deadline, and payment gatewway link for admin review."}
             </p>
           </div>
-          <span className="w-max rounded-xl bg-slate-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
+          <span className="w-max text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-300">
             {payments.length} {lang === "VN" ? "giao dịch" : "payments"}
           </span>
         </div>
@@ -1363,9 +1357,9 @@ export function AdminCharterBookingDetail() {
                 <th className="py-3 pr-3 text-left">ID</th>
                 <th className="py-3 pr-3 text-right">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                 <th className="py-3 pr-3 text-right">{lang === "VN" ? "Số tiền" : "Amount"}</th>
-                <th className="py-3 pr-3 text-right">Refund</th>
+                <th className="py-3 pr-3 text-right">{lang === "VN" ? "Hoàn tiền" : "Refund"}</th>
                 <th className="py-3 pr-3 text-right">{lang === "VN" ? "Hết hạn" : "Expires"}</th>
-                <th className="py-3 pr-3 text-left">PayOS</th>
+                <th className="py-3 pr-3 text-left">{lang === "VN" ? "Link thanh toán" : "Payment gateway"}</th>
                 <th className="py-3 pl-2 text-right">{lang === "VN" ? "Xử lý" : "Action"}</th>
               </tr>
             </thead>
@@ -1403,7 +1397,10 @@ export function AdminCharterBookingDetail() {
                     <td className="py-3 pr-3 align-middle text-right">
                       <span
                         title={paymentStatusInfo.label}
-                        className={`inline-flex max-w-full whitespace-nowrap rounded-lg border px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${paymentStatusInfo.classes}`}
+                        className={`inline-flex max-w-full whitespace-nowrap text-[10px] font-headline font-black uppercase tracking-wide ${paymentStatusInfo.classes
+                          .split(" ")
+                          .filter((cls) => cls.includes("text-"))
+                          .join(" ")}`}
                       >
                         {paymentStatusInfo.label}
                       </span>
@@ -1415,7 +1412,10 @@ export function AdminCharterBookingDetail() {
                       <div className="flex flex-col items-end gap-1">
                         <span
                           title={refundInfo.label}
-                          className={`inline-flex max-w-full whitespace-nowrap rounded-lg border px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${refundInfo.classes}`}
+                          className={`inline-flex max-w-full whitespace-nowrap text-[10px] font-headline font-black uppercase tracking-wide ${refundInfo.classes
+                            .split(" ")
+                            .filter((cls) => cls.includes("text-"))
+                            .join(" ")}`}
                         >
                           {refundInfo.label}
                         </span>

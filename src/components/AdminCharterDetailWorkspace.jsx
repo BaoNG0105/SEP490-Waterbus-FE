@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FormSelect } from "./FormSelect";
 import { AdminCharterRouteDrawPanel } from "./AdminCharterRouteDrawPanel";
 import {
@@ -51,6 +51,19 @@ import {
   formatQuoteUnitPriceLabel,
 } from "../utils/charterQuotePreview";
 import { getCharterDepositAmount } from "../utils/charterBookingActions";
+
+const BOAT_STATUS_LABELS_VN = {
+  active: "Hoạt động",
+  undermaintenance: "Bảo trì",
+  inactive: "Chưa hoạt động",
+};
+
+function translateBoatStatus(status, lang) {
+  if (!status) return status;
+  if (lang !== "VN") return status;
+  const key = String(status).toLowerCase().replace(/[_-\s]/g, "");
+  return BOAT_STATUS_LABELS_VN[key] || status;
+}
 
 function resolveItineraryStructureLegs(booking) {
   if (Array.isArray(booking?.routeLegs) && booking.routeLegs.length > 0) {
@@ -426,8 +439,8 @@ function AdminCharterRoutePlanPicker({
           </p>
           <p className="mt-1 text-[11px] font-medium text-slate-400">
             {lang === "VN"
-              ? "Mỗi chặng chọn một tuyến GPS hoặc vòng tham quan (đúng chiều cặp bến)."
-              : "Pick one GPS or sightseeing route per leg that contains both stations in order."}
+              ? "Mỗi chặng chọn một tuyến có sẵn"
+              : "Pick one available route for each leg."}
           </p>
         </div>
         {onLoad ? (
@@ -480,13 +493,12 @@ function AdminCharterRoutePlanPicker({
                 </div>
               </div>
               <span
-                className={`rounded-lg px-2.5 py-1 text-[9px] font-headline font-black uppercase tracking-wider ring-1 ${
-                  emptyCandidates
-                    ? "bg-slate-100 text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700"
-                    : selectedCandidate
-                      ? "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20"
-                      : "bg-white text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
-                }`}
+                className={`rounded-lg px-2.5 py-1 text-[9px] font-headline font-black uppercase tracking-wider ring-1 ${emptyCandidates
+                  ? "bg-slate-100 text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700"
+                  : selectedCandidate
+                    ? "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20"
+                    : "bg-white text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
+                  }`}
               >
                 {emptyCandidates
                   ? (lang === "VN" ? "Không khớp" : "No match")
@@ -636,11 +648,10 @@ function AdminBoatQuoteSelect({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((open) => !open)}
-        className={`flex w-full items-center gap-3 rounded-2xl border bg-white px-3 py-2.5 text-left outline-none transition-all disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-800 ${
-          isOpen
-            ? "border-[#124757] ring-2 ring-[#124757]/15 dark:border-yellow-400 dark:ring-yellow-400/20"
-            : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
-        }`}
+        className={`flex w-full items-center gap-3 rounded-2xl border bg-white px-3 py-2.5 text-left outline-none transition-all disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-800 ${isOpen
+          ? "border-[#124757] ring-2 ring-[#124757]/15 dark:border-yellow-400 dark:ring-yellow-400/20"
+          : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
+          }`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
@@ -661,9 +672,6 @@ function AdminBoatQuoteSelect({
           </>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <span className="flex h-14 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-900">
-              <span className="material-symbols-outlined text-2xl text-slate-300 dark:text-slate-600">directions_boat</span>
-            </span>
             <p className="text-sm font-bold text-slate-400">{lang === "VN" ? "Chọn tàu" : "Select boat"}</p>
           </div>
         )}
@@ -688,11 +696,10 @@ function AdminBoatQuoteSelect({
                   onChange(id);
                   setIsOpen(false);
                 }}
-                className={`flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors ${
-                  isSelected
-                    ? "bg-[#124757]/5 ring-1 ring-[#124757]/15 dark:bg-yellow-400/10 dark:ring-yellow-400/20"
-                    : "hover:bg-slate-50 dark:hover:bg-slate-800"
-                }`}
+                className={`flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors ${isSelected
+                  ? "bg-[#124757]/5 ring-1 ring-[#124757]/15 dark:bg-yellow-400/10 dark:ring-yellow-400/20"
+                  : "hover:bg-slate-50 dark:hover:bg-slate-800"
+                  }`}
                 role="option"
                 aria-selected={isSelected}
               >
@@ -732,52 +739,16 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
-function ManualStatusPanel({ lang, isSubmitting, manualStatusOptions, getStatusInfo, onStatusChange }) {
-  const [selectedStatus, setSelectedStatus] = useState("");
-  const statusOptions = useMemo(
-    () =>
-      (manualStatusOptions || []).map((status) => ({
-        value: status,
-        label: getStatusInfo?.(status)?.label || status,
-      })),
-    [manualStatusOptions, getStatusInfo]
-  );
-
+function ManualStatusPanel({ lang, isSubmitting, onStatusChange }) {
   return (
-    <details className="group rounded-4xl border border-slate-100 bg-white shadow-sm open:shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-      <summary className="cursor-pointer list-none px-6 py-5 marker:content-none">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
-            {lang === "VN" ? "Cập nhật trạng thái thủ công" : "Manual Status Update"}
-          </h3>
-          <span className="material-symbols-outlined text-slate-400 transition group-open:rotate-180">expand_more</span>
-        </div>
-      </summary>
-      <div className="border-t border-slate-100 px-6 pb-6 pt-4 dark:border-slate-700">
-        <label className="block min-w-0">
-          <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
-            {lang === "VN" ? "Trạng thái mới" : "New status"}
-          </span>
-          <FormSelect
-            value={selectedStatus}
-            disabled={isSubmitting}
-            placeholder={lang === "VN" ? "Chọn trạng thái" : "Select status"}
-            options={statusOptions}
-            onChange={(next) => {
-              if (!next) return;
-              setSelectedStatus("");
-              onStatusChange(next);
-            }}
-            className="mt-1 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-          />
-        </label>
-        <p className="mt-3 text-[11px] font-medium leading-relaxed text-slate-400">
-          {lang === "VN"
-            ? "Quản trị chỉ cập nhật thủ công: Đã hủy, Hết hạn, Hoàn tất. Các trạng thái còn lại được xử lý theo quy trình hệ thống."
-            : "Admins can manually set only Cancelled, Expired, or Completed. Other states follow the system workflow."}
-        </p>
-      </div>
-    </details>
+    <button
+      type="button"
+      onClick={() => onStatusChange("Cancelled")}
+      disabled={isSubmitting}
+      className="w-full rounded-xl border border-rose-700 bg-rose-700 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-60 dark:border-rose-700 dark:bg-rose-700 dark:text-white"
+    >
+      {lang === "VN" ? "Hủy booking" : "Cancel booking"}
+    </button>
   );
 }
 
@@ -801,10 +772,13 @@ function OverviewStat({ label, value, tone = "default" }) {
     default: "border-slate-200/80 bg-[#F8FBFC] dark:border-slate-700 dark:bg-slate-900",
     accent: "border-[#D8E7EA] bg-[#F7FAFB] dark:border-slate-700 dark:bg-slate-900",
     warn: "border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10",
+    success: "border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10",
   };
   const valueTone = tone === "warn"
     ? "text-rose-600 dark:text-rose-300"
-    : "text-[#124757] dark:text-yellow-400";
+    : tone === "success"
+      ? "text-emerald-600 dark:text-emerald-300"
+      : "text-[#124757] dark:text-yellow-400";
 
   return (
     <div className={`rounded-2xl border px-4 py-4 ${tones[tone]}`}>
@@ -823,14 +797,12 @@ export function AdminBookingOverviewTab({
   formatDate,
   formatDateTime,
   formatCountdown,
-  formatDuration,
   formatPassengerSummary,
   formatDeckCount,
   getRequestedDeckCount,
   getBoatDeckCount,
   getBoatSeatSetupType,
   getBoatSeatCount,
-  getPaymentStatusInfo,
   currencyFormatter,
   quoteTotal,
   bookingPaidAmount,
@@ -854,7 +826,6 @@ export function AdminBookingOverviewTab({
     });
   }
 
-  const paymentMeta = getPaymentStatusInfo(booking.paymentStatus, lang);
   const isReleasedAssignment = ["Cancelled", "Expired", "Refunded"].includes(String(booking.status || ""));
   const bookingQuotePreview = buildBookingQuotePreview(booking);
   const depositAmount = getCharterDepositAmount(quoteTotal, booking.depositAmount);
@@ -868,7 +839,7 @@ export function AdminBookingOverviewTab({
   return (
     <div className="space-y-5">
       {showBookingHoldCountdown ? (
-        <section className="overflow-hidden rounded-[2rem] border border-sky-200/80 bg-sky-50 shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-sky-500/20 dark:bg-sky-500/10">
+        <section className="overflow-hidden rounded-4xl border border-sky-200/80 bg-sky-50 shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-sky-500/20 dark:bg-sky-500/10">
           <div className="px-6 py-5 md:px-8">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -896,9 +867,6 @@ export function AdminBookingOverviewTab({
                 {lang === "VN" ? "Lộ trình, khách hàng và tình trạng thanh toán" : "Route, customer, and payment status"}
               </p>
             </div>
-            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold ${paymentMeta.classes}`}>
-              {paymentMeta.label}
-            </span>
           </div>
         </div>
 
@@ -912,6 +880,7 @@ export function AdminBookingOverviewTab({
             <OverviewStat
               label={lang === "VN" ? "Đã thu" : "Collected"}
               value={bookingPaidAmount > 0 ? currencyFormatter.format(bookingPaidAmount) : "--"}
+              tone={bookingPaidAmount > 0 ? "success" : "default"}
             />
             <OverviewStat
               label={lang === "VN" ? "Còn lại" : "Remaining"}
@@ -949,7 +918,7 @@ export function AdminBookingOverviewTab({
 
             <div className="space-y-3">
               <p className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">
-                {lang === "VN" ? "Khách & điều kiện thuê" : "Customer & rental terms"}
+                {lang === "VN" ? "Thông tin khách" : "Customer info"}
               </p>
               <OverviewField
                 icon="person"
@@ -1029,13 +998,6 @@ export function AdminBookingOverviewTab({
           <h2 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
             {lang === "VN" ? "Tàu yêu cầu & đã gán" : "Requested vs assigned boats"}
           </h2>
-          <p className="mt-1 text-xs font-medium text-slate-400">
-            {isReleasedAssignment
-              ? (lang === "VN"
-                ? "Đơn đã đóng — tàu đã gắn được xem là đã giải phóng khỏi lịch."
-                : "Closed booking — previously assigned boats are treated as released.")
-              : (lang === "VN" ? "So sánh nhanh từng tàu theo yêu cầu khách" : "Quick comparison per requested boat")}
-          </p>
         </div>
 
         <div className="space-y-4 px-6 py-6 md:px-8">
@@ -1049,7 +1011,7 @@ export function AdminBookingOverviewTab({
               ? formatDeckCount(getBoatDeckCount(assigned), lang) || getBoatSeatSetupType(assigned) || "--"
               : "";
             const assignedSeatCount = assigned ? getBoatSeatCount(assigned) : 0;
-            const assignedStatus = assigned ? getBoatStatusLabel(assigned) : "";
+            const assignedStatus = assigned ? translateBoatStatus(getBoatStatusLabel(assigned), lang) : "";
             const assignedImageUrl = assigned ? getBoatImageUrl(assigned) : DEFAULT_BOAT_IMAGE;
 
             return (
@@ -1071,7 +1033,7 @@ export function AdminBookingOverviewTab({
 
                 {assigned ? (
                   <div className="grid gap-4 p-4 md:grid-cols-[220px_minmax(0,1fr)] md:items-stretch md:p-5">
-                    <div className={`relative aspect-[4/3] overflow-hidden rounded-2xl bg-slate-200 shadow-inner dark:bg-slate-800 md:h-full md:min-h-[168px] md:aspect-auto ${isReleasedAssignment ? "grayscale" : ""}`}>
+                    <div className={`relative aspect-4/3 overflow-hidden rounded-2xl bg-slate-200 shadow-inner dark:bg-slate-800 md:h-full md:min-h-42 md:aspect-auto ${isReleasedAssignment ? "grayscale" : ""}`}>
                       <img
                         src={assignedImageUrl}
                         alt={assignedName}
@@ -1082,11 +1044,10 @@ export function AdminBookingOverviewTab({
                         }}
                       />
                       <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-[#124757]/50 via-transparent to-transparent" />
-                      <span className={`absolute bottom-3 left-3 rounded-lg px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wider shadow-sm ${
-                        isReleasedAssignment
-                          ? "bg-slate-800/95 text-white"
-                          : "bg-white/95 text-[#124757] dark:bg-slate-900/95 dark:text-yellow-400"
-                      }`}
+                      <span className={`absolute bottom-3 left-3 rounded-lg px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wider shadow-sm ${isReleasedAssignment
+                        ? "bg-slate-800/95 text-white"
+                        : "bg-white/95 text-[#124757] dark:bg-slate-900/95 dark:text-yellow-400"
+                        }`}
                       >
                         {(() => {
                           if (!isReleasedAssignment) {
@@ -1134,25 +1095,22 @@ export function AdminBookingOverviewTab({
                           </div>
                         ) : null}
                         {assignedStatus ? (
-                          <div className={`rounded-2xl border px-3 py-2.5 ${
-                            isReleasedAssignment
-                              ? "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
-                              : "border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10"
-                          }`}
-                          >
-                            <p className={`text-[10px] font-bold uppercase tracking-wide ${
-                              isReleasedAssignment
-                                ? "text-slate-400"
-                                : "text-emerald-600/80 dark:text-emerald-300"
+                          <div className={`rounded-2xl border px-3 py-2.5 ${isReleasedAssignment
+                            ? "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
+                            : "border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10"
                             }`}
+                          >
+                            <p className={`text-[10px] font-bold uppercase tracking-wide ${isReleasedAssignment
+                              ? "text-slate-400"
+                              : "text-emerald-600/80 dark:text-emerald-300"
+                              }`}
                             >
                               {lang === "VN" ? "Trạng thái tàu" : "Boat status"}
                             </p>
-                            <p className={`mt-1 text-sm font-headline font-black ${
-                              isReleasedAssignment
-                                ? "text-slate-600 dark:text-slate-300"
-                                : "text-emerald-700 dark:text-emerald-300"
-                            }`}
+                            <p className={`mt-1 text-sm font-headline font-black ${isReleasedAssignment
+                              ? "text-slate-600 dark:text-slate-300"
+                              : "text-emerald-700 dark:text-emerald-300"
+                              }`}
                             >
                               {assignedStatus}
                             </p>
@@ -1163,9 +1121,6 @@ export function AdminBookingOverviewTab({
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center md:py-12">
-                    <span className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                      <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600">directions_boat</span>
-                    </span>
                     <div>
                       <p className="font-headline text-sm font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         {lang === "VN" ? "Chưa gán tàu" : "Not assigned yet"}
@@ -1195,11 +1150,9 @@ export function AdminBookingActionsTab({
   lang,
   phase,
   booking,
-  statusInfo,
   boats,
   occupiedBoatIds = [],
   quoteForm,
-  setQuoteForm,
   canManageQuote,
   hasBlockingPayment,
   isSubmitting,
@@ -1214,8 +1167,6 @@ export function AdminBookingActionsTab({
   quotePreviewError,
   quotePreview,
   currencyFormatter,
-  formatDate,
-  formatDuration,
   formatPassengerSummary,
   formatDeckCount,
   getBoatDeckCount,
@@ -1231,16 +1182,11 @@ export function AdminBookingActionsTab({
   formatCountdown,
   quoteTotal,
   bookingPaidAmount,
-  selectedBoats,
-  payments,
-  manualStatusOptions,
-  getStatusInfo,
   onSubmitQuote,
   onQuoteBoatChange,
   onRoutePlanChange,
   onLoadRouteCandidates,
   onPreviewQuote,
-  onQuoteRentalUnitChange,
   onStatusChange,
   onNavigateTab,
   onCreateTrip,
@@ -1284,13 +1230,6 @@ export function AdminBookingActionsTab({
   if (phase === "quote") {
     return (
       <section className="space-y-6">
-        <AdminCharterRouteInfoPanel
-          lang={lang}
-          booking={booking}
-          formatDate={formatDate}
-          draftRouteCandidateLegs={routeCandidatesLoaded ? routeCandidateLegs : null}
-          draftRoutePlanSelections={routePlanSelections}
-        />
         <AdminCharterRouteDrawPanel
           lang={lang}
           booking={booking}
@@ -1307,15 +1246,12 @@ export function AdminBookingActionsTab({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">
-                  {lang === "VN" ? "Gán tàu và chốt giá" : "Assign Boats & Quote"}
+                  {lang === "VN" ? "Gán tuyến và tàu" : "Assign route & boats"}
                 </h3>
               </div>
-              <span className={`w-max rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider ${statusInfo.classes}`}>
-                {statusInfo.label}
-              </span>
             </div>
 
-            <div className="mt-4">
+            {/* <div className="mt-4">
               <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
                 {lang === "VN" ? "Hình thức thuê (khách chọn)" : "Rental type (customer choice)"}
               </p>
@@ -1326,7 +1262,7 @@ export function AdminBookingActionsTab({
                     : (lang === "VN" ? "Theo ngày" : "Daily")}
                 </span>
               </div>
-            </div>
+            </div> */}
 
             {booking.specialRequests ? (
               <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
@@ -1427,7 +1363,7 @@ export function AdminBookingActionsTab({
 
               <p className="text-[11px] font-medium leading-relaxed text-slate-400">
                 {lang === "VN"
-                  ? `Báo giá ${quoteRentalUnit === "Hour" ? "theo giờ" : "theo ngày"}: chọn route + tàu, xem trước rồi chốt giá.`
+                  ? `Báo giá ${quoteRentalUnit === "Hour" ? "theo giờ" : "theo ngày"}: chọn tuyến & tàu, xem trước rồi chốt giá.`
                   : `Quoting ${quoteRentalUnit === "Hour" ? "hourly" : "daily"}: select routes and boats, preview, then submit.`}
               </p>
 
@@ -1461,8 +1397,6 @@ export function AdminBookingActionsTab({
             getBoatId={getBoatId}
             getBoatPrice={getBoatPrice}
             isQuoteBoatSelectionComplete={isQuoteBoatSelectionComplete}
-            onPreviewQuote={onPreviewQuote}
-            canPreviewQuote={canPreviewQuote}
           />
         </div>
 
@@ -1470,8 +1404,6 @@ export function AdminBookingActionsTab({
           <ManualStatusPanel
             lang={lang}
             isSubmitting={isSubmitting}
-            manualStatusOptions={manualStatusOptions}
-            getStatusInfo={getStatusInfo}
             onStatusChange={onStatusChange}
           />
         )}
@@ -1490,13 +1422,10 @@ export function AdminBookingActionsTab({
               </h3>
               <p className="mt-1 text-xs font-bold text-slate-400">
                 {lang === "VN"
-                  ? "Chi tiết giá/lộ trình xem ở Tổng quan. Theo dõi giao dịch ở tab Thanh toán."
-                  : "See price/route details on Overview. Track transactions on the Payments tab."}
+                  ? "Chi tiết giá/lộ trình xem ở Tổng quan. Theo dõi giao dịch ở Thanh toán."
+                  : "See price/route details on Overview. Track transactions on the Payments."}
               </p>
             </div>
-            <span className={`w-max rounded-xl border px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider ${statusInfo.classes}`}>
-              {statusInfo.label}
-            </span>
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -1536,22 +1465,20 @@ export function AdminBookingActionsTab({
               onClick={() => onNavigateTab("overview")}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
             >
-              <span className="material-symbols-outlined text-base">dashboard</span>
-              {lang === "VN" ? "Xem tổng quan / giá" : "Open overview / pricing"}
+              {lang === "VN" ? "Xem tổng quan" : "Open overview"}
             </button>
             <button
               type="button"
               onClick={() => onNavigateTab("payments")}
               className="inline-flex items-center gap-2 rounded-xl bg-[#124757] px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:bg-yellow-400 dark:text-slate-900"
             >
-              <span className="material-symbols-outlined text-base">payments</span>
-              {lang === "VN" ? "Mở tab thanh toán" : "Open payments tab"}
+              {lang === "VN" ? "Xem thanh toán" : "Open payments"}
             </button>
           </div>
         </div>
 
         {!hideManualStatusPanel && (
-          <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
+          <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} onStatusChange={onStatusChange} />
         )}
       </section>
     );
@@ -1562,38 +1489,27 @@ export function AdminBookingActionsTab({
     const showCreateTrip = Boolean(canManageTripCreate);
     return (
       <section className="space-y-6">
-        <div className={`rounded-4xl border p-6 ${
-          hasLinkedTrips
-            ? "border-sky-100 bg-sky-50 dark:border-sky-500/20 dark:bg-sky-500/10"
-            : "border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10"
-        }`}
+        <div className={`rounded-4xl border p-6 ${hasLinkedTrips
+          ? "border-sky-100 bg-sky-50 dark:border-sky-500/20 dark:bg-sky-500/10"
+          : "border-emerald-100 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10"
+          }`}
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <span className={`material-symbols-outlined text-3xl ${
-                hasLinkedTrips
-                  ? "text-sky-600 dark:text-sky-300"
-                  : "text-emerald-600 dark:text-emerald-300"
-              }`}
-              >
-                {hasLinkedTrips ? "check_circle" : "sailing"}
-              </span>
               <div>
-                <h3 className={`font-headline font-black uppercase tracking-wide ${
-                  hasLinkedTrips
-                    ? "text-sky-800 dark:text-sky-300"
-                    : "text-emerald-800 dark:text-emerald-300"
-                }`}
+                <h3 className={`font-headline font-black uppercase tracking-wide ${hasLinkedTrips
+                  ? "text-sky-800 dark:text-sky-300"
+                  : "text-emerald-800 dark:text-emerald-300"
+                  }`}
                 >
                   {hasLinkedTrips
-                    ? (lang === "VN" ? "Đã có trip" : "Trip created")
+                    ? (lang === "VN" ? "Đã có chuyến" : "Trip created")
                     : (lang === "VN" ? "Sẵn sàng vận hành" : "Ready for operation")}
                 </h3>
-                <p className={`mt-1 text-sm font-bold ${
-                  hasLinkedTrips
-                    ? "text-sky-700/80 dark:text-sky-200"
-                    : "text-emerald-700/80 dark:text-emerald-200"
-                }`}
+                <p className={`mt-1 text-sm font-bold ${hasLinkedTrips
+                  ? "text-sky-700/80 dark:text-sky-200"
+                  : "text-emerald-700/80 dark:text-emerald-200"
+                  }`}
                 >
                   {formatPassengerSummary(booking, lang)} · {booking.route}
                 </p>
@@ -1602,10 +1518,10 @@ export function AdminBookingActionsTab({
                     {lang === "VN"
                       ? (linkedTripIds.length > 1
                         ? `Đã gắn ${linkedTripIds.length} chuyến Charter.`
-                        : "Booking đã được gắn chuyến Charter.")
+                        : "Booking đã được gắn chuyến theo yêu cầu.")
                       : (linkedTripIds.length > 1
                         ? `${linkedTripIds.length} Charter trips linked.`
-                        : "Charter trip is linked to this booking.")}
+                        : "Request trip is linked to this booking.")}
                   </p>
                 )}
               </div>
@@ -1616,17 +1532,13 @@ export function AdminBookingActionsTab({
                   type="button"
                   disabled={!canCreateTrip || isSubmitting || hasLinkedTrips}
                   onClick={onCreateTrip}
-                  className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-70 ${
-                    hasLinkedTrips
-                      ? "border border-sky-200 bg-white text-sky-800 dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-200"
-                      : "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 disabled:opacity-50"
-                  }`}
+                  className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-70 ${hasLinkedTrips
+                    ? "border border-sky-200 bg-white text-sky-800 dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-200"
+                    : "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 disabled:opacity-50"
+                    }`}
                 >
-                  <span className="material-symbols-outlined text-base">
-                    {hasLinkedTrips ? "check_circle" : "directions_boat"}
-                  </span>
                   {hasLinkedTrips
-                    ? (lang === "VN" ? "Đã có trip" : "Trip exists")
+                    ? (lang === "VN" ? "Đã có chuyến" : "Trip exists")
                     : (lang === "VN" ? "Tạo chuyến" : "Create trip")}
                 </button>
               )}
@@ -1643,7 +1555,7 @@ export function AdminBookingActionsTab({
         </div>
 
         {!hideManualStatusPanel && (
-          <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
+          <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} onStatusChange={onStatusChange} />
         )}
       </section>
     );
@@ -1654,13 +1566,12 @@ export function AdminBookingActionsTab({
       <div className="rounded-4xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
-            <span className="material-symbols-outlined text-3xl text-slate-500">event_busy</span>
             <div>
               <h3 className="font-headline font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
                 {lang === "VN" ? "Booking đã đóng" : "Booking closed"}
               </h3>
               <p className="mt-1 text-sm font-bold text-slate-500 dark:text-slate-400">
-                {statusInfo.label} · {lang === "VN"
+                {lang === "VN"
                   ? "Chi tiết xem Tổng quan / Thanh toán / Vé."
                   : "See details on Overview / Payments / Tickets."}
               </p>
@@ -1683,7 +1594,7 @@ export function AdminBookingActionsTab({
       </div>
 
       {!hideManualStatusPanel && (
-        <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} manualStatusOptions={manualStatusOptions} getStatusInfo={getStatusInfo} onStatusChange={onStatusChange} />
+        <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} onStatusChange={onStatusChange} />
       )}
     </section>
   );
@@ -1764,13 +1675,13 @@ export function AdminBookingTicketsTab({
   tickets,
   formatDate,
   canReviewPassengerAdds = false,
-  useAssignedApi = false,
   onRefresh,
 }) {
   const [selectedTicketIds, setSelectedTicketIds] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reviewingBatchId, setReviewingBatchId] = useState("");
   const [qrImageUrl, setQrImageUrl] = useState("");
+  const [isQrEnlarged, setIsQrEnlarged] = useState(false);
 
   const ticketRows = tickets.map((ticket, index) => {
     const ticketId = getTicketId(ticket);
@@ -1815,8 +1726,8 @@ export function AdminBookingTicketsTab({
         tone: "amber",
         title: lang === "VN" ? "Chưa thanh toán đủ" : "Not fully paid",
         text: lang === "VN"
-          ? "Vé chỉ phát hành sau khi khách thanh toán đủ (paymentStatus = Paid)."
-          : "Tickets are issued only after the booking is fully paid (paymentStatus = Paid).",
+          ? "Vé chỉ phát hành sau khi khách thanh toán đủ"
+          : "Tickets are issued only after the booking is fully paid",
       };
     }
     if (!hasManifest) {
@@ -2051,16 +1962,49 @@ export function AdminBookingTicketsTab({
               </h2>
               <p className="mt-1 text-xs font-medium text-slate-400">
                 {lang === "VN"
-                  ? "Xem hoặc tải PDF vé — khách in từ file PDF nếu cần."
-                  : "View or download ticket PDFs — customers print from the PDF if needed."}
+                  ? "Xem hoặc tải PDF vé — khách in từ file PDF nếu cần"
+                  : "View or download ticket PDFs — customers print from the PDF if needed"}
               </p>
             </div>
             {qrImageUrl && (
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
+              <button
+                type="button"
+                onClick={() => setIsQrEnlarged(true)}
+                className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left dark:border-slate-700 dark:bg-slate-900"
+              >
                 <img src={qrImageUrl} alt={lang === "VN" ? "QR tổng booking" : "Booking group QR"} className="h-20 w-20 rounded-xl bg-white object-contain p-1" />
                 <div>
-                  <p className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "QR tổng" : "Group QR"}</p>
+                  <p className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "QR booking" : "Booking QR"}</p>
                   <p className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">{booking.bookingCode}</p>
+                </div>
+              </button>
+            )}
+
+            {isQrEnlarged && qrImageUrl && (
+              <div
+                className="fixed inset-0 z-120 flex items-center justify-center bg-black/50 p-4"
+                onClick={() => setIsQrEnlarged(false)}
+                onKeyDown={(e) => { if (e.key === "Escape") setIsQrEnlarged(false); }}
+                role="presentation"
+              >
+                <div
+                  className="w-full max-w-xs rounded-3xl bg-white p-6 shadow-xl dark:bg-slate-800"
+                  onClick={(event) => event.stopPropagation()}
+                  role="dialog"
+                  aria-label={lang === "VN" ? "QR booking" : "Booking QR"}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
+                      {lang === "VN" ? "QR booking" : "Booking QR"}
+                    </span>
+                    <button type="button" onClick={() => setIsQrEnlarged(false)} className="text-slate-400 hover:text-slate-600">
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </div>
+                  <div className="flex justify-center">
+                    <img src={qrImageUrl} alt={lang === "VN" ? "QR tổng booking" : "Booking group QR"} className="h-60 w-60 rounded-xl bg-white object-contain p-2" />
+                  </div>
+                  <p className="mt-4 break-all text-center font-mono text-[11px] text-slate-500">{booking.bookingCode}</p>
                 </div>
               </div>
             )}
@@ -2069,11 +2013,10 @@ export function AdminBookingTicketsTab({
 
         <div className="space-y-4 px-6 py-6 md:px-8">
           {ticketGateMessage && (
-            <div className={`rounded-2xl border px-4 py-4 ${
-              ticketGateMessage.tone === "sky"
-                ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200"
-                : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
-            }`}
+            <div className={`rounded-2xl border px-4 py-4 ${ticketGateMessage.tone === "sky"
+              ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200"
+              : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+              }`}
             >
               <p className="text-sm font-headline font-black">{ticketGateMessage.title}</p>
               <p className="mt-1 text-xs font-bold leading-5 opacity-90">{ticketGateMessage.text}</p>
@@ -2081,28 +2024,28 @@ export function AdminBookingTicketsTab({
           )}
 
           {canViewTickets && (
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <button
-              type="button"
-              onClick={() => handleTicketAction("view")}
-              disabled={isSubmitting || !canExportTickets}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
-            >
-              <span className="material-symbols-outlined text-base">visibility</span>
-              {selectedTicketIds.length > 0
-                ? (lang === "VN" ? `Xem ${selectedTicketIds.length} vé` : `View ${selectedTicketIds.length}`)
-                : (lang === "VN" ? "Xem tất cả vé" : "View all tickets")}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTicketAction("pdf")}
-              disabled={isSubmitting || !canExportTickets}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#124757] px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
-            >
-              <span className="material-symbols-outlined text-base">download</span>
-              {lang === "VN" ? "Tải PDF" : "Download PDF"}
-            </button>
-          </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleTicketAction("view")}
+                disabled={isSubmitting || !canExportTickets}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+              >
+                <span className="material-symbols-outlined text-base">visibility</span>
+                {selectedTicketIds.length > 0
+                  ? (lang === "VN" ? `Xem ${selectedTicketIds.length} vé` : `View ${selectedTicketIds.length}`)
+                  : (lang === "VN" ? "Xem tất cả vé" : "View all tickets")}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTicketAction("pdf")}
+                disabled={isSubmitting || !canExportTickets}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#124757] px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
+              >
+                <span className="material-symbols-outlined text-base">download</span>
+                {lang === "VN" ? "Tải PDF" : "Download PDF"}
+              </button>
+            </div>
           )}
 
           {canExportTickets && (
@@ -2124,89 +2067,23 @@ export function AdminBookingTicketsTab({
             </div>
           )}
         </div>
-      </section>
 
-      {canReviewPassengerAdds && addRequestBatches.length > 0 ? (
-        <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
-          <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
-            <h3 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
-              {lang === "VN" ? "Yêu cầu thêm hành khách" : "Passenger add requests"}
-            </h3>
-            <p className="mt-1 text-xs font-medium text-slate-400">
-              {lang === "VN"
-                ? "Duyệt hoặc từ chối (từ chối bắt buộc ghi chú)."
-                : "Approve or reject (rejection note is required)."}
-            </p>
-          </div>
-          <div className="space-y-4 px-6 py-6 md:px-8">
-            {addRequestBatches.map((batch) => {
-              const busy = reviewingBatchId === batch.requestBatchId;
-              return (
-                <div
-                  key={batch.requestBatchId}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-slate-800 dark:text-white">
-                        {lang === "VN" ? "Người gửi" : "Sender"}: {batch.senderName || booking.customerName || "—"}
-                      </p>
-                      <p className="mt-1 text-xs font-medium text-slate-400">
-                        {lang === "VN" ? "Thời gian gửi" : "Submitted"}: {batch.requestedAt ? formatDate(batch.requestedAt) : "—"}
-                        {" · "}
-                        {lang === "VN" ? "Số lượng" : "Qty"}: {batch.passengers.length}
-                      </p>
-                      <span className={`mt-2 inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(batch.status)}`}>
-                        {formatPassengerApprovalStatus(batch.status, lang, batch.reviewNote)}
-                      </span>
-                    </div>
-                    {batch.status === "Pending" ? (
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleApproveBatch(batch)}
-                          className="rounded-xl bg-emerald-600 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
-                        >
-                          {busy ? "…" : (lang === "VN" ? "Duyệt" : "Approve")}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleRejectBatch(batch)}
-                          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-                        >
-                          {lang === "VN" ? "Từ chối" : "Reject"}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                  <ul className="mt-3 space-y-1.5">
-                    {batch.passengers.map((passenger, index) => (
-                      <li key={`${batch.requestBatchId}-${index}`} className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                        {passenger.fullName || "—"}
-                        {passenger.birthYear ? ` · ${passenger.birthYear}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
+        <details className="group border-t border-slate-100 dark:border-slate-700/70">
+          <summary className="cursor-pointer list-none px-6 py-5 marker:content-none md:px-8">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
+                  {lang === "VN" ? "Danh sách vé" : "Ticket list"}
+                </h3>
+                <p className="mt-1 text-xs font-medium text-slate-400">
+                  {ticketRows.length} {lang === "VN" ? "vé" : "ticket(s)"}
+                </p>
+              </div>
+              <span className="material-symbols-outlined shrink-0 text-slate-400 transition group-open:rotate-180">expand_more</span>
+            </div>
+          </summary>
 
-      <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
-        <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
-          <h3 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
-            {lang === "VN" ? "Danh sách vé" : "Ticket list"}
-          </h3>
-          <p className="mt-1 text-xs font-medium text-slate-400">
-            {ticketRows.length} {lang === "VN" ? "vé" : "ticket(s)"} · {booking.route} · {formatDate(booking.departureDate)}
-          </p>
-        </div>
-
-        <div className="space-y-3 px-6 py-6 md:px-8">
+          <div className="space-y-3 px-6 pb-6 md:px-8">
           {ticketRows.length > 0 ? ticketRows.map((row) => {
             const statusMeta = getTicketStatusMeta(row.status, lang);
             const isSelected = row.ticketId && selectedTicketIds.includes(row.ticketId);
@@ -2285,7 +2162,6 @@ export function AdminBookingTicketsTab({
             );
           }) : (
             <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center dark:border-slate-700">
-              <span className="material-symbols-outlined text-4xl text-slate-300">confirmation_number</span>
               <p className="mt-3 text-sm font-bold text-slate-500 dark:text-slate-400">
                 {!canViewTickets
                   ? (lang === "VN" ? "Chưa có vé để hiển thị." : "No tickets to display yet.")
@@ -2293,13 +2169,84 @@ export function AdminBookingTicketsTab({
               </p>
               <p className="mt-1 text-xs font-medium text-slate-400">
                 {lang === "VN"
-                  ? "Cần: thanh toán đủ + khách đã lưu danh sách hành khách."
-                  : "Requires: full payment + saved passenger manifest."}
+                  ? "Cần thanh toán đủ & khách đã lưu danh sách hành khách."
+                  : "Requires full payment & saved passenger manifest."}
               </p>
             </div>
           )}
-        </div>
+          </div>
+        </details>
       </section>
+
+      {canReviewPassengerAdds && addRequestBatches.length > 0 ? (
+        <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700/70 dark:bg-slate-800">
+          <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
+            <h3 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
+              {lang === "VN" ? "Yêu cầu thêm hành khách" : "Passenger add requests"}
+            </h3>
+            <p className="mt-1 text-xs font-medium text-slate-400">
+              {lang === "VN"
+                ? "Duyệt hoặc từ chối (từ chối bắt buộc ghi chú)."
+                : "Approve or reject (rejection note is required)."}
+            </p>
+          </div>
+          <div className="space-y-4 px-6 py-6 md:px-8">
+            {addRequestBatches.map((batch) => {
+              const busy = reviewingBatchId === batch.requestBatchId;
+              return (
+                <div
+                  key={batch.requestBatchId}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">
+                        {lang === "VN" ? "Người gửi" : "Sender"}: {batch.senderName || booking.customerName || "—"}
+                      </p>
+                      <p className="mt-1 text-xs font-medium text-slate-400">
+                        {lang === "VN" ? "Thời gian gửi" : "Submitted"}: {batch.requestedAt ? formatDate(batch.requestedAt) : "—"}
+                        {" · "}
+                        {lang === "VN" ? "Số lượng" : "Qty"}: {batch.passengers.length}
+                      </p>
+                      <span className={`mt-2 inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(batch.status)}`}>
+                        {formatPassengerApprovalStatus(batch.status, lang, batch.reviewNote)}
+                      </span>
+                    </div>
+                    {batch.status === "Pending" ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleApproveBatch(batch)}
+                          className="rounded-xl bg-emerald-600 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
+                        >
+                          {busy ? "…" : (lang === "VN" ? "Duyệt" : "Approve")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleRejectBatch(batch)}
+                          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                        >
+                          {lang === "VN" ? "Từ chối" : "Reject"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <ul className="mt-3 space-y-1.5">
+                    {batch.passengers.map((passenger, index) => (
+                      <li key={`${batch.requestBatchId}-${index}`} className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                        {passenger.fullName || "—"}
+                        {passenger.birthYear ? ` · ${passenger.birthYear}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

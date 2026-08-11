@@ -68,10 +68,10 @@ function CharterStationSelect({
   }, [isOpen]);
 
   const triggerClass = `flex w-full items-center justify-between gap-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm font-bold outline-none transition-all dark:bg-slate-900 ${disabled
-      ? "cursor-not-allowed opacity-55"
-      : isOpen
-        ? "border-[#FFD100] ring-2 ring-[#FFD100] dark:border-yellow-400 dark:ring-yellow-400"
-        : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
+    ? "cursor-not-allowed opacity-55"
+    : isOpen
+      ? "border-[#FFD100] ring-2 ring-[#FFD100] dark:border-yellow-400 dark:ring-yellow-400"
+      : "border-slate-200 hover:border-slate-300 dark:border-slate-700"
     }`;
 
   return (
@@ -137,8 +137,8 @@ function CharterStationSelect({
                     closeDropdown();
                   }}
                   className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold transition-colors ${isSelected
-                      ? "bg-yellow-50 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
-                      : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    ? "bg-yellow-50 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-300"
+                    : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
                     }`}
                   role="option"
                   aria-selected={isSelected}
@@ -943,11 +943,10 @@ export function CharterRequestForm({
                       key={option.id}
                       type="button"
                       onClick={() => handleFieldChange("rentalUnit", option.id)}
-                      className={`rounded-xl px-3 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${
-                        active
-                          ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                          : "bg-transparent text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                      }`}
+                      className={`rounded-xl px-3 py-2.5 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${active
+                        ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
+                        : "bg-transparent text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
+                        }`}
                     >
                       {lang === "VN" ? option.labelVn : option.labelEn}
                     </button>
@@ -1095,7 +1094,6 @@ export function CharterRequestForm({
                     <span className="absolute inset-0 bg-linear-to-t from-slate-950/50 via-transparent to-transparent"></span>
                   </div>
                   <div className="flex items-center gap-2.5 p-3">
-                    <span className="material-symbols-outlined text-xl text-[#124757] dark:text-yellow-400">directions_boat</span>
                     <div>
                       <p className="text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">{lang === "VN" ? "1 tầng" : "1 deck"}</p>
                       <p className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "Sức chứa tối đa 65-75 khách." : "Max capacity of 65-75 guests."}</p>
@@ -1108,7 +1106,6 @@ export function CharterRequestForm({
                     <span className="absolute inset-0 bg-linear-to-t from-slate-950/50 via-transparent to-transparent"></span>
                   </div>
                   <div className="flex items-center gap-2.5 p-3">
-                    <span className="material-symbols-outlined text-xl text-[#124757] dark:text-yellow-400">directions_boat</span>
                     <div>
                       <p className="text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">{lang === "VN" ? "2 tầng" : "2 decks"}</p>
                       <p className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "Sức chứa tối đa 55-65 khách." : "Max capacity of 55-65 guests."}</p>
@@ -1121,9 +1118,6 @@ export function CharterRequestForm({
                 {formData.requestedBoats.map((boat, index) => (
                   <div key={`boat-${index}`} className="grid gap-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 md:grid-cols-[minmax(140px,1fr)_minmax(260px,360px)_44px] md:items-center">
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
-                        <span className="material-symbols-outlined text-lg">directions_boat</span>
-                      </span>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-headline font-black uppercase tracking-wider text-[#124757] dark:text-white">
                           {lang === "VN" ? `Tàu ${index + 1}` : `Boat ${index + 1}`}
@@ -1240,11 +1234,10 @@ export function CharterRequestForm({
               };
 
               return (
-                <div className={`rounded-2xl border overflow-hidden transition-colors ${
-                  wantsInsurance
-                    ? "bg-white dark:bg-slate-900 border-[#124757]/40 dark:border-yellow-400/40"
-                    : "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700"
-                }`}>
+                <div className={`rounded-2xl border overflow-hidden transition-colors ${wantsInsurance
+                  ? "bg-white dark:bg-slate-900 border-[#124757]/40 dark:border-yellow-400/40"
+                  : "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700"
+                  }`}>
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
                     <button
                       type="button"
@@ -1252,11 +1245,10 @@ export function CharterRequestForm({
                       className="flex min-w-0 flex-1 items-center gap-3 text-left"
                       aria-expanded={isInsuranceDetailsOpen}
                     >
-                      <span className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${
-                        providerLogoUrl
-                          ? "bg-white p-2 ring-1 ring-slate-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.08)] dark:ring-slate-200"
-                          : "bg-gradient-to-br from-[#124757] to-[#0d3541] text-white shadow-[0_4px_14px_rgba(18,71,87,0.28)] dark:from-yellow-400 dark:to-yellow-300 dark:text-slate-900"
-                      }`}>
+                      <span className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${providerLogoUrl
+                        ? "bg-white p-2 ring-1 ring-slate-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.08)] dark:ring-slate-200"
+                        : "bg-linear-to-br from-[#124757] to-[#0d3541] text-white shadow-[0_4px_14px_rgba(18,71,87,0.28)] dark:from-yellow-400 dark:to-yellow-300 dark:text-slate-900"
+                        }`}>
                         {providerLogoUrl ? (
                           <img
                             src={providerLogoUrl}
@@ -1304,13 +1296,11 @@ export function CharterRequestForm({
                       role="switch"
                       aria-checked={wantsInsurance}
                       onClick={() => handleInsuranceToggle(!wantsInsurance)}
-                      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-                        wantsInsurance ? "bg-[#124757] dark:bg-yellow-400" : "bg-slate-300 dark:bg-slate-600"
-                      }`}
+                      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${wantsInsurance ? "bg-[#124757] dark:bg-yellow-400" : "bg-slate-300 dark:bg-slate-600"
+                        }`}
                     >
-                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                        wantsInsurance ? "translate-x-5" : "translate-x-0"
-                      }`} />
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${wantsInsurance ? "translate-x-5" : "translate-x-0"
+                        }`} />
                     </button>
                   </div>
 
@@ -1328,26 +1318,23 @@ export function CharterRequestForm({
                                 key={packageId}
                                 type="button"
                                 onClick={() => handleSelectPackage(pkg)}
-                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                                  isSelected
-                                    ? "bg-[#124757]/5 dark:bg-yellow-400/5"
-                                    : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                                }`}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${isSelected
+                                  ? "bg-[#124757]/5 dark:bg-yellow-400/5"
+                                  : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                  }`}
                               >
-                                <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                  isSelected
-                                    ? "border-[#124757] dark:border-yellow-400"
-                                    : "border-slate-300 dark:border-slate-600"
-                                }`}>
+                                <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected
+                                  ? "border-[#124757] dark:border-yellow-400"
+                                  : "border-slate-300 dark:border-slate-600"
+                                  }`}>
                                   {isSelected && (
                                     <span className="w-2 h-2 rounded-full bg-[#124757] dark:bg-yellow-400" />
                                   )}
                                 </span>
-                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl ${
-                                  pkg.providerLogoUrl
-                                    ? "bg-white p-1 ring-1 ring-slate-200/80 shadow-[0_1px_6px_rgba(15,23,42,0.08)] dark:ring-slate-200"
-                                    : "bg-[#124757]/10 dark:bg-yellow-400/10"
-                                }`}>
+                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl ${pkg.providerLogoUrl
+                                  ? "bg-white p-1 ring-1 ring-slate-200/80 shadow-[0_1px_6px_rgba(15,23,42,0.08)] dark:ring-slate-200"
+                                  : "bg-[#124757]/10 dark:bg-yellow-400/10"
+                                  }`}>
                                   {pkg.providerLogoUrl ? (
                                     <img src={pkg.providerLogoUrl} alt="" className="h-full w-full object-contain" />
                                   ) : (
@@ -1360,9 +1347,8 @@ export function CharterRequestForm({
                                     <span className="block text-[10px] font-bold text-slate-400 truncate">{pkg.providerName}</span>
                                   ) : null}
                                 </span>
-                                <span className={`text-xs font-headline font-black whitespace-nowrap shrink-0 ${
-                                  isSelected ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"
-                                }`}>
+                                <span className={`text-xs font-headline font-black whitespace-nowrap shrink-0 ${isSelected ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"
+                                  }`}>
                                   {formatVnd(unitPremium)}/{unitPremiumLabel}
                                 </span>
                               </button>

@@ -182,8 +182,6 @@ export function CharterBookingManagement() {
       .reduce((sum, item) => sum + item.estimatedPrice, 0),
   };
 
-  const showManagerColumn = isAdminUser(user);
-
   const resolveBookingTab = (booking) => {
     const caps = getCharterCapabilities(user, booking);
     return getDefaultCharterTab(booking, caps);
@@ -194,7 +192,7 @@ export function CharterBookingManagement() {
   };
 
   const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
-  const tableColSpan = showManagerColumn ? 6 : 5;
+  const tableColSpan = 5;
 
   return (
     <div className="space-y-8 font-body pb-10">
@@ -294,7 +292,7 @@ export function CharterBookingManagement() {
                     }`}
                   >
                     <span className="flex items-center gap-2 min-w-0">
-                      <span className={`w-2 h-2 rounded-full ${status === "All" ? "bg-slate-400" : info.dot}`}></span>
+                      <span className={`w-2 h-2 rounded-full ${status === "All" ? "bg-slate-400" : info}`}></span>
                       <span className="truncate text-[11px] font-headline font-black uppercase tracking-wider">
                         {status === "All" ? (lang === "VN" ? "Tất cả" : "All") : info.label}
                       </span>
@@ -336,9 +334,6 @@ export function CharterBookingManagement() {
                   </button>
                 </th>
                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
-                {showManagerColumn ? (
-                  <th className="py-4 px-4">{lang === "VN" ? "Quản lý phụ trách" : "Manager"}</th>
-                ) : null}
                 <th className="py-4 px-6 text-right">
                   <button
                     type="button"
@@ -364,8 +359,7 @@ export function CharterBookingManagement() {
               ) : currentBookings.length === 0 ? (
                 <tr>
                   <td colSpan={tableColSpan} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
-                    <span className="material-symbols-outlined text-4xl block mb-2">event_busy</span>
-                    {lang === "VN" ? "Không có yêu cầu thuê tàu phù hợp." : "No booking requests match your filters."}
+                    {lang === "VN" ? "Không có yêu cầu thuê tàu nào." : "No booking requests match your filters."}
                   </td>
                 </tr>
               ) : (
@@ -397,25 +391,13 @@ export function CharterBookingManagement() {
                         <p className="text-[10px] text-slate-400 mt-1">{String(booking.startTime).slice(0, 5)}</p>
                       </td>
                       <td className="py-4 px-4 text-center">
-                        <span className={`inline-flex items-center justify-center gap-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${statusInfo.text || "text-slate-600"}`}>
-                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusInfo.dot}`} />
+                        <span className={`inline-flex items-center justify-center text-[10px] font-headline font-black uppercase tracking-wide ${statusInfo.text || "text-slate-600"}`}>
                           {statusInfo.label}
                         </span>
-                        <p className="mt-1 text-[9px] text-slate-400">
+                        <p className="mt-1 text-[10px] text-slate-400">
                           {statusInfo.subLabel || getPaymentStatusInfo(booking.paymentStatus, lang).label}
                         </p>
                       </td>
-                      {showManagerColumn ? (
-                        <td className="py-4 px-4">
-                          {booking.assignedManagerName ? (
-                            <p className="font-bold text-slate-800 dark:text-white">{booking.assignedManagerName}</p>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                              {lang === "VN" ? "Chưa gán" : "Unassigned"}
-                            </span>
-                          )}
-                      </td>
-                      ) : null}
                       <td className="py-4 px-6 text-right">
                         <p className="font-bold text-slate-800 dark:text-white">{formatDate(booking.createdAt)}</p>
                         <p className="text-[10px] text-slate-400 mt-1">{booking.createdAt ? new Date(booking.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "--"}</p>

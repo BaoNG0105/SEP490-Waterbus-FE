@@ -16,7 +16,7 @@ export const matchesCharterStatusFilter = (bookingStatus, statusFilter) => {
   return status === statusFilter;
 };
 export const rentalUnits = ["Day", "Hour"];
-export const itemsPerPage = 8;
+export const itemsPerPage = 6;
 const ADMIN_CHARTER_TAB_BADGES_KEY = "adminCharterAcknowledgedTabBadges";
 
 export const readAcknowledgedTabBadges = (bookingId) => {

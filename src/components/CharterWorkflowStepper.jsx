@@ -7,7 +7,6 @@ export function CharterWorkflowStepper({ status, lang = "VN", compact = false })
   if (terminal) {
     return (
       <div className={`flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-900/60 ${compact ? "py-2" : "py-3"}`}>
-        <span className="material-symbols-outlined text-base text-slate-400">block</span>
         <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
           {lang === "VN" ? "Yêu cầu đã đóng" : "Request closed"}
         </span>
@@ -20,9 +19,9 @@ export function CharterWorkflowStepper({ status, lang = "VN", compact = false })
 
   return (
     <div className={`relative ${compact ? "" : "px-1"}`}>
-      <div className="pointer-events-none absolute left-[10%] right-[10%] top-[14px] z-0 h-0.5 -translate-y-1/2 bg-slate-200 dark:bg-slate-700" />
+      <div className="pointer-events-none absolute left-[10%] right-[10%] top-3.5 z-0 h-0.5 -translate-y-1/2 bg-slate-200 dark:bg-slate-700" />
       <div
-        className="pointer-events-none absolute left-[10%] top-[14px] z-0 h-0.5 -translate-y-1/2 bg-[#FFD100] transition-all duration-300"
+        className="pointer-events-none absolute left-[10%] top-3.5 z-0 h-0.5 -translate-y-1/2 bg-[#FFD100] transition-all duration-300"
         style={{ width: `calc(80% * ${progressRatio})` }}
       />
 
@@ -36,13 +35,12 @@ export function CharterWorkflowStepper({ status, lang = "VN", compact = false })
             <div key={step.id} className="min-w-0 text-center">
               <div className="flex items-center justify-center">
                 <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all ${
-                    active
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all ${active
                       ? "border-[#124757] bg-[#124757] text-white shadow-md shadow-[#124757]/20 dark:border-yellow-400 dark:bg-yellow-400 dark:text-slate-900"
                       : done
                         ? "border-[#FFD100] bg-[#FFD100] text-[#124757]"
                         : "border-slate-200 bg-white text-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-[14px]">
                     {done ? "check" : step.icon}
@@ -51,13 +49,12 @@ export function CharterWorkflowStepper({ status, lang = "VN", compact = false })
               </div>
               {!compact && (
                 <p
-                  className={`mt-1.5 truncate text-[9px] font-headline font-black uppercase tracking-wide ${
-                    active
+                  className={`mt-1.5 truncate text-[9px] font-headline font-black uppercase tracking-wide ${active
                       ? "text-[#124757] dark:text-yellow-400"
                       : upcoming
                         ? "text-slate-300 dark:text-slate-600"
                         : "text-slate-400"
-                  }`}
+                    }`}
                 >
                   {lang === "VN" ? step.labelVn : step.labelEn}
                 </p>

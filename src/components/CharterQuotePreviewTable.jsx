@@ -159,10 +159,7 @@ export function CharterQuotePreviewPanel({
   boatsCatalog = [],
   getBoatId,
   getBoatPrice,
-  isQuoteBoatSelectionComplete,
   compact = false,
-  onPreviewQuote,
-  canPreviewQuote = false,
 }) {
   const wrapperClass = compact
     ? "rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50"
@@ -198,20 +195,13 @@ export function CharterQuotePreviewPanel({
         <div className="mt-4 space-y-3">
           <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-xs font-bold text-slate-400 dark:border-slate-700">
             {lang === "VN"
-              ? "Chưa có preview — chọn đủ route + tàu rồi nhấn xem trước (không tự gọi)."
-              : "No preview yet — select routes and boats, then click preview (not auto-fetched)."}
+              ? "Hãy chọn đủ tuyến & tàu rồi nhấn xem trước giá"
+              : "Please select route & boats, then click preview quote"}
           </p>
-          {onPreviewQuote ? (
-            <button
-              type="button"
-              onClick={() => onPreviewQuote()}
-              disabled={!canPreviewQuote || isPreviewLoading}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
-            >
-              {isPreviewLoading
-                ? (lang === "VN" ? "Đang tính..." : "Calculating...")
-                : (lang === "VN" ? "Xem trước giá" : "Preview quote")}
-            </button>
+          {isPreviewLoading ? (
+            <p className="text-center text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+              {lang === "VN" ? "Đang tính..." : "Calculating..."}
+            </p>
           ) : null}
         </div>
       )}

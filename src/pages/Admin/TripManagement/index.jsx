@@ -51,18 +51,6 @@ const tripStatusBadgeClass = (status) => {
     }
 };
 
-const tripStatusDotClass = (status) => {
-    switch (normalizeTripStatusKey(status)) {
-        case "Scheduled": return "bg-blue-500";
-        case "Boarding": return "bg-amber-500";
-        case "InProgress": return "bg-teal-500";
-        case "Delayed": return "bg-orange-500";
-        case "Completed": return "bg-slate-400";
-        case "Cancelled": return "bg-rose-500";
-        default: return "bg-slate-400";
-    }
-};
-
 const formatTime = (iso) => {
     if (!iso) return "—";
     const time = new Date(iso);
@@ -246,7 +234,7 @@ export function TripManagement() {
     const [serviceKindFilter, setServiceKindFilter] = useState("All");
 
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 10;
+    const ITEMS_PER_PAGE = 6;
 
     useEffect(() => {
         const next = pickDateFromSearch(searchParams);
@@ -729,9 +717,8 @@ export function TripManagement() {
                                                 <div className="flex flex-col items-start gap-1">
                                                     <span
                                                         title={trip.statusNote || ""}
-                                                        className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${tripStatusBadgeClass(trip.tripStatus)}`}
+                                                        className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${tripStatusBadgeClass(trip.tripStatus)}`}
                                                     >
-                                                        <span className={`h-1.5 w-1.5 rounded-full ${tripStatusDotClass(trip.tripStatus)}`} />
                                                         {getTripStatusLabel(trip.tripStatus, lang)}
                                                     </span>
                                                     {isDelayActive(trip) ? (
