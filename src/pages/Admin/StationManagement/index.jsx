@@ -1,17 +1,21 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllStations } from "../../../services/stationService";
+import { fetchAllStations, fetchStationDetail, modifyStation } from "../../../services/stationService";
+import { notify } from "../../../utils/swalToast";
+import { NullImageIcon } from "../../../components/NullImageIcon";
+import { FormSelect } from "../../../components/FormSelect";
 
 export function StationManagement() {
     const { lang } = useApp();
     const navigate = useNavigate();
 
-    const DEFAULT_STATION_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776077167/vbxeolfuttvnbyql60ct.jpg";
-
     const [stations, setStations] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
+
+    // Danh sách ID nhà ga có ảnh lỗi (load thất bại) -> hiển thị NullImageIcon thay thế
+    const [brokenImageIds, setBrokenImageIds] = useState(new Set());
 
     // State quản lý 3 bộ lọc
     const [searchTerm, setSearchTerm] = useState("");
@@ -20,6 +24,8 @@ export function StationManagement() {
 
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 6;
+
+    const [togglingId, setTogglingId] = useState(null);
 
     useEffect(() => {
         const getStationsData = async () => {
@@ -96,6 +102,78 @@ export function StationManagement() {
         return pages;
     };
 
+    // Đánh dấu ảnh của một nhà ga bị lỗi (load thất bại) để chuyển sang hiển thị NullImageIcon
+    const markImageBroken = (stationId) => {
+        setBrokenImageIds((prev) => {
+            if (prev.has(stationId)) return prev;
+            const next = new Set(prev);
+            next.add(stationId);
+            return next;
+        });
+    };
+
+    // Nhãn trạng thái theo ngôn ngữ hiện tại
+    const getStatusLabel = (status) => {
+        const isActive = status === "Active";
+        if (lang === "VN") return isActive ? "Hoạt động" : "Ngưng hoạt động";
+        return isActive ? "Active" : "Inactive";
+    };
+
+    // Bật/tắt trạng thái hoạt động của nhà ga (giữ nguyên các trường khác)
+    const handleToggleStatus = async (station) => {
+        const previousStatus = station.status || "Inactive";
+        const nextStatus = previousStatus === "Active" ? "Inactive" : "Active";
+
+        setTogglingId(station.stationId);
+        setStations((prev) =>
+            prev.map((s) => (s.stationId === station.stationId ? { ...s, status: nextStatus } : s))
+        );
+
+        try {
+            const detail = await fetchStationDetail(station.stationId);
+            const payload = {
+                stationName: detail.stationName,
+                address: detail.address || null,
+                description: detail.description || null,
+                latitude: Number(detail.latitude),
+                longitude: Number(detail.longitude),
+                status: nextStatus,
+                hasWaitingArea: !!detail.hasWaitingArea,
+                hasParking: !!detail.hasParking,
+                hasTicketCounter: !!detail.hasTicketCounter,
+                openingTime: detail.openingTime || null,
+                closingTime: detail.closingTime || null,
+                isWaterbusStation: detail.isWaterbusStation !== false,
+                imageUrls: detail.imageUrls?.length ? detail.imageUrls : (detail.imageUrl ? [detail.imageUrl] : []),
+            };
+
+            await modifyStation(station.stationId, payload);
+
+            notify({
+                toast: true,
+                icon: "success",
+                title: nextStatus === "Active"
+                    ? (lang === "VN" ? "Đã bật nhà ga" : "Station activated")
+                    : (lang === "VN" ? "Đã tắt nhà ga" : "Station deactivated"),
+                showConfirmButton: false,
+                timer: 1500,
+            });
+        } catch (error) {
+            console.error(`Lỗi khi đổi trạng thái nhà ga ${station.stationId}:`, error);
+            setStations((prev) =>
+                prev.map((s) => (s.stationId === station.stationId ? { ...s, status: previousStatus } : s))
+            );
+            notify({
+                icon: "error",
+                title: lang === "VN" ? "Cập nhật thất bại" : "Update failed",
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể đổi trạng thái nhà ga." : "Could not update station status."),
+                confirmButtonColor: "#124757",
+            });
+        } finally {
+            setTogglingId(null);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex justify-center items-center h-64 w-full">
@@ -157,10 +235,10 @@ export function StationManagement() {
             </div>
 
             {/* THANH TÌM KIẾM VÀ CÁC BỘ LỌC FILTER */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-center">
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-stretch xl:items-center overflow-visible relative z-20">
 
                 {/* Khối Tìm kiếm Text */}
-                <div className="w-full xl:flex-1 relative flex items-center">
+                <div className="w-full relative flex items-center flex-1">
                     <span className="material-symbols-outlined absolute left-4 text-slate-400 text-lg pointer-events-none">search</span>
                     <input
                         type="text"
@@ -171,37 +249,39 @@ export function StationManagement() {
                     />
                 </div>
 
-                {/* Khối Nút Lọc (Dropdown & Buttons) */}
-                <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto overflow-x-auto shrink-0">
+                {/* Khối Nút Lọc (Dropdown) */}
+                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 w-full xl:w-auto justify-end overflow-visible">
+                    <div className="relative z-30 flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap hidden sm:inline">
+                            {lang === "VN" ? "Loại" : "Type"}
+                        </span>
+                        <FormSelect
+                            value={typeFilter}
+                            onChange={setTypeFilter}
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả loại trạm" : "All Pier Types" },
+                                { value: "Waterbus", label: lang === "VN" ? "Trạm Waterbus" : "Waterbus Pier" },
+                                { value: "Other", label: lang === "VN" ? "Trạm liên kết" : "Partner Pier" },
+                            ]}
+                            className="min-w-45 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
+                    </div>
 
-                    {/* BỘ LỌC */}
-                    <select
-                        value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 outline-none cursor-pointer shadow-inner shrink-0"
-                    >
-                        <option value="All">{lang === "VN" ? "Tất cả loại trạm" : "All Pier Types"}</option>
-                        <option value="Waterbus">{lang === "VN" ? "Trạm Waterbus" : "Waterbus Pier"}</option>
-                        <option value="Other">{lang === "VN" ? "Trạm liên kết" : "Partner Pier"}</option>
-                    </select>
-
-                    <div className="flex gap-2">
-                        {[
-                            { key: "All", vn: "Tất cả trạng thái", en: "All Status" },
-                            { key: "Active", vn: "Active", en: "Active" },
-                            { key: "Inactive", vn: "Inactive", en: "Inactive" }
-                        ].map((btn) => (
-                            <button
-                                key={btn.key} type="button"
-                                onClick={() => setStatusFilter(btn.key)}
-                                className={`px-5 py-3.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wider border transition-all shrink-0 ${statusFilter === btn.key
-                                        ? " border-transparent bg-yellow-400 text-slate-900 shadow-md"
-                                        : "bg-white text-slate-500 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50"
-                                    }`}
-                            >
-                                {lang === "VN" ? btn.vn : btn.en}
-                            </button>
-                        ))}
+                    <div className="relative z-20 flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap hidden sm:inline">
+                            {lang === "VN" ? "Trạng thái" : "Status"}
+                        </span>
+                        <FormSelect
+                            value={statusFilter}
+                            onChange={setStatusFilter}
+                            menuAlign="right"
+                            options={[
+                                { value: "All", label: lang === "VN" ? "Tất cả trạng thái" : "All status" },
+                                { value: "Active", label: lang === "VN" ? "Hoạt động" : "Active" },
+                                { value: "Inactive", label: lang === "VN" ? "Ngưng hoạt động" : "Inactive" },
+                            ]}
+                            className="min-w-37.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                        />
                     </div>
                 </div>
             </div>
@@ -213,6 +293,7 @@ export function StationManagement() {
                         <thead>
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
                                 <th className="py-4 px-6">{lang === "VN" ? "Thông tin nhà ga" : "Pier Information"}</th>
+                                <th className="py-4 px-4 text-center">{lang === "VN" ? "Phân loại" : "Type"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Mã nhà ga" : "Station Code"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
@@ -221,7 +302,7 @@ export function StationManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {currentStations.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={5} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         <span className="material-symbols-outlined text-4xl block mb-2">wrong_location</span>
                                         {lang === "VN" ? "Không có dữ liệu nhà ga nào phù hợp bộ lọc." : "No records found matching filters."}
                                     </td>
@@ -233,26 +314,26 @@ export function StationManagement() {
                                         {/* Cột 1: Thông tin Trạm bến */}
                                         <td className="py-4 px-6">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-14 h-10 rounded-xl overflow-hidden border bg-slate-100 dark:bg-slate-700 shadow-sm shrink-0">
-                                                    <img
-                                                        src={station.imageUrl || (station.imageUrls && station.imageUrls[0]) || DEFAULT_STATION_IMAGE}
-                                                        alt="Station"
-                                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                                        onError={(e) => { e.target.src = DEFAULT_STATION_IMAGE; }}
-                                                    />
+                                                <div className="w-14 h-10 rounded-xl overflow-hidden border bg-slate-100 dark:bg-slate-700 shadow-sm shrink-0 flex items-center justify-center">
+                                                    {(() => {
+                                                        const imgSrc = station.imageUrl || (station.imageUrls && station.imageUrls[0]);
+                                                        const showImage = imgSrc && !brokenImageIds.has(station.stationId);
+                                                        return showImage ? (
+                                                            <img
+                                                                src={imgSrc}
+                                                                alt="Station"
+                                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                                onError={() => markImageBroken(station.stationId)}
+                                                            />
+                                                        ) : (
+                                                            <NullImageIcon className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+                                                        );
+                                                    })()}
                                                 </div>
                                                 <div className="space-y-1">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">
-                                                            {station.stationName}
-                                                        </h4>
-                                                        {/* Badge mini phân loại trạm */}
-                                                        {station.isWaterbusStation !== false ? (
-                                                            <span className="bg-[#124757] text-yellow-400 text-[8px] px-1.5 py-0.5 rounded uppercase font-black tracking-widest shrink-0" title={lang === "VN" ? "Trạm Waterbus Chính Thức" : "Official Waterbus Pier"}>SWB</span>
-                                                        ) : (
-                                                            <span className="bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300 text-[8px] px-1.5 py-0.5 rounded uppercase font-black tracking-widest shrink-0" title={lang === "VN" ? "Trạm Liên Kết Ngoại" : "Partner Pier"}>EXT</span>
-                                                        )}
-                                                    </div>
+                                                    <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">
+                                                        {station.stationName}
+                                                    </h4>
                                                     <span className="text-[10px] text-slate-400 dark:text-slate-500 block max-w-sm truncate">
                                                         {station.address || (lang === "VN" ? "Chưa thiết lập địa chỉ" : "Address unassigned")}
                                                     </span>
@@ -260,25 +341,38 @@ export function StationManagement() {
                                             </div>
                                         </td>
 
-                                        {/* Cột 2: Mã nhà ga */}
+                                        {/* Cột 2: Phân loại trạm */}
+                                        <td className="py-4 px-4 text-center">
+                                            {station.isWaterbusStation !== false ? (
+                                                <span className="text-[#124757] dark:text-yellow-400 text-[10px] uppercase font-black tracking-widest" title={lang === "VN" ? "Trạm Waterbus Chính Thức" : "Official Waterbus Pier"}>
+                                                    {lang === "VN" ? "Trạm Waterbus" : "Waterbus Pier"}
+                                                </span>
+                                            ) : (
+                                                <span className="text-amber-600 dark:text-amber-400 text-[10px] uppercase font-black tracking-widest" title={lang === "VN" ? "Trạm Liên Kết Ngoại" : "Partner Pier"}>
+                                                    {lang === "VN" ? "Trạm liên kết" : "Partner Pier"}
+                                                </span>
+                                            )}
+                                        </td>
+
+                                        {/* Cột 3: Mã nhà ga */}
                                         <td className="py-4 px-4">
-                                            <span className="font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg border">
+                                            <span className="font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200">
                                                 {station.stationCode}
                                             </span>
                                         </td>
 
-                                        {/* Cột 3: Trạng thái */}
+                                        {/* Cột 4: Trạng thái */}
                                         <td className="py-4 px-4 text-center">
-                                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${station.status === "Active"
-                                                    ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400"
-                                                    : "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400"
+                                            <span className={`inline-flex items-center gap-1.5 text-[10px] font-headline font-black uppercase tracking-wide ${station.status === "Active"
+                                                    ? "text-emerald-600 dark:text-emerald-400"
+                                                    : "text-rose-500 dark:text-rose-400"
                                                 }`}>
                                                 <span className={`w-1.5 h-1.5 rounded-full ${station.status === "Active" ? "bg-emerald-500" : "bg-rose-500"}`}></span>
-                                                {station.status || "Inactive"}
+                                                {getStatusLabel(station.status)}
                                             </span>
                                         </td>
 
-                                        {/* Cột 4: Nút Hành động */}
+                                        {/* Cột 5: Nút Hành động */}
                                         <td className="py-4 px-6 text-center">
                                             <div className="flex items-center justify-center gap-2">
                                                 <button
@@ -287,6 +381,25 @@ export function StationManagement() {
                                                     title={lang === "VN" ? "Chỉnh sửa nhà ga" : "Modify Station"}
                                                 >
                                                     <span className="material-symbols-outlined text-[18px]">edit</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleToggleStatus(station)}
+                                                    disabled={togglingId === station.stationId}
+                                                    className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed ${station.status === "Active"
+                                                            ? "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 hover:border-rose-200 dark:hover:border-rose-500/30"
+                                                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/20 hover:border-emerald-200 dark:hover:border-emerald-500/30"
+                                                        }`}
+                                                    title={station.status === "Active"
+                                                        ? (lang === "VN" ? "Tắt nhà ga" : "Deactivate Station")
+                                                        : (lang === "VN" ? "Bật nhà ga" : "Activate Station")}
+                                                >
+                                                    {togglingId === station.stationId ? (
+                                                        <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <span className="material-symbols-outlined text-[18px]">
+                                                            {station.status === "Active" ? "toggle_on" : "toggle_off"}
+                                                        </span>
+                                                    )}
                                                 </button>
                                             </div>
                                         </td>

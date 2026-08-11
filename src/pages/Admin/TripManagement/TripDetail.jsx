@@ -31,6 +31,7 @@ import {
   getSeverityLabel,
 } from "../../../services/incidentService";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../../../utils/charterBookingAdmin";
+import { NullImageIcon } from "../../../components/NullImageIcon";
 import { formatCustomerRouteTitle, resolveTripKindKey } from "../../../utils/routeTypes";
 import { isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
 import {
@@ -719,6 +720,7 @@ export function TripDetail() {
   const [isChangingBoat, setIsChangingBoat] = useState(false);
   const [isCancelNoShowBusy, setIsCancelNoShowBusy] = useState(false);
   const [isItineraryOpen, setIsItineraryOpen] = useState(false);
+  const [boatImageError, setBoatImageError] = useState(false);
 
   const refreshTracking = async (tripId, _boatCode, { silent = false } = {}) => {
     if (!tripId) return;
@@ -945,6 +947,9 @@ export function TripDetail() {
 
   const stops = useMemo(() => sortStops(trip?.stops), [trip]);
   const boat = useMemo(() => resolveBoat(trip, boatCatalog), [trip, boatCatalog]);
+  useEffect(() => {
+    setBoatImageError(false);
+  }, [boat.imageUrl]);
   const statusKey = normalizeTripStatusKey(trip?.tripStatus || trip?.status);
   const showChangeBoat = canChangeBoat
     && Boolean(trip)
@@ -1911,12 +1916,18 @@ export function TripDetail() {
           <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <div className="grid grid-cols-1 md:grid-cols-5">
               <div className="relative md:col-span-2 aspect-16/10 md:aspect-auto md:min-h-55 bg-slate-100 dark:bg-slate-900">
-                <img
-                  src={boat.imageUrl || DEFAULT_BOAT_IMAGE}
-                  alt={boat.code || trip.tripCode}
-                  className="h-full w-full object-cover"
-                  onError={(e) => { e.currentTarget.src = DEFAULT_BOAT_IMAGE; }}
-                />
+                {boat.imageUrl && !boatImageError ? (
+                  <img
+                    src={boat.imageUrl}
+                    alt={boat.code || trip.tripCode}
+                    className="h-full w-full object-cover"
+                    onError={() => setBoatImageError(true)}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-slate-300 dark:text-slate-600">
+                    <NullImageIcon className="h-12 w-12" />
+                  </div>
+                )}
                 <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/55 to-transparent p-4">
                   <p className="font-headline text-sm font-black text-white">
                     {[boat.code, boat.name].filter(Boolean).join(" · ") || (lang === "VN" ? "Chưa gán tàu" : "No boat")}

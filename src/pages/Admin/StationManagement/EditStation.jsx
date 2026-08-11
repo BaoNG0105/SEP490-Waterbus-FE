@@ -182,7 +182,7 @@ export function EditStation() {
             notify({
                 icon: "success",
                 title: lang === "VN" ? "Cập nhật thành công!" : "Successfully Saved!",
-                text: lang === "VN" ? "Hồ sơ hạ tầng nhà ga đã được lưu trữ an toàn." : "Infrastructure details updated successfully.",
+                text: lang === "VN" ? "Hồ sơ hạ tầng nhà ga đã được lưu trữ." : "Infrastructure details updated successfully.",
                 confirmButtonColor: "#124757"
             }).then(() => navigate("/admin/stations-management"));
 
@@ -223,7 +223,7 @@ export function EditStation() {
                 </button>
                 <div>
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-                        {lang === "VN" ? `Cấu hình nhà ga: ${formData.stationCode}` : `Configure Pier: ${formData.stationCode}`}
+                        {lang === "VN" ? `Cấu hình nhà ga: ${formData.stationName}` : `Configure Pier: ${formData.stationCode}`}
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
                         {lang === "VN"
@@ -265,6 +265,17 @@ export function EditStation() {
                                 }`} />
                             </button>
                         </div>
+                    </div>
+
+                    <div>
+                        <label className={labelStyle}>{lang === "VN" ? "Mã nhà ga" : "Station Code"}</label>
+                        <input
+                            type="text"
+                            value={formData.stationCode}
+                            readOnly
+                            disabled
+                            className={`${inputStyle} cursor-not-allowed opacity-70 bg-slate-100 dark:bg-slate-800`}
+                        />
                     </div>
 
                     <div>
