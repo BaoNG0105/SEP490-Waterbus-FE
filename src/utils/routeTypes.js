@@ -98,6 +98,23 @@ export const getRouteShortLabel = (routeOrTypeOrLabel, lang = "VN") => {
   return getRouteKindLabel(routeOrTypeOrLabel, lang);
 };
 
+/** Màu chữ theo loại tuyến — dùng ở nơi chỉ cần chữ màu, không có khung/nền badge. */
+export const getRouteKindTextColorClass = (routeOrTypeOrLabel) => {
+  const key = resolveRouteLabelKey(routeOrTypeOrLabel);
+  switch (key) {
+    case "GPS":
+      return "text-amber-700 dark:text-amber-300";
+    case "Charter":
+      return "text-[#124757] dark:text-yellow-400";
+    case "Sightseeing":
+      return "text-violet-700 dark:text-violet-300";
+    case "Bus":
+      return "text-teal-700 dark:text-teal-300";
+    default:
+      return "text-slate-500 dark:text-slate-400";
+  }
+};
+
 export const isCharterSourceRoute = (route) => {
   const key = resolveRouteLabelKey(route);
   if (key === "GPS") return true;

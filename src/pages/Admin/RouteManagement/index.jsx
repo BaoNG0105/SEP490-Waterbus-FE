@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, removeRoute } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
-import { getRouteKindLabel, resolveRouteLabelKey } from "../../../utils/routeTypes";
+import { getRouteKindLabel, getRouteKindTextColorClass, resolveRouteLabelKey } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
 
 const getRouteTime = (route) => {
@@ -345,7 +345,7 @@ export function RouteManagement() {
 
                                         {/* Cột 3: Loại tuyến */}
                                         <td className="py-4 px-4 text-center">
-                                            <span className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300">
+                                            <span className={`text-[10px] font-bold uppercase ${getRouteKindTextColorClass(route)}`}>
                                                 {getRouteKindLabel(route, lang)}
                                             </span>
                                         </td>

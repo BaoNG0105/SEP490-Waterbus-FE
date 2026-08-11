@@ -313,7 +313,7 @@ const ScheduleCompare = ({
   const gpsDepart = isLast ? null : actualDep;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
+    <div className="overflow-hidden rounded-2xl">
       <div className={`${gridClass} bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400 dark:bg-slate-900/70`}>
         <span />
         <span className="text-center">{lang === "VN" ? "Đến" : "Arrive"}</span>
@@ -322,7 +322,7 @@ const ScheduleCompare = ({
 
       <div className={`${gridClass} border-t border-slate-100 px-3 py-2.5 dark:border-slate-700/60`}>
         <span className="pt-0.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
-          {lang === "VN" ? "Kế hoạch" : "Planned"}
+          {lang === "VN" ? "Dự kiến" : "Estimated"}
         </span>
         <span className="text-center text-sm font-bold tabular-nums text-slate-700 dark:text-slate-200">
           {timeText(plannedArrive)}
@@ -348,7 +348,7 @@ const ScheduleCompare = ({
 
       <div className={`${gridClass} border-t border-slate-100 px-3 py-2.5 dark:border-slate-700/60`}>
         <span className="pt-0.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
-          {lang === "VN" ? "Thực tế GPS" : "Actual GPS"}
+          {lang === "VN" ? "Thực tế" : "Actually"}
         </span>
         <span className="text-center text-sm font-black tabular-nums text-slate-800 dark:text-slate-100">
           {timeText(gpsArrive)}
@@ -653,7 +653,7 @@ const TripRealRouteMap = ({
 
   if (pathPoints.length < 2 && !boatLatLng) {
     return (
-      <div className="flex h-[300px] items-center justify-center bg-slate-100 dark:bg-slate-900/40">
+      <div className="flex h-75 items-center justify-center bg-slate-100 dark:bg-slate-900/40">
         <div className="text-center">
           <span className="material-symbols-outlined text-3xl text-slate-300">map</span>
           <p className="mt-2 text-xs font-bold text-slate-500">
@@ -665,7 +665,7 @@ const TripRealRouteMap = ({
   }
 
   return (
-    <div className="relative h-[320px] overflow-hidden bg-slate-200 sm:h-[380px]">
+    <div className="relative h-95 overflow-hidden bg-slate-200 sm:h-95">
       <WaterwayMap
         coordinates={pathPoints}
         highlightCoordinates={traveledPoints}
@@ -718,6 +718,7 @@ export function TripDetail() {
   const [selectedBoatId, setSelectedBoatId] = useState("");
   const [isChangingBoat, setIsChangingBoat] = useState(false);
   const [isCancelNoShowBusy, setIsCancelNoShowBusy] = useState(false);
+  const [isItineraryOpen, setIsItineraryOpen] = useState(false);
 
   const refreshTracking = async (tripId, _boatCode, { silent = false } = {}) => {
     if (!tripId) return;
@@ -1546,7 +1547,7 @@ export function TripDetail() {
               {trip?.tripCode || id}
             </h2>
             {trip ? (
-              <span className={`inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${statusBadgeClass(trip.tripStatus)}`}>
+              <span className={`inline-flex rounded-lg px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${statusBadgeClass(trip.tripStatus)}`}>
                 {getTripStatusLabel(trip.tripStatus || trip.status, lang)}
               </span>
             ) : null}
@@ -1629,28 +1630,6 @@ export function TripDetail() {
               {lang === "VN" ? "Hủy no-show" : "Cancel no-show"}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => {
-              const params = new URLSearchParams();
-              const boatId = boat.id || trip?.boatId || "";
-              const boatCode = boat.code || trip?.boatCode || "";
-              const routeId = routeMeta.routeId || trip?.routeId || trip?.route?.routeId || "";
-              const routeCode = routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "";
-              if (boatId) params.set("boatId", String(boatId));
-              if (boatCode) params.set("boatCode", String(boatCode));
-              if (routeId) params.set("routeId", String(routeId));
-              if (routeCode) params.set("routeCode", String(routeCode));
-              if (trip?.tripId || id) params.set("tripId", String(trip?.tripId || id));
-              if (trip?.tripCode) params.set("tripCode", String(trip.tripCode));
-              params.set("focus", "1");
-              navigate(`/admin/live-tracking?${params.toString()}`);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[#124757]/15 bg-[#124757]/5 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition hover:bg-[#124757]/10 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
-          >
-            <span className="material-symbols-outlined text-[16px]">my_location</span>
-            Live map
-          </button>
         </div>
       </div>
 
@@ -1838,16 +1817,107 @@ export function TripDetail() {
         </div>
       ) : (
         <>
+          <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-700/60 sm:px-5">
+              <h3 className="font-headline text-xs font-black uppercase tracking-[0.14em] text-[#124757] dark:text-yellow-400">
+                GPS
+              </h3>
+              <div className="ml-auto flex items-center gap-2">
+                {trackingAt ? (
+                  <span className="text-[10px] font-medium tabular-nums text-slate-400">
+                    {formatTime(trackingAt instanceof Date ? trackingAt.toISOString() : trackingAt)}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    const boatId = boat.id || trip?.boatId || "";
+                    const boatCode = boat.code || trip?.boatCode || "";
+                    const routeId = routeMeta.routeId || trip?.routeId || trip?.route?.routeId || "";
+                    const routeCode = routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "";
+                    if (boatId) params.set("boatId", String(boatId));
+                    if (boatCode) params.set("boatCode", String(boatCode));
+                    if (routeId) params.set("routeId", String(routeId));
+                    if (routeCode) params.set("routeCode", String(routeCode));
+                    if (trip?.tripId || id) params.set("tripId", String(trip?.tripId || id));
+                    if (trip?.tripCode) params.set("tripCode", String(trip.tripCode));
+                    params.set("focus", "1");
+                    navigate(`/admin/live-tracking?${params.toString()}`);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/15 bg-[#124757]/5 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition hover:bg-[#124757]/10 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
+                >
+                  {lang === "VN" ? "Bản đồ trực tiếp" : "Live map"}
+                </button>
+                {statusKey !== "Completed" && statusKey !== "Cancelled" ? (
+                  <button
+                    type="button"
+                    disabled={isTrackingBusy}
+                    onClick={() => refreshTracking(id, boat.code || trip?.boatCode || "")}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-[#124757]/30 hover:text-[#124757] disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                    title={lang === "VN" ? "Làm mới" : "Refresh"}
+                  >
+                    <span className={`material-symbols-outlined text-[16px] ${isTrackingBusy ? "animate-spin" : ""}`}>
+                      refresh
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <TripRealRouteMap
+              routeLine={routeLine}
+              stations={routeStations}
+              progress={routeProgress}
+              liveLocation={liveLocation}
+              showBoat={!tripGpsFinished}
+              boat={{
+                boatId: boat.id || trip?.boatId || boat.code || trip?.boatCode,
+                code: boat.code || trip?.boatCode,
+                name: boat.name || trip?.boatName,
+                numberOfDecks: boat.numberOfDecks,
+                serviceType: boat.serviceType,
+                seatSetupType: boat.seatSetupType,
+                imageUrl: boat.imageUrl,
+                seatCount: capacity,
+                passengerCount,
+              }}
+              routeCode={routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || ""}
+              routeLabel={formatCustomerRouteTitle(
+                routeMeta.routeName || trip?.routeName || trip?.route?.routeName || "",
+                routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "",
+                lang,
+              ) || `${fromName} → ${toName}`}
+              isMoving={isBoatMoving || (Boolean(liveLocation) && (statusKey === "InProgress" || statusKey === "Delayed"))}
+              hasOpenIncident={hasOpenIncident}
+              lang={lang}
+            />
+
+            {hasOpenIncident ? (
+              <p className="border-t border-rose-100 bg-rose-50 px-4 py-2.5 text-[11px] font-bold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200 sm:px-5">
+                {lang === "VN"
+                  ? "Marker đỏ — tàu của chuyến đang có sự cố mở."
+                  : "Red marker — this trip’s boat has an open incident."}
+              </p>
+            ) : null}
+
+            {dwellNotice ? (
+              <p className="border-t border-amber-100 bg-amber-50 px-4 py-2.5 text-[11px] font-bold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 sm:px-5">
+                {dwellNotice}
+              </p>
+            ) : null}
+          </section>
+
           <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <div className="grid grid-cols-1 md:grid-cols-5">
-              <div className="relative md:col-span-2 aspect-[16/10] md:aspect-auto md:min-h-[220px] bg-slate-100 dark:bg-slate-900">
+              <div className="relative md:col-span-2 aspect-16/10 md:aspect-auto md:min-h-55 bg-slate-100 dark:bg-slate-900">
                 <img
                   src={boat.imageUrl || DEFAULT_BOAT_IMAGE}
                   alt={boat.code || trip.tripCode}
                   className="h-full w-full object-cover"
                   onError={(e) => { e.currentTarget.src = DEFAULT_BOAT_IMAGE; }}
                 />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent p-4">
+                <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/55 to-transparent p-4">
                   <p className="font-headline text-sm font-black text-white">
                     {[boat.code, boat.name].filter(Boolean).join(" · ") || (lang === "VN" ? "Chưa gán tàu" : "No boat")}
                   </p>
@@ -1999,76 +2069,6 @@ export function TripDetail() {
             </div>
           </div>
 
-          <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-            <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-700/60 sm:px-5">
-              <h3 className="font-headline text-xs font-black uppercase tracking-[0.14em] text-[#124757] dark:text-yellow-400">
-                GPS
-              </h3>
-              <div className="ml-auto flex items-center gap-2">
-                {trackingAt ? (
-                  <span className="text-[10px] font-medium tabular-nums text-slate-400">
-                    {formatTime(trackingAt instanceof Date ? trackingAt.toISOString() : trackingAt)}
-                  </span>
-                ) : null}
-                {statusKey !== "Completed" && statusKey !== "Cancelled" ? (
-                  <button
-                    type="button"
-                    disabled={isTrackingBusy}
-                    onClick={() => refreshTracking(id, boat.code || trip?.boatCode || "")}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-[#124757]/30 hover:text-[#124757] disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
-                    title={lang === "VN" ? "Làm mới" : "Refresh"}
-                  >
-                    <span className={`material-symbols-outlined text-[16px] ${isTrackingBusy ? "animate-spin" : ""}`}>
-                      refresh
-                    </span>
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <TripRealRouteMap
-              routeLine={routeLine}
-              stations={routeStations}
-              progress={routeProgress}
-              liveLocation={liveLocation}
-              showBoat={!tripGpsFinished}
-              boat={{
-                boatId: boat.id || trip?.boatId || boat.code || trip?.boatCode,
-                code: boat.code || trip?.boatCode,
-                name: boat.name || trip?.boatName,
-                numberOfDecks: boat.numberOfDecks,
-                serviceType: boat.serviceType,
-                seatSetupType: boat.seatSetupType,
-                imageUrl: boat.imageUrl,
-                seatCount: capacity,
-                passengerCount,
-              }}
-              routeCode={routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || ""}
-              routeLabel={formatCustomerRouteTitle(
-                routeMeta.routeName || trip?.routeName || trip?.route?.routeName || "",
-                routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "",
-                lang,
-              ) || `${fromName} → ${toName}`}
-              isMoving={isBoatMoving || (Boolean(liveLocation) && (statusKey === "InProgress" || statusKey === "Delayed"))}
-              hasOpenIncident={hasOpenIncident}
-              lang={lang}
-            />
-
-            {hasOpenIncident ? (
-              <p className="border-t border-rose-100 bg-rose-50 px-4 py-2.5 text-[11px] font-bold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200 sm:px-5">
-                {lang === "VN"
-                  ? "Marker đỏ — tàu của chuyến đang có sự cố mở."
-                  : "Red marker — this trip’s boat has an open incident."}
-              </p>
-            ) : null}
-
-            {dwellNotice ? (
-              <p className="border-t border-amber-100 bg-amber-50 px-4 py-2.5 text-[11px] font-bold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200 sm:px-5">
-                {dwellNotice}
-              </p>
-            ) : null}
-          </section>
-
           <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <h3 className="font-headline text-xs font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
@@ -2087,7 +2087,7 @@ export function TripDetail() {
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                   {lang === "VN" ? "Mã tàu" : "Boat code"}
                 </p>
-                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 wrap-break-words">
                   {boat.code || "—"}
                 </div>
               </div>
@@ -2095,7 +2095,7 @@ export function TripDetail() {
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                   {lang === "VN" ? "Tên tàu" : "Boat name"}
                 </p>
-                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 wrap-break-words">
                   {boat.name || "—"}
                 </div>
               </div>
@@ -2103,7 +2103,7 @@ export function TripDetail() {
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                   {lang === "VN" ? "Biển kiểm soát" : "Registration"}
                 </p>
-                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 wrap-break-words">
                   {boat.registrationNumber || "—"}
                 </div>
               </div>
@@ -2115,7 +2115,7 @@ export function TripDetail() {
                 <div className="mt-1 space-y-0.5 text-sm font-bold text-slate-800 dark:text-slate-100">
                   {onBoardCrewDisplay.length > 0 ? (
                     onBoardCrewDisplay.map((name) => (
-                      <p key={name} className="break-words leading-snug">
+                      <p key={name} className="wrap-break-words leading-snug">
                         {name}
                       </p>
                     ))
@@ -2129,7 +2129,7 @@ export function TripDetail() {
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                   {lang === "VN" ? "Loại dịch vụ" : "Service"}
                 </p>
-                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 wrap-break-words">
                   {boat.serviceType || "—"}
                 </div>
               </div>
@@ -2137,7 +2137,7 @@ export function TripDetail() {
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                   {lang === "VN" ? "Số tầng" : "Decks"}
                 </p>
-                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 wrap-break-words">
                   {boat.numberOfDecks ?? "—"}
                 </div>
               </div>
@@ -2145,7 +2145,7 @@ export function TripDetail() {
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                   {lang === "VN" ? "Tốc độ tối đa" : "Max speed"}
                 </p>
-                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                <div className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100 wrap-break-words">
                   {boat.maxSpeedKmh != null ? `${boat.maxSpeedKmh} km/h` : "—"}
                 </div>
               </div>
@@ -2153,13 +2153,20 @@ export function TripDetail() {
           </section>
 
           <section className="rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={() => setIsItineraryOpen((prev) => !prev)}
+              className={`flex w-full flex-wrap items-center justify-between gap-2 px-5 py-3.5 text-left transition ${isItineraryOpen ? "border-b border-slate-100 dark:border-slate-700" : ""}`}
+            >
               <h3 className="font-headline text-xs font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
                 {lang === "VN" ? `Lịch trình (${stops.length} bến)` : `Itinerary (${stops.length} stations)`}
               </h3>
-            </div>
+              <span className={`material-symbols-outlined text-lg text-slate-400 transition-transform ${isItineraryOpen ? "rotate-180" : ""}`}>
+                expand_more
+              </span>
+            </button>
 
-            {stops.length === 0 ? (
+            {isItineraryOpen && (stops.length === 0 ? (
               <p className="p-8 text-center text-xs font-medium text-slate-400">
                 {lang === "VN" ? "Chuyến chưa có lịch trình bến." : "This trip has no station itinerary yet."}
               </p>
@@ -2175,7 +2182,6 @@ export function TripDetail() {
                   const isLast = index === lastStopIndex;
                   const sid = String(stop.stationId || stop.station?.stationId || "").trim();
                   const catalog = sid ? stationCatalogById.get(sid) : null;
-                  // Stop chỉ còn stationId + stationName; mã/địa chỉ lấy từ GET stations.
                   const name = stop.stationName
                     || stop.station?.stationName
                     || catalog?.stationName
@@ -2219,7 +2225,7 @@ export function TripDetail() {
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5">
                             {stopOpsBadge ? (
-                              <span className={`rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${stopOpsBadge.className}`}>
+                              <span className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${stopOpsBadge.className}`}>
                                 {stopOpsBadge.text}
                               </span>
                             ) : null}
@@ -2229,7 +2235,7 @@ export function TripDetail() {
                               </span>
                             ) : null}
                             {stop.stopStatus ? (
-                              <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                              <span className="rounded-lg bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:bg-slate-900 dark:text-slate-300">
                                 {getStopStatusLabel(stop, lang, {
                                   isFirst,
                                   isLast,
@@ -2255,13 +2261,13 @@ export function TripDetail() {
                         />
 
                         <div className="flex flex-wrap gap-2 text-[11px]">
-                          <span className="rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1 font-bold text-teal-700 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300">
+                          <span className="rounded-lg bg-teal-50 px-2.5 py-1 font-bold text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">
                             {lang === "VN" ? "Lên" : "Board"} {boarding}
                           </span>
-                          <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 font-bold text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300">
+                          <span className="rounded-lg bg-violet-50 px-2.5 py-1 font-bold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
                             {lang === "VN" ? "Xuống" : "Alight"} {alighting}
                           </span>
-                          <span className="rounded-lg border border-[#124757]/20 bg-[#124757]/5 px-2.5 py-1 font-bold text-[#124757] dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400">
+                          <span className="rounded-lg bg-[#124757]/5 px-2.5 py-1 font-bold text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400">
                             {lang === "VN" ? "Trên tàu" : "Onboard"}{" "}
                             {capacity != null
                               ? `${onBoatHere}/${capacity}`
@@ -2274,7 +2280,7 @@ export function TripDetail() {
                   });
                 })()}
               </ol>
-            )}
+            ))}
           </section>
         </>
       )}

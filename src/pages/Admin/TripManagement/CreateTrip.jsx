@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
 import { fetchAllBoats } from "../../../services/boatService";
+import { resolveBoatNumberOfDecks, resolveBoatServiceType } from "../../../utils/boatTracking";
 import {
   buildRoundTripPreviewPayload,
   buildScheduleTripsPayload,
@@ -158,6 +159,7 @@ export function CreateTrip() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
+    serviceKind: "waterbus", // waterbus | watersightseeing
     createKind: "oneWay", // oneWay | roundTrip
     routeCode: "",
     outboundRouteCode: "",
@@ -167,8 +169,8 @@ export function CreateTrip() {
     toDate: "",
     daysOfWeek: [],
     mode: "fixed", // fixed | interval (oneWay)
-    startTime: "06:00",
-    endTime: "18:00",
+    startTime: "07:00",
+    endTime: "23:00",
     intervalMinutes: 30,
     departureTimes: ["08:00"],
     draftTime: "10:00",
@@ -251,6 +253,26 @@ export function CreateTrip() {
   const clearPreview = () => {
     setRoundTripPreview(null);
     setSelectedPreviewKeys(new Set());
+  };
+
+  const handleServiceKindChange = (serviceKind) => {
+    if (serviceKind === form.serviceKind) return;
+    setForm((prev) => ({
+      ...prev,
+      serviceKind,
+      // WaterSightseeing chỉ có một chiều.
+      createKind: serviceKind === "watersightseeing" ? "oneWay" : prev.createKind,
+      // Đổi loại dịch vụ → tuyến/tàu của loại cũ không còn hợp lệ, reset để chọn lại.
+      routeCode: "",
+      outboundRouteCode: "",
+      inboundRouteCode: "",
+      boatCode: "",
+      stops: [],
+      outboundStops: [],
+      inboundStops: [],
+    }));
+    clearPreview();
+    setErrorMsg("");
   };
 
   const handleRouteChange = async (routeCode) => {
@@ -602,9 +624,16 @@ export function CreateTrip() {
   const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
   const selectStyle = `${inputStyle} cursor-pointer`;
 
+  const isWaterSightseeingKind = form.serviceKind === "watersightseeing";
+  const routesForServiceKind = useMemo(
+    () => routes.filter((r) => (
+      isWaterSightseeingKind ? r.routeType === "SightseeingLoop" : r.routeType === "Regular"
+    )),
+    [routes, isWaterSightseeingKind],
+  );
   const routeOptions = useMemo(
-    () => routes.map((r) => ({ value: r.routeCode, label: `${r.routeCode} — ${r.routeName}` })),
-    [routes],
+    () => routesForServiceKind.map((r) => ({ value: r.routeCode, label: `${r.routeCode} — ${r.routeName}` })),
+    [routesForServiceKind],
   );
   const inboundRouteOptions = useMemo(
     () => routeOptions.filter((r) => String(r.value) !== String(form.outboundRouteCode)),
@@ -627,9 +656,17 @@ export function CreateTrip() {
   const suggestedDepartureIntervalMin = routeTravelMinutes > 0
     ? Math.ceil(routeTravelMinutes) + BOAT_TURNAROUND_BUFFER_MIN
     : null;
+  const boatsForServiceKind = useMemo(
+    () => boats.filter((b) => {
+      if (resolveBoatServiceType(b) !== "Passenger") return false;
+      const decks = resolveBoatNumberOfDecks(b);
+      return isWaterSightseeingKind ? decks >= 2 : decks === 1;
+    }),
+    [boats, isWaterSightseeingKind],
+  );
   const boatOptions = useMemo(
-    () => boats.map((b) => ({ value: b.code || b.boatCode, label: `${b.code || b.boatCode} — ${b.name}` })),
-    [boats],
+    () => boatsForServiceKind.map((b) => ({ value: b.code || b.boatCode, label: `${b.code || b.boatCode} — ${b.name}` })),
+    [boatsForServiceKind],
   );
   const creatablePreviewCount = useMemo(
     () => (roundTripPreview?.items || []).filter((item) => item.canCreate).length,
@@ -687,18 +724,14 @@ export function CreateTrip() {
 
       <div className="flex gap-1 rounded-2xl bg-slate-100/80 p-1 dark:bg-slate-900/80">
         {[
-          { id: "oneWay", vn: "Một chiều", en: "One way" },
-          { id: "roundTrip", vn: "Khứ hồi", en: "Round trip" },
+          { id: "waterbus", vn: "Waterbus", en: "Waterbus" },
+          { id: "watersightseeing", vn: "WaterSightseeing", en: "WaterSightseeing" },
         ].map((item) => (
           <button
             key={item.id}
             type="button"
-            onClick={() => {
-              updateForm({ createKind: item.id });
-              clearPreview();
-              setErrorMsg("");
-            }}
-            className={`flex-1 rounded-xl px-2.5 py-2.5 text-center font-headline text-[11px] font-black uppercase tracking-wider transition ${form.createKind === item.id
+            onClick={() => handleServiceKindChange(item.id)}
+            className={`flex-1 rounded-xl px-2.5 py-2.5 text-center font-headline text-[11px] font-black uppercase tracking-wider transition ${form.serviceKind === item.id
               ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
               : "text-slate-500 dark:text-slate-400"
               }`}
@@ -707,6 +740,31 @@ export function CreateTrip() {
           </button>
         ))}
       </div>
+
+      {!isWaterSightseeingKind && (
+        <div className="flex gap-1 rounded-2xl bg-slate-100/80 p-1 dark:bg-slate-900/80">
+          {[
+            { id: "oneWay", vn: "Một chiều", en: "One way" },
+            { id: "roundTrip", vn: "Khứ hồi", en: "Round trip" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                updateForm({ createKind: item.id });
+                clearPreview();
+                setErrorMsg("");
+              }}
+              className={`flex-1 rounded-xl px-2.5 py-2.5 text-center font-headline text-[11px] font-black uppercase tracking-wider transition ${form.createKind === item.id
+                ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
+                : "text-slate-500 dark:text-slate-400"
+                }`}
+            >
+              {lang === "VN" ? item.vn : item.en}
+            </button>
+          ))}
+        </div>
+      )}
 
       {errorMsg && (
         <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20 shadow-sm">
@@ -1292,7 +1350,7 @@ export function CreateTrip() {
           </>
         ) : (
           <>
-            {(isLoadingStops || form.stops.length > 0 || (form.routeCode && !isLoadingStops)) && (
+            {!isWaterSightseeingKind && (isLoadingStops || form.stops.length > 0 || (form.routeCode && !isLoadingStops)) && (
               <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
                 <div className="border-b border-slate-100 dark:border-slate-700 pb-3">
                   <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
@@ -1361,8 +1419,8 @@ export function CreateTrip() {
                     {isSightseeingRoute ? (
                       <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                         {lang === "VN"
-                          ? `Lấy từ estimatedDurationMin tuyến. ${BOAT_TURNAROUND_BUFFER_MIN} phút buffer giữa 2 chuyến cùng tàu không tính vào thời gian tour.`
-                          : `From route estimatedDurationMin. The ${BOAT_TURNAROUND_BUFFER_MIN}-min same-boat buffer is not tour duration.`}
+                          ? `Đây là thời lượng tham quan lấy theo tuyến. Giữa 2 chuyến liên tiếp cùng một tàu, hệ thống cần thêm ${BOAT_TURNAROUND_BUFFER_MIN} phút quay đầu, chưa tính vào thời lượng này.`
+                          : `This is the tour duration configured on the route. Between two consecutive trips on the same boat, the system reserves an extra ${BOAT_TURNAROUND_BUFFER_MIN}-minute turnaround, not included in this duration.`}
                       </p>
                     ) : null}
                   </>

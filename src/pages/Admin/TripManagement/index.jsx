@@ -43,7 +43,7 @@ const tripStatusBadgeClass = (status) => {
         case "Delayed":
             return "text-orange-600 dark:text-orange-400";
         case "Completed":
-            return "text-emerald-600 dark:text-emerald-400";
+            return "text-slate-500 dark:text-slate-400";
         case "Cancelled":
             return "text-rose-500 dark:text-rose-400";
         default:
@@ -57,7 +57,7 @@ const tripStatusDotClass = (status) => {
         case "Boarding": return "bg-amber-500";
         case "InProgress": return "bg-teal-500";
         case "Delayed": return "bg-orange-500";
-        case "Completed": return "bg-emerald-500";
+        case "Completed": return "bg-slate-400";
         case "Cancelled": return "bg-rose-500";
         default: return "bg-slate-400";
     }
@@ -243,6 +243,10 @@ export function TripManagement() {
     const [operatingDate, setOperatingDate] = useState(() => pickDateFromSearch(searchParams));
     const [statusFilter, setStatusFilter] = useState("All");
     const [boatFilter, setBoatFilter] = useState("All");
+    const [serviceKindFilter, setServiceKindFilter] = useState("All");
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
 
     useEffect(() => {
         const next = pickDateFromSearch(searchParams);
@@ -409,6 +413,13 @@ export function TripManagement() {
         { value: "Cancelled", label: getTripStatusLabel("Cancelled", lang) },
     ];
 
+    const serviceKindOptions = [
+        { value: "All", label: lang === "VN" ? "Tất cả loại dịch vụ" : "All service types" },
+        { value: "Bus", label: "Waterbus" },
+        { value: "Sightseeing", label: "Watersightseeing" },
+        { value: "Charter", label: lang === "VN" ? "Request" : "Request" },
+    ];
+
     const boatOptions = useMemo(() => {
         const map = new Map();
         trips.forEach((trip) => {
@@ -428,14 +439,43 @@ export function TripManagement() {
     }, [trips, lang]);
 
     const displayedTrips = useMemo(() => {
-        if (boatFilter === "All") return trips;
-        return trips.filter((trip) => resolveBoatFilterKey(trip) === boatFilter);
-    }, [trips, boatFilter]);
+        return trips.filter((trip) => {
+            if (boatFilter !== "All" && resolveBoatFilterKey(trip) !== boatFilter) return false;
+            if (serviceKindFilter !== "All" && resolveTripKindKey(trip) !== serviceKindFilter) return false;
+            return true;
+        });
+    }, [trips, boatFilter, serviceKindFilter]);
 
     // Đổi ngày / trạng thái → reset lọc tàu (danh sách tàu theo ngày).
     useEffect(() => {
         setBoatFilter("All");
     }, [operatingDate, statusFilter]);
+
+    // Đổi bộ lọc → quay về trang 1.
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [operatingDate, statusFilter, boatFilter, serviceKindFilter]);
+
+    const totalPages = Math.ceil(displayedTrips.length / ITEMS_PER_PAGE);
+    const currentTrips = displayedTrips.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    const startIndex = displayedTrips.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+    const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, displayedTrips.length);
+
+    const getPaginationGroup = () => {
+        let pages = [];
+        if (totalPages <= 5) {
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
+        } else {
+            if (currentPage <= 3) {
+                pages = [1, 2, 3, 4, '...', totalPages];
+            } else if (currentPage >= totalPages - 2) {
+                pages = [1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+            } else {
+                pages = [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+            }
+        }
+        return pages;
+    };
 
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
@@ -474,21 +514,21 @@ export function TripManagement() {
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Sightseeing</span>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Watersightseeing</span>
                         <h3 className="text-xl font-black font-headline text-violet-600 dark:text-violet-400 mt-0.5">{isLoading ? "..." : stats.sightseeing}</h3>
                     </div>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Request (Charter)</span>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Request</span>
                         <h3 className="text-xl font-black font-headline text-amber-600 dark:text-amber-400 mt-0.5">{isLoading ? "..." : stats.charter}</h3>
                     </div>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Bus</span>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Waterbus</span>
                         <h3 className="text-xl font-black font-headline text-teal-600 dark:text-teal-400 mt-0.5">{isLoading ? "..." : stats.bus}</h3>
                     </div>
                 </div>
@@ -520,6 +560,18 @@ export function TripManagement() {
                     />
                 </div>
 
+                <div className="relative z-20 flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">
+                        {lang === "VN" ? "Loại dịch vụ" : "Service type"}
+                    </span>
+                    <FormSelect
+                        value={serviceKindFilter}
+                        onChange={setServiceKindFilter}
+                        options={serviceKindOptions}
+                        className="min-w-48 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                    />
+                </div>
+
                 <div className="relative z-20 flex items-center gap-2 min-w-0 lg:ml-auto">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">
                         {lang === "VN" ? "Trạng thái" : "Status"}
@@ -539,9 +591,10 @@ export function TripManagement() {
                 <div className="overflow-x-auto custom-scrollbar">
                     <table className="w-full table-fixed text-left border-collapse">
                         <colgroup>
-                            <col className="w-[24%]" />
-                            <col className="w-[16%]" />
-                            <col className="w-[20%]" />
+                            <col className="w-[18%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[18%]" />
                             <col className="w-[12%]" />
                             <col className="w-[8%]" />
                             <col className="w-[12%]" />
@@ -550,6 +603,7 @@ export function TripManagement() {
                         <thead>
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
                                 <th className="py-3.5 px-5 text-left">{lang === "VN" ? "Mã chuyến" : "Trip code"}</th>
+                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Dịch vụ" : "Service"}</th>
                                 <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Tàu" : "Boat"}</th>
                                 <th className="py-3.5 px-4 text-left">{lang === "VN" ? "Hành trình" : "Stations"}</th>
                                 <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Giờ chạy" : "Time"}</th>
@@ -561,24 +615,39 @@ export function TripManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={7} className="text-center py-16 text-slate-400 font-medium">
+                                    <td colSpan={8} className="text-center py-16 text-slate-400 font-medium">
                                         <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] rounded-full animate-spin mx-auto mb-2"></div>
                                         <p className="text-xs tracking-wider animate-pulse">{lang === "VN" ? "Đang tải danh sách chuyến tàu..." : "Loading trip list..."}</p>
                                     </td>
                                 </tr>
                             ) : displayedTrips.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={8} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         {lang === "VN" ? "Không có chuyến tàu nào phù hợp với bộ lọc." : "No trips found matching filters."}
                                     </td>
                                 </tr>
                             ) : (
-                                displayedTrips.map((trip) => {
+                                currentTrips.map((trip) => {
                                     const boatLabel = resolveBoatLabel(trip, lang);
                                     const boatCode = resolveBoatCode(trip);
                                     const routeMeta = routeByCode[String(trip.routeCode || "").trim()] || null;
                                     const fromLabel = resolveStationLabel(trip, "from", routeMeta);
                                     const toLabel = resolveStationLabel(trip, "to", routeMeta);
+                                    const kindKey = resolveTripKindKey(trip);
+                                    const kindLabel = kindKey === "Sightseeing"
+                                        ? "Watersightseeing"
+                                        : kindKey === "Charter"
+                                            ? (lang === "VN" ? "Request" : "Request")
+                                            : kindKey === "Bus"
+                                                ? "Waterbus"
+                                                : "—";
+                                    const kindBadgeClass = kindKey === "Sightseeing"
+                                        ? "text-violet-700 dark:text-violet-300"
+                                        : kindKey === "Charter"
+                                            ? "text-amber-700 dark:text-amber-300"
+                                            : kindKey === "Bus"
+                                                ? "text-teal-700 dark:text-teal-300"
+                                                : "text-slate-500 dark:text-slate-300";
 
                                     return (
                                         <tr key={trip.tripId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
@@ -586,6 +655,12 @@ export function TripManagement() {
                                                 <h4 className="truncate font-headline text-xs font-black tracking-wide text-slate-800 dark:text-white" title={trip.tripCode}>
                                                     {trip.tripCode}
                                                 </h4>
+                                            </td>
+
+                                            <td className="py-3.5 px-3 align-middle">
+                                                <span className={`text-[10px] font-headline font-black uppercase tracking-wide ${kindBadgeClass}`}>
+                                                    {kindLabel}
+                                                </span>
                                             </td>
 
                                             <td className="py-3.5 px-3 align-middle">
@@ -685,6 +760,66 @@ export function TripManagement() {
                     </table>
                 </div>
             </div>
+
+            {/* KHỐI PHÂN TRANG (PAGINATION) */}
+            {totalPages > 0 && (
+                <div className="flex bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between flex-col sm:flex-row gap-4">
+                    <span className="text-xs font-bold text-slate-400">
+                        {lang === "VN"
+                            ? `Hiển thị ${startIndex}-${endIndex} trong số ${displayedTrips.length} kết quả`
+                            : `Showing ${startIndex}-${endIndex} of ${displayedTrips.length} entries`}
+                    </span>
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+
+                        <button
+                            type="button"
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === 1
+                                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                }`}
+                        >
+                            <span className="material-symbols-outlined text-base">chevron_left</span>
+                        </button>
+
+                        {getPaginationGroup().map((item, index) => {
+                            if (item === '...') {
+                                return (
+                                    <span key={`ellipsis-${index}`} className="w-8 h-8 flex items-center justify-center text-slate-400 font-bold tracking-widest shrink-0">
+                                        ...
+                                    </span>
+                                );
+                            }
+                            return (
+                                <button
+                                    key={item}
+                                    type="button"
+                                    onClick={() => setCurrentPage(item)}
+                                    className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-black font-headline text-xs transition-all ${currentPage === item
+                                        ? "bg-[#124757] text-white shadow-md border-transparent dark:bg-yellow-400 dark:text-slate-900"
+                                        : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 hover:bg-slate-50"
+                                        }`}
+                                >
+                                    {item}
+                                </button>
+                            );
+                        })}
+
+                        <button
+                            type="button"
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === totalPages
+                                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                }`}
+                        >
+                            <span className="material-symbols-outlined text-base">chevron_right</span>
+                        </button>
+                    </div>
+                </div>
+            )}
 
         </div>
     );
