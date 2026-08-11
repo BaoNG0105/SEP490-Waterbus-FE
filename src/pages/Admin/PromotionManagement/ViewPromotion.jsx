@@ -42,21 +42,34 @@ const bookingTypeLabel = (type, lang) => {
 const statusTone = (status) => {
   switch (status) {
     case "Active":
-      return "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400";
+      return "text-emerald-600 dark:text-emerald-400";
     case "Draft":
-      return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400";
+      return "text-amber-700 dark:text-amber-400";
     case "Paused":
-      return "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400";
+      return "text-sky-700 dark:text-sky-400";
     default:
-      return "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400";
+      return "text-slate-500 dark:text-slate-400";
   }
+};
+
+const STATUS_LABELS = {
+  Active: { vn: "Đang hoạt động", en: "Active" },
+  Draft: { vn: "Nháp", en: "Draft" },
+  Paused: { vn: "Tạm dừng", en: "Paused" },
+  Archived: { vn: "Đã lưu trữ", en: "Archived" },
+};
+
+const statusLabel = (status, lang) => {
+  const entry = STATUS_LABELS[status];
+  if (!entry) return status || "—";
+  return lang === "VN" ? entry.vn : entry.en;
 };
 
 function InfoRow({ label, children }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-3 py-2 border-b border-slate-100 dark:border-slate-700/60 last:border-0">
       <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</dt>
-      <dd className="text-xs font-bold text-slate-800 dark:text-slate-100 break-words">{children}</dd>
+      <dd className="text-xs font-bold text-slate-800 dark:text-slate-100 wrap-break-words">{children}</dd>
     </div>
   );
 }
@@ -152,8 +165,8 @@ export function ViewPromotion() {
             {promo.promotionCode}
           </p>
         </div>
-        <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border shrink-0 ${statusTone(promo.status)}`}>
-          {promo.status}
+        <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-base font-headline font-black uppercase tracking-wide shrink-0 ${statusTone(promo.status)}`}>
+          {statusLabel(promo.status, lang)}
         </span>
         <button
           type="button"

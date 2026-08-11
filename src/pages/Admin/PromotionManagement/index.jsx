@@ -179,6 +179,19 @@ export function PromotionManagement() {
         }
     };
 
+    const handleCopyCode = (code) => {
+        if (!code) return;
+        navigator.clipboard?.writeText(code);
+        notify({
+            icon: "success",
+            title: lang === "VN" ? "Đã sao chép mã!" : "Code copied!",
+            toast: true,
+            position: "top-end",
+            showConfirmButton: false,
+            timer: 1600,
+        });
+    };
+
     const handlePause = async (promo) => {
         try {
             setProcessingId(promo.id);
@@ -360,6 +373,7 @@ export function PromotionManagement() {
                         <thead>
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
                                 <th className="py-4 px-6">{lang === "VN" ? "Khuyến mãi" : "Promotion"}</th>
+                                <th className="py-4 px-4">{lang === "VN" ? "Mã" : "Code"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Giảm giá" : "Discount"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Hiệu lực" : "Validity"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Lượt dùng" : "Usage"}</th>
@@ -370,7 +384,7 @@ export function PromotionManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {currentPromotions.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         {lang === "VN" ? "Không có khuyến mãi nào." : "No records found."}
                                     </td>
                                 </tr>
@@ -400,13 +414,21 @@ export function PromotionManagement() {
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <span className="font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg border inline-block">
-                                                        {promo.promotionCode}
-                                                    </span>
                                                 </div>
                                             </td>
 
-                                            {/* Cột 2: Loại & Giá trị giảm */}
+                                            {/* Cột 2: Mã khuyến mãi */}
+                                            <td className="py-4 px-4">
+                                                <span
+                                                    onClick={() => handleCopyCode(promo.promotionCode)}
+                                                    title={lang === "VN" ? "Nhấn để sao chép" : "Click to copy"}
+                                                    className="font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg border inline-block cursor-pointer hover:border-[#124757] dark:hover:border-yellow-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors"
+                                                >
+                                                    {promo.promotionCode}
+                                                </span>
+                                            </td>
+
+                                            {/* Cột 3: Loại & Giá trị giảm */}
                                             <td className="py-4 px-4">
                                                 <div className="space-y-1">
                                                     <span className="text-sm font-black font-headline text-[#124757] dark:text-yellow-400">
