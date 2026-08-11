@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
 import { useApp } from "../../../context/AppContext";
+
+import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
+
 import { fetchMyCharterBookings } from "../../../services/charterBookingService";
+
 import {
   getCustomerActionInfo,
   isTerminalBookingStatus,
@@ -170,8 +173,8 @@ export function CharterList() {
                 </h1>
                 <p className="mt-2 max-w-lg text-sm font-medium text-white/75">
                   {lang === "VN"
-                    ? "Theo dõi tiến trình, thanh toán và quản lý hành khách — mọi thứ ở một nơi."
-                    : "Track progress, payments, and passengers — everything in one place."}
+                    ? "Theo dõi tiến trình, thanh toán và quản lý hành khách."
+                    : "Track progress, payments, and passengers."}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -253,8 +256,8 @@ export function CharterList() {
                 <article
                   key={booking.id || booking.bookingCode}
                   className={`group relative overflow-hidden rounded-3xl border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg dark:bg-slate-800 ${actionInfo.urgent
-                      ? "border-[#124757]/20 ring-1 ring-[#124757]/10 dark:border-yellow-400/20 dark:ring-yellow-400/10"
-                      : "border-slate-100 dark:border-slate-700/50"
+                    ? "border-[#124757]/20 ring-1 ring-[#124757]/10 dark:border-yellow-400/20 dark:ring-yellow-400/10"
+                    : "border-slate-100 dark:border-slate-700/50"
                     }`}
                 >
                   <div
@@ -272,8 +275,11 @@ export function CharterList() {
                         >
                           {booking.bookingCode}
                         </button>
-                        <span className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wide ${statusInfo.classes}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot}`} />
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.classes
+                          .split(" ")
+                          .filter((cls) => cls.includes("text-"))
+                          .join(" ")
+                          }`}>
                           {statusInfo.label}
                         </span>
                         {actionInfo.urgent ? (
@@ -286,10 +292,7 @@ export function CharterList() {
 
                       <p className="truncate text-sm font-bold text-slate-700 dark:text-slate-200">{booking.route}</p>
                       <p className="text-[11px] font-bold text-slate-400">
-                        {formatDate(booking.departureDate)} · {String(booking.startTime).slice(0, 5)} · {booking.passengerCount} {lang === "VN" ? "khách" : "guests"}
-                        {Number(booking.durationValue) > 0
-                          ? ` · ${booking.durationValue} ${booking.rentalUnit === "Hour" ? (lang === "VN" ? "giờ" : "hr") : (lang === "VN" ? "ngày" : "day(s)")}`
-                          : ""}
+                        {lang === "VN" ? "Khởi hành" : "Departs"} {String(booking.startTime).slice(0, 5)} · {formatDate(booking.departureDate)} · {booking.passengerCount} {lang === "VN" ? "khách" : "guests"}
                       </p>
 
                       {!isClosed ? (
@@ -312,7 +315,6 @@ export function CharterList() {
                         onClick={() => openBooking(booking, focusPayment)}
                         className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider shadow-sm transition hover:scale-[1.02] active:scale-95 ${actionInfo.buttonClasses}`}
                       >
-                        <span className="material-symbols-outlined text-base">{actionInfo.icon}</span>
                         {actionInfo.cta}
                       </button>
                     </div>

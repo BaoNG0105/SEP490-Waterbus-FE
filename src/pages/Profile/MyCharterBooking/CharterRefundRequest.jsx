@@ -9,7 +9,6 @@ import {
   requestRefundBookingOtp,
 } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
-import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { getRefundPaymentId, isPaymentUuid, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
 
 const pick = (source, keys, fallback = "") => {
@@ -198,7 +197,6 @@ export function CharterRefund() {
     };
   }, [paymentId]);
 
-  const statusInfo = booking ? getCharterBookingStatusInfo(booking.status, booking.paymentStatus, lang) : null;
   const hasPaidPayment = booking
     && (["paid", "depositpaid"].includes(String(booking.paymentStatus).toLowerCase()) || Number(booking.paidAmount || 0) > 0 || isPaidPayment(payment));
   const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
@@ -460,16 +458,10 @@ export function CharterRefund() {
                       ? `Đã gửi mã OTP${otpMeta?.maskedDestination ? ` tới ${otpMeta.maskedDestination}` : ""}. Nhập mã 6 số để xác nhận hoàn tiền.`
                       : `An OTP was sent${otpMeta?.maskedDestination ? ` to ${otpMeta.maskedDestination}` : ""}. Enter the 6-digit code to confirm the refund.`)
                     : (lang === "VN"
-                      ? "Nhập ngân hàng, số tài khoản và tên chủ tài khoản (bắt buộc). Chọn kênh OTP rồi gửi xác nhận."
-                      : "Enter bank, account number, and account holder name (required). Choose an OTP channel, then confirm.")}
+                      ? "Vui lòng nhập ngân hàng, số tài khoản và tên chủ tài khoản. Chọn kênh OTP rồi gửi xác nhận."
+                      : "Please enter bank, account number, and account holder name. Choose an OTP channel, then confirm.")}
                 </p>
               </div>
-              {statusInfo && (
-                <span className={`inline-flex w-max items-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider ${statusInfo.classes}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot}`}></span>
-                  {statusInfo.label}
-                </span>
-              )}
             </div>
           </div>
 
@@ -534,8 +526,8 @@ export function CharterRefund() {
                     />
                     <p className="mt-1.5 text-[11px] font-medium text-slate-400">
                       {lang === "VN"
-                        ? "Nhập đúng họ tên trên tài khoản ngân hàng (bắt buộc)."
-                        : "Enter the exact bank account holder name (required)."}
+                        ? "Nhập đúng họ tên trên tài khoản ngân hàng."
+                        : "Enter the exact bank account holder name."}
                     </p>
                   </div>
                 </div>
@@ -596,9 +588,6 @@ export function CharterRefund() {
                     {lang === "VN" ? "Hủy thao tác" : "Cancel"}
                   </button>
                   <button type="submit" disabled={isSubmitting || isSendingOtp} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60">
-                    <span className={`material-symbols-outlined text-base ${isSubmitting || isSendingOtp ? "animate-spin" : ""}`}>
-                      {isSubmitting || isSendingOtp ? "progress_activity" : "sms"}
-                    </span>
                     {isSubmitting || isSendingOtp
                       ? (lang === "VN" ? "Đang gửi OTP…" : "Sending OTP…")
                       : (["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())

@@ -4,25 +4,17 @@ import { fetchBoatDetail } from "../services/boatService";
 import { getApiErrorMessage } from "../utils/apiError";
 import { SeatMapIcon, seatToneFromCode, resolveSeatTypeCode } from "./SeatMapIcon";
 import { BoatBowLabel } from "./ShipWheelIcon";
-import { getBoatImageUrl } from "../utils/charterBookingAdmin";
 
 const DEFAULT_BOAT_IMAGE = "";
 
-
 function collectBoatImages(boat, fallbackUrl = "") {
   const urls = [];
-const push = (url) => {
-  const value = String(url || "").trim();
-  if (!value) return;
+  const push = (url) => {
+    const value = String(url || "").trim();
+    if (!value || urls.includes(value)) return;
+    urls.push(value);
+  };
 
-  const resolvedUrl = getBoatImageUrl(value);
-
-  if (resolvedUrl && !urls.includes(resolvedUrl)) {
-    urls.push(resolvedUrl);
-  }
-};
-
- 
   if (Array.isArray(boat?.imageUrls)) boat.imageUrls.forEach(push);
 
   push(boat?.imageUrl);

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
+import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
+
 import {
   cancelMyCharterBooking,
   downloadAllCharterBookingTickets,
@@ -16,23 +18,22 @@ import {
   updateMyCharterBookingPassengers,
   addMyCharterBookingPassengers,
 } from "../../../services/charterBookingService";
+import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
-import { getApiErrorMessage } from "../../../utils/apiError";
+import { fetchBoatDetail } from "../../../services/boatService";
+
 import { CharterRouteMapPanel } from "../../../components/CharterRouteMapPanel";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
+import { CharterQuotePreviewTable } from "../../../components/CharterQuotePreviewTable";
+import { BoatSeatLayoutPreviewButton } from "../../../components/BoatLayoutPreview";
+import { NullImageIcon } from "../../../components/NullImageIcon";
+
+import { getApiErrorMessage } from "../../../utils/apiError";
 import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "../../../utils/insurancePreview";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { shouldShowCharterQuotePaymentCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount, bookingWaitsCustomerRefundInfo } from "../../../utils/charterBookingActions";
 import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
 import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
-import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
-import { CharterQuotePreviewTable } from "../../../components/CharterQuotePreviewTable";
-import { BoatSeatLayoutPreviewButton } from "../../../components/BoatLayoutPreview";
-import { MyCharterPaymentPanel, MyCharterPaymentStickyBar } from "./MyCharterPaymentPanel";
-import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
-import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
-import { getRefundPaymentId, isPaymentUuid, normalizeSelectedRoute, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
-import { buildConfirmBodyHtml, showAlertDialog, showConfirmDialog, showToast } from "../../../utils/swalToast";
 import {
   canShowCharterTicketsWithBalance,
   extractCharterAdditionalPaymentMeta,
@@ -41,6 +42,13 @@ import {
   markCharterTopUpPayOsStarted,
   rememberCharterPayOsSession,
 } from "../../../utils/charterPayOs";
+import { buildConfirmBodyHtml, showAlertDialog, showConfirmDialog, showToast } from "../../../utils/swalToast";
+
+import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
+import { MyCharterPaymentPanel, MyCharterPaymentStickyBar } from "./MyCharterPaymentPanel";
+import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
+import { getRefundPaymentId, isPaymentUuid, normalizeSelectedRoute, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
+
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -291,8 +299,6 @@ const formatDeckCount = (deckCount, lang) => (
     ? `${deckCount} ${lang === "VN" ? "tầng" : Number(deckCount) === 1 ? "deck" : "decks"}`
     : ""
 );
-
-const DEFAULT_BOAT_IMAGE = ""; // Không dùng ảnh default - mỗi tàu phải lấy ảnh từ API
 
 const formatDate = (value) => {
   if (!value) return "--";
@@ -582,6 +588,9 @@ export function CharterDetail() {
   const refreshedDeadlineRef = useRef("");
   const prevBalanceDueRef = useRef(null);
   const insuranceTopUpInFlightRef = useRef(false);
+  const [boatImageOverrides, setBoatImageOverrides] = useState({});
+  const fetchedBoatImageIdsRef = useRef(new Set());
+  const [activeTab, setActiveTab] = useState("overview");
 
   const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 
@@ -635,9 +644,9 @@ export function CharterDetail() {
       if (!silent) {
         setLoadError(
           error.response?.data?.message
-            || (lang === "VN"
-              ? "Máy chủ chưa thể trả về đầy đủ chi tiết. Dữ liệu tóm tắt từ danh sách đang được hiển thị."
-              : "The server could not return full details. Summary data from the list is being shown."),
+          || (lang === "VN"
+            ? "Máy chủ chưa thể trả về đầy đủ chi tiết. Dữ liệu tóm tắt từ danh sách đang được hiển thị."
+            : "The server could not return full details. Summary data from the list is being shown."),
         );
       }
       return null;
@@ -665,6 +674,7 @@ export function CharterDetail() {
 
   useEffect(() => {
     if (!location.state?.focusPayment || isLoading || !booking) return;
+    setActiveTab("payment");
     const timer = window.setTimeout(() => {
       paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 400);
@@ -1733,6 +1743,51 @@ export function CharterDetail() {
     }
   };
 
+  // Booking detail chỉ trả thông tin tối thiểu cho tàu đã gán/báo giá (không kèm imageUrl).
+  // Admin bù ảnh bằng cách gọi catalog tàu riêng; ở đây ta gọi chi tiết từng tàu thiếu ảnh qua boatId.
+  useEffect(() => {
+    const sourceBoats = Array.isArray(booking?.quoteBoats) && booking.quoteBoats.length > 0
+      ? booking.quoteBoats
+      : (Array.isArray(booking?.selectedBoats) ? booking.selectedBoats : []);
+
+    const missingIds = [...new Set(
+      sourceBoats
+        .map((boat) => {
+          const boatId = String(pick(boat, ["boatId", "id", "boat.id"], ""));
+          const hasImage = Boolean(pick(boat, ["imageUrl", "thumbnailUrl", "boat.imageUrl", "boat.thumbnailUrl", "imageUrls.0", "boat.imageUrls.0"], ""));
+          return boatId && !hasImage ? boatId : "";
+        })
+        .filter((boatId) => boatId && !fetchedBoatImageIdsRef.current.has(boatId))
+    )];
+
+    if (missingIds.length === 0) return;
+    missingIds.forEach((boatId) => fetchedBoatImageIdsRef.current.add(boatId));
+
+    let isActive = true;
+    (async () => {
+      const entries = await Promise.all(missingIds.map(async (boatId) => {
+        try {
+          const detail = await fetchBoatDetail(boatId);
+          return [boatId, pick(detail, ["imageUrl", "thumbnailUrl", "imageUrls.0"], "")];
+        } catch {
+          return [boatId, ""];
+        }
+      }));
+      if (!isActive) return;
+      setBoatImageOverrides((prev) => {
+        const next = { ...prev };
+        entries.forEach(([boatId, imageUrl]) => {
+          if (imageUrl) next[boatId] = imageUrl;
+        });
+        return next;
+      });
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [booking?.quoteBoats, booking?.selectedBoats]);
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
@@ -1748,7 +1803,7 @@ export function CharterDetail() {
 
   if (!booking) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 sm:px-6 lg:px-8 font-body">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-30 px-4 sm:px-6 lg:px-8 font-body">
         <main className="max-w-3xl mx-auto">
           <section className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700/50 text-center shadow-sm">
             <span className="material-symbols-outlined text-4xl text-rose-500">error</span>
@@ -1793,10 +1848,11 @@ export function CharterDetail() {
       : null;
     const extractedBoatId = String(pick(boat, ["boatId", "id", "boat.id"], ""));
     const fallbackBoatId = String(pick(selectedBoat, ["boatId", "id", "boat.id"], ""));
+    const resolvedBoatId = extractedBoatId || fallbackBoatId || "";
 
     return {
       boatOrder,
-      boatId: extractedBoatId || fallbackBoatId || "",
+      boatId: resolvedBoatId,
       name: getBoatDisplayName(boat, getBoatDisplayName(selectedBoat, `${lang === "VN" ? "Tàu" : "Boat"} ${boatOrder}`)),
       numberOfDecks: getRequestedDeckCount(boat) || getRequestedDeckCount(selectedBoat),
       seatSetupType: pick(boat, ["seatSetupType", "requiredSeatSetupType", "boat.seatSetupType"], pick(selectedBoat, ["seatSetupType", "requiredSeatSetupType"], "--")),
@@ -1804,7 +1860,7 @@ export function CharterDetail() {
         boat,
         ["imageUrl", "thumbnailUrl", "boat.imageUrl", "boat.thumbnailUrl", "imageUrls.0", "boat.imageUrls.0"],
         pick(selectedBoat, ["imageUrl", "thumbnailUrl", "boat.imageUrl", "boat.thumbnailUrl", "imageUrls.0", "boat.imageUrls.0"], ""),
-      ),
+      ) || boatImageOverrides[resolvedBoatId] || "",
       seatCount: pick(boat, ["seatCount", "capacity", "boat.seatCount", "boat.capacity"], pick(selectedBoat, ["seatCount", "capacity", "boat.seatCount", "boat.capacity"], "")),
       status: pick(boat, ["status", "boat.status"], pick(selectedBoat, ["status", "boat.status"], "")),
       unitPrice: Number(pick(boat, ["unitPrice", "price", "boat.unitPrice"], 0)) || 0,
@@ -1974,35 +2030,6 @@ export function CharterDetail() {
           : "Rental type and chargeable duration appear once quoted"),
     },
     {
-      label: lang === "VN" ? "Thời lượng ước tính" : "Estimated duration",
-      value: (() => {
-        const estimatedMinutes = Number(pick(booking.routeEstimate, ["estimatedDurationMinutes", "estimatedTravelMinutes"], 0));
-        const chargeableMinutes = Number(pick(booking.routeEstimate, ["chargeableDurationMinutes"], 0));
-        const chargeableValue = Number(pick(booking.routeEstimate, ["chargeableDurationValue"], 0));
-        const hasChargeable = (Number.isFinite(chargeableMinutes) && chargeableMinutes > 0)
-          || (Number.isFinite(chargeableValue) && chargeableValue > 0);
-
-        // Pending quote: don't show partial travel-only minutes (waiting/stops/buffer still missing).
-        if (booking.status === "PendingQuote" && !hasChargeable) {
-          return lang === "VN" ? "Có trong báo giá" : "Shown in quote";
-        }
-
-        if (booking.rentalUnit === "Hour" && Number.isFinite(chargeableMinutes) && chargeableMinutes > 0) {
-          const hours = Math.max(1, Math.ceil(chargeableMinutes / 60));
-          return lang === "VN" ? `${hours} giờ` : `${hours} hr`;
-        }
-        if (Number.isFinite(estimatedMinutes) && estimatedMinutes > 0) {
-          return lang === "VN" ? `${estimatedMinutes} phút di chuyển` : `${estimatedMinutes} min travel`;
-        }
-        if (Number(booking.durationValue) > 0) {
-          return booking.rentalUnit === "Hour"
-            ? (lang === "VN" ? `${booking.durationValue} giờ` : `${booking.durationValue} hr`)
-            : (lang === "VN" ? `${booking.durationValue} ngày` : `${booking.durationValue} day(s)`);
-        }
-        return lang === "VN" ? "Có trong báo giá" : "Shown in quote";
-      })(),
-    },
-    {
       label: lang === "VN" ? "Hành khách" : "Passengers",
       value: lang === "VN" ? `${booking.passengerCount} khách` : `${booking.passengerCount} guests`,
       description: lang === "VN"
@@ -2032,496 +2059,547 @@ export function CharterDetail() {
       seatSetupType: pick(boat, ["requiredSeatSetupType", "seatSetupType", "preferredSeatSetupType"], "--"),
     }))
     : [];
+  const showTicketsTab = isPaymentStatusPaid || canShowCharterTicketsWithBalance(booking);
+  const detailTabs = [
+    { id: "overview", label: lang === "VN" ? "Tổng quan" : "Overview" },
+    { id: "quote", label: lang === "VN" ? "Tàu & báo giá" : "Boat & Quote" },
+    { id: "payment", label: lang === "VN" ? "Thanh toán" : "Payment" },
+    ...(showTicketsTab ? [{ id: "tickets", label: lang === "VN" ? "Vé & hành khách" : "Tickets & Passengers" }] : []),
+  ];
 
   return (
     <>
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 sm:px-6 lg:px-8 font-body transition-colors">
-      <main className="max-w-6xl mx-auto space-y-6">
-        <button onClick={() => navigate("/profile/my-charter-booking")} className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
-          <span className="material-symbols-outlined text-xl">arrow_back</span>
-          {lang === "VN" ? "Quay lại danh sách" : "Back to Requests"}
-        </button>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-30 px-4 sm:px-6 lg:px-8 font-body transition-colors">
+        <main className="max-w-6xl mx-auto space-y-6">
+          <button onClick={() => navigate("/profile/my-charter-booking")} className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
+            <span className="material-symbols-outlined text-xl">arrow_back</span>
+            {lang === "VN" ? "Quay lại danh sách" : "Back to Requests"}
+          </button>
 
-        {loadError && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-4 py-3 text-amber-800 dark:text-amber-300">
-            <p className="text-xs font-bold">{loadError}</p>
-            <button onClick={loadDetail} className="shrink-0 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-500/30 text-xs font-black uppercase">
-              {lang === "VN" ? "Thử lại" : "Retry"}
-            </button>
-          </div>
-        )}
-
-        {/* ===== TITLE ===== */}
-        <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-[2rem] shadow-[0_24px_70px_rgba(15,23,42,0.10)] border border-slate-200/70 dark:border-slate-700/70">
-          <div className="px-6 py-6 md:px-8">
-            <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-3xl md:text-4xl font-headline font-black text-[#0E4050] dark:text-yellow-400 tracking-tight">{booking.bookingCode}</h1>
-                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-headline font-black uppercase tracking-wide border ${statusInfo.classes}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dot}`}></span>
-                    {statusInfo.label}
-                  </span>
-                </div>
-
-                <div className="mt-5 flex flex-col sm:flex-row sm:items-center gap-3 text-[#0E4050] dark:text-slate-100">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Bến đón" : "Pickup"}</p>
-                    <p className="mt-1 text-lg font-headline font-black truncate">{routeFrom}</p>
-                  </div>
-                  <div className="hidden sm:flex items-center px-2 text-slate-300">
-                    <span className="h-px w-16 bg-slate-300 dark:bg-slate-600"></span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Bến trả" : "Drop-off"}</p>
-                    <p className="mt-1 text-lg font-headline font-black truncate">{routeTo}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row xl:flex-col gap-3 xl:items-end">
-                <div className="flex flex-wrap gap-2 xl:justify-end">
-                  {booking.status === "PendingQuote" && (
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/profile/my-charter-booking/edit/${booking.id}`)}
-                      disabled={isSubmitting}
-                      className="px-5 py-3 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60 shadow-sm"
-                    >
-                      {lang === "VN" ? "Chỉnh sửa" : "Edit"}
-                    </button>
-                  )}
-                  {bookingWaitsCustomerRefundInfo(booking) && (
-                    <button
-                      type="button"
-                      onClick={handleOpenRefundForm}
-                      disabled={isSubmitting}
-                      className="px-5 py-3 rounded-xl bg-amber-600 text-white font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60 shadow-sm"
-                    >
-                      {lang === "VN" ? "Nhập thông tin hoàn tiền" : "Enter refund info"}
-                    </button>
-                  )}
-                  {!["Cancelled", "Completed", "Refunded"].includes(booking.status) && (
-                    <button onClick={handleCancelBooking} disabled={isSubmitting} className="px-5 py-3 rounded-xl bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60 shadow-sm">
-                      {lang === "VN" ? "Hủy yêu cầu" : "Cancel Request"}
-                    </button>
-                  )}
-                </div>
-              </div>
+          {loadError && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-4 py-3 text-amber-800 dark:text-amber-300">
+              <p className="text-xs font-bold">{loadError}</p>
+              <button onClick={loadDetail} className="shrink-0 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-500/30 text-xs font-black uppercase">
+                {lang === "VN" ? "Thử lại" : "Retry"}
+              </button>
             </div>
-          </div>
-        </section>
+          )}
 
-        {/* ===== SECTION 1: REQUEST OVERVIEW ===== */}
-        <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-[2rem] shadow-[0_18px_50px_rgba(15,23,42,0.07)] border border-slate-200/70 dark:border-slate-700/70">
-          <div className="border-b border-slate-100 dark:border-slate-700/70 px-6 py-5 md:px-8">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div>
-                <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
-                  {lang === "VN" ? "Tổng quan yêu cầu" : "Request Overview"}
-                </h2>
-                <p className="mt-1 text-xs font-medium text-slate-400">
-                  {lang === "VN" ? "Thông tin lộ trình, hành khách và liên hệ" : "Route, passenger, and contact details"}
-                </p>
-              </div>
-              <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
-                {formatDateTime(booking.createdAt)}
-              </span>
-            </div>
-          </div>
-
-          <div className="px-6 py-6 md:px-8">
-            <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-              <div className="rounded-2xl border border-[#D8E7EA] bg-[#F7FAFB] p-4 dark:border-slate-700 dark:bg-slate-900">
+          {/* ===== TITLE ===== */}
+          <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-4xl shadow-[0_24px_70px_rgba(15,23,42,0.10)] border border-slate-200/70 dark:border-slate-700/70">
+            <div className="px-6 py-6 md:px-8">
+              <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                    {lang === "VN" ? "Lộ trình dự kiến" : "Planned Route"}
-                  </p>
-                  <p className="mt-0.5 truncate text-base font-headline font-black text-[#0E4050] dark:text-white sm:text-lg">
-                    {routeFrom} <span className="text-slate-300">/</span> {routeTo}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="text-3xl md:text-4xl font-headline font-black text-[#0E4050] dark:text-yellow-400 tracking-tight">{booking.bookingCode}</h1>
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.classes
+                      .split(" ")
+                      .filter((cls) => cls.includes("text-"))
+                      .join(" ")
+                      }`}>
+                      {statusInfo.label}
+                    </span>
+                  </div>
+
+                  <p className="mt-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                    {lang === "VN" ? "Tạo vào lúc" : "Created at"} {formatDateTime(booking.createdAt)}
                   </p>
                 </div>
 
-                <div className="mt-3 space-y-2">
-                  {itineraryTimelineItems.map((item, index) => {
-                    const isLast = index === itineraryTimelineItems.length - 1;
-                    const isEndpoint = item.type !== "stop";
-                    const marker =
-                      item.type === "start"
-                        ? "A"
-                        : item.type === "end"
-                          ? "B"
-                          : String(index);
-                    return (
-                      <div
-                        key={`${item.type}-${item.name}-${index}`}
-                        className="grid grid-cols-[24px_1fr] items-stretch gap-2.5"
+                <div className="flex flex-col sm:flex-row xl:flex-col gap-3 xl:items-end">
+                  <div className="flex flex-wrap gap-2 xl:justify-end">
+                    {booking.status === "PendingQuote" && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/profile/my-charter-booking/edit/${booking.id}`)}
+                        disabled={isSubmitting}
+                        className="px-5 py-3 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60 shadow-sm"
                       >
-                        <div className="flex flex-col items-center">
-                          <span
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-headline font-black leading-none ${
-                              isEndpoint
-                                ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
-                                : "bg-white text-slate-500 ring-2 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600"
-                            }`}
-                          >
-                            {marker}
-                          </span>
-                          {!isLast ? (
-                            <span className="mt-1 w-0.5 min-h-2 flex-1 bg-slate-200 dark:bg-slate-600" />
-                          ) : null}
-                        </div>
-                        <div className="rounded-xl border border-slate-100 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-headline font-black uppercase tracking-widest leading-none text-slate-400">{item.label}</p>
-                              <p className="mt-1 truncate text-sm font-headline font-black leading-tight text-[#0E4050] dark:text-slate-100">{item.name}</p>
-                            </div>
-                            {item.meta ? (
-                              <span className="w-max rounded-full bg-yellow-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-yellow-400/10 dark:text-yellow-300">
-                                {item.meta}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {scheduleItems.map((item) => (
-                  <div key={item.label} className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-                    <p className="mt-1 text-lg font-headline font-black leading-snug text-slate-800 dark:text-white break-words">{item.value}</p>
-                    {item.description && (
-                      <p className="mt-1 text-xs font-bold leading-snug text-slate-400 dark:text-slate-500">{item.description}</p>
+                        {lang === "VN" ? "Chỉnh sửa" : "Edit"}
+                      </button>
+                    )}
+                    {bookingWaitsCustomerRefundInfo(booking) && (
+                      <button
+                        type="button"
+                        onClick={handleOpenRefundForm}
+                        disabled={isSubmitting}
+                        className="px-5 py-3 rounded-xl bg-amber-600 text-white font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60 shadow-sm"
+                      >
+                        {lang === "VN" ? "Nhập thông tin hoàn tiền" : "Enter refund info"}
+                      </button>
+                    )}
+                    {!["Cancelled", "Completed", "Refunded"].includes(booking.status) && (
+                      <button onClick={handleCancelBooking} disabled={isSubmitting} className="px-5 py-3 rounded-xl bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60 shadow-sm">
+                        {lang === "VN" ? "Hủy yêu cầu" : "Cancel Request"}
+                      </button>
                     )}
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {requestedDeckItems.length > 0 && (
-              <div className="mt-4 rounded-2xl bg-[#FBFDFD] px-4 py-3 ring-1 ring-[#D8E7EA] dark:bg-slate-900 dark:ring-slate-700">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Tàu yêu cầu" : "Requested Boats"}</p>
-                    <p className="truncate text-sm font-bold text-slate-600 dark:text-slate-300">
-                      {lang === "VN" ? `${requestedDeckItems.length} tàu` : `${requestedDeckItems.length} boat${requestedDeckItems.length > 1 ? "s" : ""}`}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 sm:justify-end">
-                    {requestedDeckItems.map((boat) => (
-                      <span key={`${boat.order}-${boat.deckText || boat.seatSetupType}`} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-headline font-black text-[#124757] shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#124757] text-[9px] text-white dark:bg-yellow-400 dark:text-slate-900">{boat.order}</span>
-                        {boat.deckText || boat.seatSetupType}
-                      </span>
-                    ))}
-                  </div>
                 </div>
               </div>
-            )}
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {contactItems.map((item) => (
-                <div key={item.label} className="rounded-3xl border border-slate-200 bg-[#F8FBFC] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
-                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-                  <p className="mt-1 break-words text-sm font-bold text-slate-700 dark:text-slate-200">{item.value}</p>
-                </div>
-              ))}
             </div>
+          </section>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
-                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}</p>
-                <p className="mt-3 min-h-10 font-medium text-slate-700 dark:text-slate-200 break-words">{booking.specialRequests || (lang === "VN" ? "Không có" : "None")}</p>
-              </div>
-              <CharterInsuranceInfo
-                booking={booking}
-                lang={lang}
-                currencyFormatter={currencyFormatter}
-              />
+          {/* ===== TABS ===== */}
+          <div className="sticky top-35 z-20 rounded-3xl border border-slate-100 bg-white/95 p-2 shadow-lg backdrop-blur dark:border-slate-700/60 dark:bg-slate-800/95">
+            <div className={`grid grid-cols-2 gap-2 ${detailTabs.length >= 4 ? "md:grid-cols-4" : detailTabs.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+              {detailTabs.map((tab) => {
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex h-12 items-center justify-center rounded-2xl px-3 text-[10px] font-headline font-black uppercase tracking-wider transition-all ${active
+                      ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
+                      : "text-slate-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"
+                      }`}
+                  >
+                    <span className="truncate">{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
-        </section>
 
-        {/* ===== SECTION 2: BOAT & QUOTE + PAYMENT ===== */}
-        <section className="bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70 px-6 py-6 md:px-8">
-          <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
-            {lang === "VN" ? "Tàu & báo giá" : "Boat & Quote"}
-          </h2>
+          {/* ===== WORKFLOW STEPPER ===== */}
+          <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+            <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+              {lang === "VN" ? "Tiến trình booking" : "Booking progress"}
+            </p>
+            <CharterWorkflowStepper status={booking.status} lang={lang} />
+          </div>
 
-          {booking.status === "PendingQuote" ? (
-            <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-              <h3 className="font-headline text-lg font-black">{lang === "VN" ? "Chưa có báo giá" : "No quote yet"}</h3>
-              <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Đội vận hành đang chọn tàu và chốt giá. Khi có báo giá, ảnh tàu và chi tiết giá sẽ hiển thị ở mục này." : "The operations team is assigning boats and pricing. Boat photos and quote details will appear here."}</p>
-            </div>
-          ) : hasQuote && (
-            <div className="mt-4 overflow-hidden rounded-3xl border border-[#D8E7EA] dark:border-slate-700 bg-[#F7FAFB] dark:bg-slate-900">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
+          {/* ===== SECTION 1: REQUEST OVERVIEW ===== */}
+          {activeTab === "overview" && (
+          <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.07)] border border-slate-200/70 dark:border-slate-700/70">
+            <div className="border-b border-slate-100 dark:border-slate-700/70 px-6 py-5 md:px-8">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
-                  <h3 className="mt-1 text-xl font-headline font-black text-[#0E4050] dark:text-yellow-400">{lang === "VN" ? "Chi tiết tàu và chi phí" : "Boat and pricing details"}</h3>
+                  <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
+                    {lang === "VN" ? "Tổng quan yêu cầu" : "Request Overview"}
+                  </h2>
+                  <p className="mt-1 text-xs font-medium text-slate-400">
+                    {lang === "VN" ? "Thông tin lộ trình, hành khách và liên hệ" : "Route, passenger, and contact details"}
+                  </p>
                 </div>
               </div>
+            </div>
 
-              <div className="border-b border-[#D8E7EA] px-5 py-4 dark:border-slate-700">
-                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                  {lang === "VN" ? "Lộ trình" : "Route"}
-                </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến đón" : "Pickup"}</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeFrom}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến trả" : "Drop-off"}</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeTo}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ngày giờ đi" : "Departure"}</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
-                      {formatDate(booking.departureDate)} · {String(booking.startTime || "--").slice(0, 5)}
+            <div className="px-6 py-6 md:px-8">
+              <div className="grid items-start gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className="rounded-2xl border border-[#D8E7EA] bg-[#F7FAFB] p-4 dark:border-slate-700 dark:bg-slate-900">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                      {lang === "VN" ? "Lộ trình dự kiến" : "Planned Route"}
+                    </p>
+                    <p className="mt-0.5 truncate text-base font-headline font-black text-[#0E4050] dark:text-white sm:text-lg">
+                      {routeFrom} <span className="text-slate-300">/</span> {routeTo}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ước tính" : "Estimate"}</p>
-                    <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
-                      {formatRouteEstimate(booking.routeEstimate)}
-                    </p>
+
+                  <div className="mt-3 space-y-2">
+                    {itineraryTimelineItems.map((item, index) => {
+                      const isLast = index === itineraryTimelineItems.length - 1;
+                      const isEndpoint = item.type !== "stop";
+                      const marker =
+                        item.type === "start"
+                          ? "A"
+                          : item.type === "end"
+                            ? "B"
+                            : String(index);
+                      return (
+                        <div
+                          key={`${item.type}-${item.name}-${index}`}
+                          className="grid grid-cols-[24px_1fr] items-stretch gap-2.5"
+                        >
+                          <div className="flex flex-col items-center">
+                            <span
+                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-headline font-black leading-none ${isEndpoint
+                                  ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                                  : "bg-white text-slate-500 ring-2 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600"
+                                }`}
+                            >
+                              {marker}
+                            </span>
+                            {!isLast ? (
+                              <span className="mt-1 w-0.5 min-h-2 flex-1 bg-slate-200 dark:bg-slate-600" />
+                            ) : null}
+                          </div>
+                          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-headline font-black uppercase tracking-widest leading-none text-slate-400">{item.label}</p>
+                                <p className="mt-1 truncate text-sm font-headline font-black leading-tight text-[#0E4050] dark:text-slate-100">{item.name}</p>
+                              </div>
+                              {item.meta ? (
+                                <span className="w-max text-[10px] font-bold text-amber-700 dark:text-yellow-300">
+                                  {item.meta}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-                {Array.isArray(booking.itineraryStops) && booking.itineraryStops.length > 0 ? (
-                  <div className="mt-3 space-y-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      {lang === "VN" ? "Điểm dừng" : "Stops"}
-                    </p>
-                    {booking.itineraryStops.map((stop, index) => (
-                      <p key={`${stop.stationId || "stop"}-${index}`} className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                        {lang === "VN" ? `Dừng ${stop.stopOrder || index + 1}` : `Stop ${stop.stopOrder || index + 1}`}
-                        {": "}
-                        {stop.stationName || "--"}
-                        {Number(stop.stayDurationMinutes) > 0
-                          ? ` · ${stop.stayDurationMinutes} ${lang === "VN" ? "phút" : "min"}`
-                          : ""}
-                      </p>
+
+                <div className="rounded-3xl border border-slate-200 bg-[#F8FBFC] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex flex-col gap-3">
+                    {contactItems.map((item) => (
+                      <div key={item.label}>
+                        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                        <p className="mt-1 wrap-break-words text-sm font-bold text-slate-700 dark:text-slate-200">{item.value}</p>
+                      </div>
                     ))}
                   </div>
-                ) : null}
-
-                <div className="mt-4">
-                  <CharterRouteMapPanel
-                    lang={lang}
-                    booking={booking}
-                    heightClassName="h-64 md:h-72"
-                    className="border-[#D8E7EA] dark:border-slate-700"
-                  />
+                  <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}</p>
+                    <p className="mt-1 wrap-break-words text-sm font-bold text-slate-700 dark:text-slate-200">{booking.specialRequests || (lang === "VN" ? "Không có" : "None")}</p>
+                  </div>
                 </div>
               </div>
 
-              {quoteBoatRows.length > 0 ? (
-                <div className="divide-y divide-[#D8E7EA] dark:divide-slate-700">
-                  {quoteBoatRows.map((boat) => (
-                    <div key={`${boat.boatOrder}-${boat.name}`} className="flex items-center gap-4 px-5 py-4">
-                      <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-2xl bg-slate-200 dark:bg-slate-800">
-                        <img src={boat.imageUrl} alt={boat.name} className="h-full w-full object-cover" />
-                        <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg bg-[#124757] text-[10px] font-headline font-black text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900">
-                          {boat.boatOrder}
-                        </span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="min-w-0 truncate font-headline font-black text-slate-900 dark:text-white">{boat.name}</p>
-                          <BoatSeatLayoutPreviewButton
-                            boatId={boat.boatId}
-                            boatName={boat.name}
-                            boatImageUrl={boat.imageUrl}
-                            lang={lang}
-                            boatMeta={{
-                              seatCount: boat.seatCount,
-                              numberOfDecks: boat.numberOfDecks,
-                              seatSetupType: boat.seatSetupType,
-                              imageUrl: boat.imageUrl,
-                            }}
-                          />
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <span className="rounded-full border border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-headline font-black text-[#124757] dark:text-yellow-400">
-                            {formatDeckCount(boat.numberOfDecks, lang) || boat.seatSetupType}
-                          </span>
-                          {boat.seatCount !== "" && (
-                            <span className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300">
-                              {boat.seatCount} {lang === "VN" ? "ghế" : "seats"}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {scheduleItems.map((item) => (
+                    <div key={item.label} className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
+                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                      <p className="mt-1 text-lg font-headline font-black leading-snug text-slate-800 dark:text-white wrap-break-words">{item.value}</p>
+                      {item.description && (
+                        <p className="mt-1 text-xs font-bold leading-snug text-slate-400 dark:text-slate-500">{item.description}</p>
+                      )}
                     </div>
                   ))}
-                </div>
-              ) : (
-                <div className="px-5 py-8">
-                  <div className="rounded-2xl border border-dashed border-[#BFD4D9] bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-800">
-                    <h3 className="font-headline text-lg font-black text-[#0E4050] dark:text-white">{lang === "VN" ? "Chưa nhận được chi tiết tàu" : "Boat details are not available"}</h3>
-                    <p className="mx-auto mt-1 max-w-lg text-sm font-medium text-slate-500 dark:text-slate-400">
-                      {lang === "VN" ? "Chưa có thông tin chi tiết từng tàu cho yêu cầu này. Tổng giá đã chốt vẫn được hiển thị ở phần bên dưới." : "Detailed boat information isn't available for this request yet. The confirmed total is still shown below."}
+
+                  <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
+                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Tàu yêu cầu" : "Requested Boats"}</p>
+                    <p className="mt-1 text-lg font-headline font-black leading-snug text-slate-800 dark:text-white wrap-break-words">
+                      {requestedDeckItems.length > 0
+                        ? (lang === "VN" ? `${requestedDeckItems.length} tàu` : `${requestedDeckItems.length} boat${requestedDeckItems.length > 1 ? "s" : ""}`)
+                        : (lang === "VN" ? "Chờ báo giá" : "Pending quote")}
                     </p>
+                    {requestedDeckItems.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {requestedDeckItems.map((boat) => (
+                          <span key={`${boat.order}-${boat.deckText || boat.seatSetupType}`} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-headline font-black text-[#124757] shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400">
+                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#124757] text-[8px] text-white dark:bg-yellow-400 dark:text-slate-900">{boat.order}</span>
+                            {boat.deckText || boat.seatSetupType}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-
-              <div className="border-t border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
-                {(() => {
-                  const previewHasPricedBoats = Array.isArray(customerQuotePreview?.boats)
-                    && customerQuotePreview.boats.some((boat) => (
-                      Number(boat?.subtotalAmount) > 0 || Number(boat?.unitPrice) > 0
-                    ));
-                  const previewHasTotal = Number(customerQuotePreview?.totalAmount) > 0 || displayQuoteTotal > 0;
-
-                  if (previewHasPricedBoats || (customerQuotePreview?.boats?.length > 0 && previewHasTotal)) {
-                    return (
-                      <CharterQuotePreviewTable
-                        preview={{
-                          ...customerQuotePreview,
-                          totalAmount: Number(customerQuotePreview?.totalAmount) > 0
-                            ? customerQuotePreview.totalAmount
-                            : displayQuoteTotal,
-                        }}
-                        booking={booking}
-                        lang={lang}
-                        currencyFormatter={currencyFormatter}
-                      />
-                    );
-                  }
-
-                  if (displayQuoteTotal > 0) {
-                    return (
-                      <div className="overflow-hidden rounded-2xl bg-[#124757] text-white shadow-[0_12px_30px_rgba(18,71,87,0.25)] dark:bg-yellow-400 dark:text-slate-900">
-                        <div className="flex items-end justify-between gap-3 px-4 py-4">
-                          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
-                            {lang === "VN" ? "Tổng chốt giá" : "Quote total"}
-                          </p>
-                          <p className="font-headline text-2xl font-black tabular-nums tracking-tight">
-                            {currencyFormatter.format(displayQuoteTotal)}
-                          </p>
-                        </div>
-                        {quoteDepositAmount > 0 ? (
-                          <div className="flex items-center justify-between gap-3 border-t border-white/15 px-4 py-3 dark:border-slate-900/15">
-                            <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
-                              {lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
-                            </p>
-                            <p className="text-sm font-headline font-black tabular-nums text-emerald-200 dark:text-emerald-800">
-                              {currencyFormatter.format(quoteDepositAmount)}
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="rounded-2xl border border-dashed border-[#BFD4D9] bg-[#F7FAFB] px-4 py-5 text-center dark:border-slate-700 dark:bg-slate-900">
-                      <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
-                        {lang === "VN"
-                          ? "Đã có báo giá nhưng chưa nhận được chi tiết số tiền. Thử tải lại trang."
-                          : "A quote exists but pricing details are missing. Try refreshing the page."}
-                      </p>
-                    </div>
-                  );
-                })()}
-
-                <MyCharterPaymentPanel
-                  lang={lang}
+                <CharterInsuranceInfo
                   booking={booking}
+                  lang={lang}
                   currencyFormatter={currencyFormatter}
-                  paymentSectionRef={paymentSectionRef}
-                  isPaid={isPaid}
-                  isTerminalBooking={isTerminalBooking}
-                  canShowPayOsSection={canShowPayOsSection}
-                  isSubmitting={isSubmitting}
-                  isQuoteHoldExpired={isQuoteHoldExpired}
-                  isQuotePaymentExpired={isQuotePaymentExpired}
-                  showQuotePaymentCountdown={showQuotePaymentCountdown}
-                  quotePaymentRemainingMs={quotePaymentRemainingMs}
-                  expiredPendingPayment={expiredPendingPayment}
-                  expiredPaymentCheckoutUrl={expiredPaymentCheckoutUrl}
-                  paymentCheckoutUrl={paymentCheckoutUrl}
-                  isPaymentLinkExpired={isPaymentLinkExpired}
-                  hasPendingPayOs={hasPendingPayOs}
-                  canCreatePayment={canCreatePayment}
-                  selectablePaymentChoices={selectablePaymentChoices}
-                  paymentSelectValue={paymentSelectValue}
-                  setPaymentOption={setPaymentOption}
-                  usesDefaultDeposit={usesDefaultDeposit}
-                  canPayDeposit={canPayDeposit}
-                  selectedPaymentAmount={selectedPaymentAmount}
-                  effectivePaidAmount={effectivePaidAmount}
-                  remainingAmount={remainingAmount}
-                  paymentPromotionCode={paymentPromotionCode}
-                  setPaymentPromotionCode={handlePaymentPromotionCodeChange}
-                  promoPreview={promoPreview}
-                  promoChecking={promoChecking}
-                  onApplyPromotionCode={handleApplyPromotionCode}
-                  onClearPromotionCode={handleClearPromotionCode}
-                  effectiveCheckoutUrl={effectiveCheckoutUrl}
-                  pendingPaymentOrderCode={pendingPaymentOrderCode}
-                  pendingPaymentId={pendingPaymentId}
-                  effectivePendingPaymentAmount={effectivePendingPaymentAmount}
-                  effectivePaymentDeadline={effectivePaymentDeadline}
-                  paymentWatcherRemainingMs={paymentWatcherRemainingMs}
-                  handleRespondToQuote={handleRespondToQuote}
-                  handleCreatePayment={handleCreatePayment}
-                  openPaymentPage={openPaymentPage}
-                  handleSyncPayment={handleSyncPayment}
-                  handleSyncPaymentByOrderCode={handleSyncPaymentByOrderCode}
-                  loadDetail={loadDetail}
                 />
               </div>
             </div>
+          </section>
           )}
-        </section>
 
-        {/* ===== SECTION 3: TICKETS & PASSENGERS ===== */}
-        {(isPaymentStatusPaid || canShowCharterTicketsWithBalance(booking)) && (
-          <MyCharterTicketsPanel
-            lang={lang}
-            booking={booking}
-            isPaid={isPaid || canShowCharterTicketsWithBalance(booking)}
-            isSubmitting={isSubmitting}
-            qrImageUrl={qrImageUrl}
-            selectedTicketIds={selectedTicketIds}
-            setSelectedTicketIds={setSelectedTicketIds}
-            passengerRows={passengerRows}
-            canUseContactAsSinglePassenger={canUseContactAsSinglePassenger}
-            bookerAsFirstPassenger={bookerAsFirstPassenger}
-            importInputRef={importInputRef}
-            isUsableText={isUsableText}
-            handleTicketFileAction={handleTicketFileAction}
-            handleImportPassengers={handleImportPassengers}
-            handlePassengerChange={handlePassengerChange}
-            handleSavePassengers={handleSavePassengers}
-            handleAddPassengers={handleAddPassengers}
-          />
-        )}
-      </main>
-    </div>
+          {/* ===== SECTION 2: BOAT & QUOTE ===== */}
+          {activeTab === "quote" && (
+          <section className="bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70 px-6 py-6 md:px-8">
+            <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
+              {lang === "VN" ? "Tàu & báo giá" : "Boat & Quote"}
+            </h2>
 
-    <MyCharterPaymentStickyBar
-      lang={lang}
-      isPaid={isPaid}
-      isSubmitting={isSubmitting}
-      canCreatePayment={canCreatePayment}
-      hasPendingPayOs={hasPendingPayOs}
-      selectedPaymentAmount={selectedPaymentAmount}
-      effectivePendingPaymentAmount={effectivePendingPaymentAmount}
-      effectiveCheckoutUrl={effectiveCheckoutUrl}
-      pendingPaymentOrderCode={pendingPaymentOrderCode}
-      effectivePaymentDeadline={effectivePaymentDeadline}
-      currencyFormatter={currencyFormatter}
-      openPaymentPage={openPaymentPage}
-      handleCreatePayment={handleCreatePayment}
-    />
+            {booking.status === "PendingQuote" ? (
+              <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                <h3 className="font-headline text-lg font-black">{lang === "VN" ? "Chưa có báo giá" : "No quote yet"}</h3>
+                <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Đội vận hành đang chọn tàu và chốt giá. Khi có báo giá, tàu và chi tiết giá sẽ hiển thị ở mục này." : "The operations team is assigning boats and pricing. Boat and quote details will appear here."}</p>
+              </div>
+            ) : hasQuote && (
+              <div className="mt-4 overflow-hidden rounded-3xl border border-[#D8E7EA] dark:border-slate-700 bg-[#F7FAFB] dark:bg-slate-900">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
+                  <div>
+                    <h3 className="mt-1 text-xl font-headline font-black text-[#0E4050] dark:text-yellow-400">{lang === "VN" ? "Chi tiết tàu và chi phí" : "Boat and pricing details"}</h3>
+                  </div>
+                </div>
+
+                <div className="border-b border-[#D8E7EA] px-5 py-4 dark:border-slate-700">
+                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                    {lang === "VN" ? "Lộ trình" : "Route"}
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến đón" : "Pickup"}</p>
+                      <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeFrom}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến trả" : "Drop-off"}</p>
+                      <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeTo}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ngày giờ đi" : "Departure"}</p>
+                      <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
+                        {formatDate(booking.departureDate)} · {String(booking.startTime || "--").slice(0, 5)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ước tính" : "Estimate"}</p>
+                      <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
+                        {formatRouteEstimate(booking.routeEstimate)}
+                      </p>
+                    </div>
+                  </div>
+                  {Array.isArray(booking.itineraryStops) && booking.itineraryStops.length > 0 ? (
+                    <div className="mt-3 space-y-1.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {lang === "VN" ? "Điểm dừng" : "Stops"}
+                      </p>
+                      {booking.itineraryStops.map((stop, index) => (
+                        <p key={`${stop.stationId || "stop"}-${index}`} className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                          {lang === "VN" ? `Dừng ${stop.stopOrder || index + 1}` : `Stop ${stop.stopOrder || index + 1}`}
+                          {": "}
+                          {stop.stationName || "--"}
+                          {Number(stop.stayDurationMinutes) > 0
+                            ? ` · ${stop.stayDurationMinutes} ${lang === "VN" ? "phút" : "min"}`
+                            : ""}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4">
+                    <CharterRouteMapPanel
+                      lang={lang}
+                      booking={booking}
+                      heightClassName="h-64 md:h-72"
+                      className="border-[#D8E7EA] dark:border-slate-700"
+                    />
+                  </div>
+                </div>
+
+                {quoteBoatRows.length > 0 ? (
+                  <div className="divide-y divide-[#D8E7EA] dark:divide-slate-700">
+                    {quoteBoatRows.map((boat) => (
+                      <div key={`${boat.boatOrder}-${boat.name}`} className="flex items-center gap-4 px-5 py-4">
+                        <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-2xl bg-slate-200 dark:bg-slate-800">
+                          {boat.imageUrl ? (
+                            <img src={boat.imageUrl} alt={boat.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-slate-400 dark:text-slate-500">
+                              <NullImageIcon className="h-8 w-8" />
+                            </div>
+                          )}
+                          <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg bg-[#124757] text-[10px] font-headline font-black text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900">
+                            {boat.boatOrder}
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="min-w-0 truncate font-headline font-black text-slate-900 dark:text-white">{boat.name}</p>
+                            <BoatSeatLayoutPreviewButton
+                              boatId={boat.boatId}
+                              boatName={boat.name}
+                              boatImageUrl={boat.imageUrl}
+                              lang={lang}
+                              boatMeta={{
+                                seatCount: boat.seatCount,
+                                numberOfDecks: boat.numberOfDecks,
+                                seatSetupType: boat.seatSetupType,
+                                imageUrl: boat.imageUrl,
+                              }}
+                            />
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className="rounded-full border border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-headline font-black text-[#124757] dark:text-yellow-400">
+                              {formatDeckCount(boat.numberOfDecks, lang) || boat.seatSetupType}
+                            </span>
+                            {boat.seatCount !== "" && (
+                              <span className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300">
+                                {boat.seatCount} {lang === "VN" ? "ghế" : "seats"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-5 py-8">
+                    <div className="rounded-2xl border border-dashed border-[#BFD4D9] bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-800">
+                      <h3 className="font-headline text-lg font-black text-[#0E4050] dark:text-white">{lang === "VN" ? "Chưa nhận được chi tiết tàu" : "Boat details are not available"}</h3>
+                      <p className="mx-auto mt-1 max-w-lg text-sm font-medium text-slate-500 dark:text-slate-400">
+                        {lang === "VN" ? "Chưa có thông tin chi tiết từng tàu cho yêu cầu này. Tổng giá đã chốt vẫn được hiển thị ở phần bên dưới." : "Detailed boat information isn't available for this request yet. The confirmed total is still shown below."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="border-t border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
+                  {(() => {
+                    const previewHasPricedBoats = Array.isArray(customerQuotePreview?.boats)
+                      && customerQuotePreview.boats.some((boat) => (
+                        Number(boat?.subtotalAmount) > 0 || Number(boat?.unitPrice) > 0
+                      ));
+                    const previewHasTotal = Number(customerQuotePreview?.totalAmount) > 0 || displayQuoteTotal > 0;
+
+                    if (previewHasPricedBoats || (customerQuotePreview?.boats?.length > 0 && previewHasTotal)) {
+                      return (
+                        <CharterQuotePreviewTable
+                          preview={{
+                            ...customerQuotePreview,
+                            totalAmount: Number(customerQuotePreview?.totalAmount) > 0
+                              ? customerQuotePreview.totalAmount
+                              : displayQuoteTotal,
+                          }}
+                          booking={booking}
+                          lang={lang}
+                          currencyFormatter={currencyFormatter}
+                        />
+                      );
+                    }
+
+                    if (displayQuoteTotal > 0) {
+                      return (
+                        <div className="overflow-hidden rounded-2xl bg-[#124757] text-white shadow-[0_12px_30px_rgba(18,71,87,0.25)] dark:bg-yellow-400 dark:text-slate-900">
+                          <div className="flex items-end justify-between gap-3 px-4 py-4">
+                            <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
+                              {lang === "VN" ? "Tổng chốt giá" : "Quote total"}
+                            </p>
+                            <p className="font-headline text-2xl font-black tabular-nums tracking-tight">
+                              {currencyFormatter.format(displayQuoteTotal)}
+                            </p>
+                          </div>
+                          {quoteDepositAmount > 0 ? (
+                            <div className="flex items-center justify-between gap-3 border-t border-white/15 px-4 py-3 dark:border-slate-900/15">
+                              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
+                                {lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
+                              </p>
+                              <p className="text-sm font-headline font-black tabular-nums text-emerald-200 dark:text-emerald-800">
+                                {currencyFormatter.format(quoteDepositAmount)}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="rounded-2xl border border-dashed border-[#BFD4D9] bg-[#F7FAFB] px-4 py-5 text-center dark:border-slate-700 dark:bg-slate-900">
+                        <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                          {lang === "VN"
+                            ? "Đã có báo giá nhưng chưa nhận được chi tiết số tiền. Thử tải lại trang."
+                            : "A quote exists but pricing details are missing. Try refreshing the page."}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+          </section>
+          )}
+
+          {/* ===== SECTION 2B: PAYMENT ===== */}
+          {activeTab === "payment" && (
+          <section className="bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70 px-6 py-6 md:px-8">
+            <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
+              {lang === "VN" ? "Thanh toán" : "Payment"}
+            </h2>
+
+            {hasQuote ? (
+              <MyCharterPaymentPanel
+                lang={lang}
+                booking={booking}
+                currencyFormatter={currencyFormatter}
+                paymentSectionRef={paymentSectionRef}
+                isPaid={isPaid}
+                isTerminalBooking={isTerminalBooking}
+                canShowPayOsSection={canShowPayOsSection}
+                isSubmitting={isSubmitting}
+                isQuoteHoldExpired={isQuoteHoldExpired}
+                isQuotePaymentExpired={isQuotePaymentExpired}
+                showQuotePaymentCountdown={showQuotePaymentCountdown}
+                quotePaymentRemainingMs={quotePaymentRemainingMs}
+                expiredPendingPayment={expiredPendingPayment}
+                expiredPaymentCheckoutUrl={expiredPaymentCheckoutUrl}
+                paymentCheckoutUrl={paymentCheckoutUrl}
+                isPaymentLinkExpired={isPaymentLinkExpired}
+                hasPendingPayOs={hasPendingPayOs}
+                canCreatePayment={canCreatePayment}
+                selectablePaymentChoices={selectablePaymentChoices}
+                paymentSelectValue={paymentSelectValue}
+                setPaymentOption={setPaymentOption}
+                usesDefaultDeposit={usesDefaultDeposit}
+                canPayDeposit={canPayDeposit}
+                selectedPaymentAmount={selectedPaymentAmount}
+                effectivePaidAmount={effectivePaidAmount}
+                remainingAmount={remainingAmount}
+                paymentPromotionCode={paymentPromotionCode}
+                setPaymentPromotionCode={handlePaymentPromotionCodeChange}
+                promoPreview={promoPreview}
+                promoChecking={promoChecking}
+                onApplyPromotionCode={handleApplyPromotionCode}
+                onClearPromotionCode={handleClearPromotionCode}
+                effectiveCheckoutUrl={effectiveCheckoutUrl}
+                pendingPaymentOrderCode={pendingPaymentOrderCode}
+                pendingPaymentId={pendingPaymentId}
+                effectivePendingPaymentAmount={effectivePendingPaymentAmount}
+                effectivePaymentDeadline={effectivePaymentDeadline}
+                paymentWatcherRemainingMs={paymentWatcherRemainingMs}
+                handleRespondToQuote={handleRespondToQuote}
+                handleCreatePayment={handleCreatePayment}
+                openPaymentPage={openPaymentPage}
+                handleSyncPayment={handleSyncPayment}
+                handleSyncPaymentByOrderCode={handleSyncPaymentByOrderCode}
+                loadDetail={loadDetail}
+              />
+            ) : (
+              <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                <h3 className="font-headline text-lg font-black">{lang === "VN" ? "Chưa có báo giá" : "No quote yet"}</h3>
+                <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Bạn cần chờ báo giá trước khi có thể thanh toán." : "Wait for a quote before you can make a payment."}</p>
+              </div>
+            )}
+          </section>
+          )}
+
+          {/* ===== SECTION 3: TICKETS & PASSENGERS ===== */}
+          {activeTab === "tickets" && showTicketsTab && (
+            <MyCharterTicketsPanel
+              lang={lang}
+              booking={booking}
+              isPaid={isPaid || canShowCharterTicketsWithBalance(booking)}
+              isSubmitting={isSubmitting}
+              qrImageUrl={qrImageUrl}
+              selectedTicketIds={selectedTicketIds}
+              setSelectedTicketIds={setSelectedTicketIds}
+              passengerRows={passengerRows}
+              canUseContactAsSinglePassenger={canUseContactAsSinglePassenger}
+              bookerAsFirstPassenger={bookerAsFirstPassenger}
+              importInputRef={importInputRef}
+              isUsableText={isUsableText}
+              handleTicketFileAction={handleTicketFileAction}
+              handleImportPassengers={handleImportPassengers}
+              handlePassengerChange={handlePassengerChange}
+              handleSavePassengers={handleSavePassengers}
+              handleAddPassengers={handleAddPassengers}
+            />
+          )}
+        </main>
+      </div>
+
+      <MyCharterPaymentStickyBar
+        lang={lang}
+        isPaid={isPaid}
+        isSubmitting={isSubmitting}
+        canCreatePayment={canCreatePayment}
+        hasPendingPayOs={hasPendingPayOs}
+        selectedPaymentAmount={selectedPaymentAmount}
+        effectivePendingPaymentAmount={effectivePendingPaymentAmount}
+        effectiveCheckoutUrl={effectiveCheckoutUrl}
+        pendingPaymentOrderCode={pendingPaymentOrderCode}
+        effectivePaymentDeadline={effectivePaymentDeadline}
+        currencyFormatter={currencyFormatter}
+        openPaymentPage={openPaymentPage}
+        handleCreatePayment={handleCreatePayment}
+      />
     </>
   );
 }

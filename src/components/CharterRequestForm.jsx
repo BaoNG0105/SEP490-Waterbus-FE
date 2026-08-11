@@ -953,7 +953,7 @@ export function CharterRequestForm({
                   );
                 })}
               </div>
-              <p className="text-[11px] font-medium leading-relaxed text-slate-400">
+              <p className="text-[11px] font-medium leading-relaxed text-red-500 dark:text-red-400">
                 {formData.rentalUnit === "Day"
                   ? (lang === "VN"
                     ? `Giờ đi từ ${CHARTER_DAY_WINDOW_START} đến ${CHARTER_DAY_WINDOW_END}. Thuê 1 ngày kết thúc ${CHARTER_DAY_WINDOW_END} cùng ngày; 2 ngày kết thúc ${CHARTER_DAY_WINDOW_END} ngày hôm sau.`

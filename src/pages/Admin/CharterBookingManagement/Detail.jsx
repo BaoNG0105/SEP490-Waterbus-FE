@@ -79,6 +79,7 @@ import {
   getRemainingMs,
   getRequestedDeckCount,
   getRouteCandidateLegKey,
+  hasCompletedCharterRefund,
   hasRefundablePayment,
   isActiveBoat,
   isPaidPayment,
@@ -484,6 +485,17 @@ export function AdminCharterBookingDetail() {
   const canManageTripCreate = Boolean(booking)
     && capabilities.canManageStatus
     && booking.status === "Confirmed";
+
+  // Đã hủy + đã hoàn tiền (hoặc không cần hoàn) thì không còn gì để hủy nữa.
+  const canCancelBooking = Boolean(booking)
+    && capabilities.canManageStatus
+    && !(
+      ["Cancelled", "Refunded"].includes(String(booking?.status || ""))
+      && (
+        hasCompletedCharterRefund(booking)
+        || ["refunded", "partiallyrefunded"].includes(String(booking?.paymentStatus || "").toLowerCase().replace(/[_-\s]/g, ""))
+      )
+    );
 
   const linkedTripIds = useMemo(() => {
     const fromBooking = booking ? getCharterBookingLinkedTripIds(booking) : [];
@@ -1111,21 +1123,34 @@ export function AdminCharterBookingDetail() {
         />
       ) : null}
       <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-        <div className="min-w-0">
-          <button type="button" onClick={() => navigate("/admin/charter-bookings-management")} className="mb-4 inline-flex items-center gap-2 text-xs font-headline font-black uppercase tracking-wider text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400">
-            <span className="material-symbols-outlined text-base">arrow_back</span>
-            {lang === "VN" ? "Danh sách thuê tàu" : "Booking request list"}
-          </button>
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 md:text-3xl">{booking.bookingCode}</h2>
-            <span className={`inline-flex items-center gap-1.5 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.text}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${statusInfo}`}></span>
-              {statusInfo.label}
-            </span>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <button type="button" onClick={() => navigate("/admin/charter-bookings-management")} className="mb-4 inline-flex items-center gap-2 text-xs font-headline font-black uppercase tracking-wider text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400">
+              <span className="material-symbols-outlined text-base">arrow_back</span>
+              {lang === "VN" ? "Danh sách thuê tàu" : "Booking request list"}
+            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 md:text-3xl">{booking.bookingCode}</h2>
+              <span className={`inline-flex items-center gap-1.5 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.text}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${statusInfo}`}></span>
+                {statusInfo.label}
+              </span>
+            </div>
+            <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">
+              {lang === "VN" ? "Khách hàng: " : "Customer: "}{booking.customerName || "--"}
+            </p>
           </div>
-          <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">
-            {lang === "VN" ? "Khách hàng: " : "Customer: "}{booking.customerName || "--"}
-          </p>
+
+          {canCancelBooking && (
+            <button
+              type="button"
+              onClick={() => handleDetailStatusChange("Cancelled")}
+              disabled={isSubmitting}
+              className="w-full shrink-0 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-rose-700 disabled:opacity-60 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300 sm:w-auto"
+            >
+              {lang === "VN" ? "Hủy booking" : "Cancel booking"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1271,7 +1296,6 @@ export function AdminCharterBookingDetail() {
           onLoadRouteCandidates={handleLoadRouteCandidates}
           onPreviewQuote={handlePreviewQuote}
           onQuoteRentalUnitChange={handleDetailQuoteRentalUnitChange}
-          onStatusChange={handleDetailStatusChange}
           onCreateTrip={handleCreateCharterTrip}
           canCreateTrip={charterTripGate.canCreate}
           createTripBlockers={charterTripGate.reasons}

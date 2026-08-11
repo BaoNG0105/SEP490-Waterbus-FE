@@ -92,7 +92,6 @@ export const getCustomerActionInfo = (booking, lang) => {
 
   if (status === "PendingQuote") {
     return {
-      icon: "hourglass_top",
       label: lang === "VN" ? "Chờ báo giá" : "Waiting for quote",
       cta: lang === "VN" ? "Xem tiến độ" : "Track progress",
       tone: "wait",
@@ -144,7 +143,6 @@ export const getCustomerActionInfo = (booking, lang) => {
 
   if (isTerminalBookingStatus(status)) {
     return {
-      icon: "event_busy",
       label: lang === "VN" ? "Yêu cầu đã đóng" : "Request closed",
       cta: lang === "VN" ? "Xem chi tiết" : "View details",
       tone: "closed",

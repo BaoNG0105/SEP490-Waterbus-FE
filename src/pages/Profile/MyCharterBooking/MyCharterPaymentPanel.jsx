@@ -1,7 +1,8 @@
-import { CharterPaymentLedger } from "../../../components/CharterPaymentLedger";
 import { PayOSLogo, payosButtonClassName, payosButtonLgClassName } from "../../../components/PayOSLogo";
 import { SelectablePublicVouchers } from "../../../components/SelectablePublicVouchers";
+
 import { PROMOTION_BOOKING_TYPES } from "../../../services/promotionService";
+
 import { shouldShowPaymentDeadlineCountdown } from "../../../utils/charterBookingActions";
 
 const formatCountdown = (milliseconds) => {
@@ -15,6 +16,153 @@ const formatCountdown = (milliseconds) => {
   if (days > 0) return `${days}d ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 };
+
+const pick = (source, keys, fallback = "") => {
+  for (const key of keys) {
+    const value = key.split(".").reduce((obj, part) => obj?.[part], source);
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return fallback;
+};
+
+const getPaymentStatusMeta = (status, lang) => {
+  switch (String(status || "").toLowerCase()) {
+    case "paid":
+    case "success":
+    case "succeeded":
+    case "completed":
+      return { label: lang === "VN" ? "Đã thanh toán" : "Paid", classes: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20" };
+    case "depositpaid":
+      return { label: lang === "VN" ? "Đã đặt cọc" : "Deposit paid", classes: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20" };
+    case "pending":
+      return { label: lang === "VN" ? "Đang chờ" : "Pending", classes: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20" };
+    case "expired":
+      return { label: lang === "VN" ? "Hết hạn" : "Expired", classes: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700" };
+    case "refunded":
+      return { label: lang === "VN" ? "Đã hoàn" : "Refunded", classes: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20" };
+    case "failed":
+    case "cancelled":
+      return { label: lang === "VN" ? "Thất bại" : "Failed", classes: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20" };
+    default:
+      return { label: status || "--", classes: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700" };
+  }
+};
+
+const formatDateTime = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+  return `${date.toLocaleDateString("vi-VN")} ${date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`;
+};
+
+const getPaymentTimeLabel = (payment, lang, status) => {
+  const paidAt = pick(payment, ["paidAt", "completedAt"], "");
+  const createdAt = pick(payment, ["createdAt", "createdDate"], "");
+  const updatedAt = pick(payment, ["updatedAt"], "");
+  const expiresAt = pick(payment, ["expiresAt", "expiredAt", "paymentExpiresAt"], "");
+  const isExpired = String(status || "").toLowerCase() === "expired";
+
+  if (paidAt) {
+    const formatted = formatDateTime(paidAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Thời điểm thanh toán" : "Paid at" }
+      : null;
+  }
+  if (isExpired && expiresAt) {
+    const formatted = formatDateTime(expiresAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Hết hạn lúc" : "Expired at" }
+      : null;
+  }
+  if (createdAt) {
+    const formatted = formatDateTime(createdAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Tạo lúc" : "Created at" }
+      : null;
+  }
+  if (expiresAt) {
+    const formatted = formatDateTime(expiresAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Hạn thanh toán" : "Expires at" }
+      : null;
+  }
+  if (updatedAt) {
+    const formatted = formatDateTime(updatedAt);
+    return formatted
+      ? { text: formatted, hint: lang === "VN" ? "Cập nhật lúc" : "Updated at" }
+      : null;
+  }
+  return null;
+};
+
+function CharterPaymentLedger({ payments = [], lang = "VN", currencyFormatter }) {
+  if (!Array.isArray(payments) || payments.length === 0) return null;
+
+  return (
+    <div className="mt-5 rounded-3xl border border-[#D8E7EA] bg-[#F7FAFB] p-4 dark:border-slate-700 dark:bg-slate-900/50 md:p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <h3 className="text-[11px] font-headline font-black uppercase tracking-widest text-[#124757] dark:text-yellow-400">
+          {lang === "VN" ? "Lịch sử giao dịch" : "Payment history"}
+        </h3>
+      </div>
+
+      <div className="space-y-3">
+        {payments.map((payment, index) => {
+          const amount = Number(pick(payment, ["amount", "paymentAmount", "paidAmount", "totalAmount"], 0)) || 0;
+          const status = pick(payment, ["paymentStatus", "status"], "--");
+          const meta = getPaymentStatusMeta(status, lang);
+          const timeMeta = getPaymentTimeLabel(payment, lang, status);
+          const orderCode = pick(payment, ["orderCode", "paymentOrderCode", "payosOrderCode"], "");
+          const refundAmount = Number(pick(payment, ["refundAmount", "refundedAmount"], 0)) || 0;
+
+          return (
+            <div
+              key={pick(payment, ["paymentId", "id"], index)}
+              className="flex flex-col gap-3 rounded-2xl border border-white bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider ${meta.classes
+                        .split(" ")
+                        .filter((cls) => cls.includes("text-"))
+                        .join(" ")
+                      }`}>
+                      {meta.label}
+                    </span>
+                    {orderCode && (
+                      <span className="text-[10px] font-bold text-slate-400">
+                        #{String(orderCode).slice(-8)}
+                      </span>
+                    )}
+                  </div>
+                  {timeMeta ? (
+                    <p className="mt-1 text-xs font-bold text-slate-400">
+                      <span className="font-medium text-slate-400/80">{timeMeta.hint}: </span>
+                      {timeMeta.text}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs font-bold text-slate-400">
+                      {lang === "VN" ? "Chưa có thời gian giao dịch" : "No payment timestamp"}
+                    </p>
+                  )}
+                  {refundAmount > 0 && (
+                    <p className="mt-1 text-[10px] font-bold text-teal-600 dark:text-teal-300">
+                      {lang === "VN" ? "Đã hoàn" : "Refunded"}: {currencyFormatter.format(refundAmount)}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <p className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400 sm:text-right">
+                {amount > 0 ? currencyFormatter.format(amount) : "--"}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Quote response + PayOS payment UI for customer charter detail.
@@ -76,7 +224,7 @@ export function MyCharterPaymentPanel({
         />
 
         {booking.status === "Quoted" && !isPaid ? (
-          <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+          <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-linear-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
             <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
               <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
                 {lang === "VN" ? "Phản hồi báo giá" : "Respond to quote"}
@@ -137,7 +285,7 @@ export function MyCharterPaymentPanel({
         ) : null}
 
         {canShowPayOsSection ? (
-          <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+          <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-linear-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
             <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
@@ -151,7 +299,7 @@ export function MyCharterPaymentPanel({
                   </p>
                 </div>
                 {showQuotePaymentCountdown && (
-                  <div className={`min-w-[9.5rem] rounded-2xl border px-4 py-3 text-center ${
+                  <div className={`min-w-38 rounded-2xl border px-4 py-3 text-center ${
                     isQuotePaymentExpired
                       ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
                       : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
@@ -308,7 +456,7 @@ export function MyCharterPaymentPanel({
                   )}
 
                   {booking.hasDepositPaid && (
-                    <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-bold leading-5 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    <p className="text-xs font-bold leading-5 text-emerald-700 dark:text-emerald-300">
                       {lang === "VN"
                         ? `Đã thanh toán ${currencyFormatter.format(effectivePaidAmount)}. Lần này chỉ thu phần còn lại ${currencyFormatter.format(remainingAmount)}.`
                         : `Paid ${currencyFormatter.format(effectivePaidAmount)}. This payment only charges the remaining ${currencyFormatter.format(remainingAmount)}.`}

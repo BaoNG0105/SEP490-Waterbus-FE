@@ -34,7 +34,6 @@ import {
   getBoatStatusLabel,
   getCharterRoutePricingWarning,
   getRouteCandidateLegKey,
-  hasCompletedCharterRefund,
   hasEmptyRouteCandidateLegs,
   isCharterRoutePricingBlocked,
   isRescueBoat,
@@ -739,19 +738,6 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
-function ManualStatusPanel({ lang, isSubmitting, onStatusChange }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onStatusChange("Cancelled")}
-      disabled={isSubmitting}
-      className="w-full rounded-xl border border-rose-700 bg-rose-700 px-4 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-60 dark:border-rose-700 dark:bg-rose-700 dark:text-white"
-    >
-      {lang === "VN" ? "Hủy booking" : "Cancel booking"}
-    </button>
-  );
-}
-
 function OverviewField({ icon, label, value, hint }) {
   return (
     <div className="flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5 dark:border-slate-700 dark:bg-slate-900">
@@ -1187,7 +1173,6 @@ export function AdminBookingActionsTab({
   onRoutePlanChange,
   onLoadRouteCandidates,
   onPreviewQuote,
-  onStatusChange,
   onNavigateTab,
   onCreateTrip,
   canCreateTrip = false,
@@ -1219,14 +1204,6 @@ export function AdminBookingActionsTab({
   const canSubmitQuote = canPreviewQuote
     && Boolean(quotePreview)
     && !isSubmitting;
-  const bookingStatus = String(booking?.status || "");
-  const paymentStatus = String(booking?.paymentStatus || "").toLowerCase().replace(/[_-\s]/g, "");
-  const hideManualStatusPanel = ["Cancelled", "Refunded"].includes(bookingStatus)
-    && (
-      hasCompletedCharterRefund(booking)
-      || ["refunded", "partiallyrefunded"].includes(paymentStatus)
-    );
-
   if (phase === "quote") {
     return (
       <section className="space-y-6">
@@ -1399,14 +1376,6 @@ export function AdminBookingActionsTab({
             isQuoteBoatSelectionComplete={isQuoteBoatSelectionComplete}
           />
         </div>
-
-        {!hideManualStatusPanel && (
-          <ManualStatusPanel
-            lang={lang}
-            isSubmitting={isSubmitting}
-            onStatusChange={onStatusChange}
-          />
-        )}
       </section>
     );
   }
@@ -1477,9 +1446,6 @@ export function AdminBookingActionsTab({
           </div>
         </div>
 
-        {!hideManualStatusPanel && (
-          <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} onStatusChange={onStatusChange} />
-        )}
       </section>
     );
   }
@@ -1554,9 +1520,6 @@ export function AdminBookingActionsTab({
           )}
         </div>
 
-        {!hideManualStatusPanel && (
-          <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} onStatusChange={onStatusChange} />
-        )}
       </section>
     );
   }
@@ -1592,10 +1555,6 @@ export function AdminBookingActionsTab({
           </div>
         </div>
       </div>
-
-      {!hideManualStatusPanel && (
-        <ManualStatusPanel lang={lang} isSubmitting={isSubmitting} onStatusChange={onStatusChange} />
-      )}
     </section>
   );
 }
@@ -2043,7 +2002,7 @@ export function AdminBookingTicketsTab({
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#124757] px-4 py-3 text-xs font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
               >
                 <span className="material-symbols-outlined text-base">download</span>
-                {lang === "VN" ? "Tải PDF" : "Download PDF"}
+                {lang === "VN" ? "Tải vé PDF" : "Download PDF tickets"}
               </button>
             </div>
           )}
@@ -2112,7 +2071,11 @@ export function AdminBookingTicketsTab({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-headline text-base font-black text-[#124757] dark:text-yellow-400">{row.ticketCode}</p>
-                        <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider ${statusMeta.classes}`}>
+                        <span className={`inline-flex px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider ${statusMeta.classes
+                            .split(" ")
+                            .filter((cls) => cls.includes("text-"))
+                            .join(" ")
+                          }`}>
                           {statusMeta.label}
                         </span>
                       </div>
@@ -2125,7 +2088,11 @@ export function AdminBookingTicketsTab({
                           <span>{lang === "VN" ? "Năm sinh" : "Birth year"}: {row.birthYear}</span>
                         )}
                         {row.approvalStatus ? (
-                          <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-black uppercase ${getPassengerApprovalTone(row.approvalStatus)}`}>
+                          <span className={`px-1.5 py-0.5 text-[10px] font-black uppercase ${getPassengerApprovalTone(row.approvalStatus)
+                              .split(" ")
+                              .filter((cls) => cls.includes("text-"))
+                              .join(" ")
+                            }`}>
                             {formatPassengerApprovalStatus(row.approvalStatus, lang, row.reviewNote)}
                           </span>
                         ) : null}
@@ -2184,11 +2151,6 @@ export function AdminBookingTicketsTab({
             <h3 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
               {lang === "VN" ? "Yêu cầu thêm hành khách" : "Passenger add requests"}
             </h3>
-            <p className="mt-1 text-xs font-medium text-slate-400">
-              {lang === "VN"
-                ? "Duyệt hoặc từ chối (từ chối bắt buộc ghi chú)."
-                : "Approve or reject (rejection note is required)."}
-            </p>
           </div>
           <div className="space-y-4 px-6 py-6 md:px-8">
             {addRequestBatches.map((batch) => {
@@ -2208,7 +2170,11 @@ export function AdminBookingTicketsTab({
                         {" · "}
                         {lang === "VN" ? "Số lượng" : "Qty"}: {batch.passengers.length}
                       </p>
-                      <span className={`mt-2 inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(batch.status)}`}>
+                      <span className={`mt-2 inline-flex px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(batch.status)
+                          .split(" ")
+                          .filter((cls) => cls.includes("text-"))
+                          .join(" ")
+                        }`}>
                         {formatPassengerApprovalStatus(batch.status, lang, batch.reviewNote)}
                       </span>
                     </div>
