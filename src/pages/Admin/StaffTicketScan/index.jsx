@@ -238,7 +238,6 @@ const paymentStatusLabel = (value, lang) => {
     failed: { vn: "Thanh toán thất bại", en: "Failed" },
     refunded: { vn: "Đã hoàn tiền", en: "Refunded" },
     partiallyrefunded: { vn: "Hoàn một phần", en: "Partially refunded" },
-    manualrefunded: { vn: "Hoàn thủ công", en: "Manual refund" },
   };
   const row = map[key];
   if (!row) return String(value);

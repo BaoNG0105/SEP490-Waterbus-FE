@@ -1278,7 +1278,7 @@ export function AdminBookingActionsTab({
   const hideManualStatusPanel = ["Cancelled", "Refunded"].includes(bookingStatus)
     && (
       hasCompletedCharterRefund(booking)
-      || ["refunded", "manualrefunded", "partiallyrefunded"].includes(paymentStatus)
+      || ["refunded", "partiallyrefunded"].includes(paymentStatus)
     );
 
   if (phase === "quote") {

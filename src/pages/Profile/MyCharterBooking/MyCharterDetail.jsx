@@ -76,7 +76,7 @@ const getPaymentPurpose = (payment) =>
   String(pick(payment, ["paymentPurpose", "purpose", "type"], "")).toLowerCase();
 
 const isPaidPayment = (payment) =>
-  ["paid", "depositpaid", "success", "succeeded", "completed"].includes(String(payment?.paymentStatus).toLowerCase());
+  ["paid", "depositpaid"].includes(String(payment?.paymentStatus || "").toLowerCase());
 
 const getPaymentId = (payment) => getRefundPaymentId(payment);
 
@@ -292,7 +292,7 @@ const formatDeckCount = (deckCount, lang) => (
     : ""
 );
 
-const DEFAULT_BOAT_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png";
+const DEFAULT_BOAT_IMAGE = ""; // Không dùng ảnh default - mỗi tàu phải lấy ảnh từ API
 
 const formatDate = (value) => {
   if (!value) return "--";
@@ -1791,21 +1791,19 @@ export function CharterDetail() {
     const selectedBoat = Array.isArray(booking.selectedBoats)
       ? booking.selectedBoats.find((item) => String(pick(item, ["boatOrder", "order"], index + 1)) === String(boatOrder))
       : null;
+    const extractedBoatId = String(pick(boat, ["boatId", "id", "boat.id"], ""));
+    const fallbackBoatId = String(pick(selectedBoat, ["boatId", "id", "boat.id"], ""));
 
     return {
       boatOrder,
-      boatId: String(pick(
-        boat,
-        ["boatId", "id", "boat.id"],
-        pick(selectedBoat, ["boatId", "id", "boat.id"], ""),
-      ) || ""),
+      boatId: extractedBoatId || fallbackBoatId || "",
       name: getBoatDisplayName(boat, getBoatDisplayName(selectedBoat, `${lang === "VN" ? "Tàu" : "Boat"} ${boatOrder}`)),
       numberOfDecks: getRequestedDeckCount(boat) || getRequestedDeckCount(selectedBoat),
       seatSetupType: pick(boat, ["seatSetupType", "requiredSeatSetupType", "boat.seatSetupType"], pick(selectedBoat, ["seatSetupType", "requiredSeatSetupType"], "--")),
       imageUrl: pick(
         boat,
         ["imageUrl", "thumbnailUrl", "boat.imageUrl", "boat.thumbnailUrl", "imageUrls.0", "boat.imageUrls.0"],
-        pick(selectedBoat, ["imageUrl", "thumbnailUrl", "boat.imageUrl", "boat.thumbnailUrl", "imageUrls.0", "boat.imageUrls.0"], DEFAULT_BOAT_IMAGE),
+        pick(selectedBoat, ["imageUrl", "thumbnailUrl", "boat.imageUrl", "boat.thumbnailUrl", "imageUrls.0", "boat.imageUrls.0"], ""),
       ),
       seatCount: pick(boat, ["seatCount", "capacity", "boat.seatCount", "boat.capacity"], pick(selectedBoat, ["seatCount", "capacity", "boat.seatCount", "boat.capacity"], "")),
       status: pick(boat, ["status", "boat.status"], pick(selectedBoat, ["status", "boat.status"], "")),
