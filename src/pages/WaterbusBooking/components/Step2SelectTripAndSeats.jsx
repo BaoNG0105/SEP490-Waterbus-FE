@@ -6,8 +6,10 @@ import { useApp } from "../../../context/AppContext";
 import { FormSelect } from "../../../components/FormSelect";
 import { SeatMapIcon, seatToneFromCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
+import { ImageWithFallback } from "../../../components/ImageWithFallback";
 //api
 import { fetchTripDetail, fetchTripSeatMap, holdSeats, releaseSeats } from "../../../services/tripService";
+import { fetchBoatDetail } from "../../../services/boatService";
 //toast
 import { notify, showToast } from "../../../utils/swalToast";
 //utils
@@ -37,9 +39,6 @@ import {
 
 const MAX_SEATS_PER_LEG = 10;
 const LOCKED_STATUSES = ["Held", "Booked", "Blocked"];
-
-const WATERBUS_TRIP_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1783792724/cqi2n26pl7etht4ad5q3.webp";
-const SIGHTSEEING_TRIP_IMAGE = "https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg";
 
 const TIME_FILTER_OPTIONS_VN = [
   { value: "all", label: "Tất cả khung giờ" },
@@ -125,6 +124,32 @@ const canInspectTrip = (trip) => {
   if (isMissingKmBookingBlock(trip)) return true;
   if (typeof trip.isBookable === "boolean") return trip.isBookable;
   return !isSegmentBookingClosed(trip);
+};
+
+// Trip search/list KHÔNG kèm ảnh tàu — chỉ có boatId. Ảnh thật phải lấy riêng qua GET /boats/{boatId}.
+const pickTripBoatId = (trip) => String(
+  trip?.boatId
+  || trip?.boat?.boatId
+  || trip?.boat?.vesselId
+  || trip?.BoatId
+  || "",
+).trim();
+
+// Ảnh thẻ chuyến: ưu tiên field "imageUrl" nếu trip đã kèm sẵn (một số response BE có),
+// fallback sang ảnh tàu đã tải riêng qua fetchBoatDetail (boatImageById, khoá theo boatId).
+// Không còn ảnh mặc định fix cứng theo loại tuyến — thiếu ảnh thì ImageWithFallback tự hiển thị NullImageIcon.
+const resolveTripCardImage = (trip, boatImageById = {}) => {
+  const boat = trip?.boat || trip?.Boat || {};
+  const candidates = [
+    trip?.boatImageUrl,
+    trip?.BoatImageUrl,
+    boat.imageUrl,
+    boat.ImageUrl,
+    Array.isArray(boat.imageUrls) ? boat.imageUrls[0] : "",
+    Array.isArray(trip?.boatImageUrls) ? trip.boatImageUrls[0] : "",
+    boatImageById[pickTripBoatId(trip)],
+  ];
+  return candidates.find((url) => String(url || "").trim()) || "";
 };
 
 const getTripUnavailableLabel = (trip, lang) => formatBookingClosedMessage(trip, lang);
@@ -246,7 +271,6 @@ export default function Step2SelectTripAndSeats({
   // không cần (và thường không tra được) stationCode theo cặp chặng như tuyến Regular; BE trả
   // nguyên sơ đồ ghế cả chuyến khi gọi API không kèm fromStationCode/toStationCode.
   const isLoopRoute = routeType === "SightseeingLoop";
-  const tripCardImage = isLoopRoute ? SIGHTSEEING_TRIP_IMAGE : WATERBUS_TRIP_IMAGE;
 
   // Mã bến đi/đến của từng chặng — lấy từ catalog Step1 (fromWharfCode/toWharfCode).
   // Chặng về đi ngược chiều (toWharf -> fromWharf).
@@ -280,6 +304,56 @@ export default function Step2SelectTripAndSeats({
   const [seatMapError, setSeatMapError] = useState("");
   const [isConfirmingSeats, setIsConfirmingSeats] = useState(false);
   const autoSelectKeyRef = useRef("");
+
+  // Ảnh tàu theo boatId — trip search/list không kèm ảnh nên phải gọi riêng GET /boats/{boatId}.
+  const [boatImageById, setBoatImageById] = useState({});
+  const fetchedBoatIdsRef = useRef(new Set());
+
+  // Với mỗi chuyến hiển thị (cả 2 chiều) mà chưa có ảnh gắn sẵn, tải chi tiết tàu theo boatId để lấy
+  // imageUrl thật; chỉ gọi 1 lần cho mỗi boatId (fetchedBoatIdsRef) để tránh gọi lại khi re-render.
+  // GET /boats/{boatId} yêu cầu đã đăng nhập — khách chưa login vẫn xem được danh sách chuyến ở bước
+  // này, nên PHẢI chặn gọi API khi !isAuthenticated, nếu không BE trả 401 và interceptor sẽ tự đăng
+  // xuất + đá về /login dù user chỉ đang xem, chưa hề chọn ghế.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const allTrips = [...(departureTripOptions || []), ...(returnTripOptions || [])];
+    const missingIds = [...new Set(
+      allTrips
+        .map((trip) => (resolveTripCardImage(trip) ? "" : pickTripBoatId(trip)))
+        .filter((boatId) => boatId && !fetchedBoatIdsRef.current.has(boatId))
+    )];
+
+    if (missingIds.length === 0) return;
+    missingIds.forEach((boatId) => fetchedBoatIdsRef.current.add(boatId));
+
+    let isActive = true;
+    (async () => {
+      const entries = await Promise.all(missingIds.map(async (boatId) => {
+        try {
+          const detail = await fetchBoatDetail(boatId);
+          const imageUrl = detail?.imageUrl
+            || detail?.ImageUrl
+            || (Array.isArray(detail?.imageUrls) ? detail.imageUrls[0] : "")
+            || "";
+          return [boatId, imageUrl];
+        } catch {
+          return [boatId, ""];
+        }
+      }));
+      if (!isActive) return;
+      setBoatImageById((prev) => {
+        const next = { ...prev };
+        entries.forEach(([boatId, imageUrl]) => {
+          if (imageUrl) next[boatId] = imageUrl;
+        });
+        return next;
+      });
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [departureTripOptions, returnTripOptions, isAuthenticated]);
 
   // Nếu quay lại Bước 2 từ Bước 3 (chuyến đã chọn sẵn trong bookingData), Step2 mount lại từ đầu nên
   // seatMapByLeg rỗng — tải lại sơ đồ ghế thật cho (các) chặng đã chọn để hiển thị đúng, không bị trống.
@@ -902,10 +976,11 @@ export default function Step2SelectTripAndSeats({
                 >
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-4">
-                      <img
-                        src={tripCardImage}
+                      <ImageWithFallback
+                        src={resolveTripCardImage(trip, boatImageById)}
                         alt=""
-                        className="h-14 w-14 shrink-0 rounded-xl object-cover"
+                        className="h-14 w-14 shrink-0 rounded-xl overflow-hidden"
+                        iconClassName="w-1/2 h-1/2"
                       />
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2.5 pb-3">

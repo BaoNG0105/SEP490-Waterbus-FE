@@ -203,8 +203,18 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     } catch { return `session-${Date.now()}`; }
   });
   const [isConversationClosed, setIsConversationClosed] = useState(false);
-  const [bookingFlow, setBookingFlow] = useState(false);
-  const [bookingDraft, setBookingDraft] = useState(null);
+  // bookingDraft không được BE lưu lại giữa các lượt (chỉ sống trong 1 request) nên phải tự giữ ở
+  // localStorage và khôi phục cùng conversationId — nếu không, F5 giữa lúc đặt vé trong chat sẽ mất
+  // form đang điền và trợ lý phải hỏi lại từ đầu.
+  const [bookingFlow, setBookingFlow] = useState(() => {
+    try { return window.localStorage.getItem("waterbus.chat.bookingFlow") === "1"; } catch { return false; }
+  });
+  const [bookingDraft, setBookingDraft] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem("waterbus.chat.bookingDraft");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
   const [bookingIntent, setBookingIntent] = useState(false);
   const [bookingContext, setBookingContext] = useState(EMPTY_BOOKING_CONTEXT);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -216,6 +226,21 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
+
+  // Đồng bộ bookingDraft/bookingFlow xuống localStorage để sống sót qua F5 (xem giải thích ở state init).
+  useEffect(() => {
+    try {
+      if (bookingDraft) window.localStorage.setItem("waterbus.chat.bookingDraft", JSON.stringify(bookingDraft));
+      else window.localStorage.removeItem("waterbus.chat.bookingDraft");
+    } catch { /* ignore */ }
+  }, [bookingDraft]);
+
+  useEffect(() => {
+    try {
+      if (bookingFlow) window.localStorage.setItem("waterbus.chat.bookingFlow", "1");
+      else window.localStorage.removeItem("waterbus.chat.bookingFlow");
+    } catch { /* ignore */ }
+  }, [bookingFlow]);
 
   // Câu chào là văn bản tĩnh theo ngôn ngữ, không phải do LLM trả về nên cần tự đồng bộ khi đổi VN/EN.
   useEffect(() => {
@@ -280,6 +305,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     }
     try { window.localStorage.removeItem("waterbus.chat.conversationId"); } catch { /* ignore */ }
     try { window.localStorage.removeItem("waterbus.chat.bookingDraft"); } catch { /* ignore */ }
+    try { window.localStorage.removeItem("waterbus.chat.bookingFlow"); } catch { /* ignore */ }
     setConversationId(null);
     setIsConversationClosed(false);
     setBookingFlow(false);
@@ -418,8 +444,14 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
       if (data?.bookingDraft && !formWasOpen) setBookingDraft(data.bookingDraft);
     } catch (error) {
       if (requestVersion !== conversationVersionRef.current) return;
-      if (error?.response?.status === 409) {
+      const status = error?.response?.status;
+      if (status === 409) {
         setIsConversationClosed(true);
+      } else if (status === 404) {
+        // Hội thoại không tồn tại hoặc không khớp clientSessionId/userId — bỏ conversationId hỏng
+        // để lượt chat tiếp theo tự tạo hội thoại mới thay vì lặp lại lỗi 404 mãi.
+        try { window.localStorage.removeItem("waterbus.chat.conversationId"); } catch { /* ignore */ }
+        setConversationId(null);
       }
       setMessages((prev) => [
         ...prev,
