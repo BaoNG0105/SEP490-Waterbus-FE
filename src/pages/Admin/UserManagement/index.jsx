@@ -230,11 +230,10 @@ export function UserManagement() {
                                             </div>
                                         </td>
                                         <td className="py-4 px-4 text-center">
-                                            <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${item.status === "Active"
+                                            <span className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${item.status === "Active"
                                                 ? "text-emerald-600 dark:text-emerald-400"
                                                 : "text-rose-500 dark:text-rose-400"
                                                 }`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${item.status === "Active" ? "bg-emerald-500" : "bg-rose-500"}`}></span>
                                                 {item.status === "Active"
                                                     ? (lang === "VN" ? "Hoạt động" : "Active")
                                                     : (lang === "VN" ? "Ngưng hoạt động" : "Inactive")}

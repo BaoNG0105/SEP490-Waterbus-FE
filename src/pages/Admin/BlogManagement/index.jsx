@@ -429,7 +429,7 @@ export function BlogManagement() {
                                             {/* Cột 4: Trạng thái */}
                                             <td className="py-4 px-4 text-center">
                                                 <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${statusStyle.badge}`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`}></span>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${statusStyle}`}></span>
                                                     {labelBlogStatus(blog.status, lang)}
                                                 </span>
                                             </td>

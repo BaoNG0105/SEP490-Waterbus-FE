@@ -260,12 +260,13 @@ export function LandmarkManagement() {
                                             </span>
                                         </td>
                                         <td className="py-4 px-4 text-center">
-                                            <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${landmark.isActive
+                                            <span className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${landmark.isActive
                                                     ? "text-emerald-600 dark:text-emerald-400"
                                                     : "text-rose-500 dark:text-rose-400"
                                                 }`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${landmark.isActive ? "bg-emerald-500" : "bg-rose-500"}`}></span>
-                                                {landmark.isActive ? "Active" : "Inactive"}
+                                                {landmark.isActive
+                                                    ? (lang === "VN" ? "Hoạt động" : "Active")
+                                                    : (lang === "VN" ? "Ngưng hoạt động" : "Inactive")}
                                             </span>
                                         </td>
                                         <td className="py-4 px-6 text-center">

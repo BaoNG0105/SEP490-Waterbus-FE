@@ -8,7 +8,6 @@ import {
   executeReplanConfirm,
   fetchReplanHistory,
   impactLevelColor,
-  impactReasonLabel,
   candidateTypeBadge,
 } from '../../../services/replanService';
 
@@ -51,7 +50,7 @@ function CandidateRow({ candidate, selected, onSelect }) {
         <div className="flex items-start gap-3">
           {/* Radio */}
           <div
-            className={`mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+            className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
               selected
                 ? 'border-teal-600 bg-teal-600 dark:border-teal-400'
                 : 'border-slate-300 dark:border-slate-600'

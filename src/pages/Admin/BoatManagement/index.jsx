@@ -545,7 +545,7 @@ export function BoatManagement() {
                                             {/* "status": Trạng thái */}
                                             <td className="py-4 px-6 text-center">
                                                 <span className={`inline-flex items-center gap-1.5 text-[11px] font-headline font-black uppercase tracking-wider ${statusConfig.classes.split(" ").filter((c) => c.includes("text")).join(" ")}`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${statusConfig}`}></span>
                                                     {statusConfig.label}
                                                 </span>
                                             </td>

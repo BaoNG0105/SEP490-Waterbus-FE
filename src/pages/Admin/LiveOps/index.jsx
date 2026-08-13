@@ -2,7 +2,9 @@ import { useMemo } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
+
 import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
+
 import { LiveTracking } from "../LiveTracking";
 import { IncidentManagement } from "../IncidentManagement";
 
@@ -50,7 +52,6 @@ export function LiveOps() {
               : "text-slate-500 hover:text-slate-700"
           }`}
         >
-          <span className="material-symbols-outlined text-[15px]" aria-hidden>my_location</span>
           {lang === "VN" ? "Bản đồ" : "Map"}
         </button>
       ) : null}
@@ -63,7 +64,6 @@ export function LiveOps() {
             : "text-slate-500 hover:text-slate-700"
         }`}
       >
-        <span className="material-symbols-outlined text-[15px]" aria-hidden>emergency</span>
         {lang === "VN" ? "Sự cố" : "Incidents"}
       </button>
     </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchAllRoutes } from "../../../services/routeService";
+import { FormSelect } from "../../../components/FormSelect";
 import {
   PROMOTION_BOOKING_TYPES,
   PROMOTION_DAYS,
@@ -346,27 +347,29 @@ export function PromotionFormFields({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label className={labelStyle}>{lang === "VN" ? "Hiển thị" : "Visibility"}</label>
-            <select
+            <FormSelect
               value={formData.visibility}
-              onChange={(e) => setField("visibility", e.target.value)}
+              onChange={(value) => setField("visibility", value)}
+              options={[
+                { value: PROMOTION_VISIBILITY.PUBLIC, label: lang === "VN" ? "Công khai" : "Public" },
+                { value: PROMOTION_VISIBILITY.PRIVATE, label: lang === "VN" ? "Riêng tư" : "Private" },
+              ]}
               className={inputStyle}
-            >
-              <option value={PROMOTION_VISIBILITY.PUBLIC}>{lang === "VN" ? "Công khai" : "Public"}</option>
-              <option value={PROMOTION_VISIBILITY.PRIVATE}>{lang === "VN" ? "Riêng tư" : "Private"}</option>
-            </select>
+            />
           </div>
           <div>
             <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
-            <select
+            <FormSelect
               value={formData.status}
-              onChange={(e) => setField("status", e.target.value)}
+              onChange={(value) => setField("status", value)}
+              options={[
+                { value: PROMOTION_STATUS.DRAFT, label: "Draft" },
+                { value: PROMOTION_STATUS.ACTIVE, label: "Active" },
+                { value: PROMOTION_STATUS.PAUSED, label: "Paused" },
+                ...(!isCreate ? [{ value: PROMOTION_STATUS.ARCHIVED, label: "Archived" }] : []),
+              ]}
               className={inputStyle}
-            >
-              <option value={PROMOTION_STATUS.DRAFT}>Draft</option>
-              <option value={PROMOTION_STATUS.ACTIVE}>Active</option>
-              <option value={PROMOTION_STATUS.PAUSED}>Paused</option>
-              {!isCreate && <option value={PROMOTION_STATUS.ARCHIVED}>Archived</option>}
-            </select>
+            />
           </div>
         </div>
       </div>

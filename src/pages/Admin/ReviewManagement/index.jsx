@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
+
 import { FormSelect } from "../../../components/FormSelect";
 import { fetchAdminReviews, changeReviewStatus } from "../../../services/reviewService";
 import { StarRatingDisplay } from "../../../components/TripReview";
@@ -289,11 +290,10 @@ export function ReviewManagement() {
                     </td>
 
                     <td className="py-4 px-4 text-center">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${review.status === REVIEW_STATUS.PUBLISHED
+                      <span className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${review.status === REVIEW_STATUS.PUBLISHED
                         ? "text-emerald-600 dark:text-emerald-400"
                         : "text-amber-700 dark:text-amber-400"
                         }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${review.status === REVIEW_STATUS.PUBLISHED ? "bg-emerald-500" : "bg-amber-500"}`}></span>
                         {review.status === REVIEW_STATUS.PUBLISHED
                           ? (lang === "VN" ? "Đã duyệt" : "Published")
                           : (lang === "VN" ? "Chờ duyệt" : "Hidden")}

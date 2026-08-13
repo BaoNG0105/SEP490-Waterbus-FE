@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
+
 import {
     fetchPromotions,
     modifyPromotion,
@@ -11,6 +12,7 @@ import {
     PROMOTION_TYPE,
     PROMOTION_STATUS,
 } from "../../../services/promotionService";
+
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 import { FormSelect } from "../../../components/FormSelect";
@@ -470,7 +472,7 @@ export function PromotionManagement() {
 
                                             {/* Cột 5: Trạng thái */}
                                             <td className="py-4 px-4 text-center">
-                                                <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${
+                                                <span className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${
                                                     promo.status === PROMOTION_STATUS.ACTIVE
                                                         ? "text-emerald-600 dark:text-emerald-400"
                                                         : promo.status === PROMOTION_STATUS.DRAFT
@@ -479,15 +481,6 @@ export function PromotionManagement() {
                                                                 ? "text-sky-700 dark:text-sky-400"
                                                                 : "text-slate-500 dark:text-slate-400"
                                                     }`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                                        promo.status === PROMOTION_STATUS.ACTIVE
-                                                            ? "bg-emerald-500"
-                                                            : promo.status === PROMOTION_STATUS.DRAFT
-                                                                ? "bg-amber-500"
-                                                                : promo.status === PROMOTION_STATUS.PAUSED
-                                                                    ? "bg-sky-500"
-                                                                    : "bg-slate-400"
-                                                    }`}></span>
                                                     {getStatusLabel(promo.status, lang)}
                                                 </span>
                                             </td>

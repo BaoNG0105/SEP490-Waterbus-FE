@@ -1487,7 +1487,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
         className="h-full min-h-0"
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-20 bg-gradient-to-b from-[#0E4050]/40 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-20 bg-linear-to-b from-[#0E4050]/40 to-transparent" />
 
       <div className="absolute left-3 right-3 top-3 z-30 flex items-start justify-between gap-2 md:left-4 md:right-4 md:top-4">
         <div className="pointer-events-auto inline-flex max-w-[min(100%,18rem)] flex-wrap items-center gap-1.5 rounded-2xl bg-black/30 px-2.5 py-1.5 backdrop-blur-md">
