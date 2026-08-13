@@ -1,46 +1,21 @@
 import api from './axios';
 
-// BE chỉ đọc đúng 12 trường này trong bookingDraft (mọi trường khác — departureTrips, passengers,
-// contact, preview... — bị bỏ qua hoàn toàn nhưng vẫn tính vào hạn mức 64KB của request). Vì
-// ChatBookingFlow giữ một object draft đầy đủ hơn nhiều để tự vẽ UI (danh sách chuyến, hành khách,
-// preview giá...), nên phải cắt gọn trước khi gửi lên `/assistant/chat` để tránh vượt hạn mức khi
-// khứ hồi có nhiều kết quả tìm chuyến. selectedDepartureTrip/selectedSeatsDeparture chỉ cần thể
-// hiện sự tồn tại/số lượng vì BE không đọc nội dung của chúng.
-const sanitizeBookingDraftForChat = (bookingDraft) => {
-    if (!bookingDraft || typeof bookingDraft !== 'object') return bookingDraft ?? null;
-    return {
-        stage: bookingDraft.stage,
-        serviceType: bookingDraft.serviceType,
-        fromStationName: bookingDraft.fromStationName,
-        toStationName: bookingDraft.toStationName,
-        departureDate: bookingDraft.departureDate,
-        isRoundTrip: bookingDraft.isRoundTrip,
-        returnDate: bookingDraft.returnDate,
-        adultCount: bookingDraft.adultCount,
-        childCount: bookingDraft.childCount,
-        infantCount: bookingDraft.infantCount,
-        selectedDepartureTrip: bookingDraft.selectedDepartureTrip ? {} : null,
-        selectedSeatsDeparture: Array.from({
-            length: Array.isArray(bookingDraft.selectedSeatsDeparture) ? bookingDraft.selectedSeatsDeparture.length : 0,
-        }),
-    };
-};
-
-// Api chat với trợ lý ảo Saigon Waterbus. `messages` là toàn bộ lịch sử hội thoại,
-// mỗi phần tử dạng { role: 'user' | 'assistant', text }. `language` (optional): 'VN' | 'ENG'.
-export const chatWithAssistant = (messages, language, conversationId, clientSessionId, bookingDraft) =>
+// Api chat với trợ lý ảo Waterbus. `messages` là toàn bộ lịch sử hội thoại, mỗi phần tử dạng
+// { text }. BE chỉ lấy phần tử CUỐI CÙNG có chữ làm câu hỏi hiện tại; lịch sử trước đó BE tự đọc
+// lại từ DB theo conversationId nên không cần gửi lại. Không còn `role`/`language` — trợ lý tự bám
+// theo ngôn ngữ khách đang gõ.
+//
+// `bookingDraft`: BE KHÔNG lưu draft giữa các lượt — response trả về bookingDraft ĐẦY ĐỦ đã merge
+// sẵn (server tự kiểm tra/áp thay đổi của lượt đó), và cách dùng được khuyến nghị là client CHỈ
+// echo nguyên khối lại y nguyên ở lượt sau: không tự merge, không đổi tên field, không rút gọn —
+// server đã kiểm soát toàn bộ nội dung và biết hạn mức 64KB của chính nó. Vì vậy hàm này CHỈ
+// truyền thẳng, không xử lý gì thêm.
+export const chatWithAssistant = (messages, conversationId, clientSessionId, bookingDraft = null) =>
     api.post('/assistant/chat', {
         messages,
-        language,
         conversationId,
         clientSessionId,
-        ...(bookingDraft === undefined ? {} : { bookingDraft: sanitizeBookingDraftForChat(bookingDraft) }),
-    }, { skipAuth: true }).then(r => r.data);
-
-export const updateAssistantBookingDraft = (conversationId, bookingDraft, clientSessionId) =>
-    api.put(`/assistant/conversations/${conversationId}/booking-draft`, {
         bookingDraft,
-        clientSessionId,
     }, { skipAuth: true }).then(r => r.data);
 
 export const getAssistantConversation = (conversationId, clientSessionId) =>
