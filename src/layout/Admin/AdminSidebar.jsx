@@ -124,7 +124,7 @@ const isPathActive = (currentPath, itemPath) => {
   return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
 };
 
-export const AdminSidebar = ({ isOpen, onClose }) => {
+export const AdminSidebar = ({ isOpen, onClose, isCollapsed = false, onCollapse }) => {
   const location = useLocation();
   const currentPath = location.pathname;
   const { lang } = useApp();
@@ -140,9 +140,9 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
     lang === "VN" ? "Quản trị viên" : "Admin"
   );
   const stationAssignments = user?.stationAssignments || [];
-  const primaryStation = stationAssignments.find((s) => s?.isPrimary) || stationAssignments[0];
-  const displayStationName = primaryStation?.stationName || "";
-  const extraStationCount = stationAssignments.length > 1 ? stationAssignments.length - 1 : 0;
+  const stationNames = stationAssignments
+    .map((s) => s?.stationName)
+    .filter(Boolean);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -196,16 +196,30 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
       )}
 
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col w-64 bg-[#124757] dark:bg-slate-900 border-r border-white/10 dark:border-slate-800 pt-16 transform lg:transform-none lg:opacity-100 transition-all duration-300 ${
+        className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col w-64 bg-[#124757] dark:bg-slate-900 border-r border-white/10 dark:border-slate-800 pt-16 transform transition-all duration-300 ${
           isOpen ? "translate-x-0 opacity-100" : "translate-x-0 max-lg:-translate-x-full max-lg:opacity-0"
+        } ${
+          isCollapsed ? "lg:-translate-x-full lg:opacity-0 lg:pointer-events-none" : "lg:translate-x-0 lg:opacity-100"
         }`}
       >
-        <div className="p-5 border-b border-white/10 dark:border-slate-800 flex flex-col items-center text-center space-y-3 shrink-0 bg-white/5 select-none">
+        <div className="relative p-5 border-b border-white/10 dark:border-slate-800 flex flex-col items-center text-center space-y-3 shrink-0 bg-white/5 select-none">
+          <button
+            type="button"
+            onClick={() => {
+              onClose?.();
+              onCollapse?.();
+            }}
+            className="absolute top-2 right-2 p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+            title={lang === "VN" ? "Đóng Sidebar" : "Close sidebar"}
+            aria-label={lang === "VN" ? "Đóng Sidebar" : "Close sidebar"}
+          >
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">close</span>
+          </button>
           <div className="relative group">
             <UserAvatar
               avatarUrl={displayAvatar}
               alt={displayName}
-              className="w-16 h-16 rounded-full border-2 border-dashed border-[#FFD100] shadow-md overflow-hidden transition-transform duration-500 group-hover:rotate-45 bg-white/10! text-white!"
+              className="w-16 h-16 rounded-full shadow-md overflow-hidden bg-white/10! text-white!"
               iconClassName="w-8 h-8"
             />
             <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
@@ -218,16 +232,22 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
             <h4 className="font-headline font-black text-sm uppercase tracking-wider text-white">
               {displayName}
             </h4>
-            <div className="bg-[#FFD100]/10 border border-[#FFD100]/20 rounded-full px-2.5 py-0.5 w-max mx-auto">
+            <div className="w-max mx-auto">
               <span className="text-[10px] font-headline font-black text-[#FFD100] uppercase tracking-widest">
                 {displayRole}
               </span>
             </div>
-            {displayStationName ? (
-              <p className="flex items-center justify-center gap-1 text-[11px] font-bold text-white/60">
-                <span className="truncate max-w-44">{displayStationName}</span>
-                {extraStationCount > 0 ? ` +${extraStationCount}` : ""}
-              </p>
+            {stationNames.length > 0 ? (
+              <div className="space-y-0.5">
+                {stationNames.map((name, index) => (
+                  <p
+                    key={`${name}-${index}`}
+                    className="flex items-center justify-center gap-1 text-[11px] font-bold text-white/60"
+                  >
+                    <span className="truncate max-w-44">{name}</span>
+                  </p>
+                ))}
+              </div>
             ) : null}
           </div>
         </div>

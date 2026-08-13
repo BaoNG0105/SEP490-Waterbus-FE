@@ -7,7 +7,7 @@ import "flag-icons/css/flag-icons.min.css";
 // Cùng nhịp poll với NoticeBar bên client, tránh spam request lên BE.
 const POLL_INTERVAL_MS = 60000;
 
-export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
+export const AdminHeader = ({ onMenuClick, title = "Dashboard", isSidebarCollapsed = false, onToggleSidebar }) => {
   // Lấy các state và hàm từ AppContext
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
   const langFlagCode = lang === "VN" ? "vn" : "gb";
@@ -62,8 +62,8 @@ export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
   return (
     <header className="fixed top-0 w-full z-40 flex justify-between items-center px-6 h-16 bg-[#124757] dark:bg-slate-900/80 text-white dark:text-slate-200 backdrop-blur-xl shadow-md border-b border-white/10 dark:border-slate-700 transition-colors duration-300">
 
-      {/* KHỐI TRÁI & GIỮA: Tự động lùi sang phải một khoảng lg:pl-60 trên Desktop để nhường chỗ cho Sidebar cố định */}
-      <div className="flex items-center gap-4 lg:pl-60 transition-all duration-300">
+      {/* KHỐI TRÁI & GIỮA: Tự động lùi sang phải một khoảng lg:pl-60 trên Desktop để nhường chỗ cho Sidebar cố định (bỏ khoảng lùi khi Sidebar đang thu gọn) */}
+      <div className={`flex items-center gap-4 transition-all duration-300 ${isSidebarCollapsed ? "lg:pl-4" : "lg:pl-60"}`}>
 
         {/* Nút mở Menu Drawer - Chỉ xuất hiện trên giao diện Mobile */}
         <button
@@ -73,6 +73,26 @@ export const AdminHeader = ({ onMenuClick, title = "Dashboard" }) => {
           aria-label={lang === "VN" ? "Mở menu" : "Open menu"}
         >
           <span className="material-symbols-outlined text-[24px]" aria-hidden="true">menu</span>
+        </button>
+
+        {/* Nút thu gọn/mở rộng Sidebar - Chỉ xuất hiện trên giao diện Desktop */}
+        <button
+          onClick={onToggleSidebar}
+          className="hidden lg:inline-flex p-2 hover:bg-white/10 dark:hover:bg-slate-800 rounded-xl text-white transition-colors"
+          title={
+            isSidebarCollapsed
+              ? (lang === "VN" ? "Mở Sidebar" : "Expand sidebar")
+              : (lang === "VN" ? "Thu gọn Sidebar" : "Collapse sidebar")
+          }
+          aria-label={
+            isSidebarCollapsed
+              ? (lang === "VN" ? "Mở Sidebar" : "Expand sidebar")
+              : (lang === "VN" ? "Thu gọn Sidebar" : "Collapse sidebar")
+          }
+        >
+          <span className="material-symbols-outlined text-[24px]" aria-hidden="true">
+            {isSidebarCollapsed ? "menu" : "menu_open"}
+          </span>
         </button>
 
         {/* Tiêu đề trang: Sẽ đứng ngay cạnh mép phải của Sidebar trên Desktop */}
