@@ -184,8 +184,8 @@ export function BookingListPage() {
       icon: "success",
       title: lang === "VN" ? "Đã gửi đánh giá" : "Review submitted",
       text: lang === "VN"
-        ? "Cảm ơn bạn! Đánh giá sẽ hiển thị công khai sau khi được duyệt."
-        : "Thanks! Your review will show publicly once approved.",
+        ? "Cảm ơn bạn đã dành thời gian đánh giá! Ý kiến của bạn giúp chúng tôi ngày càng hoàn thiện hơn."
+        : "Thank you for taking the time to review! Your feedback helps us improve every day.",
     });
   }, [lang]);
 
@@ -452,7 +452,7 @@ export function BookingListPage() {
                 {pendingReviewsByBookingCode[booking.bookingCode] ? (
                   <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#124757]/10 bg-[#124757]/5 px-5 py-3.5 dark:border-yellow-400/10 dark:bg-yellow-400/5 sm:px-6">
                     <p className="text-[11px] font-bold text-[#124757] dark:text-yellow-400">
-                      {lang === "VN" ? "Chuyến đã hoàn thành — hãy chia sẻ trải nghiệm của bạn." : "Trip completed — share your experience."}
+                      {lang === "VN" ? "Chuyến đã hoàn thành. Hãy chia sẻ trải nghiệm của bạn." : "Trip completed. Please share your experience."}
                     </p>
                     <button
                       type="button"
@@ -463,7 +463,6 @@ export function BookingListPage() {
                       onKeyDown={(event) => event.stopPropagation()}
                       className="flex shrink-0 items-center gap-2 rounded-xl bg-[#FFD100] px-3.5 py-2 text-xs font-headline font-black uppercase tracking-wide text-slate-900 transition hover:scale-[1.02] active:scale-95"
                     >
-                      <span className="material-symbols-outlined text-base">rate_review</span>
                       {lang === "VN" ? "Đánh giá" : "Review"}
                     </button>
                   </div>

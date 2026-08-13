@@ -473,7 +473,6 @@ const TripReviewSlot = ({ reviewable, lang, onOpenReview }) => {
           onClick={() => onOpenReview(reviewable)}
           className="flex items-center gap-2 rounded-xl border border-[#124757]/20 bg-[#124757]/5 px-3.5 py-2 text-xs font-headline font-black uppercase tracking-wide text-[#124757] transition hover:bg-[#124757]/10 dark:border-yellow-400/20 dark:bg-yellow-400/5 dark:text-yellow-400"
         >
-          <span className="material-symbols-outlined text-base">rate_review</span>
           {lang === "VN" ? "Đánh giá chuyến này" : "Review this trip"}
         </button>
       </div>
@@ -882,180 +881,180 @@ export function BookingDetailPage({ serviceType }) {
             {groupedTrips.map((group) => (
               <div key={group.tripCode} className="space-y-5">
                 <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
-                      {group.isReturn
-                        ? (lang === "VN" ? "Chiều về" : "Return")
-                        : (lang === "VN" ? "Chiều đi" : "Departure")}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
+                        {group.isReturn
+                          ? (lang === "VN" ? "Chiều về" : "Return")
+                          : (lang === "VN" ? "Chiều đi" : "Departure")}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-400">
+                      {group.ticketCount} {lang === "VN" ? "vé" : "ticket(s)"}
+                      {group.companionCount > 0
+                        ? ` · ${group.companionCount} ${lang === "VN" ? "đi kèm" : "companion(s)"}`
+                        : ""}
                     </span>
                   </div>
-                  <span className="text-xs font-bold text-slate-400">
-                    {group.ticketCount} {lang === "VN" ? "vé" : "ticket(s)"}
-                    {group.companionCount > 0
-                      ? ` · ${group.companionCount} ${lang === "VN" ? "đi kèm" : "companion(s)"}`
-                      : ""}
-                  </span>
-                </div>
 
-                <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {group.rows.flatMap((row) => {
-                    const item = row.holder;
-                    if (!item) {
-                      return row.companions.map((companion) => (
-                        <article key={companion.id} className="p-5 sm:p-6">
-                          <CompanionChip companion={companion} lang={lang} />
-                        </article>
-                      ));
-                    }
+                  <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {group.rows.flatMap((row) => {
+                      const item = row.holder;
+                      if (!item) {
+                        return row.companions.map((companion) => (
+                          <article key={companion.id} className="p-5 sm:p-6">
+                            <CompanionChip companion={companion} lang={lang} />
+                          </article>
+                        ));
+                      }
 
-                    const isLoopTour = item.fromStationName && item.fromStationName === item.toStationName;
-                    const sameDay = formatDateOnly(item.scheduledArrival) === formatDateOnly(item.scheduledDeparture);
-                    const routeTitle = isLoopTour
-                      ? (lang === "VN"
-                        ? `Tour tham quan sông Sài Gòn`
-                        : `Sightseeing tour on Saigon River`)
-                      : `${item.fromStationName} → ${item.toStationName}`;
-                    const timeLine = `${formatDateOnly(item.scheduledDeparture)} · ${formatTime(item.scheduledDeparture)} → ${sameDay ? "" : `${formatDateOnly(item.scheduledArrival)} `}${formatTime(item.scheduledArrival)}`;
+                      const isLoopTour = item.fromStationName && item.fromStationName === item.toStationName;
+                      const sameDay = formatDateOnly(item.scheduledArrival) === formatDateOnly(item.scheduledDeparture);
+                      const routeTitle = isLoopTour
+                        ? (lang === "VN"
+                          ? `Tour tham quan sông Sài Gòn`
+                          : `Sightseeing tour on Saigon River`)
+                        : `${item.fromStationName} → ${item.toStationName}`;
+                      const timeLine = `${formatDateOnly(item.scheduledDeparture)} · ${formatTime(item.scheduledDeparture)} → ${sameDay ? "" : `${formatDateOnly(item.scheduledArrival)} `}${formatTime(item.scheduledArrival)}`;
 
-                    return [(
-                      <article key={item.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:gap-5 sm:p-6">
-                        {isTicketVisible(booking, item) && item.ticketQrToken ? (
-                          <div className="flex shrink-0 items-start gap-3">
-                            <QrCodeBlock
-                              value={item.ticketQrToken}
-                              label={lang === "VN" ? "QR vé" : "Ticket QR"}
-                              size={72}
-                            />
-                          </div>
-                        ) : null}
-
-                        <div className="min-w-0 flex-1 space-y-3">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div>
-                              <h3 className="font-headline text-base font-black text-[#124757] dark:text-white">
-                                {routeTitle}
-                              </h3>
-                              <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                                {timeLine}
-                              </p>
-                            </div>
-                            <StatusBadge status={item.ticketStatus || item.itemStatus} lang={lang} />
-                          </div>
-
-                          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
-                            <div>
-                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Ghế" : "Seat"}</dt>
-                              <dd className="font-bold text-[#124757] dark:text-yellow-400">{item.seatNumber || "—"}</dd>
-                            </div>
-                            <div>
-                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Loại vé" : "Type"}</dt>
-                              <dd className="font-bold text-slate-700 dark:text-slate-200">
-                                {formatTicketTypeLabel(item.ticketTypeCode || item.ticketTypeName, lang)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Giá vé" : "Ticket fare"}</dt>
-                              <dd className="font-bold text-slate-700 dark:text-slate-200">{currencyFormatter.format(item.unitPrice)}</dd>
-                            </div>
-                            <div className="col-span-2 sm:col-span-3">
-                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Tàu" : "Boat"}</dt>
-                              <dd className="font-bold text-slate-700 dark:text-slate-200">
-                                {item.boatName || (
-                                  <span className="font-medium text-slate-400">
-                                    {lang === "VN" ? "Đang cập nhật" : "Updating"}
-                                  </span>
-                                )}
-                              </dd>
-                            </div>
-                            <div className="col-span-2 sm:col-span-3">
-                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Hành khách" : "Passenger"}</dt>
-                              <dd className="font-bold text-slate-700 dark:text-slate-200">
-                                {item.passengerName}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Năm sinh" : "Birth year"}</dt>
-                              <dd className="font-bold text-slate-700 dark:text-slate-200">
-                                {item.birthYear || "—"}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "SĐT" : "Phone"}</dt>
-                              <dd className="font-bold text-slate-700 dark:text-slate-200">
-                                {item.passengerPhone || "—"}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt className="text-[11px] font-bold text-slate-400">Email</dt>
-                              <dd className="font-bold text-slate-700 dark:text-slate-200 break-all">
-                                {item.passengerEmail || "—"}
-                              </dd>
-                            </div>
-                          </dl>
-
-                          {row.companions.length > 0 ? (
-                            <div className="rounded-2xl border border-violet-200/80 bg-violet-50/90 px-3.5 py-3 dark:border-violet-500/25 dark:bg-violet-500/10">
-                              <p className="text-[10px] font-headline font-black uppercase tracking-wider text-violet-700 dark:text-violet-200">
-                                {lang === "VN" ? "Đi kèm" : "Accompanying"}
-                              </p>
-                              <p className="mt-0.5 text-[10px] font-medium text-violet-600/80 dark:text-violet-300/70">
-                                {lang === "VN"
-                                  ? "Dùng chung QR với vé người lớn phía trên."
-                                  : "Shares the adult ticket QR above."}
-                              </p>
-                              <ul className="mt-2 space-y-1.5">
-                                {row.companions.map((companion) => (
-                                  <li key={companion.id}>
-                                    <CompanionChip companion={companion} lang={lang} />
-                                  </li>
-                                ))}
-                              </ul>
+                      return [(
+                        <article key={item.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:gap-5 sm:p-6">
+                          {isTicketVisible(booking, item) && item.ticketQrToken ? (
+                            <div className="flex shrink-0 items-start gap-3">
+                              <QrCodeBlock
+                                value={item.ticketQrToken}
+                                label={lang === "VN" ? "QR vé" : "Ticket QR"}
+                                size={72}
+                              />
                             </div>
                           ) : null}
 
-                          {isTicketVisible(booking, item) && item.ticketCode ? null : (() => {
-                            const ticketKey = getStatusKey(item.ticketStatus || item.itemStatus);
-                            if (ticketKey === "used") {
-                              return (
-                                <p className="text-[11px] font-medium text-slate-400">
+                          <div className="min-w-0 flex-1 space-y-3">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <h3 className="font-headline text-base font-black text-[#124757] dark:text-white">
+                                  {routeTitle}
+                                </h3>
+                                <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                  {timeLine}
+                                </p>
+                              </div>
+                              <StatusBadge status={item.ticketStatus || item.itemStatus} lang={lang} />
+                            </div>
+
+                            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+                              <div>
+                                <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Ghế" : "Seat"}</dt>
+                                <dd className="font-bold text-[#124757] dark:text-yellow-400">{item.seatNumber || "—"}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Loại vé" : "Type"}</dt>
+                                <dd className="font-bold text-slate-700 dark:text-slate-200">
+                                  {formatTicketTypeLabel(item.ticketTypeCode || item.ticketTypeName, lang)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Giá vé" : "Ticket fare"}</dt>
+                                <dd className="font-bold text-slate-700 dark:text-slate-200">{currencyFormatter.format(item.unitPrice)}</dd>
+                              </div>
+                              <div className="col-span-2 sm:col-span-3">
+                                <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Tàu" : "Boat"}</dt>
+                                <dd className="font-bold text-slate-700 dark:text-slate-200">
+                                  {item.boatName || (
+                                    <span className="font-medium text-slate-400">
+                                      {lang === "VN" ? "Đang cập nhật" : "Updating"}
+                                    </span>
+                                  )}
+                                </dd>
+                              </div>
+                              <div className="col-span-2 sm:col-span-3">
+                                <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Hành khách" : "Passenger"}</dt>
+                                <dd className="font-bold text-slate-700 dark:text-slate-200">
+                                  {item.passengerName}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Năm sinh" : "Birth year"}</dt>
+                                <dd className="font-bold text-slate-700 dark:text-slate-200">
+                                  {item.birthYear || "—"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "SĐT" : "Phone"}</dt>
+                                <dd className="font-bold text-slate-700 dark:text-slate-200">
+                                  {item.passengerPhone || "—"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-[11px] font-bold text-slate-400">Email</dt>
+                                <dd className="font-bold text-slate-700 dark:text-slate-200 break-all">
+                                  {item.passengerEmail || "—"}
+                                </dd>
+                              </div>
+                            </dl>
+
+                            {row.companions.length > 0 ? (
+                              <div className="rounded-2xl border border-violet-200/80 bg-violet-50/90 px-3.5 py-3 dark:border-violet-500/25 dark:bg-violet-500/10">
+                                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-violet-700 dark:text-violet-200">
+                                  {lang === "VN" ? "Đi kèm" : "Accompanying"}
+                                </p>
+                                <p className="mt-0.5 text-[10px] font-medium text-violet-600/80 dark:text-violet-300/70">
                                   {lang === "VN"
-                                    ? "Vé đã sử dụng / hết chuyến — không còn hiệu lực để check-in."
-                                    : "Ticket used / trip ended — no longer valid for check-in."}
+                                    ? "Dùng chung QR với vé người lớn phía trên."
+                                    : "Shares the adult ticket QR above."}
                                 </p>
-                              );
-                            }
-                            if (ticketKey === "checkedout") {
-                              return (
-                                <p className="text-[11px] font-medium text-slate-400">
-                                  {lang === "VN" ? "Đã check-out — hành khách đã rời tàu." : "Checked out — passenger has left the boat."}
-                                </p>
-                              );
-                            }
-                            if (ticketKey === "cancelled" || ticketKey === "expired") {
-                              return (
-                                <p className="text-[11px] font-medium text-slate-400">
-                                  {lang === "VN" ? "Vé không còn hợp lệ." : "Ticket is no longer valid."}
-                                </p>
-                              );
-                            }
-                            if (!isTicketIssued(booking, item)) {
-                              return (
-                                <p className="text-[11px] font-medium text-slate-400">
-                                  {lang === "VN"
-                                    ? "Vé điện tử sẽ hiện sau khi thanh toán thành công và vé được kích hoạt."
-                                    : "The e-ticket appears after successful payment and ticket activation."}
-                                </p>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </div>
-                      </article>
-                    )];
-                  })}
-                </div>
-              </section>
+                                <ul className="mt-2 space-y-1.5">
+                                  {row.companions.map((companion) => (
+                                    <li key={companion.id}>
+                                      <CompanionChip companion={companion} lang={lang} />
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+
+                            {isTicketVisible(booking, item) && item.ticketCode ? null : (() => {
+                              const ticketKey = getStatusKey(item.ticketStatus || item.itemStatus);
+                              if (ticketKey === "used") {
+                                return (
+                                  <p className="text-[11px] font-medium text-slate-400">
+                                    {lang === "VN"
+                                      ? "Vé đã sử dụng / hết chuyến — không còn hiệu lực để check-in."
+                                      : "Ticket used / trip ended — no longer valid for check-in."}
+                                  </p>
+                                );
+                              }
+                              if (ticketKey === "checkedout") {
+                                return (
+                                  <p className="text-[11px] font-medium text-slate-400">
+                                    {lang === "VN" ? "Đã check-out — hành khách đã rời tàu." : "Checked out — passenger has left the boat."}
+                                  </p>
+                                );
+                              }
+                              if (ticketKey === "cancelled" || ticketKey === "expired") {
+                                return (
+                                  <p className="text-[11px] font-medium text-slate-400">
+                                    {lang === "VN" ? "Vé không còn hợp lệ." : "Ticket is no longer valid."}
+                                  </p>
+                                );
+                              }
+                              if (!isTicketIssued(booking, item)) {
+                                return (
+                                  <p className="text-[11px] font-medium text-slate-400">
+                                    {lang === "VN"
+                                      ? "Vé điện tử sẽ hiện sau khi thanh toán thành công và vé được kích hoạt."
+                                      : "The e-ticket appears after successful payment and ticket activation."}
+                                  </p>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+                        </article>
+                      )];
+                    })}
+                  </div>
+                </section>
               </div>
             ))}
 
@@ -1218,11 +1217,10 @@ export function BookingDetailPage({ serviceType }) {
                 </div>
 
                 {getStatusKey(booking.status) === "pendingpayment" && booking.holdExpiresAt ? (
-                  <div className={`rounded-xl border px-3 py-2.5 text-xs font-bold ${
-                    isBookingExpired
+                  <div className={`rounded-xl border px-3 py-2.5 text-xs font-bold ${isBookingExpired
                       ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
                       : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
-                  }`}
+                    }`}
                   >
                     {isBookingExpired ? (
                       <p>{lang === "VN" ? "Booking đã hết hạn" : "Booking has expired"}</p>
