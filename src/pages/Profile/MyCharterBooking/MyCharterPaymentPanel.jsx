@@ -294,8 +294,8 @@ export function MyCharterPaymentPanel({
                   </h4>
                   <p className="mt-1 max-w-xl text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
                     {lang === "VN"
-                      ? "Chọn hình thức thanh toán rồi mở cổng PayOS để hoàn tất giao dịch."
-                      : "Choose a payment option, then open PayOS to complete your transaction."}
+                      ? "Chọn hình thức thanh toán để hoàn tất giao dịch."
+                      : "Choose a payment option to complete your transaction."}
                   </p>
                 </div>
                 {showQuotePaymentCountdown && (
@@ -516,9 +516,6 @@ export function MyCharterPaymentPanel({
                           : `${lang === "VN" ? "Thanh toán" : "Pay"} ${selectedPaymentAmount > 0 ? currencyFormatter.format(selectedPaymentAmount) : ""}`}
                       </span>
                     </button>
-                    <p className="mt-3 text-center text-[11px] font-medium text-slate-400">
-                      {lang === "VN" ? "Bạn sẽ được chuyển sang cổng thanh toán PayOS an toàn." : "You will be redirected to the secure PayOS payment gateway."}
-                    </p>
                   </div>
                 </div>
               ) : (

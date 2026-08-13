@@ -18,6 +18,39 @@ export const getWorkflowStepIndex = (status) => {
   return index >= 0 ? index : 0;
 };
 
+/** Đánh dấu tab đã xem trên trang chi tiết booking của khách — riêng biệt với bên admin. */
+const CUSTOMER_CHARTER_TAB_BADGES_KEY = "customerCharterAcknowledgedTabBadges";
+
+export const readAcknowledgedCustomerTabBadges = (bookingId) => {
+  if (!bookingId) return {};
+  try {
+    const stored = localStorage.getItem(CUSTOMER_CHARTER_TAB_BADGES_KEY);
+    if (!stored) return {};
+    const map = JSON.parse(stored);
+    const bookingState = map[bookingId];
+    return bookingState && typeof bookingState === "object" ? bookingState : {};
+  } catch {
+    return {};
+  }
+};
+
+export const acknowledgeCustomerTabBadge = (bookingId, tabId, badgeValue) => {
+  if (!bookingId || !tabId || !badgeValue) return;
+  try {
+    const stored = localStorage.getItem(CUSTOMER_CHARTER_TAB_BADGES_KEY);
+    const map = stored ? JSON.parse(stored) : {};
+    map[bookingId] = { ...(map[bookingId] || {}), [tabId]: String(badgeValue) };
+    localStorage.setItem(CUSTOMER_CHARTER_TAB_BADGES_KEY, JSON.stringify(map));
+  } catch {
+    // ignore storage errors
+  }
+};
+
+export const shouldShowCustomerTabBadge = (bookingId, tabId, badgeValue, acknowledged = readAcknowledgedCustomerTabBadges(bookingId)) => {
+  if (!badgeValue) return false;
+  return acknowledged[tabId] !== String(badgeValue);
+};
+
 const isPaidLike = (paymentStatus) =>
   ["paid", "depositpaid", "partiallyrefunded", "partially_refunded"].includes(
     String(paymentStatus || "").toLowerCase(),
@@ -28,17 +61,34 @@ const isRefundFailedPayment = (payment) => {
   return ["failed", "error", "rejected"].includes(refundStatus);
 };
 
-const isRefundSettledPayment = (payment) => {
-  const paymentStatus = String(payment?.paymentStatus || "").toLowerCase();
-  const refundStatus = String(payment?.refundStatus || payment?.refund?.status || "").toLowerCase();
-  return paymentStatus === "refunded"
-    || ["success", "succeeded", "completed", "refunded", "paid"].includes(refundStatus);
-};
+/** BE đôi khi chỉ điền refundAmount mà không đổi paymentStatus/refundStatus. */
+const getPaymentRefundAmount = (payment) =>
+  Number(
+    payment?.refundAmount
+    ?? payment?.refundedAmount
+    ?? payment?.refund?.amount
+    ?? payment?.refundAmountVnd
+    ?? payment?.RefundAmount
+    ?? payment?.RefundedAmount
+    ?? 0,
+  ) || 0;
 
 const isRefundInFlightPayment = (payment) =>
   ["pending", "processing", "requested", "created"].includes(
     String(payment?.refundStatus || payment?.refund?.status || "").toLowerCase(),
   );
+
+/** Hoàn tất kể cả khi BE vẫn để paymentStatus = Paid, chỉ điền refundAmount. */
+const isRefundSettledPayment = (payment) => {
+  const paymentStatus = String(payment?.paymentStatus || "").toLowerCase();
+  const refundStatus = String(payment?.refundStatus || payment?.refund?.status || "").toLowerCase();
+  if (paymentStatus === "refunded" || paymentStatus === "partiallyrefunded") return true;
+  if (["success", "succeeded", "completed", "refunded", "paid"].includes(refundStatus)) return true;
+  if (getPaymentRefundAmount(payment) > 0 && !isRefundInFlightPayment(payment) && !isRefundFailedPayment(payment)) {
+    return true;
+  }
+  return false;
+};
 
 /** Admin chỉ cần vào khi PayOS refund fail (manual-refund). */
 export const bookingNeedsAdminRefundAttention = (booking) => {

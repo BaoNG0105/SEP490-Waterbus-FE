@@ -475,16 +475,19 @@ export function CharterRefund() {
                     { label: lang === "VN" ? "Tàu" : "Boat", value: booking.boatName },
                     { label: lang === "VN" ? "Lộ trình" : "Route", value: booking.route },
                     { label: lang === "VN" ? "Khởi hành" : "Departure", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)}` },
-                    {
-                      label: lang === "VN" ? "Số tiền hoàn" : "Refund amount",
-                      value: refundAmountDisplay > 0 ? currencyFormatter.format(refundAmountDisplay) : "--",
-                    },
                   ].map((item) => (
                     <div key={item.label} className="flex items-start justify-between gap-3 border-b border-slate-200/70 pb-2 last:border-0 last:pb-0 dark:border-slate-700">
                       <span className="text-xs font-bold text-slate-400">{item.label}</span>
                       <span className="max-w-56 wrap-break-word text-right text-xs font-black text-slate-700 dark:text-slate-100">{item.value || "--"}</span>
                     </div>
                   ))}
+
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-xs font-bold text-slate-400">{lang === "VN" ? "Số tiền hoàn" : "Refund amount"}</span>
+                    <span className="max-w-56 wrap-break-word text-right text-xl font-headline font-black text-[#124757] dark:text-yellow-400">
+                      {refundAmountDisplay > 0 ? currencyFormatter.format(refundAmountDisplay) : "--"}
+                    </span>
+                  </div>
                 </div>
               </div>
             </aside>
@@ -634,9 +637,6 @@ export function CharterRefund() {
                       : (lang === "VN" ? "Gửi lại OTP" : "Resend OTP")}
                   </button>
                   <button type="submit" disabled={isSubmitting || otpCode.length < 6} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-wider text-white disabled:opacity-60">
-                    <span className={`material-symbols-outlined text-base ${isSubmitting ? "animate-spin" : ""}`}>
-                      {isSubmitting ? "progress_activity" : "payments"}
-                    </span>
                     {isSubmitting
                       ? (lang === "VN" ? "Đang hoàn tiền…" : "Submitting…")
                       : (lang === "VN" ? "Xác nhận hoàn tiền" : "Confirm refund")}

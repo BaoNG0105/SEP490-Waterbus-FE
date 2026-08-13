@@ -208,7 +208,7 @@ export function AdminCharterBookingDetail() {
     loadDetail({ silent: true });
   }, [loadDetail]);
 
-  const loadCandidatesFromHubRef = useRef(() => {});
+  const loadCandidatesFromHubRef = useRef(() => { });
 
   const refreshFromHub = useCallback(() => {
     refreshDetailSilently();
@@ -1155,13 +1155,12 @@ export function AdminCharterBookingDetail() {
       </div>
 
       <div className="sticky top-20 z-20 rounded-3xl border border-slate-100 bg-white/95 p-2 shadow-lg backdrop-blur dark:border-slate-700/60 dark:bg-slate-800/95">
-        <div className={`grid grid-cols-2 gap-2 ${
-          workspaceTabs.length >= 5
+        <div className={`grid grid-cols-2 gap-2 ${workspaceTabs.length >= 5
             ? "md:grid-cols-5"
             : workspaceTabs.length >= 4
               ? "md:grid-cols-4"
               : "md:grid-cols-3"
-        }`}>
+          }`}>
           {workspaceTabs.map((tab) => {
             const active = activeTab === tab.id;
             const showBadge = tab.badge
@@ -1172,17 +1171,15 @@ export function AdminCharterBookingDetail() {
                 key={tab.id}
                 type="button"
                 onClick={() => goToTab(tab.id, tab.badge)}
-                className={`relative flex h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
-                  active
+                className={`relative flex h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[10px] font-headline font-black uppercase tracking-wider transition-all ${active
                     ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
                     : "text-slate-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"
-                }`}
+                  }`}
               >
                 <span className="truncate">{tab.label}</span>
                 {showBadge ? (
-                  <span className={`absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-black ${
-                    tab.badge === "!" ? "bg-rose-500 text-white" : "bg-[#FFD100] text-slate-900"
-                  }`}
+                  <span className={`absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-black ${tab.badge === "!" ? "bg-rose-500 text-white" : "bg-[#FFD100] text-slate-900"
+                    }`}
                   >
                     {tab.badge}
                   </span>
@@ -1227,7 +1224,6 @@ export function AdminCharterBookingDetail() {
         <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-2xl text-amber-700 dark:text-amber-300">hourglass_top</span>
               <div>
                 <p className="font-headline text-sm font-black uppercase tracking-wide text-amber-800 dark:text-amber-300">
                   {lang === "VN" ? "Chờ khách nhập thông tin hoàn tiền" : "Waiting for customer refund info"}
@@ -1351,170 +1347,170 @@ export function AdminCharterBookingDetail() {
       )}
 
       {activeTab === "payments" && capabilities.canViewPayments && (
-      <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Theo dõi thanh toán" : "Payment Monitoring"}</h3>
-            <p className="mt-1 text-xs font-bold text-slate-400">
-              {lang === "VN"
-                ? "Hiển thị các giao dịch thanh toán của booking: trạng thái, hạn thanh toán và đường dẫn cổng thanh toán để quản trị kiểm tra."
-                : "Shows booking payment transactions: status, payment deadline, and payment gatewway link for admin review."}
-            </p>
+        <section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="font-headline font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Theo dõi thanh toán" : "Payment Monitoring"}</h3>
+              <p className="mt-1 text-xs font-bold text-slate-400">
+                {lang === "VN"
+                  ? "Hiển thị các giao dịch thanh toán của booking: trạng thái, hạn thanh toán và đường dẫn cổng thanh toán để quản trị kiểm tra."
+                  : "Shows booking payment transactions: status, payment deadline, and payment gatewway link for admin review."}
+              </p>
+            </div>
+            <span className="w-max text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-300">
+              {payments.length} {lang === "VN" ? "giao dịch" : "payments"}
+            </span>
           </div>
-          <span className="w-max text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-300">
-            {payments.length} {lang === "VN" ? "giao dịch" : "payments"}
-          </span>
-        </div>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-230 table-fixed text-xs">
-            <colgroup>
-              <col className="w-[18%]" />
-              <col className="w-[18%]" />
-              <col className="w-[9%]" />
-              <col className="w-[10%]" />
-              <col className="w-[13%]" />
-              <col className="w-[22%]" />
-              <col className="w-[10%]" />
-            </colgroup>
-            <thead className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-              <tr className="border-b border-slate-100 dark:border-slate-700">
-                <th className="py-3 pr-3 text-left">ID</th>
-                <th className="py-3 pr-3 text-right">{lang === "VN" ? "Trạng thái" : "Status"}</th>
-                <th className="py-3 pr-3 text-right">{lang === "VN" ? "Số tiền" : "Amount"}</th>
-                <th className="py-3 pr-3 text-right">{lang === "VN" ? "Hoàn tiền" : "Refund"}</th>
-                <th className="py-3 pr-3 text-right">{lang === "VN" ? "Hết hạn" : "Expires"}</th>
-                <th className="py-3 pr-3 text-left">{lang === "VN" ? "Link thanh toán" : "Payment gateway"}</th>
-                <th className="py-3 pl-2 text-right">{lang === "VN" ? "Xử lý" : "Action"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {payments.length > 0 ? payments.map((payment, index) => {
-                const expiresAt = pick(payment, ["expiresAt"], "");
-                const remainingMs = getRemainingMs(expiresAt, nowTick);
-                const refundInfo = getRefundStatusInfo(payment, lang);
-                const refundAmount = getRefundAmount(payment);
-                const rawRefundMessage = String(getRefundMessage(payment) || "").trim();
-                // Chỉ hiện message lỗi — ẩn "success"/token trạng thái thô dưới badge hoàn tiền.
-                const refundMessage = isRefundFailed(payment) && rawRefundMessage
-                  && !["success", "succeeded", "completed", "ok"].includes(rawRefundMessage.toLowerCase())
-                  ? rawRefundMessage
-                  : "";
-                const canHandleRefund = canAdminHandleRefund(payment, booking.status);
-                const waitsCustomerRefund = paymentWaitsCustomerRefundInfo(payment, booking.status);
-                const paymentId = String(pick(payment, ["paymentId", "id"], "--") || "--");
-                const checkoutUrl = String(pick(payment, ["checkoutUrl", "paymentUrl"], "") || "");
-                const rawPaymentStatus = pick(payment, ["paymentStatus"], "--");
-                // Đã hoàn tiền → không còn “Đã thanh toán”; hiện Đã hủy.
-                const paymentStatusForDisplay = isRefundDone(payment) ? "Cancelled" : rawPaymentStatus;
-                const paymentStatusInfo = getPaymentStatusInfo(paymentStatusForDisplay, lang);
-                const paymentStatusLower = String(rawPaymentStatus || "").toLowerCase();
-                const showPaymentLinkDeadline = ["pending", "pendingpayment", "unpaid"].includes(paymentStatusLower)
-                  && !isRefundDone(payment)
-                  && !isPaidPayment(payment);
-                return (
-                  <tr key={`${paymentId}-${index}`} className="align-middle">
-                    <td className="py-3 pr-3 align-middle text-left">
-                      <p title={paymentId} className="truncate font-mono text-[11px] font-bold text-slate-800 dark:text-white">
-                        {paymentId}
-                      </p>
-                    </td>
-                    <td className="py-3 pr-3 align-middle text-right">
-                      <span
-                        title={paymentStatusInfo.label}
-                        className={`inline-flex max-w-full whitespace-nowrap text-[10px] font-headline font-black uppercase tracking-wide ${paymentStatusInfo.classes
-                          .split(" ")
-                          .filter((cls) => cls.includes("text-"))
-                          .join(" ")}`}
-                      >
-                        {paymentStatusInfo.label}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-3 align-middle text-right whitespace-nowrap font-bold text-slate-600 dark:text-slate-300">
-                      {getPaymentAmount(payment) > 0 ? currencyFormatter.format(getPaymentAmount(payment)) : "--"}
-                    </td>
-                    <td className="py-3 pr-3 align-middle text-right">
-                      <div className="flex flex-col items-end gap-1">
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-230 table-fixed text-xs">
+              <colgroup>
+                <col className="w-[18%]" />
+                <col className="w-[18%]" />
+                <col className="w-[9%]" />
+                <col className="w-[10%]" />
+                <col className="w-[13%]" />
+                <col className="w-[22%]" />
+                <col className="w-[10%]" />
+              </colgroup>
+              <thead className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                <tr className="border-b border-slate-100 dark:border-slate-700">
+                  <th className="py-3 pr-3 text-left">ID</th>
+                  <th className="py-3 pr-3 text-right">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                  <th className="py-3 pr-3 text-right">{lang === "VN" ? "Số tiền" : "Amount"}</th>
+                  <th className="py-3 pr-3 text-right">{lang === "VN" ? "Hoàn tiền" : "Refund"}</th>
+                  <th className="py-3 pr-3 text-right">{lang === "VN" ? "Hết hạn" : "Expires"}</th>
+                  <th className="py-3 pr-3 text-left">{lang === "VN" ? "Link thanh toán" : "Payment gateway"}</th>
+                  <th className="py-3 pl-2 text-right">{lang === "VN" ? "Xử lý" : "Action"}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {payments.length > 0 ? payments.map((payment, index) => {
+                  const expiresAt = pick(payment, ["expiresAt"], "");
+                  const remainingMs = getRemainingMs(expiresAt, nowTick);
+                  const refundInfo = getRefundStatusInfo(payment, lang);
+                  const refundAmount = getRefundAmount(payment);
+                  const rawRefundMessage = String(getRefundMessage(payment) || "").trim();
+                  // Chỉ hiện message lỗi — ẩn "success"/token trạng thái thô dưới badge hoàn tiền.
+                  const refundMessage = isRefundFailed(payment) && rawRefundMessage
+                    && !["success", "succeeded", "completed", "ok"].includes(rawRefundMessage.toLowerCase())
+                    ? rawRefundMessage
+                    : "";
+                  const canHandleRefund = canAdminHandleRefund(payment, booking.status);
+                  const waitsCustomerRefund = paymentWaitsCustomerRefundInfo(payment, booking.status);
+                  const paymentId = String(pick(payment, ["paymentId", "id"], "--") || "--");
+                  const checkoutUrl = String(pick(payment, ["checkoutUrl", "paymentUrl"], "") || "");
+                  const rawPaymentStatus = pick(payment, ["paymentStatus"], "--");
+                  // Đã hoàn tiền → không còn “Đã thanh toán”; hiện Đã hủy.
+                  const paymentStatusForDisplay = isRefundDone(payment) ? "Cancelled" : rawPaymentStatus;
+                  const paymentStatusInfo = getPaymentStatusInfo(paymentStatusForDisplay, lang);
+                  const paymentStatusLower = String(rawPaymentStatus || "").toLowerCase();
+                  const showPaymentLinkDeadline = ["pending", "pendingpayment", "unpaid"].includes(paymentStatusLower)
+                    && !isRefundDone(payment)
+                    && !isPaidPayment(payment);
+                  return (
+                    <tr key={`${paymentId}-${index}`} className="align-middle">
+                      <td className="py-3 pr-3 align-middle text-left">
+                        <p title={paymentId} className="truncate font-mono text-[11px] font-bold text-slate-800 dark:text-white">
+                          {paymentId}
+                        </p>
+                      </td>
+                      <td className="py-3 pr-3 align-middle text-right">
                         <span
-                          title={refundInfo.label}
-                          className={`inline-flex max-w-full whitespace-nowrap text-[10px] font-headline font-black uppercase tracking-wide ${refundInfo.classes
+                          title={paymentStatusInfo.label}
+                          className={`inline-flex max-w-full whitespace-nowrap text-[10px] font-headline font-black uppercase tracking-wide ${paymentStatusInfo.classes
                             .split(" ")
                             .filter((cls) => cls.includes("text-"))
                             .join(" ")}`}
                         >
-                          {refundInfo.label}
+                          {paymentStatusInfo.label}
                         </span>
-                        {refundAmount > 0 ? (
-                          <p className="truncate text-[10px] font-bold text-slate-400">
-                            {currencyFormatter.format(refundAmount)}
-                          </p>
-                        ) : null}
-                        {refundMessage ? (
-                          <p title={refundMessage} className="max-w-full truncate text-[10px] font-bold text-rose-500">
-                            {refundMessage}
-                          </p>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="py-3 pr-3 align-middle text-right">
-                      {expiresAt && showPaymentLinkDeadline ? (
-                        <div className="min-w-0">
-                          <p className="truncate font-bold text-slate-600 dark:text-slate-300">
-                            {formatDateTime(expiresAt)}
-                          </p>
-                          <p className={`mt-0.5 text-[10px] font-bold ${remainingMs > 0 ? "text-slate-400" : "text-rose-500"}`}>
-                            {remainingMs > 0 ? formatCountdown(remainingMs) : (lang === "VN" ? "Hết hạn" : "Expired")}
-                          </p>
-                        </div>
-                      ) : (
-                        <span className="font-bold text-slate-400">--</span>
-                      )}
-                    </td>
-                    <td className="py-3 pr-3 align-middle text-left">
-                      {checkoutUrl ? (
-                        <a
-                          href={checkoutUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          title={checkoutUrl}
-                          className="block truncate text-slate-400 underline-offset-2 hover:text-[#124757] hover:underline dark:hover:text-yellow-400"
-                        >
-                          {checkoutUrl}
-                        </a>
-                      ) : (
-                        <span className="text-slate-400">--</span>
-                      )}
-                    </td>
-                    <td className="py-3 pl-2 align-middle text-right">
-                      <div className="inline-flex justify-end">
-                        {canHandleRefund ? (
-                          <button
-                            type="button"
-                            onClick={() => handleDetailRefundPayment(payment)}
-                            disabled={isSubmitting}
-                            className="inline-flex whitespace-nowrap rounded-lg bg-rose-600 px-2.5 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
+                      </td>
+                      <td className="py-3 pr-3 align-middle text-right whitespace-nowrap font-bold text-slate-600 dark:text-slate-300">
+                        {getPaymentAmount(payment) > 0 ? currencyFormatter.format(getPaymentAmount(payment)) : "--"}
+                      </td>
+                      <td className="py-3 pr-3 align-middle text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <span
+                            title={refundInfo.label}
+                            className={`inline-flex max-w-full whitespace-nowrap text-[10px] font-headline font-black uppercase tracking-wide ${refundInfo.classes
+                              .split(" ")
+                              .filter((cls) => cls.includes("text-"))
+                              .join(" ")}`}
                           >
-                            {lang === "VN" ? "Thủ công" : "Manual"}
-                          </button>
-                        ) : waitsCustomerRefund ? (
-                          <span className="inline-flex whitespace-nowrap rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-                            {lang === "VN" ? "Chờ khách" : "Awaiting"}
+                            {refundInfo.label}
                           </span>
+                          {refundAmount > 0 ? (
+                            <p className="truncate text-[10px] font-bold text-slate-400">
+                              {currencyFormatter.format(refundAmount)}
+                            </p>
+                          ) : null}
+                          {refundMessage ? (
+                            <p title={refundMessage} className="max-w-full truncate text-[10px] font-bold text-rose-500">
+                              {refundMessage}
+                            </p>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="py-3 pr-3 align-middle text-right">
+                        {expiresAt && showPaymentLinkDeadline ? (
+                          <div className="min-w-0">
+                            <p className="truncate font-bold text-slate-600 dark:text-slate-300">
+                              {formatDateTime(expiresAt)}
+                            </p>
+                            <p className={`mt-0.5 text-[10px] font-bold ${remainingMs > 0 ? "text-slate-400" : "text-rose-500"}`}>
+                              {remainingMs > 0 ? formatCountdown(remainingMs) : (lang === "VN" ? "Hết hạn" : "Expired")}
+                            </p>
+                          </div>
                         ) : (
-                          <span className="text-[10px] font-bold text-slate-400">--</span>
+                          <span className="font-bold text-slate-400">--</span>
                         )}
-                      </div>
-                    </td>
+                      </td>
+                      <td className="py-3 pr-3 align-middle text-left">
+                        {checkoutUrl ? (
+                          <a
+                            href={checkoutUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={checkoutUrl}
+                            className="block truncate text-slate-400 underline-offset-2 hover:text-[#124757] hover:underline dark:hover:text-yellow-400"
+                          >
+                            {checkoutUrl}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">--</span>
+                        )}
+                      </td>
+                      <td className="py-3 pl-2 align-middle text-right">
+                        <div className="inline-flex justify-end">
+                          {canHandleRefund ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDetailRefundPayment(payment)}
+                              disabled={isSubmitting}
+                              className="inline-flex whitespace-nowrap rounded-lg bg-rose-600 px-2.5 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-white disabled:opacity-50"
+                            >
+                              {lang === "VN" ? "Thủ công" : "Manual"}
+                            </button>
+                          ) : waitsCustomerRefund ? (
+                            <span className="inline-flex whitespace-nowrap px-2 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                              {lang === "VN" ? "Chờ khách" : "Awaiting"}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-400">--</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }) : (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center font-bold text-slate-400">{lang === "VN" ? "Chưa có payment link." : "No payment links yet."}</td>
                   </tr>
-                );
-              }) : (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center font-bold text-slate-400">{lang === "VN" ? "Chưa có payment link." : "No payment links yet."}</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {activeTab === "tickets" && (

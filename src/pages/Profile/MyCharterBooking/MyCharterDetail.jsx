@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
 
 import {
   cancelMyCharterBooking,
@@ -22,6 +21,7 @@ import { checkPromotionCode, normalizePromotionValidateResult } from "../../../s
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
 import { fetchBoatDetail } from "../../../services/boatService";
 
+import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
 import { CharterRouteMapPanel } from "../../../components/CharterRouteMapPanel";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
 import { CharterQuotePreviewTable } from "../../../components/CharterQuotePreviewTable";
@@ -31,7 +31,16 @@ import { NullImageIcon } from "../../../components/NullImageIcon";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "../../../utils/insurancePreview";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
-import { shouldShowCharterQuotePaymentCountdown, getCharterQuotePaymentDeadline, getCharterDepositAmount, bookingWaitsCustomerRefundInfo } from "../../../utils/charterBookingActions";
+import {
+  shouldShowCharterQuotePaymentCountdown,
+  getCharterQuotePaymentDeadline,
+  getCharterDepositAmount,
+  bookingWaitsCustomerRefundInfo,
+  getCustomerActionInfo,
+  readAcknowledgedCustomerTabBadges,
+  acknowledgeCustomerTabBadge,
+  shouldShowCustomerTabBadge,
+} from "../../../utils/charterBookingActions";
 import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
 import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
 import {
@@ -591,6 +600,14 @@ export function CharterDetail() {
   const [boatImageOverrides, setBoatImageOverrides] = useState({});
   const fetchedBoatImageIdsRef = useRef(new Set());
   const [activeTab, setActiveTab] = useState("overview");
+  const [acknowledgedTabBadges, setAcknowledgedTabBadges] = useState(() => readAcknowledgedCustomerTabBadges(id));
+
+  const goToTab = (tabId, badgeValue) => {
+    setActiveTab(tabId);
+    if (!badgeValue) return;
+    acknowledgeCustomerTabBadge(id, tabId, badgeValue);
+    setAcknowledgedTabBadges((prev) => ({ ...prev, [tabId]: String(badgeValue) }));
+  };
 
   const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 
@@ -671,6 +688,10 @@ export function CharterDetail() {
     loadedIdRef.current = id;
     loadDetail();
   }, [id, loadDetail]);
+
+  useEffect(() => {
+    setAcknowledgedTabBadges(readAcknowledgedCustomerTabBadges(id));
+  }, [id]);
 
   useEffect(() => {
     if (!location.state?.focusPayment || isLoading || !booking) return;
@@ -2060,11 +2081,19 @@ export function CharterDetail() {
     }))
     : [];
   const showTicketsTab = isPaymentStatusPaid || canShowCharterTicketsWithBalance(booking);
+  // Badge tab: "!" khi có hành động khẩn (báo giá cần trả lời, cần thanh toán, chờ nhập hoàn tiền);
+  // số lượng payments/tickets khi tab đó có dữ liệu mới — giống cơ chế bên Admin.
+  const actionInfo = getCustomerActionInfo(booking, lang);
+  const needsPaymentAttention = actionInfo.urgent && ["pay", "refund"].includes(actionInfo.tone);
+  const paymentsCount = Array.isArray(booking.payments) ? booking.payments.length : 0;
+  const paymentBadge = needsPaymentAttention ? "!" : (paymentsCount || "");
+  const ticketsCount = Array.isArray(booking.tickets) ? booking.tickets.length : 0;
+  const ticketsBadge = showTicketsTab ? (ticketsCount || "") : "";
   const detailTabs = [
     { id: "overview", label: lang === "VN" ? "Tổng quan" : "Overview" },
     { id: "quote", label: lang === "VN" ? "Tàu & báo giá" : "Boat & Quote" },
-    { id: "payment", label: lang === "VN" ? "Thanh toán" : "Payment" },
-    ...(showTicketsTab ? [{ id: "tickets", label: lang === "VN" ? "Vé & hành khách" : "Tickets & Passengers" }] : []),
+    { id: "payment", label: lang === "VN" ? "Thanh toán" : "Payment", badge: paymentBadge },
+    ...(showTicketsTab ? [{ id: "tickets", label: lang === "VN" ? "Vé & hành khách" : "Tickets & Passengers", badge: ticketsBadge }] : []),
   ];
 
   return (
@@ -2144,17 +2173,27 @@ export function CharterDetail() {
             <div className={`grid grid-cols-2 gap-2 ${detailTabs.length >= 4 ? "md:grid-cols-4" : detailTabs.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
               {detailTabs.map((tab) => {
                 const active = activeTab === tab.id;
+                const showBadge = tab.badge
+                  && activeTab !== tab.id
+                  && shouldShowCustomerTabBadge(id, tab.id, tab.badge, acknowledgedTabBadges);
                 return (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex h-12 items-center justify-center rounded-2xl px-3 text-[10px] font-headline font-black uppercase tracking-wider transition-all ${active
+                    onClick={() => goToTab(tab.id, tab.badge)}
+                    className={`relative flex h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[10px] font-headline font-black uppercase tracking-wider transition-all ${active
                       ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
                       : "text-slate-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"
                       }`}
                   >
                     <span className="truncate">{tab.label}</span>
+                    {showBadge ? (
+                      <span className={`absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-black ${tab.badge === "!" ? "bg-rose-500 text-white" : "bg-[#FFD100] text-slate-900"
+                        }`}
+                      >
+                        {tab.badge}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
