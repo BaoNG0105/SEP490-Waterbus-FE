@@ -7,6 +7,7 @@ import { ScrollToTop } from "./components/ScrollToTop";
 //Phân quyền
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 import { CustomerOnlyRoute } from "./components/CustomerOnlyRoute";
+import { GroundStaffOnlyRoute } from "./components/GroundStaffOnlyRoute";
 
 //Client
 import { Home } from "./pages/Home";
@@ -772,15 +773,18 @@ function App() {
             }
           />
 
-          {/* ******* Booking POS: quầy bán vé Waterbus/Sightseeing tại chỗ (Staff/Manager/Admin) ******* */}
-          <Route
-            path="/admin/booking-pos"
-            element={
-              <AdminLayout title="Ticket POS">
-                <BookingPOS />
-              </AdminLayout>
-            }
-          />
+          {/* ******* Booking POS: quầy bán vé Waterbus/Sightseeing tại chỗ *******
+              Chỉ Admin/Manager/Staff mặt đất (Ground) được dùng — Staff trên tàu (OnBoard) bị chặn. */}
+          <Route element={<GroundStaffOnlyRoute />}>
+            <Route
+              path="/admin/booking-pos"
+              element={
+                <AdminLayout title="Ticket POS">
+                  <BookingPOS />
+                </AdminLayout>
+              }
+            />
+          </Route>
 
           {/* ******* Blog Management: List Page ******* */}
           <Route

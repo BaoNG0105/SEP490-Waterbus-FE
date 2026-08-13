@@ -13,6 +13,9 @@ export const isManagerUser = (user) => hasRole(user, "MANAGER");
 export const isStaffUser = (user) => hasRole(user, "STAFF");
 export const isOperationsUser = (user) => hasRole(user, "ADMIN", "MANAGER", "STAFF");
 
+/** Staff "thuần" — có role STAFF nhưng không kiêm Admin/Manager. */
+export const isStaffOnlyUser = (user) => isStaffUser(user) && !isAdminUser(user) && !isManagerUser(user);
+
 export const getUserId = (user) => String(user?.id || user?.userId || user?.accountId || "");
 
 // Kiểm tra xem người dùng hiện tại có được phép Sửa/Xóa 1 user (dựa vào role của user đó) hay không
@@ -35,6 +38,15 @@ const normalizeStaffTypeKey = (value) => {
   if (raw === "ground" || raw === "1") return "Ground";
   return "";
 };
+
+export const getStaffTypeKey = (user) =>
+  normalizeStaffTypeKey(user?.staffType ?? user?.staff_type ?? user?.StaffType);
+
+/** Nhân viên mặt đất (Ground) — được phép dùng quầy bán vé (POS). */
+export const isGroundStaffUser = (user) => getStaffTypeKey(user) === "Ground";
+
+/** Nhân viên trên tàu (OnBoard) — KHÔNG được phép dùng quầy bán vé (POS). */
+export const isOnBoardStaffUser = (user) => getStaffTypeKey(user) === "OnBoard";
 
 /** Admin: Manager + Staff. Manager: chỉ Staff mặt đất. Không reset chính mình. */
 export const canResetManagedUserPassword = (currentUser, targetUser) => {

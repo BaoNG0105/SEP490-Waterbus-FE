@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { useApp } from "../../context/AppContext";
 import { fetchCurrentUserProfile } from "../../services/authService";
-import { hasRole, isAdminUser, isManagerUser, isStaffUser } from "../../utils/roleHelpers";
+import { hasRole, isStaffOnlyUser, isOnBoardStaffUser } from "../../utils/roleHelpers";
 import { logout, updateUserProfile } from "../../redux/authSlice";
 import { UserAvatar } from "../../components/UserAvatar";
 
@@ -97,9 +97,9 @@ const STAFF_MENU_PATHS = new Set([
   "/admin/booking-pos",
 ]);
 
-const isStaffOnlyUser = (user) => isStaffUser(user) && !isAdminUser(user) && !isManagerUser(user);
-
 const isNavItemVisible = (user, item, staffOnly) => {
+  // Bán vé (POS): staff mặt đất (Ground) mới được dùng, staff trên tàu (OnBoard) thì không.
+  if (item.path === "/admin/booking-pos" && staffOnly && isOnBoardStaffUser(user)) return false;
   if (staffOnly) return STAFF_MENU_PATHS.has(item.path);
   return !item.roles || hasRole(user, ...item.roles);
 };
@@ -155,6 +155,7 @@ export const AdminSidebar = ({ isOpen, onClose }) => {
           avatarUrl: data.avatarUrl || "",
           roles: data.roles || [],
           stationAssignments: data.stationAssignments || [],
+          staffType: data.staffType || data.staff_type || data.StaffType || "",
         }));
       } catch (error) {
         console.error("Lỗi tải thông tin admin sidebar:", error);

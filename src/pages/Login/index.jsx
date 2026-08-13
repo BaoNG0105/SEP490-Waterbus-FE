@@ -123,6 +123,7 @@ export const Login = () => {
           fullName: response.user?.fullName || '',
           avatarUrl: response.user?.avatarUrl || '',
           roles: response.user?.roles || [],
+          staffType: response.user?.staffType || '',
         };
         // Dispatch với đúng key "accessToken" và "user"
         dispatch(loginSuccess({
