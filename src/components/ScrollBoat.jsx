@@ -10,6 +10,14 @@ const BOAT_IMAGES = {
 // Tốc độ chạy chậm rãi — số giây để tàu lướt hết từ mép trái sang mép phải.
 const BOAT_SAIL_DURATION_S = 12;
 
+// Vị trí "ẩn hẳn" ngoài mép trái/phải, dùng calc() trộn % (theo chính bề rộng ảnh tàu) với vw
+// (theo bề rộng viewport) — nhờ vậy luôn ẩn trọn vẹn dù ảnh rộng bao nhiêu ở mọi breakpoint.
+// Trước đây dùng số vw cố định (-20vw/120vw) nên với ảnh tàu rộng (lg:w-260 ≈ 65rem), ở vị trí
+// -20vw ảnh vẫn còn thừa ra một đoạn trong viewport — tàu trông như "dừng" giữa chừng thay vì
+// lướt khuất hẳn.
+const HIDDEN_LEFT = "calc(-100% - 5vw)"; // mép phải ảnh nằm ngoài mép trái viewport
+const HIDDEN_RIGHT = "calc(100vw + 5vw)"; // mép trái ảnh nằm ngoài mép phải viewport
+
 /**
  * Ảnh con tàu tự động lướt ngang mỗi khi section chứa nó xuất hiện trong viewport
  * (không phụ thuộc tốc độ cuộn — chạy bằng CSS transition với nhịp độ cố định, chậm
@@ -26,9 +34,9 @@ const BOAT_SAIL_DURATION_S = 12;
 export function ScrollBoat({ variant = "default", className = "w-140 sm:w-180 md:w-220 lg:w-260", reverse = false }) {
   const src = BOAT_IMAGES[variant] || BOAT_IMAGES.default;
   const wrapperRef = useRef(null);
-  // Trái sang phải: -20vw (ngoài mép trái) → 120vw (ngoài mép phải). reverse thì đảo lại.
-  const startX = reverse ? 120 : -20;
-  const endX = reverse ? -20 : 120;
+  // Trái sang phải: ẩn mép trái → ẩn mép phải. reverse thì đảo lại.
+  const startX = reverse ? HIDDEN_RIGHT : HIDDEN_LEFT;
+  const endX = reverse ? HIDDEN_LEFT : HIDDEN_RIGHT;
   const [x, setX] = useState(startX);
   const [transitionEnabled, setTransitionEnabled] = useState(false);
 
@@ -39,18 +47,23 @@ export function ScrollBoat({ variant = "default", className = "w-140 sm:w-180 md
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
-          // Section vừa xuất hiện trong viewport — cho tàu chạy chậm rãi qua section.
+        if (entry.intersectionRatio >= 0.15) {
+          // Section vừa xuất hiện trong viewport (>=15%) — cho tàu chạy chậm rãi qua section.
           setTransitionEnabled(true);
           setX(endX);
-        } else {
-          // Rời khỏi viewport: về lại vị trí xuất phát ngay lập tức (không transition,
-          // vô hình vì section đang ẩn) để lần cuộn tới lại chạy lại từ đầu.
+        } else if (entry.intersectionRatio === 0) {
+          // Đã ra khỏi viewport hoàn toàn: về lại vị trí xuất phát ngay lập tức (không
+          // transition, vô hình vì section đã ẩn hết) để lần cuộn tới lại chạy lại từ đầu.
+          // Chỉ reset khi ratio = 0 (không phải hễ tụt dưới 0.15 là reset) để không cắt
+          // ngang hiệu ứng đang chạy dở khi section mới rời viewport một phần — nếu không,
+          // với các section thấp/ngắn, tàu bị "đứng hình" giữa chừng trước khi lướt hết.
           setTransitionEnabled(false);
           setX(startX);
         }
+        // else: ratio nằm giữa 0 và 0.15 (section đang rời viewport dần) — bỏ qua, để
+        // transition đang chạy dở (nếu có) tự hoàn tất thay vì bị cắt ngang giữa chừng.
       },
-      { threshold: 0.15 }
+      { threshold: [0, 0.15] }
     );
     observer.observe(section);
     return () => observer.disconnect();
@@ -62,7 +75,7 @@ export function ScrollBoat({ variant = "default", className = "w-140 sm:w-180 md
       aria-hidden="true"
       className="pointer-events-none absolute top-1/2 left-0 z-0 select-none"
       style={{
-        transform: `translate(${x}vw, -50%)`,
+        transform: `translate(${x}, -50%)`,
         transition: transitionEnabled ? `transform ${BOAT_SAIL_DURATION_S}s linear` : "none",
         willChange: "transform",
       }}

@@ -1,31 +1,15 @@
 import { useMemo } from "react";
-import countries from "i18n-iso-countries";
-import viLocale from "i18n-iso-countries/langs/vi.json";
-import enLocale from "i18n-iso-countries/langs/en.json";
 import "flag-icons/css/flag-icons.min.css";
 import { useApp } from "../context/AppContext";
 import { FormSelect } from "./FormSelect";
-
-countries.registerLocale(viLocale);
-countries.registerLocale(enLocale);
+import { countries, toEnglishNationality } from "../utils/nationality";
 
 const FlagIcon = ({ code }) => (
   <span
-    className={`fi fi-${String(code || "").toLowerCase()} !block h-3.5 w-5 shrink-0 rounded-[2px] shadow-sm`}
+    className={`fi fi-${String(code || "").toLowerCase()} block! h-3.5 w-5 shrink-0 rounded-xs shadow-sm`}
     aria-hidden="true"
   />
 );
-
-/** Chuẩn hóa về tên tiếng Anh (gửi BE), khớp cả tên VI/EN đã lưu. */
-export function toEnglishNationality(raw) {
-  const value = String(raw || "").trim();
-  if (!value) return "";
-  const enCode = countries.getAlpha2Code(value, "en");
-  if (enCode) return countries.getName(enCode, "en") || value;
-  const viCode = countries.getAlpha2Code(value, "vi");
-  if (viCode) return countries.getName(viCode, "en") || value;
-  return value;
-}
 
 export function NationalitySelect({
   value,

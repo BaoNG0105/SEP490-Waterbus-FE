@@ -249,7 +249,7 @@ export const Home = () => {
           {/* Tiêu Đề */}
           <div className="text-center space-y-4 max-w-4xl gsap-reveal">
             <h1 className="text-6xl md:text-8xl font-headline font-black text-white leading-tight drop-shadow-md">
-              {lang === "VN" ? "Welcome to" : "Chào mừng đến"}{" "}
+              {lang === "VN" ? "Chào mừng đến" : "Welcome to"}{" "}
               <br />
               <span className="text-transparent bg-clip-text bg-linear-to-r from-yellow-400 to-amber-300">
                 {lang === "VN" ? "Waterbus" : "Waterbus"}

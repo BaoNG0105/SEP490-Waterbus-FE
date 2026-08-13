@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../redux/authSlice";
 import { notify } from "../utils/swalToast";
+import "flag-icons/css/flag-icons.min.css";
 
 import { UserAvatar } from "../components/UserAvatar";
 import { logoUrl as logo } from "../data/homeData";
@@ -11,6 +12,7 @@ import { getDefaultAdminLandingPath } from "./Admin/AdminSidebar";
 
 export const Header = ({ isNoticeVisible }) => {
   const { isDarkMode, toggleDarkMode, lang, toggleLang } = useApp();
+  const langFlagCode = lang === "VN" ? "vn" : "gb";
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobileServicesOpen, setIsMobileServicesOpen] = useState(false);
@@ -198,13 +200,17 @@ export const Header = ({ isNoticeVisible }) => {
               </span>
             </button>
 
-            {/* Nút hiển thị Ngôn ngữ phẳng */}
+            {/* Nút hiển thị Ngôn ngữ dạng cờ quốc gia */}
             <button
               onClick={toggleLang}
-              className="text-[10px] font-bold text-white/90 dark:text-yellow-400 tracking-wider hover:text-yellow-400 transition-colors uppercase py-0.5 outline-none select-none"
-              title="Change Language"
+              className="flex items-center justify-center p-0.5 outline-none select-none rounded-xs hover:opacity-80 transition-opacity"
+              title={lang === "VN" ? "Chuyển sang tiếng Anh" : "Switch to Vietnamese"}
+              aria-label="Change Language"
             >
-              {lang}
+              <span
+                className={`fi fi-${langFlagCode} block! h-3.5 w-5 shrink-0 rounded-xs shadow-sm`}
+                aria-hidden="true"
+              />
             </button>
           </div>
 
@@ -400,7 +406,7 @@ export const Header = ({ isNoticeVisible }) => {
               onClick={toggleLang}
               className="flex justify-center items-center gap-2.5 bg-white/10 dark:bg-slate-800 border border-white/10 dark:border-slate-700 px-5 py-3 rounded-xl text-white dark:text-yellow-400 font-bold text-sm tracking-widest uppercase shadow-sm hover:text-yellow-400 transition-colors"
             >
-              <span className="material-symbols-outlined text-[20px]">translate</span>
+              <span className={`fi fi-${langFlagCode} h-4 w-6 shrink-0 rounded-xs shadow-sm`} aria-hidden="true" />
               {lang}
             </button>
           </div>

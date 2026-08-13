@@ -79,6 +79,7 @@ import { EditBlog } from "./pages/Admin/BlogManagement/EditBlog";
 import { SystemDataManagement } from "./pages/Admin/SystemDataManagement";
 import { CreateSystemData } from "./pages/Admin/SystemDataManagement/CreateSystemData";
 import { EditSystemData } from "./pages/Admin/SystemDataManagement/EditSystemData";
+import { AdminNotifications } from "./pages/Admin/Notifications";
 
 function App() {
   return (
@@ -371,6 +372,16 @@ function App() {
             element={
               <AdminLayout title="Revenue">
                 <Revenue />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Admin Notifications Page ******* */}
+          <Route
+            path="/admin/notifications"
+            element={
+              <AdminLayout title="Notifications">
+                <AdminNotifications />
               </AdminLayout>
             }
           />
