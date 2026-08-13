@@ -29,3 +29,31 @@ export const closeAssistantConversation = (conversationId, clientSessionId) =>
         params: { clientSessionId },
         skipAuth: true,
     }).then(r => r.data);
+
+// ===================== Admin: quản lý system prompt của trợ lý =====================
+// Quyền: Admin. Response GET/PUT/restore/reset luôn cùng 1 shape — trạng thái prompt
+// SAU thao tác — nên FE dùng chung 1 setter cho cả 4 API này.
+
+/** GET /assistant/prompt — Đọc system prompt đang có hiệu lực + lịch sử version. */
+export const getAssistantPromptAdmin = () =>
+    api.get('/assistant/prompt').then(r => r.data);
+
+/** PUT /assistant/prompt — Full replace nội dung prompt. Có hiệu lực ngay, không cần deploy. */
+export const updateAssistantPromptAdmin = (content) =>
+    api.put('/assistant/prompt', { content }).then(r => r.data);
+
+/** POST /assistant/prompt/restore/{versionId} — Quay lại một bản đã lưu (versionId lấy từ versions[].id). */
+export const restoreAssistantPromptAdmin = (versionId) =>
+    api.post(`/assistant/prompt/restore/${encodeURIComponent(versionId)}`).then(r => r.data);
+
+/** POST /assistant/prompt/reset — Về bản gốc trong code (source "builtin"). Idempotent. */
+export const resetAssistantPromptAdmin = () =>
+    api.post('/assistant/prompt/reset').then(r => r.data);
+
+/**
+ * POST /assistant/prompt/preview — Chạy thử 1 lượt LLM với prompt NHẬP VÀO (chưa lưu).
+ * Không lưu hội thoại, không ghi file, không đổi prompt đang chạy.
+ * Rate limit riêng 5 lượt/300s cho admin hiện tại — vượt thì BE trả 429.
+ */
+export const previewAssistantPromptAdmin = ({ content, question, language, withTools }) =>
+    api.post('/assistant/prompt/preview', { content, question, language, withTools }).then(r => r.data);

@@ -81,6 +81,7 @@ const MENU_GROUPS = [
         roles: ["ADMIN"],
       },
       { path: "/admin/system-data", labelVn: "Dữ liệu hệ thống", labelEn: "System Data", roles: ["ADMIN"] },
+      { path: "/admin/assistant-prompt", labelVn: "Prompt trợ lý AI", labelEn: "Assistant Prompt", roles: ["ADMIN"] },
     ],
   },
 ];

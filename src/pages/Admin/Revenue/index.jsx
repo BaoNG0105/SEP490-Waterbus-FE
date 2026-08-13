@@ -92,9 +92,9 @@ export const Revenue = () => {
   const updateFilter = (key, value) => {
     setFilters((prev) => {
       const next = { ...prev, [key]: value };
-      // Đổi dịch vụ sang 1 dịch vụ cụ thể khác "Request" -> các trạng thái chỉ thuộc Request
+      // Đổi dịch vụ sang 1 dịch vụ cụ thể khác "Charter" -> các trạng thái chỉ thuộc Charter
       // (chờ báo giá/đã đặt cọc/hoàn tiền...) không còn hợp lệ, reset về "Tất cả" để tránh lọc sai.
-      if (key === "serviceType" && value !== "All" && value !== "Request") {
+      if (key === "serviceType" && value !== "All" && value !== "Charter") {
         const bookingStatusOpt = bookingStatusOptions.find((o) => o.value === prev.bookingStatus);
         if (bookingStatusOpt?.requestOnly) next.bookingStatus = "All";
         const paymentStatusOpt = paymentStatusOptions.find((o) => o.value === prev.paymentStatus);

@@ -80,6 +80,7 @@ import { SystemDataManagement } from "./pages/Admin/SystemDataManagement";
 import { CreateSystemData } from "./pages/Admin/SystemDataManagement/CreateSystemData";
 import { EditSystemData } from "./pages/Admin/SystemDataManagement/EditSystemData";
 import { AdminNotifications } from "./pages/Admin/Notifications";
+import { AssistantPromptManagement } from "./pages/Admin/AssistantPromptManagement";
 
 function App() {
   return (
@@ -382,6 +383,16 @@ function App() {
             element={
               <AdminLayout title="Notifications">
                 <AdminNotifications />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Assistant System Prompt Management (AI) ******* */}
+          <Route
+            path="/admin/assistant-prompt"
+            element={
+              <AdminLayout title={{ vn: "Prompt trợ lý AI", en: "Assistant Prompt" }}>
+                <AssistantPromptManagement />
               </AdminLayout>
             }
           />

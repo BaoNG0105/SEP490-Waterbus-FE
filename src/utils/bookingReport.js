@@ -1,7 +1,7 @@
 // Danh mục filter + badge màu dùng cho trang báo cáo booking (GET /reports/bookings).
 
-// requestOnly: trạng thái chỉ tồn tại ở dịch vụ Request — chỉ hiện trong
-// dropdown filter khi serviceType đang là "Request" hoặc "All".
+// requestOnly: trạng thái chỉ tồn tại ở dịch vụ Request/Charter (thuê tàu) — chỉ hiện trong
+// dropdown filter khi serviceType đang là "Charter" hoặc "All".
 export const bookingStatusOptions = [
   { value: "All", labelVn: "Tất cả trạng thái", labelEn: "All Status" },
   { value: "PendingPayment", labelVn: "Chờ thanh toán", labelEn: "Pending Payment" },
@@ -27,12 +27,12 @@ export const serviceTypeOptions = [
   { value: "All", labelVn: "Tất cả dịch vụ", labelEn: "All Services" },
   { value: "Waterbus", labelVn: "Waterbus", labelEn: "Waterbus" },
   { value: "Sightseeing", labelVn: "Water Sightseeing", labelEn: "Sightseeing" },
-  { value: "Request", labelVn: "Request trip", labelEn: "Request trip" },
+  { value: "Charter", labelVn: "Request trip", labelEn: "Request trip" },
 ];
 
-/** Ẩn các option requestOnly khi đang lọc theo 1 dịch vụ cụ thể khác "Request". */
+/** Ẩn các option requestOnly khi đang lọc theo 1 dịch vụ cụ thể khác "Charter". */
 export const getVisibleStatusOptions = (options, serviceType) => {
-  const showRequestOnly = !serviceType || serviceType === "All" || serviceType === "Request";
+  const showRequestOnly = !serviceType || serviceType === "All" || serviceType === "Charter";
   return showRequestOnly ? options : options.filter((o) => !o.requestOnly);
 };
 
