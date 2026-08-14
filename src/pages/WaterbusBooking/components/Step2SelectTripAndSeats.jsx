@@ -324,7 +324,6 @@ export default function Step2SelectTripAndSeats({
     )];
 
     if (missingIds.length === 0) return;
-    missingIds.forEach((boatId) => fetchedBoatIdsRef.current.add(boatId));
 
     let isActive = true;
     (async () => {
@@ -341,6 +340,12 @@ export default function Step2SelectTripAndSeats({
         }
       }));
       if (!isActive) return;
+      // Chỉ đánh dấu "đã tải" SAU KHI fetch thật sự hoàn tất và effect này còn hiệu lực.
+      // Đánh dấu sớm (trước khi await xong) sẽ dính bug React StrictMode double-effect ở dev:
+      // lần chạy effect đầu bị cleanup hủy kết quả (isActive=false), nhưng đã lỡ đánh dấu
+      // fetchedBoatIdsRef khiến lần chạy effect thứ hai (lần "thật") bỏ qua luôn boatId đó
+      // — ảnh tàu không bao giờ hiện cho tới khi reload trang (mount mới, ref rỗng lại).
+      missingIds.forEach((boatId) => fetchedBoatIdsRef.current.add(boatId));
       setBoatImageById((prev) => {
         const next = { ...prev };
         entries.forEach(([boatId, imageUrl]) => {
