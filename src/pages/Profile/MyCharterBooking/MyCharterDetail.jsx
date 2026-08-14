@@ -1827,7 +1827,6 @@ export function CharterDetail() {
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-30 px-4 sm:px-6 lg:px-8 font-body">
         <main className="max-w-3xl mx-auto">
           <section className="bg-white dark:bg-slate-800 rounded-3xl p-8 border border-slate-100 dark:border-slate-700/50 text-center shadow-sm">
-            <span className="material-symbols-outlined text-4xl text-rose-500">error</span>
             <h1 className="mt-3 text-xl font-headline font-black text-[#124757] dark:text-white">
               {lang === "VN" ? "Không thể tải chi tiết yêu cầu" : "Unable to load request details"}
             </h1>
@@ -2091,20 +2090,15 @@ export function CharterDetail() {
   const ticketsBadge = showTicketsTab ? (ticketsCount || "") : "";
   const detailTabs = [
     { id: "overview", label: lang === "VN" ? "Tổng quan" : "Overview" },
-    { id: "quote", label: lang === "VN" ? "Tàu & báo giá" : "Boat & Quote" },
+    { id: "quote", label: lang === "VN" ? "Tàu/báo giá" : "Boat/Quote" },
     { id: "payment", label: lang === "VN" ? "Thanh toán" : "Payment", badge: paymentBadge },
-    ...(showTicketsTab ? [{ id: "tickets", label: lang === "VN" ? "Vé & hành khách" : "Tickets & Passengers", badge: ticketsBadge }] : []),
+    ...(showTicketsTab ? [{ id: "tickets", label: lang === "VN" ? "Vé/hành khách" : "Tickets/Passengers", badge: ticketsBadge }] : []),
   ];
 
   return (
     <>
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-30 px-4 sm:px-6 lg:px-8 font-body transition-colors">
         <main className="max-w-6xl mx-auto space-y-6">
-          <button onClick={() => navigate("/profile/my-charter-booking")} className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
-            <span className="material-symbols-outlined text-xl">arrow_back</span>
-            {lang === "VN" ? "Quay lại danh sách" : "Back to Requests"}
-          </button>
-
           {loadError && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-4 py-3 text-amber-800 dark:text-amber-300">
               <p className="text-xs font-bold">{loadError}</p>
@@ -2118,21 +2112,32 @@ export function CharterDetail() {
           <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-4xl shadow-[0_24px_70px_rgba(15,23,42,0.10)] border border-slate-200/70 dark:border-slate-700/70">
             <div className="px-6 py-6 md:px-8">
               <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h1 className="text-3xl md:text-4xl font-headline font-black text-[#0E4050] dark:text-yellow-400 tracking-tight">{booking.bookingCode}</h1>
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.classes
-                      .split(" ")
-                      .filter((cls) => cls.includes("text-"))
-                      .join(" ")
-                      }`}>
-                      {statusInfo.label}
-                    </span>
-                  </div>
+                <div className="flex min-w-0 items-start gap-3">
+                  {/* Nút back gắn trong section header, cùng pattern với TripDetail.jsx (Admin) */}
+                  <button
+                    type="button"
+                    onClick={() => navigate("/profile/my-charter-booking")}
+                    aria-label={lang === "VN" ? "Quay lại danh sách" : "Back to Requests"}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-[#124757] hover:text-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-yellow-400 dark:hover:text-slate-900"
+                  >
+                    <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
+                  </button>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h1 className="text-3xl md:text-4xl font-headline font-black text-[#0E4050] dark:text-yellow-400 tracking-tight">{booking.bookingCode}</h1>
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.classes
+                        .split(" ")
+                        .filter((cls) => cls.includes("text-"))
+                        .join(" ")
+                        }`}>
+                        {statusInfo.label}
+                      </span>
+                    </div>
 
-                  <p className="mt-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                    {lang === "VN" ? "Tạo vào lúc" : "Created at"} {formatDateTime(booking.createdAt)}
-                  </p>
+                    <p className="mt-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      {lang === "VN" ? "Tạo vào lúc" : "Created at"} {formatDateTime(booking.createdAt)}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row xl:flex-col gap-3 xl:items-end">
@@ -2210,393 +2215,393 @@ export function CharterDetail() {
 
           {/* ===== SECTION 1: REQUEST OVERVIEW ===== */}
           {activeTab === "overview" && (
-          <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.07)] border border-slate-200/70 dark:border-slate-700/70">
-            <div className="border-b border-slate-100 dark:border-slate-700/70 px-6 py-5 md:px-8">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
-                    {lang === "VN" ? "Tổng quan yêu cầu" : "Request Overview"}
-                  </h2>
-                  <p className="mt-1 text-xs font-medium text-slate-400">
-                    {lang === "VN" ? "Thông tin lộ trình, hành khách và liên hệ" : "Route, passenger, and contact details"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 py-6 md:px-8">
-              <div className="grid items-start gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-                <div className="rounded-2xl border border-[#D8E7EA] bg-[#F7FAFB] p-4 dark:border-slate-700 dark:bg-slate-900">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                      {lang === "VN" ? "Lộ trình dự kiến" : "Planned Route"}
-                    </p>
-                    <p className="mt-0.5 truncate text-base font-headline font-black text-[#0E4050] dark:text-white sm:text-lg">
-                      {routeFrom} <span className="text-slate-300">/</span> {routeTo}
+            <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.07)] border border-slate-200/70 dark:border-slate-700/70">
+              <div className="border-b border-slate-100 dark:border-slate-700/70 px-6 py-5 md:px-8">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div>
+                    <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
+                      {lang === "VN" ? "Tổng quan yêu cầu" : "Request Overview"}
+                    </h2>
+                    <p className="mt-1 text-xs font-medium text-slate-400">
+                      {lang === "VN" ? "Thông tin lộ trình, hành khách và liên hệ" : "Route, passenger, and contact details"}
                     </p>
                   </div>
+                </div>
+              </div>
 
-                  <div className="mt-3 space-y-2">
-                    {itineraryTimelineItems.map((item, index) => {
-                      const isLast = index === itineraryTimelineItems.length - 1;
-                      const isEndpoint = item.type !== "stop";
-                      const marker =
-                        item.type === "start"
-                          ? "A"
-                          : item.type === "end"
-                            ? "B"
-                            : String(index);
-                      return (
-                        <div
-                          key={`${item.type}-${item.name}-${index}`}
-                          className="grid grid-cols-[24px_1fr] items-stretch gap-2.5"
-                        >
-                          <div className="flex flex-col items-center">
-                            <span
-                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-headline font-black leading-none ${isEndpoint
+              <div className="px-6 py-6 md:px-8">
+                <div className="grid items-start gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                  <div className="rounded-2xl border border-[#D8E7EA] bg-[#F7FAFB] p-4 dark:border-slate-700 dark:bg-slate-900">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                        {lang === "VN" ? "Lộ trình dự kiến" : "Planned Route"}
+                      </p>
+                      <p className="mt-0.5 truncate text-base font-headline font-black text-[#0E4050] dark:text-white sm:text-lg">
+                        {routeFrom} <span className="text-slate-300">/</span> {routeTo}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {itineraryTimelineItems.map((item, index) => {
+                        const isLast = index === itineraryTimelineItems.length - 1;
+                        const isEndpoint = item.type !== "stop";
+                        const marker =
+                          item.type === "start"
+                            ? "A"
+                            : item.type === "end"
+                              ? "B"
+                              : String(index);
+                        return (
+                          <div
+                            key={`${item.type}-${item.name}-${index}`}
+                            className="grid grid-cols-[24px_1fr] items-stretch gap-2.5"
+                          >
+                            <div className="flex flex-col items-center">
+                              <span
+                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-headline font-black leading-none ${isEndpoint
                                   ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
                                   : "bg-white text-slate-500 ring-2 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600"
-                                }`}
-                            >
-                              {marker}
-                            </span>
-                            {!isLast ? (
-                              <span className="mt-1 w-0.5 min-h-2 flex-1 bg-slate-200 dark:bg-slate-600" />
-                            ) : null}
-                          </div>
-                          <div className="rounded-xl border border-slate-100 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-headline font-black uppercase tracking-widest leading-none text-slate-400">{item.label}</p>
-                                <p className="mt-1 truncate text-sm font-headline font-black leading-tight text-[#0E4050] dark:text-slate-100">{item.name}</p>
-                              </div>
-                              {item.meta ? (
-                                <span className="w-max text-[10px] font-bold text-amber-700 dark:text-yellow-300">
-                                  {item.meta}
-                                </span>
+                                  }`}
+                              >
+                                {marker}
+                              </span>
+                              {!isLast ? (
+                                <span className="mt-1 w-0.5 min-h-2 flex-1 bg-slate-200 dark:bg-slate-600" />
                               ) : null}
                             </div>
+                            <div className="rounded-xl border border-slate-100 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-headline font-black uppercase tracking-widest leading-none text-slate-400">{item.label}</p>
+                                  <p className="mt-1 truncate text-sm font-headline font-black leading-tight text-[#0E4050] dark:text-slate-100">{item.name}</p>
+                                </div>
+                                {item.meta ? (
+                                  <span className="w-max text-[10px] font-bold text-amber-700 dark:text-yellow-300">
+                                    {item.meta}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-slate-200 bg-[#F8FBFC] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
+                    <div className="flex flex-col gap-3">
+                      {contactItems.map((item) => (
+                        <div key={item.label}>
+                          <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                          <p className="mt-1 wrap-break-words text-sm font-bold text-slate-700 dark:text-slate-200">{item.value}</p>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
+                    <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Ghi chú" : "Special requests"}</p>
+                      <p className="mt-1 wrap-break-words text-sm font-bold text-slate-700 dark:text-slate-200">{booking.specialRequests || (lang === "VN" ? "Không có" : "None")}</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-[#F8FBFC] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
-                  <div className="flex flex-col gap-3">
-                    {contactItems.map((item) => (
-                      <div key={item.label}>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {scheduleItems.map((item) => (
+                      <div key={item.label} className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
                         <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-                        <p className="mt-1 wrap-break-words text-sm font-bold text-slate-700 dark:text-slate-200">{item.value}</p>
+                        <p className="mt-1 text-lg font-headline font-black leading-snug text-slate-800 dark:text-white wrap-break-words">{item.value}</p>
+                        {item.description && (
+                          <p className="mt-1 text-xs font-bold leading-snug text-slate-400 dark:text-slate-500">{item.description}</p>
+                        )}
                       </div>
                     ))}
-                  </div>
-                  <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Ghi chú" : "Special requests"}</p>
-                    <p className="mt-1 wrap-break-words text-sm font-bold text-slate-700 dark:text-slate-200">{booking.specialRequests || (lang === "VN" ? "Không có" : "None")}</p>
-                  </div>
-                </div>
-              </div>
 
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {scheduleItems.map((item) => (
-                    <div key={item.label} className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
-                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-                      <p className="mt-1 text-lg font-headline font-black leading-snug text-slate-800 dark:text-white wrap-break-words">{item.value}</p>
-                      {item.description && (
-                        <p className="mt-1 text-xs font-bold leading-snug text-slate-400 dark:text-slate-500">{item.description}</p>
+                    <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
+                      <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Tàu yêu cầu" : "Requested Boats"}</p>
+                      <p className="mt-1 text-lg font-headline font-black leading-snug text-slate-800 dark:text-white wrap-break-words">
+                        {requestedDeckItems.length > 0
+                          ? (lang === "VN" ? `${requestedDeckItems.length} tàu` : `${requestedDeckItems.length} boat${requestedDeckItems.length > 1 ? "s" : ""}`)
+                          : (lang === "VN" ? "Chờ báo giá" : "Pending quote")}
+                      </p>
+                      {requestedDeckItems.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {requestedDeckItems.map((boat) => (
+                            <span key={`${boat.order}-${boat.deckText || boat.seatSetupType}`} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-headline font-black text-[#124757] shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400">
+                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#124757] text-[8px] text-white dark:bg-yellow-400 dark:text-slate-900">{boat.order}</span>
+                              {boat.deckText || boat.seatSetupType}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                  ))}
-
-                  <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Tàu yêu cầu" : "Requested Boats"}</p>
-                    <p className="mt-1 text-lg font-headline font-black leading-snug text-slate-800 dark:text-white wrap-break-words">
-                      {requestedDeckItems.length > 0
-                        ? (lang === "VN" ? `${requestedDeckItems.length} tàu` : `${requestedDeckItems.length} boat${requestedDeckItems.length > 1 ? "s" : ""}`)
-                        : (lang === "VN" ? "Chờ báo giá" : "Pending quote")}
-                    </p>
-                    {requestedDeckItems.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {requestedDeckItems.map((boat) => (
-                          <span key={`${boat.order}-${boat.deckText || boat.seatSetupType}`} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-headline font-black text-[#124757] shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400">
-                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#124757] text-[8px] text-white dark:bg-yellow-400 dark:text-slate-900">{boat.order}</span>
-                            {boat.deckText || boat.seatSetupType}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
+                  <CharterInsuranceInfo
+                    booking={booking}
+                    lang={lang}
+                    currencyFormatter={currencyFormatter}
+                  />
                 </div>
-                <CharterInsuranceInfo
-                  booking={booking}
-                  lang={lang}
-                  currencyFormatter={currencyFormatter}
-                />
               </div>
-            </div>
-          </section>
+            </section>
           )}
 
           {/* ===== SECTION 2: BOAT & QUOTE ===== */}
           {activeTab === "quote" && (
-          <section className="bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70 px-6 py-6 md:px-8">
-            <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
-              {lang === "VN" ? "Tàu & báo giá" : "Boat & Quote"}
-            </h2>
+            <section className="bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70 px-6 py-6 md:px-8">
+              <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
+                {lang === "VN" ? "Tàu & báo giá" : "Boat & Quote"}
+              </h2>
 
-            {booking.status === "PendingQuote" ? (
-              <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-                <h3 className="font-headline text-lg font-black">{lang === "VN" ? "Chưa có báo giá" : "No quote yet"}</h3>
-                <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Đội vận hành đang chọn tàu và chốt giá. Khi có báo giá, tàu và chi tiết giá sẽ hiển thị ở mục này." : "The operations team is assigning boats and pricing. Boat and quote details will appear here."}</p>
-              </div>
-            ) : hasQuote && (
-              <div className="mt-4 overflow-hidden rounded-3xl border border-[#D8E7EA] dark:border-slate-700 bg-[#F7FAFB] dark:bg-slate-900">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
-                  <div>
-                    <h3 className="mt-1 text-xl font-headline font-black text-[#0E4050] dark:text-yellow-400">{lang === "VN" ? "Chi tiết tàu và chi phí" : "Boat and pricing details"}</h3>
-                  </div>
+              {booking.status === "PendingQuote" ? (
+                <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                  <h3 className="font-headline text-lg font-black">{lang === "VN" ? "Chưa có báo giá" : "No quote yet"}</h3>
+                  <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Đội vận hành đang chọn tàu và chốt giá. Khi có báo giá, tàu và chi tiết giá sẽ hiển thị ở mục này." : "The operations team is assigning boats and pricing. Boat and quote details will appear here."}</p>
                 </div>
-
-                <div className="border-b border-[#D8E7EA] px-5 py-4 dark:border-slate-700">
-                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                    {lang === "VN" ? "Lộ trình" : "Route"}
-                  </p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              ) : hasQuote && (
+                <div className="mt-4 overflow-hidden rounded-3xl border border-[#D8E7EA] dark:border-slate-700 bg-[#F7FAFB] dark:bg-slate-900">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến đón" : "Pickup"}</p>
-                      <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeFrom}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến trả" : "Drop-off"}</p>
-                      <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeTo}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ngày giờ đi" : "Departure"}</p>
-                      <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
-                        {formatDate(booking.departureDate)} · {String(booking.startTime || "--").slice(0, 5)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ước tính" : "Estimate"}</p>
-                      <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
-                        {formatRouteEstimate(booking.routeEstimate)}
-                      </p>
+                      <h3 className="mt-1 text-xl font-headline font-black text-[#0E4050] dark:text-yellow-400">{lang === "VN" ? "Chi tiết tàu và chi phí" : "Boat and pricing details"}</h3>
                     </div>
                   </div>
-                  {Array.isArray(booking.itineraryStops) && booking.itineraryStops.length > 0 ? (
-                    <div className="mt-3 space-y-1.5">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {lang === "VN" ? "Điểm dừng" : "Stops"}
-                      </p>
-                      {booking.itineraryStops.map((stop, index) => (
-                        <p key={`${stop.stationId || "stop"}-${index}`} className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                          {lang === "VN" ? `Dừng ${stop.stopOrder || index + 1}` : `Stop ${stop.stopOrder || index + 1}`}
-                          {": "}
-                          {stop.stationName || "--"}
-                          {Number(stop.stayDurationMinutes) > 0
-                            ? ` · ${stop.stayDurationMinutes} ${lang === "VN" ? "phút" : "min"}`
-                            : ""}
+
+                  <div className="border-b border-[#D8E7EA] px-5 py-4 dark:border-slate-700">
+                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                      {lang === "VN" ? "Lộ trình" : "Route"}
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến đón" : "Pickup"}</p>
+                        <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeFrom}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Bến trả" : "Drop-off"}</p>
+                        <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">{routeTo}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ngày giờ đi" : "Departure"}</p>
+                        <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
+                          {formatDate(booking.departureDate)} · {String(booking.startTime || "--").slice(0, 5)}
                         </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ước tính" : "Estimate"}</p>
+                        <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-white">
+                          {formatRouteEstimate(booking.routeEstimate)}
+                        </p>
+                      </div>
+                    </div>
+                    {Array.isArray(booking.itineraryStops) && booking.itineraryStops.length > 0 ? (
+                      <div className="mt-3 space-y-1.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {lang === "VN" ? "Điểm dừng" : "Stops"}
+                        </p>
+                        {booking.itineraryStops.map((stop, index) => (
+                          <p key={`${stop.stationId || "stop"}-${index}`} className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                            {lang === "VN" ? `Dừng ${stop.stopOrder || index + 1}` : `Stop ${stop.stopOrder || index + 1}`}
+                            {": "}
+                            {stop.stationName || "--"}
+                            {Number(stop.stayDurationMinutes) > 0
+                              ? ` · ${stop.stayDurationMinutes} ${lang === "VN" ? "phút" : "min"}`
+                              : ""}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4">
+                      <CharterRouteMapPanel
+                        lang={lang}
+                        booking={booking}
+                        heightClassName="h-64 md:h-72"
+                        className="border-[#D8E7EA] dark:border-slate-700"
+                      />
+                    </div>
+                  </div>
+
+                  {quoteBoatRows.length > 0 ? (
+                    <div className="divide-y divide-[#D8E7EA] dark:divide-slate-700">
+                      {quoteBoatRows.map((boat) => (
+                        <div key={`${boat.boatOrder}-${boat.name}`} className="flex items-center gap-4 px-5 py-4">
+                          <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-2xl bg-slate-200 dark:bg-slate-800">
+                            {boat.imageUrl ? (
+                              <img src={boat.imageUrl} alt={boat.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-slate-400 dark:text-slate-500">
+                                <NullImageIcon className="h-8 w-8" />
+                              </div>
+                            )}
+                            <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg bg-[#124757] text-[10px] font-headline font-black text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900">
+                              {boat.boatOrder}
+                            </span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="min-w-0 truncate font-headline font-black text-slate-900 dark:text-white">{boat.name}</p>
+                              <BoatSeatLayoutPreviewButton
+                                boatId={boat.boatId}
+                                boatName={boat.name}
+                                boatImageUrl={boat.imageUrl}
+                                lang={lang}
+                                boatMeta={{
+                                  seatCount: boat.seatCount,
+                                  numberOfDecks: boat.numberOfDecks,
+                                  seatSetupType: boat.seatSetupType,
+                                  imageUrl: boat.imageUrl,
+                                }}
+                              />
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span className="rounded-full border border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-headline font-black text-[#124757] dark:text-yellow-400">
+                                {formatDeckCount(boat.numberOfDecks, lang) || boat.seatSetupType}
+                              </span>
+                              {boat.seatCount !== "" && (
+                                <span className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300">
+                                  {boat.seatCount} {lang === "VN" ? "ghế" : "seats"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       ))}
                     </div>
-                  ) : null}
-
-                  <div className="mt-4">
-                    <CharterRouteMapPanel
-                      lang={lang}
-                      booking={booking}
-                      heightClassName="h-64 md:h-72"
-                      className="border-[#D8E7EA] dark:border-slate-700"
-                    />
-                  </div>
-                </div>
-
-                {quoteBoatRows.length > 0 ? (
-                  <div className="divide-y divide-[#D8E7EA] dark:divide-slate-700">
-                    {quoteBoatRows.map((boat) => (
-                      <div key={`${boat.boatOrder}-${boat.name}`} className="flex items-center gap-4 px-5 py-4">
-                        <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-2xl bg-slate-200 dark:bg-slate-800">
-                          {boat.imageUrl ? (
-                            <img src={boat.imageUrl} alt={boat.name} className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-slate-400 dark:text-slate-500">
-                              <NullImageIcon className="h-8 w-8" />
-                            </div>
-                          )}
-                          <span className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg bg-[#124757] text-[10px] font-headline font-black text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900">
-                            {boat.boatOrder}
-                          </span>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="min-w-0 truncate font-headline font-black text-slate-900 dark:text-white">{boat.name}</p>
-                            <BoatSeatLayoutPreviewButton
-                              boatId={boat.boatId}
-                              boatName={boat.name}
-                              boatImageUrl={boat.imageUrl}
-                              lang={lang}
-                              boatMeta={{
-                                seatCount: boat.seatCount,
-                                numberOfDecks: boat.numberOfDecks,
-                                seatSetupType: boat.seatSetupType,
-                                imageUrl: boat.imageUrl,
-                              }}
-                            />
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <span className="rounded-full border border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-headline font-black text-[#124757] dark:text-yellow-400">
-                              {formatDeckCount(boat.numberOfDecks, lang) || boat.seatSetupType}
-                            </span>
-                            {boat.seatCount !== "" && (
-                              <span className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300">
-                                {boat.seatCount} {lang === "VN" ? "ghế" : "seats"}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="px-5 py-8">
-                    <div className="rounded-2xl border border-dashed border-[#BFD4D9] bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-800">
-                      <h3 className="font-headline text-lg font-black text-[#0E4050] dark:text-white">{lang === "VN" ? "Chưa nhận được chi tiết tàu" : "Boat details are not available"}</h3>
-                      <p className="mx-auto mt-1 max-w-lg text-sm font-medium text-slate-500 dark:text-slate-400">
-                        {lang === "VN" ? "Chưa có thông tin chi tiết từng tàu cho yêu cầu này. Tổng giá đã chốt vẫn được hiển thị ở phần bên dưới." : "Detailed boat information isn't available for this request yet. The confirmed total is still shown below."}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="border-t border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
-                  {(() => {
-                    const previewHasPricedBoats = Array.isArray(customerQuotePreview?.boats)
-                      && customerQuotePreview.boats.some((boat) => (
-                        Number(boat?.subtotalAmount) > 0 || Number(boat?.unitPrice) > 0
-                      ));
-                    const previewHasTotal = Number(customerQuotePreview?.totalAmount) > 0 || displayQuoteTotal > 0;
-
-                    if (previewHasPricedBoats || (customerQuotePreview?.boats?.length > 0 && previewHasTotal)) {
-                      return (
-                        <CharterQuotePreviewTable
-                          preview={{
-                            ...customerQuotePreview,
-                            totalAmount: Number(customerQuotePreview?.totalAmount) > 0
-                              ? customerQuotePreview.totalAmount
-                              : displayQuoteTotal,
-                          }}
-                          booking={booking}
-                          lang={lang}
-                          currencyFormatter={currencyFormatter}
-                        />
-                      );
-                    }
-
-                    if (displayQuoteTotal > 0) {
-                      return (
-                        <div className="overflow-hidden rounded-2xl bg-[#124757] text-white shadow-[0_12px_30px_rgba(18,71,87,0.25)] dark:bg-yellow-400 dark:text-slate-900">
-                          <div className="flex items-end justify-between gap-3 px-4 py-4">
-                            <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
-                              {lang === "VN" ? "Tổng chốt giá" : "Quote total"}
-                            </p>
-                            <p className="font-headline text-2xl font-black tabular-nums tracking-tight">
-                              {currencyFormatter.format(displayQuoteTotal)}
-                            </p>
-                          </div>
-                          {quoteDepositAmount > 0 ? (
-                            <div className="flex items-center justify-between gap-3 border-t border-white/15 px-4 py-3 dark:border-slate-900/15">
-                              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
-                                {lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
-                              </p>
-                              <p className="text-sm font-headline font-black tabular-nums text-emerald-200 dark:text-emerald-800">
-                                {currencyFormatter.format(quoteDepositAmount)}
-                              </p>
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="rounded-2xl border border-dashed border-[#BFD4D9] bg-[#F7FAFB] px-4 py-5 text-center dark:border-slate-700 dark:bg-slate-900">
-                        <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
-                          {lang === "VN"
-                            ? "Đã có báo giá nhưng chưa nhận được chi tiết số tiền. Thử tải lại trang."
-                            : "A quote exists but pricing details are missing. Try refreshing the page."}
+                  ) : (
+                    <div className="px-5 py-8">
+                      <div className="rounded-2xl border border-dashed border-[#BFD4D9] bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-800">
+                        <h3 className="font-headline text-lg font-black text-[#0E4050] dark:text-white">{lang === "VN" ? "Chưa nhận được chi tiết tàu" : "Boat details are not available"}</h3>
+                        <p className="mx-auto mt-1 max-w-lg text-sm font-medium text-slate-500 dark:text-slate-400">
+                          {lang === "VN" ? "Chưa có thông tin chi tiết từng tàu cho yêu cầu này. Tổng giá đã chốt vẫn được hiển thị ở phần bên dưới." : "Detailed boat information isn't available for this request yet. The confirmed total is still shown below."}
                         </p>
                       </div>
-                    );
-                  })()}
+                    </div>
+                  )}
+
+                  <div className="border-t border-[#D8E7EA] dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-5">
+                    {(() => {
+                      const previewHasPricedBoats = Array.isArray(customerQuotePreview?.boats)
+                        && customerQuotePreview.boats.some((boat) => (
+                          Number(boat?.subtotalAmount) > 0 || Number(boat?.unitPrice) > 0
+                        ));
+                      const previewHasTotal = Number(customerQuotePreview?.totalAmount) > 0 || displayQuoteTotal > 0;
+
+                      if (previewHasPricedBoats || (customerQuotePreview?.boats?.length > 0 && previewHasTotal)) {
+                        return (
+                          <CharterQuotePreviewTable
+                            preview={{
+                              ...customerQuotePreview,
+                              totalAmount: Number(customerQuotePreview?.totalAmount) > 0
+                                ? customerQuotePreview.totalAmount
+                                : displayQuoteTotal,
+                            }}
+                            booking={booking}
+                            lang={lang}
+                            currencyFormatter={currencyFormatter}
+                          />
+                        );
+                      }
+
+                      if (displayQuoteTotal > 0) {
+                        return (
+                          <div className="overflow-hidden rounded-2xl bg-[#124757] text-white shadow-[0_12px_30px_rgba(18,71,87,0.25)] dark:bg-yellow-400 dark:text-slate-900">
+                            <div className="flex items-end justify-between gap-3 px-4 py-4">
+                              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
+                                {lang === "VN" ? "Tổng chốt giá" : "Quote total"}
+                              </p>
+                              <p className="font-headline text-2xl font-black tabular-nums tracking-tight">
+                                {currencyFormatter.format(displayQuoteTotal)}
+                              </p>
+                            </div>
+                            {quoteDepositAmount > 0 ? (
+                              <div className="flex items-center justify-between gap-3 border-t border-white/15 px-4 py-3 dark:border-slate-900/15">
+                                <p className="text-[10px] font-headline font-black uppercase tracking-widest text-white/70 dark:text-slate-900/60">
+                                  {lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
+                                </p>
+                                <p className="text-sm font-headline font-black tabular-nums text-emerald-200 dark:text-emerald-800">
+                                  {currencyFormatter.format(quoteDepositAmount)}
+                                </p>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="rounded-2xl border border-dashed border-[#BFD4D9] bg-[#F7FAFB] px-4 py-5 text-center dark:border-slate-700 dark:bg-slate-900">
+                          <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                            {lang === "VN"
+                              ? "Đã có báo giá nhưng chưa nhận được chi tiết số tiền. Thử tải lại trang."
+                              : "A quote exists but pricing details are missing. Try refreshing the page."}
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
-              </div>
-            )}
-          </section>
+              )}
+            </section>
           )}
 
           {/* ===== SECTION 2B: PAYMENT ===== */}
           {activeTab === "payment" && (
-          <section className="bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70 px-6 py-6 md:px-8">
-            <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
-              {lang === "VN" ? "Thanh toán" : "Payment"}
-            </h2>
+            <section className="bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70 px-6 py-6 md:px-8">
+              <h2 className="font-headline font-black text-slate-800 dark:text-white uppercase tracking-wide text-sm">
+                {lang === "VN" ? "Thanh toán" : "Payment"}
+              </h2>
 
-            {hasQuote ? (
-              <MyCharterPaymentPanel
-                lang={lang}
-                booking={booking}
-                currencyFormatter={currencyFormatter}
-                paymentSectionRef={paymentSectionRef}
-                isPaid={isPaid}
-                isTerminalBooking={isTerminalBooking}
-                canShowPayOsSection={canShowPayOsSection}
-                isSubmitting={isSubmitting}
-                isQuoteHoldExpired={isQuoteHoldExpired}
-                isQuotePaymentExpired={isQuotePaymentExpired}
-                showQuotePaymentCountdown={showQuotePaymentCountdown}
-                quotePaymentRemainingMs={quotePaymentRemainingMs}
-                expiredPendingPayment={expiredPendingPayment}
-                expiredPaymentCheckoutUrl={expiredPaymentCheckoutUrl}
-                paymentCheckoutUrl={paymentCheckoutUrl}
-                isPaymentLinkExpired={isPaymentLinkExpired}
-                hasPendingPayOs={hasPendingPayOs}
-                canCreatePayment={canCreatePayment}
-                selectablePaymentChoices={selectablePaymentChoices}
-                paymentSelectValue={paymentSelectValue}
-                setPaymentOption={setPaymentOption}
-                usesDefaultDeposit={usesDefaultDeposit}
-                canPayDeposit={canPayDeposit}
-                selectedPaymentAmount={selectedPaymentAmount}
-                effectivePaidAmount={effectivePaidAmount}
-                remainingAmount={remainingAmount}
-                paymentPromotionCode={paymentPromotionCode}
-                setPaymentPromotionCode={handlePaymentPromotionCodeChange}
-                promoPreview={promoPreview}
-                promoChecking={promoChecking}
-                onApplyPromotionCode={handleApplyPromotionCode}
-                onClearPromotionCode={handleClearPromotionCode}
-                effectiveCheckoutUrl={effectiveCheckoutUrl}
-                pendingPaymentOrderCode={pendingPaymentOrderCode}
-                pendingPaymentId={pendingPaymentId}
-                effectivePendingPaymentAmount={effectivePendingPaymentAmount}
-                effectivePaymentDeadline={effectivePaymentDeadline}
-                paymentWatcherRemainingMs={paymentWatcherRemainingMs}
-                handleRespondToQuote={handleRespondToQuote}
-                handleCreatePayment={handleCreatePayment}
-                openPaymentPage={openPaymentPage}
-                handleSyncPayment={handleSyncPayment}
-                handleSyncPaymentByOrderCode={handleSyncPaymentByOrderCode}
-                loadDetail={loadDetail}
-              />
-            ) : (
-              <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-                <h3 className="font-headline text-lg font-black">{lang === "VN" ? "Chưa có báo giá" : "No quote yet"}</h3>
-                <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Bạn cần chờ báo giá trước khi có thể thanh toán." : "Wait for a quote before you can make a payment."}</p>
-              </div>
-            )}
-          </section>
+              {hasQuote ? (
+                <MyCharterPaymentPanel
+                  lang={lang}
+                  booking={booking}
+                  currencyFormatter={currencyFormatter}
+                  paymentSectionRef={paymentSectionRef}
+                  isPaid={isPaid}
+                  isTerminalBooking={isTerminalBooking}
+                  canShowPayOsSection={canShowPayOsSection}
+                  isSubmitting={isSubmitting}
+                  isQuoteHoldExpired={isQuoteHoldExpired}
+                  isQuotePaymentExpired={isQuotePaymentExpired}
+                  showQuotePaymentCountdown={showQuotePaymentCountdown}
+                  quotePaymentRemainingMs={quotePaymentRemainingMs}
+                  expiredPendingPayment={expiredPendingPayment}
+                  expiredPaymentCheckoutUrl={expiredPaymentCheckoutUrl}
+                  paymentCheckoutUrl={paymentCheckoutUrl}
+                  isPaymentLinkExpired={isPaymentLinkExpired}
+                  hasPendingPayOs={hasPendingPayOs}
+                  canCreatePayment={canCreatePayment}
+                  selectablePaymentChoices={selectablePaymentChoices}
+                  paymentSelectValue={paymentSelectValue}
+                  setPaymentOption={setPaymentOption}
+                  usesDefaultDeposit={usesDefaultDeposit}
+                  canPayDeposit={canPayDeposit}
+                  selectedPaymentAmount={selectedPaymentAmount}
+                  effectivePaidAmount={effectivePaidAmount}
+                  remainingAmount={remainingAmount}
+                  paymentPromotionCode={paymentPromotionCode}
+                  setPaymentPromotionCode={handlePaymentPromotionCodeChange}
+                  promoPreview={promoPreview}
+                  promoChecking={promoChecking}
+                  onApplyPromotionCode={handleApplyPromotionCode}
+                  onClearPromotionCode={handleClearPromotionCode}
+                  effectiveCheckoutUrl={effectiveCheckoutUrl}
+                  pendingPaymentOrderCode={pendingPaymentOrderCode}
+                  pendingPaymentId={pendingPaymentId}
+                  effectivePendingPaymentAmount={effectivePendingPaymentAmount}
+                  effectivePaymentDeadline={effectivePaymentDeadline}
+                  paymentWatcherRemainingMs={paymentWatcherRemainingMs}
+                  handleRespondToQuote={handleRespondToQuote}
+                  handleCreatePayment={handleCreatePayment}
+                  openPaymentPage={openPaymentPage}
+                  handleSyncPayment={handleSyncPayment}
+                  handleSyncPaymentByOrderCode={handleSyncPaymentByOrderCode}
+                  loadDetail={loadDetail}
+                />
+              ) : (
+                <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                  <h3 className="font-headline text-lg font-black">{lang === "VN" ? "Chưa có báo giá" : "No quote yet"}</h3>
+                  <p className="mt-1 text-sm font-medium">{lang === "VN" ? "Bạn cần chờ báo giá trước khi có thể thanh toán." : "Wait for a quote before you can make a payment."}</p>
+                </div>
+              )}
+            </section>
           )}
 
           {/* ===== SECTION 3: TICKETS & PASSENGERS ===== */}

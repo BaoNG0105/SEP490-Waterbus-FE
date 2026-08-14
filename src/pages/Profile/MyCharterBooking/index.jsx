@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 
 import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
+import { FormSelect } from "../../../components/FormSelect";
 
 import { fetchMyCharterBookings } from "../../../services/charterBookingService";
 
@@ -15,6 +16,7 @@ import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus
 import { resolveCharterBookingStatus, resolveCharterPaymentStatus, matchesCharterStatusFilter } from "../../../utils/charterBookingAdmin";
 
 const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired"];
+const ITEMS_PER_PAGE = 6;
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -83,6 +85,8 @@ export function CharterList() {
   const [searchTerm, setSearchTerm] = useState(() => location.state?.searchCode || "");
   const [pendingOpenCode, setPendingOpenCode] = useState(() => location.state?.searchCode || "");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [priorityOnly, setPriorityOnly] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -144,8 +148,33 @@ export function CharterList() {
       || booking.boatName.toLowerCase().includes(searchValue)
       || booking.route.toLowerCase().includes(searchValue);
     const matchesStatus = matchesCharterStatusFilter(booking.status, statusFilter);
-    return matchesSearch && matchesStatus;
-  }), [bookings, searchTerm, statusFilter]);
+    const matchesPriority = !priorityOnly || getCustomerActionInfo(booking, lang).urgent;
+    return matchesSearch && matchesStatus && matchesPriority;
+  }), [bookings, searchTerm, statusFilter, priorityOnly, lang]);
+
+  // Đổi tìm kiếm/lọc trạng thái/ưu tiên thì quay lại trang 1 — tránh kẹt ở trang trống khi danh sách lọc ngắn lại.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, priorityOnly]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBookings.length / ITEMS_PER_PAGE));
+  const pagedBookings = filteredBookings.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const pageStartIndex = filteredBookings.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const pageEndIndex = Math.min(currentPage * ITEMS_PER_PAGE, filteredBookings.length);
+
+  const getPaginationGroup = () => {
+    let pages = [];
+    if (totalPages <= 5) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else if (currentPage <= 3) {
+      pages = [1, 2, 3, 4, "...", totalPages];
+    } else if (currentPage >= totalPages - 2) {
+      pages = [1, "...", totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    } else {
+      pages = [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
+    }
+    return pages;
+  };
 
   const openBooking = (booking, focusPayment = false) => {
     navigate(`/profile/my-charter-booking/${booking.id}`, {
@@ -153,7 +182,7 @@ export function CharterList() {
     });
   };
 
-  const hasFilters = searchTerm || statusFilter !== "All";
+  const hasFilters = searchTerm || statusFilter !== "All" || priorityOnly;
   const emptyMessage = bookings.length === 0
     ? (lang === "VN" ? "Bạn chưa có yêu cầu thuê tàu nào." : "You have no booking requests yet.")
     : (lang === "VN" ? "Không có yêu cầu phù hợp với bộ lọc hiện tại." : "No requests match your current filters.");
@@ -165,9 +194,6 @@ export function CharterList() {
           <div className="bg-linear-to-br from-[#124757] via-[#165a6d] to-[#0e3540] px-6 py-8 text-white md:px-8 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
               <div>
-                <p className="text-[10px] font-headline font-black uppercase tracking-[0.2em] text-white/60">
-                  Waterbus Request Booking
-                </p>
                 <h1 className="mt-1 font-headline text-2xl font-black md:text-3xl">
                   {lang === "VN" ? "Yêu cầu thuê tàu" : "My Booking Requests"}
                 </h1>
@@ -190,7 +216,7 @@ export function CharterList() {
           </div>
 
           <div className="space-y-4 p-6 md:p-8">
-            <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+            <div className="grid gap-3 md:grid-cols-[1fr_auto_220px]">
               <div className="relative">
                 <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-400">search</span>
                 <input
@@ -200,17 +226,29 @@ export function CharterList() {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-medium outline-none transition focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                 />
               </div>
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-headline font-black uppercase text-[#124757] outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+
+              {/* Bộ lọc theo ưu tiên — chỉ hiện các booking đang cần khách xử lý gấp (actionInfo.urgent) */}
+              <button
+                type="button"
+                onClick={() => setPriorityOnly((prev) => !prev)}
+                aria-pressed={priorityOnly}
+                className={`shrink-0 rounded-xl border px-4 py-3 text-xs font-headline font-black uppercase tracking-wider transition ${priorityOnly
+                  ? "border-yellow-400 bg-yellow-400 text-slate-900"
+                  : "border-slate-200 bg-slate-50 text-slate-500 hover:border-yellow-400 hover:text-yellow-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-yellow-400 dark:hover:text-yellow-400"
+                  }`}
               >
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status === "All" ? (lang === "VN" ? "Tất cả trạng thái" : "All statuses") : getStatusInfo(status).label}
-                  </option>
-                ))}
-              </select>
+                {lang === "VN" ? "Chỉ ưu tiên" : "Priority only"}
+              </button>
+
+              <FormSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={statusOptions.map((status) => ({
+                  value: status,
+                  label: status === "All" ? (lang === "VN" ? "Tất cả trạng thái" : "All statuses") : getStatusInfo(status).label,
+                }))}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-headline font-black uppercase text-[#124757] outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400"
+              />
             </div>
 
             {errorMsg && (
@@ -230,7 +268,7 @@ export function CharterList() {
               {hasFilters ? (
                 <button
                   type="button"
-                  onClick={() => { setSearchTerm(""); setStatusFilter("All"); }}
+                  onClick={() => { setSearchTerm(""); setStatusFilter("All"); setPriorityOnly(false); }}
                   className="mt-4 rounded-xl border border-slate-200 px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:text-yellow-400"
                 >
                   {lang === "VN" ? "Xóa bộ lọc" : "Clear filters"}
@@ -246,7 +284,7 @@ export function CharterList() {
               )}
             </div>
           ) : (
-            filteredBookings.map((booking) => {
+            pagedBookings.map((booking) => {
               const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
               const actionInfo = getCustomerActionInfo(booking, lang);
               const focusPayment = ["pay", "manage"].includes(actionInfo.tone) && actionInfo.urgent;
@@ -283,8 +321,7 @@ export function CharterList() {
                           {statusInfo.label}
                         </span>
                         {actionInfo.urgent ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#FFD100]/20 px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FFD100]" />
+                          <span className="text-[9px] font-headline font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
                             {lang === "VN" ? "Ưu tiên" : "Priority"}
                           </span>
                         ) : null}
@@ -324,6 +361,62 @@ export function CharterList() {
             })
           )}
         </section>
+
+        {/* KHỐI PHÂN TRANG — 6 booking/trang */}
+        {totalPages > 1 && (
+          <div className="flex flex-col items-center justify-between gap-4 rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:flex-row">
+            <span className="text-xs font-bold text-slate-400">
+              {lang === "VN"
+                ? `Hiển thị ${pageStartIndex}-${pageEndIndex} trong số ${filteredBookings.length} kết quả`
+                : `Showing ${pageStartIndex}-${pageEndIndex} of ${filteredBookings.length} entries`}
+            </span>
+            <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-bold transition-all ${currentPage === 1
+                  ? "cursor-not-allowed border border-slate-100 bg-slate-50 text-slate-300 dark:border-slate-700/50 dark:bg-slate-800/50"
+                  : "border border-slate-200 bg-white text-slate-500 hover:border-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  }`}
+              >
+                <span className="material-symbols-outlined text-base">chevron_left</span>
+              </button>
+
+              {getPaginationGroup().map((item, index) => (
+                item === "..." ? (
+                  <span key={`ellipsis-${index}`} className="flex h-8 w-8 shrink-0 items-center justify-center font-bold tracking-widest text-slate-400">
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setCurrentPage(item)}
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-headline text-xs font-black transition-all ${currentPage === item
+                      ? "border-transparent bg-[#124757] text-white shadow-md dark:bg-yellow-400 dark:text-slate-900"
+                      : "border border-slate-200 bg-white text-slate-500 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                      }`}
+                  >
+                    {item}
+                  </button>
+                )
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-bold transition-all ${currentPage === totalPages
+                  ? "cursor-not-allowed border border-slate-100 bg-slate-50 text-slate-300 dark:border-slate-700/50 dark:bg-slate-800/50"
+                  : "border border-slate-200 bg-white text-slate-500 hover:border-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  }`}
+              >
+                <span className="material-symbols-outlined text-base">chevron_right</span>
+              </button>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

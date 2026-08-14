@@ -435,11 +435,6 @@ export function CharterRefund() {
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-30 font-body dark:bg-slate-900">
       <main className="mx-auto max-w-5xl space-y-6">
-        <button onClick={() => navigate(`/profile/my-charter-booking/${booking.id}`)} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-[#124757] dark:text-slate-400 dark:hover:text-yellow-400">
-          <span className="material-symbols-outlined text-xl">arrow_back</span>
-          {lang === "VN" ? "Quay lại chi tiết" : "Back to request"}
-        </button>
-
         <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-xl dark:border-slate-700/50 dark:bg-slate-800">
           <div className="border-b border-slate-100 p-6 dark:border-slate-700 md:p-8">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -595,7 +590,7 @@ export function CharterRefund() {
                       ? (lang === "VN" ? "Đang gửi OTP…" : "Sending OTP…")
                       : (["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())
                         ? (lang === "VN" ? "Gửi OTP hoàn tiền" : "Send refund OTP")
-                        : (lang === "VN" ? "Hủy và gửi OTP" : "Cancel and send OTP"))}
+                        : (lang === "VN" ? "Xác nhận hủy và gửi OTP" : "Confirm cancel & send OTP"))}
                   </button>
                 </div>
               </form>

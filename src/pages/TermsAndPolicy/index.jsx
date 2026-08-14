@@ -26,8 +26,8 @@ export const TermsAndPolicy = () => {
         console.error(error);
         setErrorMsg(
           lang === "VN"
-            ? "Không tải được nội dung Điều khoản & Chính sách."
-            : "Failed to load Terms & Policy content."
+            ? "Không tải được nội dung Điều khoản và Chính sách."
+            : "Failed to load Terms and Policy content."
         );
       } finally {
         setIsLoading(false);
@@ -49,7 +49,7 @@ export const TermsAndPolicy = () => {
             {lang === "VN" ? "Thông tin pháp lý" : "Legal Information"}
           </p>
           <h1 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
-            {lang === "VN" ? "Điều khoản & Chính sách" : "Terms & Policy"}
+            {lang === "VN" ? "Điều khoản và Chính sách" : "Terms and Policy"}
           </h1>
         </div>
 

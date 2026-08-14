@@ -111,12 +111,6 @@ export const Profile = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pt-32 pb-10 px-4 sm:px-6 lg:px-8 font-body transition-colors">
-      <div className="max-w-4xl mx-auto flex items-center justify-between mb-8">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
-          <span className="material-symbols-outlined text-xl">arrow_back</span>
-          {lang === "VN" ? "Quay lại" : "Back"}
-        </button>
-      </div>
 
       {isLoadingProfile ? (
         <div className="flex justify-center items-center h-64">

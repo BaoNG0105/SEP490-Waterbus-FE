@@ -56,22 +56,11 @@ export function BlogDetail() {
     return (
         <div className="w-full bg-white dark:bg-slate-900 transition-colors duration-300 min-h-screen pt-28 md:pt-32 pb-24">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 space-y-8 animate-fade-in">
-                
-                <div className="flex items-center justify-between">
-                    <Link 
-                        to="/blog" 
-                        className="flex items-center gap-1.5 text-xs font-headline font-black text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors uppercase tracking-wider"
-                    >
-                        <span className="material-symbols-outlined text-base">arrow_back</span>
-                        {lang === "VN" ? "Quay lại" : "Back"}
-                    </Link>
-                </div>
-
                 <div className="space-y-4">
                     <h1 className="text-2xl sm:text-3xl md:text-4xl font-headline font-black text-[#124757] dark:text-white leading-tight tracking-tight">
                         {blog.title}
                     </h1>
-                    
+
                     <div className="flex flex-wrap items-center gap-4 text-slate-400 text-xs font-semibold pt-2 border-b border-slate-100 dark:border-slate-800 pb-4">
                         <span className="flex items-center gap-1">
                             <span className="material-symbols-outlined text-base">calendar_today</span>
@@ -106,7 +95,7 @@ export function BlogDetail() {
                             {blog.summary}
                         </p>
                     ) : null}
-                    
+
                     {contentHtml ? (
                         <div dangerouslySetInnerHTML={{ __html: contentHtml }} className="space-y-4" />
                     ) : blog.contentText || blog.content ? (

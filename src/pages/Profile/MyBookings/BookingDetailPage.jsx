@@ -811,19 +811,29 @@ export function BookingDetailPage({ serviceType }) {
   if (notFound) {
     return (
       <div className="min-h-screen bg-slate-50 py-30 px-4 font-body transition-colors dark:bg-slate-900 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-4xl rounded-4xl border border-dashed border-slate-200 bg-white p-16 text-center dark:border-slate-700 dark:bg-slate-800">
-          <span className="material-symbols-outlined mb-3 block text-5xl text-slate-300 dark:text-slate-600">search_off</span>
-          <p className="font-headline text-lg font-black text-slate-500 dark:text-slate-300">
-            {lang === "VN" ? "Không tìm thấy booking này." : "This booking could not be found."}
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate(listPath)}
-            className="mt-4 rounded-xl bg-[#FFD100] px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-900"
-          >
-            {lang === "VN" ? "Về danh sách vé" : "Back to bookings"}
-          </button>
-        </div>
+        <main className="mx-auto max-w-4xl space-y-5">
+          {/* Nút back gắn trong section header, cùng pattern với TripDetail.jsx (Admin) */}
+          <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-5">
+            <button
+              type="button"
+              onClick={() => navigate(listPath)}
+              aria-label={lang === "VN" ? "Về danh sách vé" : "Back to bookings"}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-[#124757] hover:text-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-yellow-400 dark:hover:text-slate-900"
+            >
+              <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
+            </button>
+            <h1 className="min-w-0 truncate font-headline text-xl font-black text-[#124757] dark:text-white">
+              {lang === "VN" ? "Chi tiết đặt vé" : "Booking detail"}
+            </h1>
+          </div>
+
+          <div className="rounded-4xl border border-dashed border-slate-200 bg-white p-16 text-center dark:border-slate-700 dark:bg-slate-800">
+            <span className="material-symbols-outlined mb-3 block text-5xl text-slate-300 dark:text-slate-600">search_off</span>
+            <p className="font-headline text-lg font-black text-slate-500 dark:text-slate-300">
+              {lang === "VN" ? "Không tìm thấy booking này." : "This booking could not be found."}
+            </p>
+          </div>
+        </main>
       </div>
     );
   }
@@ -841,34 +851,35 @@ export function BookingDetailPage({ serviceType }) {
   return (
     <div className="min-h-screen bg-slate-50 py-30 px-4 font-body transition-colors dark:bg-slate-900 sm:px-6 lg:px-8">
       <main className="mx-auto max-w-5xl space-y-5">
-        <button
-          type="button"
-          onClick={() => navigate(listPath)}
-          className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-[#124757] dark:text-slate-400 dark:hover:text-yellow-400"
-        >
-          <span className="material-symbols-outlined text-xl">arrow_back</span>
-          {lang === "VN" ? "Về danh sách vé" : "Back to bookings"}
-        </button>
-
-        {/* HEADER — cùng ngôn ngữ card danh sách vé */}
+        {/* HEADER — cùng ngôn ngữ card danh sách vé; nút back gắn trong header như TripDetail.jsx (Admin) */}
         <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
           <div className="flex flex-col gap-4 border-l-4 border-[#124757] p-5 pl-5 dark:border-yellow-400 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-400">
-                {lang === "VN" ? "Chi tiết đặt vé" : "Booking detail"}
-              </p>
-              <h1 className="mt-1 truncate font-headline text-2xl font-black text-[#124757] dark:text-white">
-                {lang === "VN" ? "MÃ ĐẶT CHỖ" : "BOOKING CODE"}: {booking.bookingCode}
-              </h1>
-              <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
-                {lang === "VN" ? "Đặt lúc" : "Booked at"} {formatDateTime(booking.bookedAt)}
-                {totalTicketCount > 0
-                  ? ` · ${totalTicketCount} ${lang === "VN" ? "vé" : "ticket(s)"}`
-                  : ""}
-                {totalCompanionCount > 0
-                  ? ` · ${totalCompanionCount} ${lang === "VN" ? "đi kèm" : "companion(s)"}`
-                  : ""}
-              </p>
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigate(listPath)}
+                aria-label={lang === "VN" ? "Về danh sách vé" : "Back to bookings"}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-[#124757] hover:text-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-yellow-400 dark:hover:text-slate-900"
+              >
+                <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
+              </button>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-400">
+                  {lang === "VN" ? "Chi tiết đặt vé" : "Booking detail"}
+                </p>
+                <h1 className="mt-1 truncate font-headline text-2xl font-black text-[#124757] dark:text-white">
+                  {lang === "VN" ? "MÃ ĐẶT CHỖ" : "BOOKING CODE"}: {booking.bookingCode}
+                </h1>
+                <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                  {lang === "VN" ? "Đặt lúc" : "Booked at"} {formatDateTime(booking.bookedAt)}
+                  {totalTicketCount > 0
+                    ? ` · ${totalTicketCount} ${lang === "VN" ? "vé" : "ticket(s)"}`
+                    : ""}
+                  {totalCompanionCount > 0
+                    ? ` · ${totalCompanionCount} ${lang === "VN" ? "đi kèm" : "companion(s)"}`
+                    : ""}
+                </p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <StatusBadge status={booking.status} lang={lang} size="lg" />

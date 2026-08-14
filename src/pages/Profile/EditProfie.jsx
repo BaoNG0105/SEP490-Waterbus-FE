@@ -335,16 +335,6 @@ export const EditProfile = () => {
         <div className="w-full bg-white dark:bg-slate-900 pt-32 pb-10 px-4 sm:px-6 lg:px-8 font-body transition-colors duration-300">
             <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
 
-                <div className="flex items-center justify-between">
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors"
-                    >
-                        <span className="material-symbols-outlined text-lg">arrow_back</span>
-                        <span>{lang === "VN" ? "Quay lại hồ sơ" : "Back to Profile"}</span>
-                    </button>
-                </div>
-
                 <div>
                     <h1 className="text-2xl md:text-3xl font-black text-[#124757] dark:text-yellow-400 font-headline uppercase tracking-widest">
                         {lang === "VN" ? "Cập nhật hồ sơ" : "Edit Profile"}
@@ -451,7 +441,7 @@ export const EditProfile = () => {
                         <button
                             type="submit"
                             disabled={isUpdating}
-                            className="px-8 py-3 rounded-xl font-black bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 hover:brightness-110 active:scale-[0.98] transition-all shadow-md font-headline uppercase tracking-widest text-xs disabled:opacity-50 flex items-center gap-2"
+                            className="px-8 py-3 rounded-xl font-black bg-yellow-400 text-slate-900 hover:brightness-110 active:scale-[0.98] transition-all shadow-md font-headline uppercase tracking-widest text-xs disabled:opacity-50 flex items-center gap-2"
                         >
                             {isUpdating && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
                             {lang === "VN" ? "Lưu thay đổi" : "Save Changes"}

@@ -145,7 +145,7 @@ export const ContactForm = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full sm:w-auto bg-white text-[#124757] dark:bg-yellow-400 dark:text-slate-900 px-10 py-4 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-md hover:bg-slate-100 dark:hover:bg-yellow-300 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100"
+            className="w-full sm:w-auto bg-yellow-400 text-slate-900 px-10 py-4 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-md hover:bg-yellow-300 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100"
           >
             {isSubmitting ? (
               <>
@@ -155,7 +155,6 @@ export const ContactForm = () => {
             ) : (
               <>
                 {lang === "VN" ? "Gửi lời nhắn ngay" : "Send Message"}
-                <span className="material-symbols-outlined text-lg">send</span>
               </>
             )}
           </button>

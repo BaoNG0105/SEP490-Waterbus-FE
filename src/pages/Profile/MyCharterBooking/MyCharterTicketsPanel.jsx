@@ -170,24 +170,7 @@ export function MyCharterTicketsPanel({
             aria-expanded={isManifestOpen}
           >
             <div>
-              <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"}</h2>
-              {/* <p className="mt-1 text-xs font-bold text-slate-400">
-                {isManifestOpen
-                  ? (canUseContactAsSinglePassenger
-                    ? (lang === "VN"
-                      ? "Chuyến 1 khách: họ tên lấy từ người đặt. Chỉ cần nhập năm sinh rồi bấm Lưu."
-                      : "Single passenger: name is taken from the booker. Just enter the birth year and save.")
-                    : bookerAsFirstPassenger
-                      ? (lang === "VN"
-                        ? "Hành khách số 1 là người đặt. Khách trong số đã đăng ký: Lưu là xong (không cần duyệt). Chỉ phần Thêm hành khách mới chờ duyệt."
-                        : "Passenger #1 is the booker. Guests within booked count: save directly (no approval). Only Add passengers needs review.")
-                      : (lang === "VN"
-                        ? "Khách trong số đã đăng ký lưu trực tiếp. Thêm ngoài số đăng ký thì cần duyệt."
-                        : "Guests within the booked count save directly. Extra add-ons need approval."))
-                  : (lang === "VN"
-                    ? `${passengerRows.length} hành khách · ${summary.approvedCount} đã duyệt · ${summary.pendingCount} chờ duyệt`
-                    : `${passengerRows.length} passengers · ${summary.approvedCount} approved · ${summary.pendingCount} pending`)}
-              </p> */}
+              <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"} ({passengerRows.length})</h2>
             </div>
             <span className={`material-symbols-outlined shrink-0 text-2xl text-slate-400 transition-transform ${isManifestOpen ? "rotate-180" : ""}`}>
               expand_more
@@ -237,7 +220,8 @@ export function MyCharterTicketsPanel({
             const isLocked = isPassengerRowLocked(row);
             const isBookerRow = (canUseContactAsSinglePassenger || bookerAsFirstPassenger || row.isContactPassenger) && index === 0;
             const isBookerOnly = canUseContactAsSinglePassenger && index === 0;
-            const nameLocked = isLocked || isBookerRow;
+            // Không khóa tên hành khách số 1 theo người đặt nữa — khách có thể nhập tên khác (vd đặt hộ người khác).
+            const nameLocked = isLocked;
             return (
               <div key={row.id || `passenger-${index}`} className="space-y-2">
                 <div className={`grid gap-2 items-center ${isBookerOnly

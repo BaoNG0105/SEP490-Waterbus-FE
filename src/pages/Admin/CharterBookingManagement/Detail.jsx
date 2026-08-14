@@ -1124,21 +1124,28 @@ export function AdminCharterBookingDetail() {
       ) : null}
       <div className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <button type="button" onClick={() => navigate("/admin/charter-bookings-management")} className="mb-4 inline-flex items-center gap-2 text-xs font-headline font-black uppercase tracking-wider text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400">
-              <span className="material-symbols-outlined text-base">arrow_back</span>
-              {lang === "VN" ? "Danh sách thuê tàu" : "Booking request list"}
+          <div className="flex min-w-0 items-start gap-3">
+            {/* Nút back gắn trong section header, cùng pattern với TripDetail.jsx */}
+            <button
+              type="button"
+              onClick={() => navigate("/admin/charter-bookings-management")}
+              aria-label={lang === "VN" ? "Danh sách thuê tàu" : "Booking request list"}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-[#124757] hover:text-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-yellow-400 dark:hover:text-slate-900"
+            >
+              <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
             </button>
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 md:text-3xl">{booking.bookingCode}</h2>
-              <span className={`inline-flex items-center gap-1.5 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.text}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${statusInfo}`}></span>
-                {statusInfo.label}
-              </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 md:text-3xl">{booking.bookingCode}</h2>
+                <span className={`inline-flex items-center gap-1.5 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.text}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${statusInfo}`}></span>
+                  {statusInfo.label}
+                </span>
+              </div>
+              <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">
+                {lang === "VN" ? "Khách hàng: " : "Customer: "}{booking.customerName || "--"}
+              </p>
             </div>
-            <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">
-              {lang === "VN" ? "Khách hàng: " : "Customer: "}{booking.customerName || "--"}
-            </p>
           </div>
 
           {canCancelBooking && (

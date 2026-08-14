@@ -290,8 +290,13 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
         .then((data) => {
           if (!data?.messages) return;
           setMessages((prev) => {
+            // GET conversation không chắc trả kèm actions[]/suggestedQuestions[] y hệt response của
+            // POST /assistant/chat — nếu ghi đè thẳng, nút/gợi ý đang hiện sẽ biến mất khi tới lượt
+            // poll. Giữ nguyên bản ghi cục bộ (đã có actions) cho id đã tồn tại, chỉ thêm tin nhắn mới.
+            const byId = new Map(prev.map((m) => [m.id, m]));
+            const merged = data.messages.map(mapServerMessage).map((m) => byId.get(m.id) ?? m);
             const greeting = prev.find((m) => m.id === "greeting") || { id: "greeting", from: "bot", text: t.greeting };
-            return [greeting, ...data.messages.map(mapServerMessage)];
+            return [greeting, ...merged];
           });
           if (data.status !== "Open") setIsConversationClosed(true);
         })

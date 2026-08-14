@@ -39,16 +39,6 @@ export function StationDetail() {
 
     return (
         <div className="max-w-7xl mx-auto px-6 md:px-12 pt-28 md:pt-32 pb-12 font-body animate-fade-in">
-            <div className="flex items-center justify-between mb-6">
-                <button
-                    onClick={() => navigate(-1)}
-                    className="flex items-center gap-1.5 text-xs font-headline font-black text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors uppercase tracking-wider"
-                >
-                    <span className="material-symbols-outlined text-base">arrow_back</span>
-                    {lang === "VN" ? "Quay lại" : "Back"}
-                </button>
-            </div>
-
             {/* Tiêu đề tên bến — tách riêng phía trên, đồng bộ kiểu với trang Schedule / Promotion / Blog */}
             <div className="text-center max-w-2xl mx-auto space-y-3 mb-10">
                 <h1 className="text-3xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white leading-tight">
