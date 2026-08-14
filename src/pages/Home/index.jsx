@@ -56,6 +56,40 @@ export const Home = () => {
     return stationPoints.filter(st => st.isWaterbusStation === true);
   }, [stationPoints]);
 
+  // Dữ liệu 3 thẻ điều hướng dịch vụ đặt vé (dùng chung cho lưới desktop & slider ngang mobile)
+  const serviceCards = useMemo(() => ([
+    {
+      to: "/waterbus-booking",
+      img: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus.webp",
+      alt: lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking",
+      badge: lang === "VN" ? "Tuyến cố định" : "Scheduled Route",
+      title: lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking",
+      desc: lang === "VN"
+        ? "Di chuyển nhanh chóng theo lịch trình cố định giữa các bến tàu."
+        : "Travel quickly along fixed schedules between wharves.",
+    },
+    {
+      to: "/watersightseeing-booking",
+      img: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-sightseeing.webp",
+      alt: lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking",
+      badge: lang === "VN" ? "Trải nghiệm ngắm cảnh" : "Scenic Experience",
+      title: lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking",
+      desc: lang === "VN"
+        ? "Tận hưởng hành trình ngắm cảnh thành phố dọc theo dòng sông."
+        : "Enjoy a leisurely sightseeing journey along the river.",
+    },
+    {
+      to: "/charter-booking",
+      img: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/charter.jpg",
+      alt: lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking",
+      badge: lang === "VN" ? "Riêng tư & Linh hoạt" : "Private & Flexible",
+      title: lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking",
+      desc: lang === "VN"
+        ? "Thiết kế hành trình riêng theo yêu cầu cho nhóm hoặc sự kiện."
+        : "Design a private journey tailored for groups or events.",
+    },
+  ]), [lang]);
+
   // State quản lý danh sách Blog
   const [blogs, setBlogs] = useState([]);
   const [isLoadingBlogs, setIsLoadingBlogs] = useState(true);
@@ -77,6 +111,9 @@ export const Home = () => {
 
   // Quản lý Slide ảnh của App Download Section
   const [appSlide, setAppSlide] = useState(0);
+
+  // Quản lý Slide ngang của Services Section trên responsive điện thoại
+  const [serviceSlide, setServiceSlide] = useState(0);
 
   // Quản lý Slide chạy tự động cho phần Testimonials
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
@@ -177,6 +214,14 @@ export const Home = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // Auto-play cho Slider ngang của Services Section trên responsive điện thoại
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setServiceSlide((prev) => (prev + 1) % serviceCards.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [serviceCards.length]);
+
   // GSAP Reveal Observer
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -227,8 +272,8 @@ export const Home = () => {
 
   return (
     <main className="dark:bg-slate-900 transition-colors duration-300 relative">
-      {/* ===== HERO SECTION & BOOKING FORM ===== */}
-      <section id="booking-section" className="relative min-h-[90vh] lg:min-h-screen flex flex-col justify-center items-center overflow-hidden select-none bg-slate-900">
+      {/* ===== HERO SECTION ===== */}
+      <section id="booking-section" className="relative min-h-dvh md:min-h-[90vh] lg:min-h-screen flex flex-col justify-center items-center overflow-hidden select-none bg-slate-900">
         {/* Video nền Hero tự động phát, lặp lại, tắt tiếng */}
         <div className="absolute inset-0 z-0">
           <video
@@ -334,7 +379,7 @@ export const Home = () => {
             </div>
           </div>
           {/* Khối Hình Ảnh Bên Phải */}
-          <div className="relative rounded-3xl overflow-hidden shadow-2xl aspect-video lg:aspect-square">
+          <div className="hidden md:block relative rounded-3xl overflow-hidden shadow-2xl aspect-video lg:aspect-square">
             <img
               src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/introduction.png"
               alt="Waterbus Mission Visual"
@@ -365,119 +410,124 @@ export const Home = () => {
               {lang === "VN" ? "Hành trình dành riêng cho bạn" : "Journeys Crafted For You"}
             </h2>
           </div>
-          {/* Grid 3 thẻ điều hướng dịch vụ đặt vé */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Thẻ điều hướng: Đặt vé Waterbus*/}
-            <RevealOnScroll delayMs={0}>
-              <Link
-                to="/waterbus-booking"
-                className="group flex h-full flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
+          {/* Grid 3 thẻ điều hướng dịch vụ đặt vé — hiện từ md trở lên */}
+          <div className="hidden md:grid grid-cols-3 gap-8">
+            {serviceCards.map((card, index) => (
+              <RevealOnScroll key={card.to} delayMs={index * 150}>
+                <Link
+                  to={card.to}
+                  className="group flex h-full flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
+                >
+                  <div className="relative aspect-square overflow-hidden shrink-0">
+                    <img
+                      src={card.img}
+                      alt={card.alt}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
+                  </div>
+                  <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
+                    <div className="space-y-3">
+                      <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+                        {card.badge}
+                      </span>
+                      <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
+                        {card.title}
+                      </h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                        {card.desc}
+                      </p>
+                    </div>
+                    <div className="pt-5 flex items-center gap-3">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                        {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
+                      </span>
+                      <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
+                    </div>
+                  </div>
+                </Link>
+              </RevealOnScroll>
+            ))}
+          </div>
+
+          {/* Slider ngang 1 thẻ/lần kèm nút trái/phải — chỉ hiện trên responsive điện thoại */}
+          <div className="md:hidden">
+            <div className="overflow-hidden">
+              <div
+                className="flex transition-transform duration-500 ease-in-out"
+                style={{ transform: `translateX(-${serviceSlide * 100}%)` }}
               >
-                <div className="relative aspect-square overflow-hidden shrink-0">
-                  <img
-                    src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus.webp"
-                    alt={lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
-                </div>
-                <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
-                  <div className="space-y-3">
-                    <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-                      {lang === "VN" ? "Tuyến cố định" : "Scheduled Route"}
-                    </span>
-                    <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
-                      {lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking"}
-                    </h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                      {lang === "VN"
-                        ? "Di chuyển nhanh chóng theo lịch trình cố định giữa các bến tàu."
-                        : "Travel quickly along fixed schedules between wharves."}
-                    </p>
+                {serviceCards.map((card) => (
+                  <div key={card.to} className="w-full shrink-0">
+                    <Link
+                      to={card.to}
+                      className="group flex flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300"
+                    >
+                      <div className="relative aspect-square overflow-hidden shrink-0">
+                        <img
+                          src={card.img}
+                          alt={card.alt}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
+                      </div>
+                      <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
+                        <div className="space-y-3">
+                          <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
+                            {card.badge}
+                          </span>
+                          <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
+                            {card.title}
+                          </h3>
+                          <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                            {card.desc}
+                          </p>
+                        </div>
+                        <div className="pt-5 flex items-center gap-3">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                            {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
+                          </span>
+                          <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700"></span>
+                        </div>
+                      </div>
+                    </Link>
                   </div>
-                  <div className="pt-5 flex items-center gap-3">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                      {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
-                    </span>
-                    <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
-                  </div>
-                </div>
-              </Link>
-            </RevealOnScroll>
-            {/* Thẻ điều hướng: Đặt vé WaterSightseeing */}
-            <RevealOnScroll delayMs={150}>
-              <Link
-                to="/watersightseeing-booking"
-                className="group flex h-full flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
+                ))}
+              </div>
+            </div>
+            {/* Nút điều hướng trái/phải + chấm pagination */}
+            <div className="flex items-center justify-center gap-4 mt-6">
+              <button
+                type="button"
+                onClick={() => setServiceSlide((prev) => (prev === 0 ? serviceCards.length - 1 : prev - 1))}
+                aria-label={lang === "VN" ? "Dịch vụ trước" : "Previous service"}
+                className="w-11 h-11 rounded-xl bg-white/10 text-white hover:bg-yellow-400 hover:text-[#124757] border border-white/20 flex items-center justify-center transition-all shadow-sm active:scale-95"
               >
-                <div className="relative aspect-square overflow-hidden shrink-0">
-                  <img
-                    src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-sightseeing.webp"
-                    alt={lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                <span className="material-symbols-outlined font-bold">chevron_left</span>
+              </button>
+              <div className="flex gap-2">
+                {serviceCards.map((card, index) => (
+                  <button
+                    key={card.to}
+                    type="button"
+                    onClick={() => setServiceSlide(index)}
+                    aria-label={`${lang === "VN" ? "Chuyển tới dịch vụ" : "Go to service"} ${index + 1}`}
+                    className={`h-2 rounded-full transition-all duration-300 ${index === serviceSlide
+                      ? "w-6 bg-yellow-400"
+                      : "w-2 bg-white/30 hover:bg-white/50"
+                      }`}
                   />
-                  <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
-                </div>
-                <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
-                  <div className="space-y-3">
-                    <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-                      {lang === "VN" ? "Trải nghiệm ngắm cảnh" : "Scenic Experience"}
-                    </span>
-                    <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
-                      {lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking"}
-                    </h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                      {lang === "VN"
-                        ? "Tận hưởng hành trình ngắm cảnh thành phố dọc theo dòng sông."
-                        : "Enjoy a leisurely sightseeing journey along the river."}
-                    </p>
-                  </div>
-                  <div className="pt-5 flex items-center gap-3">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                      {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
-                    </span>
-                    <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
-                  </div>
-                </div>
-              </Link>
-            </RevealOnScroll>
-            {/* Thẻ điều hướng: Dịch vụ thuê tàu (Charter) */}
-            <RevealOnScroll delayMs={300}>
-              <Link
-                to="/charter-booking"
-                className="group flex h-full flex-col bg-white dark:bg-slate-800 rounded-4xl shadow-lg border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl"
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setServiceSlide((prev) => (prev + 1) % serviceCards.length)}
+                aria-label={lang === "VN" ? "Dịch vụ kế tiếp" : "Next service"}
+                className="w-11 h-11 rounded-xl bg-white/10 text-white hover:bg-yellow-400 hover:text-[#124757] border border-white/20 flex items-center justify-center transition-all shadow-sm active:scale-95"
               >
-                <div className="relative aspect-square overflow-hidden shrink-0">
-                  <img
-                    src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/charter.jpg"
-                    alt={lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-linear-to-t from-slate-900/60 via-slate-900/10 to-transparent"></div>
-                </div>
-                <div className="flex flex-col justify-between flex-1 p-8 space-y-4">
-                  <div className="space-y-3">
-                    <span className="text-xs font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
-                      {lang === "VN" ? "Riêng tư & Linh hoạt" : "Private & Flexible"}
-                    </span>
-                    <h3 className="text-2xl font-headline font-black text-[#124757] dark:text-white leading-snug">
-                      {lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
-                    </h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                      {lang === "VN"
-                        ? "Thiết kế hành trình riêng theo yêu cầu cho nhóm hoặc sự kiện."
-                        : "Design a private journey tailored for groups or events."}
-                    </p>
-                  </div>
-                  <div className="pt-5 flex items-center gap-3">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                      {lang === "VN" ? "Đặt vé ngay" : "Book Now"}
-                    </span>
-                    <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700 group-hover:bg-yellow-400 transition-colors duration-300"></span>
-                  </div>
-                </div>
-              </Link>
-            </RevealOnScroll>
+                <span className="material-symbols-outlined font-bold">chevron_right</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -514,13 +564,13 @@ export const Home = () => {
 
       {/* ===== SCHEDULE SECTION ===== */}
       <section
-        className="relative py-24 bg-cover bg-center transition-colors duration-300 select-none overflow-hidden"
+        className="relative min-h-175 md:min-h-200 flex items-center py-24 bg-cover bg-center transition-colors duration-300 select-none overflow-hidden"
         style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/schedule.jpg')" }}
       >
         {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
         <div className="absolute inset-0 bg-[#0a2129]/55"></div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+        <div className="relative z-10 w-full max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           {/* Khối Thông Tin Bên Trái */}
           <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-32">
             <span className="text-sm font-bold uppercase tracking-widest text-yellow-400">
@@ -641,27 +691,30 @@ export const Home = () => {
               {lang === "VN" ? "Hiện chưa có khuyến mãi công khai." : "No public promotions right now."}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {promotions.slice(0, 3).map((promo) => (
-                <Link
-                  key={promo.promotionCode}
-                  to={`/promotions/${promo.promotionCode}`}
-                  className="group relative aspect-3/4 overflow-hidden shadow-lg block"
-                >
-                  <ImageWithFallback
-                    src={promo.imageUrl}
-                    alt={promo.promotionName}
-                    className="w-full h-full"
-                    imgClassName="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
-                  {/* Lớp phủ chỉ hiện tên khuyến mãi khi hover */}
-                  <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/60 transition-colors duration-300 flex items-center justify-center p-8">
-                    <h3 className="text-xl md:text-2xl font-headline font-bold text-white text-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-                      {promo.promotionName}
-                    </h3>
-                  </div>
-                </Link>
-              ))}
+            <div className="relative -mx-6 md:-mx-12 overflow-hidden mask-[linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]">
+              {/* Băng chạy liên tục — nhân đôi danh sách để tạo vòng lặp liền mạch (khớp keyframe marquee 0% -> -50%) */}
+              <div className="flex w-max gap-8 px-6 md:px-12 animate-marquee hover:[animation-play-state:paused]">
+                {[...promotions, ...promotions].map((promo, index) => (
+                  <Link
+                    key={`${promo.promotionCode}-${index}`}
+                    to={`/promotions/${promo.promotionCode}`}
+                    className="group relative w-64 sm:w-72 md:w-80 aspect-3/4 shrink-0 overflow-hidden rounded-2xl shadow-lg block"
+                  >
+                    <ImageWithFallback
+                      src={promo.imageUrl}
+                      alt={promo.promotionName}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+                    {/* Lớp phủ chỉ hiện tên khuyến mãi khi hover */}
+                    <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/60 transition-colors duration-300 flex items-center justify-center p-8">
+                      <h3 className="text-xl md:text-2xl font-headline font-bold text-white text-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+                        {promo.promotionName}
+                      </h3>
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </div>
           )}
           {/* Nút "Xem tất cả" */}
@@ -797,7 +850,10 @@ export const Home = () => {
       </section>
 
       {/* App Download Section */}
-      <section className="bg-[#124757] dark:bg-slate-900 py-16 md:py-0 overflow-hidden select-none border-t border-white/10 dark:border-slate-800/80">
+      <section
+        className="bg-[#124757] dark:bg-slate-900 bg-cover bg-center bg-no-repeat py-16 md:py-0 overflow-hidden select-none border-t border-white/10 dark:border-slate-800/80"
+        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/3D.png')" }}
+      >
         <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 items-center gap-12 lg:gap-20 min-h-125">
           {/* CỘT TRÁI: Slide Hình Ảnh App (Thiết kế xếp chồng) */}
           <div className="relative w-full h-87.5 md:h-125 flex items-center justify-center lg:justify-end">
@@ -834,8 +890,8 @@ export const Home = () => {
               <span className="text-sm font-bold uppercase tracking-widest text-yellow-400">
                 {lang === "VN" ? "Tải ứng dụng WaterBus" : "Download WaterBus App"}
               </span>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-headline font-bold text-white leading-tight">
-                {lang === "VN" ? "Đặt vé chỉ trong vài chạm," : "Book In Just A Tap,"}
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-headline font-bold text-yellow-400 leading-tight">
+                {lang === "VN" ? "Đặt vé vài chạm," : "Book In Just A Tap,"}
                 <br />
                 <span className="text-yellow-400">
                   {lang === "VN" ? "thanh toán tức thì!" : "Pay With Effortless Ease!"}
@@ -843,8 +899,8 @@ export const Home = () => {
               </h2>
               <p className="text-white/70 font-body text-base md:text-lg max-w-lg leading-relaxed pt-2">
                 {lang === "VN"
-                  ? "Trải nghiệm tiện ích đặt vé, chọn ghế và nhận vé điện tử (QR Code) ngay trên điện thoại của bạn. Không cần xếp hàng, không lo hết vé."
-                  : "Experience the convenience of booking, choosing seats, and receiving e-tickets (QR Code) right on your phone. No lines, no sold-out worries."}
+                  ? "Trải nghiệm tiện ích đặt vé và tận hưởng hành trình ngay trên điện thoại của bạn. Không cần xếp hàng, không lo hết vé."
+                  : "Experience the convenience of booking tickets and enjoying your journey right from your phone. No lines, no sold-out worries."}
               </p>
             </div>
             {/* Khối quét mã QR & Download Badges */}

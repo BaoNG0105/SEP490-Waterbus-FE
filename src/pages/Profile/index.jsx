@@ -110,7 +110,7 @@ export const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-10 px-4 sm:px-6 lg:px-8 font-body transition-colors">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pt-32 pb-10 px-4 sm:px-6 lg:px-8 font-body transition-colors">
       <div className="max-w-4xl mx-auto flex items-center justify-between mb-8">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors">
           <span className="material-symbols-outlined text-xl">arrow_back</span>
@@ -193,7 +193,7 @@ export const Profile = () => {
                 <h2 className="text-lg font-black font-headline text-[#124757] dark:text-yellow-400 uppercase tracking-widest mb-6">{lang === "VN" ? "Vé & Dịch vụ của tôi" : "My Tickets & Services"}</h2>
                 <div className="space-y-3">
                   {[
-                    { title: lang === "VN" ? "Lịch sử đặt vé" : "My Bookings", desc: lang === "VN" ? "Vé Waterbus & Sightseeing đã đặt" : "Your Waterbus & Sightseeing bookings", path: "/profile/my-bookings" },
+                    { title: lang === "VN" ? "Lịch sử đặt vé" : "My Bookings", desc: lang === "VN" ? "Vé Waterbus & WaterSightseeing đã đặt" : "Your Waterbus & Water Sightseeing bookings", path: "/profile/my-bookings" },
                     { title: lang === "VN" ? "Yêu cầu thuê tàu" : "Booking Requests", desc: lang === "VN" ? "Theo dõi yêu cầu thuê tàu" : "Track your booking requests", path: "/profile/my-charter-booking" },
                   ].map((item) => (
                     <button

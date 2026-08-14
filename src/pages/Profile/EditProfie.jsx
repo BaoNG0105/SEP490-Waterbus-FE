@@ -332,7 +332,7 @@ export const EditProfile = () => {
     }
 
     return (
-        <div className="w-full bg-white dark:bg-slate-900 py-10 px-4 sm:px-6 lg:px-8 font-body transition-colors duration-300">
+        <div className="w-full bg-white dark:bg-slate-900 pt-32 pb-10 px-4 sm:px-6 lg:px-8 font-body transition-colors duration-300">
             <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
 
                 <div className="flex items-center justify-between">

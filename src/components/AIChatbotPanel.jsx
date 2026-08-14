@@ -614,6 +614,22 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
               </button>
             </div>
           )}
+
+          {/* Footer note */}
+          <p className="bg-white px-3 pb-2.5 pt-1 text-center text-[10px] leading-snug text-slate-400 dark:bg-slate-900 dark:text-slate-500">
+            {chatLang === "VN"
+              ? "Trợ lý ảo có thể sai sót, hãy kiểm tra thông tin quan trọng."
+              : "The AI assistant can make mistakes. Check important info."}
+            {" "}
+            <a
+              href="/terms-and-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300"
+            >
+              {chatLang === "VN" ? "Điều khoản sử dụng" : "Terms of use"}
+            </a>
+          </p>
         </div>
 
         {!isAuthenticated && (

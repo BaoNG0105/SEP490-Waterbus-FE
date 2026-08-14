@@ -165,6 +165,20 @@ export function WaterbusBooking() {
                     </div>
                 </div>
 
+                {/* --- GHI CHÚ ĐIỀU KHOẢN & CHÍNH SÁCH --- */}
+                <p className="text-center text-xs text-slate-500 dark:text-slate-400 mb-10 -mt-4">
+                    {lang === "VN" ? "Vui lòng xem " : "Please review our "}
+                    <a
+                        href="/terms-and-policy"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-bold text-[#124757] dark:text-yellow-400 hover:underline"
+                    >
+                        {lang === "VN" ? "Điều khoản & Chính sách" : "Terms & Policy"}
+                    </a>
+                    {lang === "VN" ? " trước khi đặt vé." : " before booking."}
+                </p>
+
                 {/* --- ĐIỀU HƯỚNG BƯỚC --- */}
                 {currentStep === 1 && (
                     <Step1Search bookingData={bookingData} updateData={updateBookingData} onNext={() => goToStep(2)} />

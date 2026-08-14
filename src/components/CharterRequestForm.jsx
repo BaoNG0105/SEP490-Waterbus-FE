@@ -786,7 +786,7 @@ export function CharterRequestForm({
     <form noValidate onSubmit={handleFormSubmit} className={`relative rounded-4xl shadow-[0_25px_70px_rgba(18,71,87,0.10)] border overflow-hidden ${t.formBg} ${t.formBorder}`}>
       <div className={`p-8 md:p-10 border-b space-y-6 text-center ${t.headerBorder} ${t.headerBg}`}>
         <div className="space-y-2">
-          <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-400/15 border border-yellow-400/20 text-[10px] font-headline font-black uppercase tracking-widest ${t.badgeText}`}>
+          <span className={`inline-flex items-center gap-2 text-[10px] font-headline font-black uppercase tracking-widest ${t.badgeText}`}>
             {lang === "VN" ? `Bước ${currentStep + 1}/${steps.length}` : `Step ${currentStep + 1} of ${steps.length}`}
           </span>
           <h2 className={`text-2xl md:text-3xl font-headline font-black ${t.headerTitle}`}>
@@ -794,11 +794,11 @@ export function CharterRequestForm({
               ? (lang === "VN" ? "Chỉnh sửa yêu cầu thuê tàu" : "Edit Booking Request")
               : (lang === "VN" ? "Tạo yêu cầu thuê tàu" : "Create Booking Request")}
           </h2>
-          <p className={`text-xs max-w-md mx-auto ${t.headerSubtitle}`}>
-            {mode === "edit" && bookingCode && bookingCode !== "--"
-              ? (lang === "VN" ? `Mã yêu cầu ${bookingCode}` : `Request code ${bookingCode}`)
-              : (lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today.")}
-          </p>
+          {mode === "edit" && bookingCode && bookingCode !== "--" && (
+            <p className={`text-xs max-w-md mx-auto ${t.headerSubtitle}`}>
+              {lang === "VN" ? `Mã yêu cầu ${bookingCode}` : `Request code ${bookingCode}`}
+            </p>
+          )}
         </div>
 
         <div className="flex items-center justify-center gap-1.5 sm:gap-3 overflow-x-auto">
@@ -915,6 +915,9 @@ export function CharterRequestForm({
                   required
                   className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today."}
+                </p>
               </div>
               <div className="flex flex-col gap-2.5">
                 <label className={contactLabelClass}>{lang === "VN" ? "Giờ đi" : "Start Time"}{requiredMark}</label>
@@ -953,7 +956,7 @@ export function CharterRequestForm({
                   );
                 })}
               </div>
-              <p className="text-[11px] font-medium leading-relaxed text-red-500 dark:text-red-400">
+              <p className="text-[11px] font-medium leading-relaxed text-slate-400">
                 {formData.rentalUnit === "Day"
                   ? (lang === "VN"
                     ? `Giờ đi từ ${CHARTER_DAY_WINDOW_START} đến ${CHARTER_DAY_WINDOW_END}. Thuê 1 ngày kết thúc ${CHARTER_DAY_WINDOW_END} cùng ngày; 2 ngày kết thúc ${CHARTER_DAY_WINDOW_END} ngày hôm sau.`
@@ -974,7 +977,7 @@ export function CharterRequestForm({
                 <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Lộ trình & hành khách" : "Route & Guests"}</h3>
                 <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>
                   {lang === "VN"
-                    ? "Bến đón khách phải thuộc hệ thống Waterbus. Bến trả khách và bến dừng có thể chọn bến khác."
+                    ? "Bến đón khách thuộc hệ thống Waterbus. Bến trả khách và bến dừng có thể chọn bến khác."
                     : "Pickup must be a Waterbus station. Drop-off and stops can be any active station."}
                 </p>
               </div>

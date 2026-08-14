@@ -1,7 +1,7 @@
 export const deckOptions = [1, 2];
 
 /** Cửa sổ giờ khởi hành áp dụng cho cả thuê theo giờ và theo ngày. */
-export const CHARTER_DAY_WINDOW_START = "07:30";
+export const CHARTER_DAY_WINDOW_START = "07:00";
 export const CHARTER_DAY_WINDOW_END = "23:00";
 
 export const toCharterTimeMinutes = (value) => {

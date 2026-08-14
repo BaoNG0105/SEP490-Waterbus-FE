@@ -134,7 +134,7 @@ export function CharterBooking() {
         <div className="absolute inset-0 bg-[#124757]/70 dark:bg-slate-950/70 pointer-events-none"></div>
         <div className="relative max-w-5xl mx-auto px-6 md:px-12 text-center space-y-6">
           <h1 className="text-4xl md:text-6xl font-headline font-black text-white leading-tight">
-            {lang === "VN" ? "Dịch vụ thuê tàu WaterBus" : "WaterBus Request Booking"}
+            {lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking"}
           </h1>
           <p className="text-white/70 max-w-2xl mx-auto text-sm md:text-base leading-relaxed">
             {lang === "VN"
@@ -147,6 +147,21 @@ export function CharterBooking() {
       {/* ===== SECTION 2: REQUEST FORM ===== */}
       <main className="relative max-w-5xl mx-auto px-4 md:px-8 py-20">
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-72 h-72 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        {/* --- GHI CHÚ ĐIỀU KHOẢN & CHÍNH SÁCH --- */}
+        <p className="text-center text-xs text-slate-500 dark:text-slate-400 mb-6">
+          {lang === "VN" ? "Vui lòng xem " : "Please review our "}
+          <a
+            href="/terms-and-policy"
+            target="_blank"
+            rel="noreferrer"
+            className="font-bold text-[#124757] dark:text-yellow-400 hover:underline"
+          >
+            {lang === "VN" ? "Điều khoản & Chính sách" : "Terms & Policy"}
+          </a>
+          {lang === "VN" ? " trước khi gửi yêu cầu." : " before submitting your request."}
+        </p>
+
         <CharterRequestForm
           mode="create"
           idPrefix="charter"
