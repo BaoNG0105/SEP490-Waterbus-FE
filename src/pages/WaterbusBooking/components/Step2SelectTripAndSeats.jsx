@@ -7,6 +7,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { SeatMapIcon, seatToneFromCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
 import { ImageWithFallback } from "../../../components/ImageWithFallback";
+import { TripDetailModal } from "../../../components/TripDetailModal";
 //api
 import { fetchTripDetail, fetchTripSeatMap, holdSeats, releaseSeats } from "../../../services/tripService";
 import { fetchBoatDetail } from "../../../services/boatService";
@@ -305,12 +306,17 @@ export default function Step2SelectTripAndSeats({
   const [isConfirmingSeats, setIsConfirmingSeats] = useState(false);
   const autoSelectKeyRef = useRef("");
 
-  // Ảnh tàu theo boatId — trip search/list không kèm ảnh nên phải gọi riêng GET /boats/{boatId}.
+  // Trip đang được xem chi tiết trong modal (click nút icon "i" trên thẻ chuyến) — null = đóng modal.
+  const [detailTrip, setDetailTrip] = useState(null);
+
+  // Ảnh + tên tàu theo boatId — trip search/list CHỈ trả về boatId, không kèm ảnh lẫn tên thật,
+  // nên phải gọi riêng GET /boats/{boatId} để lấy cả hai.
   const [boatImageById, setBoatImageById] = useState({});
+  const [boatNameById, setBoatNameById] = useState({});
   const fetchedBoatIdsRef = useRef(new Set());
 
-  // Với mỗi chuyến hiển thị (cả 2 chiều) mà chưa có ảnh gắn sẵn, tải chi tiết tàu theo boatId để lấy
-  // imageUrl thật; chỉ gọi 1 lần cho mỗi boatId (fetchedBoatIdsRef) để tránh gọi lại khi re-render.
+  // Với mỗi chuyến hiển thị (cả 2 chiều) mà chưa từng tải chi tiết tàu, gọi 1 lần để lấy cả
+  // ảnh lẫn tên thật; chỉ gọi 1 lần cho mỗi boatId (fetchedBoatIdsRef) để tránh gọi lại khi re-render.
   // GET /boats/{boatId} yêu cầu đã đăng nhập — khách chưa login vẫn xem được danh sách chuyến ở bước
   // này, nên PHẢI chặn gọi API khi !isAuthenticated, nếu không BE trả 401 và interceptor sẽ tự đăng
   // xuất + đá về /login dù user chỉ đang xem, chưa hề chọn ghế.
@@ -319,7 +325,7 @@ export default function Step2SelectTripAndSeats({
     const allTrips = [...(departureTripOptions || []), ...(returnTripOptions || [])];
     const missingIds = [...new Set(
       allTrips
-        .map((trip) => (resolveTripCardImage(trip) ? "" : pickTripBoatId(trip)))
+        .map((trip) => pickTripBoatId(trip))
         .filter((boatId) => boatId && !fetchedBoatIdsRef.current.has(boatId))
     )];
 
@@ -334,9 +340,10 @@ export default function Step2SelectTripAndSeats({
             || detail?.ImageUrl
             || (Array.isArray(detail?.imageUrls) ? detail.imageUrls[0] : "")
             || "";
-          return [boatId, imageUrl];
+          const name = detail?.name || detail?.Name || detail?.boatName || detail?.BoatName || "";
+          return [boatId, imageUrl, name];
         } catch {
-          return [boatId, ""];
+          return [boatId, "", ""];
         }
       }));
       if (!isActive) return;
@@ -350,6 +357,13 @@ export default function Step2SelectTripAndSeats({
         const next = { ...prev };
         entries.forEach(([boatId, imageUrl]) => {
           if (imageUrl) next[boatId] = imageUrl;
+        });
+        return next;
+      });
+      setBoatNameById((prev) => {
+        const next = { ...prev };
+        entries.forEach(([boatId, , name]) => {
+          if (name) next[boatId] = name;
         });
         return next;
       });
@@ -974,11 +988,24 @@ export default function Step2SelectTripAndSeats({
                 <div
                   key={trip.tripId}
                   onClick={() => handleSelectTrip(trip)}
-                  className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border shadow-sm transition-all space-y-3 ${currentTrip?.tripId === trip.tripId
+                  className={`relative bg-white dark:bg-slate-800 p-5 rounded-2xl border shadow-sm transition-all space-y-3 ${currentTrip?.tripId === trip.tripId
                       ? "border-[#124757] ring-2 ring-[#124757]/10 bg-teal-50/5"
                       : "border-slate-100 dark:border-slate-700 hover:border-slate-300"
                     } ${inspectable ? "cursor-pointer" : "opacity-50 cursor-not-allowed"} ${missingKm && inspectable ? "opacity-95" : ""}`}
                 >
+                  {/* Nút xem chi tiết chuyến — mở modal, không kích hoạt chọn chuyến của card */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDetailTrip(trip);
+                    }}
+                    title={lang === "VN" ? "Xem chi tiết chuyến" : "View trip details"}
+                    aria-label={lang === "VN" ? "Xem chi tiết chuyến" : "View trip details"}
+                    className="absolute top-3 right-3 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm leading-none">info</span>
+                  </button>
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-4">
                       <ImageWithFallback
@@ -996,19 +1023,13 @@ export default function Step2SelectTripAndSeats({
                           </span>
                           <span className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(getSegmentArrival(trip))}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                          {isLoopRoute ? (
+                        {isLoopRoute ? (
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
                             <span>
                               {lang === "VN" ? "Tour tham quan sông Sài Gòn " : "Saigon River Sightseeing Tour "}
                             </span>
-                          ) : (
-                            <>
-                              <span>{legFromWharfName || "--"}</span>
-                              <span className="material-symbols-outlined text-xs">arrow_forward</span>
-                              <span>{legToWharfName || "--"}</span>
-                            </>
-                          )}
-                        </div>
+                          </div>
+                        ) : null}
                         {fareAdjLabel ? (
                           <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
                             {fareAdjLabel}
@@ -1316,6 +1337,18 @@ export default function Step2SelectTripAndSeats({
           </button>
         )}
       </div>
+
+      <TripDetailModal
+        trip={detailTrip}
+        onClose={() => setDetailTrip(null)}
+        lang={lang}
+        isLoopRoute={isLoopRoute}
+        legFromWharfName={legFromWharfName}
+        legToWharfName={legToWharfName}
+        boatImageById={boatImageById}
+        boatNameById={boatNameById}
+        canFetchBoatDetail={isAuthenticated}
+      />
 
     </div>
   );

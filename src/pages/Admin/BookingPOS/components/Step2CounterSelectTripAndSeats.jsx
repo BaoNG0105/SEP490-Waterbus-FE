@@ -6,6 +6,7 @@ import { useApp } from "../../../../context/AppContext";
 import { FormSelect } from "../../../../components/FormSelect";
 import { SeatMapIcon, seatToneFromCode } from "../../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../../components/ShipWheelIcon";
+import { TripDetailModal } from "../../../../components/TripDetailModal";
 //api
 import { fetchTripDetail, fetchTripSeatMap, holdSeats, releaseSeats } from "../../../../services/tripService";
 //toast
@@ -225,6 +226,10 @@ export default function Step2CounterSelectTripAndSeats({
   const [filterTime, setFilterTime] = useState("all");
   const [sortOrder, setSortOrder] = useState("earliest");
 
+  // Tên bến hiển thị trong modal chi tiết chuyến — chặng về đi ngược chiều nên phải đảo lại thứ tự tên bến
+  const legFromWharfName = activeLeg === "departure" ? fromWharfName : toWharfName;
+  const legToWharfName = activeLeg === "departure" ? toWharfName : fromWharfName;
+
   const [seatMapByLeg, setSeatMapByLeg] = useState({ departure: [], return: [] });
   const [seatMapMetaByLeg, setSeatMapMetaByLeg] = useState({
     departure: { segmentDistanceKm: null, fareAdjustment: null },
@@ -242,6 +247,9 @@ export default function Step2CounterSelectTripAndSeats({
   // để bấm lại thẻ đang chọn có thể đóng dropdown mà KHÔNG bỏ chọn chuyến/ghế đã lưu.
   const [expandedTripId, setExpandedTripId] = useState("");
   const autoSelectKeyRef = useRef("");
+
+  // Trip đang được xem chi tiết trong modal (click nút icon "i" trên thẻ chuyến) — null = đóng modal.
+  const [detailTrip, setDetailTrip] = useState(null);
 
   useEffect(() => {
     const legsToHydrate = [
@@ -771,10 +779,20 @@ export default function Step2CounterSelectTripAndSeats({
                 key={trip.tripId}
                 className={`overflow-hidden rounded-2xl border transition-all ${isSelected ? "border-[#124757] shadow-sm dark:border-yellow-400" : "border-slate-100 dark:border-slate-700"}`}
               >
-                <button
-                  type="button"
-                  onClick={() => handleCardClick(trip)}
-                  disabled={!inspectable}
+                {/* Đổi từ <button> sang <div role="button"> để có thể lồng nút icon "i" (chi tiết chuyến)
+                    riêng bên trong — HTML không cho phép <button> lồng <button>. */}
+                <div
+                  role="button"
+                  tabIndex={inspectable ? 0 : -1}
+                  aria-disabled={!inspectable}
+                  onClick={() => inspectable && handleCardClick(trip)}
+                  onKeyDown={(e) => {
+                    if (!inspectable) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleCardClick(trip);
+                    }
+                  }}
                   className={`w-full p-4 text-left transition-colors ${isSelected
                     ? "bg-[#124757]/5 dark:bg-yellow-400/10"
                     : "bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700/40"
@@ -809,6 +827,20 @@ export default function Step2CounterSelectTripAndSeats({
                       </p>
                     </div>
 
+                    {/* Nút xem chi tiết chuyến — mở modal, không kích hoạt chọn chuyến của cả hàng */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailTrip(trip);
+                      }}
+                      title={lang === "VN" ? "Xem chi tiết chuyến" : "View trip details"}
+                      aria-label={lang === "VN" ? "Xem chi tiết chuyến" : "View trip details"}
+                      className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-sm leading-none">info</span>
+                    </button>
+
                     {isPending ? (
                       <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-slate-200 border-t-[#124757] dark:border-t-yellow-400" />
                     ) : (
@@ -817,7 +849,7 @@ export default function Step2CounterSelectTripAndSeats({
                       </span>
                     )}
                   </div>
-                </button>
+                </div>
 
                 {/* --- DROPDOWN SƠ ĐỒ GHẾ — GIỮ NGUYÊN nội dung/logic như bản khách hàng, chỉ chuyển vị trí --- */}
                 {isExpanded && (
@@ -1029,6 +1061,16 @@ export default function Step2CounterSelectTripAndSeats({
           </button>
         )}
       </div>
+
+      <TripDetailModal
+        trip={detailTrip}
+        onClose={() => setDetailTrip(null)}
+        lang={lang}
+        isLoopRoute={isLoopRoute}
+        legFromWharfName={legFromWharfName}
+        legToWharfName={legToWharfName}
+        canFetchBoatDetail={isAuthenticated}
+      />
 
     </div>
   );
