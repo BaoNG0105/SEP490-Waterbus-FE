@@ -1,5 +1,12 @@
 export const deckOptions = [1, 2];
 
+/** Ảnh minh họa theo số tầng tàu — dùng chung cho lựa chọn tầng tàu (CharterRequestForm) và
+ * tab chọn loại dịch vụ Waterbus (1 tầng) / WaterSightseeing (2 tầng) khi tạo chuyến (Admin). */
+export const deckOptionImages = {
+  1: "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/15/5b/30/ea/saigon-waterbus-lu-t.jpg?w=1200&h=-1&s=1",
+  2: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQNjBezqsnPRbARMzFhnjKsf9iQcLUnZLV9CEBL1zV7w6uOrEm6V33a2Oo&s=10",
+};
+
 /** Cửa sổ giờ khởi hành áp dụng cho cả thuê theo giờ và theo ngày. */
 export const CHARTER_DAY_WINDOW_START = "07:00";
 export const CHARTER_DAY_WINDOW_END = "23:00";

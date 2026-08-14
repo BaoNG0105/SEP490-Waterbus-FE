@@ -24,6 +24,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { assignmentCoversDay } from "../../../utils/staffAssignmentCalendarUtils";
+import { deckOptionImages } from "../../../utils/charterRequestForm";
 import { notify } from "../../../utils/swalToast";
 
 const MIN_ONBOARD_STAFF = 2;
@@ -710,35 +711,36 @@ export function CreateTrip() {
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
             {lang === "VN" ? "Tạo chuyến tàu" : "Create trips"}
           </h2>
-          <p className="mt-0.5 text-xs text-slate-400">
-            {isRoundTrip
-              ? (lang === "VN"
-                ? "Gợi ý lịch khứ hồi 1 tàu, chọn khung rồi tạo. Giá theo chính sách hiện hành."
-                : "Preview one-boat round-trip slots, select, then create. Prices follow fare policy.")
-              : (lang === "VN"
-                ? "Tạo một hoặc nhiều chuyến trên cùng một form. Giá vé áp dụng theo chính sách hiện hành."
-                : "Create one or many trips in the same form. Ticket prices follow the current fare policy.")}
-          </p>
         </div>
       </div>
 
-      <div className="flex gap-1 rounded-2xl bg-slate-100/80 p-1 dark:bg-slate-900/80">
+      <div className="grid grid-cols-2 gap-3">
         {[
-          { id: "waterbus", vn: "Waterbus", en: "Waterbus" },
-          { id: "watersightseeing", vn: "WaterSightseeing", en: "WaterSightseeing" },
-        ].map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => handleServiceKindChange(item.id)}
-            className={`flex-1 rounded-xl px-2.5 py-2.5 text-center font-headline text-[11px] font-black uppercase tracking-wider transition ${form.serviceKind === item.id
-              ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-[#124757]"
-              : "text-slate-500 dark:text-slate-400"
-              }`}
-          >
-            {lang === "VN" ? item.vn : item.en}
-          </button>
-        ))}
+          { id: "waterbus", vn: "Waterbus", en: "Waterbus", image: deckOptionImages[1] },
+          { id: "watersightseeing", vn: "WaterSightseeing", en: "WaterSightseeing", image: deckOptionImages[2] },
+        ].map((item) => {
+          const active = form.serviceKind === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => handleServiceKindChange(item.id)}
+              className={`group relative h-20 overflow-hidden rounded-2xl border-2 transition ${active
+                ? "border-[#124757] dark:border-yellow-400"
+                : "border-transparent hover:border-slate-300 dark:hover:border-slate-600"
+                }`}
+            >
+              <img src={item.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <div className={`absolute inset-0 transition-colors ${active
+                ? "bg-[#124757]/55 dark:bg-slate-900/50"
+                : "bg-slate-900/55 group-hover:bg-slate-900/40"
+                }`} />
+              <span className="relative flex h-full items-center justify-center font-headline text-[11px] font-black uppercase tracking-wider text-white">
+                {lang === "VN" ? item.vn : item.en}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {!isWaterSightseeingKind && (

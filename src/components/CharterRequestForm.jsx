@@ -9,6 +9,7 @@ import {
   CHARTER_DAY_WINDOW_START,
   createEmptyBoatRequest,
   createEmptyStop,
+  deckOptionImages,
   deckOptions,
   getCharterDayStartTimeError,
   getMinDepartureDate,
@@ -18,11 +19,6 @@ import {
 import { getCharterInsuranceNote, getInsurancePendingMessage } from "../utils/insurancePreview";
 import { AppDateInput } from "./AppDateInput";
 import { notify } from "../utils/swalToast";
-
-const deckOptionImages = {
-  1: "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/15/5b/30/ea/saigon-waterbus-lu-t.jpg?w=1200&h=-1&s=1",
-  2: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQNjBezqsnPRbARMzFhnjKsf9iQcLUnZLV9CEBL1zV7w6uOrEm6V33a2Oo&s=10",
-};
 
 const getStationId = (station) => String(station.stationId || station.id);
 const getStationName = (station) => station.stationName || station.name || "--";
