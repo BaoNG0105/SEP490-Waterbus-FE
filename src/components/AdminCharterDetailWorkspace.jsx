@@ -492,11 +492,11 @@ function AdminCharterRoutePlanPicker({
                 </div>
               </div>
               <span
-                className={`rounded-lg px-2.5 py-1 text-[9px] font-headline font-black uppercase tracking-wider ring-1 ${emptyCandidates
-                  ? "bg-slate-100 text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700"
+                className={`text-[9px] font-headline font-black uppercase tracking-wider ${emptyCandidates
+                  ? "text-slate-500 dark:text-slate-400"
                   : selectedCandidate
-                    ? "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20"
-                    : "bg-white text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : "text-slate-500 dark:text-slate-300"
                   }`}
               >
                 {emptyCandidates

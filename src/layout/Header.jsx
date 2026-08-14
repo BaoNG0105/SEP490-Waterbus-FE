@@ -1,10 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../redux/authSlice";
 import { notify } from "../utils/swalToast";
+import { fetchUnreadNotificationCount, NOTIFICATION_READ_EVENT } from "../services/notificationService";
 import "flag-icons/css/flag-icons.min.css";
+
+const NOTIFICATION_POLL_INTERVAL_MS = 60000;
 
 import { UserAvatar } from "../components/UserAvatar";
 import { logoUrl as logo } from "../data/homeData";
@@ -41,6 +44,52 @@ export const Header = ({ isNoticeVisible }) => {
   // logic hiển thị tên và ảnh đại diện
   const displayAvatar = user?.avatarUrl || "";
   const displayUserName = user?.fullName || (lang === "VN" ? "Thành viên" : "Member");
+
+  // Số thông báo chưa đọc — hiện badge đỏ trên nút chuông, đồng bộ với NoticeBar
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const loadUnreadCount = useCallback(async () => {
+    // Chưa đăng nhập thì nút chuông không hiển thị (xem JSX bên dưới) nên không cần setState ở đây.
+    if (!isAuthenticated) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    try {
+      const data = await fetchUnreadNotificationCount();
+      setUnreadCount(Number(data?.unreadCount ?? 0));
+    } catch (error) {
+      console.error("Lỗi tải số thông báo chưa đọc:", error);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    // setState chỉ xảy ra bên trong loadUnreadCount sau khi await xong API — chạy bất đồng bộ,
+    // không đồng bộ trong effect. Cùng pattern với NoticeBar.jsx (loadNotifications).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadUnreadCount();
+    const poll = setInterval(loadUnreadCount, NOTIFICATION_POLL_INTERVAL_MS);
+    const onVisible = () => {
+      if (!document.hidden) loadUnreadCount();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [loadUnreadCount]);
+
+  // Đồng bộ tức thời khi có thông báo được đánh dấu đã đọc ở nơi khác (NoticeBar, trang Thông báo...)
+  useEffect(() => {
+    const onExternalRead = (event) => {
+      const { all } = event.detail || {};
+      if (all) {
+        setUnreadCount(0);
+        return;
+      }
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    };
+    window.addEventListener(NOTIFICATION_READ_EVENT, onExternalRead);
+    return () => window.removeEventListener(NOTIFICATION_READ_EVENT, onExternalRead);
+  }, []);
 
   // Kiểm tra quyền quản trị để hiển thị nút chuyển đến trang Admin Dashboard
   const adminRoles = ["ADMIN", "STAFF", "MANAGER"];
@@ -255,11 +304,16 @@ export const Header = ({ isNoticeVisible }) => {
           {isAuthenticated && (
             <Link
               to="/notifications"
-              className="hidden sm:flex items-center justify-center w-9 h-9 rounded-full bg-white/10 dark:bg-slate-800 border border-white/10 dark:border-slate-700 hover:border-yellow-400 dark:hover:border-yellow-400 transition-colors text-white hover:text-yellow-400 shrink-0"
+              className="hidden sm:flex relative items-center justify-center w-9 h-9 rounded-full bg-white/10 dark:bg-slate-800 border border-white/10 dark:border-slate-700 hover:border-yellow-400 dark:hover:border-yellow-400 transition-colors text-white hover:text-yellow-400 shrink-0"
               title={lang === "VN" ? "Thông báo" : "Notifications"}
               aria-label={lang === "VN" ? "Thông báo" : "Notifications"}
             >
               <span className="material-symbols-outlined text-lg" aria-hidden="true">notifications</span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-4.5 h-4.5 px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[9px] font-bold leading-none ring-2 ring-[#124757] dark:ring-slate-900">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </Link>
           )}
 

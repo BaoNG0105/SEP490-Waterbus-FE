@@ -133,15 +133,24 @@ export function MyCharterTicketsPanel({
             <p className="text-xs text-slate-400 mt-1">
               {selectedTicketIds.length > 0
                 ? (lang === "VN" ? `Đã chọn ${selectedTicketIds.length} vé để tải PDF.` : `${selectedTicketIds.length} tickets selected for PDF.`)
-                : (lang === "VN" ? "Không chọn vé để tải PDF toàn bộ danh sách. Mở PDF rồi in nếu cần." : "Leave tickets unselected to download the full PDF. Open the PDF to print if needed.")}
+                : (lang === "VN" ? "Không chọn vé để tải PDF toàn bộ danh sách." : "Leave tickets unselected to download the full PDF list.")}
             </p>
 
-            <div className="mt-5">
-              <button type="button" onClick={() => handleTicketFileAction("pdf")} disabled={isSubmitting || !isPaid} className="w-full sm:w-auto px-4 py-3 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
-                <span className="material-symbols-outlined text-base">download</span>
-                {lang === "VN" ? " Tải vé PDF" : " Download PDF Tickets"}
-              </button>
-            </div>
+            {/* Nút tải vé chỉ hiện sau khi danh sách hành khách đã được cập nhật (lưu xong, không còn dòng nào cần chỉnh). */}
+            {!canEditManifest ? (
+              <div className="mt-5">
+                <button type="button" onClick={() => handleTicketFileAction("pdf")} disabled={isSubmitting || !isPaid} className="w-full sm:w-auto px-4 py-3 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 font-headline font-black uppercase text-[10px] tracking-wider disabled:opacity-50">
+                  <span className="material-symbols-outlined text-base">download</span>
+                  {lang === "VN" ? " Tải vé PDF" : " Download PDF Tickets"}
+                </button>
+              </div>
+            ) : (
+              <p className="mt-5 text-[11px] text-slate-400">
+                {lang === "VN"
+                  ? "Vui lòng cập nhật và lưu danh sách hành khách trước khi tải vé."
+                  : "Please update and save the passenger list before downloading tickets."}
+              </p>
+            )}
           </div>
 
           <QrImageBlock
@@ -162,7 +171,7 @@ export function MyCharterTicketsPanel({
           >
             <div>
               <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"}</h2>
-              <p className="mt-1 text-xs font-bold text-slate-400">
+              {/* <p className="mt-1 text-xs font-bold text-slate-400">
                 {isManifestOpen
                   ? (canUseContactAsSinglePassenger
                     ? (lang === "VN"
@@ -178,7 +187,7 @@ export function MyCharterTicketsPanel({
                   : (lang === "VN"
                     ? `${passengerRows.length} hành khách · ${summary.approvedCount} đã duyệt · ${summary.pendingCount} chờ duyệt`
                     : `${passengerRows.length} passengers · ${summary.approvedCount} approved · ${summary.pendingCount} pending`)}
-              </p>
+              </p> */}
             </div>
             <span className={`material-symbols-outlined shrink-0 text-2xl text-slate-400 transition-transform ${isManifestOpen ? "rotate-180" : ""}`}>
               expand_more
@@ -306,8 +315,8 @@ export function MyCharterTicketsPanel({
           </h2>
           <p className="mt-1 text-xs font-bold text-slate-400">
             {lang === "VN"
-              ? "Thêm ngoài số khách đã đăng ký — gửi để đội vận hành duyệt. Mỗi booking chỉ 1 lần gửi; chỉ gửi khi còn hơn 24 giờ trước giờ khởi hành."
-              : "Add beyond the booked passenger count — needs operations review. One request per booking; only when more than 24 hours remain before departure."}
+              ? "Thêm ngoài số khách đã đăng ký - gửi để đội vận hành duyệt. Mỗi booking chỉ 1 lần gửi; chỉ gửi khi còn hơn 24 giờ trước giờ khởi hành."
+              : "Add beyond the booked passenger count - needs operations review. One request per booking; only when more than 24 hours remain before departure."}
           </p>
 
           {!canAdd ? (

@@ -336,8 +336,8 @@ export function CharterRequestForm({
     const hasStopStation = formData.itineraryStops.some((stop) => Boolean(stop.stationId));
     if (!hasStopStation) return "";
     return lang === "VN"
-      ? "Lộ trình khứ hồi: bến đón và bến trả trùng nhau là hợp lệ vì đã có điểm dừng."
-      : "Round-trip: same pickup and drop-off is valid because stops were added.";
+      ? "Lộ trình hợp lệ."
+      : "Valid route.";
   }, [formData.fromStationId, formData.toStationId, formData.itineraryStops, lang]);
 
   const validateCustomerStep = () => {
@@ -385,6 +385,9 @@ export function CharterRequestForm({
     }
     if (!Number.isInteger(adultCount) || !Number.isInteger(childCount) || adultCount < 0 || childCount < 0 || adultCount > 1000 || childCount > 1000 || totalPassengerCount <= 0 || totalPassengerCount > 1000) {
       return lang === "VN" ? "Người lớn và trẻ em từ 0 đến 1000, tổng hành khách phải lớn hơn 0 và không quá 1000." : "Adults and children must be 0-1000, and total passengers must be greater than 0 and no more than 1000.";
+    }
+    if (childCount > 0 && adultCount <= 0) {
+      return lang === "VN" ? "Cần có ít nhất 1 người lớn nếu có trẻ em đi cùng." : "At least 1 adult is required if children are included.";
     }
 
     const invalidStop = formData.itineraryStops.some((stop) => (
@@ -671,6 +674,16 @@ export function CharterRequestForm({
         icon: "warning",
         title: lang === "VN" ? "Số lượng hành khách chưa hợp lệ" : "Invalid passenger count",
         text: lang === "VN" ? "Người lớn và trẻ em từ 0 đến 1000, tổng hành khách phải lớn hơn 0 và không quá 1000." : "Adults and children must be 0-1000, and total passengers must be greater than 0 and no more than 1000.",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+
+    if (childCount > 0 && adultCount <= 0) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Số lượng hành khách chưa hợp lệ" : "Invalid passenger count",
+        text: lang === "VN" ? "Cần có ít nhất 1 người lớn nếu có trẻ em đi cùng." : "At least 1 adult is required if children are included.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -1070,11 +1083,39 @@ export function CharterRequestForm({
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Người lớn" : "Adults"}</label>
-                <input type="number" min="0" max="1000" value={formData.adultCount} onChange={(e) => handleFieldChange("adultCount", e.target.value)} required className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                <input
+                  type="number"
+                  min="0"
+                  max="1000"
+                  value={formData.adultCount}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    handleFieldChange("adultCount", value);
+                    // Không còn người lớn thì trẻ em reset về 0.
+                    if (!(Number(value) > 0) && Number(formData.childCount) > 0) {
+                      handleFieldChange("childCount", 0);
+                    }
+                  }}
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
+                />
               </div>
               <div className="space-y-2">
                 <label className={`text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`}>{lang === "VN" ? "Trẻ em (< 12 tuổi)" : "Children (< 12)"}</label>
-                <input type="number" min="0" max="1000" value={formData.childCount} onChange={(e) => handleFieldChange("childCount", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                <input
+                  type="number"
+                  min="0"
+                  max="1000"
+                  value={formData.childCount}
+                  onChange={(e) => handleFieldChange("childCount", e.target.value)}
+                  disabled={!(Number(formData.adultCount) > 0)}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                {!(Number(formData.adultCount) > 0) && (
+                  <p className="text-[11px] text-slate-400">
+                    {lang === "VN" ? "Trẻ em không thể đi một mình." : "Children can't travel alone."}
+                  </p>
+                )}
               </div>
             </div>
 

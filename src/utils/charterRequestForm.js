@@ -15,7 +15,7 @@ export const toCharterTimeMinutes = (value) => {
   return hours * 60 + minutes;
 };
 
-/** Giờ khởi hành hợp lệ: từ 07:30 đến 23:00 (bao gồm hai mốc). */
+/** Giờ khởi hành hợp lệ: từ 07:00 đến 23:00 (bao gồm hai mốc). */
 export const isCharterDayStartTimeValid = (startTime) => {
   const minutes = toCharterTimeMinutes(startTime);
   if (minutes == null) return false;

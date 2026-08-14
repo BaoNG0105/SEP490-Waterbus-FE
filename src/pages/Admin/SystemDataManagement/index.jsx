@@ -12,7 +12,6 @@ import {
   KNOWLEDGE_STATUS,
   labelKnowledgeStatus,
   removeKnowledgeEntry,
-  runKnowledgeSearchTest,
 } from "../../../services/knowledgeEntryService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
@@ -59,11 +58,6 @@ export function SystemDataManagement() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
-
-  const [testQuery, setTestQuery] = useState("");
-  const [testResult, setTestResult] = useState(null);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testError, setTestError] = useState("");
 
   const categoryOptions = useMemo(() => (
     metadata.categories || KNOWLEDGE_CATEGORY_ORDER
@@ -265,41 +259,17 @@ export function SystemDataManagement() {
     }
   };
 
-  const handleTestSearch = async (event) => {
-    event.preventDefault();
-    const query = testQuery.trim();
-    if (!query) {
-      setTestError(lang === "VN" ? "Nhập câu hỏi cần kiểm tra." : "Enter a query to test.");
-      return;
-    }
-
-    try {
-      setIsTesting(true);
-      setTestError("");
-      setTestResult(await runKnowledgeSearchTest({
-        query,
-        take: metadata.defaultSearchTake || 3,
-      }));
-    } catch (error) {
-      console.error("Failed to test knowledge search:", error);
-      setTestResult(null);
-      setTestError(error.response?.data?.message || (lang === "VN" ? "Không thể kiểm tra tìm kiếm." : "Could not run search test."));
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
       <div className="flex flex-col sm:flex-row bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-            {lang === "VN" ? "Quản lý kiến thức AI" : "AI Knowledge Management"}
+            {lang === "VN" ? "Quản lý dữ liệu hệ thống" : "Data Knowledge Management"}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
-              ? "Quản lý chính sách, quy định và hướng dẫn mà chatbot có thể tra cứu."
-              : "Manage policies, rules and guidance that the chatbot can retrieve."}
+              ? "Quản lý chính sách, quy định và hướng dẫn của hệ thống."
+              : "Manage system policies, regulations, and guidelines."}
           </p>
         </div>
         <button
@@ -331,8 +301,7 @@ export function SystemDataManagement() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-5">
-        <div className="space-y-5 min-w-0">
+      <div className="space-y-5 min-w-0">
           <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-center">
             <div className="w-full xl:flex-1 relative flex items-center">
               <span className="material-symbols-outlined absolute left-4 text-slate-400 text-lg pointer-events-none">search</span>
@@ -419,7 +388,7 @@ export function SystemDataManagement() {
                           </td>
                           <td className="py-4 px-4 text-center">
                             <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${statusStyle.badge}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`}></span>
+                              <span className={`w-1.5 h-1.5 rounded-full ${statusStyle}`}></span>
                               {labelKnowledgeStatus(entry.status, lang)}
                             </span>
                           </td>
@@ -515,113 +484,6 @@ export function SystemDataManagement() {
             </div>
           </div>
         </div>
-
-        <aside className="space-y-4 min-w-0">
-          <form onSubmit={handleTestSearch} className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
-            <div>
-              <h3 className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-                {lang === "VN" ? "Kiểm tra tìm kiếm chatbot" : "Test chatbot search"}
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-1">
-                {lang === "VN"
-                  ? "Nhập câu hỏi của khách để xem AI tìm thấy mục đã xuất bản nào."
-                  : "Enter a customer question to see which Published entries match."}
-              </p>
-            </div>
-
-            <textarea
-              value={testQuery}
-              onChange={(e) => setTestQuery(e.target.value)}
-              rows={3}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner resize-y"
-              placeholder={lang === "VN" ? "Ví dụ: Tôi muốn trả lại vé" : "e.g. What is your refund policy?"}
-            />
-
-            {testError && (
-              <p className="text-xs font-bold text-red-500">{testError}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={isTesting}
-              className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3 rounded-xl shadow-md disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-            >
-              {isTesting ? (
-                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <span className="material-symbols-outlined text-base">psychology</span>
-              )}
-              {lang === "VN" ? "Chạy kiểm tra" : "Run test"}
-            </button>
-          </form>
-
-          {testResult && (
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
-              <div>
-                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                  {lang === "VN" ? "Từ khóa phân tích" : "Tokens"}
-                </p>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {(testResult.tokens || []).length === 0 ? (
-                    <span className="text-xs text-slate-400">{lang === "VN" ? "Không có từ khóa phù hợp" : "No usable token"}</span>
-                  ) : (
-                    testResult.tokens.map((token) => (
-                      <span key={token} className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                        {token}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="text-xs font-bold text-slate-500 dark:text-slate-300">
-                {lang === "VN"
-                  ? `Tổng số kết quả: ${testResult.totalMatched || 0}`
-                  : `Total matched: ${testResult.totalMatched || 0}`}
-              </div>
-
-              <div className="space-y-3">
-                {(testResult.hits || []).length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-4 text-xs font-bold text-slate-400 text-center">
-                    {lang === "VN" ? "Không tìm thấy mục đã xuất bản nào." : "No Published entry matched."}
-                  </div>
-                ) : (
-                  testResult.hits.map((hit) => (
-                    <article key={hit.knowledgeEntryId} className="rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/30 p-4 space-y-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h4 className="text-sm font-black text-slate-800 dark:text-white line-clamp-2">
-                            {hit.title}
-                          </h4>
-                          <p className="text-[11px] font-bold text-slate-400">
-                            {getKnowledgeCategoryLabel(hit.category, lang)} · {lang === "VN" ? "thứ tự" : "order"} {hit.displayOrder}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded-xl bg-[#124757]/10 dark:bg-yellow-400/10 px-2 py-1 text-[10px] font-black text-[#124757] dark:text-yellow-400">
-                          {hit.score} {lang === "VN" ? "điểm" : "pts"}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
-                        <span className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 text-emerald-600 dark:text-emerald-400">
-                          {lang === "VN" ? "Từ khóa khớp" : "Matched tokens"}: {hit.matchedTokens}
-                        </span>
-                        {hit.hasStrongKeywordHit && (
-                          <span className="rounded-lg bg-amber-50 dark:bg-amber-500/10 px-2 py-1 text-amber-600 dark:text-amber-400">
-                            {lang === "VN" ? "Từ khóa khớp mạnh" : "Strong keyword"}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-5">
-                        {hit.contentSeenByAssistant}
-                      </p>
-                    </article>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-        </aside>
-      </div>
     </div>
   );
 }

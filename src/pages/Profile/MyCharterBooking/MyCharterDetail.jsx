@@ -2293,7 +2293,7 @@ export function CharterDetail() {
                     ))}
                   </div>
                   <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
-                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Ghi chú đặc biệt" : "Special requests"}</p>
+                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{lang === "VN" ? "Ghi chú" : "Special requests"}</p>
                     <p className="mt-1 wrap-break-words text-sm font-bold text-slate-700 dark:text-slate-200">{booking.specialRequests || (lang === "VN" ? "Không có" : "None")}</p>
                   </div>
                 </div>
