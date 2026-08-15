@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchStationDetail, modifyStation } from "../../../services/stationService";
-import { WaterwayMap } from "../../../components/WaterwayMap";
 import { notify } from "../../../utils/swalToast";
+import { StationFormFields } from "./StationFormFields";
 
 export function EditStation() {
     const { lang } = useApp();
@@ -198,9 +198,6 @@ export function EditStation() {
         }
     };
 
-    const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
-    const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
-
     if (isLoading) {
         return (
             <div className="flex justify-center items-center h-64 w-full">
@@ -239,204 +236,44 @@ export function EditStation() {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-                
-                {/* PANEL BÊN TRÁI: FORM ĐIỀN THÔNG TIN */}
-                <form onSubmit={handleFormSubmit} className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
-                        <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-                            {lang === "VN" ? "Thông tin nhà ga" : "Station Profile"}
-                        </h3>
-                        
-                        {/* TOGGLE PHÂN LOẠI TRẠM WATERBUS VS TRẠM NGOÀI */}
-                        <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-bold uppercase ${formData.isWaterbusStation ? "text-yellow-600 dark:text-yellow-400" : "text-slate-400"}`}>
-                                {lang === "VN" ? "Trạm Waterbus" : "Waterbus Pier"}
-                            </span>
-                            <button
-                                type="button"
-                                onClick={() => handleFieldChange("isWaterbusStation", !formData.isWaterbusStation)}
-                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-300 ease-in-out border-2 border-transparent focus:outline-none ${
-                                    formData.isWaterbusStation ? 'bg-yellow-400' : 'bg-slate-300 dark:bg-slate-600'
-                                }`}
-                            >
-                                <span className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-300 ease-in-out ${
-                                    formData.isWaterbusStation ? 'translate-x-4' : 'translate-x-0'
-                                }`} />
-                            </button>
-                        </div>
-                    </div>
+            <form onSubmit={handleFormSubmit} className="space-y-6">
+                <StationFormFields
+                    lang={lang}
+                    formData={formData}
+                    onChange={handleFieldChange}
+                    isCreate={false}
+                    imagePreviews={imagePreviews}
+                    maxImages={6}
+                    onImagesChange={handleImagesChange}
+                    onRemoveImage={handleRemoveImage}
+                />
+                <button type="submit" disabled={isSubmitting} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                    {isSubmitting && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
+                    {lang === "VN" ? "Lưu thông tin nhà ga" : "Apply Specifications"}
+                </button>
+            </form>
 
+            {/* NHÂN SỰ TRỰC THUỘC TẠI GA (chỉ xem — gắn bến ở Quản lý người dùng) */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+                <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">
+                    {lang === "VN" ? "Nhân sự trực thuộc tại ga" : "Station Personnel"}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Mã nhà ga" : "Station Code"}</label>
-                        <input
-                            type="text"
-                            value={formData.stationCode}
-                            readOnly
-                            disabled
-                            className={`${inputStyle} cursor-not-allowed opacity-70 bg-slate-100 dark:bg-slate-800`}
-                        />
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Tên nhà ga bến tàu (*)" : "Station Pier Name (*)"}</label>
-                        <input type="text" required value={formData.stationName} onChange={(e) => handleFieldChange("stationName", e.target.value)} className={inputStyle} />
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Địa chỉ bến ga" : "Street Address"}</label>
-                        <input type="text" value={formData.address} onChange={(e) => handleFieldChange("address", e.target.value)} className={inputStyle} />
-                    </div>
-
-                    {/* GIỜ HOẠT ĐỘNG CỦA BẾN */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Giờ mở cửa" : "Opening Time"}</label>
-                            <input type="time" value={formData.openingTime} onChange={(e) => handleFieldChange("openingTime", e.target.value)} className={inputStyle} />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Giờ đóng cửa" : "Closing Time"}</label>
-                            <input type="time" value={formData.closingTime} onChange={(e) => handleFieldChange("closingTime", e.target.value)} className={inputStyle} />
-                        </div>
-                    </div>
-
-                    {/* TOGGLE STATUS TRẠNG THÁI ACTIVE / INACTIVE */}
-                    <div className="flex flex-col gap-1.5 pt-1">
-                        <label className={labelStyle}>{lang === "VN" ? "Trạng thái hoạt động" : "Operational Status"}</label>
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                onClick={() => handleFieldChange("status", formData.status === "Active" ? "Inactive" : "Active")}
-                                className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-300 ease-in-out border-2 border-transparent focus:outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 ${
-                                    formData.status === "Active" ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
-                                }`}
-                            >
-                                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-300 ease-in-out ${
-                                    formData.status === "Active" ? 'translate-x-7' : 'translate-x-0'
-                                }`} />
-                            </button>
-                            <span className={`text-xs font-black uppercase tracking-wider ${formData.status === "Active" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500"}`}>
-                                {formData.status === "Active" ? (lang === "VN" ? "Hoạt động (Active)" : "Active") : (lang === "VN" ? "Tạm ngưng (Inactive)" : "Inactive")}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Mô tả chi tiết" : "General Description"}</label>
-                        <textarea rows={2} value={formData.description} onChange={(e) => handleFieldChange("description", e.target.value)} className={`${inputStyle} resize-none font-medium`} />
-                    </div>
-
-                    {/* CHECKBOX TIỆN ÍCH HẠ TẦNG */}
-                    <div className="pt-1 space-y-3">
-                        <label className={labelStyle}>{lang === "VN" ? "Danh mục dịch vụ bến bãi" : "Station Facilities Checklist"}</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <label className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.hasWaitingArea ? "bg-blue-50/40 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30" : "bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-700/60"}`}>
-                                <input type="checkbox" checked={formData.hasWaitingArea} onChange={(e) => handleFieldChange("hasWaitingArea", e.target.checked)} className="w-4 h-4 rounded text-[#124757] focus:ring-0 cursor-pointer" />
-                                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{lang === "VN" ? "Phòng chờ" : "Lounge"}</span>
-                            </label>
-                            <label className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.hasParking ? "bg-teal-50/40 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 text-teal-600" : "bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-700/60"}`}>
-                                <input type="checkbox" checked={formData.hasParking} onChange={(e) => handleFieldChange("hasParking", e.target.checked)} className="w-4 h-4 rounded text-[#124757] focus:ring-0 cursor-pointer" />
-                                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{lang === "VN" ? "Bãi đỗ xe" : "Parking"}</span>
-                            </label>
-                            <label className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.hasTicketCounter ? "bg-indigo-50/40 border-indigo-200 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" : "bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-700/60"}`}>
-                                <input type="checkbox" checked={formData.hasTicketCounter} onChange={(e) => handleFieldChange("hasTicketCounter", e.target.checked)} className="w-4 h-4 rounded text-[#124757] focus:ring-0 cursor-pointer" />
-                                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{lang === "VN" ? "Quầy bán vé" : "Counter"}</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    {/* THƯ VIỆN HÌNH ẢNH */}
-                    <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-                        <div className="flex justify-between items-center text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                            <span>{lang === "VN" ? "Thư viện ảnh nhà ga" : "Image Gallery"}</span>
-                            <span className={imagePreviews.length === 6 ? "text-rose-500" : ""}>{imagePreviews.length} / 6</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                            {imagePreviews.map((previewUrl, index) => (
-                                <div key={index} className="aspect-4/3 relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group">
-                                    <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRemoveImage(index)}
-                                        aria-label={lang === "VN" ? "Xóa ảnh" : "Remove image"}
-                                        className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-md bg-white/95 text-slate-600 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-rose-50 hover:text-rose-600 dark:bg-slate-900/90 dark:text-slate-300 dark:ring-slate-600"
-                                    >
-                                        <span className="material-symbols-outlined text-[14px]">close</span>
-                                    </button>
-                                </div>
-                            ))}
-                            {imagePreviews.length < 6 && (
-                                <label className="aspect-4/3 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center cursor-pointer transition-all">
-                                    <span className="material-symbols-outlined text-lg text-slate-400">add_photo_alternate</span>
-                                    <input type="file" multiple accept="image/jpeg, image/png, image/webp" onChange={handleImagesChange} className="hidden" />
-                                </label>
-                            )}
-                        </div>
-                    </div>
-
-                    <button type="submit" disabled={isSubmitting} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2 mt-4">
-                        {isSubmitting && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
-                        {lang === "VN" ? "Lưu thông tin nhà ga" : "Apply Specifications"}
-                    </button>
-                </form>
-
-                {/* PANEL PHẢI: BẢN ĐỒ VÀ CHI TIẾT NHÂN SỰ CHỈ ĐỂ XEM */}
-                <div className="lg:col-span-3 space-y-6 flex flex-col">             
-                    {/* BẢN ĐỒ SỐ GIS TOÀN KHUNG */}
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col h-145">
-                        <div className="mb-4 flex shrink-0 flex-wrap items-end justify-between gap-2">
-                            <div>
-                                <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
-                                    {lang === "VN" ? "Vị trí trên bản đồ" : "Map location"}
-                                </h3>
-                                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">
-                                    {lang === "VN" ? "Click bản đồ để đánh dấu vị trí bến." : "Click the map to mark the pier location."}
-                                </p>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">{lang === "VN" ? "Quản lý" : "Managers"}</span>
+                        {managers.length === 0 ? (
+                            <p className="text-xs text-slate-400 italic font-medium">{lang === "VN" ? "Chưa chỉ định quản lý bến." : "No manager assigned."}</p>
+                        ) : (
+                            <div className="flex flex-wrap gap-2">
+                                {managers.map((m, i) => {
+                                    const label = typeof m === "string" ? m : (m?.fullName || m?.name || m?.email || "--");
+                                    return (
+                                        <span key={m?.userId || m?.id || i} className="px-2.5 py-1 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 text-[10px] font-bold rounded-lg border border-amber-100 dark:border-amber-500/20">{label}</span>
+                                    );
+                                })}
                             </div>
-                            <p className="rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold tabular-nums text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                                {Number(formData.latitude).toFixed(5)}, {Number(formData.longitude).toFixed(5)}
-                            </p>
-                        </div>
-                        <div className="relative min-h-75 w-full flex-1">
-                            <div className="absolute inset-0">
-                                <WaterwayMap 
-                                    stationPoint={{
-                                        name: formData.stationName || "Vị trí bến trạm",
-                                        latitude: Number(formData.latitude) || 10.7719,
-                                        longitude: Number(formData.longitude) || 106.7067
-                                    }}
-                                    onLocationSelect={(lat, lng) => {
-                                        setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }));
-                                    }}
-                                />
-                            </div>
-                        </div>
+                        )}
                     </div>
-                    
-                    {/* DANH SÁCH ĐỘI NGŨ NHÂN SỰ TẠI GA (chỉ xem — gắn bến ở Quản lý người dùng) */}
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
-                        <h3 className="font-headline font-black text-xs text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">
-                            {lang === "VN" ? "Nhân sự trực thuộc tại ga" : "Station Personnel"}
-                        </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">{lang === "VN" ? "Quản lý" : "Managers"}</span>
-                                {managers.length === 0 ? (
-                                    <p className="text-xs text-slate-400 italic font-medium">{lang === "VN" ? "Chưa chỉ định quản lý bến." : "No manager assigned."}</p>
-                                ) : (
-                                    <div className="flex flex-wrap gap-2">
-                                        {managers.map((m, i) => {
-                                            const label = typeof m === "string" ? m : (m?.fullName || m?.name || m?.email || "--");
-                                            return (
-                                                <span key={m?.userId || m?.id || i} className="px-2.5 py-1 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 text-[10px] font-bold rounded-lg border border-amber-100 dark:border-amber-500/20">{label}</span>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
             </div>
         </div>

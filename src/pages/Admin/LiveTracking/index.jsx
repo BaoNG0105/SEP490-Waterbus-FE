@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import { Ship } from "lucide-react";
 import { useApp } from "../../../context/AppContext";
 import { WaterwayMap } from "../../../components/WaterwayMap";
+import { FormSelect } from "../../../components/FormSelect";
 import { useLiveBoatTracking } from "../../../hooks/useLiveBoatTracking";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
 import { useOperationsSchedule } from "../../../hooks/useOperationsSchedule";
@@ -1923,10 +1924,12 @@ export function LiveTracking({ viewTabs = null } = {}) {
             className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-800"
           >
             <h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-              {lang === "VN" ? "Báo sự cố (test Manager)" : "Report incident (Manager test)"}
+              {lang === "VN" ? "Báo sự cố" : "Report incident"}
             </h2>
             <label className="block space-y-1.5">
-              <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">Boat</span>
+              <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
+                {lang === "VN" ? "Tàu" : "Boat"}
+              </span>
               <select
                 required
                 value={reportForm.boatId}
@@ -1955,41 +1958,41 @@ export function LiveTracking({ viewTabs = null } = {}) {
               <p className="text-[11px] font-medium text-slate-500">
                 {reportForm.tripCode || reportForm.tripId
                   ? (lang === "VN"
-                    ? `Gắn chuyến: ${reportForm.tripCode || reportForm.tripId}`
-                    : `Link trip: ${reportForm.tripCode || reportForm.tripId}`)
+                    ? `Báo cáo chuyến: ${reportForm.tripCode || reportForm.tripId}`
+                    : `Report trip: ${reportForm.tripCode || reportForm.tripId}`)
                   : (lang === "VN"
-                    ? "Tàu chưa có chuyến hôm nay (Scheduled/Boarding/InProgress) — sẽ báo không gắn trip."
-                    : "No trip today (Scheduled/Boarding/InProgress) — will report without trip.")}
+                    ? "Tàu chưa có chuyến đang chạy hôm nay."
+                    : "No active trip today.")}
               </p>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1.5">
-                <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">Type</span>
-                <select
+                <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Loại sự cố" : "Type"}
+                </span>
+                <FormSelect
                   value={reportForm.incidentType}
-                  onChange={(e) => setReportForm((prev) => ({ ...prev, incidentType: e.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
-                >
-                  {INCIDENT_TYPES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {lang === "VN" ? item.labelVn : item.labelEn}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setReportForm((prev) => ({ ...prev, incidentType: value }))}
+                  options={INCIDENT_TYPES.map((item) => ({
+                    value: item.value,
+                    label: lang === "VN" ? item.labelVn : item.labelEn,
+                  }))}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold dark:border-slate-600 dark:bg-slate-900"
+                />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">Severity</span>
-                <select
+                <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Mức độ" : "Severity"}
+                </span>
+                <FormSelect
                   value={reportForm.severity}
-                  onChange={(e) => setReportForm((prev) => ({ ...prev, severity: e.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
-                >
-                  {INCIDENT_SEVERITIES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {lang === "VN" ? item.labelVn : item.labelEn}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setReportForm((prev) => ({ ...prev, severity: value }))}
+                  options={INCIDENT_SEVERITIES.map((item) => ({
+                    value: item.value,
+                    label: lang === "VN" ? item.labelVn : item.labelEn,
+                  }))}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold dark:border-slate-600 dark:bg-slate-900"
+                />
               </label>
             </div>
             <label className="block space-y-1.5">
@@ -2000,7 +2003,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
                 rows={2}
                 value={reportForm.description}
                 onChange={(e) => setReportForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder={lang === "VN" ? "Test báo sự cố (Manager)" : "Manager test incident"}
+                placeholder={lang === "VN" ? "Nội dung sự cố" : "Incident details"}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
               />
             </label>

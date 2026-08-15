@@ -11,8 +11,8 @@ export const getKnowledgeEntries = (params = {}) =>
     .then((response) => response.data);
 
 /**
- * GET /api/knowledge-entries/admin — Danh sách đầy đủ (kể cả Draft), không phân trang.
- * params: status? (Draft | Published), category?
+ * GET /api/knowledge-entries/admin — Danh sách đầy đủ (kể cả Draft/Private), không phân trang.
+ * params: status? (Draft | Private | Published), category?
  * Quyền truy cập: Admin.
  */
 export const getKnowledgeEntriesAdmin = (params = {}) =>

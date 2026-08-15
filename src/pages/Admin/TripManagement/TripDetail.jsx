@@ -1401,8 +1401,8 @@ export function TripDetail() {
         icon: "warning",
         title: lang === "VN" ? "Không thể hủy" : "Cannot cancel",
         text: lang === "VN"
-          ? "Tàu đã rời bến nên không thể hủy no-show."
-          : "Boat already left the berth — cannot cancel as no-show.",
+          ? "Tàu đã rời bến nên không thể hủy."
+          : "Boat already left the berth — cannot cancel trip.",
       });
       return;
     }
@@ -1410,14 +1410,14 @@ export function TripDetail() {
     const result = await notify({
       dialog: true,
       icon: "warning",
-      title: lang === "VN" ? "Hủy chuyến no-show?" : "Cancel no-show trip?",
+      title: lang === "VN" ? "Hủy chuyến?" : "Cancel trip?",
       html: lang === "VN"
-        ? "Chỉ khi Sightseeing chưa rời bến và chưa có khách check-in.<br/>BE hủy chuyến + vé Active — <b>không đổi booking/payment, không hoàn tiền tự động</b>."
-        : "Only when Sightseeing has not left berth and has no check-ins.<br/>BE cancels trip + Active tickets — <b>booking/payment unchanged, no auto-refund</b>.",
+        ? "Chỉ khi WaterSightseeing chưa rời bến và chưa có khách check-in."
+        : "Only when WaterSightseeing has not left berth and has no check-ins.",
       input: "text",
       inputValue: lang === "VN"
-        ? "Hủy chuyến sightseeing do không có khách."
-        : "Cancel sightseeing trip due to no passengers.",
+        ? "Hủy chuyến WaterSightseeing do không có khách."
+        : "Cancel WaterSightseeing trip due to no passengers.",
       inputPlaceholder: lang === "VN" ? "Ghi chú (tuỳ chọn)" : "Note (optional)",
       showCancelButton: true,
       confirmButtonText: lang === "VN" ? "Hủy chuyến" : "Cancel trip",
@@ -1431,8 +1431,8 @@ export function TripDetail() {
       await cancelTripNoShow(tripId, {
         statusNote: String(result.value || "").trim()
           || (lang === "VN"
-            ? "Hủy chuyến sightseeing do không có khách."
-            : "Cancel sightseeing trip due to no passengers."),
+            ? "Hủy chuyến WaterSightseeing do không có khách."
+            : "Cancel WaterSightseeing trip due to no passengers."),
       });
       const detail = await fetchTripDetail(tripId);
       setTrip(detail);
@@ -1450,7 +1450,7 @@ export function TripDetail() {
           title: lang === "VN" ? "Không có quyền" : "No permission",
           text: getApiErrorMessage(
             error,
-            lang === "VN" ? "Chỉ Admin được hủy chuyến no-show." : "Only Admin can cancel a no-show trip.",
+            lang === "VN" ? "Chỉ Admin được hủy chuyến." : "Only Admin can cancel a trip.",
           ),
         });
         return;
@@ -1460,7 +1460,7 @@ export function TripDetail() {
         title: lang === "VN" ? "Không hủy được chuyến" : "Unable to cancel trip",
         text: getApiErrorMessage(
           error,
-          lang === "VN" ? "Tàu đã rời bến nên không thể hủy no-show." : "Boat already left — cannot cancel no-show.",
+          lang === "VN" ? "Tàu đã rời bến nên không thể hủy." : "Boat already left — cannot cancel.",
         ),
       });
     } finally {
@@ -1629,10 +1629,7 @@ export function TripDetail() {
               disabled={isCancelNoShowBusy || isLoading}
               className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-rose-800 transition hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/40 dark:bg-rose-500/15 dark:text-rose-200"
             >
-              <span className={`material-symbols-outlined text-[16px] ${isCancelNoShowBusy ? "animate-spin" : ""}`}>
-                {isCancelNoShowBusy ? "progress_activity" : "event_busy"}
-              </span>
-              {lang === "VN" ? "Hủy no-show" : "Cancel no-show"}
+              {lang === "VN" ? "Hủy chuyến" : "Cancel trip"}
             </button>
           ) : null}
         </div>

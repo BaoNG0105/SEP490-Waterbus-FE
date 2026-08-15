@@ -12,8 +12,7 @@ import {
 } from "../../../services/blogService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
-import { RichTextEditor } from "../../../components/RichTextEditor";
-import { BlogCoverField } from "../../../components/BlogCoverField";
+import { BlogFormFields } from "./BlogFormFields";
 
 export function EditBlog() {
     const { lang } = useApp();
@@ -164,8 +163,6 @@ export function EditBlog() {
     };
 
     const coverPreview = newCoverPreview || existingImageUrls[0] || "";
-    const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
-    const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
 
     if (!canManage) {
         return <Navigate to="/admin" replace />;
@@ -180,7 +177,7 @@ export function EditBlog() {
     }
 
     return (
-        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-5xl mx-auto animate-fade-in">
+        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-6xl mx-auto animate-fade-in">
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
                 <button
                     type="button"
@@ -208,90 +205,17 @@ export function EditBlog() {
             )}
 
             <form onSubmit={handleFormSubmit} className="space-y-6">
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Thông tin cơ bản" : "Basic Information"}
-                    </h3>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Tiêu đề (*)" : "Title (*)"}</label>
-                        <input
-                            type="text"
-                            required
-                            value={formData.title}
-                            onChange={(e) => handleFieldChange("title", e.target.value)}
-                            className={inputStyle}
-                        />
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Tóm tắt" : "Summary"}</label>
-                        <textarea
-                            rows={5}
-                            value={formData.summary}
-                            onChange={(e) => handleFieldChange("summary", e.target.value)}
-                            className={`${inputStyle} min-h-28 resize-y`}
-                        />
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Chuyên mục" : "Category"}</label>
-                        <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                            {[
-                                { value: BLOG_CATEGORY.NEWS, vn: "Tin tức", en: "News" },
-                                { value: BLOG_CATEGORY.EVENT, vn: "Sự kiện", en: "Event" },
-                            ].map((option) => {
-                                const selected = formData.category === option.value;
-                                return (
-                                    <button
-                                        key={option.value}
-                                        type="button"
-                                        onClick={() => handleFieldChange("category", option.value)}
-                                        className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${selected
-                                                ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                                                : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                                            }`}
-                                    >
-                                        {lang === "VN" ? option.vn : option.en}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Ảnh bìa" : "Cover"}
-                    </h3>
-
-                    <BlogCoverField
-                        lang={lang}
-                        previewUrl={coverPreview}
-                        hasExisting={existingImageUrls.length > 0}
-                        hasNewFile={imageFiles.length > 0}
-                        fileName={imageFiles[0]?.name || ""}
-                        altText={formData.imageAltText}
-                        onAltChange={(value) => handleFieldChange("imageAltText", value)}
-                        onFileChange={handleImageFilesChange}
-                        onClearNewFile={clearImageFiles}
-                        disabled={isSubmitting}
-                    />
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Nội dung bài viết" : "Post Content"}
-                    </h3>
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Nội dung bài viết" : "Article content"}</label>
-                        <RichTextEditor
-                            value={formData.content}
-                            onChange={(html) => handleFieldChange("content", html)}
-                            placeholder={lang === "VN" ? "Nhập nội dung bài viết..." : "Enter article content..."}
-                        />
-                    </div>
-                </div>
+                <BlogFormFields
+                    lang={lang}
+                    formData={formData}
+                    onChange={handleFieldChange}
+                    imageFiles={imageFiles}
+                    coverPreview={coverPreview}
+                    existingImageUrls={existingImageUrls}
+                    onFileChange={handleImageFilesChange}
+                    onClearNewFile={clearImageFiles}
+                    disabled={isSubmitting}
+                />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button

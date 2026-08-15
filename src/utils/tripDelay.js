@@ -247,7 +247,7 @@ export const pickStationNameForStopOrder = (stops = [], stopOrder) => {
  * Bến: stationName → resolve từ delayStartStopOrder / startStopOrder.
  * Phút: BE delayMinutes, fallback đếm từ delayStartedAt.
  */
-export const formatActiveDelayLine = (delayInfo, { lang = "VN", stops = [] } = {}) => {
+export const formatActiveDelayLine = (delayInfo, { lang = "VN", stops = [], compact = false } = {}) => {
   if (!isDelayActive(delayInfo)) return "";
   const info = pickDelayInfo(delayInfo) || delayInfo;
   const stopOrder = info?.delayStartStopOrder
@@ -262,6 +262,17 @@ export const formatActiveDelayLine = (delayInfo, { lang = "VN", stops = [] } = {
   ).trim();
   const reason = String(info?.reason || info?.delayReason || "").trim();
   const mins = pickDelayMinutes(delayInfo);
+
+  // Bản gọn cho list/bảng: "Delay • Bến X (12p)" thay vì câu đầy đủ.
+  if (compact) {
+    if (lang === "VN") {
+      const where = station || reason || "Đang dừng";
+      return mins > 0 ? `Delay • ${where} (${mins}p)` : `Delay • ${where}`;
+    }
+    const where = station || reason || "Stopped";
+    return mins > 0 ? `Delay • ${where} (${mins}m)` : `Delay • ${where}`;
+  }
+
   if (lang === "VN") {
     const where = station
       ? `Tàu đang dừng tại bến ${station}`

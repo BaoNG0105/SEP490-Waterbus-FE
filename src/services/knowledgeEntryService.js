@@ -11,12 +11,36 @@ import {
 
 export const KNOWLEDGE_STATUS = {
   DRAFT: "Draft",
+  PRIVATE: "Private",
   PUBLISHED: "Published",
 };
 
+// Draft — không ai dùng. Private — chỉ trợ lý AI đọc, không hiện trên web.
+// Published — hiện trên web và trợ lý AI đọc.
+export const KNOWLEDGE_STATUS_ORDER = [
+  KNOWLEDGE_STATUS.DRAFT,
+  KNOWLEDGE_STATUS.PRIVATE,
+  KNOWLEDGE_STATUS.PUBLISHED,
+];
+
 export const labelKnowledgeStatus = (status, lang = "VN") => {
   if (status === KNOWLEDGE_STATUS.PUBLISHED) return lang === "VN" ? "Đã xuất bản" : "Published";
+  if (status === KNOWLEDGE_STATUS.PRIVATE) return lang === "VN" ? "Nội bộ" : "Private";
   return lang === "VN" ? "Bản nháp" : "Draft";
+};
+
+export const describeKnowledgeStatus = (status, lang = "VN") => {
+  if (status === KNOWLEDGE_STATUS.PUBLISHED) {
+    return lang === "VN"
+      ? "Hiện trên web và trợ lý AI đọc."
+      : "Shown on the website and read by the assistant.";
+  }
+  if (status === KNOWLEDGE_STATUS.PRIVATE) {
+    return lang === "VN"
+      ? "Chỉ trợ lý AI đọc, không hiện trên web."
+      : "Read by the assistant only — not shown on the website.";
+  }
+  return lang === "VN" ? "Bản nháp — không ai dùng." : "Draft — not used anywhere.";
 };
 
 export const KNOWLEDGE_CONTENT_AI_LIMIT = 4000;
@@ -114,7 +138,7 @@ export const fetchKnowledgeEntryMetadata = async () => {
       : KNOWLEDGE_CATEGORY_ORDER,
     statuses: Array.isArray(data?.statuses) && data.statuses.length
       ? data.statuses
-      : [KNOWLEDGE_STATUS.DRAFT, KNOWLEDGE_STATUS.PUBLISHED],
+      : KNOWLEDGE_STATUS_ORDER,
     maxKeywords: Number(data?.maxKeywords) || 30,
     maxKeywordLength: Number(data?.maxKeywordLength) || 100,
     maxContentChars: Number(data?.maxContentChars) || KNOWLEDGE_CONTENT_AI_LIMIT,

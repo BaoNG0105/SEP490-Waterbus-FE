@@ -503,6 +503,29 @@ const getStationNameFlagIcon = (name) => {
   return icon;
 };
 
+/** Chấm tròn landmark thuyết minh — xanh đậm khi active, xám khi tạm ngưng. */
+const landmarkIconCache = new Map();
+
+const getLandmarkPinIcon = (active) => {
+  const cacheKey = `landmark:${active ? 1 : 0}`;
+  const cached = landmarkIconCache.get(cacheKey);
+  if (cached) return cached;
+
+  const color = active ? "#124757" : "#94A3B8";
+  const html = `
+    <div style="width:18px;height:18px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,0.4);"></div>
+  `;
+  const icon = L.divIcon({
+    className: "live-boat-marker",
+    html,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+  });
+  landmarkIconCache.set(cacheKey, icon);
+  return icon;
+};
+
 export const WaterwayMap = ({
   coordinates = [],
   /** Đoạn đã đi (highlight vàng) — dùng cho trip GPS. */
@@ -512,6 +535,11 @@ export const WaterwayMap = ({
   stationPoint = null,
   stationsList = [],
   boatMarkers = [],
+  /** Chấm landmark thuyết minh: [{ id, name, latitude, longitude, isActive, radius, description }] */
+  landmarkMarkers = [],
+  onLandmarkEdit,
+  /** Hiện tên landmark cố định trên map (không cần bấm vào mới thấy). */
+  showLandmarkLabels = true,
   selectedBoatId = "",
   focusView = null,
   onLocationSelect,
@@ -561,6 +589,9 @@ export const WaterwayMap = ({
   const visibleBoats = (boatMarkers || []).filter((boat) =>
     isValidLatLng(boat?.latitude, boat?.longitude),
   );
+  const visibleLandmarks = (landmarkMarkers || []).filter((landmark) =>
+    isValidLatLng(landmark?.latitude, landmark?.longitude),
+  );
   const visibleRouteOverlays = (routeOverlays || [])
     .map((route) => {
       const positions = (route?.positions || [])
@@ -583,11 +614,11 @@ export const WaterwayMap = ({
   const fitMarkerKey = `${
     fitBoatMarkers
       ? `b${visibleBoats.length}-s${visibleStations.length}-r${polylinePositions.length > 0 ? 1 : 0}`
-      : `s${visibleStations.length}-r${polylinePositions.length > 0 ? 1 : 0}`
+      : `s${visibleStations.length}-l${visibleLandmarks.length}-r${polylinePositions.length > 0 ? 1 : 0}`
   }-f${preferFocus && focusPoint ? 1 : 0}`;
   const fitMarkers = fitBoatMarkers
     ? (visibleBoats.length > 0 ? visibleBoats : visibleStations)
-    : visibleStations;
+    : (visibleLandmarks.length > 0 ? visibleLandmarks : visibleStations);
 
   return (
     <div
@@ -756,6 +787,62 @@ export const WaterwayMap = ({
             );
           })
         )}
+
+        {visibleLandmarks.map((landmark) => {
+          const active = landmark.isActive !== false;
+          return (
+            <Marker
+              key={`landmark-${landmark.id}`}
+              position={[landmark.latitude, landmark.longitude]}
+              icon={getLandmarkPinIcon(active)}
+            >
+              {showLandmarkLabels ? (
+                <Tooltip
+                  permanent
+                  direction="top"
+                  offset={[0, -12]}
+                  opacity={1}
+                  className="station-name-tooltip"
+                >
+                  {landmark.name || "—"}
+                </Tooltip>
+              ) : null}
+              <Popup>
+                <div className="min-w-46 max-w-60 space-y-1.5 p-1 font-body text-center">
+                  <p className="m-0 text-xs font-black uppercase leading-tight text-[#124757]">
+                    {landmark.name || "—"}
+                  </p>
+                  {landmark.description ? (
+                    <p className="m-0 line-clamp-2 text-[10px] text-slate-400">
+                      {landmark.description}
+                    </p>
+                  ) : null}
+                  <p className="m-0 text-[10px] text-slate-400">
+                    {lang === "VN" ? "Bán kính kích hoạt" : "Trigger radius"}: {landmark.radius ?? "—"}m
+                  </p>
+                  <span
+                    className={`inline-block text-[10px] font-black uppercase tracking-wide ${
+                      active ? "text-emerald-600" : "text-rose-500"
+                    }`}
+                  >
+                    {active
+                      ? (lang === "VN" ? "Hoạt động" : "Active")
+                      : (lang === "VN" ? "Ngưng hoạt động" : "Inactive")}
+                  </span>
+                  {onLandmarkEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => onLandmarkEdit(landmark)}
+                      className="mt-1 block w-full cursor-pointer rounded-lg bg-[#124757] px-3 py-1.5 text-[10px] font-bold uppercase text-white shadow-sm transition-all hover:brightness-110"
+                    >
+                      {lang === "VN" ? "Sửa landmark" : "Edit landmark"}
+                    </button>
+                  ) : null}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
 
         {visibleBoats.map((boat) => {
           const selected = String(selectedBoatId) === String(boat.boatId);

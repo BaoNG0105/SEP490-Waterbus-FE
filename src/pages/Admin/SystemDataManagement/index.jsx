@@ -5,11 +5,13 @@ import { FormSelect } from "../../../components/FormSelect";
 import { useApp } from "../../../context/AppContext";
 import {
   changeKnowledgeEntryStatus,
+  describeKnowledgeStatus,
   fetchKnowledgeEntriesAdmin,
   fetchKnowledgeEntryMetadata,
   getKnowledgeCategoryLabel,
   KNOWLEDGE_CATEGORY_ORDER,
   KNOWLEDGE_STATUS,
+  KNOWLEDGE_STATUS_ORDER,
   labelKnowledgeStatus,
   removeKnowledgeEntry,
 } from "../../../services/knowledgeEntryService";
@@ -18,11 +20,12 @@ import { notify } from "../../../utils/swalToast";
 
 const STATUS_STYLE = {
   [KNOWLEDGE_STATUS.DRAFT]: {
-    dot: "bg-slate-400",
     badge: "text-slate-500 dark:text-slate-400",
   },
+  [KNOWLEDGE_STATUS.PRIVATE]: {
+    badge: "text-indigo-600 dark:text-indigo-400",
+  },
   [KNOWLEDGE_STATUS.PUBLISHED]: {
-    dot: "bg-emerald-500",
     badge: "text-emerald-600 dark:text-emerald-400",
   },
 };
@@ -31,7 +34,7 @@ const PAGE_SIZE = 8;
 
 const emptyMetadata = {
   categories: KNOWLEDGE_CATEGORY_ORDER,
-  statuses: [KNOWLEDGE_STATUS.DRAFT, KNOWLEDGE_STATUS.PUBLISHED],
+  statuses: KNOWLEDGE_STATUS_ORDER,
   maxKeywords: 30,
   maxKeywordLength: 100,
   maxContentChars: 4000,
@@ -49,7 +52,7 @@ export function SystemDataManagement() {
   const [metadata, setMetadata] = useState(emptyMetadata);
   const [entries, setEntries] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [stats, setStats] = useState({ total: 0, published: 0, draft: 0 });
+  const [stats, setStats] = useState({ total: 0, published: 0, private: 0, draft: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [processingId, setProcessingId] = useState(null);
@@ -111,10 +114,11 @@ export function SystemDataManagement() {
           category: categoryFilter === "All" ? undefined : categoryFilter,
         };
 
-        const [pageResult, allResult, publishedResult, draftResult] = await Promise.all([
+        const [pageResult, allResult, publishedResult, privateResult, draftResult] = await Promise.all([
           fetchKnowledgeEntriesAdmin(params),
           fetchKnowledgeEntriesAdmin({ page: 1, pageSize: 1 }),
           fetchKnowledgeEntriesAdmin({ status: KNOWLEDGE_STATUS.PUBLISHED, page: 1, pageSize: 1 }),
+          fetchKnowledgeEntriesAdmin({ status: KNOWLEDGE_STATUS.PRIVATE, page: 1, pageSize: 1 }),
           fetchKnowledgeEntriesAdmin({ status: KNOWLEDGE_STATUS.DRAFT, page: 1, pageSize: 1 }),
         ]);
 
@@ -123,6 +127,7 @@ export function SystemDataManagement() {
         setStats({
           total: allResult.totalCount || 0,
           published: publishedResult.totalCount || 0,
+          private: privateResult.totalCount || 0,
           draft: draftResult.totalCount || 0,
         });
       } catch (error) {
@@ -164,46 +169,43 @@ export function SystemDataManagement() {
     return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
   };
 
-  const handleToggleStatus = async (entry) => {
-    const nextStatus = entry.status === KNOWLEDGE_STATUS.PUBLISHED
-      ? KNOWLEDGE_STATUS.DRAFT
-      : KNOWLEDGE_STATUS.PUBLISHED;
+  const statKeyForStatus = (status) => {
+    if (status === KNOWLEDGE_STATUS.PUBLISHED) return "published";
+    if (status === KNOWLEDGE_STATUS.PRIVATE) return "private";
+    return "draft";
+  };
+
+  const handleChangeStatus = async (entry, nextStatus) => {
+    if (!nextStatus || nextStatus === entry.status) return;
 
     const confirmResult = await notify({
-      title: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
-        ? (lang === "VN" ? "Xuất bản mục kiến thức?" : "Publish this entry?")
-        : (lang === "VN" ? "Chuyển về bản nháp?" : "Move to draft?"),
-      html: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
-        ? (lang === "VN"
-          ? `Mục <b>${entry.title}</b> sẽ được chatbot sử dụng ngay.`
-          : `Entry <b>${entry.title}</b> will be available to the chatbot immediately.`)
-        : (lang === "VN"
-          ? `Mục <b>${entry.title}</b> sẽ không còn được chatbot sử dụng.`
-          : `Entry <b>${entry.title}</b> will no longer be used by the chatbot.`),
+      title: lang === "VN"
+        ? `Đổi trạng thái sang "${labelKnowledgeStatus(nextStatus, lang)}"?`
+        : `Change status to "${labelKnowledgeStatus(nextStatus, lang)}"?`,
+      html: lang === "VN"
+        ? `Mục <b>${entry.title}</b>: ${describeKnowledgeStatus(nextStatus, lang)}`
+        : `Entry <b>${entry.title}</b>: ${describeKnowledgeStatus(nextStatus, lang)}`,
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
-        ? (lang === "VN" ? "Xuất bản" : "Publish")
-        : (lang === "VN" ? "Chuyển về nháp" : "Set draft"),
+      confirmButtonText: lang === "VN" ? "Xác nhận" : "Confirm",
       cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
     });
     if (!confirmResult.isConfirmed) return;
 
+    const prevStatus = entry.status;
     try {
       setProcessingId(entry.knowledgeEntryId);
       await changeKnowledgeEntryStatus(entry.knowledgeEntryId, nextStatus);
       await reloadCurrentPage();
       setStats((prev) => ({
         ...prev,
-        published: prev.published + (nextStatus === KNOWLEDGE_STATUS.PUBLISHED ? 1 : -1),
-        draft: prev.draft + (nextStatus === KNOWLEDGE_STATUS.DRAFT ? 1 : -1),
+        [statKeyForStatus(prevStatus)]: Math.max(0, prev[statKeyForStatus(prevStatus)] - 1),
+        [statKeyForStatus(nextStatus)]: prev[statKeyForStatus(nextStatus)] + 1,
       }));
       notify({
         toast: true,
         icon: "success",
-        title: nextStatus === KNOWLEDGE_STATUS.PUBLISHED
-          ? (lang === "VN" ? "Đã xuất bản" : "Published")
-          : (lang === "VN" ? "Đã chuyển về bản nháp" : "Moved to draft"),
+        title: lang === "VN" ? "Đã cập nhật trạng thái" : "Status updated",
         showConfirmButton: false,
         timer: 1600,
       });
@@ -237,9 +239,9 @@ export function SystemDataManagement() {
       await removeKnowledgeEntry(entry.knowledgeEntryId);
       await reloadCurrentPage();
       setStats((prev) => ({
+        ...prev,
         total: Math.max(0, prev.total - 1),
-        published: entry.status === KNOWLEDGE_STATUS.PUBLISHED ? Math.max(0, prev.published - 1) : prev.published,
-        draft: entry.status === KNOWLEDGE_STATUS.DRAFT ? Math.max(0, prev.draft - 1) : prev.draft,
+        [statKeyForStatus(entry.status)]: Math.max(0, prev[statKeyForStatus(entry.status)] - 1),
       }));
       notify({
         toast: true,
@@ -288,10 +290,11 @@ export function SystemDataManagement() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: lang === "VN" ? "Tổng số" : "Total", value: stats.total, tone: "text-[#124757] dark:text-white" },
           { label: lang === "VN" ? "Đã xuất bản" : "Published", value: stats.published, tone: "text-emerald-600 dark:text-emerald-400" },
+          { label: lang === "VN" ? "Nội bộ" : "Private", value: stats.private, tone: "text-indigo-600 dark:text-indigo-400" },
           { label: lang === "VN" ? "Bản nháp" : "Draft", value: stats.draft, tone: "text-amber-600 dark:text-amber-400" },
         ].map((card) => (
           <div key={card.label} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
@@ -365,7 +368,6 @@ export function SystemDataManagement() {
                   ) : (
                     entries.map((entry) => {
                       const statusStyle = STATUS_STYLE[entry.status] || STATUS_STYLE[KNOWLEDGE_STATUS.DRAFT];
-                      const isPublished = entry.status === KNOWLEDGE_STATUS.PUBLISHED;
                       return (
                         <tr key={entry.knowledgeEntryId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
                           <td className="py-4 px-6 max-w-xs">
@@ -387,10 +389,18 @@ export function SystemDataManagement() {
                             <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{Number(entry.displayOrder) || 0}</span>
                           </td>
                           <td className="py-4 px-4 text-center">
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide ${statusStyle.badge}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${statusStyle}`}></span>
-                              {labelKnowledgeStatus(entry.status, lang)}
-                            </span>
+                            <FormSelect
+                              value={entry.status}
+                              onChange={(nextStatus) => handleChangeStatus(entry, nextStatus)}
+                              disabled={processingId === entry.knowledgeEntryId}
+                              fullWidth={false}
+                              menuAlign="right"
+                              options={KNOWLEDGE_STATUS_ORDER.map((status) => ({
+                                value: status,
+                                label: labelKnowledgeStatus(status, lang),
+                              }))}
+                              className={`mx-auto inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wide px-2.5 py-1.5 rounded-lg border border-transparent hover:border-slate-200 dark:hover:border-slate-700 disabled:opacity-50 ${statusStyle.badge}`}
+                            />
                           </td>
                           <td className="py-4 px-6 text-center">
                             <div className="flex items-center justify-center gap-2">
@@ -400,21 +410,6 @@ export function SystemDataManagement() {
                                 title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
                               >
                                 <span className="material-symbols-outlined text-[18px]">edit</span>
-                              </button>
-                              <button
-                                onClick={() => handleToggleStatus(entry)}
-                                disabled={processingId === entry.knowledgeEntryId}
-                                className={`w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center transition-all shadow-sm disabled:opacity-50 ${isPublished
-                                  ? "text-amber-500 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-500/20 dark:hover:text-amber-400"
-                                  : "text-emerald-500 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400"
-                                }`}
-                                title={isPublished ? (lang === "VN" ? "Chuyển về nháp" : "Set draft") : (lang === "VN" ? "Xuất bản" : "Publish")}
-                              >
-                                {processingId === entry.knowledgeEntryId ? (
-                                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                  <span className="material-symbols-outlined text-[18px]">{isPublished ? "unpublished" : "publish"}</span>
-                                )}
                               </button>
                               <button
                                 onClick={() => handleDelete(entry)}

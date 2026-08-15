@@ -7,12 +7,11 @@ import { fetchAllStations } from "../../../services/stationService";
 import { canManageUserRow, canResetManagedUserPassword, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
-import { AppDateInput } from "../../../components/AppDateInput";
-import { NationalitySelect } from "../../../components/NationalitySelect";
 import { canAssignStations } from "../../../components/StationAssignField";
 import { UserAvatar } from "../../../components/UserAvatar";
 import { promptResetManagedPassword } from "../../../utils/managedPasswordReset";
 import { notify } from "../../../utils/swalToast";
+import { StaffFormFields } from "./StaffFormFields";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
 
@@ -294,16 +293,10 @@ export function EditStaff() {
         }
     };
 
-    const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
     const selectStyle = `${inputStyle} cursor-pointer`;
     const readOnlyStyle = "w-full bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-400 dark:text-slate-500 shadow-inner opacity-70 cursor-not-allowed";
 
-    const genderOptions = [
-        { value: "Male", label: lang === "VN" ? "Nam" : "Male" },
-        { value: "Female", label: lang === "VN" ? "Nữ" : "Female" },
-        { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
-    ];
     const staffTypeLabel = formData.staffType === "OnBoard"
         ? (lang === "VN" ? "Trên tàu" : "Onboard")
         : (lang === "VN" ? "Bến tàu" : "Station");
@@ -319,7 +312,7 @@ export function EditStaff() {
     if (!userInfo) return null;
 
     return (
-        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-3xl mx-auto">
+        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-5xl mx-auto">
 
             {/* KHỐI TIÊU ĐỀ HEADER */}
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
@@ -367,100 +360,38 @@ export function EditStaff() {
             )}
 
             <form onSubmit={handleFormSubmit} className="space-y-6">
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Thông tin cá nhân" : "Personal Information"}
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Họ và Tên (*)" : "Full Name (*)"}</label>
-                            <input type="text" required value={formData.fullName} onChange={(e) => handleInputChange("fullName", e.target.value)} className={inputStyle} />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Ngày sinh" : "Date of Birth"}</label>
-                            <AppDateInput value={formData.dateOfBirth} onChange={(e) => handleInputChange("dateOfBirth", e.target.value)} className={inputStyle} />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Giới tính" : "Gender"}</label>
+                <StaffFormFields
+                    lang={lang}
+                    formData={formData}
+                    onChange={handleInputChange}
+                    roleLabel={staffRole?.displayName || staffRole?.systemName || "Staff"}
+                    staffTypeLabel={staffTypeLabel}
+                    showStationAssign={showStationAssign}
+                    stationAssignLabel={lang === "VN" ? "Gắn bến làm việc" : "Assigned stations"}
+                    stationAssignSlot={
+                        isCurrentUserAdmin ? (
                             <FormSelect
-                                value={formData.gender}
-                                onChange={(v) => handleInputChange("gender", v)}
-                                options={genderOptions}
+                                required
+                                value={formData.stationIds[0] || ""}
+                                onChange={(value) => setFormData((prev) => ({ ...prev, stationIds: value ? [String(value)] : [] }))}
+                                options={stationOptions}
+                                searchable
+                                placeholder={lang === "VN" ? "-- Chọn bến --" : "-- Select station --"}
+                                searchPlaceholder={lang === "VN" ? "Tìm tên bến..." : "Search station name..."}
+                                emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
                                 className={selectStyle}
                             />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
-                            <NationalitySelect
-                                value={formData.nationality}
-                                onChange={(v) => handleInputChange("nationality", v)}
-                                className={selectStyle}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Thông tin liên hệ & Vai trò" : "Contact & Role"}
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Số điện thoại (*)" : "Phone Number (*)"}</label>
-                            <input type="tel" required value={formData.phoneNumber} onChange={(e) => handleInputChange("phoneNumber", e.target.value)} className={inputStyle} />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>Email (*)</label>
-                            <input type="email" required value={formData.email} onChange={(e) => handleInputChange("email", e.target.value)} className={inputStyle} />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán" : "Assigned Role"}</label>
-                        <div className={readOnlyStyle}>
-                            {staffRole?.displayName || staffRole?.systemName || "Staff"}
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên (*)" : "Staff type (*)"}</label>
-                        <div className={readOnlyStyle}>
-                            {staffTypeLabel}
-                        </div>
-                    </div>
-
-                    {showStationAssign && (
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Gắn bến làm việc" : "Assigned stations"}</label>
-                            {isCurrentUserAdmin ? (
-                                <FormSelect
-                                    required
-                                    value={formData.stationIds[0] || ""}
-                                    onChange={(value) => setFormData((prev) => ({ ...prev, stationIds: value ? [String(value)] : [] }))}
-                                    options={stationOptions}
-                                    searchable
-                                    placeholder={lang === "VN" ? "-- Chọn bến --" : "-- Select station --"}
-                                    searchPlaceholder={lang === "VN" ? "Tìm tên bến..." : "Search station name..."}
-                                    emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
-                                    className={selectStyle}
-                                />
-                            ) : (
-                                <div className={readOnlyStyle}>
-                                    {formData.stationIds.length > 0
-                                        ? formData.stationIds
-                                            .map((sid) => stationNameById.get(String(sid)) || sid)
-                                            .join(", ")
-                                        : (lang === "VN" ? "Chưa gắn bến." : "No station assigned.")}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
+                        ) : (
+                            <div className={readOnlyStyle}>
+                                {formData.stationIds.length > 0
+                                    ? formData.stationIds
+                                        .map((sid) => stationNameById.get(String(sid)) || sid)
+                                        .join(", ")
+                                    : (lang === "VN" ? "Chưa gắn bến." : "No station assigned.")}
+                            </div>
+                        )
+                    }
+                />
 
                 <button
                     type="submit"

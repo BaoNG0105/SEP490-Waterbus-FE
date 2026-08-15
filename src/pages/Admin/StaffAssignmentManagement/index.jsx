@@ -117,26 +117,26 @@ const formatDateTime = (value, lang) => {
 const statusTone = (status) => {
   switch (status) {
     case ASSIGNMENT_STATUS.SCHEDULED:
-      return "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400";
+      return "text-sky-700 dark:text-sky-400";
     case ASSIGNMENT_STATUS.CANCELLED:
-      return "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400";
+      return "text-rose-500 dark:text-rose-400";
     case ASSIGNMENT_STATUS.REPLACED:
-      return "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300";
+      return "text-violet-700 dark:text-violet-300";
     default:
-      return "bg-slate-100 text-slate-500 border-slate-200";
+      return "text-slate-500";
   }
 };
 
 const shiftStateTone = (state) => {
   switch (state) {
     case SHIFT_STATE.ACTIVE:
-      return "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400";
+      return "text-emerald-600 dark:text-emerald-400";
     case SHIFT_STATE.COMPLETED:
-      return "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300";
+      return "text-slate-600 dark:text-slate-300";
     case SHIFT_STATE.UPCOMING:
-      return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300";
+      return "text-amber-700 dark:text-amber-300";
     default:
-      return "bg-slate-100 text-slate-500 border-slate-200";
+      return "text-slate-500";
   }
 };
 
@@ -972,29 +972,29 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
           )}
           <div className="w-32">
             <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={filterInputStyle}>
-              <option value="All">{lang === "VN" ? "Tất cả" : "All"}</option>
-              <option value={ASSIGNMENT_STATUS.SCHEDULED}>
-                {labelAssignmentStatus(ASSIGNMENT_STATUS.SCHEDULED, lang)}
-              </option>
-              <option value={ASSIGNMENT_STATUS.CANCELLED}>
-                {labelAssignmentStatus(ASSIGNMENT_STATUS.CANCELLED, lang)}
-              </option>
-              <option value={ASSIGNMENT_STATUS.REPLACED}>
-                {labelAssignmentStatus(ASSIGNMENT_STATUS.REPLACED, lang)}
-              </option>
-            </select>
+            <FormSelect
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(String(value ?? "All"))}
+              options={[
+                { value: "All", label: lang === "VN" ? "Tất cả" : "All" },
+                { value: ASSIGNMENT_STATUS.SCHEDULED, label: labelAssignmentStatus(ASSIGNMENT_STATUS.SCHEDULED, lang) },
+                { value: ASSIGNMENT_STATUS.CANCELLED, label: labelAssignmentStatus(ASSIGNMENT_STATUS.CANCELLED, lang) },
+                { value: ASSIGNMENT_STATUS.REPLACED, label: labelAssignmentStatus(ASSIGNMENT_STATUS.REPLACED, lang) },
+              ]}
+              className={filterInputStyle}
+            />
           </div>
           <div className="w-35">
             <label className={labelStyle}>{lang === "VN" ? "Tiến độ ca" : "Shift"}</label>
-            <select value={shiftStateFilter} onChange={(e) => setShiftStateFilter(e.target.value)} className={filterInputStyle}>
-              <option value="All">{lang === "VN" ? "Tất cả" : "All"}</option>
-              {Object.values(SHIFT_STATE).map((s) => (
-                <option key={s} value={s}>
-                  {labelShiftState(s, lang)}
-                </option>
-              ))}
-            </select>
+            <FormSelect
+              value={shiftStateFilter}
+              onChange={(value) => setShiftStateFilter(String(value ?? "All"))}
+              options={[
+                { value: "All", label: lang === "VN" ? "Tất cả" : "All" },
+                ...Object.values(SHIFT_STATE).map((s) => ({ value: s, label: labelShiftState(s, lang) })),
+              ]}
+              className={filterInputStyle}
+            />
           </div>
           {showStationFilter ? (
             <div className="min-w-50 w-55">
@@ -1130,7 +1130,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                             {formatDateShort(group.lastEnd)}
                           </td>
                           <td className="py-3.5 px-4 text-center">
-                            <span className="inline-flex items-center justify-center min-w-8 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-headline font-black text-[#124757] dark:text-yellow-400">
+                            <span className="inline-flex items-center justify-center min-w-8 font-headline font-black text-[#124757] dark:text-yellow-400">
                               {group.items.length}
                             </span>
                             {(group.activeCount > 0 || group.upcomingCount > 0) && (
@@ -1143,7 +1143,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                           </td>
                           <td className="py-3.5 px-4 text-center">
                             <span
-                              className={`inline-flex px-2.5 py-1 rounded-xl text-[10px] font-headline font-black uppercase tracking-wide border ${statusTone(group.status)}`}
+                              className={`inline-flex text-[10px] font-headline font-black uppercase tracking-wide ${statusTone(group.status)}`}
                             >
                               {labelAssignmentStatus(group.status, lang)}
                             </span>
@@ -1190,7 +1190,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                                 <td className="py-2.5 px-4 text-center" colSpan={2}>
                                   {shift ? (
                                     <span
-                                      className={`inline-flex px-2 py-0.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wide border ${shiftStateTone(shift)}`}
+                                      className={`inline-flex text-[10px] font-headline font-black uppercase tracking-wide ${shiftStateTone(shift)}`}
                                     >
                                       {labelShiftState(shift, lang)}
                                     </span>
@@ -1404,6 +1404,15 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
 
                 <div>
                   <label className={labelStyle}>
+                    {lang === "VN" ? "Giờ ca" : "Shift hours"}
+                  </label>
+                  <div className={`${inputStyle} flex items-center gap-2 font-bold text-[#124757] dark:text-yellow-400`}>
+                    {FULL_DAY_START_TIME} <span className="text-slate-300">→</span> {FULL_DAY_END_TIME}
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelStyle}>
                     {lang === "VN" ? "Làm những thứ nào" : "Which weekdays"}
                   </label>
                   <div className="flex flex-wrap gap-1.5">
@@ -1475,11 +1484,6 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
             ) : null}
             <p className="text-xs font-semibold text-slate-500">
               {lang === "VN" ? "Ca hiện tại" : "Current"}: {replaceForm.staffName || "—"}
-            </p>
-            <p className="text-[10px] text-slate-400">
-              {lang === "VN"
-                ? "Ca cũ chuyển Replaced — nhân viên cũ không còn thấy ca/chuyến."
-                : "Old shift becomes Replaced — previous staff no longer sees it."}
             </p>
             <label className="block space-y-1.5">
               <span className={labelStyle}>{lang === "VN" ? "Nhân viên mới (*)" : "New staff (*)"}</span>

@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
+
 import {
     fetchRouteDetail,
     modifyRoute,
-    removeRoute,
 } from "../../../services/routeService";
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchWaterwayDetail } from "../../../services/waterwayService";
+
 import { WaterwayMap } from "../../../components/WaterwayMap";
+
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
 import { getRouteKindLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
@@ -26,7 +28,6 @@ export function RouteDetail() {
 
     const [routeForm, setRouteForm] = useState(null);
     const [isSavingRouteInfo, setIsSavingRouteInfo] = useState(false);
-    const [isDeletingRoute, setIsDeletingRoute] = useState(false);
 
     const loadRouteDetail = useCallback(async () => {
         try {
@@ -142,43 +143,6 @@ export function RouteDetail() {
         }
     };
 
-    const handleDeleteRoute = async () => {
-        const result = await notify({
-            icon: "warning",
-            title: lang === "VN" ? "Xóa tuyến đường?" : "Delete Route?",
-            text: lang === "VN"
-                ? "Chỉ xóa được tuyến chưa từng có chuyến đi. Nếu tuyến đã có chuyến, bạn chuyển sang Ngừng hoạt động thay vì xóa."
-                : "You can only delete a route that has never had any trips. If it already has trips, set it to Inactive instead of deleting.",
-            showCancelButton: true,
-            confirmButtonText: lang === "VN" ? "Xóa tuyến" : "Delete",
-            cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
-            confirmButtonColor: "#e11d48",
-            cancelButtonColor: "#124757"
-        });
-        if (!result.isConfirmed) return;
-
-        try {
-            setIsDeletingRoute(true);
-            await removeRoute(id);
-            notify({
-                icon: "success",
-                title: lang === "VN" ? "Đã xóa tuyến đường!" : "Route Deleted!",
-                confirmButtonColor: "#124757"
-            }).then(() => navigate("/admin/routes-management"));
-        } catch (error) {
-            console.error("Lỗi khi xóa tuyến đường:", error);
-            notify({
-                icon: "error",
-                title: lang === "VN" ? "Không thể xóa tuyến!" : "Cannot Delete Route!",
-                text: error.response?.data?.message || (lang === "VN"
-                    ? "Tuyến này đã có chuyến đi nên không xóa được. Bạn chuyển sang Ngừng hoạt động nhé."
-                    : "This route already has trips, so it cannot be deleted. Please set it to Inactive."),
-                confirmButtonColor: "#124757"
-            });
-        } finally {
-            setIsDeletingRoute(false);
-        }
-    };
 
     if (isLoading) {
         return (
@@ -238,17 +202,6 @@ export function RouteDetail() {
                         {routeForm.status}
                     </span>
                 </div>
-                <button
-                    type="button"
-                    onClick={handleDeleteRoute}
-                    disabled={isDeletingRoute}
-                    title={lang === "VN" ? "Xóa tuyến đường" : "Delete Route"}
-                    className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-500/10 text-rose-500 border border-rose-100 dark:border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center shadow-inner shrink-0 disabled:opacity-50"
-                >
-                    {isDeletingRoute
-                        ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                        : <span className="material-symbols-outlined text-xl">delete</span>}
-                </button>
             </div>
 
             {errorMsg && (

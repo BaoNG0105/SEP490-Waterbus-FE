@@ -4,11 +4,8 @@ import { useApp } from "../../../context/AppContext";
 import { fetchUserRoles, createUser } from "../../../services/userService";
 import { getRoleSystemName } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
-import { FormSelect } from "../../../components/FormSelect";
-import { AppDateInput } from "../../../components/AppDateInput";
-import { NationalitySelect } from "../../../components/NationalitySelect";
-import { StationAssignField } from "../../../components/StationAssignField";
 import { notify } from "../../../utils/swalToast";
+import { ManagerFormFields } from "./ManagerFormFields";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
 
@@ -128,18 +125,8 @@ export function CreateManager() {
         }
     };
 
-    const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
-    const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
-    const selectStyle = `${inputStyle} cursor-pointer`;
-
-    const genderOptions = [
-        { value: "Male", label: lang === "VN" ? "Nam" : "Male" },
-        { value: "Female", label: lang === "VN" ? "Nữ" : "Female" },
-        { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
-    ];
-
     return (
-        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-3xl mx-auto">
+        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-5xl mx-auto">
 
             {/* KHỐI TIÊU ĐỀ HEADER */}
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
@@ -167,80 +154,19 @@ export function CreateManager() {
             )}
 
             <form onSubmit={handleFormSubmit} className="space-y-6">
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Thông tin cá nhân" : "Personal Information"}
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Họ và Tên (*)" : "Full Name (*)"}</label>
-                            <input type="text" required placeholder={lang === "VN" ? "VD: Nguyễn Văn A" : "e.g. John Doe"} value={formData.fullName} onChange={(e) => handleInputChange("fullName", e.target.value)} className={inputStyle} />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Ngày sinh" : "Date of Birth"}</label>
-                            <AppDateInput value={formData.dateOfBirth} onChange={(e) => handleInputChange("dateOfBirth", e.target.value)} className={inputStyle} />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Giới tính" : "Gender"}</label>
-                            <FormSelect
-                                value={formData.gender}
-                                onChange={(v) => handleInputChange("gender", v)}
-                                options={genderOptions}
-                                className={selectStyle}
-                            />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
-                            <NationalitySelect
-                                value={formData.nationality}
-                                onChange={(v) => handleInputChange("nationality", v)}
-                                className={selectStyle}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Thông tin liên hệ & Vai trò" : "Contact & Role"}
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Số điện thoại (*)" : "Phone Number (*)"}</label>
-                            <input type="tel" required placeholder="0901234567" value={formData.phoneNumber} onChange={(e) => handleInputChange("phoneNumber", e.target.value)} className={inputStyle} />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>Email (*)</label>
-                            <input
-                                type="email"
-                                required
-                                placeholder="name@gmail.com"
-                                value={formData.email}
-                                onChange={(e) => handleInputChange("email", e.target.value)}
-                                className={inputStyle}
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán" : "Assigned Role"}</label>
-                        <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
-                            {isLoadingRoles
-                                ? (lang === "VN" ? "Đang tải..." : "Loading...")
-                                : (managerRole?.displayName || managerRole?.systemName || "Manager")}
-                        </div>
-                    </div>
-
-                    <StationAssignField
-                        value={formData.stationIds}
-                        onChange={(ids) => handleInputChange("stationIds", ids)}
-                    />
-                </div>
+                <ManagerFormFields
+                    lang={lang}
+                    formData={formData}
+                    onChange={handleInputChange}
+                    roleLabel={
+                        isLoadingRoles
+                            ? (lang === "VN" ? "Đang tải..." : "Loading...")
+                            : (managerRole?.displayName || managerRole?.systemName || "Manager")
+                    }
+                    namePlaceholder={lang === "VN" ? "VD: Nguyễn Văn A" : "e.g. John Doe"}
+                    phonePlaceholder="0901234567"
+                    emailPlaceholder="name@gmail.com"
+                />
 
                 <button
                     type="submit"

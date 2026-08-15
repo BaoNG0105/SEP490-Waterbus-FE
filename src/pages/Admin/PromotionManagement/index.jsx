@@ -145,8 +145,8 @@ export function PromotionManagement() {
         const confirmResult = await notify({
             title: lang === "VN" ? "Xóa khuyến mãi?" : "Delete promotion?",
             html: lang === "VN"
-                ? `Mã <b>${promo.promotionCode}</b> sẽ soft-delete (status = Archived).`
-                : `Code <b>${promo.promotionCode}</b> will be soft-deleted (status = Archived).`,
+                ? `Mã ${promo.promotionCode}`
+                : `Code ${promo.promotionCode}`,
             icon: "warning",
             showCancelButton: true,
             confirmButtonColor: "#d33",

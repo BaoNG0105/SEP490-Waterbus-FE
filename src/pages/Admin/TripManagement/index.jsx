@@ -590,14 +590,14 @@ export function TripManagement() {
                         </colgroup>
                         <thead>
                             <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
-                                <th className="py-3.5 px-5 text-left">{lang === "VN" ? "Mã chuyến" : "Trip code"}</th>
-                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Dịch vụ" : "Service"}</th>
-                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Tàu" : "Boat"}</th>
-                                <th className="py-3.5 px-4 text-left">{lang === "VN" ? "Hành trình" : "Stations"}</th>
-                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Giờ chạy" : "Time"}</th>
-                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "HK" : "Pax"}</th>
-                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Trạng thái" : "Status"}</th>
-                                <th className="py-3.5 px-3 text-left">{lang === "VN" ? "Hành động" : "Actions"}</th>
+                                <th className="py-2.5 px-5 text-left">{lang === "VN" ? "Mã chuyến" : "Trip code"}</th>
+                                <th className="py-2.5 px-3 text-left">{lang === "VN" ? "Dịch vụ" : "Service"}</th>
+                                <th className="py-2.5 px-3 text-left">{lang === "VN" ? "Tàu" : "Boat"}</th>
+                                <th className="py-2.5 px-4 text-left">{lang === "VN" ? "Hành trình" : "Stations"}</th>
+                                <th className="py-2.5 px-3 text-left">{lang === "VN" ? "Giờ chạy" : "Time"}</th>
+                                <th className="py-2.5 px-3 text-left">{lang === "VN" ? "HK" : "Pax"}</th>
+                                <th className="py-2.5 px-3 text-left">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                                <th className="py-2.5 px-3 text-left">{lang === "VN" ? "Hành động" : "Actions"}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
@@ -639,19 +639,19 @@ export function TripManagement() {
 
                                     return (
                                         <tr key={trip.tripId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
-                                            <td className="py-3.5 px-5 align-middle">
+                                            <td className="py-2.5 px-5 align-middle">
                                                 <h4 className="truncate font-headline text-xs font-black tracking-wide text-slate-800 dark:text-white" title={trip.tripCode}>
                                                     {trip.tripCode}
                                                 </h4>
                                             </td>
 
-                                            <td className="py-3.5 px-3 align-middle">
+                                            <td className="py-2.5 px-3 align-middle">
                                                 <span className={`text-[10px] font-headline font-black uppercase tracking-wide ${kindBadgeClass}`}>
                                                     {kindLabel}
                                                 </span>
                                             </td>
 
-                                            <td className="py-3.5 px-3 align-middle">
+                                            <td className="py-2.5 px-3 align-middle">
                                                 <div className="min-w-0">
                                                     {boatCode ? (
                                                         <p className="truncate font-mono text-[11px] font-black text-[#124757] dark:text-yellow-400">
@@ -664,7 +664,7 @@ export function TripManagement() {
                                                 </div>
                                             </td>
 
-                                            <td className="py-3.5 px-4 align-middle">
+                                            <td className="py-2.5 px-4 align-middle">
                                                 <div className="flex min-w-0 items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
                                                     <span className="max-w-26 truncate" title={fromLabel}>{fromLabel}</span>
                                                     <span className="material-symbols-outlined shrink-0 text-[14px] text-[#FFD100]">arrow_forward</span>
@@ -672,7 +672,7 @@ export function TripManagement() {
                                                 </div>
                                             </td>
 
-                                            <td className="py-3.5 px-3 align-middle whitespace-nowrap">
+                                            <td className="py-2.5 px-3 align-middle whitespace-nowrap">
                                                 <span className="font-bold tabular-nums text-slate-600 dark:text-slate-300">
                                                     {formatTime(pickDisplayDeparture(trip))}
                                                     <span className="mx-1 text-slate-300">→</span>
@@ -684,14 +684,17 @@ export function TripManagement() {
                                                     const affectedLine = formatAffectedTripLine(trip, lang);
                                                     if (active) {
                                                         return (
-                                                            <p className="mt-1 max-w-44 text-[10px] font-bold leading-snug text-amber-700 dark:text-amber-300">
-                                                                {formatActiveDelayLine(trip, { lang, stops: trip.stops })}
+                                                            <p
+                                                                className="mt-1 max-w-44 truncate text-[10px] font-bold text-amber-700 dark:text-amber-300"
+                                                                title={formatActiveDelayLine(trip, { lang, stops: trip.stops })}
+                                                            >
+                                                                {formatActiveDelayLine(trip, { lang, stops: trip.stops, compact: true })}
                                                             </p>
                                                         );
                                                     }
                                                     if (affectedLine) {
                                                         return (
-                                                            <p className="mt-1 max-w-44 text-[10px] font-bold leading-snug text-orange-700 dark:text-orange-300">
+                                                            <p className="mt-1 max-w-44 truncate text-[10px] font-bold text-orange-700 dark:text-orange-300" title={affectedLine}>
                                                                 {affectedLine}
                                                             </p>
                                                         );
@@ -707,14 +710,14 @@ export function TripManagement() {
                                                 })()}
                                             </td>
 
-                                            <td className="py-3.5 px-3 align-middle">
+                                            <td className="py-2.5 px-3 align-middle">
                                                 <span className="text-xs font-black tabular-nums text-[#124757] dark:text-yellow-400">
                                                     {resolvePaxLabel(trip)}
                                                 </span>
                                             </td>
 
-                                            <td className="py-3.5 px-3 align-middle">
-                                                <div className="flex flex-col items-start gap-1">
+                                            <td className="py-2.5 px-3 align-middle">
+                                                <div className="flex flex-wrap items-center gap-1">
                                                     <span
                                                         title={trip.statusNote || ""}
                                                         className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${tripStatusBadgeClass(trip.tripStatus)}`}
@@ -722,14 +725,14 @@ export function TripManagement() {
                                                         {getTripStatusLabel(trip.tripStatus, lang)}
                                                     </span>
                                                     {isDelayActive(trip) ? (
-                                                        <span className="inline-flex rounded-lg border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9px] font-headline font-black uppercase tracking-wide text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
-                                                            {lang === "VN" ? "Đang dừng / Delay" : "Stopped / Delay"}
+                                                        <span className="inline-flex items-center text-[9px] font-headline font-black uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                                                            Delay
                                                         </span>
                                                     ) : null}
                                                 </div>
                                             </td>
 
-                                            <td className="py-3.5 px-3 align-middle">
+                                            <td className="py-2.5 px-3 align-middle">
                                                 <button
                                                     type="button"
                                                     onClick={() => navigate(`/admin/trips-management/${trip.tripId}`)}

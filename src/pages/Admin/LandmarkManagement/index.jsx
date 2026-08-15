@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllLandmarks, removeLandmark } from "../../../services/landmarksService";
 import { notify } from "../../../utils/swalToast";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
+import { WaterwayMap } from "../../../components/WaterwayMap";
 
 export function LandmarkManagement() {
     const { lang } = useApp();
@@ -65,6 +66,19 @@ export function LandmarkManagement() {
     });
 
     const sortedLandmarks = [...filteredLandmarks].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+
+    // Điểm hiện trên bản đồ — theo đúng bộ lọc tìm kiếm/trạng thái đang áp dụng, không phụ thuộc phân trang.
+    const landmarkMapMarkers = useMemo(
+        () => sortedLandmarks.map((landmark) => ({
+            id: landmark.id,
+            name: landmark.landmarkName,
+            latitude: landmark.latitude,
+            longitude: landmark.longitude,
+            isActive: landmark.isActive,
+            radius: landmark.triggerRadiusMeters,
+        })),
+        [sortedLandmarks],
+    );
 
     const totalPages = Math.ceil(sortedLandmarks.length / ITEMS_PER_PAGE);
     const currentLandmarks = sortedLandmarks.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -177,6 +191,40 @@ export function LandmarkManagement() {
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
                     <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Audio đã bake" : "Baked Audios"}</span>
                     <h3 className="text-xl font-black font-headline text-indigo-500 dark:text-indigo-400 mt-0.5">{stats.audios}</h3>
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col h-115">
+                <div className="mb-4 flex shrink-0 flex-wrap items-end justify-between gap-2">
+                    <div>
+                        <h3 className="font-headline text-xs font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                            {lang === "VN" ? "Bản đồ landmark" : "Landmark map"}
+                        </h3>
+                        <p className="mt-0.5 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                            {lang === "VN"
+                                ? "Vị trí các landmark theo tọa độ — chấm xám là landmark đang ngưng hoạt động."
+                                : "Landmark positions by coordinate — grey dots are inactive landmarks."}
+                        </p>
+                    </div>
+                    <span className="rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold tabular-nums text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                        {landmarkMapMarkers.length} {lang === "VN" ? "điểm" : "points"}
+                    </span>
+                </div>
+                <div className="relative min-h-75 w-full flex-1">
+                    <div className="absolute inset-0">
+                        {landmarkMapMarkers.length === 0 ? (
+                            <div className="flex h-full w-full items-center justify-center rounded-2xl bg-slate-50 text-xs font-bold text-slate-400 dark:bg-slate-900">
+                                {lang === "VN" ? "Không có landmark nào phù hợp bộ lọc." : "No landmarks match the current filters."}
+                            </div>
+                        ) : (
+                            <WaterwayMap
+                                landmarkMarkers={landmarkMapMarkers}
+                                onLandmarkEdit={(landmark) =>
+                                    navigate(`/admin/landmarks-management/edit/${landmark.id}`)
+                                }
+                            />
+                        )}
+                    </div>
                 </div>
             </div>
 

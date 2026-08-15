@@ -7,10 +7,9 @@ import { fetchAllStations } from "../../../services/stationService";
 import { getRoleSystemName, isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { FormSelect } from "../../../components/FormSelect";
-import { AppDateInput } from "../../../components/AppDateInput";
-import { NationalitySelect } from "../../../components/NationalitySelect";
 import { canAssignStations } from "../../../components/StationAssignField";
 import { notify } from "../../../utils/swalToast";
+import { StaffFormFields } from "./StaffFormFields";
 
 const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
 
@@ -254,15 +253,8 @@ export function CreateStaff() {
         }
     };
 
-    const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
     const selectStyle = `${inputStyle} cursor-pointer`;
-
-    const genderOptions = [
-        { value: "Male", label: lang === "VN" ? "Nam" : "Male" },
-        { value: "Female", label: lang === "VN" ? "Nữ" : "Female" },
-        { value: "Other", label: lang === "VN" ? "Khác" : "Other" },
-    ];
 
     const isSubmitDisabled =
         isSubmitting ||
@@ -276,7 +268,7 @@ export function CreateStaff() {
     if (!canAccess) return null;
 
     return (
-        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-3xl mx-auto">
+        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-5xl mx-auto">
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
                 <button
                     type="button"
@@ -291,15 +283,6 @@ export function CreateStaff() {
                             ? (lang === "VN" ? "Thêm nhân viên trên tàu" : "Add boat crew")
                             : (lang === "VN" ? "Thêm nhân viên bến" : "Add station staff")}
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                        {isOnBoardSession
-                            ? (lang === "VN"
-                                ? "Tạo tài khoản cho nhân viên tàu"
-                                : "Create an onboard crew account")
-                            : (lang === "VN"
-                                ? "Tạo tài khoản cho nhân viên bến"
-                                : "Create station staff account")}
-                    </p>
                 </div>
             </div>
 
@@ -310,144 +293,76 @@ export function CreateStaff() {
             )}
 
             <form onSubmit={handleFormSubmit} className="space-y-6">
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Thông tin cá nhân" : "Personal Information"}
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Họ và Tên (*)" : "Full Name (*)"}</label>
-                            <input type="text" required placeholder={lang === "VN" ? "VD: Nguyễn Văn A" : "e.g. John Doe"} value={formData.fullName} onChange={(e) => handleInputChange("fullName", e.target.value)} className={inputStyle} />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Ngày sinh" : "Date of Birth"}</label>
-                            <AppDateInput value={formData.dateOfBirth} onChange={(e) => handleInputChange("dateOfBirth", e.target.value)} className={inputStyle} />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Giới tính" : "Gender"}</label>
+                <StaffFormFields
+                    lang={lang}
+                    formData={formData}
+                    onChange={handleInputChange}
+                    namePlaceholder={lang === "VN" ? "VD: Nguyễn Văn A" : "e.g. John Doe"}
+                    phonePlaceholder="0901234567"
+                    emailPlaceholder="name@gmail.com"
+                    roleLabel={
+                        isLoadingRoles
+                            ? (lang === "VN" ? "Đang tải..." : "Loading...")
+                            : (staffRole?.displayName || staffRole?.systemName || "Staff")
+                    }
+                    staffTypeLabel={
+                        isOnBoardSession
+                            ? (lang === "VN" ? "Trên tàu" : "Onboard")
+                            : (lang === "VN" ? "Bến tàu" : "Station")
+                    }
+                    showStationAssign={showStationAssign}
+                    stationAssignLabel={lang === "VN" ? "Bến làm việc" : "Working station"}
+                    stationAssignSlot={
+                        isAdmin ? (
                             <FormSelect
-                                value={formData.gender}
-                                onChange={(v) => handleInputChange("gender", v)}
-                                options={genderOptions}
-                                className={selectStyle}
-                            />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Quốc tịch" : "Nationality"}</label>
-                            <NationalitySelect
-                                value={formData.nationality}
-                                onChange={(v) => handleInputChange("nationality", v)}
-                                className={selectStyle}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-                        {lang === "VN" ? "Thông tin liên hệ & Vai trò" : "Contact & Role"}
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Số điện thoại (*)" : "Phone Number (*)"}</label>
-                            <input type="tel" required placeholder="0901234567" value={formData.phoneNumber} onChange={(e) => handleInputChange("phoneNumber", e.target.value)} className={inputStyle} />
-                        </div>
-                        <div>
-                            <label className={labelStyle}>Email (*)</label>
-                            <input
-                                type="email"
                                 required
-                                placeholder="name@gmail.com"
-                                value={formData.email}
-                                onChange={(e) => handleInputChange("email", e.target.value)}
-                                className={inputStyle}
+                                value={formData.stationIds[0] || ""}
+                                onChange={(value) => setFormData((prev) => ({ ...prev, stationIds: value ? [String(value)] : [] }))}
+                                options={stationOptions}
+                                searchable
+                                disabled={isLoadingStations}
+                                placeholder={
+                                    isLoadingStations
+                                        ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...")
+                                        : (lang === "VN" ? "-- Chọn bến --" : "-- Select station --")
+                                }
+                                searchPlaceholder={lang === "VN" ? "Tìm tên bến..." : "Search station name..."}
+                                emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
+                                className={selectStyle}
                             />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Vai trò được gán" : "Assigned Role"}</label>
-                        <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
-                            {isLoadingRoles
-                                ? (lang === "VN" ? "Đang tải..." : "Loading...")
-                                : (staffRole?.displayName || staffRole?.systemName || "Staff")}
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Loại nhân viên" : "Staff type"}</label>
-                        <div className={`${inputStyle} flex items-center font-bold text-[#124757] dark:text-yellow-400`}>
-                            {isOnBoardSession
-                                ? (lang === "VN" ? "Trên tàu" : "Onboard")
-                                : (lang === "VN" ? "Bến tàu" : "Station")}
-                        </div>
-                    </div>
-
-                    {showStationAssign && (
-                        <div>
-                            <label className={labelStyle}>{lang === "VN" ? "Bến làm việc" : "Working station"}</label>
-                            {isAdmin ? (
-                                <>
-                                    <FormSelect
-                                        required
-                                        value={formData.stationIds[0] || ""}
-                                        onChange={(value) => setFormData((prev) => ({ ...prev, stationIds: value ? [String(value)] : [] }))}
-                                        options={stationOptions}
-                                        searchable
-                                        disabled={isLoadingStations}
-                                        placeholder={
-                                            isLoadingStations
-                                                ? (lang === "VN" ? "Đang tải bến..." : "Loading stations...")
-                                                : (lang === "VN" ? "-- Chọn bến --" : "-- Select station --")
-                                        }
-                                        searchPlaceholder={lang === "VN" ? "Tìm tên bến..." : "Search station name..."}
-                                        emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
-                                        className={selectStyle}
-                                    />
-                                </>
-                            ) : managerStations.length > 1 ? (
-                                <>
-                                    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/60 divide-y divide-slate-100 dark:divide-slate-700/60">
-                                        {managerStations.map((s) => {
-                                            const id = String(s.stationId);
-                                            const checked = formData.stationIds.map(String).includes(id);
-                                            return (
-                                                <label
-                                                    key={id}
-                                                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-white/80 dark:hover:bg-slate-800/80 transition-colors"
-                                                >
-                                                    <input
-                                                        type="radio"
-                                                        name="managerStation"
-                                                        checked={checked}
-                                                        onChange={() => selectManagerStation(id)}
-                                                        className="accent-[#124757] dark:accent-yellow-400"
-                                                    />
-                                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                                                        {s.stationName || s.stationCode || id}
-                                                    </span>
-                                                </label>
-                                            );
-                                        })}
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <div className={`${inputStyle} flex items-center gap-2 font-bold text-[#124757] dark:text-yellow-400`}>
-                                        {managerStations.length > 0
-                                            ? managerStations.map((s) => s.stationName).filter(Boolean).join(", ")
-                                            : (lang === "VN" ? "Bạn chưa được gắn bến nào." : "You are not assigned to any station.")}
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    )}
-                </div>
+                        ) : managerStations.length > 1 ? (
+                            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/60 divide-y divide-slate-100 dark:divide-slate-700/60">
+                                {managerStations.map((s) => {
+                                    const id = String(s.stationId);
+                                    const checked = formData.stationIds.map(String).includes(id);
+                                    return (
+                                        <label
+                                            key={id}
+                                            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-white/80 dark:hover:bg-slate-800/80 transition-colors"
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="managerStation"
+                                                checked={checked}
+                                                onChange={() => selectManagerStation(id)}
+                                                className="accent-[#124757] dark:accent-yellow-400"
+                                            />
+                                            <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                                                {s.stationName || s.stationCode || id}
+                                            </span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className={`${inputStyle} flex items-center gap-2 font-bold text-[#124757] dark:text-yellow-400`}>
+                                {managerStations.length > 0
+                                    ? managerStations.map((s) => s.stationName).filter(Boolean).join(", ")
+                                    : (lang === "VN" ? "Bạn chưa được gắn bến nào." : "You are not assigned to any station.")}
+                            </div>
+                        )
+                    }
+                />
 
                 <button
                     type="submit"

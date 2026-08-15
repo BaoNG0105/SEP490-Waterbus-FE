@@ -99,8 +99,8 @@ export function PromotionFormFields({
   };
 
   return (
-    <>
-      <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+      <div className="lg:col-span-3 bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
           {lang === "VN" ? "Thông tin cơ bản" : "Basic Information"}
         </h3>
@@ -273,6 +273,7 @@ export function PromotionFormFields({
         />
       </div>
 
+      <div className="lg:col-span-2 flex flex-col gap-6">
       <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
           {lang === "VN" ? "Thời gian & hạn mức" : "Validity & limits"}
@@ -499,6 +500,7 @@ export function PromotionFormFields({
           </div>
         </div>
       </div>
-    </>
+      </div>
+    </div>
   );
 }
