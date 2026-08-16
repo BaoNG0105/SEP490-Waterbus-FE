@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { chatWithAssistant, closeAssistantConversation, getAssistantConversation } from "../api/assistantApi";
-import { holdSeats, releaseSeats } from "../services/tripService";
+import { fetchTripSeatMap, holdSeats, releaseSeats } from "../services/tripService";
 const aiButtonImage = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/AI.png";
 
 // Style các thẻ markdown cho vừa khung bong bóng chat (không dùng @tailwindcss/typography).
@@ -150,6 +150,25 @@ const isBookingDataReadyForCheckout = (data) => {
     && data.selectedSeatsReturn.length === data.selectedSeatsDeparture.length
     && isTripStillBookable(data.selectedReturnTrip),
   );
+};
+
+// Ghế trợ lý AI chọn tạm (bookingDraft.selectedSeatsDeparture/Return) chỉ đủ seatNumber để BE kiểm
+// tra còn trống — KHÔNG có basePrice/seatTypeCode như ghế lấy từ sơ đồ ghế thật (Bước 2 tự gọi
+// fetchTripSeatMap trước khi cho chọn). Bước 3 (Step3Checkout) chỉ tin seat.basePrice có sẵn, không
+// tự gọi lại seat map — nếu đẩy thẳng ghế trợ lý sang Bước 3 mà không bù giá, tổng tiền hiển thị sẽ
+// ra 0. Gọi lại seat map thật rồi bù basePrice/seatTypeCode theo đúng seatNumber trước khi giữ ghế.
+const enrichSeatsWithFare = async (trip, seats, fromStationCode, toStationCode) => {
+  if (!trip?.tripId || !seats?.length) return seats;
+  try {
+    const seatMap = await fetchTripSeatMap(trip.tripId, { fromStationCode, toStationCode });
+    const bySeatNumber = new Map((seatMap?.seats || []).map((s) => [s.seatNumber, s]));
+    return seats.map((seat) => {
+      const real = bySeatNumber.get(seat.seatNumber);
+      return real ? { ...seat, basePrice: real.basePrice, seatTypeCode: real.seatTypeCode ?? seat.seatTypeCode } : seat;
+    });
+  } catch {
+    return seats; // fetch lỗi thì giữ nguyên — Step3 vẫn chạy được, chỉ tạm hiển thị giá 0
+  }
 };
 
 // Giữ thật sự ghế trợ lý mới chỉ "chọn tạm" — trang thật chỉ vào được Bước 3 khi ghế đã có hold hợp
@@ -377,6 +396,26 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
       setIsHoldingSeats(true);
       let seatHoldExpiresAt = null;
       try {
+        // Bù basePrice/seatTypeCode thật cho ghế trợ lý chọn tạm trước khi giữ ghế + nhảy thẳng
+        // Bước 3 — nếu không, Bước 3 sẽ hiển thị tổng tiền = 0 (xem comment enrichSeatsWithFare).
+        const [enrichedDeparture, enrichedReturn] = await Promise.all([
+          enrichSeatsWithFare(
+            bookingData.selectedDepartureTrip,
+            bookingData.selectedSeatsDeparture,
+            bookingData.fromWharfCode,
+            bookingData.toWharfCode,
+          ),
+          bookingData.isRoundTrip
+            ? enrichSeatsWithFare(
+              bookingData.selectedReturnTrip,
+              bookingData.selectedSeatsReturn,
+              bookingData.toWharfCode,
+              bookingData.fromWharfCode,
+            )
+            : Promise.resolve(bookingData.selectedSeatsReturn),
+        ]);
+        bookingData.selectedSeatsDeparture = enrichedDeparture;
+        bookingData.selectedSeatsReturn = enrichedReturn;
         seatHoldExpiresAt = await holdBookingDataSeats(bookingData);
       } catch {
         // API giữ ghế ném lỗi (vd ghế đã bị người khác khoá trước) — coi như thất bại, xử lý chung
