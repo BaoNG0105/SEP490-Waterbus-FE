@@ -1,5 +1,6 @@
 import {
   createPayment as apiCreatePayment,
+  getCharterRefundSummary as apiGetCharterRefundSummary,
   getRefundOtpOptions as apiGetRefundOtpOptions,
   manualRefundPayment as apiManualRefundPayment,
   refundPayment as apiRefundPayment,
@@ -97,3 +98,36 @@ export const syncBookingPayment = (paymentId) =>
 
 export const syncBookingPaymentByOrderCode = (orderCode) =>
   apiSyncPaymentByOrderCode(orderCode);
+
+/**
+ * GET /charter-bookings/{bookingId}/refund-summary
+ * Trả về { policyPercent, policyMessage, refundAmount, payableAmount, currency }.
+ * Nếu policyPercent === 0 → BE sẽ skip bank/OTP ở POST /refund,
+ * FE chỉ cần gửi { reason, confirmZeroRefund: true }.
+ */
+export const fetchCharterRefundSummary = async (bookingId) => {
+  const data = await apiGetCharterRefundSummary(bookingId);
+  const root = data?.data && typeof data.data === "object" && !Array.isArray(data.data) ? data.data : data;
+
+  const policyPercentRaw = pick(root, ["policyPercent", "refundPolicyPercent", "percent"], null);
+  const policyPercent = policyPercentRaw === null || policyPercentRaw === ""
+    ? null
+    : Number(policyPercentRaw);
+
+  const refundAmountRaw = pick(root, ["refundAmount", "amount", "payableAmount"], 0);
+  const refundAmount = Number(refundAmountRaw) || 0;
+
+  const payableAmountRaw = pick(root, ["payableAmount", "paidAmount"], 0);
+  const payableAmount = Number(payableAmountRaw) || 0;
+
+  return {
+    bookingId: pick(root, ["bookingId", "charterBookingId", "id"], "") || "",
+    policyPercent: Number.isFinite(policyPercent) ? policyPercent : null,
+    policyMessage: pick(root, ["policyMessage", "message", "description"], "") || "",
+    refundAmount,
+    payableAmount,
+    currency: pick(root, ["currency"], "VND") || "VND",
+    isZeroRefundPolicy: policyPercent === 0 || refundAmount <= 0,
+    raw: root,
+  };
+};

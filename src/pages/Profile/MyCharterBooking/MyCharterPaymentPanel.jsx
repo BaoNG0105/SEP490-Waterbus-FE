@@ -95,7 +95,7 @@ const getPaymentTimeLabel = (payment, lang, status) => {
   return null;
 };
 
-function CharterPaymentLedger({ payments = [], lang = "VN", currencyFormatter }) {
+function CharterPaymentLedger({ payments = [], lang = "VN", currencyFormatter, isFullyRefunded = false }) {
   if (!Array.isArray(payments) || payments.length === 0) return null;
 
   return (
@@ -104,16 +104,24 @@ function CharterPaymentLedger({ payments = [], lang = "VN", currencyFormatter })
         <h3 className="text-[11px] font-headline font-black uppercase tracking-widest text-[#124757] dark:text-yellow-400">
           {lang === "VN" ? "Lịch sử giao dịch" : "Payment history"}
         </h3>
+        {isFullyRefunded && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider text-teal-700 border border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20">
+            <span className="material-symbols-outlined text-[12px]">check_circle</span>
+            {lang === "VN" ? "Đã hoàn tiền" : "Refunded"}
+          </span>
+        )}
       </div>
 
       <div className="space-y-3">
         {payments.map((payment, index) => {
           const amount = Number(pick(payment, ["amount", "paymentAmount", "paidAmount", "totalAmount"], 0)) || 0;
           const status = pick(payment, ["paymentStatus", "status"], "--");
+          const statusLower = String(status).toLowerCase();
           const meta = getPaymentStatusMeta(status, lang);
           const timeMeta = getPaymentTimeLabel(payment, lang, status);
           const orderCode = pick(payment, ["orderCode", "paymentOrderCode", "payosOrderCode"], "");
           const refundAmount = Number(pick(payment, ["refundAmount", "refundedAmount"], 0)) || 0;
+          const isZeroRefundClosed = refundAmount <= 0 && statusLower === "refunded";
 
           return (
             <div
@@ -149,6 +157,11 @@ function CharterPaymentLedger({ payments = [], lang = "VN", currencyFormatter })
                   {refundAmount > 0 && (
                     <p className="mt-1 text-[10px] font-bold text-teal-600 dark:text-teal-300">
                       {lang === "VN" ? "Đã hoàn" : "Refunded"}: {currencyFormatter.format(refundAmount)}
+                    </p>
+                  )}
+                  {refundAmount <= 0 && isZeroRefundClosed && (
+                    <p className="mt-1 text-[10px] font-bold text-teal-600 dark:text-teal-300">
+                      {lang === "VN" ? "Đã đóng sổ · hoàn 0 ₫ theo chính sách 0%" : "Closed · 0 refund per policy 0%"}
                     </p>
                   )}
                 </div>
@@ -221,6 +234,8 @@ export function MyCharterPaymentPanel({
           payments={booking.payments}
           lang={lang}
           currencyFormatter={currencyFormatter}
+          isFullyRefunded={String(booking.status || "").toLowerCase() === "refunded"
+            || String(booking.paymentStatus || "").toLowerCase() === "refunded"}
         />
 
         {booking.status === "Quoted" && !isPaid ? (

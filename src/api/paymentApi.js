@@ -51,6 +51,22 @@ export const requestRefundOtp = (paymentId, payload = {}) => {
     .then((response) => response.data);
 };
 
+/**
+ * GET /charter-bookings/{bookingId}/refund-summary
+ * Trả về policyPercent (0-100), policyMessage, refundAmount, payableAmount, currency.
+ * BE dùng để khách xem trước khi mở form refund; nếu policyPercent === 0 thì
+ * BE skip bank/OTP và chỉ cần reason + confirmZeroRefund=true.
+ */
+export const getCharterRefundSummary = (bookingId) => {
+  const value = String(bookingId || "").trim();
+  if (!value) {
+    return Promise.reject(new Error("bookingId is required to load refund summary."));
+  }
+  return api
+    .get(`/charter-bookings/${encodeURIComponent(value)}/refund-summary`)
+    .then((response) => response.data);
+};
+
 export const manualRefundPayment = (paymentId, manualPayload = {}) => {
   const value = String(paymentId || "").trim();
 

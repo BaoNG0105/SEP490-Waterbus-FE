@@ -201,6 +201,8 @@ export function CharterRefund() {
     && (["paid", "depositpaid"].includes(String(booking.paymentStatus).toLowerCase()) || Number(booking.paidAmount || 0) > 0 || isPaidPayment(payment));
   const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
   const refundAmountDisplay = Number(otpOptions?.refundAmount || booking?.paidAmount || getPaymentAmount(payment) || 0);
+  /** Policy 0% (hủy ≥ 7 ngày) — BE skip bank/OTP, chỉ cần customer xác nhận. */
+  const isZeroRefundPolicy = refundAmountDisplay <= 0;
 
   const handleFieldChange = (field) => (event) => {
     let value = event.target.value;
@@ -230,6 +232,47 @@ export function CharterRefund() {
     setOtpCode("");
     setOtpStep(true);
     return meta;
+  };
+
+  const handleConfirmZeroRefund = async () => {
+    if (!booking?.id || !paymentId) {
+      setSubmitError(lang === "VN" ? "Không tìm thấy booking hoặc payment cần hoàn tiền." : "Unable to find the booking or payment to refund.");
+      return;
+    }
+
+    const bookingStatus = String(booking.status || "").toLowerCase();
+    const shouldCancelBooking = !cancelAlreadySubmitted && !["cancelled", "refunded"].includes(bookingStatus);
+    let didCancelBooking = false;
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError("");
+      if (shouldCancelBooking) {
+        await cancelMyCharterBooking(booking.id, {});
+        didCancelBooking = true;
+        setCancelAlreadySubmitted(true);
+      }
+
+      await refundBookingPayment(paymentId, {
+        reason: form.reason.trim() || "Hoàn tiền booking bị hủy theo chính sách 0%",
+        confirmZeroRefund: true,
+      });
+      setSuccessMessage(
+        lang === "VN"
+          ? "Đã xác nhận. Booking đã đóng sổ theo chính sách hoàn 0% — không cần chuyển khoản."
+          : "Confirmed. Booking closed under the 0% refund policy — no bank transfer needed.",
+      );
+    } catch (error) {
+      if (didCancelBooking) setCancelAlreadySubmitted(true);
+      setSubmitError(getApiErrorMessage(
+        error,
+        lang === "VN"
+          ? "Không thể xác nhận đóng sổ. Vui lòng thử lại."
+          : "Unable to confirm closure. Please try again.",
+      ));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmitRefund = async (event) => {
@@ -443,18 +486,24 @@ export function CharterRefund() {
                   {lang === "VN" ? "Hoàn tiền thuê tàu" : "Booking request refund"}
                 </p>
                 <h1 className="mt-2 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400 md:text-3xl">
-                  {otpStep
-                    ? (lang === "VN" ? "Xác nhận OTP hoàn tiền" : "Confirm refund OTP")
-                    : (lang === "VN" ? "Tài khoản nhận hoàn tiền" : "Refund receiving account")}
+                  {isZeroRefundPolicy
+                    ? (lang === "VN" ? "Xác nhận đã hoàn tiền" : "Confirm refund closed")
+                    : otpStep
+                      ? (lang === "VN" ? "Xác nhận OTP hoàn tiền" : "Confirm refund OTP")
+                      : (lang === "VN" ? "Tài khoản nhận hoàn tiền" : "Refund receiving account")}
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm font-bold text-slate-500 dark:text-slate-300">
-                  {otpStep
+                  {isZeroRefundPolicy
                     ? (lang === "VN"
-                      ? `Đã gửi mã OTP${otpMeta?.maskedDestination ? ` tới ${otpMeta.maskedDestination}` : ""}. Nhập mã 6 số để xác nhận hoàn tiền.`
-                      : `An OTP was sent${otpMeta?.maskedDestination ? ` to ${otpMeta.maskedDestination}` : ""}. Enter the 6-digit code to confirm the refund.`)
-                    : (lang === "VN"
-                      ? "Vui lòng nhập ngân hàng, số tài khoản và tên chủ tài khoản. Chọn kênh OTP rồi gửi xác nhận."
-                      : "Please enter bank, account number, and account holder name. Choose an OTP channel, then confirm.")}
+                      ? "Theo chính sách hủy, khoản hoàn của bạn là 0 ₫. Bạn không cần nhập tài khoản — chỉ cần xác nhận để đóng sổ booking."
+                      : "Per our cancellation policy, your refund is 0 VND. No bank account is needed — just confirm to close this booking.")
+                    : otpStep
+                      ? (lang === "VN"
+                        ? `Đã gửi mã OTP${otpMeta?.maskedDestination ? ` tới ${otpMeta.maskedDestination}` : ""}. Nhập mã 6 số để xác nhận hoàn tiền.`
+                        : `An OTP was sent${otpMeta?.maskedDestination ? ` to ${otpMeta.maskedDestination}` : ""}. Enter the 6-digit code to confirm the refund.`)
+                      : (lang === "VN"
+                        ? "Vui lòng nhập ngân hàng, số tài khoản và tên chủ tài khoản. Chọn kênh OTP rồi gửi xác nhận."
+                        : "Please enter bank, account number, and account holder name. Choose an OTP channel, then confirm.")}
                 </p>
               </div>
             </div>
@@ -487,7 +536,80 @@ export function CharterRefund() {
               </div>
             </aside>
 
-            {!otpStep ? (
+            {isZeroRefundPolicy ? (
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-teal-200 bg-teal-50/60 p-5 dark:border-teal-500/20 dark:bg-teal-500/10">
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined mt-0.5 text-2xl text-teal-600 dark:text-teal-300">verified</span>
+                    <div className="min-w-0">
+                      <p className="font-headline text-sm font-black uppercase tracking-wide text-teal-700 dark:text-teal-300">
+                        {lang === "VN" ? "Không cần chuyển khoản" : "No transfer needed"}
+                      </p>
+                      <p className="mt-1 text-xs font-medium leading-5 text-teal-800/90 dark:text-teal-200/90">
+                        {lang === "VN"
+                          ? "Bạn không phải nhập ngân hàng / số tài khoản / OTP. Chỉ cần xác nhận một lần để hệ thống đóng sổ theo chính sách 0%."
+                          : "No bank, account number, or OTP is required. Just confirm once to close this booking under the 0% refund policy."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+                  <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                    {lang === "VN" ? "Số tiền hoàn" : "Refund amount"}
+                  </p>
+                  <p className="mt-1 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
+                    0 ₫
+                  </p>
+                  <p className="mt-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    {lang === "VN"
+                      ? "Theo chính sách hủy — không hoàn tiền trong trường hợp này."
+                      : "Per cancellation policy — no refund applies in this case."}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                    {lang === "VN" ? "Lý do hủy (tùy chọn)" : "Cancel reason (optional)"}
+                  </label>
+                  <textarea
+                    value={form.reason}
+                    onChange={handleFieldChange("reason")}
+                    maxLength={200}
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  />
+                </div>
+
+                {submitError && (
+                  <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+                    {submitError}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/profile/my-charter-booking/${booking.id}`)}
+                    disabled={isSubmitting}
+                    className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    {lang === "VN" ? "Để sau" : "Later"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmZeroRefund}
+                    disabled={isSubmitting}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white hover:bg-teal-700 disabled:opacity-60"
+                  >
+                    <span className="material-symbols-outlined text-base">{isSubmitting ? "progress_activity" : "check_circle"}</span>
+                    {isSubmitting
+                      ? (lang === "VN" ? "Đang xác nhận…" : "Confirming…")
+                      : (lang === "VN" ? "Xác nhận đã hoàn tiền" : "Confirm refund closed")}
+                  </button>
+                </div>
+              </div>
+            ) : !otpStep ? (
               <form onSubmit={handleSubmitRefund} className="space-y-5">
                 <BankBinSelect
                   value={form.bankBin}
