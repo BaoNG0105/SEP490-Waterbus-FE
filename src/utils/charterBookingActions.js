@@ -191,6 +191,18 @@ export const getCustomerActionInfo = (booking, lang) => {
     };
   }
 
+  if (status === "Refunded") {
+    return {
+      icon: "task_alt",
+      label: lang === "VN" ? "Đã đóng sổ — yêu cầu hoàn tất" : "Closed — refund finalized",
+      cta: lang === "VN" ? "Xem chi tiết" : "View details",
+      tone: "closed",
+      urgent: false,
+      classes: "bg-teal-50/70 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20",
+      buttonClasses: "border border-teal-200 bg-white text-teal-700 hover:bg-teal-50 dark:border-teal-500/30 dark:bg-slate-900 dark:text-teal-300",
+    };
+  }
+
   if (isTerminalBookingStatus(status)) {
     return {
       label: lang === "VN" ? "Yêu cầu đã đóng" : "Request closed",
