@@ -39,7 +39,7 @@ export const getVisibleStatusOptions = (options, serviceType) => {
 export const paymentMethodOptions = [
   { value: "All", labelVn: "Tất cả phương thức", labelEn: "All Methods" },
   { value: "Cash", labelVn: "Tiền mặt", labelEn: "Cash" },
-  { value: "PayOS", labelVn: "Chuyển khoản (PayOS)", labelEn: "Bank transfer (PayOS)" },
+  { value: "PayOS", labelVn: "Chuyển khoản", labelEn: "Bank transfer" },
   { value: "Free", labelVn: "Miễn phí", labelEn: "Free" },
 ];
 
@@ -74,6 +74,18 @@ export const getPaymentStatusLabel = (status, lang = "VN") => {
   const opt = findLabel(paymentStatusOptions, status);
   if (opt) return lang === "VN" ? opt.labelVn : opt.labelEn;
   return status || "--";
+};
+
+export const getServiceTypeLabel = (value, lang = "VN") => {
+  const opt = findLabel(serviceTypeOptions, value);
+  if (opt) return lang === "VN" ? opt.labelVn : opt.labelEn;
+  return value || "--";
+};
+
+export const getPaymentMethodLabel = (value, lang = "VN") => {
+  const opt = findLabel(paymentMethodOptions, value);
+  if (opt) return lang === "VN" ? opt.labelVn : opt.labelEn;
+  return value || "--";
 };
 
 export const getBookingStatusClass = (status) =>

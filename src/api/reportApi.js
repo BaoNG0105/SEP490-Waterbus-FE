@@ -11,3 +11,10 @@ export const getBookingsReport = (params = {}) =>
 // params: keyword, bookingStatus, paymentStatus, serviceType, limit (required).
 export const getBookingsSelect = (params = {}) =>
     api.get('/reports/bookings/select', { params }).then(response => response.data);
+
+// API: Báo cáo doanh thu (Admin/Manager) — tính theo Payments đã Paid trong khoảng fromDate/toDate.
+// Bỏ ngày thì mặc định lấy từ đầu tháng hiện tại đến hôm nay theo giờ Việt Nam.
+// params: fromDate, toDate, serviceType, paymentMethod, soldByStaffId, fromStationId, toStationId.
+// Response: grossRevenue/refundAmount/netRevenue + byPaymentMethod/byServiceType/byStation/daily.
+export const getRevenueReport = (params = {}) =>
+    api.get('/reports/revenue', { params }).then(response => response.data);

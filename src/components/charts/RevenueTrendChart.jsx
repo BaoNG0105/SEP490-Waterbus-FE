@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { niceMax, formatShortDate, pickColor, categorical } from "../../utils/chartPalette";
+import { niceMax, pickColor, categorical } from "../../utils/chartPalette";
+import { formatCurrency } from "../../utils/bookingReport";
+import { formatCompactCurrency, shortenDayLabel } from "../../utils/revenueReport";
 
 const W = 600;
 const H = 170;
@@ -13,16 +15,17 @@ const PLOT_BOTTOM = H - PAD_B;
 const lineColor = categorical[0]; // slot 1 — blue, 1 series nên không cần legend riêng.
 
 /**
- * Xu hướng số booking theo ngày — line + area 1 series, có crosshair/tooltip khi hover
- * và nút "Xem bảng" để dữ liệu vẫn đọc được không cần hover (đúng nguyên tắc tooltip chỉ bổ trợ).
+ * Xu hướng doanh thu ròng theo ngày (GET /reports/revenue -> daily[]) — line + area 1 series,
+ * cùng cơ chế crosshair/tooltip + "Xem bảng" như BookingTrendChart (đọc được không cần hover).
+ * points: [{ date: "dd/MM/yyyy", netRevenue, grossRevenue, refundAmount }]
  */
-export function BookingTrendChart({ points, lang, isDarkMode, isLoading }) {
+export function RevenueTrendChart({ points, lang, isDarkMode, isLoading }) {
   const [hoverIndex, setHoverIndex] = useState(null);
   const [showTable, setShowTable] = useState(false);
 
-  const counts = points.map((p) => p.count);
-  const maxCount = Math.max(0, ...counts);
-  const yMax = niceMax(maxCount);
+  const values = points.map((p) => p.netRevenue || 0);
+  const maxValue = Math.max(0, ...values);
+  const yMax = niceMax(maxValue);
   const n = points.length;
   const xStep = n > 1 ? (PLOT_RIGHT - PAD_L) / (n - 1) : 0;
 
@@ -30,7 +33,7 @@ export function BookingTrendChart({ points, lang, isDarkMode, isLoading }) {
     () =>
       points.map((p, i) => ({
         x: n > 1 ? PAD_L + i * xStep : (PAD_L + PLOT_RIGHT) / 2,
-        y: PLOT_BOTTOM - (yMax > 0 ? (p.count / yMax) * (PLOT_BOTTOM - PAD_T) : 0),
+        y: PLOT_BOTTOM - (yMax > 0 ? ((p.netRevenue || 0) / yMax) * (PLOT_BOTTOM - PAD_T) : 0),
         ...p,
       })),
     [points, n, xStep, yMax]
@@ -43,7 +46,6 @@ export function BookingTrendChart({ points, lang, isDarkMode, isLoading }) {
   const color = pickColor(lineColor, isDarkMode);
   const surfaceRing = isDarkMode ? "#1e293b" : "#ffffff"; // khớp bg-slate-800 / bg-white của card
 
-  // Nhãn trục X: đầu, cuối và tối đa vài mốc giữa để tránh chồng chữ.
   const maxLabels = 6;
   const labelEvery = Math.max(1, Math.ceil(n / maxLabels));
   const xLabelIndexes = coords
@@ -89,7 +91,6 @@ export function BookingTrendChart({ points, lang, isDarkMode, isLoading }) {
           onClick={() => setShowTable((prev) => !prev)}
           className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors"
         >
-          <span className="material-symbols-outlined text-sm">{showTable ? "show_chart" : "table_rows"}</span>
           {showTable ? (lang === "VN" ? "Xem biểu đồ" : "View chart") : (lang === "VN" ? "Xem bảng" : "View table")}
         </button>
       </div>
@@ -100,14 +101,14 @@ export function BookingTrendChart({ points, lang, isDarkMode, isLoading }) {
             <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 text-slate-400 font-bold uppercase">
               <tr>
                 <th className="text-left py-2 px-3">{lang === "VN" ? "Ngày" : "Date"}</th>
-                <th className="text-right py-2 px-3">{lang === "VN" ? "Số booking" : "Bookings"}</th>
+                <th className="text-right py-2 px-3">{lang === "VN" ? "Doanh thu ròng" : "Net revenue"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
               {points.map((p) => (
                 <tr key={p.date}>
-                  <td className="py-1.5 px-3 text-slate-600 dark:text-slate-300 font-semibold">{formatShortDate(p.date)}</td>
-                  <td className="py-1.5 px-3 text-right text-slate-800 dark:text-white font-bold">{p.count}</td>
+                  <td className="py-1.5 px-3 text-slate-600 dark:text-slate-300 font-semibold">{shortenDayLabel(p.date)}</td>
+                  <td className="py-1.5 px-3 text-right text-slate-800 dark:text-white font-bold">{formatCurrency(p.netRevenue)}</td>
                 </tr>
               ))}
             </tbody>
@@ -130,8 +131,8 @@ export function BookingTrendChart({ points, lang, isDarkMode, isLoading }) {
               return (
                 <g key={f}>
                   <line x1={PAD_L} x2={PLOT_RIGHT} y1={y} y2={y} stroke={isDarkMode ? "#2c2c2a" : "#e1e0d9"} strokeWidth={1} />
-                  <text x={0} y={y - 3} fontSize={9} fill={isDarkMode ? "#898781" : "#898781"} fontWeight={700}>
-                    {Math.round(yMax * f)}
+                  <text x={0} y={y - 3} fontSize={9} fill="#898781" fontWeight={700}>
+                    {formatCompactCurrency(yMax * f, lang)}
                   </text>
                 </g>
               );
@@ -158,7 +159,7 @@ export function BookingTrendChart({ points, lang, isDarkMode, isLoading }) {
               textAnchor="end"
               fill={isDarkMode ? "#ffffff" : "#0b0b0b"}
             >
-              {coords[n - 1].count}
+              {formatCompactCurrency(coords[n - 1].netRevenue, lang)}
             </text>
 
             {/* Điểm hover */}
@@ -175,9 +176,9 @@ export function BookingTrendChart({ points, lang, isDarkMode, isLoading }) {
                 fontSize={9}
                 fontWeight={700}
                 textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"}
-                fill={isDarkMode ? "#898781" : "#898781"}
+                fill="#898781"
               >
-                {formatShortDate(coords[i].date)}
+                {shortenDayLabel(coords[i].date)}
               </text>
             ))}
           </svg>
@@ -187,10 +188,13 @@ export function BookingTrendChart({ points, lang, isDarkMode, isLoading }) {
               className="absolute pointer-events-none z-10 -translate-x-1/2 -translate-y-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg px-2.5 py-1.5 text-[11px] whitespace-nowrap"
               style={{ left: `${(hovered.x / W) * 100}%`, top: `${(hovered.y / H) * 100 - 4}%` }}
             >
-              <p className="text-slate-400 dark:text-slate-500 font-bold">{formatShortDate(hovered.date)}</p>
-              <p className="text-slate-800 dark:text-white font-black">
-                {hovered.count} {lang === "VN" ? "booking" : "bookings"}
-              </p>
+              <p className="text-slate-400 dark:text-slate-500 font-bold">{shortenDayLabel(hovered.date)}</p>
+              <p className="text-slate-800 dark:text-white font-black">{formatCurrency(hovered.netRevenue)}</p>
+              {hovered.refundAmount > 0 && (
+                <p className="text-rose-500 dark:text-rose-400 font-bold">
+                  {lang === "VN" ? "Hoàn: " : "Refund: "}{formatCurrency(hovered.refundAmount)}
+                </p>
+              )}
             </div>
           )}
         </div>

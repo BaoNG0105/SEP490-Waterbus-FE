@@ -17,7 +17,7 @@ const MENU_GROUPS = [
     labelEn: "Overview",
     items: [
       { path: "/admin", labelVn: "Dashboard", labelEn: "Dashboard", roles: ["ADMIN"] },
-      { path: "/admin/revenue", labelVn: "Doanh thu", labelEn: "Revenue", roles: ["ADMIN", "MANAGER"] },
+      { path: "/admin/booking-summary", labelVn: "Tổng hợp Booking", labelEn: "Booking Summary", roles: ["ADMIN", "MANAGER"] },
     ],
   },
   {

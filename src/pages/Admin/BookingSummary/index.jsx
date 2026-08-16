@@ -20,8 +20,8 @@ import {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
-/** Báo cáo doanh thu — danh sách booking chi tiết, lọc theo trạng thái/dịch vụ/thời gian. */
-export const Revenue = () => {
+/** Tổng hợp Booking — danh sách booking chi tiết, lọc theo trạng thái/dịch vụ/thời gian. */
+export const BookingSummary = () => {
   const { lang } = useApp();
   const { user } = useSelector((state) => state.auth);
   const canAccess = hasRole(user, "ADMIN", "MANAGER");
@@ -73,11 +73,11 @@ export const Revenue = () => {
       const result = await getBookingsReport(params);
       setData(result);
     } catch (error) {
-      console.error("Lỗi tải báo cáo doanh thu:", error);
+      console.error("Lỗi tải tổng hợp booking:", error);
       setErrorMsg(
         lang === "VN"
-          ? "Không thể tải dữ liệu báo cáo doanh thu."
-          : "Failed to load the revenue report."
+          ? "Không thể tải dữ liệu tổng hợp booking."
+          : "Failed to load the booking summary."
       );
     } finally {
       setIsLoading(false);
@@ -137,7 +137,7 @@ export const Revenue = () => {
       {/* HEADER */}
       <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
         <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-          {lang === "VN" ? "Báo cáo doanh thu" : "Revenue Financials"}
+          {lang === "VN" ? "Tổng hợp Booking" : "Booking Summary"}
         </h2>
         <p className="text-xs text-slate-400 mt-0.5">
           {lang === "VN"
