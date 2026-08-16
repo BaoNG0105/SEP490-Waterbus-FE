@@ -6,7 +6,7 @@ import { chatWithAssistant, closeAssistantConversation, getAssistantConversation
 import { fetchTripSeatMap, holdSeats, releaseSeats } from "../services/tripService";
 const aiButtonImage = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/AI.png";
 
-// Style các thẻ markdown cho vừa khung bong bóng chat (không dùng @tailwindcss/typography).
+// Style các thẻ markdown cho vừa khung bong bóng chat.
 const markdownComponents = {
   p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
   strong: ({ children }) => <strong className="font-bold">{children}</strong>,
@@ -23,6 +23,7 @@ const markdownComponents = {
   ),
 };
 
+// Câu mở đầu trên FE
 const TEXT = {
   VN: {
     title: "Trợ lý ảo Waterbus",
@@ -56,7 +57,7 @@ const mapServerMessage = (message) => ({
   actions: Array.isArray(message.actions) ? message.actions : [],
 });
 
-// BE không xoá field khi vá draft (chỉ ghi đè khoá nó vừa đổi), nên nếu tuyến/ngày/loại dịch vụ vừa
+// BE không xoá field khi vá draft (chỉ ghi đè khoá nó vừa đổi), nếu tuyến/ngày/loại dịch vụ vừa
 // đổi mà chuyến/ghế đã chọn là của tuyến/ngày CŨ thì client phải tự dọn — theo đúng note API.
 // Chặng về dọn theo cùng điều kiện của chặng đi, cộng thêm khi returnDate/isRoundTrip đổi.
 const clearStaleSelection = (previous, next) => {

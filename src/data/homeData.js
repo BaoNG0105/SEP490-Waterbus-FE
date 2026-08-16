@@ -41,7 +41,7 @@ export const guidelines = [
     },
     {
         id: 4,
-        image: "https://res.cloudinary.com/dygipvoal/image/upload/v1784570508/ws8ueijujgru30bcjoff.png",
+        image: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/b4.png",
         titleVn: "Nhận vé QR qua Email & SMS",
         titleEn: "Receive QR Ticket via Email & SMS",
         descVn: "Hệ thống sẽ gửi mã QR vé về email và app của bạn. Xuất trình mã này khi lên tàu.",
