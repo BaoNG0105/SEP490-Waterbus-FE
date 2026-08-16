@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
+//service
 import { fetchAllRoutes, fetchRouteDetail } from "../../../services/routeService";
 import { fetchAllBoats } from "../../../services/boatService";
-import { resolveBoatNumberOfDecks, resolveBoatServiceType } from "../../../utils/boatTracking";
 import {
   buildRoundTripPreviewPayload,
   buildScheduleTripsPayload,
@@ -20,12 +20,15 @@ import {
   fetchStaffAssignments,
   isAssignmentInactive,
 } from "../../../services/staffAssignmentService";
-import { FormSelect } from "../../../components/FormSelect";
-import { AppDateInput } from "../../../components/AppDateInput";
+//utils
+import { resolveBoatNumberOfDecks, resolveBoatServiceType } from "../../../utils/boatTracking";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { assignmentCoversDay } from "../../../utils/staffAssignmentCalendarUtils";
 import { deckOptionImages } from "../../../utils/charterRequestForm";
 import { notify } from "../../../utils/swalToast";
+//component
+import { FormSelect } from "../../../components/FormSelect";
+import { AppDateInput } from "../../../components/AppDateInput";
 
 const MIN_ONBOARD_STAFF = 2;
 
@@ -173,8 +176,8 @@ export function CreateTrip() {
     startTime: "07:00",
     endTime: "23:00",
     intervalMinutes: 30,
-    departureTimes: ["08:00"],
-    draftTime: "10:00",
+    departureTimes: [],
+    draftTime: "",
     stops: [],
     outboundStops: [],
     inboundStops: [],

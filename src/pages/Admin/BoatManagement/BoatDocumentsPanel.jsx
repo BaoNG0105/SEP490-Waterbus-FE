@@ -384,7 +384,6 @@ export function BoatDocumentsPanel({
                   {pendingFile ? (
                     <div className="flex items-center justify-between gap-2 rounded-lg bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-2">
                       <span className="text-[11px] font-bold text-[#124757] dark:text-yellow-300 truncate inline-flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[14px]">schedule</span>
                         {pendingFile.name}
                       </span>
                       <button

@@ -41,6 +41,13 @@ const authSlice = createSlice({
       localStorage.removeItem('accessToken');
       localStorage.removeItem('user');
       localStorage.removeItem('expirationTime');
+
+      // Dọn luôn dữ liệu trợ lý AI (session/hội thoại/bookingDraft) — các API chat neo theo
+      // clientSessionId lưu trên trình duyệt (không neo theo JWT), nên nếu không xoá, người dùng
+      // tiếp theo đăng nhập chung máy sẽ kế thừa hội thoại/bookingDraft của người vừa đăng xuất.
+      localStorage.removeItem('waterbus.chat.conversationId');
+      localStorage.removeItem('waterbus.chat.bookingDraft');
+      localStorage.removeItem('waterbus.chat.clientSessionId');
     },
 
     updateUserProfile: (state, action) => {

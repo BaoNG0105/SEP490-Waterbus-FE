@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
+
 import { addNewBoat, fetchAllBoats, uploadBoatDocument } from "../../../services/boatService";
+
 import { FormSelect } from "../../../components/FormSelect";
+
 import { notify } from "../../../utils/swalToast";
 import {
   BOAT_DOCUMENT_ACCEPT,
@@ -402,11 +405,10 @@ export function CreateBoat() {
                 return (
                   <div
                     key={type}
-                    className={`rounded-2xl border p-4 space-y-2 transition-colors ${
-                      file
+                    className={`rounded-2xl border p-4 space-y-2 transition-colors ${file
                         ? "border-[#124757]/40 bg-[#124757]/5 dark:border-yellow-400/40 dark:bg-yellow-400/5"
                         : "border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-900/50"
-                    }`}
+                      }`}
                   >
                     <label className={labelStyle}>{label}</label>
                     <input
@@ -418,7 +420,6 @@ export function CreateBoat() {
                     {file ? (
                       <div className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 dark:bg-slate-800">
                         <span className="truncate text-[11px] font-bold text-[#124757] dark:text-yellow-300 inline-flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-[14px]">description</span>
                           {file.name}
                         </span>
                         <button

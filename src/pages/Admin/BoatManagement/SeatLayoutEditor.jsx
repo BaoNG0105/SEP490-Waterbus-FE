@@ -28,8 +28,8 @@ const SEAT_SETUP_TYPE_LABELS = {
 
 export function SeatLayoutEditor() {
   const { lang } = useApp();
-  const params = useParams(); 
-  const targetId = params.id || params.boatId; 
+  const params = useParams();
+  const targetId = params.id || params.boatId;
   const navigate = useNavigate();
 
   const [boatData, setBoatData] = useState(null);
@@ -65,7 +65,7 @@ export function SeatLayoutEditor() {
         const initDecks = Array.from({ length: detail.numberOfDecks || 1 }, (_, i) => ({
           id: i + 1,
           type: i === 0 ? 'MAIN' : 'UPPER',
-          rows: 10,
+          rows: 14,
           columns: 7,
           matrix: []
         }));
@@ -102,7 +102,7 @@ export function SeatLayoutEditor() {
           columnCount: d.columns
         }))
       };
-      
+
       const res = await generateMatrix(targetId, payload);
       if (res && res.decks) {
         const defaultSeatCode = boatData.seatSetupType === "StandardAndVip" ? "CABIN" : "STANDARD";
@@ -225,7 +225,7 @@ export function SeatLayoutEditor() {
 
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto" onMouseUp={() => setIsDrawing(false)} onMouseLeave={() => setIsDrawing(false)}>
-      
+
       {/* HEADER BẢNG ĐIỀU KHIỂN */}
       <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
         <button onClick={() => navigate("/admin/boats-management")} className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-[#124757] hover:text-white transition-all flex items-center justify-center">
@@ -242,11 +242,11 @@ export function SeatLayoutEditor() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
+
         {/* PANEL TRÁI: CẤU HÌNH VÀ CÔNG CỤ */}
         <div className="lg:col-span-3 space-y-4">
           <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700 shadow-sm sticky top-24">
-            
+
             {!hasMatrix && (
               <div className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
                 <h4 className="text-[10px] font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider mb-3">
@@ -257,17 +257,17 @@ export function SeatLayoutEditor() {
                     <div key={d.id} className="flex items-center justify-between gap-1">
                       <span className="text-xs font-bold text-slate-600 dark:text-slate-300 w-12">Tầng {d.id}</span>
                       <div className="flex items-center gap-1.5 flex-1 justify-end">
-                        <input 
-                          type="number" min={1} value={d.rows} 
+                        <input
+                          type="number" min={1} value={d.rows}
                           onChange={(e) => setDecks(prev => prev.map(deck => deck.id === d.id ? { ...deck, rows: Number(e.target.value) } : deck))}
-                          className="w-12 sm:w-14 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757]" 
+                          className="w-12 sm:w-14 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757]"
                           title="Số hàng (Rows)"
                         />
                         <span className="text-[10px] text-slate-400 font-bold">X</span>
-                        <input 
-                          type="number" min={1} value={d.columns} 
+                        <input
+                          type="number" min={1} value={d.columns}
                           onChange={(e) => setDecks(prev => prev.map(deck => deck.id === d.id ? { ...deck, columns: Number(e.target.value) } : deck))}
-                          className="w-12 sm:w-14 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757]" 
+                          className="w-12 sm:w-14 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757]"
                           title="Số cột (Columns)"
                         />
                       </div>
@@ -278,15 +278,14 @@ export function SeatLayoutEditor() {
             )}
 
             <h3 className="text-xs font-black font-headline uppercase text-slate-500 mb-4 border-b border-slate-100 dark:border-slate-700 pb-2">Bảng công cụ vẽ</h3>
-            
+
             <div className="space-y-3">
               {currentTools.map((tool) => (
                 <button
                   key={tool.id}
                   onClick={() => setActiveTool(tool.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[11px] font-bold transition-all border-2 ${
-                    activeTool === tool.id ? 'border-[#124757] dark:border-yellow-400 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-700'
-                  } ${tool.tone ? 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200' : tool.color}`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[11px] font-bold transition-all border-2 ${activeTool === tool.id ? 'border-[#124757] dark:border-yellow-400 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-700'
+                    } ${tool.tone ? 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200' : tool.color}`}
                 >
                   {tool.tone ? (
                     <span className="inline-block h-8 w-7 shrink-0">
@@ -319,9 +318,8 @@ export function SeatLayoutEditor() {
               <button
                 key={d.id}
                 onClick={() => setActiveDeck(d.id)}
-                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                  activeDeck === d.id ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md" : "text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
-                }`}
+                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeDeck === d.id ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-md" : "text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  }`}
               >
                 Tầng {d.id} ({d.type})
               </button>
@@ -330,15 +328,14 @@ export function SeatLayoutEditor() {
 
           {!hasMatrix ? (
             <div className="h-112.5 bg-slate-50 dark:bg-slate-900/50 rounded-4xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400 p-6 text-center">
-              <span className="material-symbols-outlined text-5xl mb-2 text-slate-300">grid_on</span>
               <p className="font-bold text-slate-500 mb-1">Thiết lập số hàng và cột ở Panel bên trái.</p>
               <p className="text-xs">Sau đó nhấn "Sinh ma trận lưới" để bắt đầu thiết kế chỗ ngồi.</p>
             </div>
           ) : currentDeckData && (
             <div className="w-full bg-white dark:bg-slate-800 p-6 md:p-10 rounded-4xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center overflow-x-auto">
-              
+
               <div className={`relative overflow-visible bg-slate-100 dark:bg-slate-900/80 border-8 border-slate-300 dark:border-slate-600 rounded-t-[12rem] rounded-b-[3rem] px-8 md:px-14 pb-16 shadow-2xl min-w-max flex flex-col items-center ${Number(activeDeck) === 1 ? "pt-16" : "pt-10"}`}>
-                
+
                 {Number(activeDeck) === 1 ? (
                   <div className="absolute top-4 left-1/2 -translate-x-1/2">
                     <BoatBowLabel lang={lang} />

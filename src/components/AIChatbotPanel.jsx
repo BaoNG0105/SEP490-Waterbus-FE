@@ -219,7 +219,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
   const [hasStarted, setHasStarted] = useState(() => {
     try { return Boolean(window.localStorage.getItem("waterbus.chat.conversationId")); } catch { return false; }
   });
-  const [clientSessionId] = useState(() => {
+  const [clientSessionId, setClientSessionId] = useState(() => {
     try {
       const key = "waterbus.chat.clientSessionId";
       const existing = window.localStorage.getItem(key);
@@ -244,6 +244,13 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
   });
   const bottomRef = useRef(null);
   const conversationVersionRef = useRef(0);
+  // Luôn giữ giá trị mới nhất để effect phát hiện-logout bên dưới đọc được conversationId/
+  // clientSessionId hiện tại mà không cần liệt kê chúng vào dependency (tránh effect chạy lại
+  // mỗi khi 2 giá trị này đổi trong lúc đang chat bình thường).
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+  const clientSessionIdRef = useRef(clientSessionId);
+  clientSessionIdRef.current = clientSessionId;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -263,10 +270,17 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     );
   }, [chatLang, t.greeting]);
 
+  // Chỉ khôi phục hội thoại từ server ĐÚNG MỘT LẦN lúc mount (case F5/đổi tab, dùng conversationId đã
+  // có sẵn trong localStorage lúc khởi tạo state). KHÔNG chạy lại mỗi khi conversationId đổi, vì nó
+  // cũng đổi ngay trong lúc đang chat (lượt tin nhắn đầu tiên, sendText mới nhận conversationId từ
+  // server) — nếu chạy lại lúc đó, GET sẽ ghi đè luôn tin nhắn bot vừa nhận (đang có actions) bằng
+  // bản GET không có actions/suggestedQuestions, làm nút biến mất chỉ vài giây sau khi vừa hiện ra.
+  const initialConversationIdRef = useRef(conversationId);
   useEffect(() => {
     let cancelled = false;
-    if (!conversationId) return undefined;
-    getAssistantConversation(conversationId, clientSessionId)
+    const idToRestore = initialConversationIdRef.current;
+    if (!idToRestore) return undefined;
+    getAssistantConversation(idToRestore, clientSessionId)
       .then((data) => {
         if (cancelled || !data?.messages) return;
         const restored = data.messages.map(mapServerMessage);
@@ -280,7 +294,8 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
         }
       });
     return () => { cancelled = true; };
-  }, [conversationId, clientSessionId, t.greeting]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cố ý chỉ chạy 1 lần lúc mount, xem comment trên.
+  }, []);
 
   // Poll để hiển thị tin nhắn tự động đóng sau 30 phút ngay cả khi user vẫn mở widget.
   useEffect(() => {
@@ -292,11 +307,17 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
           setMessages((prev) => {
             // GET conversation không chắc trả kèm actions[]/suggestedQuestions[] y hệt response của
             // POST /assistant/chat — nếu ghi đè thẳng, nút/gợi ý đang hiện sẽ biến mất khi tới lượt
-            // poll. Giữ nguyên bản ghi cục bộ (đã có actions) cho id đã tồn tại, chỉ thêm tin nhắn mới.
-            const byId = new Map(prev.map((m) => [m.id, m]));
-            const merged = data.messages.map(mapServerMessage).map((m) => byId.get(m.id) ?? m);
+            // poll. Tin nhắn bot cục bộ dùng id tự sinh (b-<timestamp>), khác hẳn id thật server trả
+            // ở GET này, nên KHÔNG thể match theo id để giữ lại bản có actions (match sẽ luôn trượt).
+            // Thay vào đó chỉ APPEND các tin nhắn mới nằm sau những gì đã có cục bộ (đúng thứ tự BE
+            // trả), không đụng tới tin đã hiển thị (đã có sẵn actions/suggestedQuestions từ chính
+            // response POST /chat của lượt đó).
+            const existing = prev.filter((m) => m.id !== "greeting");
+            const serverMapped = data.messages.map(mapServerMessage);
+            if (serverMapped.length <= existing.length) return prev;
+            const appended = serverMapped.slice(existing.length);
             const greeting = prev.find((m) => m.id === "greeting") || { id: "greeting", from: "bot", text: t.greeting };
-            return [greeting, ...merged];
+            return [greeting, ...existing, ...appended];
           });
           if (data.status !== "Open") setIsConversationClosed(true);
         })
@@ -304,6 +325,38 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
     }, 60_000);
     return () => window.clearInterval(timer);
   }, [conversationId, clientSessionId, isConversationClosed, t.greeting]);
+
+  // authSlice.logout() đã tự xoá 3 key localStorage (conversationId/bookingDraft/clientSessionId) ở
+  // MỌI nơi gọi dispatch(logout()), kể cả khi khung chat đang đóng (chưa mount). Effect này chỉ lo
+  // phần localStorage không tự lo được: nếu khung chat đang MỞ đúng lúc logout thì state trong bộ
+  // nhớ (messages, bookingDraft, conversationId...) vẫn còn nguyên — phải tự reset, đồng thời best-
+  // effort đóng hội thoại phía server rồi phát hành 1 clientSessionId mới cho phiên tiếp theo.
+  const wasAuthenticatedRef = useRef(isAuthenticated);
+  useEffect(() => {
+    const wasAuthenticated = wasAuthenticatedRef.current;
+    wasAuthenticatedRef.current = isAuthenticated;
+    if (!wasAuthenticated || isAuthenticated) return; // chỉ xử lý đúng lúc true -> false (vừa đăng xuất)
+
+    conversationVersionRef.current += 1; // huỷ mọi request chat của phiên cũ đang bay dở
+    const closingConversationId = conversationIdRef.current;
+    const closingClientSessionId = clientSessionIdRef.current;
+    if (closingConversationId) {
+      closeAssistantConversation(closingConversationId, closingClientSessionId).catch(() => {
+        // best-effort — hội thoại cũ tự hết hạn/tự dọn theo thời gian nếu đóng lỗi, không chặn logout
+      });
+    }
+
+    const nextClientSessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    try { window.localStorage.setItem("waterbus.chat.clientSessionId", nextClientSessionId); } catch { /* ignore */ }
+    setClientSessionId(nextClientSessionId);
+    setConversationId(null);
+    setIsConversationClosed(false);
+    setBookingDraft(null);
+    setMessages([{ id: "greeting", from: "bot", text: t.greeting }]);
+    setDraft("");
+    setIsTyping(false);
+    setHasStarted(false);
+  }, [isAuthenticated, t.greeting]);
 
   // Bấm nút "open-booking" (do trợ lý gợi ý): nếu đã đủ chuyến + ghế (và khách đã đăng nhập), thử
   // giữ ghế thật rồi nhảy thẳng sang Bước 3 checkout; nếu chưa đủ hoặc giữ ghế thất bại thì vẫn mở
