@@ -219,10 +219,6 @@ html.dark {
   animation: marquee 30s linear infinite;
 }
 
-@utility animate-scroll-wheel {
-  animation: scrollWheel 2s ease-in-out infinite;
-}
-
 /* Hiệu ứng xuất hiện của nút AI nổi khi trang vừa tải xong */
 @utility animate-ai-pop-in {
   animation: wb-ai-pop-in 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -259,23 +255,6 @@ html.dark {
 
   100% {
     transform: translateX(-50%);
-  }
-}
-
-@keyframes scrollWheel {
-  0% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-
-  50% {
-    transform: translateY(10px);
-    opacity: 0.3;
-  }
-
-  100% {
-    transform: translateY(0);
-    opacity: 1;
   }
 }
 

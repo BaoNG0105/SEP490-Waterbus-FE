@@ -320,59 +320,52 @@ export const Home = () => {
             : "pointer-events-none translate-y-3 opacity-0"
             }`}
         >
-          <span className="flex h-11 w-7 justify-center rounded-full border-2 border-current pt-2">
-            <span className="h-2 w-1 rounded-full bg-current animate-scroll-wheel"></span>
-          </span>
-          <span className="material-symbols-outlined text-xl">
-            keyboard_arrow_down
+          <span className="material-symbols-outlined animate-bounce text-3xl">
+            arrow_downward
           </span>
         </button>
       </section>
 
       {/* ===== MiSSON SECTION ===== */}
       <section
-        className="relative py-24 bg-cover bg-center transition-colors duration-300 overflow-hidden"
-        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/background-section.png')" }}
+        className="relative py-24 bg-white dark:bg-slate-900 transition-colors duration-300 overflow-hidden"
       >
-        {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
-        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
-        <ScrollBoat />
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Khối Nội Dung Bên Trái */}
           <div className="space-y-6">
-            <span className="text-sm font-bold uppercase tracking-widest text-yellow-400">
+            <span className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
               {lang === "VN" ? "Sứ mệnh của chúng tôi" : "Our Mission"}
             </span>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white leading-tight">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white leading-tight">
               {lang === "VN"
                 ? "Kiến tạo chuẩn mực mới cho di chuyển đô thị"
                 : "Redefining The Standard Of Urban Mobility"}
             </h2>
-            <p className="text-white/70 font-body text-base leading-relaxed">
+            <p className="text-slate-600 dark:text-white/70 font-body text-base leading-relaxed">
               {lang === "VN"
                 ? "Waterbus đang định hình lại tương lai của giao thông đô thị bằng cách khai phá tiềm năng to lớn của mạng lưới sông ngòi Sài Gòn. Chúng tôi không chỉ cung cấp một phương tiện đi lại thông thường, mà mang đến một giải pháp di chuyển xanh, bền vững, giúp giảm tải ùn tắc đường bộ nghiêm trọng, tiết kiệm thời gian quý báu của hành khách và kiến tạo những trải nghiệm hành trình thư thái, kết nối sâu sắc con người với cảnh quan thiên nhiên tráng lệ của thành phố."
                 : "Waterbus is reshaping the future of urban transportation by unlocking the immense potential of Saigon's river network. We don't just provide a standard transit method; we offer a green, sustainable mobility solution that alleviates severe road congestion, saves precious passenger time, and creates relaxed journey experiences that deeply connect people with the magnificent natural landscapes of the city."}
             </p>
             <div className="grid grid-cols-2 gap-8 pt-6">
               <div className="space-y-2">
-                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-400">
+                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400">
                   15min
                 </div>
-                <p className="text-sm font-bold text-white">
+                <p className="text-sm font-bold text-[#124757] dark:text-white">
                   {lang === "VN" ? "Tần suất cao điểm" : "Peak frequency"}
                 </p>
-                <p className="text-xs text-white/60">
+                <p className="text-xs text-slate-500 dark:text-white/60">
                   {lang === "VN" ? "Các chuyến tàu chạy liên tục không lo chờ đợi" : "Continuous trips with zero waiting time"}
                 </p>
               </div>
               <div className="space-y-2">
-                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-400">
+                <div className="text-4xl md:text-5xl font-headline font-black text-yellow-500 dark:text-yellow-400">
                   100%
                 </div>
-                <p className="text-sm font-bold text-white">
+                <p className="text-sm font-bold text-[#124757] dark:text-white">
                   {lang === "VN" ? "Năng lượng sạch" : "Clean energy"}
                 </p>
-                <p className="text-xs text-white/60">
+                <p className="text-xs text-slate-500 dark:text-white/60">
                   {lang === "VN" ? "Hướng tới hệ sinh thái giao thông không phát thải" : "Towards a zero-emission transit ecosystem"}
                 </p>
               </div>
@@ -394,11 +387,11 @@ export const Home = () => {
       <section
         id="services-section"
         className="relative py-24 bg-cover bg-center transition-colors duration-300 select-none overflow-hidden"
-        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus-on-the-Saigon-River_1738411382.webp')" }}
+        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/background-section.png')" }}
       >
         {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
         <div className="absolute inset-0 bg-[#0a2129]/55"></div>
-        <ScrollBoat variant="sightseeing" reverse />
+        <ScrollBoat />
 
         <div className="relative max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
@@ -532,56 +525,22 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* STATION SECTION — bản đồ phủ toàn bộ làm nền, tiêu đề nổi trên lớp gradient tối */}
-      <section className="relative h-160 md:h-180 overflow-hidden">
-        {/* Bản đồ số truyền mảng dữ liệu động từ API trạm bến — làm nền cho cả section */}
-        <div className="absolute inset-0">
-          <WaterwayMap
-            stationsList={waterbusStations}
-            stationAsFlag
-            showStationLabels
-            showStationImages
-            interactionGate
-            className="h-full"
-          />
-        </div>
-
-        {/* Gradient tối phía trên để tiêu đề luôn nổi bật — không chặn thao tác bản đồ bên dưới */}
-        <div className="absolute inset-x-0 top-0 z-10 h-64 bg-linear-to-b from-[#0a2129]/70 via-[#0a2129]/25 to-transparent pointer-events-none" />
-
-        {/* Tiêu đề & Subtitle */}
-        <div className="relative z-20 pt-16 md:pt-20 px-6 md:px-12 pointer-events-none">
-          <div className="max-w-7xl mx-auto flex flex-col items-center text-center space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-400">
-              {lang === "VN" ? "Mạng lưới bến tàu" : "Operational Grid"}
-            </p>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white drop-shadow-lg">
-              {lang === "VN" ? "Mạng lưới bến tàu kết nối khắp thành phố" : "A City-Wide Network Of Waterway Stations"}
-            </h2>
-          </div>
-        </div>
-      </section>
-
       {/* ===== SCHEDULE SECTION ===== */}
       <section
-        className="relative min-h-175 md:min-h-200 flex items-center py-24 bg-cover bg-center transition-colors duration-300 select-none overflow-hidden"
-        style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/schedule.jpg')" }}
+        className="relative min-h-175 md:min-h-200 flex items-center py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden"
       >
-        {/* Lớp phủ tối để chữ luôn nổi bật trên ảnh nền */}
-        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
-
         <div className="relative z-10 w-full max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           {/* Khối Thông Tin Bên Trái */}
           <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-32">
-            <span className="text-sm font-bold uppercase tracking-widest text-yellow-400">
+            <span className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
               {lang === "VN" ? "Thời gian hoạt động" : "Operation Hours"}
             </span>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white leading-tight">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white leading-tight">
               {lang === "VN"
                 ? "Lịch trình linh hoạt, sẵn sàng cho mọi hành trình"
                 : "Flexible Schedules, Ready For Every Journey"}
             </h2>
-            <p className="text-white/70 font-body text-base leading-relaxed">
+            <p className="text-slate-600 dark:text-white/70 font-body text-base leading-relaxed">
               {lang === "VN"
                 ? "Hệ thống vận hành liên tục từ sáng sớm đến tối muộn với tần suất tối ưu, đảm bảo đáp ứng trọn vẹn mọi nhu cầu di chuyển đi làm hay tham quan ngắm cảnh của quý khách."
                 : "The system operates continuously from early morning until late at night with optimized frequency, fully meeting your daily commuting or sightseeing needs."}
@@ -613,7 +572,7 @@ export const Home = () => {
                 </div>
                 <div className="flex items-baseline gap-3">
                   <span className="text-8xl md:text-9xl font-black font-headline tracking-tighter leading-none drop-shadow-md">
-                    15
+                    5
                   </span>
                   <span className="text-2xl md:text-3xl font-bold opacity-90">
                     {lang === "VN" ? "phút/chuyến" : "mins/trip"}
@@ -630,7 +589,7 @@ export const Home = () => {
               </div>
               <div className="flex items-baseline gap-2 text-slate-900 dark:text-white group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors duration-300">
                 <span className="text-6xl md:text-7xl font-black font-headline tracking-tighter leading-none">
-                  30
+                  20
                 </span>
                 <span className="text-lg font-bold text-slate-500 dark:text-slate-400">
                   {lang === "VN" ? "phút" : "mins"}
@@ -646,7 +605,7 @@ export const Home = () => {
               </div>
               <div className="flex items-baseline gap-2 text-slate-900 dark:text-white group-hover:text-[#124757] dark:group-hover:text-yellow-400 transition-colors duration-300">
                 <span className="text-6xl md:text-7xl font-black font-headline tracking-tighter leading-none">
-                  20
+                  10
                 </span>
                 <span className="text-lg font-bold text-slate-500 dark:text-slate-400">
                   {lang === "VN" ? "phút" : "mins"}
@@ -657,37 +616,55 @@ export const Home = () => {
         </div>
       </section>
 
+      {/* STATION SECTION — bản đồ phủ toàn bộ làm nền, tiêu đề nổi trên lớp gradient tối */}
+      <section className="relative h-160 md:h-180 overflow-hidden">
+        {/* Bản đồ số truyền mảng dữ liệu động từ API trạm bến — làm nền cho cả section */}
+        <div className="absolute inset-0">
+          <WaterwayMap
+            stationsList={waterbusStations}
+            stationAsFlag
+            showStationLabels
+            showStationImages
+            interactionGate
+            className="h-full"
+          />
+        </div>
+
+        {/* Gradient tối phía trên để tiêu đề luôn nổi bật — không chặn thao tác bản đồ bên dưới */}
+        <div className="absolute inset-x-0 top-0 z-10 h-64 bg-linear-to-b from-[#0a2129]/70 via-[#0a2129]/25 to-transparent pointer-events-none" />
+
+        {/* Tiêu đề & Subtitle */}
+        <div className="relative z-20 pt-16 md:pt-20 px-6 md:px-12 pointer-events-none">
+          <div className="max-w-7xl mx-auto flex flex-col items-center text-center space-y-4">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-400">
+              {lang === "VN" ? "Mạng lưới bến tàu" : "Operational Grid"}
+            </p>
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white drop-shadow-lg">
+              {lang === "VN" ? "Mạng lưới bến tàu kết nối khắp thành phố" : "A City-Wide Network Of Waterway Stations"}
+            </h2>
+          </div>
+        </div>
+      </section>
+
       {/* ===== PROMOTION SECTIONS ===== */}
-      <section className="relative py-24 transition-colors duration-300 select-none overflow-hidden">
-        {/* Video nền — tắt tiếng, tự phát, chạy liên tục */}
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/video-river.mp4"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        {/* Lớp phủ tối để chữ luôn nổi bật trên video nền */}
-        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
-        <ScrollBoat variant="top" reverse />
+      <section className="relative py-24 bg-white dark:bg-slate-900 transition-colors duration-300 select-none overflow-hidden">
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12">
           {/* Tiêu đề & Subtitle */}
           <div className="flex flex-col items-center text-center mb-16 space-y-4">
-            <p className="text-sm font-bold uppercase tracking-widest text-yellow-400">
+            <p className="text-sm font-bold uppercase tracking-widest text-yellow-500 dark:text-yellow-400">
               {lang === "VN" ? "Chương trình ưu đãi" : "Exclusive Offers"}
             </p>
-            <h2 className="text-4xl md:text-5xl font-headline font-bold text-white">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold text-[#124757] dark:text-white">
               {lang === "VN" ? "Đặc quyền dành riêng cho hành khách" : "Exclusive Privileges For Our Passengers"}
             </h2>
           </div>
           {/* Grid danh sách các thẻ Khuyến mại (dữ liệu thật từ API getPublicPromotions) */}
           {isLoadingPromotions ? (
             <div className="flex justify-center items-center py-20">
-              <div className="w-10 h-10 border-4 border-white/20 border-t-yellow-400 rounded-full animate-spin"></div>
+              <div className="w-10 h-10 border-4 border-slate-200 dark:border-white/20 border-t-yellow-500 dark:border-t-yellow-400 rounded-full animate-spin"></div>
             </div>
           ) : promotions.length === 0 ? (
-            <div className="text-center py-10 text-white/60 font-medium">
+            <div className="text-center py-10 text-slate-500 dark:text-white/60 font-medium">
               {lang === "VN" ? "Hiện chưa có khuyến mãi công khai." : "No public promotions right now."}
             </div>
           ) : (

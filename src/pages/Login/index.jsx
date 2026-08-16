@@ -6,6 +6,7 @@ import { loginWithGoogle, loginWithPhoneEmail } from "../../services/authService
 import { useDispatch, useSelector } from "react-redux";
 import { loginSuccess } from "../../redux/authSlice";
 import { getDefaultAdminLandingPath } from "../../layout/Admin/AdminSidebar";
+import { ScrollBoat } from "../../components/ScrollBoat";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -195,17 +196,24 @@ export const Login = () => {
   return (
     <div className="min-h-screen w-full flex font-body bg-white dark:bg-slate-900 transition-colors duration-300 overflow-x-hidden">
 
-      {/* CỘT TRÁI: BANNER HÌNH ẢNH  */}
-      <div className="w-1/2 h-screen top-0 hidden md:block relative overflow-hidden shrink-0 select-none">
-        <img
-          src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/login.png"
-          alt="Login Banner"
-          className="w-full h-full object-cover transform scale-100 hover:scale-[1.01] transition-transform duration-700 ease-out"
+      {/* CỘT TRÁI: BANNER VIDEO NỀN + TÀU (chuyển từ Promotion section của trang chủ) */}
+      <section className="w-1/2 h-screen top-0 hidden md:block relative overflow-hidden shrink-0 select-none">
+        {/* Video nền — tắt tiếng, tự phát, chạy liên tục */}
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          src="https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/video-river.mp4"
+          className="absolute inset-0 w-full h-full object-cover"
         />
+        {/* Lớp phủ tối để chữ luôn nổi bật trên video nền */}
+        <div className="absolute inset-0 bg-[#0a2129]/55"></div>
+        <ScrollBoat variant="top" reverse />
         {/* Lớp phủ chuyển màu Gradient xanh đặc trưng giúp hiển thị chữ rõ nét */}
         <div className="absolute inset-0 bg-linear-to-t from-[#124757] via-[#124757]/40 to-transparent opacity-90"></div>
 
-        {/* Khung nội dung text nổi dưới chân ảnh */}
+        {/* Khung nội dung text nổi dưới chân video */}
         <div className="absolute bottom-12 left-12 right-12 text-white space-y-2 z-10">
           <h2 className="font-headline font-black text-4xl uppercase tracking-wider text-[#FFD100] drop-shadow-md">
             WaterBus
@@ -216,7 +224,7 @@ export const Login = () => {
               : "Discover the beauty of Saigon River your way."}
           </p>
         </div>
-      </div>
+      </section>
 
       {/* CỘT PHẢI: KHÔNG GIAN FORM ĐĂNG NHẬP FULL CHIỀU CAO MÀN HÌNH */}
       <div className="flex-1 min-h-screen flex flex-col justify-center bg-white dark:bg-slate-900 px-6 py-12 sm:px-12 md:px-16 lg:px-24 relative">

@@ -1,10 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
+
 import { AppDateInput } from "../../components/AppDateInput";
 import { FormSelect } from "../../components/FormSelect";
+
 import { fetchOperationsSchedule, toOperationsScheduleDate } from "../../services/operationsService";
 import { fetchAllStations } from "../../services/stationService";
+import { normalizeTripStatusKey } from "../../services/tripService";
+
 import { getApiErrorMessage } from "../../utils/apiError";
 import { getTodayDateString } from "../../utils/dateOnly";
 import { resolveTripKindKey } from "../../utils/routeTypes";
@@ -20,7 +24,6 @@ import {
   resolveStopStatusKey,
   findNextApproachStopIndex,
 } from "../../utils/tripStopTimes";
-import { normalizeTripStatusKey } from "../../services/tripService";
 
 /** Giờ hiện trên lịch khách: ưu tiên lịch/điều chỉnh, không lấy actual sớm từ simulator. */
 const pickScheduleBoardArrival = (stop) => (
@@ -321,7 +324,7 @@ export function Schedule() {
   const routeTypeOptions = useMemo(() => ([
     { value: "", label: lang === "VN" ? "Tất cả loại" : "All types" },
     { value: "Regular", label: "Waterbus" },
-    { value: "SightseeingLoop", label: "Sightseeing" },
+    { value: "SightseeingLoop", label: "WaterSightseeing" },
   ]), [lang]);
 
   const filteredTrips = useMemo(() => {
@@ -372,8 +375,8 @@ export function Schedule() {
             </h1>
             <p className="max-w-xl text-sm font-medium text-slate-500 dark:text-slate-400">
               {lang === "VN"
-                ? "Nắm rõ từng chuyến khởi hành, cập nhật tức thì như bảng điện tử tại nhà ga."
-                : "Every departure at a glance, updated the instant it changes — just like at the terminal."}
+                ? "Nắm rõ từng chuyến khởi hành, cập nhật tức thì"
+                : "Every departure at a glance, updated the instant it changes"}
             </p>
           </div>
 

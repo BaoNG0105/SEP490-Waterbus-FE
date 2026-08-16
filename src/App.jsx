@@ -39,7 +39,7 @@ import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
-import { Revenue } from "./pages/Admin/Revenue";
+import { BookingSummary } from "./pages/Admin/BookingSummary";
 import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor, BoatCrewSchedule } from "./pages/Admin/BoatManagement";
 import { TripManagement, CreateTrip, TripDetail } from "./pages/Admin/TripManagement";
 import { SeatTypeManagement } from "./pages/Admin/SeatTypeManagement";
@@ -367,12 +367,12 @@ function App() {
             }
           />
 
-          {/* ******* Revenue Report Page ******* */}
+          {/* ******* Booking Summary Page ******* */}
           <Route
-            path="/admin/revenue"
+            path="/admin/booking-summary"
             element={
-              <AdminLayout title="Revenue">
-                <Revenue />
+              <AdminLayout title="Booking Summary">
+                <BookingSummary />
               </AdminLayout>
             }
           />
