@@ -11,6 +11,19 @@ export const TermsAndPolicy = () => {
   const [activeCategory, setActiveCategory] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [expandedIds, setExpandedIds] = useState(() => new Set());
+
+  const toggleEntry = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -83,20 +96,40 @@ export const TermsAndPolicy = () => {
               </nav>
             </aside>
 
-            <section className="lg:col-span-9 space-y-8">
-              {(activeGroup?.entries || []).map((entry) => (
-                <article
-                  key={entry.knowledgeEntryId}
-                  className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 p-8"
-                >
-                  <h2 className="text-xl md:text-2xl font-headline font-bold text-[#124757] dark:text-white mb-4">
-                    {entry.title}
-                  </h2>
-                  <p className="text-sm md:text-base text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line font-body">
-                    {entry.content}
-                  </p>
-                </article>
-              ))}
+            <section className="lg:col-span-9 space-y-4">
+              {(activeGroup?.entries || []).map((entry) => {
+                const isExpanded = expandedIds.has(entry.knowledgeEntryId);
+                return (
+                  <article
+                    key={entry.knowledgeEntryId}
+                    className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleEntry(entry.knowledgeEntryId)}
+                      aria-expanded={isExpanded}
+                      className="flex w-full items-center justify-between gap-4 p-8 text-left"
+                    >
+                      <h2 className="text-xl md:text-2xl font-headline font-bold text-[#124757] dark:text-white">
+                        {entry.title}
+                      </h2>
+                      <span
+                        className={`material-symbols-outlined shrink-0 text-2xl text-slate-400 transition-transform dark:text-slate-500 ${
+                          isExpanded ? "rotate-180" : ""
+                        }`}
+                        aria-hidden
+                      >
+                        expand_more
+                      </span>
+                    </button>
+                    {isExpanded && (
+                      <p className="px-8 pb-8 -mt-2 text-sm md:text-base text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line font-body">
+                        {entry.content}
+                      </p>
+                    )}
+                  </article>
+                );
+              })}
             </section>
           </div>
         )}
