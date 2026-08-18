@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { fetchSightseeingTripSearch } from "../../../services/tripService";
-import { getTodayDateString } from "../../../utils/dateOnly";
+import { getTodayDateString, getMaxBookableDateString } from "../../../utils/dateOnly";
 
 const SIGHTSEEING_ROUTE_TYPE = "SightseeingLoop";
 
@@ -90,6 +90,7 @@ export default function Step1SearchSightseeing({ bookingData, updateData, onNext
           <AppDateInput
             value={departureDate}
             min={getTodayDateString()}
+            max={getMaxBookableDateString()}
             onChange={(e) => updateData({ departureDate: e.target.value })}
             className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
           />

@@ -1023,13 +1023,6 @@ export default function Step2SelectTripAndSeats({
                           </span>
                           <span className="text-2xl font-headline font-black text-[#124757] dark:text-white">{formatTripTime(getSegmentArrival(trip))}</span>
                         </div>
-                        {isLoopRoute ? (
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                            <span>
-                              {lang === "VN" ? "Tour tham quan sông Sài Gòn " : "Saigon River Sightseeing Tour "}
-                            </span>
-                          </div>
-                        ) : null}
                         {fareAdjLabel ? (
                           <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
                             {fareAdjLabel}
@@ -1302,8 +1295,10 @@ export default function Step2SelectTripAndSeats({
         </p>
       )}
 
-      {/* --- NÚT ĐIỀU HƯỚNG CHUYỂN BƯỚC DƯỚI CÙNG --- */}
-      <div className="pt-6 border-t flex justify-between">
+      {/* --- NÚT ĐIỀU HƯỚNG CHUYỂN BƯỚC DƯỚI CÙNG ---
+          Dán cố định (sticky) ở đáy khung nhìn khi cuộn — danh sách chuyến bên trái có thể dài,
+          tránh việc phải kéo hết xuống cuối trang mới thấy nút chuyển bước. */}
+      <div className="sticky bottom-0 z-30 -mx-4 px-4 pt-4 pb-4 md:-mx-8 md:px-8 md:pt-6 rounded-t-3xl border border-b-0 border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-[0_-8px_20px_-12px_rgba(15,23,42,0.15)] dark:shadow-[0_-8px_20px_-12px_rgba(0,0,0,0.4)] flex justify-between">
         <button type="button" onClick={handleBack} className="border px-6 py-3 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800">
           {leaveTarget === "home"
             ? (lang === "VN" ? "Thoát" : "Leave")

@@ -1437,7 +1437,7 @@ export function StaffTicketScanPage() {
             type="button"
             onClick={() => setCameraOpen((prev) => !prev)}
             disabled={isScanning}
-            className={`inline-flex h-[46px] items-center justify-center gap-1.5 rounded-2xl px-4 text-xs font-headline font-black uppercase tracking-wider disabled:opacity-50 ${
+            className={`inline-flex h-11.5 items-center justify-center gap-1.5 rounded-2xl px-4 text-xs font-headline font-black uppercase tracking-wider disabled:opacity-50 ${
               cameraOpen
                 ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
                 : "border border-slate-200 bg-white text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
@@ -1453,7 +1453,7 @@ export function StaffTicketScanPage() {
           <button
             type="submit"
             disabled={isScanning}
-            className="h-[46px] rounded-2xl bg-[#124757] px-6 text-xs font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
+            className="h-11.5 rounded-2xl bg-[#124757] px-6 text-xs font-headline font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
           >
             {isScanning
               ? (lang === "VN" ? "Đang tra…" : "Looking up…")

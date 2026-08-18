@@ -4,7 +4,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchTripSearch } from "../../../services/tripService";
-import { getTodayDateString } from "../../../utils/dateOnly";
+import { getTodayDateString, getMaxBookableDateString } from "../../../utils/dateOnly";
 import { getApiErrorMessage } from "../../../utils/apiError";
 
 const getStationId = (station) => String(station.stationId || station.id || "");
@@ -195,6 +195,7 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
           <AppDateInput
             value={departureDate}
             min={getTodayDateString()}
+            max={getMaxBookableDateString()}
             onChange={(e) => {
               const next = e.target.value;
               const patch = { departureDate: next };
@@ -213,6 +214,7 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
             <AppDateInput
               value={returnDate}
               min={departureDate || getTodayDateString()}
+              max={getMaxBookableDateString()}
               onChange={(e) => updateData({ returnDate: e.target.value })}
               className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
             />
