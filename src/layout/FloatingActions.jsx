@@ -1,18 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { AIChatbotPanel } from "../components/AIChatbotPanel";
 
 const aiButtonImage = "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/AI.png";
 
-// Âm thanh chào mừng phát cùng lúc bong bóng chào hiện lên, theo ngôn ngữ đang chọn
-const GREETING_AUDIO_URL = {
-  VN: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/greeting-vi.wav",
-  ENG: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/greeting-en.wav",
-};
-
 // Chỉ chào 1 lần cho mỗi phiên (session), reload trang trong cùng phiên sẽ không lặp lại
 const GREETING_SESSION_KEY = "hasSeenAiGreeting";
-// Độ trễ trước khi hiệu ứng chào (pop-in nút + bong bóng + âm thanh) bắt đầu, tính từ lúc vào web
+// Độ trễ trước khi hiệu ứng chào (pop-in nút + bong bóng) bắt đầu, tính từ lúc vào web
 const GREETING_START_DELAY_MS = 2000;
 
 export const FloatingActions = () => {
@@ -27,40 +21,15 @@ export const FloatingActions = () => {
   // Bong bóng chào mừng: hiện sau GREETING_START_DELAY_MS, tự tắt sau ~5 giây
   const [showGreeting, setShowGreeting] = useState(false);
 
-  // Luôn giữ ngôn ngữ mới nhất để dùng trong setTimeout (effect dưới chỉ chạy 1 lần lúc mount)
-  const langRef = useRef(lang);
-  useEffect(() => {
-    langRef.current = lang;
-  }, [lang]);
-
   useEffect(() => {
     if (hasSeenGreeting) return;
 
     let hideGreetingTimer;
-    let greetingAudio;
-    const INTERACTION_EVENTS = ["pointerdown", "keydown"];
-    let playOnFirstInteraction = () => {};
 
     const startGreetingTimer = setTimeout(() => {
       setIsButtonVisible(true);
       setShowGreeting(true);
       sessionStorage.setItem(GREETING_SESSION_KEY, "true");
-
-      // Phát âm thanh chào mừng theo ngôn ngữ hiện tại
-      const audioUrl = GREETING_AUDIO_URL[langRef.current] || GREETING_AUDIO_URL.ENG;
-      greetingAudio = new Audio(audioUrl);
-
-      // Đa số trình duyệt chặn autoplay có tiếng nếu người dùng chưa từng tương tác với trang.
-      // Nếu bị chặn thì tự phát lại ngay ở lần chạm/click/gõ phím đầu tiên của người dùng.
-      playOnFirstInteraction = () => {
-        greetingAudio.play().catch(() => {});
-        INTERACTION_EVENTS.forEach((evt) => document.removeEventListener(evt, playOnFirstInteraction));
-      };
-      greetingAudio.play().catch(() => {
-        INTERACTION_EVENTS.forEach((evt) =>
-          document.addEventListener(evt, playOnFirstInteraction, { once: true }),
-        );
-      });
 
       hideGreetingTimer = setTimeout(() => setShowGreeting(false), 5000);
     }, GREETING_START_DELAY_MS);
@@ -68,8 +37,6 @@ export const FloatingActions = () => {
     return () => {
       clearTimeout(startGreetingTimer);
       clearTimeout(hideGreetingTimer);
-      greetingAudio?.pause();
-      INTERACTION_EVENTS.forEach((evt) => document.removeEventListener(evt, playOnFirstInteraction));
     };
   }, [hasSeenGreeting]);
 
