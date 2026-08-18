@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
+
 import { fetchAllBoats } from "../../../services/boatService";
 import { fetchAllStations } from "../../../services/stationService";
 import {
@@ -26,6 +27,7 @@ import {
   resolveShiftState,
   validateBulkAssignmentForm,
 } from "../../../services/staffAssignmentService";
+
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getUserId, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
@@ -145,6 +147,57 @@ const getStaffName = (staff) => staff?.fullName || staff?.name || staff?.raw?.fu
 const getBoatId = (boat) => String(boat?.boatId || boat?.id || "");
 const getStationId = (station) => String(station?.stationId || station?.id || "");
 
+/**
+ * Validate real-time từng field bắt buộc (*) của modal "Xếp lịch làm việc" — trả về
+ * { [field]: message }, rỗng nghĩa là hợp lệ. `validateBulkAssignmentForm` (staffAssignmentService)
+ * vẫn giữ nguyên làm lớp chặn cuối cùng lúc submit (kiểm thêm daysOfWeek/giờ ca), hàm này chỉ lo
+ * phần hiện lỗi ngay dưới từng field khi người dùng đang thao tác trong modal.
+ */
+const validateCreateAssignmentForm = (form, lang) => {
+  const errors = {};
+
+  if (!form.staffUserId) {
+    errors.staffUserId = lang === "VN" ? "Vui lòng chọn nhân viên." : "Please select a staff member.";
+  }
+
+  if (form.assignmentType === ASSIGNMENT_TYPE.BOAT) {
+    if (!form.boatId) {
+      errors.boatId = lang === "VN" ? "Vui lòng chọn tàu." : "Please select a boat.";
+    }
+  } else if (form.assignmentType === ASSIGNMENT_TYPE.STATION && form.staffUserId && !form.stationId) {
+    errors.stationId = lang === "VN"
+      ? "Nhân viên chưa được gắn bến — không thể xếp lịch."
+      : "Staff has no assigned station — cannot schedule.";
+  }
+
+  if (!form.fromDate) {
+    errors.fromDate = lang === "VN" ? "Vui lòng chọn từ ngày." : "Please select a start date.";
+  }
+  if (!form.toDate) {
+    errors.toDate = lang === "VN" ? "Vui lòng chọn đến ngày." : "Please select an end date.";
+  } else if (form.fromDate && form.toDate < form.fromDate) {
+    errors.toDate = lang === "VN" ? "Đến ngày phải sau hoặc bằng từ ngày." : "End date must be on or after start date.";
+  }
+
+  return errors;
+};
+
+/**
+ * Validate real-time từng field bắt buộc (*) của modal "Thay nhân viên": Nhân viên mới, Lý do.
+ */
+const validateReplaceForm = (form, lang) => {
+  const errors = {};
+
+  if (!form.staffUserId) {
+    errors.staffUserId = lang === "VN" ? "Vui lòng chọn nhân viên thay thế." : "Please select a replacement staff.";
+  }
+  if (!String(form.reason || "").trim()) {
+    errors.reason = lang === "VN" ? "Vui lòng nhập lý do thay." : "Please enter a replacement reason.";
+  }
+
+  return errors;
+};
+
 export function StaffAssignmentManagement({ viewTabs = null }) {
   const { lang } = useApp();
   const { user: currentUser } = useSelector((state) => state.auth);
@@ -192,6 +245,10 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
     emptyCreateForm(canCreateBoat ? ASSIGNMENT_TYPE.BOAT : ASSIGNMENT_TYPE.STATION)
   );
   const [createError, setCreateError] = useState("");
+  // Validate real-time từng field trong modal xếp lịch — lỗi chỉ hiện cho field đã "touched"
+  // (đã chọn/đổi ít nhất 1 lần — các field ở đây đều là select/date-picker, không có blur tự
+  // nhiên như input text), nhưng nút "Xác nhận xếp lịch" bị khóa ngay khi còn field trống/sai.
+  const [createTouched, setCreateTouched] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingStaffStation, setIsLoadingStaffStation] = useState(false);
   const [replaceForm, setReplaceForm] = useState({
@@ -201,6 +258,9 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
     reason: "",
   });
   const [replaceError, setReplaceError] = useState("");
+  // Validate real-time từng field trong modal thay nhân viên — lỗi chỉ hiện cho field đã
+  // "touched" (nhân viên mới = đã chọn 1 lần, lý do = đã rời khỏi ô 1 lần).
+  const [replaceTouched, setReplaceTouched] = useState({});
   const [isReplacing, setIsReplacing] = useState(false);
 
   // list | schedule — mặc định Lịch (Tuần; Admin xem theo tàu)
@@ -229,6 +289,9 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
     "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1 block";
   const inputStyle =
     "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+  const errorInputStyle =
+    "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all";
+  const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
   const filterInputStyle =
     "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-lg px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400";
 
@@ -329,6 +392,9 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
             ? { ...prev, stationId: ids?.[0] ? String(ids[0]) : "" }
             : prev
         ));
+        // Bến được nạp tự động (không phải do user chọn tay) — touch ngay khi có kết quả để lỗi
+        // "chưa được gắn bến" (nếu có) hiện lên kịp thời, không cần một thao tác nào khác.
+        if (!cancelled) setCreateTouched((prev) => ({ ...prev, stationId: true }));
       } finally {
         if (!cancelled) setIsLoadingStaffStation(false);
       }
@@ -601,6 +667,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
 
   const openCreate = () => {
     setCreateError("");
+    setCreateTouched({});
     if (!canCreateBoat && !canCreateStation) return;
     setCreateForm(emptyCreateForm(canCreateBoat ? ASSIGNMENT_TYPE.BOAT : ASSIGNMENT_TYPE.STATION));
     setIsCreateOpen(true);
@@ -625,10 +692,31 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
       }
       return next;
     });
+    // Field vừa được chọn/đổi → touch để lỗi (nếu có) hiện ngay. Đổi loại phân công thì reset hết
+    // touched của các field phụ thuộc (staffUserId/boatId/stationId vừa bị xóa trắng ở trên).
+    setCreateTouched((prev) => (
+      field === "assignmentType" ? { assignmentType: true } : { ...prev, [field]: true }
+    ));
   };
+
+  const createFieldErrors = useMemo(
+    () => validateCreateAssignmentForm(createForm, lang),
+    [createForm, lang]
+  );
+  const hasCreateFieldErrors = Object.keys(createFieldErrors).length > 0;
+  const visibleCreateFieldErrors = useMemo(() => {
+    const visible = {};
+    Object.keys(createFieldErrors).forEach((field) => {
+      if (createTouched[field]) visible[field] = createFieldErrors[field];
+    });
+    return visible;
+  }, [createFieldErrors, createTouched]);
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
+    // Bấm submit khi còn field lỗi → touch hết để hiện lỗi lên thay vì âm thầm chặn.
+    setCreateTouched({ staffUserId: true, boatId: true, stationId: true, fromDate: true, toDate: true });
+    if (hasCreateFieldErrors) return;
     try {
       setIsSaving(true);
       setCreateError("");
@@ -695,6 +783,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
 
   const openReplace = (row) => {
     setReplaceError("");
+    setReplaceTouched({});
     setReplaceForm({
       assignmentId: row.assignmentId,
       staffName: row.staffName || "",
@@ -703,16 +792,21 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
     });
   };
 
+  const replaceFieldErrors = useMemo(() => validateReplaceForm(replaceForm, lang), [replaceForm, lang]);
+  const hasReplaceFieldErrors = Object.keys(replaceFieldErrors).length > 0;
+  const visibleReplaceFieldErrors = useMemo(() => {
+    const visible = {};
+    Object.keys(replaceFieldErrors).forEach((field) => {
+      if (replaceTouched[field]) visible[field] = replaceFieldErrors[field];
+    });
+    return visible;
+  }, [replaceFieldErrors, replaceTouched]);
+
   const handleReplaceSubmit = async (e) => {
     e.preventDefault();
-    if (!replaceForm.assignmentId || !replaceForm.staffUserId) {
-      setReplaceError(lang === "VN" ? "Chọn nhân viên thay thế." : "Select replacement staff.");
-      return;
-    }
-    if (!String(replaceForm.reason || "").trim()) {
-      setReplaceError(lang === "VN" ? "Nhập lý do thay." : "Enter a replacement reason.");
-      return;
-    }
+    // Bấm submit khi còn lỗi → touch hết để hiện lỗi lên thay vì âm thầm chặn.
+    setReplaceTouched({ staffUserId: true, reason: true });
+    if (!replaceForm.assignmentId || hasReplaceFieldErrors) return;
     try {
       setIsReplacing(true);
       setReplaceError("");
@@ -1337,8 +1431,9 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                     placeholder={lang === "VN" ? "-- Chọn nhân viên --" : "-- Select staff --"}
                     searchPlaceholder={lang === "VN" ? "Tìm tên nhân viên..." : "Search staff..."}
                     emptyLabel={lang === "VN" ? "Không có nhân viên" : "No staff"}
-                    className={inputStyle}
+                    className={visibleCreateFieldErrors.staffUserId ? errorInputStyle : inputStyle}
                   />
+                  {visibleCreateFieldErrors.staffUserId && <p className={errorTextStyle}>{visibleCreateFieldErrors.staffUserId}</p>}
                 </div>
 
                 {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT ? (
@@ -1361,14 +1456,15 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                       placeholder={lang === "VN" ? "-- Chọn tàu --" : "-- Select boat --"}
                       searchPlaceholder={lang === "VN" ? "Tìm tên tàu..." : "Search boat name..."}
                       emptyLabel={lang === "VN" ? "Không có tàu" : "No boats"}
-                      className={inputStyle}
+                      className={visibleCreateFieldErrors.boatId ? errorInputStyle : inputStyle}
                     />
+                    {visibleCreateFieldErrors.boatId && <p className={errorTextStyle}>{visibleCreateFieldErrors.boatId}</p>}
                   </div>
                 ) : (
                   <>
                     <div>
                       <label className={labelStyle}>{lang === "VN" ? "Bến làm việc (*)" : "Work station (*)"}</label>
-                      <div className={`${inputStyle} flex items-center gap-2 font-bold text-[#124757] dark:text-yellow-400`}>
+                      <div className={`${visibleCreateFieldErrors.stationId ? errorInputStyle : inputStyle} flex items-center gap-2 font-bold text-[#124757] dark:text-yellow-400`}>
                         {!createForm.staffUserId
                           ? (lang === "VN" ? "-- Chọn nhân viên trước --" : "-- Select staff first --")
                           : isLoadingStaffStation
@@ -1377,6 +1473,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                               ? stationNameById.get(String(createForm.stationId)) || (lang === "VN" ? "Bến không xác định" : "Unknown station")
                               : (lang === "VN" ? "Nhân viên chưa được gắn bến." : "Staff has no station assigned.")}
                       </div>
+                      {visibleCreateFieldErrors.stationId && <p className={errorTextStyle}>{visibleCreateFieldErrors.stationId}</p>}
                     </div>
                   </>
                 )}
@@ -1388,8 +1485,9 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                       required
                       value={createForm.fromDate}
                       onChange={(e) => handleCreateField("fromDate", e.target.value)}
-                      className={inputStyle}
+                      className={visibleCreateFieldErrors.fromDate ? errorInputStyle : inputStyle}
                     />
+                    {visibleCreateFieldErrors.fromDate && <p className={errorTextStyle}>{visibleCreateFieldErrors.fromDate}</p>}
                   </div>
                   <div>
                     <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "End date (*)"}</label>
@@ -1397,8 +1495,9 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                       required
                       value={createForm.toDate}
                       onChange={(e) => handleCreateField("toDate", e.target.value)}
-                      className={inputStyle}
+                      className={visibleCreateFieldErrors.toDate ? errorInputStyle : inputStyle}
                     />
+                    {visibleCreateFieldErrors.toDate && <p className={errorTextStyle}>{visibleCreateFieldErrors.toDate}</p>}
                   </div>
                 </div>
 
@@ -1413,7 +1512,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
 
                 <div>
                   <label className={labelStyle}>
-                    {lang === "VN" ? "Làm những thứ nào" : "Which weekdays"}
+                    {lang === "VN" ? "Các ngày làm trong tuần" : "Days of the week"}
                   </label>
                   <div className="flex flex-wrap gap-1.5">
                     {DAYS_OF_WEEK.map((day) => {
@@ -1445,7 +1544,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
               <div className="shrink-0 border-t border-slate-100 px-5 py-4 dark:border-slate-700">
                 <button
                   type="submit"
-                  disabled={isSaving}
+                  disabled={isSaving || hasCreateFieldErrors}
                   className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isSaving && (
@@ -1490,7 +1589,10 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
               <FormSelect
                 required
                 value={replaceForm.staffUserId}
-                onChange={(value) => setReplaceForm((prev) => ({ ...prev, staffUserId: String(value ?? "") }))}
+                onChange={(value) => {
+                  setReplaceForm((prev) => ({ ...prev, staffUserId: String(value ?? "") }));
+                  setReplaceTouched((prev) => ({ ...prev, staffUserId: true }));
+                }}
                 options={staffOptionsForCreate
                   .map((s) => ({
                     value: getStaffId(s),
@@ -1501,8 +1603,9 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                 placeholder={lang === "VN" ? "-- Chọn nhân viên --" : "-- Select staff --"}
                 searchPlaceholder={lang === "VN" ? "Tìm tên nhân viên..." : "Search staff..."}
                 emptyLabel={lang === "VN" ? "Không có nhân viên" : "No staff"}
-                className={inputStyle}
+                className={visibleReplaceFieldErrors.staffUserId ? errorInputStyle : inputStyle}
               />
+              {visibleReplaceFieldErrors.staffUserId && <p className={errorTextStyle}>{visibleReplaceFieldErrors.staffUserId}</p>}
             </label>
             <label className="block space-y-1.5">
               <span className={labelStyle}>{lang === "VN" ? "Lý do thay (*)" : "Reason (*)"}</span>
@@ -1511,13 +1614,15 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                 required
                 value={replaceForm.reason}
                 onChange={(e) => setReplaceForm((prev) => ({ ...prev, reason: e.target.value }))}
-                className={inputStyle}
+                onBlur={() => setReplaceTouched((prev) => ({ ...prev, reason: true }))}
+                className={visibleReplaceFieldErrors.reason ? errorInputStyle : inputStyle}
                 placeholder={lang === "VN" ? "VD: Nghỉ đột xuất" : "e.g. Sudden leave"}
               />
+              {visibleReplaceFieldErrors.reason && <p className={errorTextStyle}>{visibleReplaceFieldErrors.reason}</p>}
             </label>
             <button
               type="submit"
-              disabled={isReplacing}
+              disabled={isReplacing || hasReplaceFieldErrors}
               className="w-full bg-sky-600 text-white font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl hover:brightness-110 disabled:opacity-50"
             >
               {isReplacing
