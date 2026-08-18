@@ -12,16 +12,7 @@ import { UserAvatar } from "../../../components/UserAvatar";
 import { promptResetManagedPassword } from "../../../utils/managedPasswordReset";
 import { notify } from "../../../utils/swalToast";
 import { StaffFormFields } from "./StaffFormFields";
-
-const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
-
-const isAllowedEmail = (email) => {
-    const trimmed = String(email || "").trim().toLowerCase();
-    if (!trimmed) return true;
-    const at = trimmed.lastIndexOf("@");
-    if (at < 1 || at === trimmed.length - 1) return false;
-    return ALLOWED_EMAIL_DOMAINS.includes(trimmed.slice(at + 1));
-};
+import { validateStaffFields } from "./staffValidation";
 
 // Chuyển đổi chuỗi ngày sinh trả về từ BE (có thể là ISO hoặc dd/MM/yyyy) sang định dạng yyyy-MM-dd cho input HTML5
 const toInputDate = (value) => {
@@ -203,6 +194,19 @@ export function EditStaff() {
         [stations]
     );
 
+    // Validate real-time các field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi
+    // ít nhất 1 lần), nhưng nút Lưu bị khóa ngay khi còn lỗi dù chưa touched hết.
+    const [touchedFields, setTouchedFields] = useState({});
+    const fieldErrors = useMemo(() => validateStaffFields(formData, lang), [formData, lang]);
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+    const visibleFieldErrors = useMemo(() => {
+        const visible = {};
+        Object.keys(fieldErrors).forEach((field) => {
+            if (touchedFields[field]) visible[field] = fieldErrors[field];
+        });
+        return visible;
+    }, [fieldErrors, touchedFields]);
+
     const handleInputChange = (field, value) => {
         setFormData((prev) => {
             const next = { ...prev, [field]: value };
@@ -213,8 +217,15 @@ export function EditStaff() {
         });
     };
 
+    const handleFieldBlur = (field) => {
+        setTouchedFields((prev) => ({ ...prev, [field]: true }));
+    };
+
     const handleFormSubmit = async (e) => {
         e.preventDefault();
+        // Bấm submit (VD: nhấn Enter) khi còn lỗi → hiện hết lỗi lên thay vì âm thầm chặn.
+        setTouchedFields({ fullName: true, phoneNumber: true, email: true });
+        if (hasFieldErrors) return;
         try {
             setIsSubmitting(true);
             setErrorMsg("");
@@ -229,15 +240,6 @@ export function EditStaff() {
                     lang === "VN"
                         ? "Vui lòng chọn bến làm việc cho nhân viên."
                         : "Please select a working station for the staff."
-                );
-                return;
-            }
-
-            if (!isAllowedEmail(formData.email)) {
-                setErrorMsg(
-                    lang === "VN"
-                        ? "Email chỉ hỗ trợ @gmail.com hoặc @fpt.edu.vn."
-                        : "Email must be @gmail.com or @fpt.edu.vn."
                 );
                 return;
             }
@@ -297,10 +299,6 @@ export function EditStaff() {
     const selectStyle = `${inputStyle} cursor-pointer`;
     const readOnlyStyle = "w-full bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-400 dark:text-slate-500 shadow-inner opacity-70 cursor-not-allowed";
 
-    const staffTypeLabel = formData.staffType === "OnBoard"
-        ? (lang === "VN" ? "Trên tàu" : "Onboard")
-        : (lang === "VN" ? "Bến tàu" : "Station");
-
     if (isLoading) {
         return (
             <div className="flex justify-center items-center h-64 w-full">
@@ -331,11 +329,8 @@ export function EditStaff() {
                     />
                     <div className="min-w-0">
                         <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide truncate">
-                            {lang === "VN" ? `Chỉnh sửa: ${userInfo.code}` : `Edit: ${userInfo.code}`}
-                        </h2>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                            {lang === "VN" ? "Cập nhật hồ sơ cá nhân và loại nhân viên" : "Update the staff's personal profile and staff type"}
-                        </p>
+                            {lang === "VN" ? `Chỉnh sửa nhân viên: ${userInfo.code}` : `Edit staff: ${userInfo.code}`}
+                        </h2>   
                     </div>
                 </div>
                 {canResetManagedUserPassword(currentUser, { ...userInfo, staffType: formData.staffType || userInfo.staffType }) && (
@@ -364,8 +359,8 @@ export function EditStaff() {
                     lang={lang}
                     formData={formData}
                     onChange={handleInputChange}
-                    roleLabel={staffRole?.displayName || staffRole?.systemName || "Staff"}
-                    staffTypeLabel={staffTypeLabel}
+                    errors={visibleFieldErrors}
+                    onFieldBlur={handleFieldBlur}
                     showStationAssign={showStationAssign}
                     stationAssignLabel={lang === "VN" ? "Gắn bến làm việc" : "Assigned stations"}
                     stationAssignSlot={
@@ -395,7 +390,7 @@ export function EditStaff() {
 
                 <button
                     type="submit"
-                    disabled={isSubmitting || (isCurrentUserAdmin && showStationAssign && formData.stationIds.length === 0)}
+                    disabled={isSubmitting || hasFieldErrors || (isCurrentUserAdmin && showStationAssign && formData.stationIds.length === 0)}
                     className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                     {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}

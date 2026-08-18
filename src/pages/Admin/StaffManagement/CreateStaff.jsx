@@ -10,15 +10,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { canAssignStations } from "../../../components/StationAssignField";
 import { notify } from "../../../utils/swalToast";
 import { StaffFormFields } from "./StaffFormFields";
-
-const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
-
-const isAllowedEmail = (email) => {
-  const trimmed = String(email || "").trim().toLowerCase();
-  const at = trimmed.lastIndexOf("@");
-  if (at < 1 || at === trimmed.length - 1) return false;
-  return ALLOWED_EMAIL_DOMAINS.includes(trimmed.slice(at + 1));
-};
+import { validateStaffFields } from "./staffValidation";
 
 const getStationId = (station) => String(station?.stationId || station?.id || "");
 
@@ -155,6 +147,19 @@ export function CreateStaff() {
         setFormData((prev) => ({ ...prev, stationIds: [String(stationId)] }));
     };
 
+    // Validate real-time các field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi
+    // ít nhất 1 lần), nhưng nút Tạo bị khóa ngay khi còn lỗi dù chưa touched hết.
+    const [touchedFields, setTouchedFields] = useState({});
+    const fieldErrors = useMemo(() => validateStaffFields(formData, lang), [formData, lang]);
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+    const visibleFieldErrors = useMemo(() => {
+        const visible = {};
+        Object.keys(fieldErrors).forEach((field) => {
+            if (touchedFields[field]) visible[field] = fieldErrors[field];
+        });
+        return visible;
+    }, [fieldErrors, touchedFields]);
+
     const handleInputChange = (field, value) => {
         setFormData((prev) => {
             const next = { ...prev, [field]: value };
@@ -165,8 +170,15 @@ export function CreateStaff() {
         });
     };
 
+    const handleFieldBlur = (field) => {
+        setTouchedFields((prev) => ({ ...prev, [field]: true }));
+    };
+
     const handleFormSubmit = async (e) => {
         e.preventDefault();
+        // Bấm submit (VD: nhấn Enter) khi còn lỗi → hiện hết lỗi lên thay vì âm thầm chặn.
+        setTouchedFields({ fullName: true, phoneNumber: true, email: true });
+        if (hasFieldErrors) return;
         try {
             setIsSubmitting(true);
             setErrorMsg("");
@@ -202,15 +214,6 @@ export function CreateStaff() {
                     );
                     return;
                 }
-            }
-
-            if (!isAllowedEmail(formData.email)) {
-                setErrorMsg(
-                    lang === "VN"
-                        ? "Email chỉ hỗ trợ @gmail.com hoặc @fpt.edu.vn."
-                        : "Email must be @gmail.com or @fpt.edu.vn."
-                );
-                return;
             }
 
             const payload = {
@@ -260,6 +263,7 @@ export function CreateStaff() {
         isSubmitting ||
         isLoadingRoles ||
         !staffRole ||
+        hasFieldErrors ||
         (targetStaffType === "Ground" && (
             (isManagerOnly && (managerStations.length === 0 || formData.stationIds.length === 0)) ||
             (isAdmin && formData.stationIds.length === 0)
@@ -297,19 +301,11 @@ export function CreateStaff() {
                     lang={lang}
                     formData={formData}
                     onChange={handleInputChange}
+                    errors={visibleFieldErrors}
+                    onFieldBlur={handleFieldBlur}
                     namePlaceholder={lang === "VN" ? "VD: Nguyễn Văn A" : "e.g. John Doe"}
                     phonePlaceholder="0901234567"
                     emailPlaceholder="name@gmail.com"
-                    roleLabel={
-                        isLoadingRoles
-                            ? (lang === "VN" ? "Đang tải..." : "Loading...")
-                            : (staffRole?.displayName || staffRole?.systemName || "Staff")
-                    }
-                    staffTypeLabel={
-                        isOnBoardSession
-                            ? (lang === "VN" ? "Trên tàu" : "Onboard")
-                            : (lang === "VN" ? "Bến tàu" : "Station")
-                    }
                     showStationAssign={showStationAssign}
                     stationAssignLabel={lang === "VN" ? "Bến làm việc" : "Working station"}
                     stationAssignSlot={

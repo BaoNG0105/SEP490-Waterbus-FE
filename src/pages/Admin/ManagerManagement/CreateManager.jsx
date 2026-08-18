@@ -6,15 +6,7 @@ import { getRoleSystemName } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify } from "../../../utils/swalToast";
 import { ManagerFormFields } from "./ManagerFormFields";
-
-const ALLOWED_EMAIL_DOMAINS = ["gmail.com", "fpt.edu.vn"];
-
-const isAllowedEmail = (email) => {
-  const trimmed = String(email || "").trim().toLowerCase();
-  const at = trimmed.lastIndexOf("@");
-  if (at < 1 || at === trimmed.length - 1) return false;
-  return ALLOWED_EMAIL_DOMAINS.includes(trimmed.slice(at + 1));
-};
+import { validateManagerFields } from "./managerValidation";
 
 export function CreateManager() {
     const { lang } = useApp();
@@ -61,27 +53,38 @@ export function CreateManager() {
         [roles]
     );
 
+    // Validate real-time các field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi
+    // ít nhất 1 lần), nhưng nút Tạo bị khóa ngay khi còn lỗi dù chưa touched hết.
+    const [touchedFields, setTouchedFields] = useState({});
+    const fieldErrors = useMemo(() => validateManagerFields(formData, lang), [formData, lang]);
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+    const visibleFieldErrors = useMemo(() => {
+        const visible = {};
+        Object.keys(fieldErrors).forEach((field) => {
+            if (touchedFields[field]) visible[field] = fieldErrors[field];
+        });
+        return visible;
+    }, [fieldErrors, touchedFields]);
+
     const handleInputChange = (field, value) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
+    const handleFieldBlur = (field) => {
+        setTouchedFields((prev) => ({ ...prev, [field]: true }));
+    };
+
     const handleFormSubmit = async (e) => {
         e.preventDefault();
+        // Bấm submit (VD: nhấn Enter) khi còn lỗi → hiện hết lỗi lên thay vì âm thầm chặn.
+        setTouchedFields({ fullName: true, phoneNumber: true, email: true, stationIds: true });
+        if (hasFieldErrors) return;
         try {
             setIsSubmitting(true);
             setErrorMsg("");
 
             if (!managerRole) {
                 setErrorMsg(lang === "VN" ? "Không tìm thấy vai trò Manager." : "Manager role not found.");
-                return;
-            }
-
-            if (!isAllowedEmail(formData.email)) {
-                setErrorMsg(
-                    lang === "VN"
-                        ? "Email chỉ hỗ trợ @gmail.com hoặc @fpt.edu.vn."
-                        : "Email must be @gmail.com or @fpt.edu.vn."
-                );
                 return;
             }
 
@@ -158,11 +161,8 @@ export function CreateManager() {
                     lang={lang}
                     formData={formData}
                     onChange={handleInputChange}
-                    roleLabel={
-                        isLoadingRoles
-                            ? (lang === "VN" ? "Đang tải..." : "Loading...")
-                            : (managerRole?.displayName || managerRole?.systemName || "Manager")
-                    }
+                    errors={visibleFieldErrors}
+                    onFieldBlur={handleFieldBlur}
                     namePlaceholder={lang === "VN" ? "VD: Nguyễn Văn A" : "e.g. John Doe"}
                     phonePlaceholder="0901234567"
                     emailPlaceholder="name@gmail.com"
@@ -170,7 +170,7 @@ export function CreateManager() {
 
                 <button
                     type="submit"
-                    disabled={isSubmitting || isLoadingRoles || !managerRole}
+                    disabled={isSubmitting || isLoadingRoles || !managerRole || hasFieldErrors}
                     className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                     {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}

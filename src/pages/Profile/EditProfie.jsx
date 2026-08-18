@@ -11,6 +11,8 @@ import "flag-icons/css/flag-icons.min.css";
 import { notify, showValidationMessage } from "../../utils/swalToast";
 import { AppDateInput } from "../../components/AppDateInput";
 import { UserAvatar } from "../../components/UserAvatar";
+import { getTodayDateString } from "../../utils/dateOnly";
+import { isBlank, isValidEmailFormat, isValidPhoneFormat } from "../../utils/formValidation";
 import Swal from "sweetalert2";
 
 import countries from "i18n-iso-countries";
@@ -107,6 +109,30 @@ export const EditProfile = () => {
         setProfileData((prev) => ({ ...prev, [name]: value }));
     };
 
+    // Validate real-time — lỗi chỉ hiện cho field đã "touched" (rời khỏi ít nhất 1 lần), nhưng
+    // nút Lưu bị khóa ngay khi còn lỗi dù chưa touched hết. Chỉ Họ tên là bắt buộc (*); Email/SĐT
+    // để trống vẫn hợp lệ nhưng nếu đã nhập thì phải đúng định dạng.
+    const [touchedFields, setTouchedFields] = useState({});
+    const handleFieldBlur = (e) => {
+        setTouchedFields((prev) => ({ ...prev, [e.target.name]: true }));
+    };
+    const fieldErrors = useMemo(() => {
+        const errors = {};
+        if (isBlank(profileData.fullName)) {
+            errors.fullName = lang === "VN" ? "Vui lòng nhập họ và tên." : "Full name is required.";
+        }
+        if (!isBlank(profileData.email) && !isValidEmailFormat(profileData.email)) {
+            errors.email = lang === "VN" ? "Email không đúng định dạng." : "Invalid email format.";
+        }
+        if (!isBlank(profileData.phoneNumber) && !isValidPhoneFormat(profileData.phoneNumber)) {
+            errors.phoneNumber = lang === "VN"
+                ? "Số điện thoại không hợp lệ (VD: 0901234567)."
+                : "Invalid phone number (e.g. 0901234567).";
+        }
+        return errors;
+    }, [profileData.fullName, profileData.email, profileData.phoneNumber, lang]);
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+
     const handleNationalityChange = (e) => {
         const matched = countryList.find(item => item.code === e.target.value);
         if (matched) {
@@ -140,6 +166,11 @@ export const EditProfile = () => {
     // ==========================================
     const handleSaveProfile = async (e) => {
         e.preventDefault();
+
+        // Bấm submit khi còn lỗi (VD: nhấn Enter trước khi rời hết field) → hiện hết lỗi lên
+        // thay vì âm thầm chặn.
+        setTouchedFields({ fullName: true, email: true, phoneNumber: true });
+        if (hasFieldErrors) return;
 
         const isEmailChanged = profileData.email.trim() !== "" && profileData.email.trim() !== (originalData?.email || "");
         const isPhoneChanged = profileData.phoneNumber.trim() !== (originalData?.phoneNumber || "");
@@ -322,6 +353,8 @@ export const EditProfile = () => {
 
     const labelClasses = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputClasses = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner";
+    const errorInputClasses = "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 transition-all shadow-inner";
+    const fieldErrorText = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
 
     if (isLoadingProfile) {
         return (
@@ -371,7 +404,12 @@ export const EditProfile = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-1">
                             <label className={labelClasses}>{lang === "VN" ? "Họ và Tên (*)" : "Full Name (*)"}</label>
-                            <input required name="fullName" type="text" value={profileData.fullName} onChange={handleProfileDataChange} className={inputClasses} />
+                            <input
+                                required name="fullName" type="text"
+                                value={profileData.fullName} onChange={handleProfileDataChange} onBlur={handleFieldBlur}
+                                className={touchedFields.fullName && fieldErrors.fullName ? errorInputClasses : inputClasses}
+                            />
+                            {touchedFields.fullName && fieldErrors.fullName && <p className={fieldErrorText}>{fieldErrors.fullName}</p>}
                         </div>
 
                         <div className="space-y-1">
@@ -385,7 +423,12 @@ export const EditProfile = () => {
 
                         <div className="space-y-1">
                             <label className={labelClasses}>{lang === "VN" ? "Địa chỉ Email" : "Email Address"}</label>
-                            <input name="email" type="email" value={profileData.email} onChange={handleProfileDataChange} className={inputClasses} />
+                            <input
+                                name="email" type="email"
+                                value={profileData.email} onChange={handleProfileDataChange} onBlur={handleFieldBlur}
+                                className={touchedFields.email && fieldErrors.email ? errorInputClasses : inputClasses}
+                            />
+                            {touchedFields.email && fieldErrors.email && <p className={fieldErrorText}>{fieldErrors.email}</p>}
                         </div>
 
                         <div className="space-y-1">
@@ -397,14 +440,16 @@ export const EditProfile = () => {
                                 type="tel"
                                 value={profileData.phoneNumber}
                                 onChange={handleProfileDataChange}
-                                className={inputClasses}
+                                onBlur={handleFieldBlur}
+                                className={touchedFields.phoneNumber && fieldErrors.phoneNumber ? errorInputClasses : inputClasses}
                                 placeholder={lang === "VN" ? "Cập nhật số điện thoại..." : "Add phone number..."}
                             />
+                            {touchedFields.phoneNumber && fieldErrors.phoneNumber && <p className={fieldErrorText}>{fieldErrors.phoneNumber}</p>}
                         </div>
 
                         <div className="space-y-1">
                             <label className={labelClasses}>{lang === "VN" ? "Ngày tháng năm sinh" : "Date of Birth"}</label>
-                            <AppDateInput name="dob" value={profileData.dob} onChange={handleProfileDataChange} className={inputClasses} />
+                            <AppDateInput name="dob" value={profileData.dob} max={getTodayDateString()} onChange={handleProfileDataChange} className={inputClasses} />
                         </div>
 
                         <div className="space-y-1">
@@ -440,7 +485,7 @@ export const EditProfile = () => {
                         </button>
                         <button
                             type="submit"
-                            disabled={isUpdating}
+                            disabled={isUpdating || hasFieldErrors}
                             className="px-8 py-3 rounded-xl font-black bg-yellow-400 text-slate-900 hover:brightness-110 active:scale-[0.98] transition-all shadow-md font-headline uppercase tracking-widest text-xs disabled:opacity-50 flex items-center gap-2"
                         >
                             {isUpdating && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}

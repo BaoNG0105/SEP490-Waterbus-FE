@@ -1,11 +1,16 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
+
 import { registerCustomer, verifyRegisterOtp, resendRegisterOtp } from "../../services/authService";
+
 import { FormSelect } from "../../components/FormSelect";
 import { AppDateInput } from "../../components/AppDateInput";
 import { NationalitySelect } from "../../components/NationalitySelect";
+
 import { getApiErrorMessage } from "../../utils/apiError";
+import { getTodayDateString } from "../../utils/dateOnly";
+import { isBlank, isValidEmailFormat, isValidPhoneFormat } from "../../utils/formValidation";
 import { notify } from "../../utils/swalToast";
 
 /** UI dùng SMS/EMAIL; BE chỉ nhận phone/email. */
@@ -19,6 +24,11 @@ const MAX_OTP_ATTEMPTS = 5;
 
 const SELECT_TRIGGER_CLASS =
   "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner";
+
+// Field lỗi (đã touched) → đổi viền sang đỏ thay vì viền slate mặc định.
+const withErrorBorder = (base, hasError) =>
+  hasError ? base.replace(/border-slate-200 dark:border-slate-700/, "border-rose-500 dark:border-rose-500") : base;
+const fieldErrorText = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
 
 export const Register = () => {
   const { lang, isDarkMode } = useApp();
@@ -84,6 +94,59 @@ export const Register = () => {
     { key: "special", met: passwordCriteria.special, label: lang === "VN" ? "1 ký tự đặc biệt" : "1 special character" },
   ];
 
+  // Validate real-time toàn bộ field bắt buộc — lỗi chỉ hiện cho field đã "touched" (rời khỏi ít
+  // nhất 1 lần), nhưng nút Đăng ký bị khóa ngay khi còn lỗi dù chưa touched hết.
+  const [touchedFields, setTouchedFields] = useState({});
+  const handleBlur = (e) => {
+    setTouchedFields((prev) => ({ ...prev, [e.target.name]: true }));
+  };
+
+  const fieldErrors = useMemo(() => {
+    const errors = {};
+    if (isBlank(formData.fullName)) {
+      errors.fullName = lang === "VN" ? "Vui lòng nhập họ và tên." : "Full name is required.";
+    }
+
+    const hasPhone = !isBlank(formData.phone);
+    const hasEmail = !isBlank(formData.email);
+    if (!hasPhone && !hasEmail) {
+      errors.contact = lang === "VN"
+        ? "Vui lòng nhập Số điện thoại hoặc Email."
+        : "Please provide either a Phone number or an Email.";
+    }
+    if (hasPhone && !isValidPhoneFormat(formData.phone)) {
+      errors.phone = lang === "VN"
+        ? "Số điện thoại không hợp lệ (VD: 0901234567)."
+        : "Invalid phone number (e.g. 0901234567).";
+    }
+    if (hasEmail && !isValidEmailFormat(formData.email)) {
+      errors.email = lang === "VN" ? "Email không đúng định dạng." : "Invalid email format.";
+    }
+
+    if (isBlank(formData.password)) {
+      errors.password = lang === "VN" ? "Vui lòng nhập mật khẩu." : "Password is required.";
+    } else if (!isPasswordStrong) {
+      errors.password = lang === "VN"
+        ? "Mật khẩu chưa đủ mạnh, xem các tiêu chí bên dưới."
+        : "Password is not strong enough, see the criteria below.";
+    }
+
+    if (isBlank(formData.confirmPassword)) {
+      errors.confirmPassword = lang === "VN" ? "Vui lòng xác nhận mật khẩu." : "Please confirm your password.";
+    } else if (formData.confirmPassword !== formData.password) {
+      errors.confirmPassword = lang === "VN" ? "Mật khẩu xác nhận không khớp." : "Passwords do not match.";
+    }
+
+    if (!formData.termsAccepted) {
+      errors.termsAccepted = lang === "VN"
+        ? "Bạn cần đồng ý với Điều khoản sử dụng."
+        : "You must accept the Terms of Use.";
+    }
+
+    return errors;
+  }, [formData, isPasswordStrong, lang]);
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+
   const showOtpSelection = formData.phone.trim() !== "" && formData.email.trim() !== "";
 
   // TỰ ĐỘNG GÁN KÊNH OTP KHI CHỈ NHẬP 1 TRONG 2
@@ -135,28 +198,18 @@ export const Register = () => {
     e.preventDefault();
     setErrorMsg("");
 
-    // 💡 NGHIỆP VỤ: Kiểm tra Phone & Email bắt buộc ít nhất một kênh
-    if (!formData.phone.trim() && !formData.email.trim()) {
-      setErrorMsg(lang === "VN" ? "Vui lòng nhập Số điện thoại hoặc Email." : "Please provide either a Phone number or an Email.");
-      return;
-    }
-
-    if (!isPasswordStrong) {
-      setErrorMsg(lang === "VN"
-        ? "Mật khẩu phải có ít nhất 8 ký tự, gồm 1 chữ hoa, 1 chữ số và 1 ký tự đặc biệt."
-        : "Password must be at least 8 characters and include an uppercase letter, a number, and a special character.");
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setErrorMsg(lang === "VN" ? "Mật khẩu xác nhận không khớp!" : "Passwords do not match!");
-      return;
-    }
-
-    if (!formData.termsAccepted) {
-      setErrorMsg(lang === "VN" ? "Bạn cần đồng ý với Điều khoản sử dụng." : "You must accept the Terms of Use.");
-      return;
-    }
+    // Bấm submit khi còn lỗi (VD: nhấn Enter trước khi rời hết field) → hiện hết lỗi lên thay vì
+    // âm thầm chặn. Các rule chi tiết (SĐT/Email bắt buộc 1 trong 2, mật khẩu đủ mạnh, khớp xác
+    // nhận, đồng ý điều khoản...) đã được validate real-time ở fieldErrors bên trên.
+    setTouchedFields({
+      fullName: true,
+      phone: true,
+      email: true,
+      password: true,
+      confirmPassword: true,
+      termsAccepted: true,
+    });
+    if (hasFieldErrors) return;
 
     // 💡 NGHIỆP VỤ: Xử lý ngày sinh mặc định ngày hiện tại nếu bỏ trống
     let formattedDate = "";
@@ -391,10 +444,11 @@ export const Register = () => {
                   </label>
                   <input
                     type="text" name="fullName" required
-                    value={formData.fullName} onChange={handleChange}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                    value={formData.fullName} onChange={handleChange} onBlur={handleBlur}
+                    className={withErrorBorder("w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner", touchedFields.fullName && fieldErrors.fullName)}
                     placeholder="Nguyen Van A"
                   />
+                  {touchedFields.fullName && fieldErrors.fullName && <p className={fieldErrorText}>{fieldErrors.fullName}</p>}
                 </div>
                 {/* NGÀY SINH */}
                 <div className="space-y-1">
@@ -404,10 +458,40 @@ export const Register = () => {
                   <AppDateInput
                     name="dateOfBirth"
                     value={formData.dateOfBirth}
+                    max={getTodayDateString()}
                     onChange={handleChange}
                     className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
                   />
                 </div>
+              </div>
+              {/* EMAIL & PHONE */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                  {lang === "VN" ? "Thông tin liên hệ" : "Contact information"}
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <input
+                      type="tel" name="phone" value={formData.phone} onChange={handleChange} onBlur={handleBlur}
+                      className={withErrorBorder("w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-md", touchedFields.phone && fieldErrors.phone)}
+                      placeholder={lang === "VN" ? "Số điện thoại..." : "Phone Number..."}
+                    />
+                    {touchedFields.phone && fieldErrors.phone && <p className={fieldErrorText}>{fieldErrors.phone}</p>}
+                  </div>
+                  <div>
+                    <input
+                      type="email" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur}
+                      className={withErrorBorder("w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-md", touchedFields.email && fieldErrors.email)}
+                      placeholder="Email..."
+                    />
+                    {touchedFields.email && fieldErrors.email && <p className={fieldErrorText}>{fieldErrors.email}</p>}
+                  </div>
+                </div>
+                <p className={(touchedFields.phone || touchedFields.email) && fieldErrors.contact ? fieldErrorText : "pt-0.5 text-[11px] font-medium text-slate-400"}>
+                  {(touchedFields.phone || touchedFields.email) && fieldErrors.contact
+                    ? fieldErrors.contact
+                    : (lang === "VN" ? "Cần điền SĐT hoặc Email." : "Please fill in phone or email.")}
+                </p>
               </div>
               {/* GIỚI TÍNH */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -435,27 +519,6 @@ export const Register = () => {
                     placeholder={lang === "VN" ? "Chọn quốc tịch" : "Select nationality"}
                   />
                 </div>
-              </div>
-              {/* EMAIL & PHONE */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                  {lang === "VN" ? "Thông tin liên hệ" : "Contact information"}
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input
-                    type="tel" name="phone" value={formData.phone} onChange={handleChange}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-md"
-                    placeholder={lang === "VN" ? "Số điện thoại..." : "Phone Number..."}
-                  />
-                  <input
-                    type="email" name="email" value={formData.email} onChange={handleChange}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-md"
-                    placeholder="Email..."
-                  />
-                </div>
-                <p className="pt-0.5 text-[11px] font-medium text-slate-400">
-                  {lang === "VN" ? "Cần điền SĐT hoặc Email." : "Please fill in phone or email."}
-                </p>
               </div>
 
               {showOtpSelection && (
@@ -492,8 +555,8 @@ export const Register = () => {
                   <div className="relative">
                     <input
                       type={showPassword ? "text" : "password"} name="password" required
-                      value={formData.password} onChange={handleChange}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-4 pr-10 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                      value={formData.password} onChange={handleChange} onBlur={handleBlur}
+                      className={withErrorBorder("w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-4 pr-10 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner", touchedFields.password && fieldErrors.password)}
                       placeholder="••••••••"
                     />
                     <button
@@ -505,6 +568,11 @@ export const Register = () => {
                       </span>
                     </button>
                   </div>
+                  {/* Chỉ hiện lỗi text khi để trống — khi có gõ nhưng chưa đủ mạnh thì bảng tiêu
+                      chí bên dưới đã tự nêu rõ tiêu chí nào còn thiếu, không cần lặp lại bằng chữ. */}
+                  {touchedFields.password && isBlank(formData.password) && (
+                    <p className={fieldErrorText}>{fieldErrors.password}</p>
+                  )}
 
                   {/* THANH TIẾN TRÌNH ĐỘ MẠNH MẬT KHẨU */}
                   {formData.password.length > 0 && (
@@ -550,8 +618,8 @@ export const Register = () => {
                   <div className="relative">
                     <input
                       type={showConfirmPassword ? "text" : "password"} name="confirmPassword" required
-                      value={formData.confirmPassword} onChange={handleChange}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-4 pr-10 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                      value={formData.confirmPassword} onChange={handleChange} onBlur={handleBlur}
+                      className={withErrorBorder("w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-4 pr-10 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner", touchedFields.confirmPassword && fieldErrors.confirmPassword)}
                       placeholder="••••••••"
                     />
                     <button
@@ -563,6 +631,9 @@ export const Register = () => {
                       </span>
                     </button>
                   </div>
+                  {touchedFields.confirmPassword && fieldErrors.confirmPassword && (
+                    <p className={fieldErrorText}>{fieldErrors.confirmPassword}</p>
+                  )}
                 </div>
               </div>
 
@@ -570,7 +641,7 @@ export const Register = () => {
                 <label className="flex items-start gap-3 cursor-pointer group">
                   <input
                     type="checkbox" name="termsAccepted"
-                    checked={formData.termsAccepted} onChange={handleChange}
+                    checked={formData.termsAccepted} onChange={handleChange} onBlur={handleBlur}
                     className="mt-1 rounded text-[#124757] focus:ring-[#124757] dark:text-yellow-400 dark:focus:ring-yellow-400 cursor-pointer w-4 h-4"
                   />
                   <span className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
@@ -594,10 +665,13 @@ export const Register = () => {
                     </a>.
                   </span>
                 </label>
+                {touchedFields.termsAccepted && fieldErrors.termsAccepted && (
+                  <p className={fieldErrorText}>{fieldErrors.termsAccepted}</p>
+                )}
               </div>
               {/* NÚT ĐĂNG KÝ */}
               <button
-                type="submit" disabled={isLoading}
+                type="submit" disabled={isLoading || hasFieldErrors}
                 className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 py-4 mt-2 rounded-xl font-black font-headline uppercase text-sm tracking-widest hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
               >
                 {isLoading && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}

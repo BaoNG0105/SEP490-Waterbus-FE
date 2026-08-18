@@ -40,7 +40,26 @@ export const Login = () => {
 
   // 2. QUẢN LÝ THÔNG BÁO LỖI CHUNG VÀ TỪNG FIELD
   const [errorMsg, setErrorMsg] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({});
+  // Validate real-time — chỉ check rỗng (null/blank), không check định dạng vì field này nhận
+  // cả email lẫn số điện thoại. Lỗi chỉ hiện cho field đã "touched" (rời khỏi ít nhất 1 lần),
+  // nhưng nút Đăng Nhập bị khóa ngay khi còn field rỗng dù chưa touched hết.
+  const [touchedFields, setTouchedFields] = useState({});
+  const handleFieldBlur = (field) => {
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
+  };
+  const fieldErrors = {
+    ...(emailOrPhone.trim() ? {} : {
+      emailOrPhone: lang === "VN" ? "Vui lòng nhập Email hoặc Số điện thoại" : "Email or Phone is required",
+    }),
+    ...(password ? {} : {
+      password: lang === "VN" ? "Vui lòng nhập mật khẩu" : "Password is required",
+    }),
+  };
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  const visibleFieldErrors = {
+    ...(touchedFields.emailOrPhone ? { emailOrPhone: fieldErrors.emailOrPhone } : {}),
+    ...(touchedFields.password ? { password: fieldErrors.password } : {}),
+  };
 
   //3. QUẢN LÝ AUTH VÀ ĐIỀU HƯỚNG: KIỂM TRA NẾU ĐÃ ĐĂNG NHẬP THÌ VỀ TRANG CHỦ
   const navigate = useNavigate();
@@ -93,24 +112,14 @@ export const Login = () => {
   // 4. HÀM XỬ LÝ ĐĂNG NHẬP BẰNG TÀI KHOẢN/MẬT KHẨU
   const handleLogin = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     setErrorMsg("");
-    setFieldErrors({});
 
-    const errors = {};
-    if (!emailOrPhone.trim()) {
-      errors.emailOrPhone = lang === "VN" ? "Vui lòng nhập Email hoặc Số điện thoại" : "Email or Phone is required";
-    }
-    if (!password) {
-      errors.password = lang === "VN" ? "Vui lòng nhập mật khẩu" : "Password is required";
-    }
+    // Bấm submit khi còn field rỗng (VD: nhấn Enter trước khi rời hết field) → hiện hết lỗi lên
+    // thay vì âm thầm chặn.
+    setTouchedFields({ emailOrPhone: true, password: true });
+    if (hasFieldErrors) return;
 
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
-      setIsLoading(false);
-      return;
-    }
-
+    setIsLoading(true);
     try {
       const payload = {
         emailOrPhone: emailOrPhone.trim(),
@@ -275,11 +284,12 @@ export const Login = () => {
                   type="text"
                   value={emailOrPhone}
                   onChange={(e) => setEmailOrPhone(e.target.value)}
+                  onBlur={() => handleFieldBlur("emailOrPhone")}
                   placeholder={lang === "VN" ? "Nhập email hoặc số điện thoại..." : "Enter your email or phone..."}
-                  className={`w-full bg-slate-50 dark:bg-slate-900 border ${fieldErrors.emailOrPhone ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'} rounded-xl pl-11 pr-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] focus:border-transparent transition-all`}
+                  className={`w-full bg-slate-50 dark:bg-slate-900 border ${visibleFieldErrors.emailOrPhone ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'} rounded-xl pl-11 pr-4 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] focus:border-transparent transition-all`}
                 />
               </div>
-              {fieldErrors.emailOrPhone && <p className="text-xs text-red-500 font-bold">{fieldErrors.emailOrPhone}</p>}
+              {visibleFieldErrors.emailOrPhone && <p className="text-xs text-red-500 font-bold">{visibleFieldErrors.emailOrPhone}</p>}
             </div>
 
             {/* Trường nhập Mật khẩu */}
@@ -300,9 +310,10 @@ export const Login = () => {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => handleFieldBlur("password")}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className={`w-full bg-slate-50 dark:bg-slate-900 border ${fieldErrors.password ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'} rounded-xl pl-11 pr-12 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] focus:border-transparent transition-all`}
+                  className={`w-full bg-slate-50 dark:bg-slate-900 border ${visibleFieldErrors.password ? 'border-red-500' : 'border-slate-200 dark:border-slate-700'} rounded-xl pl-11 pr-12 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] focus:border-transparent transition-all`}
                 />
                 <button
                   type="button"
@@ -316,13 +327,13 @@ export const Login = () => {
                   </span>
                 </button>
               </div>
-              {fieldErrors.password && <p className="text-xs text-red-500 font-bold">{fieldErrors.password}</p>}
+              {visibleFieldErrors.password && <p className="text-xs text-red-500 font-bold">{visibleFieldErrors.password}</p>}
             </div>
 
             {/* Phím bấm kích hoạt Submit */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || hasFieldErrors}
               className="w-full bg-[#124757] dark:bg-[#FFD100] text-white dark:text-slate-900 font-headline font-black uppercase tracking-wider py-4 rounded-xl text-sm shadow-md hover:opacity-90 disabled:opacity-70 transition-all flex justify-center items-center gap-2 mt-2"
             >
               {isLoading ? (
