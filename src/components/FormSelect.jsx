@@ -172,7 +172,7 @@ export function FormSelect({
                       >
                         <span className="flex min-w-0 flex-1 items-center gap-2.5">
                           {opt.icon ? <span className="inline-flex shrink-0 items-center">{opt.icon}</span> : null}
-                          <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{opt.label}</span>
+                          <span className="min-w-0 flex-1 whitespace-normal wrap-break-words leading-snug">{opt.label}</span>
                         </span>
                         {active && !optDisabled ? (
                           <span className="material-symbols-outlined shrink-0 text-base text-[#124757] dark:text-yellow-400">check</span>
@@ -189,7 +189,7 @@ export function FormSelect({
       : null;
 
   return (
-    <div ref={rootRef} className={`relative ${fullWidth ? "w-full min-w-0 max-w-full" : "w-auto shrink-0"} ${isOpen ? "z-[60]" : ""} ${disabled ? "opacity-50" : ""}`}>
+    <div ref={rootRef} className={`relative ${fullWidth ? "w-full min-w-0 max-w-full" : "w-auto shrink-0"} ${isOpen ? "z-60" : ""} ${disabled ? "opacity-50" : ""}`}>
       <button
         type="button"
         disabled={disabled}

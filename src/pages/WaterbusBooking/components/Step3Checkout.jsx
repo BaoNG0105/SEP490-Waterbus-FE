@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { FormSelect } from "../../../components/FormSelect";
+import { YearPickerInput } from "../../../components/YearPickerInput";
 import { PayOSLogo, payosButtonLgClassName } from "../../../components/PayOSLogo";
 import { SelectablePublicVouchers } from "../../../components/SelectablePublicVouchers";
 import { submitBooking, fetchMyBookingDetail } from "../../../services/bookingService";
@@ -987,17 +988,14 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                     <label className="text-[11px] font-bold uppercase text-slate-500">
                       {lang === "VN" ? "Năm sinh *" : "Birth year *"}
                     </label>
-                    <input
-                      type="number"
+                    <YearPickerInput
                       min={1900}
                       max={travelYear}
                       value={passenger.birthYear}
                       onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
-                      placeholder="YYYY"
                       required
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus-within:border-[#124757] dark:focus-within:border-[#FFD100]"
                     />
-           
                   </div>
 
                   <div className="space-y-1.5">
@@ -1067,17 +1065,14 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                           </div>
                           <div className="w-full sm:w-32 space-y-1.5">
                             <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh *" : "Birth Year *"}</label>
-                            <input
-                              type="number"
+                            <YearPickerInput
                               min={infantBirthYearMin}
                               max={travelYear}
                               value={passenger.infant.birthYear}
                               onChange={(e) => handleInfantChange(index, "birthYear", e.target.value)}
-                              placeholder="YYYY"
                               required
-                              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]"
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus-within:border-[#124757] dark:focus-within:border-[#FFD100]"
                             />
-                    
                           </div>
                         </div>
                       </div>

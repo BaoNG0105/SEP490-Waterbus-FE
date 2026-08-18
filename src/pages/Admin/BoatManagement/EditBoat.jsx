@@ -9,6 +9,7 @@ import { fetchSeatLayout, deleteSeats, changeSeatStatus } from "../../../service
 import { BoatDocumentsPanel } from "./BoatDocumentsPanel";
 import { BoatDutyRosterPanel } from "./BoatCrewSchedule";
 import { FormSelect } from "../../../components/FormSelect";
+import { YearPickerInput } from "../../../components/YearPickerInput";
 import { SeatMapIcon, seatToneFromCode, resolveSeatTypeCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
 import { notify } from "../../../utils/swalToast";
@@ -17,6 +18,7 @@ export function EditBoat() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { id } = useParams();
+  const currentYear = new Date().getFullYear();
 
   const [formData, setFormData] = useState(null);
   const [boatStatus, setBoatStatus] = useState("");
@@ -147,6 +149,14 @@ export function EditBoat() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    if (Number(formData.yearBuilt) > currentYear) {
+      setErrorMsg(
+        lang === "VN"
+          ? `Năm đóng tàu không được lớn hơn năm hiện tại (${currentYear}).`
+          : `Year built cannot be later than the current year (${currentYear}).`
+      );
+      return;
+    }
     try {
       setIsSubmitting(true);
       setErrorMsg("");
@@ -287,6 +297,8 @@ export function EditBoat() {
   const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
   const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
   const selectStyle = `${inputStyle} cursor-pointer`;
+  // Ring focus của YearPickerInput cần "focus-within" vì viền nằm ở div bọc, không phải input.
+  const yearInputStyle = inputStyle.replace(/\bfocus:/g, "focus-within:");
   const deckOptions = [
     { value: 1, label: lang === "VN" ? "1 Tầng" : "1 Deck" },
     { value: 2, label: lang === "VN" ? "2 Tầng" : "2 Decks" },
@@ -415,7 +427,7 @@ export function EditBoat() {
             </div>
             <div>
               <label className={labelStyle}>{lang === "VN" ? "Năm đóng tàu" : "Year Built"}</label>
-              <input type="number" min={1900} max={2100} required value={formData.yearBuilt || ""} onChange={(e) => handleFieldChange("yearBuilt", e.target.value)} className={inputStyle} />
+              <YearPickerInput min={1900} max={currentYear} required value={formData.yearBuilt || ""} onChange={(e) => handleFieldChange("yearBuilt", e.target.value)} className={yearInputStyle} />
             </div>
           </div>
 

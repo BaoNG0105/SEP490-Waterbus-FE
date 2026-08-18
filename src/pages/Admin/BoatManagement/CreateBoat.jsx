@@ -5,6 +5,7 @@ import { useApp } from "../../../context/AppContext";
 import { addNewBoat, fetchAllBoats, uploadBoatDocument } from "../../../services/boatService";
 
 import { FormSelect } from "../../../components/FormSelect";
+import { YearPickerInput } from "../../../components/YearPickerInput";
 
 import { notify } from "../../../utils/swalToast";
 import {
@@ -37,6 +38,7 @@ const isValidDocFile = (file) =>
 export function CreateBoat() {
   const { lang } = useApp();
   const navigate = useNavigate();
+  const currentYear = new Date().getFullYear();
 
   const [formData, setFormData] = useState({
     code: "",
@@ -149,6 +151,14 @@ export function CreateBoat() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    if (Number(formData.yearBuilt) > currentYear) {
+      setErrorMsg(
+        lang === "VN"
+          ? `Năm đóng tàu không được lớn hơn năm hiện tại (${currentYear}).`
+          : `Year built cannot be later than the current year (${currentYear}).`
+      );
+      return;
+    }
     try {
       setIsSubmitting(true);
       setErrorMsg("");
@@ -306,11 +316,11 @@ export function CreateBoat() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Mã số đăng ký" : "Registration Number"}</label>
-                <input type="text" placeholder="VD: VN-001" value={formData.registrationNumber} onChange={(e) => handleInputChange("registrationNumber", e.target.value)} className={inputStyle} />
+                <input type="text" placeholder="VD: SG-WB-001" value={formData.registrationNumber} onChange={(e) => handleInputChange("registrationNumber", e.target.value)} className={inputStyle} />
               </div>
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Năm đóng tàu" : "Year Built"}</label>
-                <input type="number" min={1900} max={2100} required value={formData.yearBuilt} onChange={(e) => handleInputChange("yearBuilt", e.target.value)} className={inputStyle} />
+                <YearPickerInput min={1900} max={currentYear} required value={formData.yearBuilt} onChange={(e) => handleInputChange("yearBuilt", e.target.value)} className={inputStyle} />
               </div>
             </div>
           </div>

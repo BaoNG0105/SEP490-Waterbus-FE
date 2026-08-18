@@ -267,7 +267,7 @@ export function AppDateInput({
         aria-label={isVn ? "Chọn ngày" : "Choose date"}
         style={{ top: panelPos.top, left: panelPos.left }}
         onMouseDown={(event) => event.stopPropagation()}
-        className="fixed z-[200] w-[18.5rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-600 dark:bg-slate-900"
+        className="fixed z-200 w-74 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-600 dark:bg-slate-900"
       >
         <div className="mb-2 flex items-center justify-between gap-2">
           <button
