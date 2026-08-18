@@ -258,6 +258,19 @@ html.dark {
   }
 }
 
+/* Tàu lướt ngang lặp vô hạn (ScrollBoat) — mốc đầu/cuối truyền qua CSS custom property
+   --boat-start/--boat-end (đặt bằng inline style của từng instance) để dùng chung 1 keyframe
+   cho cả chiều xuôi lẫn chiều reverse. */
+@keyframes wb-boat-sail {
+  from {
+    transform: translate(var(--boat-start), -50%);
+  }
+
+  to {
+    transform: translate(var(--boat-end), -50%);
+  }
+}
+
 /* Custom Leaflet Popup */
 .leaflet-popup-content-wrapper {
   border-radius: 1rem !important;

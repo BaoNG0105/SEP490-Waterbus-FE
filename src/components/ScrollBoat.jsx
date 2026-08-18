@@ -7,7 +7,7 @@ const BOAT_IMAGES = {
   top: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/boat-top.png",
 };
 
-// Tốc độ chạy chậm rãi — số giây để tàu lướt hết từ mép trái sang mép phải.
+// Tốc độ chạy chậm rãi — số giây để tàu lướt hết từ mép trái sang mép phải, mỗi vòng lặp.
 const BOAT_SAIL_DURATION_S = 12;
 
 // Vị trí "ẩn hẳn" ngoài mép trái/phải, dùng calc() trộn % (theo chính bề rộng ảnh tàu) với vw
@@ -19,11 +19,11 @@ const HIDDEN_LEFT = "calc(-100% - 5vw)"; // mép phải ảnh nằm ngoài mép 
 const HIDDEN_RIGHT = "calc(100vw + 5vw)"; // mép trái ảnh nằm ngoài mép phải viewport
 
 /**
- * Ảnh con tàu tự động lướt ngang mỗi khi section chứa nó xuất hiện trong viewport
- * (không phụ thuộc tốc độ cuộn — chạy bằng CSS transition với nhịp độ cố định, chậm
- * rãi). Mặc định chạy từ trái sang phải; đặt `reverse` để chạy ngược, phải sang trái.
- * Rời khỏi viewport thì tàu lặng lẽ về lại vị trí xuất phát để lần sau cuộn tới lại
- * chạy từ đầu.
+ * Ảnh con tàu tự động lướt ngang lặp vô hạn hễ section chứa nó còn hiển thị trong viewport
+ * (không phụ thuộc tốc độ cuộn — chạy bằng CSS animation `wb-boat-sail` với nhịp độ cố định,
+ * chậm rãi, lặp lại liên tục). Mặc định chạy từ trái sang phải; đặt `reverse` để chạy ngược,
+ * phải sang trái. Rời khỏi viewport thì tàu lặng lẽ về lại vị trí xuất phát và dừng animation,
+ * để lần sau cuộn tới lại chạy lại từ đầu.
  *
  * Section cha cần có class "relative overflow-hidden" để cắt phần tàu tràn ra ngoài.
  * Đặt <ScrollBoat /> làm con trực tiếp đầu tiên của section (component tự tìm section
@@ -37,8 +37,7 @@ export function ScrollBoat({ variant = "default", className = "w-140 sm:w-180 md
   // Trái sang phải: ẩn mép trái → ẩn mép phải. reverse thì đảo lại.
   const startX = reverse ? HIDDEN_RIGHT : HIDDEN_LEFT;
   const endX = reverse ? HIDDEN_LEFT : HIDDEN_RIGHT;
-  const [x, setX] = useState(startX);
-  const [transitionEnabled, setTransitionEnabled] = useState(false);
+  const [isSailing, setIsSailing] = useState(false);
 
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -48,26 +47,23 @@ export function ScrollBoat({ variant = "default", className = "w-140 sm:w-180 md
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.intersectionRatio >= 0.15) {
-          // Section vừa xuất hiện trong viewport (>=15%) — cho tàu chạy chậm rãi qua section.
-          setTransitionEnabled(true);
-          setX(endX);
+          // Section vừa xuất hiện trong viewport (>=15%) — cho tàu chạy lặp vô hạn qua section.
+          setIsSailing(true);
         } else if (entry.intersectionRatio === 0) {
-          // Đã ra khỏi viewport hoàn toàn: về lại vị trí xuất phát ngay lập tức (không
-          // transition, vô hình vì section đã ẩn hết) để lần cuộn tới lại chạy lại từ đầu.
+          // Đã ra khỏi viewport hoàn toàn: dừng animation và về lại vị trí xuất phát ngay lập
+          // tức (vô hình vì section đã ẩn hết) để lần cuộn tới lại chạy lại từ đầu.
           // Chỉ reset khi ratio = 0 (không phải hễ tụt dưới 0.15 là reset) để không cắt
-          // ngang hiệu ứng đang chạy dở khi section mới rời viewport một phần — nếu không,
-          // với các section thấp/ngắn, tàu bị "đứng hình" giữa chừng trước khi lướt hết.
-          setTransitionEnabled(false);
-          setX(startX);
+          // ngang hiệu ứng đang chạy dở khi section mới rời viewport một phần.
+          setIsSailing(false);
         }
         // else: ratio nằm giữa 0 và 0.15 (section đang rời viewport dần) — bỏ qua, để
-        // transition đang chạy dở (nếu có) tự hoàn tất thay vì bị cắt ngang giữa chừng.
+        // animation đang chạy dở (nếu có) tự tiếp tục thay vì bị cắt ngang giữa chừng.
       },
       { threshold: [0, 0.15] }
     );
     observer.observe(section);
     return () => observer.disconnect();
-  }, [startX, endX]);
+  }, []);
 
   return (
     <div
@@ -75,8 +71,10 @@ export function ScrollBoat({ variant = "default", className = "w-140 sm:w-180 md
       aria-hidden="true"
       className="pointer-events-none absolute top-1/2 left-0 z-0 select-none"
       style={{
-        transform: `translate(${x}, -50%)`,
-        transition: transitionEnabled ? `transform ${BOAT_SAIL_DURATION_S}s linear` : "none",
+        "--boat-start": startX,
+        "--boat-end": endX,
+        transform: isSailing ? undefined : `translate(${startX}, -50%)`,
+        animation: isSailing ? `wb-boat-sail ${BOAT_SAIL_DURATION_S}s linear infinite` : "none",
         willChange: "transform",
       }}
     >

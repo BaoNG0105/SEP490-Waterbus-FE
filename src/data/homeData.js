@@ -51,7 +51,7 @@ export const guidelines = [
 
 // ẢNH SLIDE QUẢNG CÁO APP
 export const appImages = [
-    "https://res.cloudinary.com/dygipvoal/image/upload/v1776075675/f2fvvilwixmukclz3nzn.png",
-    "https://res.cloudinary.com/dygipvoal/image/upload/v1776075559/ustejbfjzikg2ls4rkvf.jpg",
-    "https://res.cloudinary.com/dygipvoal/image/upload/v1776075336/wkzbfwc5xyfby9ueute1.png"
+    "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/app-1.png",
+    "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/app-2.jpg",
+    "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/app-3.png"
 ];

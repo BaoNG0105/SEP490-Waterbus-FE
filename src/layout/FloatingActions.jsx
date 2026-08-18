@@ -13,10 +13,10 @@ export const FloatingActions = () => {
   // Nhúng Context để hỗ trợ đa ngôn ngữ cho các Tooltip (tiêu đề khi trỏ chuột vào)
   const { lang } = useApp();
   const [isChatOpen, setIsChatOpen] = useState(false);
-  // Đã chào trong phiên này chưa — quyết định có chạy hiệu ứng pop-in / bong bóng / âm thanh hay không
+  // Đã chào trong phiên này chưa — quyết định có chạy hiệu ứng pop-in / bong bóng hay không
   const [hasSeenGreeting] = useState(() => sessionStorage.getItem(GREETING_SESSION_KEY) === "true");
   // Nút AI Chatbot: nếu đã chào rồi thì hiện luôn (không delay/animation); lần đầu thì đợi
-  // GREETING_START_DELAY_MS mới xuất hiện, để đồng bộ cùng lúc với bong bóng + âm thanh
+  // GREETING_START_DELAY_MS mới xuất hiện, để đồng bộ cùng lúc với bong bóng
   const [isButtonVisible, setIsButtonVisible] = useState(hasSeenGreeting);
   // Bong bóng chào mừng: hiện sau GREETING_START_DELAY_MS, tự tắt sau ~5 giây
   const [showGreeting, setShowGreeting] = useState(false);
@@ -51,8 +51,9 @@ export const FloatingActions = () => {
       )}
 
       {/* Nút AI Chatbot + bong bóng chào mừng: lần đầu vào web thì đợi GREETING_START_DELAY_MS mới
-          xuất hiện cùng lúc với âm thanh; các lần sau trong cùng phiên thì hiện ngay, không delay */}
-      {isButtonVisible && (
+          xuất hiện; các lần sau trong cùng phiên thì hiện ngay, không delay.
+          Ẩn hẳn nút khi khung chat đang mở*/}
+      {isButtonVisible && !isChatOpen && (
         <div className="relative flex flex-col gap-4">
           {/* Bong bóng chào mừng: hiện ~5 giây rồi tự tắt */}
           <div
@@ -70,7 +71,7 @@ export const FloatingActions = () => {
           {/* Nút AI Chatbot */}
           <button
             type="button"
-            onClick={() => setIsChatOpen((prev) => !prev)}
+            onClick={() => setIsChatOpen(true)}
             title={lang === "VN" ? "Trợ lý ảo AI" : "AI Assistant"}
             className={`${hasSeenGreeting ? "" : "animate-ai-pop-in"} group relative w-32 h-32 pointer-events-auto`}
           >
@@ -81,9 +82,7 @@ export const FloatingActions = () => {
             />
 
             {/* Chấm báo online */}
-            {!isChatOpen && (
-              <span className="absolute right-1 top-1 h-4 w-4 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
-            )}
+            <span className="absolute right-1 top-1 h-4 w-4 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
           </button>
         </div>
       )}

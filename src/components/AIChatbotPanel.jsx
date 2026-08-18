@@ -551,7 +551,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
 
   return (
     <div
-      className="pointer-events-auto flex h-130 w-[92vw] max-w-95 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900 animate-[chatPopIn_0.25s_ease-out]"
+      className="pointer-events-auto flex h-[80vh] max-h-160 w-[92vw] max-w-125 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900 animate-[chatPopIn_0.25s_ease-out]"
       role="dialog"
       aria-label={t.title}
     >
