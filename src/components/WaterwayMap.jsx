@@ -442,16 +442,16 @@ const shortStationCode = (code) => {
   return raw.replace(/^ST[-_\s]*/i, "") || raw;
 };
 
-const getStationPinIcon = (code) => {
+const getStationPinIcon = (code, inactive = false) => {
   const label = shortStationCode(code);
-  const cacheKey = `gpsflag:${label}`;
+  const cacheKey = `gpsflag:${label}:${inactive ? 1 : 0}`;
   const cached = stationIconCache.get(cacheKey);
   if (cached) return cached;
 
   const safeCode = escapeHtml(label);
 
   const html = `
-    <div class="wb-flagcode">
+    <div class="wb-flagcode"${inactive ? ' style="opacity:0.5;filter:grayscale(1);"' : ""}>
       <span class="wb-flagcode__badge">${safeCode}</span>
       <span class="wb-flagcode__pole"></span>
       <span class="wb-flagcode__tip"></span>
@@ -474,15 +474,15 @@ const getStationPinIcon = (code) => {
 };
 
 /** Cờ tên bến (trang Home): lá cờ #124757 + cột + chân. */
-const getStationNameFlagIcon = (name) => {
+const getStationNameFlagIcon = (name, inactive = false) => {
   const label = String(name || "—").trim() || "—";
-  const cacheKey = `name:${label}`;
+  const cacheKey = `name:${label}:${inactive ? 1 : 0}`;
   const cached = stationIconCache.get(cacheKey);
   if (cached) return cached;
 
   const safeName = escapeHtml(label);
   const html = `
-    <div class="wb-flagname">
+    <div class="wb-flagname"${inactive ? ' style="opacity:0.5;filter:grayscale(1);"' : ""}>
       <span class="wb-flagname__badge">${safeName}</span>
       <span class="wb-flagname__pole"></span>
       <span class="wb-flagname__tip"></span>
@@ -534,6 +534,11 @@ export const WaterwayMap = ({
   overlayEyebrow = "Đang hiển thị tuyến",
   stationPoint = null,
   stationsList = [],
+  /** true = hiện cả nhà ga đang ngưng hoạt động (mờ + xám), dùng cho trang quản trị. Mặc định
+   *  chỉ hiện nhà ga đang hoạt động (đúng hành vi cũ cho các trang công khai). */
+  includeInactiveStations = false,
+  /** Khi truyền vào, popup nhà ga hiện nút "Sửa nhà ga" gọi callback này thay vì link công khai. */
+  onStationEdit,
   boatMarkers = [],
   /** Chấm landmark thuyết minh: [{ id, name, latitude, longitude, isActive, radius, description }] */
   landmarkMarkers = [],
@@ -582,9 +587,10 @@ export const WaterwayMap = ({
     ? [focusView.latitude, focusView.longitude]
     : null;
   const visibleStations = (stationsList || []).filter((station) => {
+    if (!isValidLatLng(station?.latitude, station?.longitude)) return false;
+    if (includeInactiveStations) return true;
     const status = String(station?.status || "Active").toLowerCase();
-    const active = status === "active" || status === "";
-    return active && isValidLatLng(station?.latitude, station?.longitude);
+    return status === "active" || status === "";
   });
   const visibleBoats = (boatMarkers || []).filter((boat) =>
     isValidLatLng(boat?.latitude, boat?.longitude),
@@ -731,11 +737,12 @@ export const WaterwayMap = ({
           visibleStations.map((station, index) => {
             const stationName = station.stationName || station.name || "—";
             const stationImage = getStationImageUrl(station);
+            const stationInactive = String(station?.status || "Active").toLowerCase() === "inactive";
             const useNameFlag = stationAsFlag && showStationLabels;
             const markerIcon = useNameFlag
-              ? getStationNameFlagIcon(stationName)
+              ? getStationNameFlagIcon(stationName, stationInactive)
               : stationAsFlag
-                ? getStationPinIcon(station.stationCode)
+                ? getStationPinIcon(station.stationCode, stationInactive)
                 : undefined;
             return (
               <Marker
@@ -772,7 +779,26 @@ export const WaterwayMap = ({
                     <p className="m-0 line-clamp-2 text-[10px] text-slate-400">
                       {station.address || (lang === "VN" ? "Bến tàu Saigon Waterbus" : "Saigon Waterbus station")}
                     </p>
-                    {!hideStationLink ? (
+                    {includeInactiveStations ? (
+                      <span
+                        className={`inline-block text-[10px] font-black uppercase tracking-wide ${
+                          stationInactive ? "text-rose-500" : "text-emerald-600"
+                        }`}
+                      >
+                        {stationInactive
+                          ? (lang === "VN" ? "Ngưng hoạt động" : "Inactive")
+                          : (lang === "VN" ? "Hoạt động" : "Active")}
+                      </span>
+                    ) : null}
+                    {onStationEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => onStationEdit(station)}
+                        className="mt-1 block w-full cursor-pointer rounded-lg bg-[#124757] px-3 py-1.5 text-[10px] font-bold uppercase text-white shadow-sm transition-all hover:brightness-110"
+                      >
+                        {lang === "VN" ? "Sửa nhà ga" : "Edit station"}
+                      </button>
+                    ) : !hideStationLink ? (
                       <button
                         type="button"
                         onClick={() => navigate(`/station/${station.stationId}`)}
@@ -861,18 +887,18 @@ export const WaterwayMap = ({
           //   onboardPassengerCount     = số khách ĐÃ CHECKIN trên tàu
           //   alightedPassengerCount    = số khách đã xuống bến
           // FE chỉ hiển thị ratio khi onboardPassengerCount > 0.
-          const totalPassenger = (() => {
+          {/* const totalPassenger = (() => {
             const n = Number(boat.totalPassengerCount);
             return Number.isFinite(n) && n >= 0 ? n : null;
-          })();
+          })(); */}
           const onboardPassenger = (() => {
             const n = Number(boat.onboardPassengerCount);
             return Number.isFinite(n) && n >= 0 ? n : null;
           })();
-          const alightedPassenger = (() => {
+          {/* const alightedPassenger = (() => {
             const n = Number(boat.alightedPassengerCount);
             return Number.isFinite(n) && n >= 0 ? n : null;
-          })();
+          })(); */}
           const hasSeats = seatCount != null;
           // Đã checkin = có onboardPassenger > 0 (BE confirm)
           const hasCheckedIn = onboardPassenger != null && onboardPassenger > 0;

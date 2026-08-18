@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllStations, fetchStationDetail, modifyStation } from "../../../services/stationService";
 import { notify } from "../../../utils/swalToast";
 import { NullImageIcon } from "../../../components/NullImageIcon";
 import { FormSelect } from "../../../components/FormSelect";
+import { WaterwayMap } from "../../../components/WaterwayMap";
 
 export function StationManagement() {
     const { lang } = useApp();
@@ -77,6 +78,12 @@ export function StationManagement() {
 
         return matchesSearch && matchesStatus && matchesType;
     });
+
+    // Điểm hiện trên bản đồ — theo đúng bộ lọc tìm kiếm/loại/trạng thái đang áp dụng, không phụ thuộc phân trang.
+    const stationMapMarkers = useMemo(
+        () => filteredStations.filter((station) => station.latitude != null && station.longitude != null),
+        [filteredStations]
+    );
 
     const totalPages = Math.ceil(filteredStations.length / ITEMS_PER_PAGE);
     const currentStations = filteredStations.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -230,6 +237,45 @@ export function StationManagement() {
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Ngưng hoạt động" : "Inactive / Closed"}</span>
                         <h3 className="text-xl font-black font-headline text-rose-500 mt-0.5">{stats.inactive}</h3>
+                    </div>
+                </div>
+            </div>
+
+            {/* SECTION 2: BẢN ĐỒ NHÀ GA */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col h-115">
+                <div className="mb-4 flex shrink-0 flex-wrap items-end justify-between gap-2">
+                    <div>
+                        <h3 className="font-headline text-xs font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                            {lang === "VN" ? "Bản đồ nhà ga" : "Station map"}
+                        </h3>
+                        <p className="mt-0.5 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                            {lang === "VN"
+                                ? "Vị trí các nhà ga theo tọa độ — cờ mờ/xám là nhà ga đang ngưng hoạt động. Bấm vào cờ để sửa nhanh."
+                                : "Station positions by coordinate — dimmed/grey flags are inactive stations. Click a flag to edit."}
+                        </p>
+                    </div>
+                    <span className="rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold tabular-nums text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                        {stationMapMarkers.length} {lang === "VN" ? "điểm" : "points"}
+                    </span>
+                </div>
+                <div className="relative min-h-75 w-full flex-1">
+                    <div className="absolute inset-0">
+                        {stationMapMarkers.length === 0 ? (
+                            <div className="flex h-full w-full items-center justify-center rounded-2xl bg-slate-50 text-xs font-bold text-slate-400 dark:bg-slate-900">
+                                {lang === "VN" ? "Không có nhà ga nào phù hợp bộ lọc." : "No stations match the current filters."}
+                            </div>
+                        ) : (
+                            <WaterwayMap
+                                stationsList={stationMapMarkers}
+                                stationAsFlag
+                                showStationLabels
+                                showStationImages
+                                includeInactiveStations
+                                onStationEdit={(station) =>
+                                    navigate(`/admin/stations-management/edit/${station.stationId}`)
+                                }
+                            />
+                        )}
                     </div>
                 </div>
             </div>
