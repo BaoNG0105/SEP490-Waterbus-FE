@@ -2,11 +2,13 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import 'leaflet/dist/leaflet.css';
+
 import { fetchAllStations } from "../../services/stationService";
-import { WaterwayMap } from "../../components/WaterwayMap";
 import { fetchPublishedBlogPosts, labelBlogCategory } from "../../services/blogService";
 import { fetchPublicPromotions } from "../../services/promotionService";
 import { fetchPublicReviews } from "../../services/reviewService";
+
+import { WaterwayMap } from "../../components/WaterwayMap";
 import { StarRatingDisplay } from "../../components/TripReview";
 import { ContactForm } from "../../components/ContactForm";
 import { ImageWithFallback } from "../../components/ImageWithFallback";
@@ -837,7 +839,7 @@ export const Home = () => {
             {/* Lớp trang trí phát sáng phía sau */}
             <div className="absolute w-62.5 md:w-87.5 h-62.5 md:h-87.5 bg-yellow-400/20 rounded-full blur-[80px]"></div>
             {/* Khung chứa các Slide Ảnh */}
-            <div className="relative w-55 md:w-70 h-112.5 md:h-125 mt-10 md:mt-24 lg:mt-32">
+            <div className="relative w-55 md:w-70 h-130 md:h-145 mt-4 md:mt-10 lg:mt-14">
               {appImages.map((img, index) => (
                 <div
                   key={index}

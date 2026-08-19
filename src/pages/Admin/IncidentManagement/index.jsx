@@ -90,7 +90,6 @@ const unwrapList = (data) => {
 };
 
 export function IncidentManagement({
-  embedded: _embedded = false,
   hideReport = false,
   viewTabs = null,
 } = {}) {
@@ -106,7 +105,6 @@ export function IncidentManagement({
   const canResolveIncident = isAdmin || isManager;
   const {
     incidents,
-    connectionMode,
     errorMsg,
     isInitialLoading,
     refresh,
@@ -195,14 +193,14 @@ export function IncidentManagement({
 
   useEffect(() => {
     if (listTab !== "history") return undefined;
-    loadHistory().catch(() => {});
+    loadHistory().catch(() => { });
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ khi đổi tab lịch sử
   }, [listTab]);
 
   // Prefetch nhẹ để badge Lịch sử có số.
   useEffect(() => {
-    loadHistory({ silent: true }).catch(() => {});
+    loadHistory({ silent: true }).catch(() => { });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -530,10 +528,10 @@ export function IncidentManagement({
       const opsDay = toOperationsScheduleDate();
       await Promise.all([
         refresh(),
-        fetchResolvedIncidents().then((list) => setHistoryIncidents(Array.isArray(list) ? list : [])).catch(() => {}),
-        fetchAllBoats().then((data) => setBoats(unwrapList(data))).catch(() => {}),
-        fetchAllTrips({ fromDate: day, toDate: day }).then((data) => setTrips(unwrapList(data))).catch(() => {}),
-        fetchOperationsSchedule({ fromDate: opsDay, toDate: opsDay }).catch(() => {}),
+        fetchResolvedIncidents().then((list) => setHistoryIncidents(Array.isArray(list) ? list : [])).catch(() => { }),
+        fetchAllBoats().then((data) => setBoats(unwrapList(data))).catch(() => { }),
+        fetchAllTrips({ fromDate: day, toDate: day }).then((data) => setTrips(unwrapList(data))).catch(() => { }),
+        fetchOperationsSchedule({ fromDate: opsDay, toDate: opsDay }).catch(() => { }),
       ]);
     } catch (error) {
       notify({
@@ -579,10 +577,10 @@ export function IncidentManagement({
       });
       await refresh();
       if (listTab === "history") {
-        await loadHistory({ silent: true }).catch(() => {});
+        await loadHistory({ silent: true }).catch(() => { });
       } else {
         // Prefetch history so count/tab sẵn sàng sau khi đóng.
-        loadHistory({ silent: true }).catch(() => {});
+        loadHistory({ silent: true }).catch(() => { });
       }
     } catch (error) {
       notify({
@@ -634,11 +632,10 @@ export function IncidentManagement({
             setListTab("open");
             setExpandedIds(new Set());
           }}
-          className={`rounded-xl px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${
-            listTab === "open"
+          className={`rounded-xl px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${listTab === "open"
               ? "bg-white text-[#124757] shadow-sm dark:bg-slate-800 dark:text-yellow-400"
               : "text-slate-500 hover:text-slate-700 dark:text-slate-400"
-          }`}
+            }`}
         >
           {lang === "VN" ? `Đang mở (${stats.open})` : `Open (${stats.open})`}
         </button>
@@ -648,11 +645,10 @@ export function IncidentManagement({
             setListTab("history");
             setExpandedIds(new Set());
           }}
-          className={`rounded-xl px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${
-            listTab === "history"
+          className={`rounded-xl px-4 py-2 text-[11px] font-headline font-black uppercase tracking-wider transition ${listTab === "history"
               ? "bg-white text-[#124757] shadow-sm dark:bg-slate-800 dark:text-yellow-400"
               : "text-slate-500 hover:text-slate-700 dark:text-slate-400"
-          }`}
+            }`}
         >
           {lang === "VN" ? `Lịch sử (${stats.history})` : `History (${stats.history})`}
         </button>
@@ -660,18 +656,15 @@ export function IncidentManagement({
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { label: lang === "VN" ? "Đang mở" : "Open", value: stats.open, icon: "emergency" },
-          { label: lang === "VN" ? "Cao / Nghiêm trọng" : "High / Critical", value: stats.high, icon: "priority_high" },
-          { label: lang === "VN" ? "Đã điều cứu" : "Rescue assigned", value: stats.rescued, icon: "directions_boat" },
-          { label: lang === "VN" ? "Chưa gán QL" : "No manager", value: stats.unassigned, icon: "person_off" },
+          { label: lang === "VN" ? "Đang mở" : "Open", value: stats.open },
+          { label: lang === "VN" ? "Cao / Nghiêm trọng" : "High / Critical", value: stats.high },
+          { label: lang === "VN" ? "Đã điều cứu" : "Rescue assigned", value: stats.rescued },
+          { label: lang === "VN" ? "Chưa gán QL" : "No manager", value: stats.unassigned },
         ].map((card) => (
           <div
             key={card.label}
             className="flex items-center gap-4 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800"
           >
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400">
-              <span className="material-symbols-outlined text-2xl">{card.icon}</span>
-            </div>
             <div>
               <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 {card.label}
@@ -708,7 +701,7 @@ export function IncidentManagement({
           <div className="flex justify-end">
             <button
               type="button"
-              onClick={() => loadHistory().catch(() => {})}
+              onClick={() => loadHistory().catch(() => { })}
               disabled={historyLoading}
               className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-100 disabled:opacity-50 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700"
             >
@@ -728,7 +721,7 @@ export function IncidentManagement({
           <p className="px-6 py-14 text-center text-sm font-medium text-slate-400">
             {listTab === "history"
               ? (lang === "VN" ? "Chưa có lịch sử cứu hộ / sự cố đã đóng." : "No rescue / resolved incident history yet.")
-              : (lang === "VN" ? "Không có sự cố đang Open." : "No open incidents.")}
+              : (lang === "VN" ? "Không có sự cố nào." : "No incidents yet.")}
           </p>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
@@ -799,11 +792,11 @@ export function IncidentManagement({
                 });
                 fetchActiveBoatsByServiceType("Rescue")
                   .then((data) => setRescueBoats(Array.isArray(data) ? data : []))
-                  .catch(() => {});
+                  .catch(() => { });
                 if (needsReplace || incidentShowsReplacementBoatField(enriched)) {
                   fetchActiveBoatsByServiceType("Passenger")
                     .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
-                    .catch(() => {});
+                    .catch(() => { });
                 }
               };
 
@@ -1030,10 +1023,10 @@ export function IncidentManagement({
                 {boats
                   .filter((boat) => boatServiceType(boat).toLowerCase() !== "rescue")
                   .map((boat) => (
-                  <option key={boat.boatId || boat.id} value={boat.boatId || boat.id}>
-                    {boat.boatCode || boat.code} · {boat.boatName || boat.name || ""}
-                  </option>
-                ))}
+                    <option key={boat.boatId || boat.id} value={boat.boatId || boat.id}>
+                      {boat.boatCode || boat.code} · {boat.boatName || boat.name || ""}
+                    </option>
+                  ))}
               </select>
             </label>
             <label className="block space-y-1.5">

@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { fetchUserList } from "../../../services/userService";
+import { fetchUserList, updateUserStatus, USER_STATUS } from "../../../services/userService";
 import { getRoleSystemName, isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
 import { UserAvatar } from "../../../components/UserAvatar";
 import { FormSelect } from "../../../components/FormSelect";
+import { notify } from "../../../utils/swalToast";
 
 export function UserManagement() {
     const { lang } = useApp();
@@ -17,6 +18,7 @@ export function UserManagement() {
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState("All");
     const [currentPage, setCurrentPage] = useState(1);
+    const [updatingUserId, setUpdatingUserId] = useState("");
     const ITEMS_PER_PAGE = 8;
 
     const canAccessPage = isAdminUser(currentUser) || isManagerUser(currentUser);
@@ -91,6 +93,54 @@ export function UserManagement() {
             pages = [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
         }
         return pages;
+    };
+
+    const handleToggleStatus = async (item) => {
+        const nextStatus = item.status === USER_STATUS.ACTIVE ? USER_STATUS.SUSPENDED : USER_STATUS.ACTIVE;
+        const isSuspending = nextStatus === USER_STATUS.SUSPENDED;
+
+        const confirmResult = await notify({
+            icon: isSuspending ? "warning" : "question",
+            title: isSuspending
+                ? (lang === "VN" ? "Tạm khóa tài khoản?" : "Suspend account?")
+                : (lang === "VN" ? "Kích hoạt tài khoản?" : "Activate account?"),
+            html: lang === "VN"
+                ? `${isSuspending ? "Tạm khóa" : "Kích hoạt"} tài khoản <b>${item.fullName}</b> (${item.code})?<br/><span style="color:#94a3b8;font-size:12px">Thao tác này sẽ thu hồi phiên đăng nhập hiện tại của khách hàng.</span>`
+                : `${isSuspending ? "Suspend" : "Activate"} account <b>${item.fullName}</b> (${item.code})?<br/><span style="color:#94a3b8;font-size:12px">This will revoke the customer's active login session.</span>`,
+            showCancelButton: true,
+            focusCancel: true,
+            reverseButtons: true,
+            confirmButtonColor: isSuspending ? "#dc2626" : "#124757",
+            cancelButtonColor: "#124757",
+            confirmButtonText: isSuspending
+                ? (lang === "VN" ? "Tạm khóa" : "Suspend")
+                : (lang === "VN" ? "Kích hoạt" : "Activate"),
+            cancelButtonText: lang === "VN" ? "Không" : "No",
+        });
+        if (!confirmResult.isConfirmed) return;
+
+        try {
+            setUpdatingUserId(item.id);
+            await updateUserStatus(item.id, nextStatus);
+            await notify({
+                icon: "success",
+                title: isSuspending
+                    ? (lang === "VN" ? "Đã tạm khóa tài khoản" : "Account suspended")
+                    : (lang === "VN" ? "Đã kích hoạt tài khoản" : "Account activated"),
+                timer: 1600,
+                showConfirmButton: false,
+            });
+            await loadUsers();
+        } catch (error) {
+            console.error("Lỗi khi cập nhật trạng thái khách hàng:", error);
+            notify({
+                icon: "error",
+                title: lang === "VN" ? "Cập nhật thất bại" : "Update failed",
+                text: lang === "VN" ? "Vui lòng thử lại." : "Please try again.",
+            });
+        } finally {
+            setUpdatingUserId("");
+        }
     };
 
     if (!canAccessPage) {
@@ -193,12 +243,13 @@ export function UserManagement() {
                                 <th className="py-4 px-6">{lang === "VN" ? "Thông tin khách hàng" : "Customer Information"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Liên hệ" : "Contact"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                                <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {currentUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={3} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={4} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         <span className="material-symbols-outlined text-4xl block mb-2">person_off</span>
                                         {lang === "VN" ? "Không có khách hàng nào phù hợp bộ lọc." : "No records found matching filters."}
                                     </td>
@@ -238,6 +289,31 @@ export function UserManagement() {
                                                     ? (lang === "VN" ? "Hoạt động" : "Active")
                                                     : (lang === "VN" ? "Ngưng hoạt động" : "Inactive")}
                                             </span>
+                                        </td>
+                                        <td className="py-4 px-6 text-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleToggleStatus(item)}
+                                                disabled={updatingUserId === item.id}
+                                                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-[10px] font-headline font-black uppercase tracking-wide transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${item.status === "Active"
+                                                    ? "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400"
+                                                    : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-emerald-600 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400"
+                                                    }`}
+                                                title={item.status === "Active"
+                                                    ? (lang === "VN" ? "Tạm khóa tài khoản" : "Suspend account")
+                                                    : (lang === "VN" ? "Kích hoạt tài khoản" : "Activate account")}
+                                            >
+                                                {updatingUserId === item.id ? (
+                                                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                ) : (
+                                                    <span className="material-symbols-outlined text-[15px]">
+                                                        {item.status === "Active" ? "block" : "check_circle"}
+                                                    </span>
+                                                )}
+                                                {item.status === "Active"
+                                                    ? (lang === "VN" ? "Khóa" : "Suspend")
+                                                    : (lang === "VN" ? "Kích hoạt" : "Activate")}
+                                            </button>
                                         </td>
                                     </tr>
                                 ))

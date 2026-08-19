@@ -18,6 +18,9 @@ export const updateManagedUser = (userId, payload) =>
 export const deleteManagedUser = (userId) =>
   api.delete(`/users/delete/${userId}`).then((response) => response.data);
 
+export const updateManagedUserStatus = (userId, payload) =>
+  api.patch(`/users/status/${userId}`, payload).then((response) => response.data);
+
 export const resetManagedUserPassword = (userId) =>
   api.post(`/users/managed/${userId}/reset-password`).then((response) => response.data);
 

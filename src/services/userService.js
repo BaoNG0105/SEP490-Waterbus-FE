@@ -8,6 +8,7 @@ import {
   getUserStations,
   updateUserStations,
   resetManagedUserPassword as apiResetManagedUserPassword,
+  updateManagedUserStatus,
 } from "../api/userApi";
 import { getRoleSystemName } from "../utils/roleHelpers";
 
@@ -266,6 +267,18 @@ export const deleteUser = async (userId) => {
 
 export const resetManagedUserPassword = async (userId) => {
   const data = await apiResetManagedUserPassword(userId);
+  return data;
+};
+
+// Status hợp lệ cho PATCH /users/status/{userId}: Active, Suspended (đổi status sẽ revoke refresh token của user)
+export const USER_STATUS = {
+  ACTIVE: "Active",
+  SUSPENDED: "Suspended",
+};
+
+export const updateUserStatus = async (userId, status) => {
+  const data = await updateManagedUserStatus(userId, { status });
+  invalidateUserCaches();
   return data;
 };
 
