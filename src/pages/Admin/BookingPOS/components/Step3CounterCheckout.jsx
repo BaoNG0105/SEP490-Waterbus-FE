@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../../../context/AppContext";
 import { FormSelect } from "../../../../components/FormSelect";
+import { YearPickerInput } from "../../../../components/YearPickerInput";
+import { isBlank, isValidEmailFormat, isValidPhoneFormat } from "../../../../utils/formValidation";
 import {
   fetchTicketTypes,
   DEFAULT_TICKET_TYPES,
@@ -93,6 +95,20 @@ const PAYMENT_METHODS = [
   { id: "Cash", labelVn: "Tiền mặt", labelEn: "Cash", icon: "payments" },
   { id: "PayOS", labelVn: "PayOS (QR)", labelEn: "PayOS (QR)", icon: "qr_code_2" },
 ];
+
+const withErrorBorder = (base, hasError) =>
+  hasError ? base.replace(/border-slate-200 dark:border-slate-700/, "border-rose-500 dark:border-rose-500") : base;
+const fieldErrorText = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
+
+const BIRTH_YEAR_ABS_MIN = 1900;
+/** Khoảng năm sinh hợp lệ theo loại vé (đồng bộ với Step3Checkout — luồng khách hàng). */
+const getBirthYearRangeForTicketType = (ticketTypeCode, travelYear) => {
+  const type = String(ticketTypeCode || "").toUpperCase();
+  if (type === "INFANT") return { min: travelYear - 2, max: travelYear };
+  if (type === "CHILD") return { min: travelYear - 12, max: travelYear - 3 };
+  if (type === "SENIOR") return { min: BIRTH_YEAR_ABS_MIN, max: travelYear - SENIOR_MIN_AGE };
+  return { min: BIRTH_YEAR_ABS_MIN, max: travelYear - 13 };
+};
 
 /**
  * Bước 3 dành riêng cho quầy bán vé (Staff/Manager): POST /api/bookings/counter thay vì
@@ -291,6 +307,101 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
     )));
   };
 
+  // Validate real-time từng field (giống Step3Checkout — luồng khách hàng).
+  const [touched, setTouched] = useState({ contact: {}, passengers: {}, infants: {} });
+  const markContactTouched = (field) =>
+    setTouched((prev) => ({ ...prev, contact: { ...prev.contact, [field]: true } }));
+  const markPassengerTouched = (index, field) =>
+    setTouched((prev) => ({
+      ...prev,
+      passengers: { ...prev.passengers, [index]: { ...prev.passengers[index], [field]: true } },
+    }));
+  const markInfantTouched = (index, field) =>
+    setTouched((prev) => ({
+      ...prev,
+      infants: { ...prev.infants, [index]: { ...prev.infants[index], [field]: true } },
+    }));
+
+  const fieldErrors = {
+    contact: {
+      ...(isBlank(contact.name)
+        ? { name: lang === "VN" ? "Vui lòng nhập họ tên khách." : "Please enter the customer's full name." }
+        : {}),
+      ...(isBlank(contact.phone)
+        ? { phone: lang === "VN" ? "Vui lòng nhập số điện thoại." : "Please enter a phone number." }
+        : !isValidPhoneFormat(contact.phone)
+          ? { phone: lang === "VN" ? "Số điện thoại không hợp lệ." : "Invalid phone number." }
+          : {}),
+      ...(isBlank(contact.email)
+        ? { email: lang === "VN" ? "Vui lòng nhập email." : "Please enter an email." }
+        : !isValidEmailFormat(contact.email)
+          ? { email: lang === "VN" ? "Email không hợp lệ." : "Invalid email." }
+          : {}),
+    },
+    passengers: passengers.map((p) => {
+      const errors = {};
+      if (isBlank(p.name)) {
+        errors.name = lang === "VN" ? "Vui lòng nhập họ tên." : "Please enter a full name.";
+      }
+      if (isBlank(p.birthYear)) {
+        errors.birthYear = lang === "VN" ? "Vui lòng nhập năm sinh." : "Please enter a birth year.";
+      } else {
+        const year = Number(p.birthYear);
+        if (!Number.isInteger(year) || year > travelYear || year < BIRTH_YEAR_ABS_MIN) {
+          errors.birthYear = lang === "VN"
+            ? `Năm sinh phải từ ${BIRTH_YEAR_ABS_MIN} đến ${travelYear}.`
+            : `Birth year must be between ${BIRTH_YEAR_ABS_MIN} and ${travelYear}.`;
+        } else if (!isTicketTypeMatchingBirthYear(p.ticketType, p.birthYear, travelYear)) {
+          const band = classifyPassengerAgeBand(p.birthYear, travelYear);
+          const type = String(p.ticketType || "").toUpperCase();
+          const age = getAgeFromBirthYear(p.birthYear, travelYear);
+          const seniorHint = type === "SENIOR" ? (lang === "VN" ? ` (cần ≥ ${SENIOR_MIN_AGE} tuổi, hiện ${age ?? "—"} tuổi)` : ` (needs ≥ ${SENIOR_MIN_AGE}, now ${age ?? "—"})`) : "";
+          errors.birthYear = lang === "VN"
+            ? `Năm sinh này thuộc nhóm ${band}, không khớp loại vé ${type}${seniorHint}.`
+            : `This birth year is in the ${band} age band, which doesn't match ticket type ${type}${seniorHint}.`;
+        }
+      }
+      if (!isBlank(p.phone) && !isValidPhoneFormat(p.phone)) {
+        errors.phone = lang === "VN" ? "Số điện thoại không hợp lệ." : "Invalid phone number.";
+      }
+      if (!isBlank(p.email) && !isValidEmailFormat(p.email)) {
+        errors.email = lang === "VN" ? "Email không hợp lệ." : "Invalid email.";
+      }
+      return errors;
+    }),
+    infants: passengers.map((p) => {
+      if (!p.infant) return {};
+      const errors = {};
+      if (isBlank(p.infant.name)) {
+        errors.name = lang === "VN" ? "Vui lòng nhập họ tên em bé." : "Please enter the infant's name.";
+      }
+      if (isBlank(p.infant.birthYear)) {
+        errors.birthYear = lang === "VN" ? "Vui lòng nhập năm sinh." : "Please enter a birth year.";
+      } else {
+        const year = Number(p.infant.birthYear);
+        if (!Number.isInteger(year) || year > travelYear || year < infantBirthYearMin) {
+          errors.birthYear = lang === "VN"
+            ? `Năm sinh em bé phải từ ${infantBirthYearMin} đến ${travelYear}.`
+            : `Infant birth year must be between ${infantBirthYearMin} and ${travelYear}.`;
+        }
+      }
+      return errors;
+    }),
+  };
+
+  const hasFieldErrors =
+    Object.keys(fieldErrors.contact).length > 0
+    || fieldErrors.passengers.some((e) => Object.keys(e).length > 0)
+    || fieldErrors.infants.some((e) => Object.keys(e).length > 0);
+
+  const touchAllFields = () => {
+    setTouched({
+      contact: { name: true, phone: true, email: true },
+      passengers: Object.fromEntries(passengers.map((_, i) => [i, { name: true, birthYear: true, phone: true, email: true }])),
+      infants: Object.fromEntries(passengers.map((p, i) => [i, p.infant ? { name: true, birthYear: true } : {}])),
+    });
+  };
+
   // 3. BẢO HIỂM (giống luồng khách hàng)
   const [insurancePackages, setInsurancePackages] = useState([]);
   const [isInsuranceLoading, setIsInsuranceLoading] = useState(true);
@@ -399,6 +510,8 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
 
   const handleSubmit = async () => {
     setSubmitError("");
+    touchAllFields();
+    if (hasFieldErrors) return;
 
     if (!contact.name.trim() || !contact.phone.trim() || !contact.email.trim()) {
       showError(
@@ -759,9 +872,16 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                 placeholder="Nguyễn Văn A"
                 value={contact.name}
                 onChange={(e) => setContact({ ...contact, name: e.target.value })}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-colors focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:focus:border-[#FFD100]"
+                onBlur={() => markContactTouched("name")}
+                className={withErrorBorder(
+                  "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-colors focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:focus:border-[#FFD100]",
+                  touched.contact.name && fieldErrors.contact.name
+                )}
                 required
               />
+              {touched.contact.name && fieldErrors.contact.name && (
+                <p className={fieldErrorText}>{fieldErrors.contact.name}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Số điện thoại *" : "Phone Number *"}</label>
@@ -770,9 +890,16 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                 placeholder="0901234567"
                 value={contact.phone}
                 onChange={(e) => setContact({ ...contact, phone: e.target.value })}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-colors focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:focus:border-[#FFD100]"
+                onBlur={() => markContactTouched("phone")}
+                className={withErrorBorder(
+                  "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-colors focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:focus:border-[#FFD100]",
+                  touched.contact.phone && fieldErrors.contact.phone
+                )}
                 required
               />
+              {touched.contact.phone && fieldErrors.contact.phone && (
+                <p className={fieldErrorText}>{fieldErrors.contact.phone}</p>
+              )}
             </div>
           </div>
           <div className="space-y-1.5">
@@ -782,12 +909,20 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
               placeholder="example@domain.com"
               value={contact.email}
               onChange={(e) => setContact({ ...contact, email: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-colors focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:focus:border-[#FFD100]"
+              onBlur={() => markContactTouched("email")}
+              className={withErrorBorder(
+                "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-colors focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:focus:border-[#FFD100]",
+                touched.contact.email && fieldErrors.contact.email
+              )}
               required
             />
-            <p className="text-[11px] text-slate-400">
-              {lang === "VN" ? "Vé điện tử (QR) sẽ gửi về email này ngay sau khi xác nhận thanh toán." : "The e-ticket (QR) is emailed here right after payment is confirmed."}
-            </p>
+            {touched.contact.email && fieldErrors.contact.email ? (
+              <p className={fieldErrorText}>{fieldErrors.contact.email}</p>
+            ) : (
+              <p className="text-[11px] text-slate-400">
+                {lang === "VN" ? "Vé điện tử (QR) sẽ gửi về email này ngay sau khi xác nhận thanh toán." : "The e-ticket (QR) is emailed here right after payment is confirmed."}
+              </p>
+            )}
           </div>
         </div>
 
@@ -844,10 +979,17 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                       type="text"
                       value={passenger.name}
                       onChange={(e) => handlePassengerChange(index, "name", e.target.value)}
+                      onBlur={() => markPassengerTouched(index, "name")}
                       placeholder={lang === "VN" ? "Nguyễn Văn A..." : "Enter full name..."}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]"
+                      className={withErrorBorder(
+                        "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]",
+                        touched.passengers[index]?.name && fieldErrors.passengers[index]?.name
+                      )}
                       required
                     />
+                    {touched.passengers[index]?.name && fieldErrors.passengers[index]?.name && (
+                      <p className={fieldErrorText}>{fieldErrors.passengers[index].name}</p>
+                    )}
                   </div>
 
                   <div className="relative z-10 space-y-1.5">
@@ -872,16 +1014,23 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh *" : "Birth year *"}</label>
-                    <input
-                      type="number"
-                      min={1900}
-                      max={travelYear}
+                    <YearPickerInput
+                      min={getBirthYearRangeForTicketType(passenger.ticketType, travelYear).min}
+                      max={getBirthYearRangeForTicketType(passenger.ticketType, travelYear).max}
                       value={passenger.birthYear}
-                      onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
-                      placeholder="YYYY"
+                      onChange={(e) => {
+                        handlePassengerChange(index, "birthYear", e.target.value);
+                        markPassengerTouched(index, "birthYear");
+                      }}
                       required
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]"
+                      className={withErrorBorder(
+                        "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus-within:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus-within:border-[#FFD100]",
+                        touched.passengers[index]?.birthYear && fieldErrors.passengers[index]?.birthYear
+                      )}
                     />
+                    {touched.passengers[index]?.birthYear && fieldErrors.passengers[index]?.birthYear && (
+                      <p className={fieldErrorText}>{fieldErrors.passengers[index].birthYear}</p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -890,9 +1039,16 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                       type="tel"
                       value={passenger.phone}
                       onChange={(e) => handlePassengerChange(index, "phone", e.target.value)}
+                      onBlur={() => markPassengerTouched(index, "phone")}
                       placeholder={lang === "VN" ? "Không bắt buộc" : "Optional"}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]"
+                      className={withErrorBorder(
+                        "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]",
+                        touched.passengers[index]?.phone && fieldErrors.passengers[index]?.phone
+                      )}
                     />
+                    {touched.passengers[index]?.phone && fieldErrors.passengers[index]?.phone && (
+                      <p className={fieldErrorText}>{fieldErrors.passengers[index].phone}</p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -901,9 +1057,16 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                       type="email"
                       value={passenger.email}
                       onChange={(e) => handlePassengerChange(index, "email", e.target.value)}
+                      onBlur={() => markPassengerTouched(index, "email")}
                       placeholder={lang === "VN" ? "Không bắt buộc" : "Optional"}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]"
+                      className={withErrorBorder(
+                        "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]",
+                        touched.passengers[index]?.email && fieldErrors.passengers[index]?.email
+                      )}
                     />
+                    {touched.passengers[index]?.email && fieldErrors.passengers[index]?.email && (
+                      <p className={fieldErrorText}>{fieldErrors.passengers[index].email}</p>
+                    )}
                   </div>
                 </div>
 
@@ -942,22 +1105,36 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                             type="text"
                             value={passenger.infant.name}
                             onChange={(e) => handleInfantChange(index, "name", e.target.value)}
+                            onBlur={() => markInfantTouched(index, "name")}
                             placeholder={lang === "VN" ? "Nhập tên em bé..." : "Enter infant's name..."}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]"
+                            className={withErrorBorder(
+                              "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]",
+                              touched.infants[index]?.name && fieldErrors.infants[index]?.name
+                            )}
                           />
+                          {touched.infants[index]?.name && fieldErrors.infants[index]?.name && (
+                            <p className={fieldErrorText}>{fieldErrors.infants[index].name}</p>
+                          )}
                         </div>
                         <div className="w-full space-y-1.5 sm:w-32">
                           <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh *" : "Birth Year *"}</label>
-                          <input
-                            type="number"
+                          <YearPickerInput
                             min={infantBirthYearMin}
                             max={travelYear}
                             value={passenger.infant.birthYear}
-                            onChange={(e) => handleInfantChange(index, "birthYear", e.target.value)}
-                            placeholder="YYYY"
+                            onChange={(e) => {
+                              handleInfantChange(index, "birthYear", e.target.value);
+                              markInfantTouched(index, "birthYear");
+                            }}
                             required
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus:border-[#FFD100]"
+                            className={withErrorBorder(
+                              "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus-within:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:focus-within:border-[#FFD100]",
+                              touched.infants[index]?.birthYear && fieldErrors.infants[index]?.birthYear
+                            )}
                           />
+                          {touched.infants[index]?.birthYear && fieldErrors.infants[index]?.birthYear && (
+                            <p className={fieldErrorText}>{fieldErrors.infants[index].birthYear}</p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1221,7 +1398,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={isSubmitting || isHoldExpired}
+            disabled={isSubmitting || isHoldExpired || hasFieldErrors}
             className="inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-[#124757] px-6 py-4 text-sm font-headline font-black uppercase tracking-wider text-white shadow-lg shadow-[#124757]/25 transition hover:scale-[1.01] hover:bg-[#0e3a46] disabled:opacity-50 disabled:hover:scale-100 dark:bg-yellow-400 dark:text-slate-900"
           >
             {isSubmitting ? (
