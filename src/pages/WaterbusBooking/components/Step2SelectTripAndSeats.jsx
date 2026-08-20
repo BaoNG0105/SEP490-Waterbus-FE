@@ -1089,8 +1089,8 @@ export default function Step2SelectTripAndSeats({
             {currentTrip && !isLoopRoute ? (
               <p className="mt-2 text-[11px] font-bold italic text-rose-600 dark:text-rose-400">
                 {lang === "VN"
-                  ? "Giá vé sẽ thay đổi tùy thuộc vào bến khởi hành, điểm đến (quãng đường) và thời điểm đặt vé. Vé đặc biệt (trẻ em / người lớn tuổi / người khuyết tật): MIỄN PHÍ."
-                  : "Ticket price varies depending on the departure station, destination (distance) and time of booking. Special tickets (children / seniors / disabled): FREE."}
+                  ? "Giá vé sẽ thay đổi tùy thuộc vào bến khởi hành, điểm đến và thời điểm đặt vé. Vé đặc biệt (trẻ em / người lớn tuổi / người khuyết tật): MIỄN PHÍ. Em bé dưới 2 tuổi: MIỄN PHÍ, không chiếm ghế riêng, đi kèm 1 hành khách người lớn."
+                  : "Ticket price varies depending on the departure station, destination (distance) and time of booking. Special tickets (children / seniors / disabled): FREE. Infants under 2 years old: FREE, no separate seat, must accompany an adult passenger."}
               </p>
             ) : null}
           </div>

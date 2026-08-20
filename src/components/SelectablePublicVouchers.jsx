@@ -16,12 +16,52 @@ const formatExpiry = (isoValue, lang = "VN") => {
 };
 
 /**
+ * Xét nhanh (chỉ phía FE, không gọi API) 1 voucher có còn khả năng áp dụng hay không, dựa trên
+ * các điều kiện khách quan đã có sẵn trong dữ liệu voucher: còn hiệu lực theo thời gian, còn lượt
+ * dùng, và đơn hàng hiện tại (nếu biết `orderAmount`) có đạt `minOrderValue` không. Các điều kiện
+ * phức tạp hơn (tuyến/khung giờ/ngày trong tuần, lượt dùng theo tài khoản...) vẫn để BE quyết định
+ * khi bấm "Áp dụng" thật — đây chỉ để làm mờ + khóa trước những voucher rõ ràng không dùng được,
+ * tránh người dùng chọn nhầm rồi mới thấy lỗi.
+ */
+const getVoucherApplicability = (promo, orderAmount, lang = "VN") => {
+  const now = Date.now();
+
+  if (promo.validFrom) {
+    const from = new Date(promo.validFrom).getTime();
+    if (Number.isFinite(from) && now < from) {
+      return { applicable: false, reason: lang === "VN" ? "Chưa bắt đầu" : "Not started yet" };
+    }
+  }
+  if (promo.validTo) {
+    const to = new Date(promo.validTo).getTime();
+    if (Number.isFinite(to) && now > to) {
+      return { applicable: false, reason: lang === "VN" ? "Đã hết hạn" : "Expired" };
+    }
+  }
+  if (promo.usageLimit != null && Number(promo.usageCount) >= Number(promo.usageLimit)) {
+    return { applicable: false, reason: lang === "VN" ? "Đã hết lượt dùng" : "Fully redeemed" };
+  }
+  if (promo.minOrderValue != null && orderAmount != null && Number(orderAmount) < Number(promo.minOrderValue)) {
+    const formatted = Number(promo.minOrderValue).toLocaleString(lang === "VN" ? "vi-VN" : "en-US");
+    return {
+      applicable: false,
+      reason: lang === "VN" ? `Đơn tối thiểu ${formatted}đ` : `Min order ${formatted}`,
+    };
+  }
+
+  return { applicable: true, reason: "" };
+};
+
+/**
  * UI chọn voucher: header + ô nhập + carousel thẻ ngang.
  */
 export function SelectablePublicVouchers({
   lang = "VN",
   bookingType,
   selectedCode = "",
+  /** Tổng tiền đơn hàng hiện tại (trước giảm giá) — dùng để làm mờ + khóa các voucher chưa đạt
+   * minOrderValue. Bỏ qua (không lọc theo mức tối thiểu) nếu không truyền vào. */
+  orderAmount = null,
   onSelect,
   onChangeCode,
   onClear,
@@ -152,13 +192,17 @@ export function SelectablePublicVouchers({
             const discountLabel = formatPromotionDiscountLabel(promo, lang);
             const title = promo.promotionName || discountLabel || code;
             const expiry = formatExpiry(promo.validTo, lang);
+            const { applicable, reason } = getVoucherApplicability(promo, orderAmount, lang);
             return (
               <article
                 key={promo.id || code}
+                title={!applicable ? reason : undefined}
                 className={`relative w-[200px] shrink-0 rounded-2xl border bg-white p-3 dark:bg-slate-900 ${
-                  active
-                    ? "border-[#124757] shadow-sm dark:border-yellow-400"
-                    : "border-slate-200 dark:border-slate-700"
+                  !applicable
+                    ? "opacity-50 grayscale-35 border-slate-200 dark:border-slate-700"
+                    : active
+                      ? "border-[#124757] shadow-sm dark:border-yellow-400"
+                      : "border-slate-200 dark:border-slate-700"
                 }`}
               >
                 <p className="line-clamp-2 min-h-9 text-[13px] font-bold leading-snug text-slate-800 dark:text-white">
@@ -170,13 +214,15 @@ export function SelectablePublicVouchers({
                 </p>
                 <div className="mt-2.5 flex items-end justify-between gap-2 border-t border-dashed border-slate-200 pt-2.5 dark:border-slate-700">
                   <p className="text-[10px] font-medium text-slate-400">
-                    {expiry
-                      ? `${lang === "VN" ? "HSD" : "Exp"}: ${expiry}`
-                      : (lang === "VN" ? "Không HSD" : "No expiry")}
+                    {!applicable
+                      ? reason
+                      : expiry
+                        ? `${lang === "VN" ? "HSD" : "Exp"}: ${expiry}`
+                        : (lang === "VN" ? "Không HSD" : "No expiry")}
                   </p>
                   <button
                     type="button"
-                    disabled={disabled || !code}
+                    disabled={disabled || !code || !applicable}
                     onClick={() => handleApplyCode(code)}
                     className={`shrink-0 text-[12px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                       active
