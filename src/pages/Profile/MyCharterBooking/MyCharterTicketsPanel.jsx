@@ -182,7 +182,7 @@ export function MyCharterTicketsPanel({
           <input ref={importInputRef} type="file" accept=".xlsx,.csv,.tsv,.txt" onChange={handleImportPassengers} className="hidden" />
         </div>
 
-        {isManifestOpen && (
+        {isPaid && isManifestOpen && (
         <>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {[

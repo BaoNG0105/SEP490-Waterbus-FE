@@ -24,15 +24,16 @@ const OptionalNumberField = ({
   onToggle,
   value,
   onChange,
+  error,
   unlimitedVn = "Không giới hạn",
   unlimitedEn = "Unlimited",
 }) => (
-  <div>
-    <div className="flex items-center justify-between mb-1.5">
-      <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+  <div className="flex flex-col">
+    <div className="flex items-center justify-between mb-1.5 gap-2">
+      <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider min-w-0 leading-tight">
         {lang === "VN" ? labelVn : labelEn}
       </label>
-      <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 cursor-pointer">
+      <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 cursor-pointer shrink-0">
         <input
           type="checkbox"
           checked={!enabled}
@@ -48,8 +49,9 @@ const OptionalNumberField = ({
       disabled={!enabled}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={inputStyle}
+      className={`${inputStyle} mt-auto ${error ? "border-red-400 dark:border-red-500" : ""}`}
     />
+    {error && <p className="text-[10px] text-red-500 mt-1 font-bold">{error}</p>}
   </div>
 );
 
@@ -63,8 +65,10 @@ export function PromotionFormFields({
   lockCode = false,
   lockType = false,
   isCreate = true,
+  onErrorsChange,
 }) {
   const [routes, setRoutes] = useState([]);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     fetchAllRoutes()
@@ -72,8 +76,120 @@ export function PromotionFormFields({
       .catch(() => setRoutes([]));
   }, []);
 
-  const setField = (field, value) => onChange(field, value);
+  const validateField = (field, value) => {
+    switch (field) {
+      case "promotionCode": {
+        const v = String(value || "").trim();
+        if (!v) return lang === "VN" ? "Mã khuyến mãi bắt buộc." : "Promotion code is required.";
+        if (v.length > 50) return lang === "VN" ? "Mã tối đa 50 ký tự." : "Code max 50 characters.";
+        break;
+      }
+      case "promotionName": {
+        const v = String(value || "").trim();
+        if (!v) return lang === "VN" ? "Tên khuyến mãi bắt buộc." : "Promotion name is required.";
+        if (v.length > 150) return lang === "VN" ? "Tên tối đa 150 ký tự." : "Name max 150 characters.";
+        break;
+      }
+      case "description": {
+        const v = String(value || "");
+        if (v.length > 1000) return lang === "VN" ? "Mô tả tối đa 1000 ký tự." : "Description max 1000 characters.";
+        break;
+      }
+      case "discountValue": {
+        const num = Number(value);
+        if (!Number.isFinite(num) || num <= 0) return lang === "VN" ? "Giá trị giảm phải > 0." : "Discount must be > 0.";
+        if (isPercent && num > 100) return lang === "VN" ? "Phần trăm giảm không được > 100." : "Percent cannot exceed 100.";
+        break;
+      }
+      case "maxDiscountAmount": {
+        if (formData.hasMaxDiscountAmount && value !== "") {
+          const num = Number(value);
+          if (!Number.isFinite(num) || num < 1)
+            return lang === "VN" ? "Giảm tối đa phải ≥ 1.000đ." : "Max discount must be ≥ 1,000.";
+        }
+        break;
+      }
+      case "minOrderValue": {
+        if (formData.hasMinOrderValue && value !== "") {
+          const num = Number(value);
+          if (!Number.isFinite(num) || num < 1)
+            return lang === "VN" ? "Đơn tối thiểu phải ≥ 1.000đ." : "Minimum order must be ≥ 1,000.";
+        }
+        break;
+      }
+      case "usageLimit": {
+        if (formData.hasUsageLimit && value !== "") {
+          const num = Number(value);
+          if (!Number.isFinite(num) || num < 1)
+            return lang === "VN" ? "Lượt dùng tổng phải ≥ 1." : "Usage limit must be ≥ 1.";
+        }
+        break;
+      }
+      case "maxUsesPerAccount": {
+        if (formData.hasMaxUsesPerAccount && value !== "") {
+          const num = Number(value);
+          if (!Number.isFinite(num) || num < 1)
+            return lang === "VN" ? "Lượt dùng/user phải ≥ 1." : "Max uses per account must be ≥ 1.";
+        }
+        break;
+      }
+      case "budgetCap": {
+        if (formData.hasBudgetCap && value !== "") {
+          const num = Number(value);
+          if (!Number.isFinite(num) || num < 1)
+            return lang === "VN" ? "Ngân sách phải ≥ 1.000đ." : "Budget must be ≥ 1,000.";
+        }
+        break;
+      }
+      case "validTo": {
+        if (formData.validFrom && value) {
+          const fromTs = new Date(formData.validFrom).getTime();
+          const toTs = new Date(value).getTime();
+          if (!isNaN(fromTs) && !isNaN(toTs) && toTs <= fromTs)
+            return lang === "VN" ? "Ngày kết thúc phải sau ngày bắt đầu." : "End date must be after start date.";
+        }
+        break;
+      }
+      case "departureTo": {
+        if (formData.departureFrom && value) {
+          if (value < formData.departureFrom)
+            return lang === "VN" ? "Giờ kết thúc phải ≥ giờ bắt đầu." : "End time must be ≥ start time.";
+        }
+        break;
+      }
+    }
+    return null;
+  };
+
+  const setField = (field, value) => {
+    const err = validateField(field, value);
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (err) next[field] = err;
+      else delete next[field];
+      if (onErrorsChange) onErrorsChange(next);
+      return next;
+    });
+    onChange(field, value);
+  };
   const isPercent = formData.promotionType === PROMOTION_TYPE.PERCENT;
+
+  const dayNameFromIndex = (i) =>
+    ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][i] ?? "";
+
+  const availableDays = (() => {
+    if (!formData.validFrom || !formData.validTo) return null;
+    const from = new Date(formData.validFrom);
+    const to = new Date(formData.validTo);
+    if (isNaN(from) || isNaN(to) || from > to) return null;
+    const days = new Set();
+    const cur = new Date(from);
+    while (cur <= to) {
+      days.add(dayNameFromIndex(cur.getDay()));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return days;
+  })();
 
   const dayLabel = (day) => {
     const map = {
@@ -99,7 +215,7 @@ export function PromotionFormFields({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
       <div className="lg:col-span-3 bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
           {lang === "VN" ? "Thông tin cơ bản" : "Basic Information"}
@@ -118,11 +234,14 @@ export function PromotionFormFields({
               placeholder="WELCOME10"
               value={formData.promotionCode}
               onChange={(e) => setField("promotionCode", e.target.value.toUpperCase())}
-              className={`${inputStyle} uppercase tracking-wider ${lockCode ? "cursor-not-allowed opacity-60" : ""}`}
+              className={`${inputStyle} uppercase tracking-wider ${lockCode ? "cursor-not-allowed opacity-60" : ""} ${errors.promotionCode ? "border-red-400 dark:border-red-500" : ""}`}
             />
             <p className="text-[10px] text-slate-400 mt-1">
               {lang === "VN" ? "Tối đa 50 ký tự, tự chuyển hoa, không sửa sau khi tạo." : "Max 50 chars, uppercase, locked after create."}
             </p>
+            {errors.promotionCode && (
+              <p className="text-[10px] text-red-500 mt-1 font-bold">{errors.promotionCode}</p>
+            )}
           </div>
           <div>
             <label className={labelStyle}>
@@ -134,8 +253,11 @@ export function PromotionFormFields({
               maxLength={150}
               value={formData.promotionName}
               onChange={(e) => setField("promotionName", e.target.value)}
-              className={inputStyle}
+              className={`${inputStyle} ${errors.promotionName ? "border-red-400 dark:border-red-500" : ""}`}
             />
+            {errors.promotionName && (
+              <p className="text-[10px] text-red-500 mt-1 font-bold">{errors.promotionName}</p>
+            )}
           </div>
         </div>
 
@@ -146,9 +268,12 @@ export function PromotionFormFields({
             maxLength={1000}
             value={formData.description}
             onChange={(e) => setField("description", e.target.value)}
-            className={`${inputStyle} resize-none font-medium`}
+            className={`${inputStyle} resize-none font-medium ${errors.description ? "border-red-400 dark:border-red-500" : ""}`}
           />
           <p className="text-[10px] text-slate-400 mt-1">{formData.description?.length || 0}/1000</p>
+          {errors.description && (
+            <p className="text-[10px] text-red-500 mt-1 font-bold">{errors.description}</p>
+          )}
         </div>
 
         <div>
@@ -160,11 +285,13 @@ export function PromotionFormFields({
             className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-[#124757] file:px-3 file:py-2 file:text-[10px] file:font-black file:uppercase file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900"
           />
           {formData.imagePreviewUrl ? (
-            <img
-              src={formData.imagePreviewUrl}
-              alt=""
-              className="mt-3 h-28 w-auto rounded-xl border border-slate-200 object-cover dark:border-slate-700"
-            />
+            <div className="relative inline-block mt-3">
+              <img
+                src={formData.imagePreviewUrl}
+                alt=""
+                className="h-28 w-auto rounded-xl border border-slate-200 object-cover dark:border-slate-700"
+              />
+            </div>
           ) : null}
         </div>
 
@@ -217,8 +344,8 @@ export function PromotionFormFields({
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <div className="flex flex-col">
             <label className={labelStyle}>
               {isPercent
                 ? lang === "VN"
@@ -236,146 +363,55 @@ export function PromotionFormFields({
               max={isPercent ? 100 : undefined}
               value={formData.discountValue}
               onChange={(e) => setField("discountValue", e.target.value)}
-              className={inputStyle}
+              className={`${inputStyle} mt-auto ${errors.discountValue ? "border-red-400 dark:border-red-500" : ""}`}
             />
+            {errors.discountValue && (
+              <p className="text-[10px] text-red-500 mt-1 font-bold">{errors.discountValue}</p>
+            )}
           </div>
           {isPercent ? (
-            <OptionalNumberField
-              lang={lang}
-              labelVn="Giảm tối đa (VND)"
-              labelEn="Max discount (VND)"
-              enabled={formData.hasMaxDiscountAmount}
-              onToggle={(v) => setField("hasMaxDiscountAmount", v)}
-              value={formData.maxDiscountAmount}
-              onChange={(v) => setField("maxDiscountAmount", v)}
-              unlimitedVn="Không giới hạn"
-              unlimitedEn="No max"
-            />
+            <div className="flex flex-col h-full">
+              <OptionalNumberField
+                lang={lang}
+                labelVn="Giảm tối đa (VND)"
+                labelEn="Max discount (VND)"
+                enabled={formData.hasMaxDiscountAmount}
+                onToggle={(v) => setField("hasMaxDiscountAmount", v)}
+                value={formData.maxDiscountAmount}
+                onChange={(v) => setField("maxDiscountAmount", v)}
+                error={errors.maxDiscountAmount}
+                unlimitedVn="Không giới hạn"
+                unlimitedEn="No max"
+              />
+            </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 px-4 py-3 text-[10px] text-slate-400 font-semibold">
-              {lang === "VN"
-                ? "Fixed: maxDiscountAmount luôn null."
-                : "Fixed: maxDiscountAmount is always null."}
+            <div className="flex flex-col h-full">
+              <label className={labelStyle}>Giảm tối đa (VND)</label>
+              <div className="mt-auto rounded-xl border border-dashed border-slate-200 dark:border-slate-700 px-4 py-3 text-[10px] text-slate-400 font-semibold">
+                {lang === "VN"
+                  ? "Chỉ áp dụng khi chọn Giảm theo %"
+                  : "Only available for % discount type"}
+              </div>
             </div>
           )}
-        </div>
-
-        <OptionalNumberField
-          lang={lang}
-          labelVn="Giá trị đơn tối thiểu (VND)"
-          labelEn="Minimum order (VND)"
-          enabled={formData.hasMinOrderValue}
-          onToggle={(v) => setField("hasMinOrderValue", v)}
-          value={formData.minOrderValue}
-          onChange={(v) => setField("minOrderValue", v)}
-          unlimitedVn="Không yêu cầu"
-          unlimitedEn="No minimum"
-        />
-      </div>
-
-      <div className="lg:col-span-2 flex flex-col gap-6">
-      <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-        <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-          {lang === "VN" ? "Thời gian & hạn mức" : "Validity & limits"}
-        </h3>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div>
-            <label className={labelStyle}>{lang === "VN" ? "Hiệu lực từ (*)" : "Valid from (*)"}</label>
-            <input
-              type="datetime-local"
-              required
-              value={formData.validFrom}
-              onChange={(e) => setField("validFrom", e.target.value)}
-              className={inputStyle}
-            />
-          </div>
-          <div>
-            <label className={labelStyle}>{lang === "VN" ? "Hiệu lực đến (*)" : "Valid to (*)"}</label>
-            <input
-              type="datetime-local"
-              required
-              value={formData.validTo}
-              onChange={(e) => setField("validTo", e.target.value)}
-              className={inputStyle}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <OptionalNumberField
-            lang={lang}
-            labelVn="Giới hạn lượt dùng tổng"
-            labelEn="Total usage limit"
-            enabled={formData.hasUsageLimit}
-            onToggle={(v) => setField("hasUsageLimit", v)}
-            value={formData.usageLimit}
-            onChange={(v) => setField("usageLimit", v)}
-          />
-          <OptionalNumberField
-            lang={lang}
-            labelVn="Tối đa / tài khoản"
-            labelEn="Max uses / account"
-            enabled={formData.hasMaxUsesPerAccount}
-            onToggle={(v) => setField("hasMaxUsesPerAccount", v)}
-            value={formData.maxUsesPerAccount}
-            onChange={(v) => setField("maxUsesPerAccount", v)}
-          />
-        </div>
-
-        <OptionalNumberField
-          lang={lang}
-          labelVn="Ngân sách tối đa (VND)"
-          labelEn="Budget cap (VND)"
-          enabled={formData.hasBudgetCap}
-          onToggle={(v) => setField("hasBudgetCap", v)}
-          value={formData.budgetCap}
-          onChange={(v) => setField("budgetCap", v)}
-        />
-
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={formData.firstBookingOnly}
-            onChange={(e) => setField("firstBookingOnly", e.target.checked)}
-            className="w-4 h-4 rounded text-[#124757] focus:ring-0"
-          />
-          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-            {lang === "VN" ? "Chỉ áp dụng booking đầu tiên" : "First booking only"}
-          </span>
-        </label>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div>
-            <label className={labelStyle}>{lang === "VN" ? "Hiển thị" : "Visibility"}</label>
-            <FormSelect
-              value={formData.visibility}
-              onChange={(value) => setField("visibility", value)}
-              options={[
-                { value: PROMOTION_VISIBILITY.PUBLIC, label: lang === "VN" ? "Công khai" : "Public" },
-                { value: PROMOTION_VISIBILITY.PRIVATE, label: lang === "VN" ? "Riêng tư" : "Private" },
-              ]}
-              className={inputStyle}
-            />
-          </div>
-          <div>
-            <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
-            <FormSelect
-              value={formData.status}
-              onChange={(value) => setField("status", value)}
-              options={[
-                { value: PROMOTION_STATUS.DRAFT, label: "Draft" },
-                { value: PROMOTION_STATUS.ACTIVE, label: "Active" },
-                { value: PROMOTION_STATUS.PAUSED, label: "Paused" },
-                ...(!isCreate ? [{ value: PROMOTION_STATUS.ARCHIVED, label: "Archived" }] : []),
-              ]}
-              className={inputStyle}
+          <div className="flex flex-col h-full">
+            <OptionalNumberField
+              lang={lang}
+              labelVn="Giá trị đơn tối thiểu (VND)"
+              labelEn="Minimum order (VND)"
+              enabled={formData.hasMinOrderValue}
+              onToggle={(v) => setField("hasMinOrderValue", v)}
+              value={formData.minOrderValue}
+              onChange={(v) => setField("minOrderValue", v)}
+              error={errors.minOrderValue}
+              unlimitedVn="Không yêu cầu"
+              unlimitedEn="No minimum"
             />
           </div>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+      <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
           {lang === "VN" ? "Phạm vi áp dụng" : "Scope"}
         </h3>
@@ -416,22 +452,32 @@ export function PromotionFormFields({
           <div className="flex flex-wrap gap-1.5">
             {PROMOTION_DAYS.map((day) => {
               const on = formData.daysOfWeek.includes(day);
+              const available = availableDays ? availableDays.has(day) : true;
               return (
                 <button
                   key={day}
                   type="button"
-                  onClick={() => setField("daysOfWeek", toggleInList(formData.daysOfWeek, day))}
+                  onClick={() => available && setField("daysOfWeek", toggleInList(formData.daysOfWeek, day))}
                   className={`w-10 h-10 rounded-xl text-[10px] font-black border transition ${
                     on
                       ? "bg-[#124757] text-white border-[#124757] dark:bg-yellow-400 dark:text-slate-900"
-                      : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900 dark:border-slate-700"
+                      : available
+                        ? "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-900 dark:border-slate-700"
+                        : "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed opacity-40 dark:bg-slate-800"
                   }`}
                 >
                   {dayLabel(day)}
                 </button>
-              );
+                );
             })}
           </div>
+          {!availableDays && (
+            <p className="text-[10px] text-slate-400 mt-1.5 italic">
+              {lang === "VN"
+                ? "Chọn ngày hiệu lực để xem ngày khả dụng."
+                : "Select validity dates to see available days."}
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -450,8 +496,11 @@ export function PromotionFormFields({
               type="time"
               value={formData.departureTo}
               onChange={(e) => setField("departureTo", e.target.value)}
-              className={inputStyle}
+              className={`${inputStyle} ${errors.departureTo ? "border-red-400 dark:border-red-500" : ""}`}
             />
+            {errors.departureTo && (
+              <p className="text-[10px] text-red-500 mt-1 font-bold">{errors.departureTo}</p>
+            )}
           </div>
         </div>
 
@@ -500,7 +549,114 @@ export function PromotionFormFields({
           </div>
         </div>
       </div>
+
+      <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+        <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
+          {lang === "VN" ? "Thời gian & hạn mức" : "Validity & limits"}
+        </h3>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label className={labelStyle}>{lang === "VN" ? "Hiệu lực từ (*)" : "Valid from (*)"}</label>
+            <input
+              type="datetime-local"
+              required
+              value={formData.validFrom}
+              onChange={(e) => setField("validFrom", e.target.value)}
+              className={inputStyle}
+            />
+          </div>
+          <div>
+            <label className={labelStyle}>{lang === "VN" ? "Hiệu lực đến (*)" : "Valid to (*)"}</label>
+            <input
+              type="datetime-local"
+              required
+              value={formData.validTo}
+              onChange={(e) => setField("validTo", e.target.value)}
+              className={`${inputStyle} ${errors.validTo ? "border-red-400 dark:border-red-500" : ""}`}
+            />
+            {errors.validTo && (
+              <p className="text-[10px] text-red-500 mt-1 font-bold">{errors.validTo}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <OptionalNumberField
+            lang={lang}
+            labelVn="Giới hạn lượt dùng tổng"
+            labelEn="Total usage limit"
+            enabled={formData.hasUsageLimit}
+            onToggle={(v) => setField("hasUsageLimit", v)}
+            value={formData.usageLimit}
+            onChange={(v) => setField("usageLimit", v)}
+            error={errors.usageLimit}
+          />
+          <OptionalNumberField
+            lang={lang}
+            labelVn="Tối đa / tài khoản"
+            labelEn="Max uses / account"
+            enabled={formData.hasMaxUsesPerAccount}
+            onToggle={(v) => setField("hasMaxUsesPerAccount", v)}
+            value={formData.maxUsesPerAccount}
+            onChange={(v) => setField("maxUsesPerAccount", v)}
+            error={errors.maxUsesPerAccount}
+          />
+        </div>
+
+        <OptionalNumberField
+          lang={lang}
+          labelVn="Ngân sách tối đa (VND)"
+          labelEn="Budget cap (VND)"
+          enabled={formData.hasBudgetCap}
+          onToggle={(v) => setField("hasBudgetCap", v)}
+          value={formData.budgetCap}
+          onChange={(v) => setField("budgetCap", v)}
+          error={errors.budgetCap}
+        />
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={formData.firstBookingOnly}
+            onChange={(e) => setField("firstBookingOnly", e.target.checked)}
+            className="w-4 h-4 rounded text-[#124757] focus:ring-0"
+          />
+          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+            {lang === "VN" ? "Chỉ áp dụng booking đầu tiên" : "First booking only"}
+          </span>
+        </label>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label className={labelStyle}>{lang === "VN" ? "Hiển thị" : "Visibility"}</label>
+            <FormSelect
+              value={formData.visibility}
+              onChange={(value) => setField("visibility", value)}
+              options={[
+                { value: PROMOTION_VISIBILITY.PUBLIC, label: lang === "VN" ? "Công khai" : "Public" },
+                { value: PROMOTION_VISIBILITY.PRIVATE, label: lang === "VN" ? "Riêng tư" : "Private" },
+              ]}
+              className={inputStyle}
+            />
+          </div>
+          <div>
+            <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
+            <FormSelect
+              value={formData.status}
+              onChange={(value) => setField("status", value)}
+              options={[
+                { value: PROMOTION_STATUS.DRAFT, label: "Draft" },
+                { value: PROMOTION_STATUS.ACTIVE, label: "Active" },
+                { value: PROMOTION_STATUS.PAUSED, label: "Paused" },
+                ...(!isCreate ? [{ value: PROMOTION_STATUS.ARCHIVED, label: "Archived" }] : []),
+              ]}
+              className={inputStyle}
+            />
+          </div>
+        </div>
       </div>
+
     </div>
   );
 }

@@ -19,6 +19,7 @@ export function CreatePromotion() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [formData, setFormData] = useState(() => emptyPromotionForm());
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -26,6 +27,7 @@ export function CreatePromotion() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    if (Object.keys(fieldErrors).length > 0) return;
     try {
       setIsSubmitting(true);
       setErrorMsg("");
@@ -110,6 +112,7 @@ export function CreatePromotion() {
           lang={lang}
           formData={formData}
           onChange={handleFieldChange}
+          onErrorsChange={setFieldErrors}
           isCreate
         />
 

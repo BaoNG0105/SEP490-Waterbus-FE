@@ -17,6 +17,7 @@ import {
   updateMyCharterBookingPassengers,
   addMyCharterBookingPassengers,
 } from "../../../services/charterBookingService";
+import { normalizePassengerApprovalStatus } from "../../../utils/charterPassengerAdd";
 import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
 import { fetchBoatDetail } from "../../../services/boatService";
@@ -2594,6 +2595,19 @@ export function CharterDetail() {
                   handleSyncPayment={handleSyncPayment}
                   handleSyncPaymentByOrderCode={handleSyncPaymentByOrderCode}
                   loadDetail={loadDetail}
+                  passengerRows={passengerRows}
+                  handlePassengerChange={handlePassengerChange}
+                  handleSavePassengers={handleSavePassengers}
+                  canEditManifest={(() => {
+                    if (!isPaid) return false;
+                    return passengerRows.some((row) => {
+                      const rawApproval = String(row.approvalStatus || "").trim();
+                      const approval = normalizePassengerApprovalStatus(row.approvalStatus);
+                      const isDraftSlot = !row.id && !row.requestBatchId && !rawApproval;
+                      const isLocked = Boolean(row.requestBatchId) || (!isDraftSlot && approval === "Approved");
+                      return !isLocked;
+                    });
+                  })()}
                 />
               ) : (
                 <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">

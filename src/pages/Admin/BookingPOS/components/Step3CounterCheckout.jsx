@@ -236,7 +236,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
 
   const handleUnlinkCustomer = () => {
     setLinkedCustomer(null);
-    setPointsToUseInput("");
+    setUseAllPoints(false);
   };
 
   // 2. THÔNG TIN TỪNG HÀNH KHÁCH CÓ GHẾ — giống hệt luồng khách hàng.
@@ -353,14 +353,9 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
 
   // Điểm tích lũy: theo khách đã tra cứu, không phải nhân viên đang đăng nhập.
   const pointBalance = linkedCustomer ? Number(linkedCustomer.pointBalance) || 0 : 0;
-  const [pointsToUseInput, setPointsToUseInput] = useState("");
+  const [useAllPoints, setUseAllPoints] = useState(false);
   const maxPointsToUse = linkedCustomer ? getMaxPointsToUse(pointBalance, estimatedOrderAmount) : 0;
-  const pointsToUse = (() => {
-    if (!linkedCustomer) return 0;
-    const raw = Math.floor(Number(pointsToUseInput) || 0);
-    if (raw <= 0) return 0;
-    return Math.min(raw, maxPointsToUse);
-  })();
+  const pointsToUse = useAllPoints ? maxPointsToUse : 0;
   const estimatedPayable = Math.max(0, estimatedOrderAmount - pointsToUse);
   const estimatedEarn = linkedCustomer ? estimateEarnPoints(estimatedPayable) : 0;
 
@@ -482,6 +477,8 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
       paymentMethod,
       customerUserId: linkedCustomer?.customerUserId || null,
       customerConfirmedForPoints: Boolean(linkedCustomer),
+      // Backend chỉ nhận cờ useAllPoints; FE gửi số điểm tối đa.
+      useAllPoints: pointsToUse > 0,
       pointsToUse: pointsToUse > 0 ? pointsToUse : 0,
     };
 
@@ -1114,28 +1111,35 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
             </p>
           ) : (
             <>
-              <div className="mt-2.5 flex gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  max={maxPointsToUse}
-                  step={1}
-                  value={pointsToUseInput}
-                  onChange={(e) => setPointsToUseInput(e.target.value)}
-                  placeholder="0"
-                  disabled={maxPointsToUse <= 0 || isSubmitting}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black text-[#124757] outline-none disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                />
+              <div className="mt-2.5 flex items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Dùng điểm" : "Use points"}</span>
                 <button
                   type="button"
+                  onClick={() => setUseAllPoints((v) => !v)}
                   disabled={maxPointsToUse <= 0 || isSubmitting}
-                  onClick={() => setPointsToUseInput(String(maxPointsToUse))}
-                  className="shrink-0 rounded-xl border border-[#124757]/20 bg-[#124757]/5 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#124757] disabled:cursor-not-allowed disabled:opacity-40 ${
+                    useAllPoints ? "bg-[#124757] dark:bg-yellow-400" : "bg-slate-200 dark:bg-slate-700"
+                  }`}
                 >
-                  {lang === "VN" ? "Tối đa" : "Max"}
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      useAllPoints ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
                 </button>
               </div>
-              <p className="mt-1.5 text-[10px] text-slate-400">{lang === "VN" ? "1 điểm = 1 VND · tối đa 50% giá trị đơn" : "1 point = 1 VND · max 50% of order value"}</p>
+              {useAllPoints && maxPointsToUse > 0 && (
+                <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                  {lang === "VN"
+                    ? `Áp dụng ${maxPointsToUse.toLocaleString()} điểm (−${maxPointsToUse.toLocaleString()} VND)`
+                    : `Applying ${maxPointsToUse.toLocaleString()} points (−${maxPointsToUse.toLocaleString()} VND)`}
+                </p>
+              )}
+              {maxPointsToUse <= 0 && (
+                <p className="mt-1 text-[10px] text-slate-400">
+                  {lang === "VN" ? "Không đủ điểm hoặc đơn hàng quá nhỏ (tối đa 50% giá trị đơn)" : "Not enough points or order too small (max 50% of order total)"}
+                </p>
+              )}
             </>
           )}
         </div>
