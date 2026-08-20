@@ -3,12 +3,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { QRCodeSVG } from "qrcode.react";
 import { useApp } from "../../../context/AppContext";
-//import
+//service
 import { fetchMyBookingDetail } from "../../../services/bookingService";
 import { fetchTripDetail } from "../../../services/tripService";
-import { fetchReviewableTrips, submitBookingReview } from "../../../services/reviewService";
+import { fetchReviewableTrips, normalizeReviewableTrip, submitBookingReview } from "../../../services/reviewService";
+//component
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
+//util
 import { MY_BOOKINGS_PATH, getBookingServiceConfig } from "../../../utils/bookingServiceType";
 import {
   getBookingInsurancePackageId,
@@ -18,7 +20,7 @@ import {
 import { INSURANCE_BOOKING_TYPES } from "../../../services/insuranceService";
 import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
 import { notify } from "../../../utils/swalToast";
-import { normalizeReviewableTrip, StarRatingDisplay, TripReviewModal } from "../../../components/TripReview";
+import { StarRatingDisplay, TripReviewModal } from "../../../components/TripReview";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -828,7 +830,6 @@ export function BookingDetailPage({ serviceType }) {
           </div>
 
           <div className="rounded-4xl border border-dashed border-slate-200 bg-white p-16 text-center dark:border-slate-700 dark:bg-slate-800">
-            <span className="material-symbols-outlined mb-3 block text-5xl text-slate-300 dark:text-slate-600">search_off</span>
             <p className="font-headline text-lg font-black text-slate-500 dark:text-slate-300">
               {lang === "VN" ? "Không tìm thấy booking này." : "This booking could not be found."}
             </p>
@@ -1229,8 +1230,8 @@ export function BookingDetailPage({ serviceType }) {
 
                 {getStatusKey(booking.status) === "pendingpayment" && booking.holdExpiresAt ? (
                   <div className={`rounded-xl border px-3 py-2.5 text-xs font-bold ${isBookingExpired
-                      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
-                      : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+                    ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+                    : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
                     }`}
                   >
                     {isBookingExpired ? (

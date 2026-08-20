@@ -1,37 +1,10 @@
 import { useState } from "react";
 import { getApiErrorMessage } from "../utils/apiError";
 
-const pick = (source, keys, fallback = "") => {
-  for (const key of keys) {
-    const value = key.split(".").reduce((obj, part) => obj?.[part], source);
-    if (value !== undefined && value !== null && value !== "") return value;
-  }
-  return fallback;
-};
-
-export const REVIEW_COMMENT_MAX_LENGTH = 1000;
-
-/** Chuẩn hoá 1 dòng của GET /reviews/my/reviewable-trips. Review giờ tính theo booking (bookingId), không phải theo trip. */
-export const normalizeReviewableTrip = (trip) => {
-  const myReviewRaw = trip?.myReview ?? trip?.MyReview ?? null;
-  return {
-    tripId: String(pick(trip, ["tripId", "id"], "")),
-    tripCode: pick(trip, ["tripCode"], ""),
-    routeName: pick(trip, ["routeName"], ""),
-    departureTime: pick(trip, ["departureTime"], ""),
-    arrivalTime: pick(trip, ["arrivalTime"], ""),
-    bookingId: String(pick(trip, ["bookingId"], "")),
-    bookingCode: pick(trip, ["bookingCode"], ""),
-    isRoundTrip: Boolean(trip?.isRoundTrip),
-    myReview: myReviewRaw
-      ? {
-        rating: Number(pick(myReviewRaw, ["rating"], 0)),
-        comment: pick(myReviewRaw, ["comment"], ""),
-        status: pick(myReviewRaw, ["status"], ""),
-      }
-      : null,
-  };
-};
+// Chỉ để lại các export component ở file này — react-refresh/only-export-components (Fast
+// Refresh chỉ hoạt động khi 1 file chỉ export component). Hằng số/hàm dùng chung nằm ở
+// services/reviewService.js (normalizeReviewableTrip) — import từ đó, không phải từ đây.
+const REVIEW_COMMENT_MAX_LENGTH = 1000;
 
 /** Sao hiển thị (đọc) — dùng cho đánh giá đã gửi. */
 export const StarRatingDisplay = ({ rating, size = "text-lg" }) => (
@@ -154,7 +127,7 @@ export function TripReviewModal({ lang, onClose, onSubmitted }) {
 
           <button
             type="button"
-            disabled={submitting}
+            disabled={submitting || rating < 1}
             onClick={handleSubmit}
             className="w-full rounded-xl bg-[#FFD100] px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-900 transition disabled:cursor-not-allowed disabled:opacity-60"
           >

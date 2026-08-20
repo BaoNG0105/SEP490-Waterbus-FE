@@ -197,7 +197,7 @@ export function SelectablePublicVouchers({
               <article
                 key={promo.id || code}
                 title={!applicable ? reason : undefined}
-                className={`relative w-[200px] shrink-0 rounded-2xl border bg-white p-3 dark:bg-slate-900 ${
+                className={`relative w-50 shrink-0 rounded-2xl border bg-white p-3 dark:bg-slate-900 ${
                   !applicable
                     ? "opacity-50 grayscale-35 border-slate-200 dark:border-slate-700"
                     : active

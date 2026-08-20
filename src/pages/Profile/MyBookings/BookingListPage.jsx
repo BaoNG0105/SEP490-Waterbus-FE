@@ -3,10 +3,10 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import { fetchMyBookings } from "../../../services/bookingService";
-import { fetchReviewableTrips, submitBookingReview } from "../../../services/reviewService";
+import { fetchReviewableTrips, normalizeReviewableTrip, submitBookingReview } from "../../../services/reviewService";
 import { BOOKING_SERVICE_CONFIG, getBookingServiceConfig } from "../../../utils/bookingServiceType";
 import { notify } from "../../../utils/swalToast";
-import { normalizeReviewableTrip, TripReviewModal } from "../../../components/TripReview";
+import { TripReviewModal } from "../../../components/TripReview";
 import { FormSelect } from "../../../components/FormSelect";
 
 const pick = (source, keys, fallback = "") => {
