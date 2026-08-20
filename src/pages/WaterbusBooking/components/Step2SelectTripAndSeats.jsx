@@ -1002,12 +1002,12 @@ export default function Step2SelectTripAndSeats({
                     }}
                     title={lang === "VN" ? "Xem chi tiết chuyến" : "View trip details"}
                     aria-label={lang === "VN" ? "Xem chi tiết chuyến" : "View trip details"}
-                    className="absolute top-3 right-3 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-colors"
+                    className="absolute top-1/2 -translate-y-1/2 right-2 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-colors"
                   >
                     <span className="material-symbols-outlined text-sm leading-none">info</span>
                   </button>
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div className="flex items-center gap-4">
                       <ImageWithFallback
                         src={resolveTripCardImage(trip, boatImageById)}
                         alt=""
@@ -1037,7 +1037,7 @@ export default function Step2SelectTripAndSeats({
                         ) : null}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto">
+                    <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto pr-8">
                       <div className="text-right">
                         {/* BE: card chuyến show minPrice dạng "từ 9.000đ" — null khi thiếu km (không ẩn trip). */}
                         <div className={`text-base font-headline font-black ${trip.minPrice == null || missingKm

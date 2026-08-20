@@ -100,7 +100,7 @@ import {
   resolveQuoteDurationValue,
   readAcknowledgedTabBadges,
   acknowledgeTabBadge,
-  shouldShowTabBadge,
+  getAvailableRefundAmount,
 } from "../../../utils/charterBookingAdmin";
 import { fetchCharterSourceRoutes, fetchRouteDetail } from "../../../services/routeService";
 
@@ -1368,6 +1368,42 @@ export function AdminCharterBookingDetail() {
               {payments.length} {lang === "VN" ? "giao dịch" : "payments"}
             </span>
           </div>
+
+          {/* Refund summary — dùng refundablePayments theo BE contract. */}
+          {booking.refundablePayments && booking.refundablePayments.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-300">
+                  {lang === "VN" ? "Chính sách hoàn" : "Refund policy"}:
+                </span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                  {booking.policyPercent ?? 0}%
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-300">
+                  {lang === "VN" ? "Có thể hoàn" : "Available refund"}:
+                </span>
+                <span className={`text-xs font-bold ${getAvailableRefundAmount(booking.refundablePayments) > 0 ? "text-teal-600 dark:text-teal-300" : "text-slate-400"}`}>
+                  {currencyFormatter.format(getAvailableRefundAmount(booking.refundablePayments))}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-300">
+                  {lang === "VN" ? "Đã hoàn" : "Already refunded"}:
+                </span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                  {currencyFormatter.format(booking.totalRefundedAmount ?? 0)}
+                </span>
+              </div>
+              {booking.canRequestRefund && getAvailableRefundAmount(booking.refundablePayments) > 0 && (
+                <span className="ml-auto rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-headline font-black uppercase tracking-wider text-teal-700 border border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20">
+                  {lang === "VN" ? "Có thể yêu cầu hoàn" : "Refundable"}
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-230 table-fixed text-xs">
               <colgroup>

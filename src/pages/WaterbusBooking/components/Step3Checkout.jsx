@@ -236,7 +236,6 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     setPassengers(updated);
   };
 
-  // Kéo tên/SĐT/email từ tài khoản đang đăng nhập xuống Thông tin liên hệ (người đặt)
   const [isLoadingAccountInfo, setIsLoadingAccountInfo] = useState(false);
 
   useEffect(() => {
@@ -279,7 +278,6 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     }
   };
 
-  // Chiếu tên/SĐT/email từ Thông tin liên hệ (đã điền ở trên) xuống Hành khách 1
   const handleUseContactInfoForPassenger = (index) => {
     setPassengers((prev) => prev.map((passenger, i) => (
       i === index
@@ -321,13 +319,12 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     )));
   };
 
-  // 4. STATE: MÃ GIẢM GIÁ, ĐIỂM TÍCH LŨY, BẢO HIỂM & SUBMIT
   const [promoCode, setPromoCode] = useState("");
   const [promoPreview, setPromoPreview] = useState(null);
   const [promoChecking, setPromoChecking] = useState(false);
   const promoValidateSeqRef = useRef(0);
   const [pointBalance, setPointBalance] = useState(0);
-  const [pointsToUseInput, setPointsToUseInput] = useState("");
+  const [useAllPoints, setUseAllPoints] = useState(false);
   const [insurancePackages, setInsurancePackages] = useState([]);
   const [isInsuranceLoading, setIsInsuranceLoading] = useState(true);
   const [insuranceLoadError, setInsuranceLoadError] = useState("");
@@ -335,6 +332,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
   const lastInsurancePackageIdRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -424,11 +422,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
 
   // BE: maxPointsToUse = min(pointBalance, floor(orderAmount * 0.5)); 1 điểm = 1 VND
   const maxPointsToUse = getMaxPointsToUse(pointBalance, estimatedOrderAmount);
-  const pointsToUse = (() => {
-    const raw = Math.floor(Number(pointsToUseInput) || 0);
-    if (raw <= 0) return 0;
-    return Math.min(raw, maxPointsToUse);
-  })();
+  // User chỉ có 2 lựa chọn: KHÔNG dùng (0) hoặc dùng TỐI ĐA (maxPointsToUse).
+  const pointsToUse = useAllPoints ? maxPointsToUse : 0;
   const estimatedPayable = Math.max(0, estimatedOrderAmount - pointsToUse);
   const estimatedEarn = estimateEarnPoints(estimatedPayable);
   const isFreeBookingEstimate = estimatedPayable === 0;
@@ -745,7 +740,6 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
         });
       };
 
-      // Vé 0đ: BE chốt Confirmed tự động → GET detail lấy ticketCode/QR rồi vào màn vé (không PayOS).
       if (orderAmount === 0 && bookingStatus.toLowerCase() === "confirmed") {
         try {
           await fetchMyBookingDetail(bookingId);
@@ -756,11 +750,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
         return;
       }
 
-      // Vé có tiền: tạo payment PayOS như cũ.
       const payment = await createBookingPayment({
         bookingId,
         paymentOption: "Full",
         promotionCode: promoCode.trim() || null,
+        useAllPoints: pointsForPayment > 0,
         pointsToUse: pointsForPayment > 0 ? pointsForPayment : 0,
       });
       const checkoutUrl = pick(payment, [
@@ -1259,19 +1253,17 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
 
             if (isInsuranceLoading) {
               return (
-                <div className="rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-800">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
-                      <span className="material-symbols-outlined text-xl">verified_user</span>
-                    </span>
-                    <div>
-                      <p className="text-sm font-bold text-slate-800 dark:text-white">
-                        {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-slate-400">
-                        {lang === "VN" ? "Đang tải gói bảo hiểm…" : "Loading insurance…"}
-                      </p>
-                    </div>
+                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400">
+                    <span className="material-symbols-outlined text-lg">verified_user</span>
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-slate-800 dark:text-white">
+                      {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      {lang === "VN" ? "Đang tải…" : "Loading…"}
+                    </p>
                   </div>
                 </div>
               );
@@ -1279,126 +1271,119 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
 
             if (!insurancePackages.length) {
               return (
-                <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/70 p-3.5 dark:border-amber-500/30 dark:bg-amber-500/10">
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 dark:bg-slate-900 dark:text-amber-300">
-                      <span className="material-symbols-outlined text-xl">verified_user</span>
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-800 dark:text-white">
-                        {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
-                      </p>
-                      <p className="mt-1 text-[11px] font-medium leading-5 text-slate-600 dark:text-slate-300">
-                        {insuranceLoadError
-                          || (lang === "VN"
-                            ? "Chưa có gói Active PassengerInsurance. Admin → Bảo hiểm tạo gói (mặc định gửi PassengerInsurance)."
-                            : "No Active PassengerInsurance package yet. Create one in Admin → Insurance.")}
-                      </p>
-                    </div>
+                <div className="flex items-start gap-3 rounded-2xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-amber-600 dark:bg-slate-900 dark:text-amber-300">
+                    <span className="material-symbols-outlined text-lg">verified_user</span>
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 dark:text-white">
+                      {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                    </p>
+                    <p className="mt-1 text-[11px] font-medium leading-5 text-slate-600 dark:text-slate-300">
+                      {insuranceLoadError
+                        || (lang === "VN"
+                          ? "Chưa có gói Active. Admin → Bảo hiểm tạo gói."
+                          : "No Active package. Admin → Insurance to create one.")}
+                    </p>
                   </div>
                 </div>
               );
             }
 
+            const singlePackage = insurancePackages.length === 1;
+            const selectedPkg = selectedInsurancePackage;
+
             return (
-              <div className="rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-800">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl ${
-                      providerLogoUrl
-                        ? "bg-white p-1 ring-1 ring-slate-200 dark:ring-slate-600"
-                        : "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400"
-                    }`}>
-                      {providerLogoUrl ? (
-                        <img src={providerLogoUrl} alt={providerName || "Insurance"} className="h-full w-full object-contain" />
-                      ) : (
-                        <span className="material-symbols-outlined text-xl">verified_user</span>
-                      )}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-800 dark:text-white">
-                        {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
-                      </p>
-                      <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                        {wantsInsurance && selectedInsurancePackage
-                          ? `${selectedInsurancePackage.name || providerName} · ${formatVnd(insuranceFee)}`
-                          : (lang === "VN" ? "Tùy chọn thêm khi thanh toán" : "Optional add-on at checkout")}
-                      </p>
-                    </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                {/* Dòng header: icon | label | giá | toggle */}
+                <div className="flex items-center gap-3">
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg ${
+                    providerLogoUrl
+                      ? "bg-white p-1 ring-1 ring-slate-200 dark:ring-slate-600"
+                      : "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400"
+                  }`}>
+                    {providerLogoUrl ? (
+                      <img src={providerLogoUrl} alt={providerName || "Insurance"} className="h-full w-full object-contain" />
+                    ) : (
+                      <span className="material-symbols-outlined text-lg">verified_user</span>
+                    )}
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-slate-800 dark:text-white">
+                      {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {wantsInsurance && selectedPkg
+                        ? `${selectedPkg.name || providerName} · ${formatVnd(insuranceFee)}`
+                        : (singlePackage
+                            ? formatVnd(insurancePackages[0].unitPremiumAmount) + `/${lang === "VN" ? "khách" : "pax"} · ${lang === "VN" ? "Tùy chọn" : "Optional"}`
+                            : (lang === "VN" ? "Tùy chọn thêm" : "Optional add-on"))}
+                    </p>
                   </div>
+
+                  {/* Toggle bật/tắt */}
                   <button
                     type="button"
                     role="switch"
                     aria-checked={wantsInsurance}
                     disabled={insuranceRequired || isSubmitting}
                     onClick={() => handleInsuranceToggle(!wantsInsurance)}
-                    className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60 ${
-                      wantsInsurance ? "bg-[#124757] dark:bg-yellow-400" : "bg-slate-300 dark:bg-slate-600"
-                    }`}
-                    title={insuranceRequired
-                      ? (lang === "VN" ? "Gói bắt buộc" : "Required package")
-                      : undefined}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 ${
+                      wantsInsurance
+                        ? "bg-[#124757] dark:bg-yellow-400"
+                        : "bg-slate-300 dark:bg-slate-600"
+                    } ${!wantsInsurance ? "focus-visible:ring-[#124757]" : ""}`}
+                    title={insuranceRequired ? (lang === "VN" ? "Gói bắt buộc" : "Required") : undefined}
                   >
-                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      wantsInsurance ? "translate-x-5" : "translate-x-0"
+                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                      wantsInsurance ? "translate-x-6" : "translate-x-1"
                     }`} />
                   </button>
                 </div>
 
-                {wantsInsurance ? (
-                  <div className="mt-3 space-y-2.5 border-t border-slate-100 pt-3 dark:border-slate-700">
-                    {insurancePackages.length > 1 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {insurancePackages.map((pkg) => {
-                          const packageId = getInsurancePackageId(pkg);
-                          const isSelected = isSameInsurancePackageId(selectedInsurancePackageId, packageId);
-                          return (
-                            <button
-                              key={packageId}
-                              type="button"
-                              onClick={() => handleSelectPackage(pkg)}
-                              className={`rounded-xl border px-3 py-2 text-left text-[11px] font-bold transition ${
-                                isSelected
-                                  ? "border-[#124757] bg-[#124757]/8 text-[#124757] dark:border-yellow-400 dark:bg-yellow-400/10 dark:text-yellow-400"
-                                  : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
-                              }`}
-                            >
-                              <span className="block">{pkg.name || pkg.code}</span>
-                              <span className="mt-0.5 block text-slate-400">
-                                {formatVnd(pkg.unitPremiumAmount)}/{lang === "VN" ? "khách" : "pax"}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                    {selectedInsurancePackage ? (
-                      <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                        <span>
-                          {formatVnd(insurancePreview.unitPremium)} × {insurancePreview.quantity}{" "}
-                          {lang === "VN" ? "khách" : "pax"}
-                          {Number(selectedInsurancePackage.coverageAmount) > 0
-                            ? ` · ${lang === "VN" ? "BH" : "Cover"} ${formatVnd(selectedInsurancePackage.coverageAmount)}`
-                            : ""}
-                        </span>
+                {/* Pills chọn gói — chỉ hiện khi bật */}
+                {wantsInsurance && !singlePackage && (
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
+                    {insurancePackages.map((pkg) => {
+                      const packageId = getInsurancePackageId(pkg);
+                      const isSelected = isSameInsurancePackageId(selectedInsurancePackageId, packageId);
+                      return (
                         <button
+                          key={packageId}
                           type="button"
-                          onClick={handleShowTerms}
-                          className="shrink-0 font-bold text-[#124757] hover:underline dark:text-yellow-400"
+                          onClick={() => handleSelectPackage(pkg)}
+                          className={`rounded-xl border px-3 py-2 text-left text-[11px] font-bold transition ${
+                            isSelected
+                              ? "border-[#124757] bg-[#124757] text-white dark:border-yellow-400 dark:bg-yellow-400 dark:text-slate-900"
+                              : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
+                          }`}
                         >
-                          {lang === "VN" ? "Điều khoản" : "Terms"}
+                          <span className="block">{pkg.name || pkg.code}</span>
+                          <span className={`mt-0.5 block text-[10px] ${isSelected ? "text-white/70 dark:text-slate-900/70" : "text-slate-400"}`}>
+                            {formatVnd(pkg.unitPremiumAmount)}/{lang === "VN" ? "khách" : "pax"}
+                            {Number(pkg.coverageAmount) > 0 ? ` · BH ${formatVnd(pkg.coverageAmount)}` : ""}
+                          </span>
                         </button>
-                      </div>
-                    ) : null}
+                      );
+                    })}
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleShowTerms}
-                    className="mt-2 text-[11px] font-bold text-[#124757] hover:underline dark:text-yellow-400"
-                  >
-                    {lang === "VN" ? "Xem điều khoản bảo hiểm" : "View insurance terms"}
-                  </button>
+                )}
+
+                {/* Chi tiết giá + điều khoản */}
+                {wantsInsurance && selectedPkg && (
+                  <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2.5 dark:border-slate-700">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {formatVnd(insurancePreview.unitPremium)} × {insurancePreview.quantity} {lang === "VN" ? "khách" : "pax"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleShowTerms}
+                      className="text-[11px] font-bold text-[#124757] hover:underline dark:text-yellow-400"
+                    >
+                      {lang === "VN" ? "Điều khoản" : "Terms"}
+                    </button>
+                  </div>
                 )}
               </div>
             );
@@ -1427,32 +1412,41 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
               {lang === "VN" ? "Số dư" : "Balance"} {pointBalance.toLocaleString()}
             </span>
           </div>
-          <div className="mt-2.5 flex gap-2">
-            <input
-              type="number"
-              min={0}
-              max={maxPointsToUse}
-              step={1}
-              value={pointsToUseInput}
-              onChange={(e) => setPointsToUseInput(e.target.value)}
-              placeholder="0"
-              disabled={maxPointsToUse <= 0 || isSubmitting}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black text-[#124757] outline-none disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-            />
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              {lang === "VN" ? "Dùng điểm" : "Use points"}
+            </span>
             <button
               type="button"
+              onClick={() => setUseAllPoints((v) => !v)}
               disabled={maxPointsToUse <= 0 || isSubmitting}
-              onClick={() => setPointsToUseInput(String(maxPointsToUse))}
-              className="shrink-0 rounded-xl border border-[#124757]/20 bg-[#124757]/5 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#124757] disabled:cursor-not-allowed disabled:opacity-40 ${
+                useAllPoints
+                  ? "bg-[#124757] dark:bg-yellow-400"
+                  : "bg-slate-200 dark:bg-slate-700"
+              }`}
             >
-              {lang === "VN" ? "Tối đa" : "Max"}
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                  useAllPoints ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
             </button>
           </div>
-          <p className="mt-1.5 text-[10px] text-slate-400">
-            {lang === "VN"
-              ? `1 điểm = 1 VND`
-              : `1 point = 1 VND`}
-          </p>
+          {useAllPoints && maxPointsToUse > 0 && (
+            <p className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+              {lang === "VN"
+                ? `Áp dụng ${maxPointsToUse.toLocaleString()} điểm (−${maxPointsToUse.toLocaleString()} VND)`
+                : `Applying ${maxPointsToUse.toLocaleString()} points (−${maxPointsToUse.toLocaleString()} VND)`}
+            </p>
+          )}
+          {maxPointsToUse <= 0 && (
+            <p className="mt-1 text-[10px] text-slate-400">
+              {lang === "VN"
+                ? "Không đủ điểm hoặc đơn hàng quá nhỏ (tối đa 50% giá trị đơn)"
+                : "Not enough points or order too small (max 50% of order total)"}
+            </p>
+          )}
         </div>
 
         {/* Tổng tiền */}
@@ -1473,19 +1467,19 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
           )}
           {insuranceFee > 0 && (
             <div className="flex items-start justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
-              <div>
+              <div className="min-w-0 max-w-[65%]">
                 <p>{lang === "VN" ? "Bảo hiểm" : "Insurance"}</p>
                 <p className="mt-0.5 text-[11px] text-slate-400">
                   {insurancePreview.unitPremium.toLocaleString()}đ × {insurancePreview.quantity}{" "}
                   {lang === "VN" ? "hành khách" : "passenger(s)"}
                 </p>
               </div>
-              <span className="font-bold text-slate-700 dark:text-slate-200">+{insuranceFee.toLocaleString()}đ</span>
+              <span className="shrink-0 font-bold text-slate-700 dark:text-slate-200">+{insuranceFee.toLocaleString()}đ</span>
             </div>
           )}
           {promoCode.trim() ? (
             <div className="flex items-start justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
-              <div>
+              <div className="min-w-0 max-w-[65%]">
                 <p>{lang === "VN" ? "Mã giảm giá" : "Promo code"}</p>
                 <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wide text-[#124757] dark:text-yellow-400">
                   {promoCode.trim()}
@@ -1556,10 +1550,32 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
 
         {/* Hành động */}
         <div className="space-y-3 pt-1">
+          {/* Checkbox điều khoản — bắt buộc trước khi đặt vé */}
+          <label
+            className={`flex cursor-pointer items-start gap-2.5 rounded-2xl border p-3.5 transition-colors ${
+              agreedToTerms
+                ? "border-[#124757] bg-[#124757]/5 dark:border-yellow-400/40 dark:bg-yellow-400/5"
+                : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              disabled={isSubmitting}
+              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-[#124757] accent-[#124757] focus:ring-[#124757] disabled:opacity-50 dark:border-slate-600 dark:accent-yellow-400"
+            />
+            <span className="flex-1 text-[11px] leading-5 text-slate-600 dark:text-slate-300">
+              {lang === "VN"
+                ? <>Tôi đã đọc, hiểu rõ và đồng ý với <strong className="font-bold text-[#124757] dark:text-yellow-400">Điều khoản dịch vụ</strong> và <strong className="font-bold text-[#124757] dark:text-yellow-400">Chính sách hoàn/hủy vé</strong> của Waterbus.</>
+                : <>I have read, understood and agree to Waterbus's <strong className="font-bold text-[#124757] dark:text-yellow-400">Terms of Service</strong> and <strong className="font-bold text-[#124757] dark:text-yellow-400">Refund & Cancellation Policy</strong>.</>}
+            </span>
+          </label>
+
           <button
             type="button"
             onClick={handlePayment}
-            disabled={isSubmitting || isHoldExpired}
+            disabled={isSubmitting || isHoldExpired || !agreedToTerms}
             className={isFreeBookingEstimate
               ? "inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-[#124757] px-6 py-4 text-sm font-headline font-black uppercase tracking-wider text-white shadow-lg shadow-[#124757]/25 transition hover:bg-[#0e3a46] hover:scale-[1.01] disabled:opacity-50 disabled:hover:scale-100"
               : payosButtonLgClassName}

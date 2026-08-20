@@ -1,9 +1,40 @@
+import { useState } from "react";
 import { PayOSLogo, payosButtonClassName, payosButtonLgClassName } from "../../../components/PayOSLogo";
 import { SelectablePublicVouchers } from "../../../components/SelectablePublicVouchers";
 
 import { PROMOTION_BOOKING_TYPES } from "../../../services/promotionService";
 
 import { shouldShowPaymentDeadlineCountdown } from "../../../utils/charterBookingActions";
+
+const CURRENT_YEAR = new Date().getFullYear();
+const MIN_BIRTH_YEAR = 1900;
+
+function PassengerRowInput({ row, index, lang, onChange, disabled }) {
+  return (
+    <div className="grid grid-cols-[42px_1fr_160px] gap-2 items-center">
+      <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400">
+        {index + 1}
+      </label>
+      <input
+        value={row.fullName}
+        onChange={(e) => onChange(index, "fullName", e.target.value)}
+        disabled={disabled}
+        placeholder={lang === "VN" ? "Họ tên" : "Full name"}
+        className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 disabled:opacity-60"
+      />
+      <input
+        type="number"
+        min={MIN_BIRTH_YEAR}
+        max={CURRENT_YEAR}
+        value={row.birthYear}
+        onChange={(e) => onChange(index, "birthYear", e.target.value)}
+        disabled={disabled}
+        placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
+        className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 disabled:opacity-60"
+      />
+    </div>
+  );
+}
 
 const formatCountdown = (milliseconds) => {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -226,6 +257,11 @@ export function MyCharterPaymentPanel({
   handleSyncPayment,
   handleSyncPaymentByOrderCode,
   loadDetail,
+  // Passenger manifest props
+  passengerRows,
+  handlePassengerChange,
+  handleSavePassengers,
+  canEditManifest,
 }) {
   return (
     <>
@@ -300,12 +336,56 @@ export function MyCharterPaymentPanel({
         ) : null}
 
         {canShowPayOsSection ? (
-          <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-linear-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-            <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
-                    {lang === "VN" ? "Thanh toán qua PayOS" : "Pay via PayOS"}
+          <div className="space-y-5">
+            {/* ===== PASSENGER MANIFEST — before payment ===== */}
+            {passengerRows && passengerRows.length > 0 && (
+              <div className="overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-white dark:border-slate-700 dark:bg-slate-900 shadow-sm">
+                <div className="border-b border-[#D8E7EA]/80 bg-[#F7FAFB]/80 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
+                  <h4 className="font-headline text-sm font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
+                    {lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"}
+                  </h4>
+                  <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    {lang === "VN"
+                      ? "Nhập thông tin hành khách trước khi thanh toán."
+                      : "Enter passenger details before paying."}
+                  </p>
+                </div>
+                <div className="space-y-2.5 px-5 py-4 md:px-6">
+                  {passengerRows.map((row, index) => (
+                    <PassengerRowInput
+                      key={row.id || `passenger-${index}`}
+                      row={row}
+                      index={index}
+                      lang={lang}
+                      onChange={handlePassengerChange}
+                      disabled={!canEditManifest}
+                    />
+                  ))}
+                </div>
+                {canEditManifest && (
+                  <div className="flex justify-end px-5 pb-4 md:px-6">
+                    <button
+                      type="button"
+                      onClick={handleSavePassengers}
+                      disabled={isSubmitting || !canEditManifest}
+                      className="rounded-xl bg-[#124757] dark:bg-yellow-400 px-6 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:text-slate-900 disabled:opacity-50 transition-colors hover:bg-[#0d3541] dark:hover:bg-yellow-300"
+                    >
+                      {isSubmitting
+                        ? (lang === "VN" ? "Đang lưu..." : "Saving...")
+                        : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ===== PAYOS PAYMENT CARD ===== */}
+            <div className="overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-linear-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+              <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h4 className="font-headline text-base font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
+                      {lang === "VN" ? "Thanh toán qua PayOS" : "Pay via PayOS"}
                   </h4>
                   <p className="mt-1 max-w-xl text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
                     {lang === "VN"
@@ -539,6 +619,7 @@ export function MyCharterPaymentPanel({
                 </p>
               )}
             </div>
+          </div>
           </div>
         ) : null}
       </div>

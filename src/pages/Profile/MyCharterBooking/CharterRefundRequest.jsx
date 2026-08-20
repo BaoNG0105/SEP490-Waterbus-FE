@@ -9,7 +9,7 @@ import {
   requestRefundBookingOtp,
 } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
-import { getRefundPaymentId, isPaymentUuid, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
+import { getRefundPaymentId, getAvailableRefundAmount, isPaymentUuid, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -69,6 +69,7 @@ const normalizeBooking = (item) => {
     paymentStatus: resolveCharterPaymentStatus(item),
     paidAmount: paidAmountFromPayments || Number(pick(item, ["paidAmount", "paidPaymentAmount", "depositAmount"], 0)) || 0,
     payments,
+    refundablePayments: Array.isArray(item?.refundablePayments) ? item.refundablePayments : [],
     raw: item,
   };
 };
@@ -200,7 +201,12 @@ export function CharterRefund() {
   const hasPaidPayment = booking
     && (["paid", "depositpaid"].includes(String(booking.paymentStatus).toLowerCase()) || Number(booking.paidAmount || 0) > 0 || isPaidPayment(payment));
   const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
-  const refundAmountDisplay = Number(otpOptions?.refundAmount || booking?.paidAmount || getPaymentAmount(payment) || 0);
+  /** Lấy từ refundablePayments — tránh dùng outstandingRefundAmount (số dư sổ sách).
+   *  refundablePayments = [] ⇒ BE policy 0% (không hoàn) ⇒ không được fallback sang paidAmount. */
+  const refundAmountFromPolicy = booking?.refundablePayments?.length > 0
+    ? getAvailableRefundAmount(booking.refundablePayments)
+    : 0;
+  const refundAmountDisplay = Number(otpOptions?.refundAmount || refundAmountFromPolicy || 0);
   /** Policy 0% (hủy ≥ 7 ngày) — BE skip bank/OTP, chỉ cần customer xác nhận. */
   const isZeroRefundPolicy = refundAmountDisplay <= 0;
 
@@ -241,7 +247,7 @@ export function CharterRefund() {
     }
 
     const bookingStatus = String(booking.status || "").toLowerCase();
-    const shouldCancelBooking = !cancelAlreadySubmitted && !["cancelled", "refunded"].includes(bookingStatus);
+    const shouldCancelBooking = !cancelAlreadySubmitted && !["cancelled", "refunded"].includes(bookingStatus) && refundAmountFromPolicy > 0;
     let didCancelBooking = false;
 
     try {
@@ -529,7 +535,7 @@ export function CharterRefund() {
                   <div className="flex items-start justify-between gap-3">
                     <span className="text-xs font-bold text-slate-400">{lang === "VN" ? "Số tiền hoàn" : "Refund amount"}</span>
                     <span className="max-w-56 wrap-break-word text-right text-xl font-headline font-black text-[#124757] dark:text-yellow-400">
-                      {refundAmountDisplay > 0 ? currencyFormatter.format(refundAmountDisplay) : "--"}
+                      {refundAmountDisplay >= 0 ? currencyFormatter.format(refundAmountDisplay) : "--"}
                     </span>
                   </div>
                 </div>
@@ -559,7 +565,7 @@ export function CharterRefund() {
                     {lang === "VN" ? "Số tiền hoàn" : "Refund amount"}
                   </p>
                   <p className="mt-1 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
-                    0 ₫
+                    {refundAmountDisplay >= 0 ? currencyFormatter.format(refundAmountDisplay) : "--"}
                   </p>
                   <p className="mt-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
                     {lang === "VN"

@@ -605,6 +605,24 @@ export const getRefundMessage = (payment) =>
 export const getRefundBankValue = (payment, booking, keys) =>
   pick(payment, keys, pick(booking?.raw, keys, pick(booking, keys, "")));
 
+/** Tính tổng số có thể hoàn từ refundablePayments — theo đúng BE contract. */
+export const getAvailableRefundAmount = (refundablePayments) => {
+  if (!Array.isArray(refundablePayments) || refundablePayments.length === 0) return 0;
+  return refundablePayments.reduce((sum, p) => {
+    const n = Number(p?.availableRefundAmount ?? p?.AvailableRefundAmount ?? 0);
+    return sum + (Number.isFinite(n) && n >= 0 ? n : 0);
+  }, 0);
+};
+
+/** Tính tổng đã hoàn từ refundablePayments. */
+export const getAlreadyRefundedFromPayments = (refundablePayments) => {
+  if (!Array.isArray(refundablePayments) || refundablePayments.length === 0) return 0;
+  return refundablePayments.reduce((sum, p) => {
+    const n = Number(p?.alreadyRefundedAmount ?? p?.AlreadyRefundedAmount ?? 0);
+    return sum + (Number.isFinite(n) && n >= 0 ? n : 0);
+  }, 0);
+};
+
 const PAYMENT_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** Internal payment UUID only — never PayOS paymentLinkId / orderCode. */
@@ -1761,5 +1779,10 @@ export const normalizeBooking = (item) => {
     createdAt: pick(item, ["createdAt", "createdDate"]),
     assignedManagerId: String(pick(item, ["assignedManagerId", "managerUserId", "assignedManager.id", "assignedManager.userId"], "")),
     assignedManagerName: pick(item, ["assignedManagerName", "assignedManager.fullName", "assignedManager.name"], ""),
+    // Refund summary từ BE contract
+    refundablePayments: Array.isArray(item?.refundablePayments) ? item.refundablePayments : [],
+    totalRefundedAmount: Number(pick(item, ["totalRefundedAmount", "TotalRefundedAmount"], 0)) || 0,
+    policyPercent: Number(pick(item, ["policyPercent", "refundPolicyPercent", "PolicyPercent"], 0)) || 0,
+    canRequestRefund: Boolean(pick(item, ["canRequestRefund", "CanRequestRefund"], false)),
   };
 };

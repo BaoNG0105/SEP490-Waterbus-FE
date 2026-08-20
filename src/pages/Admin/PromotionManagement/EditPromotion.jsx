@@ -23,6 +23,7 @@ export function EditPromotion() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [formData, setFormData] = useState(() => emptyPromotionForm());
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     const getPromotionRecord = async () => {
@@ -73,6 +74,7 @@ export function EditPromotion() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    if (Object.keys(fieldErrors).length > 0) return;
     try {
       setIsSubmitting(true);
       setErrorMsg("");
@@ -150,6 +152,7 @@ export function EditPromotion() {
           lang={lang}
           formData={formData}
           onChange={handleFieldChange}
+          onErrorsChange={setFieldErrors}
           lockCode
           lockType
           isCreate={false}
