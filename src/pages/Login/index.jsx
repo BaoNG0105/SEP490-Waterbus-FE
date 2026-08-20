@@ -142,7 +142,7 @@ export const Login = () => {
         }));
         handleRoleRedirect(userInfo);
       } else {
-        setErrorMsg(lang === "VN" ? "Dữ liệu trả về không hợp lệ." : "Invalid response data.");
+        setErrorMsg(lang === "VN" ? "Thông tin đăng nhập không hợp lệ." : "Invalid login credentials.");
       }
     } catch (error) {
       console.error("Login Error:", error);
