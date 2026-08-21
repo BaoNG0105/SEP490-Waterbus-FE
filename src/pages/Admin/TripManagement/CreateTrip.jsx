@@ -26,11 +26,17 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { assignmentCoversDay } from "../../../utils/staffAssignmentCalendarUtils";
 import { deckOptionImages } from "../../../utils/charterRequestForm";
 import { notify } from "../../../utils/swalToast";
+import { getTodayDateString, getMaxBookableDateString } from "../../../utils/dateOnly";
 //component
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
+import { AppTimeInput } from "../../../components/AppTimeInput";
 
 const MIN_ONBOARD_STAFF = 2;
+
+// Giờ khởi hành chỉ nhận trong khung phục vụ 07:00 - 23:00 (7h sáng - 11h đêm).
+const TRIP_TIME_MIN = "07:00";
+const TRIP_TIME_MAX = "23:00";
 
 const DAYS_OF_WEEK = [
   { value: 0, vn: "CN", en: "Sun" },
@@ -215,6 +221,72 @@ export function CreateTrip() {
     [availableWeekdays],
   );
 
+  const todayDateString = getTodayDateString();
+  const maxBookableDateString = getMaxBookableDateString();
+  const needsTimeWindow = isRoundTrip || form.mode === "interval";
+  const showDepartureTimesField = !isRoundTrip && form.mode === "fixed";
+
+  // Validate real-time từng field — null-check + nghiệp vụ (ngày không ở quá khứ/không quá 7
+  // ngày tới, giờ trong khung 07:00-23:00, giờ bắt đầu < giờ kết thúc...). Lỗi chỉ hiện cho field
+  // đã "touched", nhưng nút submit bị khóa ngay khi còn field lỗi dù chưa touched hết.
+  const [touchedFields, setTouchedFields] = useState({});
+  const handleFieldBlur = (field) => {
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
+  };
+  const fieldErrors = {
+    ...(!form.fromDate
+      ? { fromDate: lang === "VN" ? "Vui lòng chọn từ ngày" : "Please choose the from date" }
+      : form.fromDate < todayDateString
+        ? { fromDate: lang === "VN" ? "Không được chọn ngày trong quá khứ" : "Cannot pick a past date" }
+        : form.fromDate > maxBookableDateString
+          ? { fromDate: lang === "VN" ? "Chỉ được tạo chuyến trong vòng 7 ngày tới" : "Trips can only be created up to 7 days ahead" }
+          : {}),
+    ...(!form.toDate
+      ? { toDate: lang === "VN" ? "Vui lòng chọn đến ngày" : "Please choose the to date" }
+      : form.toDate < todayDateString
+        ? { toDate: lang === "VN" ? "Không được chọn ngày trong quá khứ" : "Cannot pick a past date" }
+        : form.toDate > maxBookableDateString
+          ? { toDate: lang === "VN" ? "Chỉ được tạo chuyến trong vòng 7 ngày tới" : "Trips can only be created up to 7 days ahead" }
+          : form.fromDate && form.toDate < form.fromDate
+            ? { toDate: lang === "VN" ? "Đến ngày phải sau hoặc bằng từ ngày" : "To date must be on or after the from date" }
+            : {}),
+    ...(needsTimeWindow ? (
+      !form.startTime
+        ? { startTime: lang === "VN" ? "Vui lòng chọn giờ bắt đầu" : "Please choose the start time" }
+        : (form.startTime < TRIP_TIME_MIN || form.startTime > TRIP_TIME_MAX)
+          ? { startTime: lang === "VN" ? `Chỉ nhận giờ từ ${TRIP_TIME_MIN} đến ${TRIP_TIME_MAX}` : `Only ${TRIP_TIME_MIN}-${TRIP_TIME_MAX} is allowed` }
+          : (form.endTime && form.startTime >= form.endTime)
+            ? { startTime: lang === "VN" ? "Giờ bắt đầu phải trước giờ kết thúc" : "Start time must be before end time" }
+            : {}
+    ) : {}),
+    ...(needsTimeWindow ? (
+      !form.endTime
+        ? { endTime: lang === "VN" ? "Vui lòng chọn giờ kết thúc" : "Please choose the end time" }
+        : (form.endTime < TRIP_TIME_MIN || form.endTime > TRIP_TIME_MAX)
+          ? { endTime: lang === "VN" ? `Chỉ nhận giờ từ ${TRIP_TIME_MIN} đến ${TRIP_TIME_MAX}` : `Only ${TRIP_TIME_MIN}-${TRIP_TIME_MAX} is allowed` }
+          : (form.startTime && form.endTime <= form.startTime)
+            ? { endTime: lang === "VN" ? "Giờ kết thúc phải sau giờ bắt đầu" : "End time must be after start time" }
+            : {}
+    ) : {}),
+    ...(!isRoundTrip && form.mode === "interval"
+      ? (String(form.intervalMinutes).trim() === "" || Number.isNaN(Number(form.intervalMinutes)) || Number(form.intervalMinutes) <= 0
+        ? { intervalMinutes: lang === "VN" ? "Vui lòng nhập khoảng phút hợp lệ (> 0)" : "Please enter a valid interval (> 0)" }
+        : {})
+      : {}),
+    ...(showDepartureTimesField && form.departureTimes.length === 0
+      ? { departureTimes: lang === "VN" ? "Thêm ít nhất một giờ khởi hành cố định" : "Add at least one fixed departure time" }
+      : {}),
+  };
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  const visibleFieldErrors = {
+    ...(touchedFields.fromDate ? { fromDate: fieldErrors.fromDate } : {}),
+    ...(touchedFields.toDate ? { toDate: fieldErrors.toDate } : {}),
+    ...(touchedFields.startTime ? { startTime: fieldErrors.startTime } : {}),
+    ...(touchedFields.endTime ? { endTime: fieldErrors.endTime } : {}),
+    ...(touchedFields.intervalMinutes ? { intervalMinutes: fieldErrors.intervalMinutes } : {}),
+    ...(touchedFields.departureTimes ? { departureTimes: fieldErrors.departureTimes } : {}),
+  };
+
   useEffect(() => {
     if (!showDaysOfWeek) {
       setForm((prev) => (prev.daysOfWeek.length > 0 ? { ...prev, daysOfWeek: [] } : prev));
@@ -377,6 +449,7 @@ export function CreateTrip() {
         ? prev.departureTimes
         : [...prev.departureTimes, time].sort(),
     }));
+    setTouchedFields((prev) => ({ ...prev, departureTimes: true }));
   };
 
   const removeFixedTime = (time) => {
@@ -384,6 +457,7 @@ export function CreateTrip() {
       ...prev,
       departureTimes: prev.departureTimes.filter((item) => item !== time),
     }));
+    setTouchedFields((prev) => ({ ...prev, departureTimes: true }));
   };
 
   const ensureOnBoardCrew = async (boatCode, dayKey) => {
@@ -410,6 +484,9 @@ export function CreateTrip() {
   };
 
   const handlePreviewRoundTrip = async () => {
+    // Bấm "Xem gợi ý" khi còn field lỗi → hiện hết lỗi lên thay vì âm thầm chặn.
+    setTouchedFields((prev) => ({ ...prev, fromDate: true, toDate: true, startTime: true, endTime: true }));
+    if (hasFieldErrors) return;
     try {
       setIsPreviewing(true);
       setErrorMsg("");
@@ -485,6 +562,12 @@ export function CreateTrip() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Bấm submit khi còn field lỗi (VD: nhấn Enter) → hiện hết lỗi lên thay vì âm thầm chặn.
+    setTouchedFields({
+      fromDate: true, toDate: true, startTime: true, endTime: true,
+      intervalMinutes: true, departureTimes: true,
+    });
+    if (hasFieldErrors) return;
     if (isRoundTrip) {
       try {
         setIsSubmitting(true);
@@ -626,6 +709,11 @@ export function CreateTrip() {
 
   const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
   const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+  const errorInputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all";
+  const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
+  // Ring focus của AppTimeInput cần "focus-within" vì viền nằm ở div bọc, không phải input.
+  const timeInputStyle = inputStyle.replace(/\bfocus:/g, "focus-within:");
+  const timeErrorInputStyle = errorInputStyle.replace(/\bfocus:/g, "focus-within:");
   const selectStyle = `${inputStyle} cursor-pointer`;
 
   const isWaterSightseeingKind = form.serviceKind === "watersightseeing";
@@ -868,6 +956,8 @@ export function CreateTrip() {
               <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
               <AppDateInput
                 required
+                min={todayDateString}
+                max={maxBookableDateString}
                 value={form.fromDate}
                 onChange={(e) => {
                   const fromDate = e.target.value;
@@ -875,22 +965,28 @@ export function CreateTrip() {
                     fromDate,
                     toDate: !form.toDate || form.toDate < fromDate ? fromDate : form.toDate,
                   });
+                  handleFieldBlur("fromDate");
                   if (isRoundTrip) clearPreview();
                 }}
-                className={inputStyle}
+                className={visibleFieldErrors.fromDate ? errorInputStyle : inputStyle}
               />
+              {visibleFieldErrors.fromDate && <p className={errorTextStyle}>{visibleFieldErrors.fromDate}</p>}
             </div>
             <div>
               <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "To date (*)"}</label>
               <AppDateInput
                 required
+                min={form.fromDate || todayDateString}
+                max={maxBookableDateString}
                 value={form.toDate}
                 onChange={(e) => {
                   updateForm({ toDate: e.target.value });
+                  handleFieldBlur("toDate");
                   if (isRoundTrip) clearPreview();
                 }}
-                className={inputStyle}
+                className={visibleFieldErrors.toDate ? errorInputStyle : inputStyle}
               />
+              {visibleFieldErrors.toDate && <p className={errorTextStyle}>{visibleFieldErrors.toDate}</p>}
             </div>
           </div>
 
@@ -939,23 +1035,35 @@ export function CreateTrip() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Giờ bắt đầu" : "Start time"}</label>
-                <input
-                  type="time"
+                <AppTimeInput
                   required
+                  min={TRIP_TIME_MIN}
+                  max={TRIP_TIME_MAX}
                   value={form.startTime}
-                  onChange={(e) => { updateForm({ startTime: e.target.value }); clearPreview(); }}
-                  className={inputStyle}
+                  onChange={(e) => {
+                    updateForm({ startTime: e.target.value });
+                    handleFieldBlur("startTime");
+                    clearPreview();
+                  }}
+                  className={visibleFieldErrors.startTime ? timeErrorInputStyle : timeInputStyle}
                 />
+                {visibleFieldErrors.startTime && <p className={errorTextStyle}>{visibleFieldErrors.startTime}</p>}
               </div>
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Giờ kết thúc" : "End time"}</label>
-                <input
-                  type="time"
+                <AppTimeInput
                   required
+                  min={TRIP_TIME_MIN}
+                  max={TRIP_TIME_MAX}
                   value={form.endTime}
-                  onChange={(e) => { updateForm({ endTime: e.target.value }); clearPreview(); }}
-                  className={inputStyle}
+                  onChange={(e) => {
+                    updateForm({ endTime: e.target.value });
+                    handleFieldBlur("endTime");
+                    clearPreview();
+                  }}
+                  className={visibleFieldErrors.endTime ? timeErrorInputStyle : timeInputStyle}
                 />
+                {visibleFieldErrors.endTime && <p className={errorTextStyle}>{visibleFieldErrors.endTime}</p>}
               </div>
             </div>
           ) : (
@@ -1010,23 +1118,33 @@ export function CreateTrip() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className={labelStyle}>{lang === "VN" ? "Từ giờ" : "From"}</label>
-                      <input
-                        type="time"
+                      <AppTimeInput
                         required
+                        min={TRIP_TIME_MIN}
+                        max={TRIP_TIME_MAX}
                         value={form.startTime}
-                        onChange={(e) => updateForm({ startTime: e.target.value })}
-                        className={inputStyle}
+                        onChange={(e) => {
+                          updateForm({ startTime: e.target.value });
+                          handleFieldBlur("startTime");
+                        }}
+                        className={visibleFieldErrors.startTime ? timeErrorInputStyle : timeInputStyle}
                       />
+                      {visibleFieldErrors.startTime && <p className={errorTextStyle}>{visibleFieldErrors.startTime}</p>}
                     </div>
                     <div>
                       <label className={labelStyle}>{lang === "VN" ? "Đến giờ" : "To"}</label>
-                      <input
-                        type="time"
+                      <AppTimeInput
                         required
+                        min={TRIP_TIME_MIN}
+                        max={TRIP_TIME_MAX}
                         value={form.endTime}
-                        onChange={(e) => updateForm({ endTime: e.target.value })}
-                        className={inputStyle}
+                        onChange={(e) => {
+                          updateForm({ endTime: e.target.value });
+                          handleFieldBlur("endTime");
+                        }}
+                        className={visibleFieldErrors.endTime ? timeErrorInputStyle : timeInputStyle}
                       />
+                      {visibleFieldErrors.endTime && <p className={errorTextStyle}>{visibleFieldErrors.endTime}</p>}
                     </div>
                     <div>
                       <label className={labelStyle}>{lang === "VN" ? "Mỗi (phút)" : "Every (min)"}</label>
@@ -1036,8 +1154,10 @@ export function CreateTrip() {
                         required
                         value={form.intervalMinutes}
                         onChange={(e) => updateForm({ intervalMinutes: e.target.value })}
-                        className={inputStyle}
+                        onBlur={() => handleFieldBlur("intervalMinutes")}
+                        className={visibleFieldErrors.intervalMinutes ? errorInputStyle : inputStyle}
                       />
+                      {visibleFieldErrors.intervalMinutes && <p className={errorTextStyle}>{visibleFieldErrors.intervalMinutes}</p>}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1069,19 +1189,22 @@ export function CreateTrip() {
               ) : (
                 <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
                   <div className="flex flex-wrap items-end gap-3">
-                    <div className="min-w-37.5 flex-1 sm:flex-none sm:w-40">
+                    <div
+                      className="min-w-37.5 flex-1 sm:flex-none sm:w-40"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addFixedTime();
+                        }
+                      }}
+                    >
                       <label className={labelStyle}>{lang === "VN" ? "Giờ mới" : "New time"}</label>
-                      <input
-                        type="time"
+                      <AppTimeInput
+                        min={TRIP_TIME_MIN}
+                        max={TRIP_TIME_MAX}
                         value={form.draftTime}
                         onChange={(e) => updateForm({ draftTime: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addFixedTime();
-                          }
-                        }}
-                        className={inputStyle}
+                        className={timeInputStyle}
                       />
                     </div>
                     <button
@@ -1095,11 +1218,16 @@ export function CreateTrip() {
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      {lang === "VN"
-                        ? `Đã chọn (${form.departureTimes.length})`
-                        : `Selected (${form.departureTimes.length})`}
-                    </p>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {lang === "VN"
+                          ? `Đã chọn (${form.departureTimes.length})`
+                          : `Selected (${form.departureTimes.length})`}
+                      </p>
+                      {visibleFieldErrors.departureTimes && (
+                        <p className={errorTextStyle}>{visibleFieldErrors.departureTimes}</p>
+                      )}
+                    </div>
                     {form.departureTimes.length > 1 && (
                       <button
                         type="button"
@@ -1249,7 +1377,7 @@ export function CreateTrip() {
               <button
                 type="button"
                 onClick={handlePreviewRoundTrip}
-                disabled={isPreviewing || isSubmitting || isLoadingOptions || isLoadingStops || isLoadingInboundStops}
+                disabled={isPreviewing || isSubmitting || isLoadingOptions || isLoadingStops || isLoadingInboundStops || hasFieldErrors}
                 className="flex-1 bg-white text-[#124757] border border-[#124757]/30 dark:bg-slate-900 dark:text-yellow-400 dark:border-yellow-400/40 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-sm hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
               >
                 {isPreviewing && (
@@ -1447,6 +1575,7 @@ export function CreateTrip() {
             || isLoadingOptions
             || isLoadingStops
             || isLoadingInboundStops
+            || hasFieldErrors
             || (isRoundTrip && (!roundTripPreview || selectedCreatableCount < 1))
           }
           className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
