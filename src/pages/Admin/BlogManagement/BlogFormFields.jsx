@@ -4,10 +4,16 @@ import { BlogCoverField } from "../../../components/BlogCoverField";
 
 const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
 const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
+const errorInputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all disabled:opacity-50";
+const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
 
 /**
  * Khối field dùng chung cho CreateBlog / EditBlog.
  * Bố cục: hàng 1 = Thông tin cơ bản + Ảnh bìa (cạnh nhau), hàng 2 = Nội dung bài viết.
+ *
+ * `errors`: { [field]: message } — chỉ hiện khi field tương ứng đã "touched" (do trang cha
+ * quyết định, thường sau onBlur hoặc sau lần bấm submit đầu tiên).
+ * `onFieldBlur`: (field) => void — báo trang cha field vừa rời khỏi.
  */
 export function BlogFormFields({
     lang,
@@ -19,8 +25,11 @@ export function BlogFormFields({
     onFileChange,
     onClearNewFile,
     disabled = false,
+    errors = {},
+    onFieldBlur,
 }) {
     const setField = (field, value) => onChange(field, value);
+    const handleBlur = (field) => onFieldBlur?.(field);
 
     return (
         <div className="space-y-6">
@@ -38,8 +47,10 @@ export function BlogFormFields({
                             placeholder={lang === "VN" ? "VD: Khám phá Sài Gòn bằng Waterbus" : "e.g. Discover Saigon by Waterbus"}
                             value={formData.title}
                             onChange={(e) => setField("title", e.target.value)}
-                            className={inputStyle}
+                            onBlur={() => handleBlur("title")}
+                            className={errors.title ? errorInputStyle : inputStyle}
                         />
+                        {errors.title && <p className={errorTextStyle}>{errors.title}</p>}
                     </div>
 
                     <div>
@@ -95,6 +106,7 @@ export function BlogFormFields({
                         onFileChange={onFileChange}
                         onClearNewFile={onClearNewFile}
                         disabled={disabled}
+                        errorText={errors.cover}
                     />
                 </div>
             </div>
@@ -103,13 +115,15 @@ export function BlogFormFields({
                 <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
                     {lang === "VN" ? "Nội dung bài viết" : "Post Content"}
                 </h3>
-                <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Nội dung bài viết" : "Article content"}</label>
+                <div onBlur={() => handleBlur("content")}>
+                    <label className={labelStyle}>{lang === "VN" ? "Nội dung bài viết (*)" : "Article content (*)"}</label>
                     <RichTextEditor
                         value={formData.content}
                         onChange={(html) => setField("content", html)}
                         placeholder={lang === "VN" ? "Nhập nội dung bài viết..." : "Enter article content..."}
+                        className={errors.content ? "[&>div:last-child>div:last-child]:border-rose-500 dark:[&>div:last-child>div:last-child]:border-rose-500" : ""}
                     />
+                    {errors.content && <p className={errorTextStyle}>{errors.content}</p>}
                 </div>
             </div>
         </div>

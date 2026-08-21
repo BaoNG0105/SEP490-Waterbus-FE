@@ -14,6 +14,9 @@ import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 import { BlogFormFields } from "./BlogFormFields";
 
+/** Rich text rỗng khi không còn ký tự sau khi bóc hết thẻ HTML (VD "<p><br></p>"). */
+const isContentBlank = (html) => String(html || "").replace(/<[^>]*>/g, "").trim() === "";
+
 export function EditBlog() {
     const { lang } = useApp();
     const navigate = useNavigate();
@@ -93,6 +96,34 @@ export function EditBlog() {
         return () => URL.revokeObjectURL(newCoverPreview);
     }, [newCoverPreview]);
 
+    // Validate real-time field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi ít
+    // nhất 1 lần), nhưng nút Lưu/Xuất bản bị khóa ngay khi còn field lỗi dù chưa touched hết.
+    const [touchedFields, setTouchedFields] = useState({});
+    const handleFieldBlur = (field) => {
+        setTouchedFields((prev) => ({ ...prev, [field]: true }));
+    };
+    const fieldErrors = {
+        ...(formData.title.trim() ? {} : {
+            title: lang === "VN" ? "Vui lòng nhập tiêu đề" : "Title is required",
+        }),
+        ...(isContentBlank(formData.content) ? {
+            content: lang === "VN" ? "Vui lòng nhập nội dung bài viết" : "Article content is required",
+        } : {}),
+    };
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+    const visibleFieldErrors = {
+        ...(touchedFields.title ? { title: fieldErrors.title } : {}),
+        ...(touchedFields.content ? { content: fieldErrors.content } : {}),
+    };
+
+    // Ảnh bìa chỉ bắt buộc khi Xuất bản (bản nháp không cần) — hiện lỗi ngay tại field, không
+    // chờ "touched", để người dùng biết vì sao nút Xuất bản đang bị khóa.
+    const coverError = (imageFiles.length === 0 && existingImageUrls.length === 0)
+        ? (lang === "VN" ? "Bắt buộc phải có ảnh bìa để xuất bản" : "A cover image is required to publish")
+        : "";
+    const formFieldErrors = { ...visibleFieldErrors, cover: coverError };
+    const hasPublishBlockingErrors = hasFieldErrors || Boolean(coverError);
+
     const handleFieldChange = (field, value) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
@@ -108,6 +139,9 @@ export function EditBlog() {
     const handleFormSubmit = async (e) => {
         e.preventDefault();
         const nextStatus = e.nativeEvent.submitter?.value || BLOG_STATUS.DRAFT;
+        // Bấm submit khi còn field lỗi (VD: nhấn Enter) → hiện hết lỗi lên thay vì âm thầm chặn.
+        setTouchedFields({ title: true, content: true });
+        if (hasFieldErrors) return;
         try {
             setIsSubmitting(true);
             setErrorMsg("");
@@ -215,6 +249,8 @@ export function EditBlog() {
                     onFileChange={handleImageFilesChange}
                     onClearNewFile={clearImageFiles}
                     disabled={isSubmitting}
+                    errors={formFieldErrors}
+                    onFieldBlur={handleFieldBlur}
                 />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -222,7 +258,7 @@ export function EditBlog() {
                         type="submit"
                         name="status"
                         value={BLOG_STATUS.DRAFT}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || hasFieldErrors}
                         className="w-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                     >
                         {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
@@ -232,7 +268,8 @@ export function EditBlog() {
                         type="submit"
                         name="status"
                         value={BLOG_STATUS.PUBLISHED}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || hasPublishBlockingErrors}
+                        title={coverError || undefined}
                         className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                     >
                         {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}

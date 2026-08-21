@@ -12,6 +12,7 @@ export function BlogCoverField({
   onFileChange,
   onClearNewFile,
   disabled = false,
+  errorText = "",
 }) {
   const inputId = useId();
   const inputRef = useRef(null);
@@ -32,8 +33,8 @@ export function BlogCoverField({
   else if (hasExisting) statusLabel = isVn ? "Đang dùng" : "Current";
 
   let hintText = isVn
-    ? "Bắt buộc khi xuất bản. Chỉ upload file — không dán link ảnh."
-    : "Required to publish. Upload a file only — no image URLs.";
+    ? "Bắt buộc khi xuất bản"
+    : "Required to publish";
   if (hasNewFile) {
     hintText = isVn
       ? `Sẽ thay ảnh khi lưu · ${fileName || "file đã chọn"}`
@@ -62,7 +63,7 @@ export function BlogCoverField({
 
       <div className="grid gap-4 sm:grid-cols-[minmax(0,17rem)_1fr] sm:items-stretch">
         <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
-          <div className="aspect-[16/10] w-full">
+          <div className="aspect-16/10 w-full">
             {previewUrl ? (
               <img
                 src={previewUrl}
@@ -105,6 +106,9 @@ export function BlogCoverField({
             <p className="mt-1 text-[11px] font-medium leading-relaxed text-slate-500 dark:text-slate-400">
               {hintText}
             </p>
+            {errorText ? (
+              <p className="mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">{errorText}</p>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
