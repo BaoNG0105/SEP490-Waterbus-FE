@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchAllStations, fetchStationDetail, modifyStation } from "../../../services/stationService";
+import { fetchAllStations, changeStationStatus } from "../../../services/stationService";
 import { notify } from "../../../utils/swalToast";
 import { NullImageIcon } from "../../../components/NullImageIcon";
 import { FormSelect } from "../../../components/FormSelect";
@@ -137,24 +137,7 @@ export function StationManagement() {
         );
 
         try {
-            const detail = await fetchStationDetail(station.stationId);
-            const payload = {
-                stationName: detail.stationName,
-                address: detail.address || null,
-                description: detail.description || null,
-                latitude: Number(detail.latitude),
-                longitude: Number(detail.longitude),
-                status: nextStatus,
-                hasWaitingArea: !!detail.hasWaitingArea,
-                hasParking: !!detail.hasParking,
-                hasTicketCounter: !!detail.hasTicketCounter,
-                openingTime: detail.openingTime || null,
-                closingTime: detail.closingTime || null,
-                isWaterbusStation: detail.isWaterbusStation !== false,
-                imageUrls: detail.imageUrls?.length ? detail.imageUrls : (detail.imageUrl ? [detail.imageUrl] : []),
-            };
-
-            await modifyStation(station.stationId, payload);
+            await changeStationStatus(station.stationId, nextStatus);
 
             notify({
                 toast: true,

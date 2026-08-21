@@ -1,8 +1,9 @@
-import { 
+import {
     getStations as apiGetStations,
     getStationById as apiGetStationById,
     createStation as apiCreateStation,
-    updateStation as apiUpdateStation    
+    updateStation as apiUpdateStation,
+    updateStationStatus as apiUpdateStationStatus,
 } from '../api/stationApi';
 
 const pick = (source, keys, fallback = "") => {
@@ -100,6 +101,16 @@ export const modifyStation = async (stationId, stationPayload) => {
         return await apiUpdateStation(stationId, stationPayload);
     } catch (error) {
         console.error(`Lỗi khi thực hiện modifyStation cho ID ${stationId}:`, error);
+        throw error;
+    }
+};
+
+/** Bật/tắt trạng thái hoạt động của nhà ga — PATCH riêng, không cần gửi lại toàn bộ hồ sơ. */
+export const changeStationStatus = async (stationId, status) => {
+    try {
+        return await apiUpdateStationStatus(stationId, status);
+    } catch (error) {
+        console.error(`Lỗi khi đổi trạng thái nhà ga ${stationId}:`, error);
         throw error;
     }
 };

@@ -32,8 +32,29 @@ export function CreateStation() {
     isWaterbusStation: true,
   });
 
+  // Validate real-time — chỉ check rỗng (null/blank), giống Login. Lỗi chỉ hiện cho field đã
+  // "touched" (rời khỏi ít nhất 1 lần), nhưng nút Tạo bị khóa ngay khi còn field rỗng.
+  const [touchedFields, setTouchedFields] = useState({});
+  const fieldErrors = {
+    ...(formData.stationCode.trim() ? {} : {
+      stationCode: lang === "VN" ? "Vui lòng nhập mã nhà ga" : "Station code is required",
+    }),
+    ...(formData.stationName.trim() ? {} : {
+      stationName: lang === "VN" ? "Vui lòng nhập tên nhà ga" : "Station name is required",
+    }),
+  };
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  const visibleFieldErrors = {
+    ...(touchedFields.stationCode ? { stationCode: fieldErrors.stationCode } : {}),
+    ...(touchedFields.stationName ? { stationName: fieldErrors.stationName } : {}),
+  };
+
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleFieldBlur = (field) => {
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
   };
 
   const handleImagesChange = (e) => {
@@ -99,16 +120,12 @@ export function CreateStation() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    // Bấm submit khi còn field rỗng (VD: nhấn Enter) → hiện hết lỗi lên thay vì âm thầm chặn.
+    setTouchedFields({ stationCode: true, stationName: true });
+    if (hasFieldErrors) return;
+
     const code = formData.stationCode.trim().toUpperCase();
     const name = formData.stationName.trim();
-    if (!code || !name) {
-      setErrorMsg(
-        lang === "VN"
-          ? "Vui lòng nhập mã nhà ga và tên nhà ga."
-          : "Station code and name are required.",
-      );
-      return;
-    }
 
     try {
       setIsSubmitting(true);
@@ -222,11 +239,13 @@ export function CreateStation() {
           maxImages={MAX_IMAGES}
           onImagesChange={handleImagesChange}
           onRemoveImage={handleRemoveImage}
+          errors={visibleFieldErrors}
+          onFieldBlur={handleFieldBlur}
         />
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || hasFieldErrors}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#124757] py-4 font-headline text-xs font-black uppercase tracking-wider text-white shadow-md transition-all hover:brightness-110 disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
         >
           {isSubmitting ? (

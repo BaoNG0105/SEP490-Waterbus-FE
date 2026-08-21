@@ -1,12 +1,19 @@
 import { WaterwayMap } from "../../../components/WaterwayMap";
+import { AppTimeInput } from "../../../components/AppTimeInput";
 
 const labelStyle = "mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500";
 const inputStyle = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-800 outline-none shadow-inner transition-all focus:ring-2 focus:ring-[#124757] dark:border-slate-700/60 dark:bg-slate-900 dark:text-white dark:focus:ring-yellow-400";
+const errorInputStyle = "w-full rounded-xl border border-rose-500 dark:border-rose-500 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-800 outline-none shadow-inner transition-all focus:ring-2 focus:ring-rose-500 dark:bg-slate-900 dark:text-white";
+const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
 
 /**
  * Khối field dùng chung cho CreateStation / EditStation.
  * Bố cục: "Thông tin nhà ga" cạnh "Vị trí trên bản đồ" trên cùng 1 hàng.
  * Mô tả / trạng thái / tiện ích chỉ hiện ở Edit (Create chưa có các field này).
+ *
+ * `errors`: { [field]: message } — chỉ hiện khi field tương ứng đã "touched" (do trang cha
+ * quyết định, giống Login — chỉ check rỗng/null, không check định dạng).
+ * `onFieldBlur`: (field) => void — báo trang cha field vừa rời khỏi.
  */
 export function StationFormFields({
     lang,
@@ -17,8 +24,11 @@ export function StationFormFields({
     maxImages = 6,
     onImagesChange,
     onRemoveImage,
+    errors = {},
+    onFieldBlur,
 }) {
     const setField = (field, value) => onChange(field, value);
+    const handleBlur = (field) => onFieldBlur?.(field);
 
     return (
         <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
@@ -54,9 +64,11 @@ export function StationFormFields({
                             disabled={!isCreate}
                             value={formData.stationCode}
                             onChange={(e) => setField("stationCode", e.target.value.toUpperCase())}
+                            onBlur={() => handleBlur("stationCode")}
                             placeholder={lang === "VN" ? "VD: BD, TT" : "e.g. BD, TT"}
-                            className={`${inputStyle} uppercase tracking-wider ${!isCreate ? "cursor-not-allowed opacity-70 bg-slate-100 dark:bg-slate-800" : ""}`}
+                            className={`${errors.stationCode ? errorInputStyle : inputStyle} uppercase tracking-wider ${!isCreate ? "cursor-not-allowed opacity-70 bg-slate-100 dark:bg-slate-800" : ""}`}
                         />
+                        {errors.stationCode && <p className={errorTextStyle}>{errors.stationCode}</p>}
                     </div>
                     <div className="sm:col-span-2">
                         <label className={labelStyle}>
@@ -67,8 +79,10 @@ export function StationFormFields({
                             required
                             value={formData.stationName}
                             onChange={(e) => setField("stationName", e.target.value)}
-                            className={inputStyle}
+                            onBlur={() => handleBlur("stationName")}
+                            className={errors.stationName ? errorInputStyle : inputStyle}
                         />
+                        {errors.stationName && <p className={errorTextStyle}>{errors.stationName}</p>}
                     </div>
                 </div>
 
@@ -85,44 +99,28 @@ export function StationFormFields({
                 <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Giờ mở cửa" : "Opening Time"}</label>
-                        <input
-                            type="time"
+                        <AppTimeInput
                             value={formData.openingTime}
                             onChange={(e) => setField("openingTime", e.target.value)}
+                            max={formData.closingTime || undefined}
                             className={inputStyle}
                         />
                     </div>
                     <div>
                         <label className={labelStyle}>{lang === "VN" ? "Giờ đóng cửa" : "Closing Time"}</label>
-                        <input
-                            type="time"
+                        <AppTimeInput
                             value={formData.closingTime}
                             onChange={(e) => setField("closingTime", e.target.value)}
+                            min={formData.openingTime || undefined}
                             className={inputStyle}
                         />
                     </div>
                 </div>
 
+                {/* Trạng thái hoạt động: công tắc bật/tắt đã chuyển lên thanh tiêu đề trang Edit
+                    (PATCH riêng /stations/{id}/status, cập nhật ngay không cần bấm Lưu). */}
                 {!isCreate && (
                     <>
-                        <div className="flex flex-col gap-1.5 pt-1">
-                            <label className={labelStyle}>{lang === "VN" ? "Trạng thái hoạt động" : "Operational Status"}</label>
-                            <div className="flex items-center gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setField("status", formData.status === "Active" ? "Inactive" : "Active")}
-                                    className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 ${formData.status === "Active" ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
-                                >
-                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-300 ease-in-out ${formData.status === "Active" ? "translate-x-7" : "translate-x-0"}`} />
-                                </button>
-                                <span className={`text-xs font-black uppercase tracking-wider ${formData.status === "Active" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500"}`}>
-                                    {formData.status === "Active"
-                                        ? (lang === "VN" ? "Hoạt động (Active)" : "Active")
-                                        : (lang === "VN" ? "Tạm ngưng (Inactive)" : "Inactive")}
-                                </span>
-                            </div>
-                        </div>
-
                         <div>
                             <label className={labelStyle}>{lang === "VN" ? "Mô tả chi tiết" : "General Description"}</label>
                             <textarea

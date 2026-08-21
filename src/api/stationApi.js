@@ -23,3 +23,7 @@ export const updateStation = (id, data) => {
         .put(`/stations/${id}`, data, isFormData ? { headers: { "Content-Type": "multipart/form-data" } } : undefined)
         .then((response) => response.data);
 };
+
+/** PATCH /stations/{id}/status — chỉ bật/tắt Active|Inactive, không cần gửi lại toàn bộ hồ sơ. */
+export const updateStationStatus = (id, status) =>
+    api.patch(`/stations/${id}/status`, { status }).then((response) => response.data);

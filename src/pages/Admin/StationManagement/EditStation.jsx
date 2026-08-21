@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-import { fetchStationDetail, modifyStation } from "../../../services/stationService";
+import { fetchStationDetail, modifyStation, changeStationStatus } from "../../../services/stationService";
 import { notify } from "../../../utils/swalToast";
 import { StationFormFields } from "./StationFormFields";
 
@@ -43,7 +43,7 @@ export function EditStation() {
                 setIsLoading(true);
                 setErrorMsg("");
                 const data = await fetchStationDetail(id);
-                
+
                 // Trích xuất định dạng thời gian HH:mm thích hợp cho thẻ input HTML5
                 const formatTime = (timeStr) => timeStr ? timeStr.slice(0, 5) : "";
 
@@ -94,19 +94,72 @@ export function EditStation() {
         getStationRecord();
     }, [id, lang, navigate]);
 
+    // Validate real-time — chỉ check rỗng (null/blank), giống Login. Mã nhà ga bị khóa (readOnly)
+    // khi sửa nên không cần validate. Lỗi chỉ hiện cho field đã "touched", nhưng nút Lưu bị khóa
+    // ngay khi còn field rỗng.
+    const [touchedFields, setTouchedFields] = useState({});
+    const fieldErrors = {
+        ...(formData.stationName.trim() ? {} : {
+            stationName: lang === "VN" ? "Vui lòng nhập tên nhà ga" : "Station name is required",
+        }),
+    };
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+    const visibleFieldErrors = {
+        ...(touchedFields.stationName ? { stationName: fieldErrors.stationName } : {}),
+    };
+
     const handleFieldChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleFieldBlur = (field) => {
+        setTouchedFields((prev) => ({ ...prev, [field]: true }));
+    };
+
+    // Bật/tắt trạng thái hoạt động — PATCH riêng ngay khi bấm nút (không cần chờ bấm "Lưu thông
+    // tin nhà ga"), đồng thời đồng bộ vào formData để lần Lưu sau không gửi ngược trạng thái cũ.
+    const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+    const handleToggleStatus = async () => {
+        const previousStatus = formData.status || "Inactive";
+        const nextStatus = previousStatus === "Active" ? "Inactive" : "Active";
+
+        setIsTogglingStatus(true);
+        setFormData((prev) => ({ ...prev, status: nextStatus }));
+        try {
+            await changeStationStatus(id, nextStatus);
+            notify({
+                toast: true,
+                position: "top-end",
+                icon: "success",
+                title: nextStatus === "Active"
+                    ? (lang === "VN" ? "Đã bật nhà ga" : "Station activated")
+                    : (lang === "VN" ? "Đã tắt nhà ga" : "Station deactivated"),
+                showConfirmButton: false,
+                timer: 1800,
+            });
+        } catch (error) {
+            console.error(`Lỗi khi đổi trạng thái nhà ga ${id}:`, error);
+            setFormData((prev) => ({ ...prev, status: previousStatus }));
+            notify({
+                icon: "error",
+                title: lang === "VN" ? "Cập nhật thất bại" : "Update failed",
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể đổi trạng thái nhà ga." : "Could not update station status."),
+                confirmButtonColor: "#124757",
+            });
+        } finally {
+            setIsTogglingStatus(false);
+        }
     };
 
     // LOGIC KIỂM SOÁT THƯ VIỆN HÌNH ẢNH UPLOAD
     const handleImagesChange = (e) => {
         const files = Array.from(e.target.files);
         if (selectedImages.length + imagePreviews.length + files.length > 6) {
-            notify({ 
-                icon: 'warning', 
-                title: lang === "VN" ? 'Quá giới hạn' : 'Limit Exceeded', 
-                text: lang === "VN" ? 'Mỗi bến trạm chỉ được lưu trữ tối đa 6 hình ảnh.' : 'Maximum 6 images allowed per station.', 
-                confirmButtonColor: '#124757' 
+            notify({
+                icon: 'warning',
+                title: lang === "VN" ? 'Quá giới hạn' : 'Limit Exceeded',
+                text: lang === "VN" ? 'Mỗi bến trạm chỉ được lưu trữ tối đa 6 hình ảnh.' : 'Maximum 6 images allowed per station.',
+                confirmButtonColor: '#124757'
             });
             return;
         }
@@ -142,6 +195,9 @@ export function EditStation() {
     // LOGIC ĐÓNG GÓI PAYLOAD GỬI LÊN BACKEND
     const handleFormSubmit = async (e) => {
         e.preventDefault();
+        // Bấm submit khi còn field rỗng (VD: nhấn Enter) → hiện hết lỗi lên thay vì âm thầm chặn.
+        setTouchedFields({ stationName: true });
+        if (hasFieldErrors) return;
         try {
             setIsSubmitting(true);
             setErrorMsg("");
@@ -208,25 +264,48 @@ export function EditStation() {
 
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
-            
+
             {/* KHỐI TIÊU ĐỀ HEADER TRANG */}
             <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
-                <button 
-                    type="button" 
-                    onClick={() => navigate("/admin/stations-management")} 
+                <button
+                    type="button"
+                    onClick={() => navigate("/admin/stations-management")}
                     className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all flex items-center justify-center shadow-inner shrink-0"
                 >
                     <span className="material-symbols-outlined text-xl font-bold">arrow_back</span>
                 </button>
-                <div>
+                <div className="min-w-0 flex-1">
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
                         {lang === "VN" ? `Cấu hình nhà ga: ${formData.stationName}` : `Configure Pier: ${formData.stationCode}`}
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                        {lang === "VN"
-                            ? "Cập nhật thông tin bến, ảnh và vị trí trên bản đồ."
-                            : "Update pier details, photos, and map location."}
-                    </p>
+                </div>
+
+                {/* CÔNG TẮC BẬT/TẮT TRẠNG THÁI HOẠT ĐỘNG — cập nhật ngay qua PATCH riêng, không cần bấm Lưu */}
+                <div className="flex shrink-0 items-center gap-3">
+                    <span className={`text-xs font-black uppercase tracking-wider ${formData.status === "Active" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`}>
+                        {formData.status === "Active"
+                            ? (lang === "VN" ? "Hoạt động" : "Active")
+                            : (lang === "VN" ? "Tạm ngưng" : "Inactive")}
+                    </span>
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={formData.status === "Active"}
+                        disabled={isTogglingStatus}
+                        onClick={handleToggleStatus}
+                        title={formData.status === "Active"
+                            ? (lang === "VN" ? "Bấm để tắt hoạt động" : "Click to deactivate")
+                            : (lang === "VN" ? "Bấm để bật hoạt động" : "Click to activate")}
+                        className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#124757] disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-yellow-400 ${formData.status === "Active" ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
+                    >
+                        {isTogglingStatus ? (
+                            <span className="absolute inset-0 flex items-center justify-center">
+                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/60 border-t-white" />
+                            </span>
+                        ) : (
+                            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-300 ease-in-out ${formData.status === "Active" ? "translate-x-7" : "translate-x-0"}`} />
+                        )}
+                    </button>
                 </div>
             </div>
 
@@ -246,8 +325,10 @@ export function EditStation() {
                     maxImages={6}
                     onImagesChange={handleImagesChange}
                     onRemoveImage={handleRemoveImage}
+                    errors={visibleFieldErrors}
+                    onFieldBlur={handleFieldBlur}
                 />
-                <button type="submit" disabled={isSubmitting} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                <button type="submit" disabled={isSubmitting || hasFieldErrors} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3.5 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
                     {isSubmitting && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
                     {lang === "VN" ? "Lưu thông tin nhà ga" : "Apply Specifications"}
                 </button>
