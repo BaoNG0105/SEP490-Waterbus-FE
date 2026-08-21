@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
+
 import {
   generateMatrix,
   configureSeats
 } from "../../../services/seatService";
 import { fetchBoatDetail } from "../../../services/boatService";
+
 import { SeatMapIcon, seatToneFromCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
 import { notify } from "../../../utils/swalToast";
@@ -92,7 +94,22 @@ export function SeatLayoutEditor() {
   const currentTools = getAvailableTools(boatData?.seatSetupType || "FullStandard");
   const hasMatrix = decks.some(d => d.matrix && d.matrix.length > 0);
 
+  // Validate real-time số hàng/cột mỗi tầng — phải là số nguyên > 0 trước khi cho "Sinh ma trận".
+  const deckFieldErrors = {};
+  decks.forEach((d) => {
+    const errors = {};
+    if (!Number.isInteger(d.rows) || d.rows <= 0) {
+      errors.rows = lang === "VN" ? "Số hàng phải lớn hơn 0" : "Rows must be greater than 0";
+    }
+    if (!Number.isInteger(d.columns) || d.columns <= 0) {
+      errors.columns = lang === "VN" ? "Số cột phải lớn hơn 0" : "Columns must be greater than 0";
+    }
+    deckFieldErrors[d.id] = errors;
+  });
+  const hasDeckFieldErrors = Object.values(deckFieldErrors).some((e) => Object.keys(e).length > 0);
+
   const handleGenerateLayout = async () => {
+    if (hasDeckFieldErrors) return;
     try {
       setIsLoading(true);
       const payload = {
@@ -253,26 +270,36 @@ export function SeatLayoutEditor() {
                   Tùy chỉnh số ô lưới
                 </h4>
                 <div className="space-y-3">
-                  {decks.map(d => (
-                    <div key={d.id} className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300 w-12">Tầng {d.id}</span>
-                      <div className="flex items-center gap-1.5 flex-1 justify-end">
-                        <input
-                          type="number" min={1} value={d.rows}
-                          onChange={(e) => setDecks(prev => prev.map(deck => deck.id === d.id ? { ...deck, rows: Number(e.target.value) } : deck))}
-                          className="w-12 sm:w-14 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757]"
-                          title="Số hàng (Rows)"
-                        />
-                        <span className="text-[10px] text-slate-400 font-bold">X</span>
-                        <input
-                          type="number" min={1} value={d.columns}
-                          onChange={(e) => setDecks(prev => prev.map(deck => deck.id === d.id ? { ...deck, columns: Number(e.target.value) } : deck))}
-                          className="w-12 sm:w-14 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757]"
-                          title="Số cột (Columns)"
-                        />
+                  {decks.map(d => {
+                    const errors = deckFieldErrors[d.id] || {};
+                    return (
+                      <div key={d.id} className="space-y-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300 w-12">Tầng {d.id}</span>
+                          <div className="flex items-center gap-1.5 flex-1 justify-end">
+                            <input
+                              type="number" min={1} value={d.rows}
+                              onChange={(e) => setDecks(prev => prev.map(deck => deck.id === d.id ? { ...deck, rows: Number(e.target.value) } : deck))}
+                              className={`w-12 sm:w-14 bg-white dark:bg-slate-800 border rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757] ${errors.rows ? "border-rose-500 dark:border-rose-500" : "border-slate-200 dark:border-slate-600"}`}
+                              title="Số hàng (Rows)"
+                            />
+                            <span className="text-[10px] text-slate-400 font-bold">X</span>
+                            <input
+                              type="number" min={1} value={d.columns}
+                              onChange={(e) => setDecks(prev => prev.map(deck => deck.id === d.id ? { ...deck, columns: Number(e.target.value) } : deck))}
+                              className={`w-12 sm:w-14 bg-white dark:bg-slate-800 border rounded-lg px-1.5 py-1.5 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-[#124757] ${errors.columns ? "border-rose-500 dark:border-rose-500" : "border-slate-200 dark:border-slate-600"}`}
+                              title="Số cột (Columns)"
+                            />
+                          </div>
+                        </div>
+                        {(errors.rows || errors.columns) && (
+                          <p className="text-right text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                            {errors.rows || errors.columns}
+                          </p>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -300,7 +327,7 @@ export function SeatLayoutEditor() {
             </div>
 
             <div className="mt-6 space-y-2 border-t border-slate-100 dark:border-slate-700 pt-4">
-              <button onClick={handleGenerateLayout} disabled={hasMatrix} className="w-full bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-white px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50">
+              <button onClick={handleGenerateLayout} disabled={hasMatrix || hasDeckFieldErrors} className="w-full bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-white px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50">
                 1. Sinh ma trận lưới
               </button>
               <button onClick={handleSaveConfiguration} disabled={isSubmitting || !hasMatrix} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 hover:brightness-110 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2">

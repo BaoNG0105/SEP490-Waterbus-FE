@@ -159,11 +159,10 @@ export function BoatDutyRosterPanel({ boatId }) {
                 setDisplayMode(opt.id);
                 if (opt.id === "schedule") setAnchorDate(new Date());
               }}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${
-                displayMode === opt.id
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-headline font-black uppercase tracking-wider transition-all ${displayMode === opt.id
                   ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 shadow-sm"
                   : "text-slate-500 dark:text-slate-400"
-              }`}
+                }`}
             >
               {lang === "VN" ? opt.vn : opt.en}
             </button>
@@ -249,10 +248,9 @@ export function BoatDutyRosterPanel({ boatId }) {
         </div>
       ) : assignments.length === 0 ? (
         <div className="bg-white dark:bg-slate-800 p-10 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm text-center">
-          <span className="material-symbols-outlined text-3xl text-slate-300 block mb-2">group_off</span>
           <p className="text-xs font-bold text-slate-400">
             {lang === "VN"
-              ? "Chưa có ca Boat nào trong khoảng này. Tạo ở Phân công Staff."
+              ? "Chưa có ca nào trong khoảng này. Hãy tạo phân công cho nhân viên."
               : "No Boat shifts in this range. Create them in Staff Assignments."}
           </p>
           <Link
@@ -376,9 +374,9 @@ export function BoatCrewSchedule() {
                 ? "Đang tải thông tin tàu..."
                 : "Loading boat..."
               : boatCode ||
-                (lang === "VN"
-                  ? "Chỉ xem ai đang được phân công trên tàu này"
-                  : "View who is assigned to this boat")}
+              (lang === "VN"
+                ? "Chỉ xem ai đang được phân công trên tàu này"
+                : "View who is assigned to this boat")}
           </p>
         </div>
       </div>

@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
+//service
 import {
   fetchBoatDocuments,
   removeBoatDocument,
   uploadBoatDocument,
 } from "../../../services/boatService";
+//utils
 import {
   BOAT_DOCUMENT_ACCEPT,
   BOAT_DOCUMENT_MAX_SIZE,
@@ -28,8 +30,20 @@ const formatDateTime = (value, lang) => {
   });
 };
 
-const isValidFile = (file) =>
-  BOAT_DOCUMENT_MIME_TYPES.includes(file.type) && file.size <= BOAT_DOCUMENT_MAX_SIZE;
+/** Trả về lý do cụ thể file không hợp lệ (sai định dạng hay quá dung lượng) để hiện lỗi tại chỗ. */
+const getFileValidationError = (file, lang) => {
+  if (!BOAT_DOCUMENT_MIME_TYPES.includes(file.type)) {
+    return lang === "VN"
+      ? "Sai định dạng — chỉ nhận PDF, JPG, PNG, WEBP."
+      : "Invalid format — only PDF, JPG, PNG, WEBP are accepted.";
+  }
+  if (file.size > BOAT_DOCUMENT_MAX_SIZE) {
+    return lang === "VN"
+      ? "Dung lượng vượt quá 10MB."
+      : "File exceeds the 10MB limit.";
+  }
+  return "";
+};
 
 export function BoatDocumentsPanel({
   boatId,
@@ -43,13 +57,14 @@ export function BoatDocumentsPanel({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [pendingFiles, setPendingFiles] = useState({});
+  const [uploadErrors, setUploadErrors] = useState({});
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [deletingType, setDeletingType] = useState(null);
 
   const isUnderMaintenance = boatStatus?.toLowerCase() === "undermaintenance";
   const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
 
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
       setIsLoading(true);
       setErrorMsg("");
@@ -64,24 +79,31 @@ export function BoatDocumentsPanel({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [boatId, lang]);
 
   useEffect(() => {
     if (boatId) loadDocuments();
-  }, [boatId, lang]);
+  }, [boatId, loadDocuments]);
 
   const setPendingFile = (type, file) => {
-    if (file && !isValidFile(file)) {
-      notify({
-        icon: "warning",
-        title: lang === "VN" ? "File không hợp lệ" : "Invalid file",
-        text: lang === "VN"
-          ? "Chỉ hỗ trợ PDF, JPG, PNG, WEBP và tối đa 10MB."
-          : "Only PDF, JPG, PNG, WEBP files up to 10MB are supported.",
-        confirmButtonColor: "#124757",
-      });
-      return;
+    if (file) {
+      const reason = getFileValidationError(file, lang);
+      if (reason) {
+        setUploadErrors((prev) => ({ ...prev, [type]: reason }));
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "File không hợp lệ" : "Invalid file",
+          text: reason,
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
     }
+    setUploadErrors((prev) => {
+      const next = { ...prev };
+      delete next[type];
+      return next;
+    });
     setPendingFiles((prev) => {
       const next = { ...prev };
       if (file) next[type] = file;
@@ -91,6 +113,11 @@ export function BoatDocumentsPanel({
   };
 
   const clearPendingFile = (type) => {
+    setUploadErrors((prev) => {
+      const next = { ...prev };
+      delete next[type];
+      return next;
+    });
     setPendingFiles((prev) => {
       const next = { ...prev };
       delete next[type];
@@ -274,14 +301,17 @@ export function BoatDocumentsPanel({
           const label = lang === "VN" ? meta.labelVn : meta.labelEn;
           const isDeleting = deletingType === doc.type;
           const pendingFile = pendingFiles[doc.type] || null;
+          const docError = uploadErrors[doc.type] || "";
 
           return (
             <div
               key={doc.type}
               className={`bg-white dark:bg-slate-800 p-5 rounded-4xl border shadow-sm space-y-4 transition-colors ${
-                pendingFile
-                  ? "border-[#124757]/40 dark:border-yellow-400/40"
-                  : "border-slate-100 dark:border-slate-700/50"
+                docError
+                  ? "border-rose-500 dark:border-rose-500"
+                  : pendingFile
+                    ? "border-[#124757]/40 dark:border-yellow-400/40"
+                    : "border-slate-100 dark:border-slate-700/50"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -395,6 +425,8 @@ export function BoatDocumentsPanel({
                         <span className="material-symbols-outlined text-base">close</span>
                       </button>
                     </div>
+                  ) : docError ? (
+                    <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">{docError}</p>
                   ) : (
                     <p className="text-[10px] text-slate-400">
                       {lang === "VN" ? "PDF, JPG, PNG, WEBP · tối đa 10MB" : "PDF, JPG, PNG, WEBP · max 10MB"}
@@ -412,6 +444,7 @@ export function BoatDocumentsPanel({
                     onChange={(e) => setPendingFile(doc.type, e.target.files?.[0] || null)}
                     className="block w-full text-[11px] font-bold text-slate-600 dark:text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-[#124757] file:text-white dark:file:bg-yellow-400 dark:file:text-slate-900 file:font-bold file:cursor-pointer"
                   />
+                  {docError && <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">{docError}</p>}
                   {pendingFile ? (
                     <div className="flex items-center justify-between gap-2 rounded-lg bg-[#124757]/5 dark:bg-yellow-400/10 px-3 py-2">
                       <span className="text-[11px] font-bold text-[#124757] dark:text-yellow-300 truncate inline-flex items-center gap-1.5">

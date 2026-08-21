@@ -12,13 +12,22 @@ import { FormSelect } from "../../../components/FormSelect";
 import { YearPickerInput } from "../../../components/YearPickerInput";
 import { SeatMapIcon, seatToneFromCode, resolveSeatTypeCode } from "../../../components/SeatMapIcon";
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
+//utils
 import { notify } from "../../../utils/swalToast";
+import {
+  BOAT_CODE_REGEX,
+  REGISTRATION_NUMBER_REGEX,
+  MIN_BOAT_SPEED_KMH,
+  MAX_BOAT_SPEED_KMH,
+  getMinYearBuilt,
+} from "../../../utils/boatValidation";
 
 export function EditBoat() {
   const { lang } = useApp();
   const navigate = useNavigate();
   const { id } = useParams();
   const currentYear = new Date().getFullYear();
+  const minYearBuilt = getMinYearBuilt(currentYear);
 
   const [formData, setFormData] = useState(null);
   const [boatStatus, setBoatStatus] = useState("");
@@ -110,6 +119,46 @@ export function EditBoat() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Validate real-time từng field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi
+  // ít nhất 1 lần), nhưng nút Lưu bị khóa ngay khi còn field lỗi dù chưa touched hết.
+  const [touchedFields, setTouchedFields] = useState({});
+  const handleFieldBlur = (field) => {
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
+  };
+  const fieldErrors = formData ? {
+    ...(formData.code.trim()
+      ? (BOAT_CODE_REGEX.test(formData.code.trim())
+        ? {}
+        : { code: lang === "VN" ? "Mã tàu chỉ được gồm chữ cái, số và dấu gạch dưới (_)" : "Code may only contain letters, numbers and underscores" })
+      : { code: lang === "VN" ? "Vui lòng nhập mã hiệu tàu" : "Boat code is required" }),
+    ...(formData.name.trim() ? {} : {
+      name: lang === "VN" ? "Vui lòng nhập tên phương tiện" : "Boat name is required",
+    }),
+    ...((formData.registrationNumber || "").trim() && !REGISTRATION_NUMBER_REGEX.test((formData.registrationNumber || "").trim())
+      ? { registrationNumber: lang === "VN" ? "Mã số đăng ký chỉ được gồm chữ cái, số và dấu gạch ngang (-)" : "Registration number may only contain letters, numbers and hyphens" }
+      : {}),
+    ...(String(formData.maxSpeedKmh).trim() === "" || Number.isNaN(Number(formData.maxSpeedKmh))
+      ? { maxSpeedKmh: lang === "VN" ? "Vui lòng nhập vận tốc tối đa" : "Max speed is required" }
+      : Number(formData.maxSpeedKmh) < MIN_BOAT_SPEED_KMH || Number(formData.maxSpeedKmh) > MAX_BOAT_SPEED_KMH
+        ? { maxSpeedKmh: lang === "VN" ? `Vận tốc phải từ ${MIN_BOAT_SPEED_KMH} đến ${MAX_BOAT_SPEED_KMH} km/h` : `Speed must be between ${MIN_BOAT_SPEED_KMH} and ${MAX_BOAT_SPEED_KMH} km/h` }
+        : {}),
+    ...(String(formData.yearBuilt).trim() === ""
+      ? { yearBuilt: lang === "VN" ? "Vui lòng nhập năm đóng tàu" : "Year built is required" }
+      : Number(formData.yearBuilt) > currentYear
+        ? { yearBuilt: lang === "VN" ? `Năm đóng tàu không được lớn hơn ${currentYear}` : `Year built cannot be later than ${currentYear}` }
+        : Number(formData.yearBuilt) < minYearBuilt
+          ? { yearBuilt: lang === "VN" ? `Năm đóng tàu không được sớm hơn ${minYearBuilt}` : `Year built cannot be earlier than ${minYearBuilt}` }
+          : {}),
+  } : {};
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  const visibleFieldErrors = {
+    ...(touchedFields.code ? { code: fieldErrors.code } : {}),
+    ...(touchedFields.name ? { name: fieldErrors.name } : {}),
+    ...(touchedFields.registrationNumber ? { registrationNumber: fieldErrors.registrationNumber } : {}),
+    ...(touchedFields.maxSpeedKmh ? { maxSpeedKmh: fieldErrors.maxSpeedKmh } : {}),
+    ...(touchedFields.yearBuilt ? { yearBuilt: fieldErrors.yearBuilt } : {}),
+  };
+
   // QUẢN LÝ ẢNH (TỐI ĐA 3 ẢNH)
   const handleImagesChange = (e) => {
     const files = Array.from(e.target.files);
@@ -149,14 +198,9 @@ export function EditBoat() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (Number(formData.yearBuilt) > currentYear) {
-      setErrorMsg(
-        lang === "VN"
-          ? `Năm đóng tàu không được lớn hơn năm hiện tại (${currentYear}).`
-          : `Year built cannot be later than the current year (${currentYear}).`
-      );
-      return;
-    }
+    // Bấm submit khi còn field lỗi (VD: nhấn Enter) → hiện hết lỗi lên thay vì âm thầm chặn.
+    setTouchedFields({ code: true, name: true, registrationNumber: true, maxSpeedKmh: true, yearBuilt: true });
+    if (hasFieldErrors) return;
     try {
       setIsSubmitting(true);
       setErrorMsg("");
@@ -296,9 +340,12 @@ export function EditBoat() {
 
   const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
   const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+  const errorInputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all";
+  const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
   const selectStyle = `${inputStyle} cursor-pointer`;
   // Ring focus của YearPickerInput cần "focus-within" vì viền nằm ở div bọc, không phải input.
   const yearInputStyle = inputStyle.replace(/\bfocus:/g, "focus-within:");
+  const yearErrorInputStyle = errorInputStyle.replace(/\bfocus:/g, "focus-within:");
   const deckOptions = [
     { value: 1, label: lang === "VN" ? "1 Tầng" : "1 Deck" },
     { value: 2, label: lang === "VN" ? "2 Tầng" : "2 Decks" },
@@ -401,11 +448,27 @@ export function EditBoat() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
               <label className={labelStyle}>{lang === "VN" ? "Mã hiệu tàu (*)" : "Boat Code (*)"}</label>
-              <input type="text" required value={formData.code} onChange={(e) => handleFieldChange("code", e.target.value)} className={inputStyle} />
+              <input
+                type="text"
+                required
+                value={formData.code}
+                onChange={(e) => handleFieldChange("code", e.target.value)}
+                onBlur={() => handleFieldBlur("code")}
+                className={visibleFieldErrors.code ? errorInputStyle : inputStyle}
+              />
+              {visibleFieldErrors.code && <p className={errorTextStyle}>{visibleFieldErrors.code}</p>}
             </div>
             <div>
               <label className={labelStyle}>{lang === "VN" ? "Tên phương tiện (*)" : "Boat Name (*)"}</label>
-              <input type="text" required value={formData.name} onChange={(e) => handleFieldChange("name", e.target.value)} className={inputStyle} />
+              <input
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => handleFieldChange("name", e.target.value)}
+                onBlur={() => handleFieldBlur("name")}
+                className={visibleFieldErrors.name ? errorInputStyle : inputStyle}
+              />
+              {visibleFieldErrors.name && <p className={errorTextStyle}>{visibleFieldErrors.name}</p>}
             </div>
           </div>
 
@@ -423,11 +486,29 @@ export function EditBoat() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
               <label className={labelStyle}>{lang === "VN" ? "Mã biển số đăng ký" : "Registration Number"}</label>
-              <input type="text" value={formData.registrationNumber || ""} onChange={(e) => handleFieldChange("registrationNumber", e.target.value)} className={inputStyle} />
+              <input
+                type="text"
+                value={formData.registrationNumber || ""}
+                onChange={(e) => handleFieldChange("registrationNumber", e.target.value)}
+                onBlur={() => handleFieldBlur("registrationNumber")}
+                className={visibleFieldErrors.registrationNumber ? errorInputStyle : inputStyle}
+              />
+              {visibleFieldErrors.registrationNumber && <p className={errorTextStyle}>{visibleFieldErrors.registrationNumber}</p>}
             </div>
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Năm đóng tàu" : "Year Built"}</label>
-              <YearPickerInput min={1900} max={currentYear} required value={formData.yearBuilt || ""} onChange={(e) => handleFieldChange("yearBuilt", e.target.value)} className={yearInputStyle} />
+              <label className={labelStyle}>{lang === "VN" ? "Năm đóng tàu (*)" : "Year Built (*)"}</label>
+              <YearPickerInput
+                min={minYearBuilt}
+                max={currentYear}
+                required
+                value={formData.yearBuilt || ""}
+                onChange={(e) => {
+                  handleFieldChange("yearBuilt", e.target.value);
+                  handleFieldBlur("yearBuilt");
+                }}
+                className={visibleFieldErrors.yearBuilt ? yearErrorInputStyle : yearInputStyle}
+              />
+              {visibleFieldErrors.yearBuilt && <p className={errorTextStyle}>{visibleFieldErrors.yearBuilt}</p>}
             </div>
           </div>
 
@@ -470,8 +551,18 @@ export function EditBoat() {
 
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Vận tốc tối đa (Kmh)" : "Max Speed (Kmh)"}</label>
-              <input type="number" min={0} required value={formData.maxSpeedKmh} onChange={(e) => handleFieldChange("maxSpeedKmh", e.target.value)} className={inputStyle} />
+              <label className={labelStyle}>{lang === "VN" ? `Vận tốc tối đa (Kmh, ${MIN_BOAT_SPEED_KMH}-${MAX_BOAT_SPEED_KMH}) (*)` : `Max Speed (Kmh, ${MIN_BOAT_SPEED_KMH}-${MAX_BOAT_SPEED_KMH}) (*)`}</label>
+              <input
+                type="number"
+                min={MIN_BOAT_SPEED_KMH}
+                max={MAX_BOAT_SPEED_KMH}
+                required
+                value={formData.maxSpeedKmh}
+                onChange={(e) => handleFieldChange("maxSpeedKmh", e.target.value)}
+                onBlur={() => handleFieldBlur("maxSpeedKmh")}
+                className={visibleFieldErrors.maxSpeedKmh ? errorInputStyle : inputStyle}
+              />
+              {visibleFieldErrors.maxSpeedKmh && <p className={errorTextStyle}>{visibleFieldErrors.maxSpeedKmh}</p>}
             </div>
           </div>
 
@@ -509,7 +600,7 @@ export function EditBoat() {
             </div>
           </div>
 
-          <button type="submit" disabled={isSubmitting} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 hover:brightness-110 disabled:opacity-50 py-3.5 rounded-xl text-xs font-headline font-black uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2 mt-4">
+          <button type="submit" disabled={isSubmitting || hasFieldErrors} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 hover:brightness-110 disabled:opacity-50 py-3.5 rounded-xl text-xs font-headline font-black uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2 mt-4">
             {isSubmitting && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
             {lang === "VN" ? "Lưu thông số phương tiện" : "Save Specifications"}
           </button>
