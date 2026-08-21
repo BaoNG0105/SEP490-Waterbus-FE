@@ -311,7 +311,6 @@ export function RouteManagement() {
                             {currentRoutes.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
-                                        <span className="material-symbols-outlined text-4xl block mb-2">route</span>
                                         {lang === "VN" ? "Không có dữ liệu tuyến đường nào phù hợp." : "No records found matching filters."}
                                     </td>
                                 </tr>

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
+
 import { fetchAllRoutes, fetchRouteDetail, mergeGpsRoutes } from "../../../services/routeService";
+
 import { getApiErrorMessage } from "../../../utils/apiError";
 import {
   canSelectForMerge,
@@ -9,6 +11,7 @@ import {
   validateMergeRouteChain,
 } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
+import { REGISTRATION_NUMBER_REGEX } from "../../../utils/boatValidation";
 
 const getRouteId = (route) => String(route?.routeId || route?.id || "");
 
@@ -63,6 +66,30 @@ export function MergeGpsRoutes() {
     () => new Set((routes || []).map((r) => String(r.routeCode || "").toUpperCase())),
     [routes]
   );
+
+  // Validate real-time field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi ít
+  // nhất 1 lần), nhưng nút Ghép tuyến bị khóa ngay khi còn field lỗi dù chưa touched hết.
+  const [touchedFields, setTouchedFields] = useState({});
+  const handleFieldBlur = (field) => {
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
+  };
+  const fieldErrors = {
+    ...(formData.routeCode.trim()
+      ? (!REGISTRATION_NUMBER_REGEX.test(formData.routeCode.trim())
+        ? { routeCode: lang === "VN" ? "Mã tuyến chỉ được gồm chữ cái, số và dấu gạch ngang (-)" : "Route code may only contain letters, numbers and hyphens" }
+        : existingCodes.has(formData.routeCode.trim().toUpperCase())
+          ? { routeCode: lang === "VN" ? `Mã tuyến "${formData.routeCode.trim().toUpperCase()}" đã tồn tại` : `Route code "${formData.routeCode.trim().toUpperCase()}" already exists` }
+          : {})
+      : { routeCode: lang === "VN" ? "Vui lòng nhập mã tuyến" : "Route code is required" }),
+    ...(formData.routeName.trim() ? {} : {
+      routeName: lang === "VN" ? "Vui lòng nhập tên tuyến" : "Route name is required",
+    }),
+  };
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  const visibleFieldErrors = {
+    ...(touchedFields.routeCode ? { routeCode: fieldErrors.routeCode } : {}),
+    ...(touchedFields.routeName ? { routeName: fieldErrors.routeName } : {}),
+  };
 
   const ensureDetail = async (routeId) => {
     if (detailCache[routeId]?.stops) return detailCache[routeId];
@@ -130,25 +157,19 @@ export function MergeGpsRoutes() {
   const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
   const inputStyle =
     "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+  const errorInputStyle =
+    "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all";
+  const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Bấm submit khi còn field lỗi (VD: nhấn Enter) → hiện hết lỗi lên thay vì âm thầm chặn.
+    setTouchedFields({ routeCode: true, routeName: true });
+    if (hasFieldErrors) return;
     try {
       setErrorMsg("");
       const code = formData.routeCode.trim().toUpperCase();
       const name = formData.routeName.trim();
-      if (!code) {
-        setErrorMsg(lang === "VN" ? "Mã tuyến bắt buộc." : "Route code is required.");
-        return;
-      }
-      if (!name) {
-        setErrorMsg(lang === "VN" ? "Tên tuyến bắt buộc." : "Route name is required.");
-        return;
-      }
-      if (existingCodes.has(code)) {
-        setErrorMsg(lang === "VN" ? `Mã tuyến "${code}" đã tồn tại.` : `Route code "${code}" already exists.`);
-        return;
-      }
 
       // Đảm bảo mỗi tuyến đã có stops từ GET detail
       const detailed = [];
@@ -239,9 +260,11 @@ export function MergeGpsRoutes() {
                 required
                 value={formData.routeCode}
                 onChange={(e) => setFormData((p) => ({ ...p, routeCode: e.target.value.toUpperCase() }))}
-                className={`${inputStyle} uppercase`}
+                onBlur={() => handleFieldBlur("routeCode")}
+                className={`${visibleFieldErrors.routeCode ? errorInputStyle : inputStyle} uppercase`}
                 placeholder="A-B-C"
               />
+              {visibleFieldErrors.routeCode && <p className={errorTextStyle}>{visibleFieldErrors.routeCode}</p>}
             </div>
             <div>
               <label className={labelStyle}>{lang === "VN" ? "Tên tuyến (*)" : "Route name (*)"}</label>
@@ -249,9 +272,11 @@ export function MergeGpsRoutes() {
                 required
                 value={formData.routeName}
                 onChange={(e) => setFormData((p) => ({ ...p, routeName: e.target.value }))}
-                className={inputStyle}
+                onBlur={() => handleFieldBlur("routeName")}
+                className={visibleFieldErrors.routeName ? errorInputStyle : inputStyle}
                 placeholder="A - B - C"
               />
+              {visibleFieldErrors.routeName && <p className={errorTextStyle}>{visibleFieldErrors.routeName}</p>}
             </div>
           </div>
           <div>
@@ -347,7 +372,7 @@ export function MergeGpsRoutes() {
 
         <button
           type="submit"
-          disabled={isSubmitting || selectedIds.length < 2}
+          disabled={isSubmitting || selectedIds.length < 2 || hasFieldErrors}
           className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {isSubmitting && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />}

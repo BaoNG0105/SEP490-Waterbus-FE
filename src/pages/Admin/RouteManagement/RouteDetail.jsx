@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
-
+//service
 import {
     fetchRouteDetail,
     modifyRoute,
 } from "../../../services/routeService";
 import { fetchAllStations } from "../../../services/stationService";
 import { fetchWaterwayDetail } from "../../../services/waterwayService";
-
+//component
 import { WaterwayMap } from "../../../components/WaterwayMap";
-
+//utils
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
 import { getRouteKindLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
@@ -28,6 +28,13 @@ export function RouteDetail() {
 
     const [routeForm, setRouteForm] = useState(null);
     const [isSavingRouteInfo, setIsSavingRouteInfo] = useState(false);
+
+    // Validate real-time field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi ít
+    // nhất 1 lần), nhưng nút Lưu bị khóa ngay khi còn field lỗi dù chưa touched hết.
+    const [touchedFields, setTouchedFields] = useState({});
+    const handleFieldBlur = (field) => {
+        setTouchedFields((prev) => ({ ...prev, [field]: true }));
+    };
 
     const loadRouteDetail = useCallback(async () => {
         try {
@@ -116,6 +123,9 @@ export function RouteDetail() {
 
     const handleSaveRouteInfo = async (e) => {
         e.preventDefault();
+        // Bấm submit khi còn field lỗi (VD: nhấn Enter) → hiện hết lỗi lên thay vì âm thầm chặn.
+        setTouchedFields({ routeName: true });
+        if (hasFieldErrors) return;
         try {
             setIsSavingRouteInfo(true);
             setErrorMsg("");
@@ -166,8 +176,20 @@ export function RouteDetail() {
 
     const sortedStops = (route.stops || []).slice().sort((a, b) => a.stopOrder - b.stopOrder);
 
+    const fieldErrors = {
+        ...(routeForm.routeName.trim() ? {} : {
+            routeName: lang === "VN" ? "Vui lòng nhập tên tuyến đường" : "Route name is required",
+        }),
+    };
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+    const visibleFieldErrors = {
+        ...(touchedFields.routeName ? { routeName: fieldErrors.routeName } : {}),
+    };
+
     const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
+    const errorInputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all";
+    const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
 
     return (
         <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
@@ -231,8 +253,10 @@ export function RouteDetail() {
                         <input
                             type="text" required value={routeForm.routeName}
                             onChange={(e) => handleRouteFormChange("routeName", e.target.value)}
-                            className={inputStyle}
+                            onBlur={() => handleFieldBlur("routeName")}
+                            className={visibleFieldErrors.routeName ? errorInputStyle : inputStyle}
                         />
+                        {visibleFieldErrors.routeName && <p className={errorTextStyle}>{visibleFieldErrors.routeName}</p>}
                     </div>
                 </div>
 
@@ -264,7 +288,7 @@ export function RouteDetail() {
                     </div>
                 </div>
 
-                <button type="submit" disabled={isSavingRouteInfo} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                <button type="submit" disabled={isSavingRouteInfo || hasFieldErrors} className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-3 rounded-xl shadow-md hover:brightness-110 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
                     {isSavingRouteInfo && <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
                     {lang === "VN" ? "Lưu thông tin tuyến" : "Save Route Info"}
                 </button>
