@@ -16,6 +16,10 @@ export const updateInsurancePackage = (id, data) =>
 export const updateInsurancePackageStatus = (id, data) =>
     api.patch(`/insurance-packages/${id}/status`, data).then((response) => response.data);
 
+// Kiểm tra đã có gói Waterbus default active chưa (chỉ 1 gói Waterbus mặc định/bookingType)
+export const checkWaterbusDefault = (bookingType) =>
+    api.get('/insurance-packages/check-waterbus-default', { params: { bookingType } }).then((response) => response.data);
+
 // Xóa gói bảo hiểm (chỉ dùng nội bộ nếu BE còn hỗ trợ; UI admin không dùng)
 export const deleteInsurancePackage = (id) =>
     api.delete(`/insurance-packages/${id}`).then((response) => response.data);

@@ -6,15 +6,20 @@ import { fetchCurrentUserProfile } from "../services/authService";
 import { updateUserProfile } from "../redux/authSlice";
 import {
   CHARTER_DAY_WINDOW_END,
+  CHARTER_DAY_WINDOW_END_EXCLUSIVE,
   CHARTER_DAY_WINDOW_START,
   createEmptyBoatRequest,
+  createEmptyPassenger,
   createEmptyStop,
   deckOptionImages,
   deckOptions,
   getCharterDayStartTimeError,
   getMinDepartureDate,
+  getPassengerTypeMismatchError,
   isCharterDayStartTimeValid,
   normalizeDeckCount,
+  PASSENGER_TYPE_ADULT,
+  PASSENGER_TYPE_CHILD,
 } from "../utils/charterRequestForm";
 import { getCharterInsuranceNote, getInsurancePendingMessage } from "../utils/insurancePreview";
 import { AppDateInput } from "./AppDateInput";
@@ -188,6 +193,7 @@ export function CharterRequestForm({
   onUnauthenticated,
   bookingCode = "",
   onSubmit,
+  onSubmitError,
 }) {
   const dispatch = useDispatch();
   const t = STYLES;
@@ -205,6 +211,10 @@ export function CharterRequestForm({
   const [currentStep, setCurrentStep] = useState(0);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState(initialFormData);
+  const [touchedPassengers, setTouchedPassengers] = useState({});
+  const [showPassengerErrors, setShowPassengerErrors] = useState(false);
+  const formDataRef = useRef(formData);
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
   const submitInFlightRef = useRef(false);
   const lastInsurancePackageIdRef = useRef(null);
 
@@ -253,6 +263,28 @@ export function CharterRequestForm({
     };
   }, [initialFormData?.insurancePackageId, initialFormData?.insuranceSelected]);
 
+  useEffect(() => {
+    if (currentStep !== 3) return;
+    const totalPassengerCount = Math.max(
+      0,
+      (Number(formData.adultCount) || 0) + (Number(formData.childCount) || 0)
+    );
+    const previousTotal = Array.isArray(formData.passengers) ? formData.passengers.length : 0;
+    if (previousTotal === totalPassengerCount) return;
+    setFormData((prev) => {
+      const previousPassengers = Array.isArray(prev.passengers) ? prev.passengers : [];
+      const expanded = Array.from({ length: totalPassengerCount }, (_, index) => {
+        const existing = previousPassengers[index];
+        if (existing && typeof existing === "object") return existing;
+        return createEmptyPassenger(PASSENGER_TYPE_ADULT);
+      });
+      const same = previousPassengers.length === expanded.length
+        && previousPassengers.every((p, i) => p === expanded[i]);
+      if (same) return prev;
+      return { ...prev, passengers: expanded };
+    });
+  }, [currentStep, formData.adultCount, formData.childCount, formData.passengers]);
+
   const contactInputClass = `w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] transition-all disabled:opacity-55 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-950 disabled:text-slate-500 dark:disabled:text-slate-400`;
   const contactLabelClass = `flex min-h-4 items-center text-[10px] font-headline font-black uppercase tracking-wider ${t.label}`;
   const contactErrorTextClass = `text-[11px] font-bold ${t.errorText}`;
@@ -274,12 +306,35 @@ export function CharterRequestForm({
     const contactPhone = String(data.contactPhone || "").trim();
     const contactEmail = String(data.contactEmail || "").trim();
 
-    if (!customerName) errors.customerName = contactRequiredMessages.customerName;
-    if (!contactPhone) errors.contactPhone = contactRequiredMessages.contactPhone;
+    if (!customerName) {
+      errors.customerName = contactRequiredMessages.customerName;
+    } else if (!/^[\p{L}\s]+$/u.test(customerName)) {
+      errors.customerName = lang === "VN"
+        ? "Chỉ chữ cái và khoảng trắng."
+        : "Letters and spaces only.";
+    } else if (/\s{2,}/.test(customerName)) {
+      errors.customerName = lang === "VN"
+        ? "Không có 2 dấu cách liên tiếp."
+        : "No consecutive spaces.";
+    }
+    if (!contactPhone) {
+      errors.contactPhone = contactRequiredMessages.contactPhone;
+    } else if (!/^(?:\+84|0)[35789]\d{8}$/.test(contactPhone)) {
+      errors.contactPhone = lang === "VN"
+        ? "Sai định dạng (VD: 0912345678)."
+        : "Invalid format (e.g. 0912345678).";
+    }
+    const emailLower = contactEmail.toLowerCase();
     if (!contactEmail) {
       errors.contactEmail = contactRequiredMessages.contactEmail;
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
-      errors.contactEmail = lang === "VN" ? "Email liên hệ chưa đúng định dạng." : "Contact email is not valid.";
+      errors.contactEmail = lang === "VN" ? "Sai định dạng email." : "Invalid email format.";
+    } else if (
+      !emailLower.endsWith("@gmail.com") && !emailLower.endsWith("@fpt.edu.vn")
+    ) {
+      errors.contactEmail = lang === "VN"
+        ? "Chỉ chấp nhận @gmail.com hoặc @fpt.edu.vn."
+        : "Only @gmail.com or @fpt.edu.vn.";
     }
 
     return errors;
@@ -306,7 +361,8 @@ export function CharterRequestForm({
   const steps = [
     { titleVn: "Thông tin khách hàng", titleEn: "Customer Information", icon: "person" },
     { titleVn: "Lịch trình", titleEn: "Schedule", icon: "event" },
-    { titleVn: "Lộ trình & hành khách", titleEn: "Route & Guests", icon: "route" },
+    { titleVn: "Lộ trình", titleEn: "Route", icon: "route" },
+    { titleVn: "Danh sách hành khách", titleEn: "Passenger List", icon: "groups" },
     { titleVn: "Ghi chú", titleEn: "Notes", icon: "notes" },
   ];
   const isLastStep = currentStep === steps.length - 1;
@@ -343,6 +399,43 @@ export function CharterRequestForm({
     setFieldErrors(errors);
     if (firstErrorField) return { text: getContactValidationText(errors), field: firstErrorField };
 
+    return null;
+  };
+
+  const validatePassengerListStep = () => {
+    const passengers = Array.isArray(formData.passengers) ? formData.passengers : [];
+    const totalPassengerCount = (Number(formData.adultCount) || 0) + (Number(formData.childCount) || 0);
+    if (totalPassengerCount <= 0) {
+      return lang === "VN"
+        ? "Vui lòng quay lại bước Lộ trình để nhập số lượng hành khách."
+        : "Please go back to the Route step and enter the number of passengers.";
+    }
+    const typeMismatch = getPassengerTypeMismatchError(passengers, formData.adultCount, formData.childCount, lang);
+    if (typeMismatch) return typeMismatch;
+    const missingNameIndex = passengers.findIndex((p) => !String(p?.fullName || "").trim());
+    if (missingNameIndex !== -1) {
+      return lang === "VN"
+        ? `Vui lòng nhập họ tên cho hành khách thứ ${missingNameIndex + 1}.`
+        : `Please enter the name for passenger #${missingNameIndex + 1}.`;
+    }
+    const currentYear = new Date().getFullYear();
+    const missingYearIndex = passengers.findIndex((p) => !String(p?.birthYear ?? "").trim());
+    if (missingYearIndex !== -1) {
+      return lang === "VN"
+        ? `Vui lòng nhập năm sinh cho hành khách thứ ${missingYearIndex + 1}.`
+        : `Please enter the birth year for passenger #${missingYearIndex + 1}.`;
+    }
+    const invalidYearIndex = passengers.findIndex((p) => {
+      const raw = String(p?.birthYear ?? "").trim();
+      if (raw === "") return false;
+      const year = Number(raw);
+      return !Number.isInteger(year) || year < 1900 || year > currentYear;
+    });
+    if (invalidYearIndex !== -1) {
+      return lang === "VN"
+        ? `Năm sinh không hợp lệ cho hành khách thứ ${invalidYearIndex + 1}.`
+        : `Invalid birth year for passenger #${invalidYearIndex + 1}.`;
+    }
     return null;
   };
 
@@ -403,7 +496,13 @@ export function CharterRequestForm({
     return null;
   };
 
-  const stepValidators = [validateCustomerStep, validateScheduleStep, validateRouteStep, () => null];
+  const stepValidators = [
+    validateCustomerStep,
+    validateScheduleStep,
+    validateRouteStep,
+    validatePassengerListStep,
+    () => null,
+  ];
   const hasRequiredCustomerInfo = Boolean(
     formData.customerName.trim()
     && formData.contactPhone.trim()
@@ -415,13 +514,16 @@ export function CharterRequestForm({
       ? !validateScheduleStep()
       : currentStep === 2
         ? !validateRouteStep()
-        : true;
+        : currentStep === 3
+          ? !validatePassengerListStep()
+          : true;
 
   const handleNextStep = () => {
     const validationResult = stepValidators[currentStep]();
     const errorText = typeof validationResult === "string" ? validationResult : validationResult?.text;
     if (errorText) {
       if (validationResult?.field) focusContactField(validationResult.field);
+      if (currentStep === 3) setShowPassengerErrors(true);
       if (currentStep === 0) return;
       notify({
         icon: "warning",
@@ -436,6 +538,7 @@ export function CharterRequestForm({
 
   const handleBackStep = () => {
     setCurrentStep((prev) => Math.max(prev - 1, 0));
+    setShowPassengerErrors(false);
   };
 
   const handleFieldChange = (field, value) => {
@@ -447,9 +550,21 @@ export function CharterRequestForm({
       return next;
     });
     setFieldErrors((prev) => {
-      if (!prev[field]) return prev;
       const next = { ...prev };
-      delete next[field];
+      if (next[field]) delete next[field];
+
+      if (field === "customerName" || field === "contactPhone" || field === "contactEmail") {
+        const draft = {
+          ...formDataRef.current,
+          [field]: value,
+        };
+        const liveErrors = getContactFieldErrors(draft);
+        for (const key of ["customerName", "contactPhone", "contactEmail"]) {
+          if (liveErrors[key]) next[key] = liveErrors[key];
+          else delete next[key];
+        }
+      }
+
       return next;
     });
   };
@@ -773,6 +888,10 @@ export function CharterRequestForm({
         };
       }),
       preferredNumberOfDecks: normalizeDeckCount(formData.requestedBoats[0]?.numberOfDecks),
+      passengers: (Array.isArray(formData.passengers) ? formData.passengers : []).map((p) => ({
+        fullName: String(p?.fullName || "").trim(),
+        birthYear: String(p?.birthYear || "").trim() ? Number(p.birthYear) : null,
+      })),
       specialRequests: formData.specialRequests || null,
       rentalUnit: formData.rentalUnit === "Day" ? "Day" : "Hour",
       insuranceSelected: Boolean(selectedInsurancePackageId),
@@ -785,14 +904,40 @@ export function CharterRequestForm({
 
     try {
       await onSubmit?.(payload);
+    } catch (error) {
+      const mapped = mapServerErrorsToFields(error);
+      if (mapped) {
+        setFieldErrors((prev) => ({ ...prev, ...mapped }));
+        onSubmitError?.(error, mapped);
+      }
+      throw error;
     } finally {
       submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
 
+  const mapServerErrorsToFields = (error) => {
+    const data = error?.response?.data;
+    const errors = data?.errors;
+    if (!errors || typeof errors !== "object") return null;
+    const allowed = ["customerName", "contactPhone", "contactEmail"];
+    const capitalizeFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    const mapped = {};
+    for (const field of allowed) {
+      const value = errors[field] || errors[capitalizeFirst(field)];
+      if (Array.isArray(value)) {
+        const first = value.find((v) => typeof v === "string" && v.trim());
+        if (first) mapped[field] = first.trim();
+      } else if (typeof value === "string" && value.trim()) {
+        mapped[field] = value.trim();
+      }
+    }
+    return Object.keys(mapped).length > 0 ? mapped : null;
+  };
+
   return (
-    <form noValidate onSubmit={handleFormSubmit} className={`relative rounded-4xl shadow-[0_25px_70px_rgba(18,71,87,0.10)] border overflow-hidden ${t.formBg} ${t.formBorder}`}>
+    <form noValidate onSubmit={handleFormSubmit} className={`relative rounded-4xl shadow-[0_25px_70px_rgba(18,71,87,0.10)] border ${t.formBg} ${t.formBorder}`}>
       <div className={`p-8 md:p-10 border-b space-y-6 text-center ${t.headerBorder} ${t.headerBg}`}>
         <div className="space-y-2">
           <span className={`inline-flex items-center gap-2 text-[10px] font-headline font-black uppercase tracking-widest ${t.badgeText}`}>
@@ -853,7 +998,7 @@ export function CharterRequestForm({
         </div>
       </div>
 
-      <div className="p-6 md:p-10 space-y-7">
+      <div className="p-6 md:p-12 space-y-8">
         {!isAuthenticated && (
           <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-4 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-3">
             <span className="material-symbols-outlined text-xl">lock</span>
@@ -862,27 +1007,27 @@ export function CharterRequestForm({
         )}
         {/* STEP 1: Thông tin khách hàng */}
         {currentStep === 0 && (
-          <section className="space-y-6 max-w-3xl mx-auto">
+          <section className="space-y-6 max-w-5xl mx-auto">
             <div className="flex flex-col items-center text-center gap-3">
               <div>
                 <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Thông tin khách hàng" : "Customer Information"}</h3>
                 <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Cho chúng tôi biết ai là người liên hệ chính của yêu cầu này." : "Tell us who the main contact for this request is."}</p>
               </div>
             </div>
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="flex flex-col gap-2.5">
+            <div className="grid md:grid-cols-12 gap-x-5 gap-y-5">
+              <div className="flex flex-col gap-2.5 md:col-span-4">
                 <label className={contactLabelClass}>{lang === "VN" ? "Họ tên người đặt" : "Contact Name"}{requiredMark}</label>
                 <input id={`${idPrefix}-customerName`} value={formData.customerName} onChange={(e) => handleFieldChange("customerName", e.target.value)} disabled={useAccountInfo} required maxLength={120} className={getContactInputClass("customerName")} placeholder={lang === "VN" ? "Nhập họ tên" : "Full name"} aria-invalid={Boolean(fieldErrors.customerName)} aria-describedby={fieldErrors.customerName ? `${idPrefix}-customerName-error` : undefined} />
                 {fieldErrors.customerName && <p id={`${idPrefix}-customerName-error`} className={contactErrorTextClass}>{fieldErrors.customerName}</p>}
               </div>
-              <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-2.5 md:col-span-4">
                 <label className={contactLabelClass}>{lang === "VN" ? "Số điện thoại" : "Phone Number"}{requiredMark}</label>
-                <input id={`${idPrefix}-contactPhone`} value={formData.contactPhone} onChange={(e) => handleFieldChange("contactPhone", e.target.value)} disabled={useAccountInfo} required maxLength={30} className={getContactInputClass("contactPhone")} placeholder={lang === "VN" ? "Nhập số điện thoại" : "Phone number"} aria-invalid={Boolean(fieldErrors.contactPhone)} aria-describedby={fieldErrors.contactPhone ? `${idPrefix}-contactPhone-error` : undefined} />
+                <input id={`${idPrefix}-contactPhone`} value={formData.contactPhone} onChange={(e) => { const v = e.target.value.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, ""); handleFieldChange("contactPhone", v); }} disabled={useAccountInfo} required maxLength={13} inputMode="tel" className={getContactInputClass("contactPhone")} placeholder={lang === "VN" ? "Số điện thoại" : "SDT"} aria-invalid={Boolean(fieldErrors.contactPhone)} aria-describedby={fieldErrors.contactPhone ? `${idPrefix}-contactPhone-error` : undefined} />
                 {fieldErrors.contactPhone && <p id={`${idPrefix}-contactPhone-error`} className={contactErrorTextClass}>{fieldErrors.contactPhone}</p>}
               </div>
-              <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-2.5 md:col-span-4">
                 <label className={contactLabelClass}>Email{requiredMark}</label>
-                <input id={`${idPrefix}-contactEmail`} type="email" value={formData.contactEmail} onChange={(e) => handleFieldChange("contactEmail", e.target.value)} disabled={useAccountInfo} required maxLength={160} className={getContactInputClass("contactEmail")} placeholder="email@example.com" aria-invalid={Boolean(fieldErrors.contactEmail)} aria-describedby={fieldErrors.contactEmail ? `${idPrefix}-contactEmail-error` : undefined} />
+                <input id={`${idPrefix}-contactEmail`} type="email" value={formData.contactEmail} onChange={(e) => handleFieldChange("contactEmail", e.target.value)} disabled={useAccountInfo} required maxLength={160} className={getContactInputClass("contactEmail")} placeholder="Email" aria-invalid={Boolean(fieldErrors.contactEmail)} aria-describedby={fieldErrors.contactEmail ? `${idPrefix}-contactEmail-error` : undefined} />
                 {fieldErrors.contactEmail && <p id={`${idPrefix}-contactEmail-error`} className={contactErrorTextClass}>{fieldErrors.contactEmail}</p>}
               </div>
             </div>
@@ -930,15 +1075,43 @@ export function CharterRequestForm({
               </div>
               <div className="flex flex-col gap-2.5">
                 <label className={contactLabelClass}>{lang === "VN" ? "Giờ đi" : "Start Time"}{requiredMark}</label>
-                <input
-                  type="time"
-                  value={formData.startTime}
-                  min={CHARTER_DAY_WINDOW_START}
-                  max={CHARTER_DAY_WINDOW_END}
-                  onChange={(e) => handleFieldChange("startTime", e.target.value)}
-                  required
-                  className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
-                />
+                {(() => {
+                  const current = formData.startTime;
+                  const isInvalid = current && current.length === 5 && !isCharterDayStartTimeValid(current);
+                  const errorText = isInvalid ? getCharterDayStartTimeError(current, lang) : null;
+                  const inputClass = `w-full px-4 py-3 rounded-xl border text-sm font-bold outline-none focus:ring-2 ${
+                    errorText
+                      ? "bg-rose-50 dark:bg-rose-950/30 border-rose-400 text-rose-700 dark:text-rose-300 focus:ring-rose-400 placeholder-rose-300"
+                      : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white focus:ring-[#FFD100]"
+                  }`;
+                  return (
+                    <>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={current}
+                        maxLength={5}
+                        placeholder="HH:MM"
+                        onChange={(e) => {
+                          let raw = e.target.value.replace(/[^\d:]/g, "");
+                          if (raw.length === 2 && !raw.includes(":") && (current || "").length < 2) {
+                            raw = `${raw}:`;
+                          }
+                          if (raw.length > 5) raw = raw.slice(0, 5);
+                          handleFieldChange("startTime", raw);
+                        }}
+                        required
+                        aria-invalid={Boolean(errorText)}
+                        className={inputClass}
+                      />
+                      {errorText ? (
+                        <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">{errorText}</p>
+                      ) : (
+                        <p className="text-[10px] text-slate-400">{lang === "VN" ? "Hiện tại hệ thống chỉ cho phép giờ đi từ 07:00 – 22:00." : "The system currently allows start time from 07:00 – 22:00."}</p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
@@ -965,15 +1138,6 @@ export function CharterRequestForm({
                   );
                 })}
               </div>
-              <p className="text-[11px] font-medium leading-relaxed text-slate-400">
-                {formData.rentalUnit === "Day"
-                  ? (lang === "VN"
-                    ? `Giờ đi từ ${CHARTER_DAY_WINDOW_START} đến ${CHARTER_DAY_WINDOW_END}. Thuê 1 ngày kết thúc ${CHARTER_DAY_WINDOW_END} cùng ngày; 2 ngày kết thúc ${CHARTER_DAY_WINDOW_END} ngày hôm sau.`
-                    : `Start time is from ${CHARTER_DAY_WINDOW_START} to ${CHARTER_DAY_WINDOW_END}. A 1-day rental ends at ${CHARTER_DAY_WINDOW_END} the same day; 2 days ends at ${CHARTER_DAY_WINDOW_END} the next day.`)
-                  : (lang === "VN"
-                    ? `Giờ đi từ ${CHARTER_DAY_WINDOW_START} đến ${CHARTER_DAY_WINDOW_END}. Số giờ tính tiền do hệ thống ước tính từ lộ trình.`
-                    : `Start time is from ${CHARTER_DAY_WINDOW_START} to ${CHARTER_DAY_WINDOW_END}. Chargeable duration is calculated from the route.`)}
-              </p>
             </div>
           </section>
         )}
@@ -1195,7 +1359,7 @@ export function CharterRequestForm({
             </div>
 
             {/* Bảo hiểm hành khách */}
-            {insurancePackages.length > 0 && (() => {
+            {(() => {
               const formatVnd = (value) => (Number(value) || 0).toLocaleString("vi-VN") + "đ";
               const wantsInsurance = selectedInsurancePackageId != null;
               const selectedPackage = wantsInsurance
@@ -1444,8 +1608,186 @@ export function CharterRequestForm({
           </section>
         )}
 
-        {/* Ghi chú */}
+        {/* STEP 4: Danh sách hành khách */}
         {currentStep === 3 && (
+          <section className="space-y-6 max-w-6xl mx-auto">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div>
+                <h3 className={`font-headline font-black text-lg ${t.sectionTitle}`}>{lang === "VN" ? "Danh sách hành khách" : "Passenger List"}</h3>
+                <p className={`text-xs mt-1 max-w-sm mx-auto ${t.sectionSubtitle}`}>{lang === "VN" ? "Vui lòng nhập họ tên và năm sinh cho từng hành khách theo số lượng đã khai báo." : "Please enter each passenger's name (required) and birth year (optional) matching the declared count."}</p>
+              </div>
+            </div>
+            {(() => {
+              const passengers = Array.isArray(formData.passengers) ? formData.passengers : [];
+              const passengerNamePattern = /^[\p{L}\s]+$/u;
+              const currentYear = new Date().getFullYear();
+              if (passengers.length === 0) {
+                return (
+                  <div className="rounded-xl border border-dashed border-white/20 dark:border-slate-700 bg-white/5 dark:bg-slate-900 p-6 text-center text-xs text-white/70 dark:text-slate-400">
+                    {lang === "VN"
+                      ? "Chưa có hành khách. Quay lại bước Lộ trình để khai báo số lượng."
+                      : "No passengers yet. Go back to the Route step to declare the count."}
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-4">
+                  {(() => {
+                    const declaredAdults = Number(formData.adultCount) || 0;
+                    const declaredChildren = Number(formData.childCount) || 0;
+                    const actualAdults = passengers.filter((p) => p?.type !== PASSENGER_TYPE_CHILD && p?.type !== "Child").length;
+                    const actualChildren = passengers.filter((p) => p?.type === PASSENGER_TYPE_CHILD || p?.type === "Child").length;
+                    const adultMatch = actualAdults === declaredAdults;
+                    const childMatch = actualChildren === declaredChildren;
+                    const allMatch = adultMatch && childMatch;
+                    const chipBase = "inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1 text-xs font-headline font-black uppercase tracking-wider transition-colors";
+                    const chipMatch = "bg-emerald-500 text-white border-emerald-500 shadow-sm";
+                    const chipMismatch = "bg-rose-500 text-white border-rose-500 shadow-sm";
+                    return (
+                      <div className="flex items-center gap-2.5 px-1 py-1.5">
+                        <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full flex-shrink-0 border-2 shadow-md ${
+                          allMatch
+                            ? "bg-emerald-500 text-white border-emerald-400"
+                            : "bg-rose-500 text-white border-rose-400"
+                        }`}>
+                          <span className="material-symbols-outlined text-lg leading-none">
+                            {allMatch ? "check_circle" : "priority_high"}
+                          </span>
+                        </span>
+                        <span className="text-xs font-headline font-black uppercase tracking-wider text-[#FFD100] whitespace-nowrap">
+                          {lang === "VN" ? "Hiện tại / Yêu cầu" : "Current / Required"}
+                        </span>
+                        <span className={`${chipBase} ${adultMatch ? chipMatch : chipMismatch}`}>
+                          <span className="material-symbols-outlined text-sm leading-none">
+                            {adultMatch ? "check_circle" : "person_off"}
+                          </span>
+                          <span className="opacity-90">{lang === "VN" ? "Người lớn" : "Adults"}</span>
+                          <span className="inline-flex items-baseline gap-0.5">
+                            <span className="text-sm font-black">{actualAdults}</span>
+                            <span className="opacity-70">/</span>
+                            <span className="opacity-90">{declaredAdults}</span>
+                          </span>
+                        </span>
+                        <span className={`${chipBase} ${childMatch ? chipMatch : chipMismatch}`}>
+                          <span className="material-symbols-outlined text-sm leading-none">
+                            {childMatch ? "check_circle" : "person_off"}
+                          </span>
+                          <span className="opacity-90">{lang === "VN" ? "Trẻ em" : "Children"}</span>
+                          <span className="inline-flex items-baseline gap-0.5">
+                            <span className="text-sm font-black">{actualChildren}</span>
+                            <span className="opacity-70">/</span>
+                            <span className="opacity-90">{declaredChildren}</span>
+                          </span>
+                        </span>
+                        {!allMatch && (
+                          <span className="text-[11px] whitespace-nowrap font-extrabold uppercase tracking-wide text-rose-300 ml-auto">
+                            {lang === "VN" ? "Chưa khớp yêu cầu!" : "Mismatch!"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <div className={`flex items-center text-[10px] font-headline font-black uppercase tracking-wider ${t.sectionSubtitle}`}>
+                    <span>{lang === "VN" ? `Tổng cộng ${passengers.length} hành khách` : `${passengers.length} passengers in total`}</span>
+                  </div>
+                  <div className="space-y-2.5 max-h-[70vh] overflow-y-auto pr-1">
+                    {passengers.map((passenger, index) => {
+                      const name = String(passenger.fullName || "").trim();
+                      const year = String(passenger.birthYear || "").trim();
+                      const rawNameError = !name
+                        ? (lang === "VN" ? "Vui lòng nhập họ tên." : "Full name is required.")
+                        : !passengerNamePattern.test(name)
+                          ? (lang === "VN" ? "Chỉ chữ cái và khoảng trắng." : "Letters and spaces only.")
+                          : /\s{2,}/.test(name)
+                            ? (lang === "VN" ? "Không có 2 dấu cách liên tiếp." : "No consecutive spaces.")
+                            : name.trim().split(/\s+/).filter(Boolean).length < 2
+                              ? (lang === "VN" ? "Họ tên phải có ít nhất 2 từ (Họ và Tên)." : "Full name must have at least 2 words (First & Last).")
+                              : null;
+                      const yearNum = year ? Number(year) : null;
+                      const rawYearError = year === ""
+                        ? (lang === "VN" ? "Vui lòng nhập năm sinh." : "Birth year is required.")
+                        : (!Number.isInteger(yearNum) || yearNum < 1900 || yearNum > currentYear
+                          ? (lang === "VN" ? "Năm sinh không hợp lệ (1900–2026)." : "Invalid birth year (1900–2026).")
+                          : null);
+                      const isTouched = touchedPassengers[index] || showPassengerErrors;
+                      const nameError = isTouched ? rawNameError : null;
+                      const yearError = isTouched ? rawYearError : null;
+                      const markTouched = (field) => setTouchedPassengers((prev) => ({ ...prev, [`${index}-${field}`]: true }));
+                      const cardClass = "grid grid-cols-12 gap-3 items-start rounded-xl bg-white/5 dark:bg-slate-900 border border-white/10 dark:border-slate-700 p-3 transition-colors";
+                      return (
+                        <div key={`passenger-${index}`} className={cardClass}>
+                          <div className="col-span-1 flex flex-col items-center pt-6">
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#FFD100] text-[#124757] text-xs font-headline font-black">
+                              {index + 1}
+                            </span>
+                          </div>
+                          <div className="col-span-6 flex flex-col gap-1.5">
+                            <div className="flex items-center justify-between gap-2 min-h-4">
+                              <label className={contactLabelClass}>{lang === "VN" ? "Họ tên" : "Full name"}{requiredMark}</label>
+                            </div>
+                            <input
+                              value={passenger.fullName || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFormData((prev) => {
+                                  const list = Array.isArray(prev.passengers) ? [...prev.passengers] : [];
+                                  list[index] = { ...(list[index] || createEmptyPassenger()), fullName: value };
+                                  return { ...prev, passengers: list };
+                                });
+                              }}
+                              onBlur={() => markTouched("name")}
+                              maxLength={120}
+                              className={`${contactInputClass} ${nameError ? "border-rose-400 focus:ring-rose-400 bg-rose-50 dark:bg-rose-950/30" : ""}`}
+                              placeholder={lang === "VN" ? "Nhập họ tên" : "Full name"}
+                              aria-invalid={Boolean(nameError)}
+                            />
+                            {nameError && <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">{nameError}</p>}
+                          </div>
+                          <div className="col-span-5 flex flex-col gap-1.5">
+                            <div className="flex items-center justify-between min-h-4">
+                              <label className={`${contactLabelClass} whitespace-nowrap`}>{lang === "VN" ? "Năm sinh" : "Birth year"}{requiredMark}</label>
+                            </div>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              required
+                              min={1900}
+                              max={currentYear}
+                              value={passenger.birthYear || ""}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/\D/g, "").slice(0, 4);
+                                const yearNum = raw ? Number(raw) : Number.NaN;
+                                const inferredType = Number.isInteger(yearNum) && yearNum >= 1900 && yearNum <= currentYear
+                                  ? (currentYear - yearNum >= 12 ? PASSENGER_TYPE_ADULT : PASSENGER_TYPE_CHILD)
+                                  : (passenger?.type || PASSENGER_TYPE_ADULT);
+                                setFormData((prev) => {
+                                  const list = Array.isArray(prev.passengers) ? [...prev.passengers] : [];
+                                  list[index] = { ...(list[index] || createEmptyPassenger()), birthYear: raw, type: inferredType };
+                                  return { ...prev, passengers: list };
+                                });
+                              }}
+                              onBlur={() => markTouched("year")}
+                              maxLength={4}
+                              className={`${contactInputClass} ${yearError ? "border-rose-400 focus:ring-rose-400" : ""}`}
+                              placeholder="1990"
+                              aria-invalid={Boolean(yearError)}
+                            />
+                            {yearError && (
+                              <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">{yearError}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+          </section>
+        )}
+
+        {/* STEP 5: Ghi chú */}
+        {currentStep === 4 && (
           <section className="space-y-6 max-w-3xl mx-auto">
             <div className="flex flex-col items-center text-center gap-3">
               <div>
@@ -1463,15 +1805,18 @@ export function CharterRequestForm({
         )}
 
         <div className={`flex items-center justify-between gap-4 pt-2 border-t ${t.footerBorder}`}>
-          <button
-            type="button"
-            onClick={handleBackStep}
-            disabled={currentStep === 0}
-            className={`inline-flex items-center gap-2 rounded-2xl border px-6 py-3.5 font-headline font-black uppercase tracking-widest text-xs disabled:opacity-40 mt-5 ${t.backButton}`}
-          >
-            <span className="material-symbols-outlined text-base">arrow_back</span>
-            {lang === "VN" ? "Quay lại" : "Back"}
-          </button>
+          {currentStep > 0 ? (
+            <button
+              type="button"
+              onClick={handleBackStep}
+              className={`inline-flex items-center gap-2 rounded-2xl border px-6 py-3.5 font-headline font-black uppercase tracking-widest text-xs mt-5 ${t.backButton}`}
+            >
+              <span className="material-symbols-outlined text-base">arrow_back</span>
+              {lang === "VN" ? "Quay lại" : "Back"}
+            </button>
+          ) : (
+            <span aria-hidden />
+          )}
           {isLastStep ? (
             <button type="submit" disabled={isSubmitting} className={`w-full sm:w-auto min-w-56 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-60 mt-5 ${t.primaryButton}`}>
               {isSubmitting
@@ -1479,7 +1824,18 @@ export function CharterRequestForm({
                 : (mode === "edit" ? (lang === "VN" ? "Lưu thay đổi" : "Save Changes") : (lang === "VN" ? "Gửi yêu cầu" : "Submit"))}
             </button>
           ) : (
-            <button type="submit" disabled={!canContinueToNext} className={`inline-flex items-center gap-2 w-full sm:w-auto min-w-56 justify-center font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-40 disabled:cursor-not-allowed mt-5 ${t.primaryButton}`}>
+            <button type="submit" disabled={!canContinueToNext} className={`inline-flex items-center gap-2 w-full sm:w-auto min-w-56 justify-center font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-40 disabled:cursor-not-allowed mt-5 ${
+              currentStep === 3 && (() => {
+                const list = Array.isArray(formData.passengers) ? formData.passengers : [];
+                const a = list.filter((p) => p?.type !== PASSENGER_TYPE_CHILD && p?.type !== "Child").length;
+                const c = list.filter((p) => p?.type === PASSENGER_TYPE_CHILD || p?.type === "Child").length;
+                const da = Number(formData.adultCount) || 0;
+                const dc = Number(formData.childCount) || 0;
+                return da + dc > 0 && (a !== da || c !== dc);
+              })()
+                ? "bg-rose-500 text-white hover:bg-rose-600 ring-2 ring-rose-300 dark:bg-rose-600 dark:hover:bg-rose-500"
+                : t.primaryButton
+            }`}>
               {lang === "VN" ? "Tiếp theo" : "Next"}
               <span className="material-symbols-outlined text-base">arrow_forward</span>
             </button>

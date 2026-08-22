@@ -81,6 +81,7 @@ export function MyCharterTicketsPanel({
   passengerRows,
   canUseContactAsSinglePassenger,
   bookerAsFirstPassenger = false,
+  bookerName = "",
   importInputRef,
   isUsableText,
   handleTicketFileAction,
@@ -220,6 +221,7 @@ export function MyCharterTicketsPanel({
             const isLocked = isPassengerRowLocked(row);
             const isBookerRow = (canUseContactAsSinglePassenger || bookerAsFirstPassenger || row.isContactPassenger) && index === 0;
             const isBookerOnly = canUseContactAsSinglePassenger && index === 0;
+            const displayName = String(row.fullName || "").trim() || (index === 0 ? bookerName : "");
             // Không khóa tên hành khách số 1 theo người đặt nữa — khách có thể nhập tên khác (vd đặt hộ người khác).
             const nameLocked = isLocked;
             return (
@@ -243,7 +245,7 @@ export function MyCharterTicketsPanel({
                   {!isBookerOnly ? (
                     <div className="relative">
                       <input
-                        value={row.fullName}
+                        value={displayName}
                         onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)}
                         disabled={nameLocked}
                         placeholder={lang === "VN" ? "Họ tên" : "Full name"}

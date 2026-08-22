@@ -9,8 +9,8 @@ import {
 } from '../api/promotionApi';
 
 export const PROMOTION_TYPE = {
-    PERCENT: 'Percent',
-    FIXED: 'Fixed',
+    PERCENT: 'Percentage',
+    FIXED: 'Amount',
 };
 
 export const PROMOTION_STATUS = {
@@ -73,8 +73,15 @@ const normalizeScope = (scope) => {
             departureTo: '',
         };
     }
+    const rawTypes = scope.applicableBookingTypes ?? scope.bookingTypes ?? [];
+    // Map BE enum values → FE internal: SEAT→SeatBooking, CHARTER→CharterBooking
+    const bookingTypes = Array.isArray(rawTypes) ? rawTypes.map((t) => {
+        if (t === 'SEAT' || t === 'SeatBooking') return 'SeatBooking';
+        if (t === 'CHARTER' || t === 'CharterBooking') return 'CharterBooking';
+        return t;
+    }) : [];
     return {
-        bookingTypes: Array.isArray(scope.bookingTypes) ? scope.bookingTypes.filter(Boolean) : [],
+        bookingTypes,
         routeIds: Array.isArray(scope.routeIds) ? scope.routeIds.map(String) : [],
         daysOfWeek: Array.isArray(scope.daysOfWeek) ? scope.daysOfWeek.filter(Boolean) : [],
         departureFrom: scope.departureFrom ? String(scope.departureFrom).slice(0, 5) : '',
@@ -89,7 +96,7 @@ export const normalizePromotion = (item) => {
         id: String(item.id ?? item.promotionId ?? ''),
         promotionCode: item.promotionCode || '',
         promotionName: item.promotionName || '',
-        promotionType: item.promotionType || PROMOTION_TYPE.PERCENT,
+        promotionType: item.discountType || item.promotionType || PROMOTION_TYPE.PERCENT,
         discountValue: Number(item.discountValue) || 0,
         maxDiscountAmount:
             item.maxDiscountAmount === null || item.maxDiscountAmount === undefined
@@ -99,17 +106,13 @@ export const normalizePromotion = (item) => {
             item.minOrderValue === null || item.minOrderValue === undefined
                 ? null
                 : Number(item.minOrderValue),
-        validFrom: item.validFrom || null,
-        validTo: item.validTo || null,
+        validFrom: item.startDate || item.validFrom || null,
+        validTo: item.endDate || item.validTo || null,
         usageLimit:
-            item.usageLimit === null || item.usageLimit === undefined
-                ? null
-                : Number(item.usageLimit),
+            item.maxUsageCount ?? item.usageLimit ?? null,
         usageCount: Number(item.usageCount ?? item.usedCount ?? 0) || 0,
         maxUsesPerAccount:
-            item.maxUsesPerAccount === null || item.maxUsesPerAccount === undefined
-                ? null
-                : Number(item.maxUsesPerAccount),
+            item.maxUsagePerAccount ?? item.maxUsesPerAccount ?? null,
         budgetCap:
             item.budgetCap === null || item.budgetCap === undefined
                 ? null
@@ -177,14 +180,20 @@ const emptyToNullList = (list) => {
 };
 
 export const buildPromotionScope = (form) => {
-    const bookingTypes = emptyToNullList(form.bookingTypes);
+    const rawTypes = emptyToNullList(form.bookingTypes);
+    // Map FE internal values → BE enum: SeatBooking→SEAT, CharterBooking→CHARTER
+    const applicableBookingTypes = rawTypes?.map((t) => {
+        if (t === PROMOTION_BOOKING_TYPES.SEAT || t === 'SEAT') return 'SEAT';
+        if (t === PROMOTION_BOOKING_TYPES.CHARTER || t === 'CHARTER') return 'CHARTER';
+        return t;
+    });
     const routeIds = emptyToNullList(form.routeIds);
     const daysOfWeek = emptyToNullList(form.daysOfWeek);
     const departureFrom = toHhMm(form.departureFrom);
     const departureTo = toHhMm(form.departureTo);
 
     const hasAny =
-        bookingTypes ||
+        applicableBookingTypes ||
         routeIds ||
         daysOfWeek ||
         departureFrom ||
@@ -193,7 +202,7 @@ export const buildPromotionScope = (form) => {
     if (!hasAny) return null;
 
     return {
-        bookingTypes,
+        applicableBookingTypes,
         routeIds,
         daysOfWeek,
         departureFrom,
@@ -206,16 +215,16 @@ export const buildPromotionPayload = (form, { includeCode = true } = {}) => {
 
     const payload = {
         promotionName: String(form.promotionName || '').trim(),
-        promotionType: form.promotionType || PROMOTION_TYPE.PERCENT,
+        discountType: isPercent ? PROMOTION_TYPE.PERCENT : PROMOTION_TYPE.FIXED,
         discountValue: Number(form.discountValue) || 0,
         maxDiscountAmount: isPercent
             ? toNullablePositive(form.maxDiscountAmount, !!form.hasMaxDiscountAmount)
             : null,
         minOrderValue: toNullableNonNegative(form.minOrderValue, !!form.hasMinOrderValue),
-        validFrom: toIsoWithOffset(form.validFrom),
-        validTo: toIsoWithOffset(form.validTo),
-        usageLimit: toNullablePositive(form.usageLimit, !!form.hasUsageLimit),
-        maxUsesPerAccount: toNullablePositive(form.maxUsesPerAccount, !!form.hasMaxUsesPerAccount),
+        startDate: toIsoWithOffset(form.validFrom),
+        endDate: toIsoWithOffset(form.validTo),
+        maxUsageCount: toNullablePositive(form.usageLimit, !!form.hasUsageLimit),
+        maxUsagePerAccount: toNullablePositive(form.maxUsesPerAccount, !!form.hasMaxUsesPerAccount),
         budgetCap: toNullablePositive(form.budgetCap, !!form.hasBudgetCap),
         firstBookingOnly: !!form.firstBookingOnly,
         scope: buildPromotionScope(form),
@@ -378,7 +387,7 @@ export const fetchPublicPromotions = async () => {
 /** Scope trống / null = áp mọi loại booking. */
 export const isPromotionForBookingType = (promo, bookingType) => {
     if (!promo || !bookingType) return false;
-    const types = promo?.scope?.bookingTypes;
+    const types = promo?.scope?.applicableBookingTypes ?? promo?.scope?.bookingTypes;
     if (!Array.isArray(types) || types.length === 0) return true;
     return types.map(String).includes(String(bookingType));
 };

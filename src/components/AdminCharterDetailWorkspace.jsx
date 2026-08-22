@@ -988,9 +988,15 @@ export function AdminBookingOverviewTab({
 
         <div className="space-y-4 px-6 py-6 md:px-8">
           {boatRows.length > 0 ? boatRows.map(({ requested, assigned, index }) => {
-            const requestedText = requested
+            const totalRequested = requestedBoats.length;
+            const isFirstRow = index === 0;
+            const deckText = requested
               ? formatDeckCount(getRequestedDeckCount(requested), lang) || pick(requested, ["requiredSeatSetupType", "seatSetupType"], "--")
               : "--";
+            const countLabel = lang === "VN" ? "tàu" : "boat(s)";
+            const requestedText = isFirstRow && totalRequested > 0
+              ? `${totalRequested} ${countLabel} · ${deckText}`
+              : deckText;
             const assignedCode = assigned ? getBoatCode(assigned) : "";
             const assignedName = assigned ? getBoatNameOnly(assigned, lang === "VN" ? `Tàu ${index + 1}` : `Boat ${index + 1}`) : "";
             const assignedDeckText = assigned
@@ -1311,11 +1317,15 @@ export function AdminBookingActionsTab({
 
                   return (
                     <div key={quoteBoat.boatOrder} className="rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-                      <div className="mb-3 flex items-center justify-between gap-2">
+                      <div className="mb-3 flex items-center gap-2 flex-wrap">
                         <p className="text-[11px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
                           {lang === "VN" ? `Tàu ${quoteBoat.boatOrder}` : `Boat ${quoteBoat.boatOrder}`}
                         </p>
-                        <span className="rounded-lg bg-white px-2 py-1 text-[9px] font-black uppercase text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+                        <span className="text-slate-300 dark:text-slate-600">·</span>
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          {lang === "VN" ? "Loại:" : "Type:"}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-md bg-[#124757]/10 px-2 py-0.5 text-[10px] font-bold text-[#124757] ring-1 ring-[#124757]/20 dark:bg-yellow-400/10 dark:text-yellow-400 dark:ring-yellow-400/30">
                           {formatDeckCount(quoteBoat.requiredNumberOfDecks, lang) || quoteBoat.requiredSeatSetupType || "--"}
                         </span>
                       </div>
