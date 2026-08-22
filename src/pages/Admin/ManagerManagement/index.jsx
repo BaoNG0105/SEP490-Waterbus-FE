@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { fetchUserList, fetchUserStations, deleteUser } from "../../../services/userService";
+import { fetchUserList, fetchUserStations, updateUserStatus, USER_STATUS, deleteUser } from "../../../services/userService";
 import { fetchAllStations } from "../../../services/stationService";
 import { canResetManagedUserPassword, getRoleSystemName, isAdminUser } from "../../../utils/roleHelpers";
 import { promptResetManagedPassword } from "../../../utils/managedPasswordReset";
@@ -25,6 +25,8 @@ export function ManagerManagement() {
     const [statusFilter, setStatusFilter] = useState("All");
     const [stationFilter, setStationFilter] = useState("All");
     const [currentPage, setCurrentPage] = useState(1);
+    const [updatingUserId, setUpdatingUserId] = useState("");
+    const [deletingUserId, setDeletingUserId] = useState("");
     const ITEMS_PER_PAGE = 8;
 
     const canAccessPage = isAdminUser(currentUser);
@@ -162,9 +164,59 @@ export function ManagerManagement() {
         return pages;
     };
 
+    const handleToggleStatus = async (item) => {
+        const nextStatus = item.status === USER_STATUS.ACTIVE ? USER_STATUS.SUSPENDED : USER_STATUS.ACTIVE;
+        const isSuspending = nextStatus === USER_STATUS.SUSPENDED;
+
+        const confirmResult = await notify({
+            icon: isSuspending ? "warning" : "question",
+            title: isSuspending
+                ? (lang === "VN" ? "Tạm khóa tài khoản?" : "Suspend account?")
+                : (lang === "VN" ? "Kích hoạt tài khoản?" : "Activate account?"),
+            html: lang === "VN"
+                ? `${isSuspending ? "Tạm khóa" : "Kích hoạt"} tài khoản <b>${item.fullName}</b> (${item.code})?<br/><span style="color:#94a3b8;font-size:12px">Thao tác này sẽ thu hồi phiên đăng nhập hiện tại của quản lý.</span>`
+                : `${isSuspending ? "Suspend" : "Activate"} account <b>${item.fullName}</b> (${item.code})?<br/><span style="color:#94a3b8;font-size:12px">This will revoke the manager's active login session.</span>`,
+            showCancelButton: true,
+            focusCancel: true,
+            reverseButtons: true,
+            confirmButtonColor: isSuspending ? "#dc2626" : "#124757",
+            cancelButtonColor: "#124757",
+            confirmButtonText: isSuspending
+                ? (lang === "VN" ? "Tạm khóa" : "Suspend")
+                : (lang === "VN" ? "Kích hoạt" : "Activate"),
+            cancelButtonText: lang === "VN" ? "Không" : "No",
+        });
+
+        if (!confirmResult.isConfirmed) return;
+
+        try {
+            setUpdatingUserId(item.id);
+            await updateUserStatus(item.id, nextStatus);
+            await notify({
+                icon: "success",
+                title: isSuspending
+                    ? (lang === "VN" ? "Đã tạm khóa tài khoản" : "Account suspended")
+                    : (lang === "VN" ? "Đã kích hoạt tài khoản" : "Account activated"),
+                timer: 1600,
+                showConfirmButton: false,
+            });
+            await loadUsers();
+        } catch (error) {
+            console.error("Lỗi khi cập nhật trạng thái quản lý:", error);
+            notify({
+                icon: "error",
+                title: lang === "VN" ? "Cập nhật thất bại" : "Update failed",
+                text: error.response?.data?.message || (lang === "VN" ? "Không thể cập nhật trạng thái quản lý này." : "Failed to update this manager's status."),
+                confirmButtonColor: "#124757",
+            });
+        } finally {
+            setUpdatingUserId("");
+        }
+    };
+
     const handleDelete = async (item) => {
         const confirmResult = await notify({
-            icon: "question",
+            icon: "warning",
             title: lang === "VN" ? "Xóa quản lý?" : "Delete manager?",
             html: lang === "VN"
                 ? `Bạn chắc chắn muốn xóa vĩnh viễn tài khoản <b>${item.fullName}</b> (${item.code})?<br/><span style="color:#94a3b8;font-size:12px">Hành động này không thể hoàn tác.</span>`
@@ -181,9 +233,9 @@ export function ManagerManagement() {
         if (!confirmResult.isConfirmed) return;
 
         try {
-            setIsLoading(true);
+            setDeletingUserId(item.id);
             await deleteUser(item.id);
-            notify({
+            await notify({
                 icon: "success",
                 title: lang === "VN" ? "Đã xóa!" : "Deleted!",
                 text: lang === "VN" ? `Quản lý ${item.code} đã được xóa khỏi hệ thống.` : `Manager ${item.code} has been deleted.`,
@@ -199,7 +251,7 @@ export function ManagerManagement() {
                 confirmButtonColor: "#124757",
             });
         } finally {
-            setIsLoading(false);
+            setDeletingUserId("");
         }
     };
 
@@ -408,11 +460,36 @@ export function ManagerManagement() {
                                                 )}
                                                 <button
                                                     type="button"
+                                                    onClick={() => handleToggleStatus(item)}
+                                                    disabled={updatingUserId === item.id}
+                                                    className={`w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${item.status === "Active"
+                                                        ? "text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400"
+                                                        : "text-emerald-600 hover:bg-emerald-500 hover:text-white dark:hover:bg-emerald-500/20 dark:hover:text-emerald-400"
+                                                        }`}
+                                                    title={item.status === "Active"
+                                                        ? (lang === "VN" ? "Tạm khóa tài khoản" : "Suspend account")
+                                                        : (lang === "VN" ? "Kích hoạt tài khoản" : "Activate account")}
+                                                >
+                                                    {updatingUserId === item.id ? (
+                                                        <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <span className="material-symbols-outlined text-[18px]">
+                                                            {item.status === "Active" ? "block" : "check_circle"}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                                <button
+                                                    type="button"
                                                     onClick={() => handleDelete(item)}
-                                                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm"
+                                                    disabled={deletingUserId === item.id}
+                                                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500/20 dark:hover:text-rose-400 flex items-center justify-center transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                                     title={lang === "VN" ? "Xóa" : "Delete"}
                                                 >
-                                                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                                                    {deletingUserId === item.id ? (
+                                                        <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                                                    )}
                                                 </button>
                                             </div>
                                         </td>

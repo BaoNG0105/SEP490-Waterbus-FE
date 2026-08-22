@@ -1,4 +1,4 @@
-import { validateFullNamePhoneEmail } from "../../../utils/formValidation";
+import { validateFullNamePhoneEmail } from "./formValidation";
 
 /**
  * Validate các field bắt buộc (*) dùng chung cho CreateManager / EditManager: Họ tên, SĐT, Email,

@@ -9,7 +9,7 @@ import { UserAvatar } from "../../../components/UserAvatar";
 import { promptResetManagedPassword } from "../../../utils/managedPasswordReset";
 import { notify } from "../../../utils/swalToast";
 import { ManagerFormFields } from "./ManagerFormFields";
-import { validateManagerFields } from "./managerValidation";
+import { validateManagerFields } from "../../../utils/managerValidation";
 
 // Chuyển đổi chuỗi ngày sinh trả về từ BE (có thể là ISO hoặc dd/MM/yyyy) sang định dạng yyyy-MM-dd cho input HTML5
 const toInputDate = (value) => {

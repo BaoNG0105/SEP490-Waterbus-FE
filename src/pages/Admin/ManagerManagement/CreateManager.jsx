@@ -6,7 +6,7 @@ import { getRoleSystemName } from "../../../utils/roleHelpers";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify } from "../../../utils/swalToast";
 import { ManagerFormFields } from "./ManagerFormFields";
-import { validateManagerFields } from "./managerValidation";
+import { validateManagerFields } from "../../../utils/managerValidation";
 
 export function CreateManager() {
     const { lang } = useApp();

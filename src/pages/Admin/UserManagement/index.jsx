@@ -310,9 +310,6 @@ export function UserManagement() {
                                                         {item.status === "Active" ? "block" : "check_circle"}
                                                     </span>
                                                 )}
-                                                {item.status === "Active"
-                                                    ? (lang === "VN" ? "Khóa" : "Suspend")
-                                                    : (lang === "VN" ? "Kích hoạt" : "Activate")}
                                             </button>
                                         </td>
                                     </tr>

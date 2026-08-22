@@ -10,7 +10,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { canAssignStations } from "../../../components/StationAssignField";
 import { notify } from "../../../utils/swalToast";
 import { StaffFormFields } from "./StaffFormFields";
-import { validateStaffFields } from "./staffValidation";
+import { validateStaffFields } from "../../../utils/staffValidation";
 
 const getStationId = (station) => String(station?.stationId || station?.id || "");
 
