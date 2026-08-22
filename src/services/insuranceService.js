@@ -4,6 +4,7 @@ import {
     updateInsurancePackage as apiUpdateInsurancePackage,
     updateInsurancePackageStatus as apiUpdateInsurancePackageStatus,
     deleteInsurancePackage as apiDeleteInsurancePackage,
+    checkWaterbusDefault as apiCheckWaterbusDefault,
 } from '../api/insuranceApi';
 
 /** BE mới: 1 loại gói dùng chung mọi luồng booking. */
@@ -225,4 +226,18 @@ export const buildInsuranceConditionsHtml = (rawConditions, {
     )).join('');
 
     return `<div style="margin:10px 0 0;text-align:left;">${rows}</div>`;
+};
+
+/** Kiểm tra đã có gói Waterbus default active chưa cho 1 bookingType. */
+export const checkWaterbusDefault = async (bookingType) => {
+    try {
+        const data = await apiCheckWaterbusDefault(normalizeBookingType(bookingType));
+        return {
+            hasActiveWaterbusDefault: Boolean(data?.hasActiveWaterbusDefault),
+            existingPackage: data?.existingPackage || null,
+        };
+    } catch (error) {
+        console.error('Lỗi khi check waterbus default:', error);
+        return { hasActiveWaterbusDefault: false, existingPackage: null };
+    }
 };

@@ -5,6 +5,7 @@ import {
   addInsurancePackage,
   modifyInsurancePackage,
   changeInsurancePackageStatus,
+  checkWaterbusDefault,
   INSURANCE_BOOKING_TYPES,
 } from "../../../services/insuranceService";
 import { notify } from "../../../utils/swalToast";
@@ -17,6 +18,7 @@ const emptyForm = () => ({
   unitPremiumAmount: "",
   coverageAmount: "",
   isRequired: false,
+  providerSource: "waterbus",
   providerName: "",
   providerLogoUrl: "",
   providerLogoFile: null,
@@ -213,6 +215,7 @@ export function InsuranceManagement() {
   const [isSaving, setIsSaving] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
   const [viewingPackage, setViewingPackage] = useState(null);
+  const [waterbusDefaultConflict, setWaterbusDefaultConflict] = useState(null); // { hasActiveWaterbusDefault, existingPackage }
 
   const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
   const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-60 disabled:cursor-not-allowed";
@@ -259,9 +262,14 @@ export function InsuranceManagement() {
   const openCreateModal = () => {
     setEditingId(null);
     const nextOrder = packages.length > 0 ? Math.max(...packages.map((p) => Number(p.displayOrder) || 0)) + 1 : 1;
-    setForm({ ...emptyForm(), displayOrder: nextOrder });
+    const newForm = { ...emptyForm(), displayOrder: nextOrder };
+    setForm(newForm);
     setTouched({});
+    setWaterbusDefaultConflict(null);
     setIsModalOpen(true);
+    if (newForm.providerSource === "waterbus") {
+      checkWaterbusConflict();
+    }
   };
 
   const openEditModal = (pkg) => {
@@ -274,6 +282,7 @@ export function InsuranceManagement() {
       unitPremiumAmount: formatVndDisplay(pkg.unitPremiumAmount),
       coverageAmount: formatVndDisplay(pkg.coverageAmount),
       isRequired: Boolean(pkg.isRequired),
+      providerSource: pkg.providerSource || "waterbus",
       providerName: pkg.providerName || "",
       providerLogoUrl: existingLogo,
       providerLogoFile: null,
@@ -285,6 +294,7 @@ export function InsuranceManagement() {
       displayOrder: Number(pkg.displayOrder) || 1,
     };
     setForm(nextForm);
+    setWaterbusDefaultConflict(null);
     // Chỉ báo lỗi cho những field thực sự invalid (vd: data cũ vi phạm rule mới).
     // Field hợp lệ sẽ được re-validate khi user thao tác.
     setTouched(buildTouchedFromValidation(nextForm));
@@ -298,6 +308,10 @@ export function InsuranceManagement() {
       return next;
     });
     setIsModalOpen(true);
+    // Check conflict nếu là Waterbus
+    if (nextForm.providerSource === "waterbus") {
+      checkWaterbusConflict();
+    }
   };
 
   const openViewModal = (pkg) => {
@@ -322,6 +336,27 @@ export function InsuranceManagement() {
     setForm((prev) => ({ ...prev, [field]: value }));
     if (REALTIME_VALIDATED_FIELDS.has(field)) {
       setTouched((prev) => ({ ...prev, [field]: true }));
+    }
+    // Khi chuyển sang Waterbus → check conflict
+    if (field === "providerSource" && value === "waterbus") {
+      checkWaterbusConflict();
+    } else if (field === "providerSource") {
+      setWaterbusDefaultConflict(null);
+    }
+  };
+
+  const checkWaterbusConflict = async () => {
+    try {
+      const result = await checkWaterbusDefault(form.bookingType);
+      // Bỏ qua nếu đang edit gói đó
+      const isSamePackage = editingId && result.existingPackage?.id === editingId;
+      if (!isSamePackage) {
+        setWaterbusDefaultConflict(result);
+      } else {
+        setWaterbusDefaultConflict(null);
+      }
+    } catch {
+      setWaterbusDefaultConflict(null);
     }
   };
 
@@ -455,6 +490,7 @@ export function InsuranceManagement() {
       unitPremiumAmount: parseVndInput(form.unitPremiumAmount),
       coverageAmount: parseVndInput(form.coverageAmount),
       isRequired: false,
+      providerSource: form.providerSource || "waterbus",
       providerName: form.providerName.trim() || null,
       providerLogoUrl: form.providerLogoUrl.trim() || null,
       conditions: form.conditions.map((c) => c.trim()).filter(Boolean),
@@ -685,7 +721,19 @@ export function InsuranceManagement() {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-headline font-black text-sm text-slate-800 dark:text-white truncate">{pkg.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-headline font-black text-sm text-slate-800 dark:text-white truncate">{pkg.name}</h3>
+                        <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                          pkg.providerSource === "third_party"
+                            ? "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
+                            : "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
+                        }`}>
+                          <span className="material-symbols-outlined text-[9px]">{pkg.providerSource === "third_party" ? "business" : "directions_boat"}</span>
+                          {pkg.providerSource === "third_party"
+                            ? (lang === "VN" ? "Bên thứ 3" : "3rd party")
+                            : "Waterbus"}
+                        </span>
+                      </div>
                       <p className="text-[11px] text-slate-400 font-bold mt-0.5">{pkg.code}</p>
                     </div>
                   </div>
@@ -892,6 +940,67 @@ export function InsuranceManagement() {
                   </span>
                 </div>
 
+                {/* Nguồn nhà cung cấp */}
+                <div>
+                  <label className={labelStyle}>{lang === "VN" ? "Nguồn cung cấp" : "Provider source"}</label>
+                  <div className="flex gap-2 mt-1">
+                    {[
+                      { value: "waterbus", labelVn: "Waterbus", labelEn: "Waterbus", icon: "directions_boat" },
+                      { value: "third_party", labelVn: "Bên thứ 3", labelEn: "Third party", icon: "business" },
+                    ].map((opt) => {
+                      const isActive = form.providerSource === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => updateField("providerSource", opt.value)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg border-2 font-headline font-black text-[10px] uppercase tracking-wide transition-all ${isActive
+                            ? "bg-[#124757] border-[#124757] text-white dark:bg-yellow-400 dark:border-yellow-400 dark:text-slate-900"
+                            : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600"
+                            }`}
+                        >
+                          <span className="material-symbols-outlined text-sm">{opt.icon}</span>
+                          {lang === "VN" ? opt.labelVn : opt.labelEn}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Warning: đã có gói Waterbus default active */}
+                  {waterbusDefaultConflict?.hasActiveWaterbusDefault && (
+                    <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 p-3 space-y-1.5">
+                      <div className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-amber-500 text-base shrink-0">warning</span>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 leading-snug">
+                            {lang === "VN"
+                              ? "Đã có gói Waterbus mặc định cho loại vé này."
+                              : "A default Waterbus package already exists for this booking type."}
+                          </p>
+                          {waterbusDefaultConflict.existingPackage && (
+                            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-0.5">
+                              {waterbusDefaultConflict.existingPackage.name}
+                              {" — "}
+                              {formatVnd(waterbusDefaultConflict.existingPackage.unitPremiumAmount)}
+                            </p>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              closeModal();
+                              if (waterbusDefaultConflict.existingPackage?.id) {
+                                setTimeout(() => openEditModal(waterbusDefaultConflict.existingPackage), 100);
+                              }
+                            }}
+                            className="mt-1.5 text-[10px] font-black text-[#124757] dark:text-yellow-400 hover:underline uppercase tracking-wide"
+                          >
+                            {lang === "VN" ? "→ Sửa gói hiện tại" : "→ Edit existing package"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className={labelStyle}>{lang === "VN" ? "Tên nhà cung cấp" : "Provider name"}</label>
                   <input
@@ -1021,7 +1130,7 @@ export function InsuranceManagement() {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={isSaving || hasBlockingError}
+                disabled={isSaving || hasBlockingError || !!waterbusDefaultConflict?.hasActiveWaterbusDefault}
                 className="rounded-2xl bg-[#124757] px-6 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300 inline-flex items-center justify-center gap-2"
               >
                 {isSaving && <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
@@ -1074,7 +1183,19 @@ export function InsuranceManagement() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h4 className="font-headline font-black text-base text-slate-800 dark:text-white">{viewingPackage.name}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-headline font-black text-base text-slate-800 dark:text-white">{viewingPackage.name}</h4>
+                    <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                      viewingPackage.providerSource === "third_party"
+                        ? "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
+                        : "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
+                    }`}>
+                      <span className="material-symbols-outlined text-[9px]">{viewingPackage.providerSource === "third_party" ? "business" : "directions_boat"}</span>
+                      {viewingPackage.providerSource === "third_party"
+                        ? (lang === "VN" ? "Bên thứ 3" : "3rd party")
+                        : "Waterbus"}
+                    </span>
+                  </div>
                   <p className="text-[11px] text-slate-400 font-bold mt-0.5">{viewingPackage.code}</p>
                   <span className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                     (viewingPackage.status || "").toLowerCase() === "active"
