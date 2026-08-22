@@ -2,13 +2,20 @@ import { WaterwayMap } from "../../../components/WaterwayMap";
 
 const labelStyle = "mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500";
 const inputStyle = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-800 outline-none shadow-inner transition-all focus:ring-2 focus:ring-[#124757] dark:border-slate-700/60 dark:bg-slate-900 dark:text-white dark:focus:ring-yellow-400";
+const errorInputStyle = "w-full rounded-xl border border-rose-500 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-800 outline-none shadow-inner transition-all focus:ring-2 focus:ring-rose-500 dark:border-rose-500 dark:bg-slate-900 dark:text-white";
+const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
 
 /**
  * Khối field dùng chung cho CreateLandmark / EditLandmark.
  * Bố cục: "Thông tin landmark" cạnh "Vị trí trên bản đồ" trên cùng 1 hàng.
+ *
+ * `errors`: { [field]: message } — chỉ hiện khi field tương ứng đã "touched" (do trang cha
+ * quyết định khi nào đưa message vào, thường là sau onBlur hoặc sau lần submit đầu tiên).
+ * `onFieldBlur`: (field) => void — báo trang cha field vừa rời khỏi.
  */
-export function LandmarkFormFields({ lang, formData, onChange }) {
+export function LandmarkFormFields({ lang, formData, onChange, errors = {}, onFieldBlur }) {
     const setField = (field, value) => onChange(field, value);
+    const handleBlur = (field) => onFieldBlur?.(field);
 
     return (
         <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
@@ -38,40 +45,52 @@ export function LandmarkFormFields({ lang, formData, onChange }) {
                         required
                         value={formData.landmarkName}
                         onChange={(e) => setField("landmarkName", e.target.value)}
+                        onBlur={() => handleBlur("landmarkName")}
                         placeholder={lang === "VN" ? "VD: Cầu Ba Son" : "e.g. Ba Son Bridge"}
-                        className={inputStyle}
+                        className={errors.landmarkName ? errorInputStyle : inputStyle}
                     />
+                    {errors.landmarkName && <p className={errorTextStyle}>{errors.landmarkName}</p>}
                 </div>
 
                 <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Mô tả (nội dung sẽ được bake thành audio)" : "Description (text used to bake audio)"}</label>
+                    <label className={labelStyle}>{lang === "VN" ? "Mô tả (nội dung sẽ được bake thành audio) (*)" : "Description (text used to bake audio) (*)"}</label>
                     <textarea
                         rows={4}
+                        required
                         value={formData.description}
                         onChange={(e) => setField("description", e.target.value)}
-                        className={`${inputStyle} resize-none font-medium`}
+                        onBlur={() => handleBlur("description")}
+                        className={`${errors.description ? errorInputStyle : inputStyle} resize-none font-medium`}
                     />
+                    {errors.description && <p className={errorTextStyle}>{errors.description}</p>}
                 </div>
 
                 <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Thứ tự hiển thị" : "Display Order"}</label>
+                        <label className={labelStyle}>{lang === "VN" ? "Thứ tự hiển thị (*)" : "Display Order (*)"}</label>
                         <input
                             type="number"
+                            required
+                            min={1}
                             value={formData.displayOrder}
                             onChange={(e) => setField("displayOrder", e.target.value)}
-                            className={inputStyle}
+                            onBlur={() => handleBlur("displayOrder")}
+                            className={errors.displayOrder ? errorInputStyle : inputStyle}
                         />
+                        {errors.displayOrder && <p className={errorTextStyle}>{errors.displayOrder}</p>}
                     </div>
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Bán kính kích hoạt (m)" : "Trigger Radius (m)"}</label>
+                        <label className={labelStyle}>{lang === "VN" ? "Bán kính kích hoạt (m) (*)" : "Trigger Radius (m) (*)"}</label>
                         <input
                             type="number"
-                            min={0}
+                            required
+                            min={1}
                             value={formData.triggerRadiusMeters}
                             onChange={(e) => setField("triggerRadiusMeters", e.target.value)}
-                            className={inputStyle}
+                            onBlur={() => handleBlur("triggerRadiusMeters")}
+                            className={errors.triggerRadiusMeters ? errorInputStyle : inputStyle}
                         />
+                        {errors.triggerRadiusMeters && <p className={errorTextStyle}>{errors.triggerRadiusMeters}</p>}
                     </div>
                 </div>
             </div>

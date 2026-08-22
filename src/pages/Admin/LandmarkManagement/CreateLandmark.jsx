@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { addNewLandmark } from "../../../services/landmarksService";
 import { notify } from "../../../utils/swalToast";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { LandmarkFormFields } from "./LandmarkFormFields";
+import { validateLandmarkFields } from "../../../utils/landmarkValidation";
 
 export function CreateLandmark() {
     const { lang } = useApp();
@@ -23,18 +24,34 @@ export function CreateLandmark() {
         isActive: true,
     });
 
+    // Validate real-time các field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi
+    // ít nhất 1 lần), nhưng nút Tạo bị khóa ngay khi còn lỗi dù chưa touched hết.
+    const [touchedFields, setTouchedFields] = useState({});
+    const fieldErrors = useMemo(() => validateLandmarkFields(formData, lang), [formData, lang]);
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+    const visibleFieldErrors = useMemo(() => {
+        const visible = {};
+        Object.keys(fieldErrors).forEach((field) => {
+            if (touchedFields[field]) visible[field] = fieldErrors[field];
+        });
+        return visible;
+    }, [fieldErrors, touchedFields]);
+
     const handleFieldChange = (field, value) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
+    const handleFieldBlur = (field) => {
+        setTouchedFields((prev) => ({ ...prev, [field]: true }));
+    };
+
     const handleFormSubmit = async (e) => {
         e.preventDefault();
-        const name = formData.landmarkName.trim();
-        if (!name) {
-            setErrorMsg(lang === "VN" ? "Vui lòng nhập tên landmark." : "Landmark name is required.");
-            return;
-        }
+        // Bấm submit (VD: nhấn Enter) khi còn lỗi → hiện hết lỗi lên thay vì âm thầm chặn.
+        setTouchedFields({ landmarkName: true, description: true, displayOrder: true, triggerRadiusMeters: true });
+        if (hasFieldErrors) return;
 
+        const name = formData.landmarkName.trim();
         const latitude = Number(formData.latitude);
         const longitude = Number(formData.longitude);
         if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -50,9 +67,9 @@ export function CreateLandmark() {
                 landmarkName: name,
                 latitude,
                 longitude,
-                description: formData.description.trim() || null,
-                displayOrder: Number(formData.displayOrder) || 0,
-                triggerRadiusMeters: Number(formData.triggerRadiusMeters) || 300,
+                description: formData.description.trim(),
+                displayOrder: Number(formData.displayOrder),
+                triggerRadiusMeters: Number(formData.triggerRadiusMeters),
                 isActive: formData.isActive,
             };
 
@@ -98,11 +115,17 @@ export function CreateLandmark() {
             ) : null}
 
             <form onSubmit={handleFormSubmit} className="space-y-6">
-                <LandmarkFormFields lang={lang} formData={formData} onChange={handleFieldChange} />
+                <LandmarkFormFields
+                    lang={lang}
+                    formData={formData}
+                    onChange={handleFieldChange}
+                    errors={visibleFieldErrors}
+                    onFieldBlur={handleFieldBlur}
+                />
 
                 <button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || hasFieldErrors}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#124757] py-4 font-headline text-xs font-black uppercase tracking-wider text-white shadow-md transition-all hover:brightness-110 disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900"
                 >
                     {isSubmitting ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : null}
