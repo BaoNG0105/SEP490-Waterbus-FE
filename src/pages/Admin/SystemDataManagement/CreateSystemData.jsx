@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
 import {
   addKnowledgeEntry,
   buildKnowledgeEntryPayload,
-  validateKnowledgeEntryForm,
+  validateKnowledgeEntryFields,
   KNOWLEDGE_STATUS,
   KNOWLEDGE_CATEGORY_ORDER,
 } from "../../../services/knowledgeEntryService";
@@ -32,6 +32,19 @@ export function CreateSystemData() {
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Validate real-time các field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi
+  // ít nhất 1 lần), nhưng các nút Lưu bị khóa ngay khi còn lỗi dù chưa touched hết.
+  const [touchedFields, setTouchedFields] = useState({});
+  const fieldErrors = useMemo(() => validateKnowledgeEntryFields(form, lang), [form, lang]);
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  const visibleFieldErrors = useMemo(() => {
+    const visible = {};
+    Object.keys(fieldErrors).forEach((field) => {
+      if (touchedFields[field]) visible[field] = fieldErrors[field];
+    });
+    return visible;
+  }, [fieldErrors, touchedFields]);
+
   if (!canManage) {
     return <Navigate to="/admin" replace />;
   }
@@ -40,20 +53,18 @@ export function CreateSystemData() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleFieldBlur = (field) => {
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
+  };
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     const status = e.nativeEvent.submitter?.value || KNOWLEDGE_STATUS.DRAFT;
     const submittedForm = { ...form, status };
 
-    const validationError = validateKnowledgeEntryForm(submittedForm, lang);
-    if (validationError) {
-      notify({
-        icon: "warning",
-        title: lang === "VN" ? "Thiếu thông tin" : "Missing information",
-        text: validationError,
-      });
-      return;
-    }
+    // Bấm submit khi còn lỗi → hiện hết lỗi lên thay vì âm thầm chặn.
+    setTouchedFields({ title: true, category: true, content: true, keywords: true, displayOrder: true });
+    if (hasFieldErrors) return;
 
     try {
       setIsSaving(true);
@@ -110,14 +121,21 @@ export function CreateSystemData() {
       )}
 
       <form onSubmit={handleFormSubmit} className="space-y-6">
-      <SystemDataFormFields lang={lang} formData={form} onChange={updateField} disabled={isSaving} />
+      <SystemDataFormFields
+        lang={lang}
+        formData={form}
+        onChange={updateField}
+        disabled={isSaving}
+        errors={visibleFieldErrors}
+        onFieldBlur={handleFieldBlur}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
           type="submit"
           name="status"
           value={KNOWLEDGE_STATUS.DRAFT}
-          disabled={isSaving}
+          disabled={isSaving || hasFieldErrors}
           title={lang === "VN" ? "Không ai dùng." : "Not used anywhere."}
           className="w-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
@@ -128,7 +146,7 @@ export function CreateSystemData() {
           type="submit"
           name="status"
           value={KNOWLEDGE_STATUS.PRIVATE}
-          disabled={isSaving}
+          disabled={isSaving || hasFieldErrors}
           title={lang === "VN" ? "Chỉ trợ lý AI đọc, không hiện trên web." : "Read by the assistant only — not shown on the website."}
           className="w-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
@@ -139,7 +157,7 @@ export function CreateSystemData() {
           type="submit"
           name="status"
           value={KNOWLEDGE_STATUS.PUBLISHED}
-          disabled={isSaving}
+          disabled={isSaving || hasFieldErrors}
           title={lang === "VN" ? "Hiện trên web và trợ lý AI đọc." : "Shown on the website and read by the assistant."}
           className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >

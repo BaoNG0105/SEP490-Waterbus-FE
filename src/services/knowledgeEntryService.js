@@ -199,21 +199,38 @@ export const buildKnowledgeEntryPayload = (form) => ({
   displayOrder: Number(form.displayOrder) || 0,
 });
 
-export const validateKnowledgeEntryForm = (form, lang = "VN") => {
+/**
+ * Validate từng field bắt buộc (*) dùng chung cho CreateSystemData / EditSystemData: Tiêu đề,
+ * Chuyên mục, Nội dung, Từ khóa tìm kiếm (cần ít nhất 1 từ khóa không rỗng), Thứ tự hiển thị
+ * (phải là số lớn hơn 0). Trả về { [field]: message } — rỗng nghĩa là hợp lệ.
+ */
+export const validateKnowledgeEntryFields = (form, lang = "VN") => {
+  const errors = {};
+
   if (!String(form.title || "").trim()) {
-    return lang === "VN" ? "Vui lòng nhập tiêu đề." : "Title is required.";
+    errors.title = lang === "VN" ? "Vui lòng nhập tiêu đề." : "Title is required.";
   }
-  if (!String(form.content || "").trim()) {
-    return lang === "VN" ? "Vui lòng nhập nội dung." : "Content is required.";
-  }
+
   if (!KNOWLEDGE_CATEGORY_ORDER.includes(form.category)) {
-    return lang === "VN" ? "Vui lòng chọn chuyên mục hợp lệ." : "Please select a valid category.";
+    errors.category = lang === "VN" ? "Vui lòng chọn chuyên mục hợp lệ." : "Please select a valid category.";
   }
+
+  if (!String(form.content || "").trim()) {
+    errors.content = lang === "VN" ? "Vui lòng nhập nội dung." : "Content is required.";
+  }
+
   const keywords = (form.keywords || []).map((k) => k.trim()).filter(Boolean);
   if (keywords.length === 0) {
-    return lang === "VN"
+    errors.keywords = lang === "VN"
       ? "Cần ít nhất 1 từ khóa để trợ lý AI tìm đúng mục này."
       : "At least 1 keyword is required so the assistant can match this entry.";
   }
-  return "";
+
+  if (String(form.displayOrder ?? "").trim() === "") {
+    errors.displayOrder = lang === "VN" ? "Vui lòng nhập thứ tự hiển thị." : "Display order is required.";
+  } else if (!Number.isFinite(Number(form.displayOrder)) || Number(form.displayOrder) <= 0) {
+    errors.displayOrder = lang === "VN" ? "Thứ tự hiển thị phải là số lớn hơn 0." : "Display order must be a number greater than 0.";
+  }
+
+  return errors;
 };
