@@ -10,6 +10,10 @@ export const deckOptionImages = {
 /** Cửa sổ giờ khởi hành áp dụng cho cả thuê theo giờ và theo ngày. */
 export const CHARTER_DAY_WINDOW_START = "07:00";
 export const CHARTER_DAY_WINDOW_END = "23:00";
+/** Giờ muộn nhất user được chọn làm giờ đi (22:00 = 23:00 - 1h, vì 23:00 là giờ đóng cửa station). */
+export const CHARTER_DAY_WINDOW_END_EXCLUSIVE = "22:00";
+/** Bước nhảy phút cho input giờ đi (60 = bước 1 giờ, không cho phút lẻ). */
+export const CHARTER_DAY_WINDOW_STEP = 60;
 
 export const toCharterTimeMinutes = (value) => {
   const raw = String(value || "").trim();
@@ -22,20 +26,20 @@ export const toCharterTimeMinutes = (value) => {
   return hours * 60 + minutes;
 };
 
-/** Giờ khởi hành hợp lệ: từ 07:00 đến 23:00 (bao gồm hai mốc). */
+/** Giờ khởi hành hợp lệ: từ 07:00 đến trước 22:00 (vì giờ đóng cửa station Waterbus là 23:00, cần về trước 23:00). */
 export const isCharterDayStartTimeValid = (startTime) => {
   const minutes = toCharterTimeMinutes(startTime);
   if (minutes == null) return false;
   const start = toCharterTimeMinutes(CHARTER_DAY_WINDOW_START);
-  const end = toCharterTimeMinutes(CHARTER_DAY_WINDOW_END);
-  return minutes >= start && minutes <= end;
+  const end = toCharterTimeMinutes(CHARTER_DAY_WINDOW_END_EXCLUSIVE);
+  return minutes >= start && minutes < end;
 };
 
 export const getCharterDayStartTimeError = (startTime, lang = "VN") => {
   if (isCharterDayStartTimeValid(startTime)) return null;
   return lang === "VN"
-    ? `Giờ đi phải từ ${CHARTER_DAY_WINDOW_START} đến ${CHARTER_DAY_WINDOW_END}.`
-    : `Start time must be from ${CHARTER_DAY_WINDOW_START} to ${CHARTER_DAY_WINDOW_END}.`;
+    ? `Giờ đi phải từ ${CHARTER_DAY_WINDOW_START} đến trước ${CHARTER_DAY_WINDOW_END_EXCLUSIVE}.`
+    : `Start time must be from ${CHARTER_DAY_WINDOW_START} to before ${CHARTER_DAY_WINDOW_END_EXCLUSIVE}.`;
 };
 
 export const getMinDepartureDate = () => {
@@ -57,6 +61,69 @@ export const createEmptyStop = () => ({
 export const createEmptyBoatRequest = () => ({
   numberOfDecks: 1,
 });
+
+export const PASSENGER_TYPE_ADULT = "Adult";
+export const PASSENGER_TYPE_CHILD = "Child";
+
+export const createEmptyPassenger = (type = PASSENGER_TYPE_ADULT) => ({
+  fullName: "",
+  birthYear: "",
+  type,
+});
+
+/**
+ * Phân bổ type cho danh sách hành khách dựa trên adultCount / childCount đã khai báo ở bước Lộ trình.
+ * - adultCount passenger đầu = Adult
+ * - childCount passenger sau = Child
+ * - Nếu tổng passengers khác tổng khai báo → còn thừa/thiếu thì nguyên cũ (an toàn).
+ */
+export const assignPassengerTypesFromCounts = (passengers, adultCount, childCount) => {
+  const list = Array.isArray(passengers) ? passengers : [];
+  const adults = Math.max(0, Number(adultCount) || 0);
+  const children = Math.max(0, Number(childCount) || 0);
+  const expectedTotal = adults + children;
+  if (list.length !== expectedTotal) return list;
+  return list.map((p, idx) => {
+    const desired = idx < adults ? PASSENGER_TYPE_ADULT : PASSENGER_TYPE_CHILD;
+    if (p && p.type === desired) return p;
+    return { ...(p || createEmptyPassenger(desired)), type: desired };
+  });
+};
+
+/** Tính số adult/child thực tế từ danh sách hành khách theo type. */
+export const countPassengersByType = (passengers) => {
+  const list = Array.isArray(passengers) ? passengers : [];
+  let adultCount = 0;
+  let childCount = 0;
+  for (const p of list) {
+    if (p?.type === PASSENGER_TYPE_ADULT) adultCount += 1;
+    else if (p?.type === PASSENGER_TYPE_CHILD) childCount += 1;
+  }
+  return { adultCount, childCount, total: adultCount + childCount };
+};
+
+/** Validate danh sách hành khách có khớp số lượng adult/child đã khai báo không. Trả về null nếu hợp lệ. */
+export const getPassengerTypeMismatchError = (passengers, adultCount, childCount, lang = "VN") => {
+  const declared = Math.max(0, Number(adultCount) || 0) + Math.max(0, Number(childCount) || 0);
+  const { total } = countPassengersByType(passengers);
+  if (total !== declared) {
+    return lang === "VN"
+      ? `Danh sách hành khách (${total}) chưa khớp số lượng đã khai báo (${declared}).`
+      : `Passenger list (${total}) does not match declared count (${declared}).`;
+  }
+  const { adultCount: a, childCount: c } = countPassengersByType(passengers);
+  if (a !== Math.max(0, Number(adultCount) || 0) || c !== Math.max(0, Number(childCount) || 0)) {
+    return lang === "VN"
+      ? `Cần đúng ${adultCount} người lớn và ${childCount} trẻ em (đang có ${a} người lớn, ${c} trẻ em).`
+      : `Need exactly ${adultCount} adult(s) and ${childCount} child(ren) (got ${a} adult(s), ${c} child(ren)).`;
+  }
+  if (c > 0 && a <= 0) {
+    return lang === "VN"
+      ? "Cần có ít nhất 1 người lớn nếu có trẻ em đi cùng."
+      : "At least 1 adult is required if children are included.";
+  }
+  return null;
+};
 
 export const normalizeDeckCount = (value, fallback = 1) => {
   const numberOfDecks = Number(value);

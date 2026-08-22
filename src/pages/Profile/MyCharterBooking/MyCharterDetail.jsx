@@ -656,6 +656,15 @@ export function CharterDetail() {
         })
         : buildEmptyPassengerRows(normalized, user);
       setPassengerRows(initialPassengers);
+      // Đảm bảo dòng #1 luôn có tên người đặt khi user chưa nhập / BE trả rỗng.
+      const bookerName = getBookerPassengerName(normalized, user);
+      if (bookerName) {
+        setPassengerRows((prev) => prev.map((row, idx) => (
+          idx === 0 && !String(row.fullName || "").trim()
+            ? { ...row, fullName: bookerName, isContactPassenger: true }
+            : row
+        )));
+      }
       setSelectedTicketIds([]);
       return normalized;
     } catch (error) {
@@ -2631,6 +2640,7 @@ export function CharterDetail() {
               passengerRows={passengerRows}
               canUseContactAsSinglePassenger={canUseContactAsSinglePassenger}
               bookerAsFirstPassenger={bookerAsFirstPassenger}
+              bookerName={getBookerPassengerName(booking, user)}
               importInputRef={importInputRef}
               isUsableText={isUsableText}
               handleTicketFileAction={handleTicketFileAction}

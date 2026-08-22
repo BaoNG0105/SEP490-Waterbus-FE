@@ -28,9 +28,12 @@ const emptyForm = () => ({
   displayOrder: 1,
 });
 
-const VALIDATED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions", "displayOrder"];
+const VALIDATED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
 
-const REQUIRED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount", "displayOrder"];
+const REQUIRED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount"];
+
+// Field cần realtime validate (error hiện ngay khi gõ).
+const REALTIME_VALIDATED_FIELDS = new Set(["unitPremiumAmount", "coverageAmount"]);
 
 const MAX_CODE = 50;
 const MAX_NAME = 150;
@@ -38,8 +41,9 @@ const MAX_PROVIDER_NAME = 150;
 const MAX_URL = 2048;
 const MAX_CONDITIONS = 20;
 const MAX_CONDITION_TEXT = 500;
-const MAX_PREMIUM = 100_000_000;
-const MAX_COVERAGE = 10_000_000_000;
+const MAX_PREMIUM = 100_000_000_000;
+const MIN_PREMIUM = 1_000;
+const MAX_COVERAGE = 10_000_000_000_00;
 const MAX_LOGO_SIZE = 5 * 1024 * 1024;
 const CODE_REGEX = /^[A-Za-z]\w*$/;
 const URL_REGEX = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
@@ -51,10 +55,10 @@ const buildTouched = (fields) => {
 };
 
 // Chỉ touch những field thực sự vi phạm (khi mở edit mà data cũ invalid theo rule mới).
-const buildTouchedFromValidation = (formValues, ctx) => {
+const buildTouchedFromValidation = (formValues) => {
   const next = {};
   for (const fieldName of VALIDATED_FIELDS) {
-    if (validateField(fieldName, formValues[fieldName], formValues, ctx)?.level === "error") {
+    if (validateField(fieldName, formValues[fieldName], formValues)?.level === "error") {
       next[fieldName] = true;
     }
   }
@@ -99,13 +103,20 @@ const formatVndInput = (raw) => {
   return out.join("");
 };
 
+// Map bookingType (enum từ BE) sang nhãn hiển thị.
+const BOOKING_TYPE_LABELS = {
+  PassengerInsurance: { vn: "Bảo hiểm hành khách", en: "Passenger insurance" },
+  SeatInsurance: { vn: "Bảo hiểm vé", en: "Ticket insurance" },
+  CharterInsurance: { vn: "Bảo hiểm thuê tàu", en: "Charter insurance" },
+};
+const getBookingTypeLabel = (bookingType, lang = "VN") => {
+  const entry = BOOKING_TYPE_LABELS[bookingType];
+  if (!entry) return bookingType || "—";
+  return lang === "VN" ? entry.vn : entry.en;
+};
+
 const validateField = (name, value, form, ctx = {}) => {
   const stringValue = String(value ?? "");
-  const packagesLength = Number(ctx.packagesLength) || 0;
-  const isEditing = Boolean(ctx.editingId);
-  // Max display order = total packages + 1 (khi edit thì vẫn tính như vậy; nếu user đang edit
-  // chính gói đó thì max = packagesLength + 1 vẫn đúng vì gói đó không đếm vào "số mới").
-  const maxDisplayOrder = Math.max(1, packagesLength + 1);
   switch (name) {
     case "code": {
       const trimmed = stringValue.trim();
@@ -122,16 +133,20 @@ const validateField = (name, value, form, ctx = {}) => {
     }
     case "unitPremiumAmount": {
       const num = parseVndInput(stringValue);
-      if (!Number.isFinite(num) || !stringValue.trim()) return { level: "error", message: "Phí bảo hiểm phải từ 1 VND trở lên." };
-      if (num < 1) return { level: "error", message: "Phí bảo hiểm phải từ 1 VND trở lên." };
+      if (!Number.isFinite(num) || !stringValue.trim()) return { level: "error", message: `Phí bảo hiểm phải từ ${MIN_PREMIUM.toLocaleString("vi-VN")} VND trở lên.` };
+      if (num < MIN_PREMIUM) return { level: "error", message: `Phí bảo hiểm phải từ ${MIN_PREMIUM.toLocaleString("vi-VN")} VND trở lên.` };
       if (num > MAX_PREMIUM) return { level: "error", message: `Phí bảo hiểm không được vượt quá ${MAX_PREMIUM.toLocaleString("vi-VN")} VND.` };
       return null;
     }
     case "coverageAmount": {
       const num = parseVndInput(stringValue);
-      if (!Number.isFinite(num) || !stringValue.trim()) return { level: "error", message: "Mức bồi thường phải lớn hơn 0." };
-      if (num <= 0) return { level: "error", message: "Mức bồi thường phải lớn hơn 0." };
+      if (!Number.isFinite(num) || !stringValue.trim()) return { level: "error", message: `Mức bồi thường phải từ ${MIN_PREMIUM.toLocaleString("vi-VN")} VND trở lên.` };
+      if (num < MIN_PREMIUM) return { level: "error", message: `Mức bồi thường phải từ ${MIN_PREMIUM.toLocaleString("vi-VN")} VND trở lên.` };
       if (num > MAX_COVERAGE) return { level: "error", message: `Mức bồi thường không được vượt quá ${MAX_COVERAGE.toLocaleString("vi-VN")} VND.` };
+      const fee = parseVndInput(form?.unitPremiumAmount);
+      if (Number.isFinite(fee) && fee >= MIN_PREMIUM && num < fee) {
+        return { level: "warning", message: `Mức bồi thường (${num.toLocaleString("vi-VN")}) thấp hơn phí mỗi khách (${fee.toLocaleString("vi-VN")}).` };
+      }
       return null;
     }
     case "providerName": {
@@ -168,22 +183,6 @@ const validateField = (name, value, form, ctx = {}) => {
       }
       return null;
     }
-    case "displayOrder": {
-      const trimmed = stringValue.trim();
-      if (!trimmed) return { level: "error", message: "Vui lòng nhập thứ tự hiển thị." };
-      const num = Number(trimmed);
-      if (!Number.isInteger(num)) return { level: "error", message: "Thứ tự hiển thị phải là số nguyên." };
-      if (num < 1) return { level: "error", message: "Thứ tự hiển thị phải từ 1 trở lên." };
-      if (num > maxDisplayOrder) {
-        return {
-          level: "error",
-          message: isEditing
-            ? `Thứ tự hiển thị không được vượt quá ${maxDisplayOrder} (tổng gói hiện có + 1).`
-            : `Khi tạo mới, thứ tự hiển thị tối đa là ${packagesLength + 1}. Vui lòng nhập lại.`,
-        };
-      }
-      return null;
-    }
     default:
       return null;
   }
@@ -213,6 +212,7 @@ export function InsuranceManagement() {
   const [touched, setTouched] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
+  const [viewingPackage, setViewingPackage] = useState(null);
 
   const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
   const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-60 disabled:cursor-not-allowed";
@@ -258,7 +258,8 @@ export function InsuranceManagement() {
 
   const openCreateModal = () => {
     setEditingId(null);
-    setForm(emptyForm());
+    const nextOrder = packages.length > 0 ? Math.max(...packages.map((p) => Number(p.displayOrder) || 0)) + 1 : 1;
+    setForm({ ...emptyForm(), displayOrder: nextOrder });
     setTouched({});
     setIsModalOpen(true);
   };
@@ -286,8 +287,25 @@ export function InsuranceManagement() {
     setForm(nextForm);
     // Chỉ báo lỗi cho những field thực sự invalid (vd: data cũ vi phạm rule mới).
     // Field hợp lệ sẽ được re-validate khi user thao tác.
-    setTouched(buildTouchedFromValidation(nextForm, { packagesLength: packages.length, editingId: pkg.id }));
+    setTouched(buildTouchedFromValidation(nextForm));
+    // Realtime validate cho các field tiền/số — touch luôn để error hiện ngay nếu data cũ vi phạm rule.
+    setTouched((prev) => {
+      const next = { ...prev };
+      for (const field of REALTIME_VALIDATED_FIELDS) {
+        const result = validateField(field, nextForm[field], nextForm);
+        if (result?.level === "error") next[field] = true;
+      }
+      return next;
+    });
     setIsModalOpen(true);
+  };
+
+  const openViewModal = (pkg) => {
+    setViewingPackage(pkg);
+  };
+
+  const closeViewModal = () => {
+    setViewingPackage(null);
   };
 
   const closeModal = () => {
@@ -302,6 +320,9 @@ export function InsuranceManagement() {
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    if (REALTIME_VALIDATED_FIELDS.has(field)) {
+      setTouched((prev) => ({ ...prev, [field]: true }));
+    }
   };
 
   const handleBlur = (field) => {
@@ -379,10 +400,9 @@ export function InsuranceManagement() {
   };
 
   const validateForm = () => {
-    const fieldNames = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions", "displayOrder"];
-    const ctx = { packagesLength: packages.length, editingId };
+    const fieldNames = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
     for (const fieldName of fieldNames) {
-      const result = validateField(fieldName, form[fieldName], form, ctx);
+      const result = validateField(fieldName, form[fieldName], form);
       if (result && result.level === "error") {
         return result.message;
       }
@@ -391,14 +411,13 @@ export function InsuranceManagement() {
   };
 
   const errors = useMemo(() => {
-    const fieldNames = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions", "displayOrder"];
-    const ctx = { packagesLength: packages.length, editingId };
+    const fieldNames = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
     const result = {};
     for (const fieldName of fieldNames) {
-      result[fieldName] = validateField(fieldName, form[fieldName], form, ctx);
+      result[fieldName] = validateField(fieldName, form[fieldName], form);
     }
     return result;
-  }, [form, packages.length, editingId]);
+  }, [form, packages, editingId]);
 
   const hasBlockingError = useMemo(
     () => Object.entries(errors).some(([field, e]) => e && e.level === "error" && touched[field]),
@@ -431,7 +450,6 @@ export function InsuranceManagement() {
 
   const buildPayload = () => {
     const commonFields = {
-      code: form.code.trim(),
       name: form.name.trim(),
       bookingType: INSURANCE_BOOKING_TYPES.PASSENGER,
       unitPremiumAmount: parseVndInput(form.unitPremiumAmount),
@@ -443,8 +461,14 @@ export function InsuranceManagement() {
       termsUrl: form.termsUrl.trim() || null,
       status: form.status,
       isActive: form.status === "Active",
-      displayOrder: Number(form.displayOrder) || 1,
     };
+    // Code chỉ gửi khi Create (BE coi code là định danh bất biến sau khi tạo).
+    if (!editingId) {
+      commonFields.code = form.code.trim();
+    }
+    // displayOrder: luôn gửi cả Create + Edit. Khi Create, nếu user chọn vị trí đã có gói khác,
+    // BE sẽ tự dồn các gói xuống để nhường chỗ.
+    commonFields.displayOrder = Number(form.displayOrder) || 1;
 
     if (form.providerLogoFile) {
       const formData = new FormData();
@@ -466,7 +490,6 @@ export function InsuranceManagement() {
   const handleSave = async () => {
     const validationError = validateForm();
     if (validationError) {
-      // Đánh dấu tất cả field required là touched để hiển thị hint lỗi inline.
       setTouched(buildTouched(REQUIRED_FIELDS));
       notify({
         icon: "warning",
@@ -480,17 +503,15 @@ export function InsuranceManagement() {
     try {
       setIsSaving(true);
       const payload = buildPayload();
-      // Guard chặn: nếu field tiền hoặc code/name không hợp lệ thì không gửi.
-      // validateForm đã chặn trước đó, đây chỉ là đề phòng sau khi build payload.
       if (
-        !payload.code ||
+        (editingId ? false : !payload.code) ||
         !payload.name ||
         typeof payload.unitPremiumAmount !== "number" ||
         typeof payload.coverageAmount !== "number" ||
         !Number.isFinite(payload.unitPremiumAmount) ||
         !Number.isFinite(payload.coverageAmount) ||
-        payload.unitPremiumAmount < 1 ||
-        payload.coverageAmount <= 0
+        payload.unitPremiumAmount < MIN_PREMIUM ||
+        payload.coverageAmount < MIN_PREMIUM
       ) {
         setTouched(buildTouched(REQUIRED_FIELDS));
         notify({
@@ -572,21 +593,6 @@ export function InsuranceManagement() {
       setTogglingId(null);
     }
   };
-
-  const getBookingTypeLabel = (value) => {
-    const type = String(value || "");
-    if (type === INSURANCE_BOOKING_TYPES.PASSENGER || !type) {
-      return lang === "VN" ? "Hành khách (chung)" : "Passenger (shared)";
-    }
-    if (type === INSURANCE_BOOKING_TYPES.SEAT) {
-      return lang === "VN" ? "Vé lẻ (legacy)" : "Seat (legacy)";
-    }
-    if (type === INSURANCE_BOOKING_TYPES.CHARTER) {
-      return lang === "VN" ? "Thuê tàu (legacy)" : "Request Booking (legacy)";
-    }
-    return type;
-  };
-
   return (
     <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
@@ -683,14 +689,25 @@ export function InsuranceManagement() {
                       <p className="text-[11px] text-slate-400 font-bold mt-0.5">{pkg.code}</p>
                     </div>
                   </div>
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border shrink-0 ${
-                    active
-                      ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
-                      : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-slate-400"}`} />
-                    {active ? (lang === "VN" ? "Active" : "Active") : (lang === "VN" ? "Inactive" : "Inactive")}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openViewModal(pkg)}
+                      aria-label={lang === "VN" ? "Xem chi tiết" : "View details"}
+                      title={lang === "VN" ? "Xem chi tiết" : "View details"}
+                      className="h-7 w-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 hover:bg-[#124757] hover:text-white dark:hover:bg-yellow-400 dark:hover:text-slate-900 transition-all inline-flex items-center justify-center"
+                    >
+                      <span className="material-symbols-outlined text-base">info</span>
+                    </button>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                      active
+                        ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
+                        : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-slate-400"}`} />
+                      {active ? (lang === "VN" ? "Hoạt động" : "Active") : (lang === "VN" ? "Không hoạt động" : "Inactive")}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -710,20 +727,6 @@ export function InsuranceManagement() {
                       {formatVnd(pkg.coverageAmount)}
                     </p>
                   </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-bold">
-                    {getBookingTypeLabel(pkg.bookingType)}
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 font-bold">
-                    {lang === "VN" ? "Thứ tự" : "Order"}: {Number(pkg.displayOrder) || 0}
-                  </span>
-                  {pkg.providerName && (
-                    <span className="inline-flex items-center gap-1 font-bold">
-                      {pkg.providerName}
-                    </span>
-                  )}
                 </div>
 
                 <div className="flex gap-2 pt-1">
@@ -762,7 +765,7 @@ export function InsuranceManagement() {
       )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div key={editingId || "create"} className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <button
             type="button"
             aria-label="Close overlay"
@@ -799,11 +802,13 @@ export function InsuranceManagement() {
                     value={form.code}
                     onChange={(e) => updateField("code", e.target.value.toUpperCase())}
                     onBlur={() => handleBlur("code")}
-                    className={inputClass("code") + " uppercase tracking-wider"}
-                    placeholder="PASSENGER_BASIC"
+                    readOnly={!!editingId}
+                    className={inputClass("code") + " uppercase tracking-wider" + (editingId ? " bg-slate-100 dark:bg-slate-800/60 cursor-not-allowed text-slate-500" : "")}
+                    placeholder="CODE"
                     maxLength={MAX_CODE}
                     spellCheck={false}
                     autoCapitalize="characters"
+                    title={editingId ? (lang === "VN" ? "Mã gói không thể thay đổi sau khi tạo." : "Code is read-only after creation.") : undefined}
                   />
                   {renderHint("code")}
                 </div>
@@ -814,7 +819,7 @@ export function InsuranceManagement() {
                     onChange={(e) => updateField("name", e.target.value)}
                     onBlur={() => handleBlur("name")}
                     className={inputClass("name")}
-                    placeholder={lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                    placeholder={lang === "VN" ? "Tên bảo hiểm" : "Insurance name"}
                     maxLength={MAX_NAME}
                   />
                   {renderHint("name")}
@@ -829,9 +834,10 @@ export function InsuranceManagement() {
                     inputMode="numeric"
                     value={form.unitPremiumAmount}
                     onChange={(e) => updateField("unitPremiumAmount", formatVndInput(e.target.value))}
+                    onInput={(e) => updateField("unitPremiumAmount", formatVndInput(e.target.value))}
                     onBlur={() => handleBlur("unitPremiumAmount")}
                     className={inputClass("unitPremiumAmount")}
-                    placeholder={lang === "VN" ? "Ví dụ: 1.000" : "e.g. 1,000"}
+                    placeholder={lang === "VN" ? `Tối thiểu ${MIN_PREMIUM.toLocaleString("vi-VN")}` : `Min ${MIN_PREMIUM.toLocaleString("vi-VN")}`}
                   />
                   {renderHint("unitPremiumAmount")}
                 </div>
@@ -841,30 +847,17 @@ export function InsuranceManagement() {
                     inputMode="numeric"
                     value={form.coverageAmount}
                     onChange={(e) => updateField("coverageAmount", formatVndInput(e.target.value))}
+                    onInput={(e) => updateField("coverageAmount", formatVndInput(e.target.value))}
                     onBlur={() => handleBlur("coverageAmount")}
                     className={inputClass("coverageAmount")}
-                    placeholder={lang === "VN" ? "Ví dụ: 50.000.000" : "e.g. 50,000,000"}
+                    placeholder={lang === "VN" ? `Tối thiểu ${MIN_PREMIUM.toLocaleString("vi-VN")}` : `Min ${MIN_PREMIUM.toLocaleString("vi-VN")}`}
                   />
                   {renderHint("coverageAmount")}
                 </div>
               </div>
 
-              {/* Row 3: Thứ tự + Trạng thái */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Thứ tự hiển thị" : "Display order"}</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.displayOrder}
-                    onChange={(e) => updateField("displayOrder", e.target.value)}
-                    onBlur={() => handleBlur("displayOrder")}
-                    className={inputClass("displayOrder")}
-                    placeholder={lang === "VN" ? "VD: 1" : "e.g. 1"}
-                  />
-                  {renderHint("displayOrder")}
-                </div>
-                <div>
+              {/* Row 3: Trạng thái */}
+              <div>
                   <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
                   <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
                     {[
@@ -889,10 +882,16 @@ export function InsuranceManagement() {
                     })}
                   </div>
                 </div>
-              </div>
 
               {/* Section: Nhà cung cấp + Logo */}
-              <div className="rounded-xl border border-slate-200/70 bg-slate-50/50 p-4 dark:border-slate-700/70 dark:bg-slate-900/40 space-y-3">
+              <div className="rounded-xl border border-slate-200/70 bg-slate-50/50 p-4 dark:border-slate-700/70 dark:bg-slate-900/40 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200/70 dark:border-slate-700/70">
+                  <span className="material-symbols-outlined text-base text-slate-400">storefront</span>
+                  <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    {lang === "VN" ? "Nhà cung cấp bảo hiểm" : "Insurance provider"}
+                  </span>
+                </div>
+
                 <div>
                   <label className={labelStyle}>{lang === "VN" ? "Tên nhà cung cấp" : "Provider name"}</label>
                   <input
@@ -901,46 +900,55 @@ export function InsuranceManagement() {
                     onBlur={() => handleBlur("providerName")}
                     className={inputClass("providerName")}
                     maxLength={MAX_PROVIDER_NAME}
-                    placeholder={lang === "VN" ? "Bảo Việt, PVI..." : "Bao Viet, PVI..."}
+                    placeholder={lang === "VN" ? "Tên nhà cung cấp" : "Provider name"}
                   />
                   {renderHint("providerName")}
                 </div>
 
                 <div>
                   <label className={labelStyle}>{lang === "VN" ? "Logo nhà cung cấp" : "Provider logo"}</label>
-                  <div className="flex items-center gap-3">
-                    <div className="h-16 w-16 shrink-0 rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 overflow-hidden flex items-center justify-center">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="h-28 w-28 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 overflow-hidden flex items-center justify-center transition-all hover:border-slate-300 dark:hover:border-slate-600">
                       {form.providerLogoPreview ? (
-                        <img src={form.providerLogoPreview} alt="logo" className="h-full w-full object-contain" />
+                        <img src={form.providerLogoPreview} alt="logo" className="h-full w-full object-contain p-2" />
                       ) : (
-                        <span className="material-symbols-outlined text-slate-300 text-2xl">image</span>
+                        <div className="flex flex-col items-center justify-center text-slate-300 dark:text-slate-600">
+                          <span className="material-symbols-outlined text-3xl">add_photo_alternate</span>
+                          <span className="text-[9px] font-bold uppercase tracking-wider mt-1">No logo</span>
+                        </div>
                       )}
                     </div>
-                    <div className="flex-1 flex flex-wrap items-center gap-2">
-                      <label className="cursor-pointer inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                        <span className="material-symbols-outlined text-base">upload</span>
-                        {(() => {
-                        if (!form.providerLogoPreview) return lang === "VN" ? "Tải ảnh lên" : "Upload";
-                        return lang === "VN" ? "Đ�i ảnh" : "Replace";
-                      })()}
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                          className="hidden"
-                          onChange={handleLogoChange}
-                        />
-                      </label>
-                      {form.providerLogoPreview && (
-                        <button
-                          type="button"
-                          onClick={removeLogo}
-                          className="inline-flex items-center gap-1 rounded-xl bg-red-50 dark:bg-red-500/10 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-red-500 hover:bg-red-100 transition-all"
-                        >
-                          <span className="material-symbols-outlined text-base">delete</span>
-                          {lang === "VN" ? "Xóa" : "Remove"}
-                        </button>
-                      )}
-                      <span className="text-[10px] text-slate-400">JPG/PNG/WEBP, ≤ {Math.round(MAX_LOGO_SIZE / (1024 * 1024))}MB</span>
+                    <div className="flex-1 flex flex-col gap-2 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600">
+                          <span className="material-symbols-outlined text-base">upload</span>
+                          {(() => {
+                            if (!form.providerLogoPreview) return lang === "VN" ? "Tải ảnh lên" : "Upload";
+                            return lang === "VN" ? "Đổi ảnh" : "Change";
+                          })()}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                            className="hidden"
+                            onChange={handleLogoChange}
+                          />
+                        </label>
+                        {form.providerLogoPreview && (
+                          <button
+                            type="button"
+                            onClick={removeLogo}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 px-3.5 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-red-500 hover:bg-red-100 dark:hover:bg-red-500/20 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-base">delete</span>
+                            {lang === "VN" ? "Xóa" : "Remove"}
+                          </button>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                        {lang === "VN"
+                          ? `Định dạng JPG, PNG, WEBP hoặc SVG. Dung lượng tối đa ${Math.round(MAX_LOGO_SIZE / (1024 * 1024))}MB`
+                          : `JPG, PNG, WEBP or SVG. Max ${Math.round(MAX_LOGO_SIZE / (1024 * 1024))}MB. Square image with transparent background recommended.`}
+                      </span>
                     </div>
                   </div>
                   {renderHint("providerLogoFile")}
@@ -954,7 +962,7 @@ export function InsuranceManagement() {
                   onChange={(e) => updateField("termsUrl", e.target.value)}
                   onBlur={() => handleBlur("termsUrl")}
                   className={inputClass("termsUrl")}
-                  placeholder="https://...terms.pdf"
+                  placeholder=" "
                   maxLength={MAX_URL}
                 />
                 {renderHint("termsUrl")}
@@ -983,7 +991,7 @@ export function InsuranceManagement() {
                         onChange={(e) => updateCondition(index, e.target.value)}
                         onBlur={() => handleBlur("conditions")}
                         className={inputStyle}
-                        placeholder={lang === "VN" ? "VD: Chỉ áp dụng trong thời gian chuyến đi." : "e.g. Valid only during the trip."}
+                        placeholder={lang === "VN" ? "Nhập điều kiện áp dụng" : "Enter condition"}
                         maxLength={MAX_CONDITION_TEXT}
                       />
                       <button
@@ -1019,6 +1027,133 @@ export function InsuranceManagement() {
                 {isSaving && <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
                 {editingId ? (lang === "VN" ? "Lưu thay đổi" : "Save changes") : (lang === "VN" ? "Tạo gói" : "Create")}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingPackage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <button
+            type="button"
+            aria-label="Close overlay"
+            className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]"
+            onClick={closeViewModal}
+          />
+          <div className="relative my-auto w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-4xl border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:border-slate-700 dark:bg-slate-800">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5 bg-white dark:bg-slate-800 dark:border-slate-700">
+              <div>
+                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Gói bảo hiểm" : "Insurance package"}
+                </p>
+                <h3 className="mt-1 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
+                  {lang === "VN" ? "Chi tiết gói" : "Package details"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeViewModal}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-600 dark:border-slate-700 dark:hover:text-slate-200"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Header: logo + name + status */}
+              <div className="flex items-start gap-4">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden ${
+                  viewingPackage.providerLogoUrl
+                    ? "bg-white dark:bg-white border border-slate-200 dark:border-slate-600 p-1.5"
+                    : "bg-[#124757]/10 dark:bg-yellow-400/10"
+                }`}>
+                  {viewingPackage.providerLogoUrl ? (
+                    <img src={viewingPackage.providerLogoUrl} alt={viewingPackage.providerName || viewingPackage.name} className="w-full h-full object-contain" />
+                  ) : (
+                    <span className="material-symbols-outlined text-2xl text-[#124757] dark:text-yellow-400">shield</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-headline font-black text-base text-slate-800 dark:text-white">{viewingPackage.name}</h4>
+                  <p className="text-[11px] text-slate-400 font-bold mt-0.5">{viewingPackage.code}</p>
+                  <span className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                    (viewingPackage.status || "").toLowerCase() === "active"
+                      ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
+                      : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      (viewingPackage.status || "").toLowerCase() === "active" ? "bg-emerald-500" : "bg-slate-400"
+                    }`} />
+                    {(viewingPackage.status || "").toLowerCase() === "active"
+                      ? (lang === "VN" ? "Hoạt động" : "Active")
+                      : (lang === "VN" ? "Không hoạt động" : "Inactive")}
+                  </span>
+                </div>
+              </div>
+
+              {/* Fees row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {lang === "VN" ? "Phí / khách" : "Fee / passenger"}
+                  </p>
+                  <p className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400 mt-1">
+                    {formatVnd(viewingPackage.unitPremiumAmount)}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {lang === "VN" ? "Mức bồi thường" : "Coverage"}
+                  </p>
+                  <p className="text-sm font-headline font-black text-slate-700 dark:text-slate-200 mt-1">
+                    {formatVnd(viewingPackage.coverageAmount)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Provider */}
+              <div>
+                <p className={labelStyle}>{lang === "VN" ? "Nhà cung cấp" : "Provider"}</p>
+                <p className="text-xs font-bold text-slate-800 dark:text-white">{viewingPackage.providerName || "—"}</p>
+              </div>
+
+              {/* Terms URL */}
+              {viewingPackage.termsUrl && (
+                <div>
+                  <p className={labelStyle}>{lang === "VN" ? "Điều khoản" : "Terms"}</p>
+                  <a
+                    href={viewingPackage.termsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-bold text-[#124757] dark:text-yellow-400 hover:underline break-all"
+                  >
+                    {viewingPackage.termsUrl}
+                  </a>
+                </div>
+              )}
+
+              {/* Conditions */}
+              <div>
+                <p className={labelStyle}>{lang === "VN" ? "Điều kiện áp dụng" : "Conditions"}</p>
+                {Array.isArray(viewingPackage.conditions) && viewingPackage.conditions.length > 0 ? (
+                  <ul className="space-y-2">
+                    {viewingPackage.conditions
+                      .map((c) => (typeof c === "string" ? c : c?.text))
+                      .filter(Boolean)
+                      .map((text, i) => (
+                        <li
+                          key={i}
+                          className="flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 p-3"
+                        >
+                          <span className="material-symbols-outlined text-lg leading-none text-[#124757] dark:text-yellow-400 shrink-0 self-start -mt-px">check_circle</span>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1">{text}</span>
+                        </li>
+                      ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">—</p>
+                )}
+              </div>
             </div>
           </div>
         </div>

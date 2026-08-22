@@ -19,7 +19,7 @@ const MONTHS = {
   ],
 };
 
-const PANEL_WIDTH = 296; // ~18.5rem
+const PANEL_WIDTH = 296;
 const PANEL_EST_HEIGHT = 340;
 
 const parseYmd = (value) => {

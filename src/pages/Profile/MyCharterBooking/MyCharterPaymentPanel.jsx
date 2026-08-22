@@ -10,13 +10,15 @@ const CURRENT_YEAR = new Date().getFullYear();
 const MIN_BIRTH_YEAR = 1900;
 
 function PassengerRowInput({ row, index, lang, onChange, disabled }) {
+  const fallbackName = index === 0 && row.isContactPassenger ? (row.fullName || "") : "";
+  const displayName = String(row.fullName || "").trim() || fallbackName;
   return (
     <div className="grid grid-cols-[42px_1fr_160px] gap-2 items-center">
       <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400">
         {index + 1}
       </label>
       <input
-        value={row.fullName}
+        value={displayName}
         onChange={(e) => onChange(index, "fullName", e.target.value)}
         disabled={disabled}
         placeholder={lang === "VN" ? "Họ tên" : "Full name"}
@@ -270,8 +272,8 @@ export function MyCharterPaymentPanel({
           payments={booking.payments}
           lang={lang}
           currencyFormatter={currencyFormatter}
-          isFullyRefunded={String(booking.status || "").toLowerCase() === "refunded"
-            || String(booking.paymentStatus || "").toLowerCase() === "refunded"}
+          isFullyRefunded={(String(booking.status || "").toLowerCase() === "refunded"
+            || String(booking.paymentStatus || "").toLowerCase() === "refunded")}
         />
 
         {booking.status === "Quoted" && !isPaid ? (
@@ -380,7 +382,7 @@ export function MyCharterPaymentPanel({
             )}
 
             {/* ===== PAYOS PAYMENT CARD ===== */}
-            <div className="overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-linear-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+            <div className="overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
               <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
@@ -626,6 +628,7 @@ export function MyCharterPaymentPanel({
     </>
   );
 }
+
 
 export function MyCharterPaymentStickyBar({
   lang,

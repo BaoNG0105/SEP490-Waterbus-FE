@@ -145,7 +145,7 @@ export function CharterBooking() {
       </section>
 
       {/* ===== SECTION 2: REQUEST FORM ===== */}
-      <main className="relative max-w-5xl mx-auto px-4 md:px-8 py-20">
+      <main className="relative max-w-7xl mx-auto px-4 md:px-8 py-20">
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-72 h-72 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none"></div>
 
         {/* --- GHI CHÚ ĐIỀU KHOẢN & CHÍNH SÁCH --- */}
