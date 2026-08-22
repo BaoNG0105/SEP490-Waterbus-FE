@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../../../../context/AppContext";
 import { FormSelect } from "../../../../components/FormSelect";
 import { YearPickerInput } from "../../../../components/YearPickerInput";
@@ -402,12 +402,12 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
     });
   };
 
-  // 3. BẢO HIỂM (giống luồng khách hàng)
+  // 3. BẢO HIỂM — auto chọn gói mặc định (ưu tiên gói isRequired, không thì gói đầu tiên), không
+  // cho khách/nhân viên bỏ chọn: mọi hành khách luôn được tính phí bảo hiểm này.
   const [insurancePackages, setInsurancePackages] = useState([]);
   const [isInsuranceLoading, setIsInsuranceLoading] = useState(true);
   const [insuranceLoadError, setInsuranceLoadError] = useState("");
   const [selectedInsurancePackageId, setSelectedInsurancePackageId] = useState(null);
-  const lastInsurancePackageIdRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -419,14 +419,11 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
         setInsurancePackages(packages);
         setSelectedInsurancePackageId((currentId) => {
           if (currentId && packages.some((pkg) => isSameInsurancePackageId(getInsurancePackageId(pkg), currentId))) {
-            lastInsurancePackageIdRef.current = String(currentId);
             return currentId;
           }
           const required = packages.find((pkg) => pkg.isRequired);
           const defaultPkg = required || packages[0];
-          const defaultId = getInsurancePackageId(defaultPkg);
-          if (defaultId) lastInsurancePackageIdRef.current = defaultId;
-          return defaultId;
+          return getInsurancePackageId(defaultPkg);
         });
       })
       .catch((error) => {
@@ -452,7 +449,6 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
     ? calculateTicketInsurancePreview({ unitPremiumAmount: selectedInsurancePackage.unitPremiumAmount, passengerCount: insurancePassengerCount })
     : { canPreview: false, quantity: 0, unitPremium: 0, total: 0 };
   const insuranceFee = selectedInsurancePackageId ? Number(insurancePreview.total) || 0 : 0;
-  const insuranceRequired = insurancePackages.some((pkg) => pkg.isRequired);
 
   // 4. ƯỚC TÍNH GIÁ — không có mã khuyến mãi tại quầy.
   const sumSeatsPrice = (seats) => seats.reduce((sum, seat, i) => {
@@ -1243,31 +1239,16 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-slate-800 dark:text-white">{lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}</p>
                   <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    {selectedInsurancePackageId && selectedInsurancePackage
+                    {selectedInsurancePackage
                       ? `${selectedInsurancePackage.name} · ${formatVnd(insuranceFee)}`
-                      : (lang === "VN" ? "Tùy chọn thêm" : "Optional add-on")}
+                      : (lang === "VN" ? "Áp dụng cho mọi hành khách" : "Applied to every passenger")}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={Boolean(selectedInsurancePackageId)}
-                  disabled={insuranceRequired || isSubmitting}
-                  onClick={() => {
-                    if (insuranceRequired) return;
-                    if (selectedInsurancePackageId) {
-                      lastInsurancePackageIdRef.current = String(selectedInsurancePackageId);
-                      setSelectedInsurancePackageId(null);
-                    } else {
-                      setSelectedInsurancePackageId(lastInsurancePackageIdRef.current || getInsurancePackageId(insurancePackages[0]));
-                    }
-                  }}
-                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60 ${selectedInsurancePackageId ? "bg-[#124757] dark:bg-yellow-400" : "bg-slate-300 dark:bg-slate-600"}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${selectedInsurancePackageId ? "translate-x-5" : "translate-x-0"}`} />
-                </button>
+                <span className="shrink-0 rounded-lg bg-emerald-50 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  {lang === "VN" ? "Đã bao gồm" : "Included"}
+                </span>
               </div>
-              {selectedInsurancePackageId && selectedInsurancePackage ? (
+              {selectedInsurancePackage ? (
                 <p className="mt-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
                   {formatVnd(insurancePreview.unitPremium)} × {insurancePreview.quantity} {lang === "VN" ? "khách" : "pax"}
                 </p>

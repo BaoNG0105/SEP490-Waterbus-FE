@@ -145,12 +145,20 @@ function SeatTypesTab({ lang, onGoToDistanceTab, deckMode = "deck1", concessionP
   };
 
   const handleSave = async (code) => {
+    if (!String(draftPrice ?? "").trim()) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Thiếu giá" : "Missing price",
+        text: lang === "VN" ? "Vui lòng nhập giá gốc." : "Please enter a base price.",
+      });
+      return;
+    }
     const price = Number(draftPrice);
-    if (!Number.isFinite(price) || price <= 0) {
+    if (!Number.isFinite(price) || price <= 1000) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Giá không hợp lệ" : "Invalid price",
-        text: lang === "VN" ? "basePrice phải > 0." : "basePrice must be > 0.",
+        text: lang === "VN" ? "Giá gốc phải lớn hơn 1.000 VND." : "Base price must be greater than 1,000 VND.",
       });
       return;
     }
@@ -362,6 +370,34 @@ function DistanceFareTab({ lang }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
+
+    if (!String(form.baseFare ?? "").trim() || !String(form.pricePerKm ?? "").trim()) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Thiếu thông tin" : "Missing information",
+        text: lang === "VN" ? "Vui lòng nhập đầy đủ giá cơ bản và giá/km." : "Please fill in both the base fare and the price per km.",
+      });
+      return;
+    }
+    const baseFare = Number(form.baseFare);
+    if (!Number.isFinite(baseFare) || baseFare <= 1000) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Giá cơ bản không hợp lệ" : "Invalid base fare",
+        text: lang === "VN" ? "Giá cơ bản phải lớn hơn 1.000 VND." : "Base fare must be greater than 1,000 VND.",
+      });
+      return;
+    }
+    const pricePerKm = Number(form.pricePerKm);
+    if (!Number.isFinite(pricePerKm) || pricePerKm <= 0) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Giá/km không hợp lệ" : "Invalid price per km",
+        text: lang === "VN" ? "Giá/km phải lớn hơn 0." : "Price per km must be greater than 0.",
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const saved = await saveFarePolicy(form);
@@ -518,10 +554,29 @@ function SurchargeTab({ lang }) {
 
   const handleSaveWeekend = async (e) => {
     e.preventDefault();
+
+    if (!String(weekend.surchargePercent ?? "").trim()) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Thiếu mức phụ thu" : "Missing surcharge",
+        text: lang === "VN" ? "Vui lòng nhập mức phụ thu." : "Please enter a surcharge percentage.",
+      });
+      return;
+    }
+    const weekendPercent = Number(weekend.surchargePercent);
+    if (!Number.isFinite(weekendPercent) || weekendPercent <= 0) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Mức phụ thu không hợp lệ" : "Invalid surcharge",
+        text: lang === "VN" ? "Mức phụ thu phải lớn hơn 0%." : "Surcharge must be greater than 0%.",
+      });
+      return;
+    }
+
     setSavingWeekend(true);
     try {
       const payload = {
-        surchargePercent: Number(weekend.surchargePercent) || 0,
+        surchargePercent: weekendPercent,
         isActive: Boolean(weekend.isActive),
       };
       await saveWeekendAdjustment(payload);
@@ -568,13 +623,30 @@ function SurchargeTab({ lang }) {
       });
       return;
     }
+    if (!String(holiday.surchargePercent ?? "").trim()) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Thiếu mức phụ thu" : "Missing surcharge",
+        text: lang === "VN" ? "Vui lòng nhập mức phụ thu." : "Please enter a surcharge percentage.",
+      });
+      return;
+    }
+    const holidayPercent = Number(holiday.surchargePercent);
+    if (!Number.isFinite(holidayPercent) || holidayPercent <= 0) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Mức phụ thu không hợp lệ" : "Invalid surcharge",
+        text: lang === "VN" ? "Mức phụ thu phải lớn hơn 0%." : "Surcharge must be greater than 0%.",
+      });
+      return;
+    }
     setSavingHoliday(true);
     try {
       const payload = {
         date: holiday.date,
         scope: "Holiday",
         name: holidayName,
-        surchargePercent: Number(holiday.surchargePercent) || 0,
+        surchargePercent: holidayPercent,
         isActive: true,
       };
       await saveCalendarDayAdjustment(payload);
@@ -885,11 +957,19 @@ function SightseeingConcessionTab({ lang, onPercentChange }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) {
+    if (!String(percent ?? "").trim()) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Thiếu mức giảm" : "Missing discount",
+        text: lang === "VN" ? "Vui lòng nhập mức giảm." : "Please enter a discount percentage.",
+      });
+      return;
+    }
+    if (!Number.isFinite(discountPercent) || discountPercent <= 0 || discountPercent > 100) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Mức giảm không hợp lệ" : "Invalid discount",
-        text: lang === "VN" ? "Nhập số từ 0 đến 100." : "Enter a number between 0 and 100.",
+        text: lang === "VN" ? "Nhập số lớn hơn 0 và tối đa 100." : "Enter a number greater than 0, up to 100.",
       });
       return;
     }
@@ -1047,12 +1127,20 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
 
   const handleSave = async (row) => {
     const draft = drafts[row.charterBoatRentalPricePolicyId] || {};
+    if (!String(draft.unitPrice ?? "").trim()) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Thiếu giá" : "Missing price",
+        text: lang === "VN" ? "Vui lòng nhập giá thuê." : "Please enter a unit price.",
+      });
+      return;
+    }
     const unitPrice = Number(draft.unitPrice);
-    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+    if (!Number.isFinite(unitPrice) || unitPrice <= 1000) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Giá không hợp lệ" : "Invalid price",
-        text: lang === "VN" ? "Giá thuê phải ≥ 0." : "Unit price must be ≥ 0.",
+        text: lang === "VN" ? "Giá thuê phải lớn hơn 1.000 VND." : "Unit price must be greater than 1,000 VND.",
       });
       return;
     }

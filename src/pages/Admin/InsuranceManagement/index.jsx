@@ -111,13 +111,13 @@ const BOOKING_TYPE_LABELS = {
   SeatInsurance: { vn: "Bảo hiểm vé", en: "Ticket insurance" },
   CharterInsurance: { vn: "Bảo hiểm thuê tàu", en: "Charter insurance" },
 };
-const getBookingTypeLabel = (bookingType, lang = "VN") => {
-  const entry = BOOKING_TYPE_LABELS[bookingType];
-  if (!entry) return bookingType || "—";
-  return lang === "VN" ? entry.vn : entry.en;
-};
+// const getBookingTypeLabel = (bookingType, lang = "VN") => {
+//   const entry = BOOKING_TYPE_LABELS[bookingType];
+//   if (!entry) return bookingType || "—";
+//   return lang === "VN" ? entry.vn : entry.en;
+// };
 
-const validateField = (name, value, form, ctx = {}) => {
+const validateField = (name, value, form = {}) => {
   const stringValue = String(value ?? "");
   switch (name) {
     case "code": {
@@ -231,7 +231,7 @@ export function InsuranceManagement() {
     } catch (error) {
       setErrorMsg(
         error.response?.data?.message ||
-          (lang === "VN" ? "Không tải được danh sách gói bảo hiểm." : "Failed to load insurance packages.")
+        (lang === "VN" ? "Không tải được danh sách gói bảo hiểm." : "Failed to load insurance packages.")
       );
     } finally {
       setIsLoading(false);
@@ -709,11 +709,10 @@ export function InsuranceManagement() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 overflow-hidden ${
-                      pkg.providerLogoUrl
-                        ? "bg-white dark:bg-white border border-slate-200 dark:border-slate-600 p-1.5"
-                        : "bg-[#124757]/10 dark:bg-yellow-400/10"
-                    }`}>
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 overflow-hidden ${pkg.providerLogoUrl
+                      ? "bg-white dark:bg-white border border-slate-200 dark:border-slate-600 p-1.5"
+                      : "bg-[#124757]/10 dark:bg-yellow-400/10"
+                      }`}>
                       {pkg.providerLogoUrl ? (
                         <img src={pkg.providerLogoUrl} alt={pkg.providerName || pkg.name} className="w-full h-full object-contain" />
                       ) : (
@@ -723,15 +722,13 @@ export function InsuranceManagement() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <h3 className="font-headline font-black text-sm text-slate-800 dark:text-white truncate">{pkg.name}</h3>
-                        <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
-                          pkg.providerSource === "third_party"
-                            ? "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
-                            : "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
-                        }`}>
-                          <span className="material-symbols-outlined text-[9px]">{pkg.providerSource === "third_party" ? "business" : "directions_boat"}</span>
+                        <span className={`shrink-0 text-[9px] font-bold ${pkg.providerSource === "third_party"
+                          ? "text-violet-600 dark:text-violet-300"
+                          : "text-sky-600 dark:text-sky-300"
+                          }`}>
                           {pkg.providerSource === "third_party"
                             ? (lang === "VN" ? "Bên thứ 3" : "3rd party")
-                            : "Waterbus"}
+                            : (lang === "VN" ? "Hệ thống" : "System")}
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-400 font-bold mt-0.5">{pkg.code}</p>
@@ -747,12 +744,10 @@ export function InsuranceManagement() {
                     >
                       <span className="material-symbols-outlined text-base">info</span>
                     </button>
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                      active
-                        ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
-                        : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-slate-400"}`} />
+                    <span className={`text-[10px] font-bold ${active
+                      ? "text-emerald-600 dark:text-emerald-300"
+                      : "text-slate-500 dark:text-slate-400"
+                      }`}>
                       {active ? (lang === "VN" ? "Hoạt động" : "Active") : (lang === "VN" ? "Không hoạt động" : "Inactive")}
                     </span>
                   </div>
@@ -790,11 +785,10 @@ export function InsuranceManagement() {
                     type="button"
                     onClick={() => handleToggleActive(pkg)}
                     disabled={togglingId === pkg.id}
-                    className={`flex-1 px-3 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wide transition-all inline-flex items-center justify-center gap-1.5 disabled:opacity-60 ${
-                      active
-                        ? "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-300"
-                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300"
-                    }`}
+                    className={`flex-1 px-3 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wide transition-all inline-flex items-center justify-center gap-1.5 disabled:opacity-60 ${active
+                      ? "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-300"
+                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300"
+                      }`}
                   >
                     {togglingId === pkg.id ? (
                       <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -813,7 +807,7 @@ export function InsuranceManagement() {
       )}
 
       {isModalOpen && (
-        <div key={editingId || "create"} className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div key={editingId || "create"} className="fixed inset-0 z-100 flex items-center justify-center p-4">
           <button
             type="button"
             aria-label="Close overlay"
@@ -841,7 +835,7 @@ export function InsuranceManagement() {
               </button>
             </div>
 
-<div className="p-6 space-y-5">
+            <div className="p-6 space-y-5">
               {/* Row 1: Mã gói + Tên gói */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -905,36 +899,27 @@ export function InsuranceManagement() {
               </div>
 
               {/* Row 3: Trạng thái */}
-              <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Trạng thái" : "Status"}</label>
-                  <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
-                    {[
-                      { value: "Active", labelVn: "Bật", labelEn: "Active" },
-                      { value: "Inactive", labelVn: "Tắt", labelEn: "Inactive" },
-                    ].map((option) => {
-                      const selected = form.status === option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => updateField("status", option.value)}
-                          className={`h-10 rounded-lg px-2 text-[11px] font-headline font-black uppercase tracking-wider transition-all ${
-                            selected
-                              ? "bg-[#124757] text-white shadow-sm dark:bg-yellow-400 dark:text-slate-900"
-                              : "text-slate-500 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
-                          }`}
-                        >
-                          {lang === "VN" ? option.labelVn : option.labelEn}
-                        </button>
-                      );
-                    })}
-                  </div>
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  {lang === "VN" ? "Trạng thái" : "Status"}
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-headline font-black uppercase tracking-wider ${form.status === "Active" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`}>
+                    {form.status === "Active" ? (lang === "VN" ? "Bật" : "Active") : (lang === "VN" ? "Tắt" : "Inactive")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => updateField("status", form.status === "Active" ? "Inactive" : "Active")}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none ${form.status === "Active" ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
+                  >
+                    <span className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-300 ease-in-out ${form.status === "Active" ? "translate-x-4" : "translate-x-0"}`} />
+                  </button>
                 </div>
+              </div>
 
               {/* Section: Nhà cung cấp + Logo */}
               <div className="rounded-xl border border-slate-200/70 bg-slate-50/50 p-4 dark:border-slate-700/70 dark:bg-slate-900/40 space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-slate-200/70 dark:border-slate-700/70">
-                  <span className="material-symbols-outlined text-base text-slate-400">storefront</span>
                   <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     {lang === "VN" ? "Nhà cung cấp bảo hiểm" : "Insurance provider"}
                   </span>
@@ -945,8 +930,8 @@ export function InsuranceManagement() {
                   <label className={labelStyle}>{lang === "VN" ? "Nguồn cung cấp" : "Provider source"}</label>
                   <div className="flex gap-2 mt-1">
                     {[
-                      { value: "waterbus", labelVn: "Waterbus", labelEn: "Waterbus", icon: "directions_boat" },
-                      { value: "third_party", labelVn: "Bên thứ 3", labelEn: "Third party", icon: "business" },
+                      { value: "waterbus", labelVn: "Hệ thống", labelEn: "System" },
+                      { value: "third_party", labelVn: "Bên thứ 3", labelEn: "Third party" },
                     ].map((opt) => {
                       const isActive = form.providerSource === opt.value;
                       return (
@@ -959,7 +944,6 @@ export function InsuranceManagement() {
                             : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600"
                             }`}
                         >
-                          <span className="material-symbols-outlined text-sm">{opt.icon}</span>
                           {lang === "VN" ? opt.labelVn : opt.labelEn}
                         </button>
                       );
@@ -1142,7 +1126,7 @@ export function InsuranceManagement() {
       )}
 
       {viewingPackage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 overflow-y-auto">
           <button
             type="button"
             aria-label="Close overlay"
@@ -1171,11 +1155,10 @@ export function InsuranceManagement() {
             <div className="p-6 space-y-5">
               {/* Header: logo + name + status */}
               <div className="flex items-start gap-4">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden ${
-                  viewingPackage.providerLogoUrl
-                    ? "bg-white dark:bg-white border border-slate-200 dark:border-slate-600 p-1.5"
-                    : "bg-[#124757]/10 dark:bg-yellow-400/10"
-                }`}>
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden ${viewingPackage.providerLogoUrl
+                  ? "bg-white dark:bg-white border border-slate-200 dark:border-slate-600 p-1.5"
+                  : "bg-[#124757]/10 dark:bg-yellow-400/10"
+                  }`}>
                   {viewingPackage.providerLogoUrl ? (
                     <img src={viewingPackage.providerLogoUrl} alt={viewingPackage.providerName || viewingPackage.name} className="w-full h-full object-contain" />
                   ) : (
@@ -1185,26 +1168,22 @@ export function InsuranceManagement() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h4 className="font-headline font-black text-base text-slate-800 dark:text-white">{viewingPackage.name}</h4>
-                    <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
-                      viewingPackage.providerSource === "third_party"
-                        ? "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
-                        : "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
-                    }`}>
-                      <span className="material-symbols-outlined text-[9px]">{viewingPackage.providerSource === "third_party" ? "business" : "directions_boat"}</span>
+                    <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${viewingPackage.providerSource === "third_party"
+                      ? "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
+                      : "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
+                      }`}>
                       {viewingPackage.providerSource === "third_party"
                         ? (lang === "VN" ? "Bên thứ 3" : "3rd party")
-                        : "Waterbus"}
+                        : (lang === "VN" ? "Hệ thống" : "System")}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 font-bold mt-0.5">{viewingPackage.code}</p>
-                  <span className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                    (viewingPackage.status || "").toLowerCase() === "active"
-                      ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
-                      : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      (viewingPackage.status || "").toLowerCase() === "active" ? "bg-emerald-500" : "bg-slate-400"
-                    }`} />
+                  <span className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${(viewingPackage.status || "").toLowerCase() === "active"
+                    ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
+                    : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
+                    }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${(viewingPackage.status || "").toLowerCase() === "active" ? "bg-emerald-500" : "bg-slate-400"
+                      }`} />
                     {(viewingPackage.status || "").toLowerCase() === "active"
                       ? (lang === "VN" ? "Hoạt động" : "Active")
                       : (lang === "VN" ? "Không hoạt động" : "Inactive")}
