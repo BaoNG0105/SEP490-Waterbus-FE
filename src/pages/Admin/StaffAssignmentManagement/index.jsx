@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-
+//service
 import { fetchAllBoats } from "../../../services/boatService";
 import { fetchAllStations } from "../../../services/stationService";
 import {
@@ -27,14 +27,16 @@ import {
   resolveShiftState,
   validateBulkAssignmentForm,
 } from "../../../services/staffAssignmentService";
-
+//utils
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getUserId, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
+import { getRangeForScheduleMode, toDateKey } from "../../../utils/staffAssignmentCalendarUtils";
+import { notify } from "../../../utils/swalToast";
+//component
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { FormSelect } from "../../../components/FormSelect";
-import { getRangeForScheduleMode, toDateKey } from "../../../utils/staffAssignmentCalendarUtils";
-import { notify } from "../../../utils/swalToast";
+
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -170,11 +172,16 @@ const validateCreateAssignmentForm = (form, lang) => {
       : "Staff has no assigned station — cannot schedule.";
   }
 
+  const todayDateString = toDateInputValue(new Date());
   if (!form.fromDate) {
     errors.fromDate = lang === "VN" ? "Vui lòng chọn từ ngày." : "Please select a start date.";
+  } else if (form.fromDate < todayDateString) {
+    errors.fromDate = lang === "VN" ? "Không được chọn ngày trong quá khứ." : "Cannot pick a past date.";
   }
   if (!form.toDate) {
     errors.toDate = lang === "VN" ? "Vui lòng chọn đến ngày." : "Please select an end date.";
+  } else if (form.toDate < todayDateString) {
+    errors.toDate = lang === "VN" ? "Không được chọn ngày trong quá khứ." : "Cannot pick a past date.";
   } else if (form.fromDate && form.toDate < form.fromDate) {
     errors.toDate = lang === "VN" ? "Đến ngày phải sau hoặc bằng từ ngày." : "End date must be on or after start date.";
   }
@@ -1483,6 +1490,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                     <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "Start date (*)"}</label>
                     <AppDateInput
                       required
+                      min={toDateInputValue(new Date())}
                       value={createForm.fromDate}
                       onChange={(e) => handleCreateField("fromDate", e.target.value)}
                       className={visibleCreateFieldErrors.fromDate ? errorInputStyle : inputStyle}
@@ -1493,6 +1501,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                     <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "End date (*)"}</label>
                     <AppDateInput
                       required
+                      min={createForm.fromDate || toDateInputValue(new Date())}
                       value={createForm.toDate}
                       onChange={(e) => handleCreateField("toDate", e.target.value)}
                       className={visibleCreateFieldErrors.toDate ? errorInputStyle : inputStyle}
