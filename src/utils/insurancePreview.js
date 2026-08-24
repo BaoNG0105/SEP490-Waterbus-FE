@@ -151,45 +151,41 @@ export const resolveInsuranceSelected = (booking) => {
   return null;
 };
 
-export const normalizeInsuranceFromBooking = (booking) => {
-  const insurance = booking?.insurance;
-  const selected = resolveInsuranceSelected(booking);
-  const packageId = getBookingInsurancePackageId(booking);
-
-  if (!insurance || typeof insurance !== "object") {
-    if (selected === true) {
-      return {
-        packageId,
-        packageCode: "",
-        packageName: "",
-        providerName: "",
-        providerLogoUrl: "",
-        quantity: 0,
-        unitPremiumAmount: 0,
-        coverageAmount: 0,
-        totalAmount: 0,
-        terms: "",
-        selected: true,
-      };
-    }
-    return null;
+const pickNumber = (...values) => {
+  for (const value of values) {
+    const num = Number(value);
+    if (Number.isFinite(num) && num !== 0) return num;
   }
+  return 0;
+};
 
-  const quantity = Number(insurance.quantity ?? insurance.seatCount) || 0;
-  const totalAmount = Number(insurance.totalAmount ?? insurance.amount ?? insurance.premiumAmount) || 0;
-  const unitPremiumAmount = Number(insurance.unitPremiumAmount ?? insurance.unitAmount) || 0;
-  const coverageAmount = Number(insurance.coverageAmount ?? insurance.coverage) || 0;
-  const packageCode = insurance.code ?? insurance.packageCode ?? "";
-  const packageName = insurance.packageName ?? insurance.name ?? "";
-  const providerName = insurance.providerName ?? "";
-  const providerLogoUrl = insurance.providerLogoUrl
-    ?? insurance.logoUrl
-    ?? insurance.provider?.logoUrl
-    ?? insurance.provider?.providerLogoUrl
+const normalizeInsuranceLeg = (leg) => {
+  if (!leg || typeof leg !== "object") return null;
+  const quantity = Number(leg.quantity ?? leg.seatCount) || 0;
+  const unitPremiumAmount = Number(leg.unitPremiumAmount ?? leg.unitAmount) || 0;
+  const coverageAmount = Number(leg.coverageAmount ?? leg.coverage) || 0;
+  const totalAmount = pickNumber(
+    leg.totalAmount,
+    leg.amount,
+    leg.premiumAmount,
+    quantity * unitPremiumAmount,
+  );
+  const packageId = leg.insurancePackageId
+    ?? leg.packageId
+    ?? leg.id
+    ?? null;
+  const packageCode = leg.code ?? leg.packageCode ?? "";
+  const packageName = leg.packageName ?? leg.name ?? "";
+  const providerName = leg.providerName ?? "";
+  const providerLogoUrl = leg.providerLogoUrl
+    ?? leg.logoUrl
+    ?? leg.provider?.logoUrl
+    ?? leg.provider?.providerLogoUrl
     ?? "";
-  const terms = insurance.terms ?? insurance.conditions ?? insurance.termUrl ?? insurance.termsUrl ?? "";
+  const terms = leg.terms ?? leg.conditions ?? leg.termUrl ?? leg.termsUrl ?? "";
+  const source = leg.source ?? leg.providerSource ?? leg.provider?.source ?? "";
 
-  if (!quantity && !totalAmount && !unitPremiumAmount && selected !== true && !packageName && !packageId) {
+  if (!quantity && !totalAmount && !unitPremiumAmount && !packageName && !packageId) {
     return null;
   }
 
@@ -199,11 +195,162 @@ export const normalizeInsuranceFromBooking = (booking) => {
     packageName,
     providerName,
     providerLogoUrl,
+    source,
     quantity,
     unitPremiumAmount,
     coverageAmount,
-    totalAmount: quantity > 0 ? (totalAmount || unitPremiumAmount * quantity) : totalAmount,
+    totalAmount,
     terms,
+  };
+};
+
+export const normalizeInsuranceFromBooking = (booking) => {
+  const insurance = booking?.insurance;
+  const selected = resolveInsuranceSelected(booking);
+
+  if (!insurance || typeof insurance !== "object") {
+    if (selected === true) {
+      const fallbackPackageId = getBookingInsurancePackageId(booking);
+      const legacyAmount = pickNumber(
+        booking?.insurance?.totalAmount,
+        booking?.insurance?.amount,
+        booking?.insurance?.premiumAmount,
+      );
+      return {
+        mode: "default",
+        default: {
+          packageId: fallbackPackageId,
+          packageCode: "",
+          packageName: "",
+          providerName: "",
+          providerLogoUrl: "",
+          source: "",
+          quantity: 0,
+          unitPremiumAmount: 0,
+          coverageAmount: 0,
+          totalAmount: legacyAmount,
+          terms: "",
+        },
+        optional: null,
+        defaultInsuranceAmount: legacyAmount,
+        optionalInsuranceAmount: 0,
+        totalInsuranceAmount: legacyAmount,
+        quantity: 0,
+        totalAmount: legacyAmount,
+        terms: "",
+        selected: true,
+      };
+    }
+    return null;
+  }
+
+  // Chuẩn hoá: backend có thể trả defaultInsuranceAmount + optionalInsuranceAmount,
+  // hoặc nested default/optional object, hoặc payload cũ (quantity/unit/totalAmount phẳng).
+  const defaultLegRaw = insurance.default ?? insurance.defaultInsurance ?? null;
+  const optionalLegRaw = insurance.optional ?? insurance.optionalInsurance ?? null;
+
+  const defaultLeg = normalizeInsuranceLeg(defaultLegRaw);
+  const optionalLeg = normalizeInsuranceLeg(optionalLegRaw);
+
+  let defaultAmount = pickNumber(
+    insurance.defaultInsuranceAmount,
+    insurance.defaultAmount,
+    defaultLeg?.totalAmount,
+  );
+  let optionalAmount = pickNumber(
+    insurance.optionalInsuranceAmount,
+    insurance.optionalAmount,
+    optionalLeg?.totalAmount,
+  );
+
+  // Nếu BE không tách rõ default vs optional mà trả về phẳng,
+  // suy ra default = unitPremiumAmount × (số khách - optionalPackageId? 1:0).
+  if (!defaultLeg && !optionalLeg) {
+    const quantity = Number(insurance.quantity ?? insurance.seatCount) || 0;
+    const unitPremiumAmount = Number(insurance.unitPremiumAmount ?? insurance.unitAmount) || 0;
+    const coverageAmount = Number(insurance.coverageAmount ?? insurance.coverage) || 0;
+    const totalAmount = pickNumber(
+      insurance.totalAmount,
+      insurance.amount,
+      insurance.premiumAmount,
+      quantity * unitPremiumAmount,
+    );
+    const packageId = getBookingInsurancePackageId(booking);
+    const packageCode = insurance.code ?? insurance.packageCode ?? "";
+    const packageName = insurance.packageName ?? insurance.name ?? "";
+    const providerName = insurance.providerName ?? "";
+    const providerLogoUrl = insurance.providerLogoUrl
+      ?? insurance.logoUrl
+      ?? insurance.provider?.logoUrl
+      ?? insurance.provider?.providerLogoUrl
+      ?? "";
+    const terms = insurance.terms ?? insurance.conditions ?? insurance.termUrl ?? insurance.termsUrl ?? "";
+
+    if (!quantity && !totalAmount && !unitPremiumAmount && !packageName && !packageId) {
+      return null;
+    }
+
+    // Fallback: coi như default-only (chế độ cũ).
+    return {
+      mode: "default",
+      default: {
+        packageId,
+        packageCode,
+        packageName,
+        providerName,
+        providerLogoUrl,
+        source: "",
+        quantity,
+        unitPremiumAmount,
+        coverageAmount,
+        totalAmount,
+        terms,
+      },
+      optional: null,
+      defaultInsuranceAmount: totalAmount,
+      optionalInsuranceAmount: 0,
+      totalInsuranceAmount: totalAmount,
+      quantity,
+      unitPremiumAmount,
+      coverageAmount,
+      totalAmount,
+      packageId,
+      packageCode,
+      packageName,
+      providerName,
+      providerLogoUrl,
+      terms,
+      selected: selected !== false,
+    };
+  }
+
+  // Trường hợp có defaultLeg nhưng BE không trả defaultAmount riêng → tự tính từ leg.totalAmount.
+  if (defaultLeg && defaultAmount === 0) defaultAmount = defaultLeg.totalAmount;
+  if (optionalLeg && optionalAmount === 0) optionalAmount = optionalLeg.totalAmount;
+
+  const totalAmount = defaultAmount + optionalAmount;
+  const primary = defaultLeg || optionalLeg;
+  const mode = defaultLeg && optionalLeg
+    ? "default+optional"
+    : (defaultLeg ? "default" : "optional");
+
+  return {
+    mode,
+    default: defaultLeg,
+    optional: optionalLeg,
+    defaultInsuranceAmount: defaultAmount,
+    optionalInsuranceAmount: optionalAmount,
+    totalInsuranceAmount: totalAmount,
+    quantity: (defaultLeg?.quantity || 0) + (optionalLeg?.quantity || 0),
+    unitPremiumAmount: primary?.unitPremiumAmount || 0,
+    coverageAmount: primary?.coverageAmount || 0,
+    totalAmount,
+    packageId: primary?.packageId || null,
+    packageCode: primary?.packageCode || "",
+    packageName: primary?.packageName || "",
+    providerName: primary?.providerName || "",
+    providerLogoUrl: primary?.providerLogoUrl || "",
+    terms: primary?.terms || "",
     selected: selected !== false,
   };
 };

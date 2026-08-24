@@ -324,7 +324,7 @@ const normalizeBookingDetail = (data) => ({
   bookedAt: pick(data, ["bookedAt"], ""),
   status: pick(data, ["bookingStatus"], "--"),
   serviceType: pick(data, ["serviceType"], ""),
-  subtotalAmount: Number(pick(data, ["subtotalAmount"], 0)),
+  subtotalAmount: Number(pick(data, ["subtotalAmount", "ticketSubtotalAmount"], 0)),
   discountAmount: Number(pick(data, ["discountAmount"], 0)),
   totalAmount: Number(pick(data, ["totalAmount"], 0)),
   pointsUsed: Number(pick(data, ["pointsUsed"], 0)),

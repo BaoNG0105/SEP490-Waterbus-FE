@@ -129,3 +129,24 @@ export const normalizeDeckCount = (value, fallback = 1) => {
   const numberOfDecks = Number(value);
   return deckOptions.includes(numberOfDecks) ? numberOfDecks : fallback;
 };
+
+/**
+ * Chuẩn hoá input số điện thoại VN khi user paste/gõ:
+ * - Chỉ giữ chữ số và dấu '+' ở đầu.
+ * - Nếu bắt đầu bằng '+84' hoặc '84' (đủ 10–11 chữ số) → đổi sang '0' + 9 chữ số còn lại.
+ * - Nếu không match → trả về chuỗi đã strip ký tự lạ, không tự ý thêm '0'.
+ * Dùng cho cả onChange input lẫn load từ profile (đề phòng profile lưu số quốc tế).
+ */
+export const normalizeVietnamPhoneInput = (raw) => {
+  const original = String(raw ?? "");
+  // Bỏ mọi ký tự không phải số và không phải '+', nhưng chỉ cho phép '+' ở đầu.
+  let cleaned = original.replace(/[^\d+]/g, "").replace(/(?!^)\+/g, "");
+  if (!cleaned) return "";
+
+  // +84xxxxxxxxx (11–12 chars) hoặc 84xxxxxxxxx (10–11 chars) → convert sang 0xxxxxxxxx
+  if (/^\+?84\d{9}$/.test(cleaned) || /^84\d{9}$/.test(cleaned)) {
+    return `0${cleaned.replace(/^\+?84/, "").slice(0, 9)}`;
+  }
+  // Người dùng mới gõ "+84" rồi dừng: giữ nguyên để họ tiếp tục nhập.
+  return cleaned;
+};

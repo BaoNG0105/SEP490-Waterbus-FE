@@ -17,7 +17,7 @@ import {
   updateMyCharterBookingPassengers,
   addMyCharterBookingPassengers,
 } from "../../../services/charterBookingService";
-import { normalizePassengerApprovalStatus } from "../../../utils/charterPassengerAdd";
+import { listBookingPassengers, normalizePassengerApprovalStatus } from "../../../utils/charterPassengerAdd";
 import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
 import { fetchBoatDetail } from "../../../services/boatService";
@@ -43,7 +43,7 @@ import {
   shouldShowCustomerTabBadge,
 } from "../../../utils/charterBookingActions";
 import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
-import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
+import { getPassengerBirthYear, hasCharterPassengerName } from "../../../utils/charterBookingTickets";
 import {
   canShowCharterTicketsWithBalance,
   extractCharterAdditionalPaymentMeta,
@@ -95,6 +95,157 @@ const getPaymentPurpose = (payment) =>
 
 const isPaidPayment = (payment) =>
   ["paid", "depositpaid"].includes(String(payment?.paymentStatus || "").toLowerCase());
+
+function CustomerPassengerManifest({ booking, lang, onEdit }) {
+  const passengers = listBookingPassengers(booking).filter(hasCharterPassengerName);
+  const isPaid = String(booking?.paymentStatus || "").toLowerCase() === "paid";
+  const isConfirmed = String(booking?.status || "") === "Confirmed";
+  const isLocked = !isPaid || !isConfirmed;
+
+  const typeLabel = (row) => {
+    const type = String(pick(row, ["passengerType", "type"], "") || "").toLowerCase();
+    if (type === "adult") return lang === "VN" ? "Người lớn" : "Adult";
+    if (type === "child") return lang === "VN" ? "Trẻ em" : "Child";
+    return lang === "VN" ? "Khách" : "Guest";
+  };
+
+  const typeTone = (row) => {
+    const type = String(pick(row, ["passengerType", "type"], "") || "").toLowerCase();
+    if (type === "child")
+      return "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30";
+    return "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/30";
+  };
+
+  const summaryText =
+    passengers.length > 0
+      ? lang === "VN"
+        ? `${passengers.length} / ${booking.passengerCount || passengers.length} hành khách đã lưu`
+        : `${passengers.length} / ${booking.passengerCount || passengers.length} passengers saved`
+      : lang === "VN"
+        ? "Chưa có hành khách nào"
+        : "No passengers saved yet";
+
+  return (
+    <section className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
+      {/* Header — đồng bộ style với các card scheduleItems ở trên */}
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#F7FAFB] via-white to-white px-5 py-4 dark:border-slate-700/70 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400">
+            <span className="material-symbols-outlined text-[22px]">groups</span>
+          </span>
+          <div className="min-w-0">
+            <p className="font-headline text-[10px] font-black uppercase tracking-widest text-slate-400">
+              {lang === "VN" ? "Danh sách hành khách" : "Passenger manifest"}
+            </p>
+            <p className="mt-0.5 truncate text-base font-headline font-black text-slate-800 dark:text-white">
+              {summaryText}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {isLocked && passengers.length === 0 ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-headline font-black uppercase tracking-widest text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              <span className="material-symbols-outlined text-[14px]">lock</span>
+              {lang === "VN" ? "Mở sau thanh toán" : "Unlocks after payment"}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#124757]/10 px-3 py-1 text-[10px] font-headline font-black uppercase tracking-widest text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400">
+              <span className="material-symbols-outlined text-[14px]">person</span>
+              {passengers.length > 0
+                ? lang === "VN"
+                  ? `${passengers.length} khách`
+                  : `${passengers.length} pax`
+                : lang === "VN"
+                  ? `${booking.passengerCount || 0} chỗ`
+                  : `${booking.passengerCount || 0} seats`}
+            </span>
+          )}
+
+          {onEdit && passengers.length > 0 ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#124757] px-3 py-1 text-[10px] font-headline font-black uppercase tracking-widest text-white shadow-sm transition hover:bg-[#0f3d4b] active:scale-95 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
+            >
+              <span className="material-symbols-outlined text-[14px]">edit</span>
+              {lang === "VN" ? "Chỉnh sửa" : "Edit"}
+            </button>
+          ) : null}
+        </div>
+      </header>
+
+      {/* Body */}
+      <div className="px-5 py-4">
+        {passengers.length > 0 ? (
+          <>
+          <div className="flex items-center gap-4 rounded-xl bg-slate-50 px-4 py-2 font-headline text-[10px] font-black uppercase tracking-widest text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+            <span className="flex h-6 w-9 shrink-0 items-center justify-center">#</span>
+            <span className="min-w-0 flex-1">{lang === "VN" ? "Họ tên" : "Full name"}</span>
+            <span className="w-20 shrink-0 text-center sm:w-24">{lang === "VN" ? "Năm sinh" : "Birth year"}</span>
+            <span className="w-[88px] shrink-0 text-center">{lang === "VN" ? "Loại" : "Type"}</span>
+          </div>
+          <ol className="mt-2 grid gap-2">
+            {passengers.map((row, idx) => {
+              const name = pick(row, ["fullName", "passengerName", "name", "contactName"], "");
+              const birthYear = getPassengerBirthYear(row);
+              const idNumber = pick(row, ["idNumber", "identityNumber", "nationalId", "citizenId", "passport"], "");
+              const meta = [birthYear || null, idNumber || null]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li
+                  key={`${name}-${idx}`}
+                  className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm transition hover:border-slate-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 font-headline text-xs font-black text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                    {idx + 1}
+                  </span>
+                  <div className="min-w-0 flex-1 truncate text-sm font-bold text-slate-800 dark:text-white">
+                    {name}
+                  </div>
+                  <div className="w-20 shrink-0 text-center text-sm font-bold text-slate-800 dark:text-white sm:w-24">
+                    {birthYear || "—"}
+                  </div>
+                  <span
+                    className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-headline font-black uppercase tracking-wide ring-1 ${typeTone(row)}`}
+                  >
+                    {typeLabel(row)}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+          </>
+        ) : (
+          <div className="flex items-start gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
+            <span className="material-symbols-outlined mt-0.5 shrink-0 text-amber-500">info</span>
+            <div className="text-xs leading-relaxed">
+              <p className="font-bold text-slate-700 dark:text-slate-200">
+                {lang === "VN" ? "Chưa có danh sách hành khách" : "Manifest not provided"}
+              </p>
+              <p className="mt-0.5 text-slate-500 dark:text-slate-400">
+                {lang === "VN"
+                  ? `Vào mục \"Nhập vé\" sau khi thanh toán đủ để nhập ${booking.passengerCount || 0} khách.`
+                  : `Open the \"Manage tickets\" tab after full payment to enter ${booking.passengerCount || 0} guests.`}
+              </p>
+            </div>
+            {onEdit && !isLocked ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[#124757] px-4 py-2 text-[11px] font-headline font-black uppercase tracking-widest text-white shadow-sm transition hover:bg-[#0f3d4b] active:scale-95 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
+              >
+                <span className="material-symbols-outlined text-[14px]">edit</span>
+                {lang === "VN" ? "Nhập danh sách" : "Enter manifest"}
+              </button>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 const getPaymentId = (payment) => getRefundPaymentId(payment);
 
@@ -1900,10 +2051,11 @@ export function CharterDetail() {
   });
   const quoteTotal = booking.totalAmount || booking.estimatedPrice;
   const boatsRentalTotal = quoteBoatRows.reduce((sum, boat) => sum + (Number(boat.subtotalAmount) || 0), 0);
+  const defaultInsuranceAmount = Number(booking.defaultInsuranceAmount ?? booking.insurance?.defaultInsuranceAmount ?? 0) || 0;
+  const optionalInsuranceAmount = Number(booking.optionalInsuranceAmount ?? booking.insurance?.optionalInsuranceAmount ?? 0) || 0;
+  const legacyInsuranceTotal = Number(booking.insurance?.totalAmount) || 0;
   const insuranceQuoteAmount = booking.insuranceSelected !== false
-    && Number(booking.insurance?.quantity) > 0
-    && Number(booking.insurance?.totalAmount) > 0
-    ? Number(booking.insurance.totalAmount)
+    ? Math.max(defaultInsuranceAmount + optionalInsuranceAmount, legacyInsuranceTotal)
     : 0;
   const quoteDiscountAmount = Number(booking.discountAmount) || 0;
   const displayQuoteTotal = quoteTotal > 0
@@ -2098,11 +2250,21 @@ export function CharterDetail() {
   const paymentBadge = needsPaymentAttention ? "!" : (paymentsCount || "");
   const ticketsCount = Array.isArray(booking.tickets) ? booking.tickets.length : 0;
   const ticketsBadge = showTicketsTab ? (ticketsCount || "") : "";
+  const manifestRows = listBookingPassengers(booking).filter(hasCharterPassengerName);
+  const passengersCount = manifestRows.length;
+  const passengersBadge = passengersCount > 0 ? String(passengersCount) : "";
+
+  const goToTicketsTab = () => goToTab("tickets", ticketsBadge);
   const detailTabs = [
     { id: "overview", label: lang === "VN" ? "Tổng quan" : "Overview" },
     { id: "quote", label: lang === "VN" ? "Tàu/báo giá" : "Boat/Quote" },
     { id: "payment", label: lang === "VN" ? "Thanh toán" : "Payment", badge: paymentBadge },
-    ...(showTicketsTab ? [{ id: "tickets", label: lang === "VN" ? "Vé/hành khách" : "Tickets/Passengers", badge: ticketsBadge }] : []),
+    {
+      id: "passengers",
+      label: lang === "VN" ? "Danh sách khách" : "Passengers",
+      badge: passengersBadge,
+    },
+    ...(showTicketsTab ? [{ id: "tickets", label: lang === "VN" ? "Nhập vé" : "Manage tickets", badge: ticketsBadge }] : []),
   ];
 
   return (
@@ -2351,6 +2513,19 @@ export function CharterDetail() {
                     currencyFormatter={currencyFormatter}
                   />
                 </div>
+              </div>
+            </section>
+          )}
+
+          {/* ===== SECTION 1B: PASSENGER LIST ===== */}
+          {activeTab === "passengers" && (
+            <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70">
+              <div className="px-6 py-6 md:px-8">
+                <CustomerPassengerManifest
+                  booking={booking}
+                  lang={lang}
+                  onEdit={showTicketsTab ? goToTicketsTab : undefined}
+                />
               </div>
             </section>
           )}

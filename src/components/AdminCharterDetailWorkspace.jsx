@@ -16,6 +16,7 @@ import {
   getPassengerBirthYear,
   getCharterTicketId,
   hasCharterPassengerManifest,
+  hasCharterPassengerName,
   isCharterFullyPaid,
 } from "../utils/charterBookingTickets";
 import { extractCharterAdditionalPaymentMeta } from "../utils/charterPayOs";
@@ -23,6 +24,7 @@ import {
   formatPassengerApprovalStatus,
   getPassengerAddRequestBatches,
   getPassengerApprovalTone,
+  listBookingPassengers,
 } from "../utils/charterPassengerAdd";
 import { getApiErrorMessage } from "../utils/apiError";
 import { buildConfirmBodyHtml, showConfirmDialog, showToast } from "../utils/swalToast";
@@ -738,18 +740,175 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
-function OverviewField({ icon, label, value, hint }) {
+function OverviewField({ icon, label, value, hint, action }) {
   return (
     <div className="flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5 dark:border-slate-700 dark:bg-slate-900">
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EAF3F5] text-[#124757] dark:bg-slate-800 dark:text-yellow-400">
         <span className="material-symbols-outlined text-xl">{icon}</span>
       </span>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-[11px] font-bold text-slate-400">{label}</p>
         <p className="mt-0.5 wrap-break-word text-sm font-bold leading-snug text-slate-800 dark:text-white">{value || "--"}</p>
         {hint ? <p className="mt-1 text-xs font-medium text-slate-400">{hint}</p> : null}
       </div>
+      {action ? <div className="shrink-0 self-center">{action}</div> : null}
     </div>
+  );
+}
+
+export function AdminBookingPassengersTab({ booking, lang }) {
+  const passengers = listBookingPassengers(booking).filter(hasCharterPassengerName);
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+
+  if (passengers.length === 0) {
+    return (
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <p className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">
+          {lang === "VN" ? "Danh sách hành khách" : "Passenger manifest"}
+        </p>
+        <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+          {lang === "VN"
+            ? "Khách chưa nhập danh sách hành khách. Danh sách sẽ xuất hiện ở đây khi khách lưu."
+            : "No passenger list yet. It will appear here once the customer saves it."}
+        </p>
+      </section>
+    );
+  }
+
+  const typeLabel = (row) => {
+    const type = String(pick(row, ["passengerType", "type"], "") || "").toLowerCase();
+    if (type === "adult" || type === "người lớn") return lang === "VN" ? "Người lớn" : "Adult";
+    if (type === "child" || type === "trẻ em") return lang === "VN" ? "Trẻ em" : "Child";
+    return lang === "VN" ? "Hành khách" : "Guest";
+  };
+
+  const typeTone = (row) => {
+    const type = String(pick(row, ["passengerType", "type"], "") || "").toLowerCase();
+    if (type === "adult") return "bg-sky-50 text-sky-700 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20";
+    if (type === "child") return "bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20";
+    return "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+  };
+
+  const counts = passengers.reduce(
+    (acc, row) => {
+      const type = String(pick(row, ["passengerType", "type"], "") || "").toLowerCase();
+      if (type === "child" || type === "trẻ em") acc.child += 1;
+      else acc.adult += 1;
+      return acc;
+    },
+    { adult: 0, child: 0 },
+  );
+
+  const filtered = passengers.filter((row) => {
+    if (typeFilter !== "all") {
+      const t = String(pick(row, ["passengerType", "type"], "") || "").toLowerCase();
+      const wantChild = typeFilter === "child";
+      const isChild = t === "child" || t === "trẻ em";
+      if (wantChild !== isChild) return false;
+    }
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    const name = String(pick(row, ["fullName", "passengerName", "name", "contactName"], "")).toLowerCase();
+    const idNumber = String(pick(row, ["idNumber", "identityNumber", "nationalId", "citizenId", "passport"], "")).toLowerCase();
+    const note = String(pick(row, ["note", "specialNote", "remarks"], "")).toLowerCase();
+    return name.includes(q) || idNumber.includes(q) || note.includes(q);
+  });
+
+  const sizeText = "text-sm";
+  const padY = "py-1.5";
+  const padX = "px-3";
+
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-headline font-black uppercase tracking-widest text-slate-400">
+            {lang === "VN" ? "Danh sách hành khách" : "Passenger manifest"}
+          </p>
+          <p className={`mt-1 ${sizeText} font-bold text-slate-700 dark:text-slate-200`}>
+            {passengers.length} {lang === "VN" ? "khách" : "guests"}
+            <span className="ml-2 text-slate-400">·</span>
+            <span className="ml-2 text-slate-500 dark:text-slate-400">
+              {counts.adult} {lang === "VN" ? "lớn" : "adult"} · {counts.child} {lang === "VN" ? "trẻ em" : "child"}
+            </span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <span className="material-symbols-outlined pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-base text-slate-400">search</span>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={lang === "VN" ? "Tìm tên" : "Search name"}
+              className="w-44 rounded-full border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs font-medium text-slate-700 placeholder:text-slate-400 focus:border-[#124757] focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 sm:w-56"
+            />
+          </div>
+          <div className="flex rounded-full border border-slate-200 bg-white p-0.5 text-[10px] font-headline font-black uppercase tracking-wider dark:border-slate-600 dark:bg-slate-900">
+            {[
+              { id: "all", label: lang === "VN" ? "Tất cả" : "All" },
+              { id: "adult", label: lang === "VN" ? "Người lớn" : "Adult" },
+              { id: "child", label: lang === "VN" ? "Trẻ em" : "Child" },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setTypeFilter(opt.id)}
+                className={`rounded-full px-3 py-1 transition ${
+                  typeFilter === opt.id
+                    ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
+                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={`flex items-center gap-4 rounded-xl bg-slate-50 ${padX} py-2 font-headline text-[10px] font-black uppercase tracking-widest text-slate-500 dark:bg-slate-900/60 dark:text-slate-400`}>
+        <span className="flex h-6 w-9 shrink-0 items-center justify-center">#</span>
+        <span className="min-w-0 flex-1">{lang === "VN" ? "Họ tên" : "Full name"}</span>
+        <span className="w-20 shrink-0 text-center sm:w-24">{lang === "VN" ? "Năm sinh" : "Birth year"}</span>
+        <span className="w-[88px] shrink-0 text-center">{lang === "VN" ? "Loại" : "Type"}</span>
+      </div>
+
+      <ol className="mt-1.5 grid gap-1">
+        {filtered.map((row, idx) => {
+          const name = pick(row, ["fullName", "passengerName", "name", "contactName"], "");
+          const birthYear = getPassengerBirthYear(row);
+          return (
+            <li
+              key={`${name}-${idx}`}
+              className={`flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 ${padX} ${padY} transition hover:border-slate-200 hover:bg-white dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-slate-600 dark:hover:bg-slate-900`}
+            >
+              <span className="flex h-8 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[11px] font-bold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                {idx + 1}
+              </span>
+              <div className={`min-w-0 flex-1 truncate ${sizeText} font-bold text-slate-800 dark:text-white`}>
+                {name}
+              </div>
+              <div className={`w-20 shrink-0 text-center ${sizeText} font-bold text-slate-800 dark:text-white sm:w-24`}>
+                {birthYear || "—"}
+              </div>
+              <span
+                className={`shrink-0 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-headline font-black uppercase tracking-wide ${typeTone(row)}`}
+              >
+                {typeLabel(row)}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {filtered.length === 0 ? (
+        <p className="mt-3 text-center text-xs font-medium text-slate-400">
+          {lang === "VN" ? "Không có khách phù hợp bộ lọc." : "No passengers match the filter."}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -921,6 +1080,7 @@ export function AdminBookingOverviewTab({
                 icon="groups"
                 label={lang === "VN" ? "Hành khách" : "Passengers"}
                 value={formatPassengerSummary(booking, lang)}
+               
               />
               <OverviewField
                 icon="event_available"

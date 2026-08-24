@@ -11,7 +11,7 @@ import {
 } from "../../../../services/ticketTypeService";
 import { getMaxPointsToUse, estimateEarnPoints } from "../../../../services/pointService";
 import {
-  fetchActiveInsurancePackages,
+  fetchThirdPartyInsurancePackages,
   findInsurancePackageById,
   getInsurancePackageId,
   isSameInsurancePackageId,
@@ -413,7 +413,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
     let cancelled = false;
     setIsInsuranceLoading(true);
     setInsuranceLoadError("");
-    fetchActiveInsurancePackages(INSURANCE_BOOKING_TYPES.PASSENGER)
+    fetchThirdPartyInsurancePackages(INSURANCE_BOOKING_TYPES.PASSENGER)
       .then((packages) => {
         if (cancelled) return;
         setInsurancePackages(packages);
@@ -450,10 +450,10 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
     : { canPreview: false, quantity: 0, unitPremium: 0, total: 0 };
   const insuranceFee = selectedInsurancePackageId ? Number(insurancePreview.total) || 0 : 0;
 
-  // 4. ƯỚC TÍNH GIÁ — không có mã khuyến mãi tại quầy.
+  // 4. ƯỚC TÍNH GIÁ — effectivePrice đã bao gồm bảo hiểm mặc định.
   const sumSeatsPrice = (seats) => seats.reduce((sum, seat, i) => {
     const modifier = getPriceModifier(passengers[i]?.ticketType || "ADULT");
-    return sum + Number(seat.basePrice || 0) * modifier;
+    return sum + Number(seat.effectivePrice || seat.basePrice || 0) * modifier;
   }, 0);
   const subtotal = sumSeatsPrice(selectedSeatsDeparture) + (isRoundTrip ? sumSeatsPrice(selectedSeatsReturn) : 0);
   const estimatedOrderAmount = subtotal + insuranceFee;

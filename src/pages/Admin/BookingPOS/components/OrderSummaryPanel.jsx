@@ -33,8 +33,8 @@ export function OrderSummaryPanel({ lang, bookingData, activeLeg }) {
     ...(isRoundTrip ? [{ key: "return", label: lang === "VN" ? "Chiều về" : "Return", trip: selectedReturnTrip, seats: selectedSeatsReturn }] : []),
   ];
 
-  const totalSubtotal = selectedSeatsDeparture.reduce((sum, s) => sum + Number(s.basePrice || 0), 0)
-    + (isRoundTrip ? selectedSeatsReturn.reduce((sum, s) => sum + Number(s.basePrice || 0), 0) : 0);
+  const totalSubtotal = selectedSeatsDeparture.reduce((sum, s) => sum + Number(s.effectivePrice || s.basePrice || 0), 0)
+    + (isRoundTrip ? selectedSeatsReturn.reduce((sum, s) => sum + Number(s.effectivePrice || s.basePrice || 0), 0) : 0);
 
   return (
     <div className="sticky top-28 space-y-4 rounded-3xl border border-slate-100 bg-white p-5 shadow-xl dark:border-slate-700/50 dark:bg-slate-800 md:p-6">
@@ -97,7 +97,7 @@ export function OrderSummaryPanel({ lang, bookingData, activeLeg }) {
               </div>
               {leg.seats.length > 0 ? (
                 <p className="mt-2 text-right text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
-                  {leg.seats.reduce((sum, s) => sum + Number(s.basePrice || 0), 0).toLocaleString()}đ
+                  {leg.seats.reduce((sum, s) => sum + Number(s.effectivePrice || s.basePrice || 0), 0).toLocaleString()}đ
                 </p>
               ) : null}
             </>

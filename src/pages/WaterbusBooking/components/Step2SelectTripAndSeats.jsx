@@ -1033,14 +1033,14 @@ export default function Step2SelectTripAndSeats({
                     <div className="flex items-center justify-between sm:justify-end gap-5 w-full sm:w-auto pr-8">
                       <div className="text-right">
                         {/* BE: card chuyến show minPrice dạng "từ 9.000đ" — null khi thiếu km (không ẩn trip). */}
-                        <div className={`text-base font-headline font-black ${trip.minPrice == null || missingKm
+                        <div className={`text-base font-headline font-black ${(trip.effectivePrice ?? trip.minPrice) == null || missingKm
                             ? "text-rose-600 dark:text-rose-300"
                             : "text-[#124757] dark:text-[#FFD100]"
                           }`}>
-                          {trip.minPrice != null && Number.isFinite(Number(trip.minPrice)) && !missingKm ? (
+                          {(trip.effectivePrice ?? trip.minPrice) != null && Number.isFinite(Number(trip.effectivePrice ?? trip.minPrice)) && !missingKm ? (
                             <>
                               <span className="text-xs font-bold text-slate-400 mr-1">{lang === "VN" ? "từ" : "from"}</span>
-                              {formatMinPriceLabel(trip.minPrice, lang)}
+                              {formatMinPriceLabel(trip.effectivePrice ?? trip.minPrice, lang)}
                             </>
                           ) : (
                             formatMinPriceLabel(null, lang)
@@ -1134,7 +1134,7 @@ export default function Step2SelectTripAndSeats({
                   >
                     {seat.seatNumber}
                     <span className="text-[#124757] dark:text-yellow-400">
-                      {Number(seat.basePrice || 0).toLocaleString()}₫
+                      {Number(seat.effectivePrice || seat.basePrice || 0).toLocaleString()}₫
                     </span>
                   </span>
                 ))}
@@ -1144,7 +1144,7 @@ export default function Step2SelectTripAndSeats({
                   {lang === "VN" ? "Tạm tính" : "Subtotal"}
                 </span>
                 <span className="text-lg font-headline font-black text-[#124757] dark:text-yellow-400">
-                  {currentSeats.reduce((sum, s) => sum + Number(s.basePrice || 0), 0).toLocaleString()} VND
+                  {currentSeats.reduce((sum, s) => sum + Number(s.effectivePrice || s.basePrice || 0), 0).toLocaleString()} VND
                 </span>
               </div>
             </div>
@@ -1246,7 +1246,7 @@ export default function Step2SelectTripAndSeats({
                                     {seatStatusLabel}
                                   </div>
                                   <div className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
-                                    {lang === "VN" ? "Giá" : "Price"}: {Number(seat.basePrice || 0).toLocaleString()} {lang === "VN" ? "VNĐ" : "VND"}
+                                    {lang === "VN" ? "Giá" : "Price"}: {Number(seat.effectivePrice || seat.basePrice || 0).toLocaleString()} {lang === "VN" ? "VNĐ" : "VND"}
                                   </div>
                                 </div>
                                 <div className="mx-auto -mt-1 h-2 w-2 rotate-45 border-b border-r border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800" />

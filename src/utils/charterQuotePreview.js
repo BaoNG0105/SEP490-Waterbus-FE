@@ -283,6 +283,10 @@ export const buildQuotePreviewModel = (preview, options = {}) => {
   const insuranceSource = {
     insuranceSelected: preview?.insuranceSelected ?? options.booking?.insuranceSelected,
     insurancePackageId: preview?.insurancePackageId ?? options.booking?.insurancePackageId,
+    includeDefaultInsurance: preview?.includeDefaultInsurance ?? options.booking?.includeDefaultInsurance,
+    optionalInsurancePackageId: preview?.optionalInsurancePackageId ?? options.booking?.optionalInsurancePackageId,
+    defaultInsuranceAmount: preview?.defaultInsuranceAmount ?? options.booking?.defaultInsuranceAmount,
+    optionalInsuranceAmount: preview?.optionalInsuranceAmount ?? options.booking?.optionalInsuranceAmount,
     insurance: preview?.insurance ?? options.booking?.insurance,
   };
   const insurance = normalizeInsuranceFromBooking(insuranceSource);
@@ -363,10 +367,22 @@ export const buildBookingQuotePreview = (booking) => {
 
   const boatsRentalTotal = boats.reduce((sum, boat) => sum + (Number(boat.subtotalAmount) || 0), 0);
   const insurance = booking.insurance || normalizeInsuranceFromBooking(booking);
-  const insuranceAmount = booking.insuranceSelected !== false
-    && Number(insurance?.quantity) > 0
-    && Number(insurance?.totalAmount) > 0
-    ? Number(insurance.totalAmount)
+  // Tổng tiền bảo hiểm ưu tiên lấy từ BE trả defaultInsuranceAmount + optionalInsuranceAmount nếu có,
+  // fallback về insurance.totalAmount (chuẩn hoá).
+  const defaultInsuranceAmount = Number(
+    booking.defaultInsuranceAmount
+    ?? insurance?.defaultInsuranceAmount
+    ?? 0,
+  ) || 0;
+  const optionalInsuranceAmount = Number(
+    booking.optionalInsuranceAmount
+    ?? insurance?.optionalInsuranceAmount
+    ?? 0,
+  ) || 0;
+  const insuranceAmount = (booking.insuranceSelected !== false)
+    && (Number(insurance?.quantity) > 0 || defaultInsuranceAmount > 0 || optionalInsuranceAmount > 0)
+    && (Number(insurance?.totalAmount) > 0 || defaultInsuranceAmount + optionalInsuranceAmount > 0)
+    ? Math.max(defaultInsuranceAmount + optionalInsuranceAmount, Number(insurance?.totalAmount) || 0)
     : 0;
   const discountAmount = Number(
     booking.discountAmount
@@ -398,6 +414,10 @@ export const buildBookingQuotePreview = (booking) => {
     promotionCode: booking.promotionCode || pick(raw, ["promotionCode"], ""),
     insuranceSelected: booking.insuranceSelected,
     insurancePackageId: booking.insurancePackageId,
+    includeDefaultInsurance: booking.includeDefaultInsurance,
+    optionalInsurancePackageId: booking.optionalInsurancePackageId,
+    defaultInsuranceAmount,
+    optionalInsuranceAmount,
     insurance,
   };
 };
