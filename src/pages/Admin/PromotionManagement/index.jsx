@@ -6,7 +6,6 @@ import { useApp } from "../../../context/AppContext";
 import {
     fetchPromotions,
     modifyPromotion,
-    removePromotion,
     buildPromotionPayload,
     formFromPromotion,
     PROMOTION_TYPE,
@@ -105,7 +104,6 @@ export function PromotionManagement() {
         active: promotions.filter((p) => p.status === PROMOTION_STATUS.ACTIVE).length,
         draft: promotions.filter((p) => p.status === PROMOTION_STATUS.DRAFT).length,
         paused: promotions.filter((p) => p.status === PROMOTION_STATUS.PAUSED).length,
-        archived: promotions.filter((p) => p.status === PROMOTION_STATUS.ARCHIVED).length,
         expired: promotions.filter((p) => getPromotionLifecycle(p) === "expired").length,
     }), [promotions]);
 
@@ -139,46 +137,6 @@ export function PromotionManagement() {
             pages = [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
         }
         return pages;
-    };
-
-    const handleDeactivate = async (promo) => {
-        const confirmResult = await notify({
-            title: lang === "VN" ? "Xóa khuyến mãi?" : "Delete promotion?",
-            html: lang === "VN"
-                ? `Mã ${promo.promotionCode}`
-                : `Code ${promo.promotionCode}`,
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonColor: "#d33",
-            cancelButtonColor: "#124757",
-            confirmButtonText: lang === "VN" ? "Xóa (Archive)" : "Delete (Archive)",
-            cancelButtonText: lang === "VN" ? "Hủy bỏ" : "Cancel",
-        });
-        if (!confirmResult.isConfirmed) return;
-
-        try {
-            setProcessingId(promo.id);
-            await removePromotion(promo.id);
-            notify({
-                toast: true,
-                position: "top-end",
-                icon: "success",
-                title: lang === "VN" ? "Đã archive" : "Archived",
-                showConfirmButton: false,
-                timer: 1600,
-            });
-            await loadPromotions();
-        } catch (error) {
-            console.error("Lỗi khi xóa khuyến mãi:", error);
-            notify({
-                icon: "error",
-                title: lang === "VN" ? "Thất bại" : "Failed",
-                text: error.response?.data?.message || (lang === "VN" ? "Không thể xóa khuyến mãi này." : "Failed to delete this promotion."),
-                confirmButtonColor: "#124757",
-            });
-        } finally {
-            setProcessingId(null);
-        }
     };
 
     const handleCopyCode = (code) => {
@@ -360,7 +318,6 @@ export function PromotionManagement() {
                                 { value: PROMOTION_STATUS.DRAFT, label: getStatusLabel(PROMOTION_STATUS.DRAFT, lang) },
                                 { value: PROMOTION_STATUS.ACTIVE, label: getStatusLabel(PROMOTION_STATUS.ACTIVE, lang) },
                                 { value: PROMOTION_STATUS.PAUSED, label: getStatusLabel(PROMOTION_STATUS.PAUSED, lang) },
-                                { value: PROMOTION_STATUS.ARCHIVED, label: getStatusLabel(PROMOTION_STATUS.ARCHIVED, lang) },
                             ]}
                             className="min-w-45 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
                         />
@@ -503,21 +460,7 @@ export function PromotionManagement() {
                                                         >
                                                             <span className="material-symbols-outlined text-[18px]">edit</span>
                                                         </button>
-                                                        {promo.status !== PROMOTION_STATUS.ACTIVE && promo.status !== PROMOTION_STATUS.ARCHIVED && (
-                                                            <button
-                                                                onClick={() => handleActivate(promo)}
-                                                                disabled={processingId === promo.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-500 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
-                                                                title={lang === "VN" ? "Kích hoạt" : "Activate"}
-                                                            >
-                                                                {processingId === promo.id ? (
-                                                                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                                                ) : (
-                                                                    <span className="material-symbols-outlined text-[18px]">toggle_on</span>
-                                                                )}
-                                                            </button>
-                                                        )}
-                                                        {promo.status === PROMOTION_STATUS.ACTIVE && (
+                                                        {promo.status === PROMOTION_STATUS.ACTIVE ? (
                                                             <button
                                                                 onClick={() => handlePause(promo)}
                                                                 disabled={processingId === promo.id}
@@ -530,18 +473,17 @@ export function PromotionManagement() {
                                                                     <span className="material-symbols-outlined text-[18px]">pause</span>
                                                                 )}
                                                             </button>
-                                                        )}
-                                                        {promo.status !== PROMOTION_STATUS.ARCHIVED && (
+                                                        ) : (
                                                             <button
-                                                                onClick={() => handleDeactivate(promo)}
+                                                                onClick={() => handleActivate(promo)}
                                                                 disabled={processingId === promo.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
-                                                                title={lang === "VN" ? "Xóa (Archive)" : "Delete (Archive)"}
+                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-500 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                                title={lang === "VN" ? "Kích hoạt" : "Activate"}
                                                             >
                                                                 {processingId === promo.id ? (
                                                                     <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                                                                 ) : (
-                                                                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                                                                    <span className="material-symbols-outlined text-[18px]">toggle_on</span>
                                                                 )}
                                                             </button>
                                                         )}

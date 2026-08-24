@@ -38,7 +38,7 @@ export const AdminLayout = ({ children, title }) => {
           
           {/* 3. MAIN BODY - Nằm ở khu vực chính giữa để hiển thị nội dung các trang quản trị */}
           {/* Lớp flex-1 giúp main tự động giãn rộng để đẩy khít Footer xuống dưới cùng nếu ít nội dung */}
-          <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto pb-12">
+          <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
             {children}
           </main>
 

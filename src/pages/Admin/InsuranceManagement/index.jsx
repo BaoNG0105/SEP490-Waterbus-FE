@@ -11,6 +11,16 @@ import {
 import { notify } from "../../../utils/swalToast";
 import { FormSelect } from "../../../components/FormSelect";
 
+const escapeHtml = (value) => {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+};
+
 const emptyForm = () => ({
   code: "",
   name: "",
@@ -225,7 +235,13 @@ export function InsuranceManagement() {
       setIsLoading(true);
       setErrorMsg("");
       const params = {};
-      if (statusFilter === "Active") params.activeOnly = true;
+      // BE mặc định activeOnly=true khi không truyền param → sẽ loại gói Inactive
+      // khỏi filter "all" và "Inactive" trên Admin page. Force explicit để hiển thị đủ.
+      if (statusFilter === "Active") {
+        params.activeOnly = true;
+      } else {
+        params.activeOnly = false;
+      }
       const data = await fetchInsurancePackages(params);
       setPackages(data || []);
     } catch (error) {
@@ -259,6 +275,139 @@ export function InsuranceManagement() {
       .sort((a, b) => Number(a.displayOrder ?? 0) - Number(b.displayOrder ?? 0));
   }, [packages, search, statusFilter]);
 
+  // Phát hiện nhiều gói Waterbus default Active cùng lúc (vi phạm constraint "chỉ 1 gói Waterbus mặc định").
+  // Mục đích: cảnh báo user khi mở form / save. KHÔNG khóa thao tác trên list.
+  const waterbusDuplicates = useMemo(() => {
+    return packages.filter(
+      (pkg) => pkg.isWaterbusDefault === true && isPackageActive(pkg),
+    );
+  }, [packages]);
+
+  const hasDuplicateWaterbus = waterbusDuplicates.length > 1;
+
+  // Trả về các gói Waterbus default Active khác (loại trừ chính gói đang edit).
+  const findOtherActiveWaterbusDefaults = (excludeId) => {
+    return waterbusDuplicates.filter(
+      (pkg) => String(pkg.id ?? pkg.insurancePackageId) !== String(excludeId || ""),
+    );
+  };
+
+  /**
+   * Parse lỗi từ BE — chỉ dùng nội bộ để detect duplicate Waterbus default.
+   * KHÔNG hiển thị raw message cho khách hàng.
+   * @returns {{ isDuplicateDefault: boolean }}
+   */
+  const detectDuplicateDefault = (error) => {
+    const data = error?.response?.data || {};
+    const status = error?.response?.status;
+    if (status !== 400) return { isDuplicateDefault: false };
+
+    const collected = [];
+    if (data.errors && typeof data.errors === "object") {
+      Object.values(data.errors).forEach((val) => {
+        if (Array.isArray(val)) collected.push(...val);
+        else if (val) collected.push(val);
+      });
+    }
+    if (data.message) collected.push(data.message);
+    if (data.title) collected.push(data.title);
+
+    const text = collected.join(" | ").toLowerCase();
+    // Detect duplicate bảo hiểm mặc định — không quan tâm field name kỹ thuật.
+    const isDuplicateDefault =
+      /default/.test(text) &&
+      (/waterbus/.test(text) || /đã có.*mặc định/.test(text) || /already.*active.*default/.test(text));
+
+    return { isDuplicateDefault };
+  };
+
+  /**
+   * Pre-check duplicate bảo hiểm mặc định trước khi submit (áp dụng cho cả Create và Edit).
+   * Trả về `true` nếu OK để tiếp tục submit; `false` nếu đã show dialog chặn lại.
+   *
+   * Lý do tách: flow Edit có thể đổi gói ThirdParty → Waterbus (làm cho isWaterbusDefault=true)
+   * hoặc đổi status Inactive → Active. Cả 2 trường hợp đều phải pre-check giống nhau để khách hàng
+   * không phải chờ BE reject mới biết.
+   *
+   * @returns {Promise<boolean>} true nếu không có conflict, false nếu đã chặn.
+   */
+  const ensureNoActiveDefault = async ({ payload, excludeId }) => {
+    // Chỉ quan tâm khi payload yêu cầu: là Waterbus default + đang được bật.
+    if (payload.isWaterbusDefault !== true || payload.isActive !== true) {
+      return true;
+    }
+    try {
+      const check = await checkWaterbusDefault(payload.bookingType);
+      // Tìm các gói trùng (loại trừ chính gói đang edit nếu có).
+      const conflicting = (check?.existingPackage ? [check.existingPackage] : [])
+        .filter((other) => String(other?.id ?? other?.insurancePackageId) !== String(excludeId || ""));
+      if (check?.hasActiveWaterbusDefault && conflicting.length > 0) {
+        setWaterbusDefaultConflict({
+          hasActiveWaterbusDefault: true,
+          existingPackage: conflicting[0] || null,
+          duplicates: conflicting,
+        });
+        showDuplicateDefaultDialog({ duplicates: conflicting });
+        return false;
+      }
+    } catch (checkErr) {
+      // Check lỗi → tin tưởng BE validate khi submit. Không chặn UX ở đây.
+      console.warn("Không check được duplicate trước khi submit, tiếp tục gửi request:", checkErr);
+    }
+    return true;
+  };
+
+  /**
+   * Dialog thông báo gọn cho khách hàng:
+   * - Tiêu đề: vì sao bị chặn
+   * - Danh sách gói cần tắt (nếu có)
+   * - Hướng dẫn 1 dòng
+   * KHÔNG hiển thị field name, raw message, hay chi tiết kỹ thuật từ BE.
+   */
+  const showDuplicateDefaultDialog = ({ duplicates }) => {
+    const dupList = (duplicates || []).map((pkg) => `
+      <li style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border:1px solid #fcd34d;border-radius:8px;font-size:13px;">
+        <span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1;">
+          <span style="color:#0f172a;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(pkg.name || "")}</span>
+          <span style="color:#64748b;font-size:11px;font-family:monospace;">${escapeHtml(pkg.code || "")}</span>
+        </span>
+        <span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;flex-shrink:0;">
+          ${lang === "VN" ? "Đang bật" : "Active"}
+        </span>
+      </li>
+    `).join("");
+
+    const html = `
+      <div style="text-align:left;font-family:inherit;">
+        <p style="margin:0 0 12px 0;color:#0f172a;font-size:14px;line-height:1.55;">
+          ${lang === "VN"
+            ? "Hiện đã có một gói bảo hiểm mặc định đang hoạt động. Bạn cần <strong>tắt gói đó</strong> trước khi bật gói khác làm mặc định."
+            : "A default insurance package is already active. Please <strong>turn it off</strong> before enabling another as the default."}
+        </p>
+        ${dupList ? `
+          <p style="margin:0 0 6px 0;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.5px;">
+            ${lang === "VN" ? "Gói cần tắt" : "Package to turn off"}
+          </p>
+          <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;">
+            ${dupList}
+          </ul>
+        ` : ""}
+      </div>
+    `;
+
+    notify({
+      dialog: true,
+      icon: "warning",
+      tone: "warning",
+      title: lang === "VN"
+        ? "Đã có gói bảo hiểm mặc định đang hoạt động"
+        : "A default insurance package is already active",
+      html,
+      confirmButtonText: lang === "VN" ? "Đóng" : "Close",
+      width: 460,
+    });
+  };
+
   const openCreateModal = () => {
     setEditingId(null);
     const nextOrder = packages.length > 0 ? Math.max(...packages.map((p) => Number(p.displayOrder) || 0)) + 1 : 1;
@@ -275,6 +424,9 @@ export function InsuranceManagement() {
   const openEditModal = (pkg) => {
     setEditingId(pkg.id);
     const existingLogo = pkg.providerLogoUrl || "";
+    const isWaterbus = pkg.isWaterbusDefault === true
+      || pkg.providerSource === "Waterbus"
+      || pkg.providerSource === "waterbus";
     const nextForm = {
       code: pkg.code || "",
       name: pkg.name || "",
@@ -282,7 +434,7 @@ export function InsuranceManagement() {
       unitPremiumAmount: formatVndDisplay(pkg.unitPremiumAmount),
       coverageAmount: formatVndDisplay(pkg.coverageAmount),
       isRequired: Boolean(pkg.isRequired),
-      providerSource: pkg.providerSource || "waterbus",
+      providerSource: isWaterbus ? "waterbus" : "third_party",
       providerName: pkg.providerName || "",
       providerLogoUrl: existingLogo,
       providerLogoFile: null,
@@ -333,31 +485,53 @@ export function InsuranceManagement() {
   };
 
   const updateField = (field, value) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [field]: value };
+      // Auto-fill providerName when switching to Waterbus (only if currently empty)
+      if (field === "providerSource" && value === "waterbus" && !prev.providerName.trim()) {
+        next.providerName = "Waterbus";
+      }
+      return next;
+    });
     if (REALTIME_VALIDATED_FIELDS.has(field)) {
       setTouched((prev) => ({ ...prev, [field]: true }));
     }
-    // Khi chuyển sang Waterbus → check conflict
+    // Trigger check conflict khi:
+    // - Chuyển sang Waterbus
+    // - Đổi status sang Active (vì gói Waterbus + Active mới = có thể gây duplicate)
     if (field === "providerSource" && value === "waterbus") {
       checkWaterbusConflict();
     } else if (field === "providerSource") {
       setWaterbusDefaultConflict(null);
+    } else if (field === "status" && value === "Active") {
+      // Check dựa trên form state hiện tại (sau khi set xong) → cần dùng setForm callback.
+      setForm((prev) => {
+        if (prev.providerSource === "waterbus") {
+          checkWaterbusConflict();
+        }
+        return prev;
+      });
+    } else if (field === "status" && value === "Inactive") {
+      setWaterbusDefaultConflict(null);
     }
   };
 
-  const checkWaterbusConflict = async () => {
-    try {
-      const result = await checkWaterbusDefault(form.bookingType);
-      // Bỏ qua nếu đang edit gói đó
-      const isSamePackage = editingId && result.existingPackage?.id === editingId;
-      if (!isSamePackage) {
-        setWaterbusDefaultConflict(result);
-      } else {
-        setWaterbusDefaultConflict(null);
-      }
-    } catch {
-      setWaterbusDefaultConflict(null);
+  const checkWaterbusConflict = () => {
+    // Check từ packages đã load (BE đánh dấu Waterbus default qua isWaterbusDefault).
+    // Tìm gói Waterbus default Active KHÁC gói đang edit.
+    const otherActiveWaterbus = findOtherActiveWaterbusDefaults(editingId);
+    if (otherActiveWaterbus.length === 0) {
+      setWaterbusDefaultConflict({ hasActiveWaterbusDefault: false, existingPackage: null });
+      return;
     }
+    // Lấy gói đầu tiên làm đại diện (UI chỉ cần 1 để hiển thị link "Sửa gói hiện tại").
+    const existing = otherActiveWaterbus[0];
+    setWaterbusDefaultConflict({
+      hasActiveWaterbusDefault: true,
+      existingPackage: existing,
+      // Kèm danh sách đầy đủ để user biết có bao nhiêu gói trùng.
+      duplicates: otherActiveWaterbus,
+    });
   };
 
   const handleBlur = (field) => {
@@ -484,13 +658,25 @@ export function InsuranceManagement() {
   };
 
   const buildPayload = () => {
+    const sourceKey = form.providerSource === "third_party" ? "ThirdParty" : "Waterbus";
+    // DEBUG: trace state khi payload được build
+    if (typeof window !== "undefined" && window.console) {
+      console.debug("[InsuranceManagement] buildPayload:", {
+        formProviderSource: form.providerSource,
+        derivedSourceKey: sourceKey,
+        formStatus: form.status,
+        formName: form.name,
+        editingId,
+      });
+    }
     const commonFields = {
       name: form.name.trim(),
       bookingType: INSURANCE_BOOKING_TYPES.PASSENGER,
       unitPremiumAmount: parseVndInput(form.unitPremiumAmount),
       coverageAmount: parseVndInput(form.coverageAmount),
       isRequired: false,
-      providerSource: form.providerSource || "waterbus",
+      providerSource: sourceKey,
+      isWaterbusDefault: sourceKey === "Waterbus",
       providerName: form.providerName.trim() || null,
       providerLogoUrl: form.providerLogoUrl.trim() || null,
       conditions: form.conditions.map((c) => c.trim()).filter(Boolean),
@@ -555,12 +741,23 @@ export function InsuranceManagement() {
           title: lang === "VN" ? "Thiếu thông tin" : "Missing information",
           text:
             lang === "VN"
-              ? "Vui lòng nhập đầy đủ Mã gói, Tên gói, Phí bảo hiểm ≥ 1 và Mức bồi thường > 0."
-              : "Please fill Code, Name, Premium ≥ 1 and Coverage > 0.",
+              ? "Vui lòng nhập đầy đủ Mã gói, Tên gói, Phí bảo hiểm và Mức bồi thường (tối thiểu 1.000 VND)."
+              : "Please fill Code, Name, Premium and Coverage (minimum 1,000 VND).",
           confirmButtonColor: "#124757",
         });
         return;
       }
+
+      // Spec BE: cả Create lẫn Edit đều phải đảm bảo chưa có gói Waterbus default active khác
+      // khi payload yêu cầu isWaterbusDefault=true + isActive=true.
+      // - Create: payload đang áp dụng cho gói mới → excludeId = null.
+      // - Edit: payload đang áp dụng cho gói đang sửa → excludeId = editingId (tránh chặn chính gói đó).
+      const ok = await ensureNoActiveDefault({ payload, excludeId: editingId });
+      if (!ok) {
+        setIsSaving(false);
+        return;
+      }
+
       if (editingId) {
         await modifyInsurancePackage(editingId, payload);
       } else {
@@ -581,10 +778,25 @@ export function InsuranceManagement() {
         timer: 1800,
       });
     } catch (error) {
+      const { isDuplicateDefault } = detectDuplicateDefault(error);
+      if (isDuplicateDefault) {
+        const duplicates = findOtherActiveWaterbusDefaults(editingId);
+        setWaterbusDefaultConflict({
+          hasActiveWaterbusDefault: true,
+          existingPackage: duplicates[0] || null,
+          duplicates,
+        });
+        showDuplicateDefaultDialog({ duplicates });
+        // Refetch để đảm bảo UI đồng bộ DB (trường hợp DB có data stale)
+        await loadPackages();
+        return;
+      }
       notify({
         icon: "error",
         title: lang === "VN" ? "Lưu thất bại" : "Save failed",
-        text: error.response?.data?.message || (lang === "VN" ? "Không thể lưu gói bảo hiểm." : "Could not save the package."),
+        text: lang === "VN"
+          ? "Không thể lưu gói bảo hiểm. Vui lòng thử lại."
+          : "Could not save the package. Please try again.",
         confirmButtonColor: "#124757",
       });
     } finally {
@@ -596,6 +808,21 @@ export function InsuranceManagement() {
     const currentlyActive = isPackageActive(pkg);
     const nextStatus = currentlyActive ? "Inactive" : "Active";
     const nextActive = nextStatus === "Active";
+
+    // Spec BE: trước khi PATCH status → Active trên gói có isWaterbusDefault=true,
+    // phải đảm bảo chưa có gói Waterbus default active nào khác.
+    if (nextActive && pkg.isWaterbusDefault === true) {
+      const ok = await ensureNoActiveDefault({
+        payload: {
+          isWaterbusDefault: true,
+          isActive: true,
+          bookingType: pkg.bookingType || INSURANCE_BOOKING_TYPES.PASSENGER,
+        },
+        excludeId: pkg.id,
+      });
+      if (!ok) return;
+    }
+
     setTogglingId(pkg.id);
     setPackages((prev) => prev.map((p) => (
       p.id === pkg.id ? { ...p, status: nextStatus, isActive: nextActive } : p
@@ -613,16 +840,28 @@ export function InsuranceManagement() {
         showConfirmButton: false,
         timer: 1500,
       });
+      // Spec BE: PATCH /status không trả về DTO → phải refetch để đồng bộ isWaterbusDefault / isActive với DB.
+      await loadPackages();
     } catch (error) {
       setPackages((prev) => prev.map((p) => (
         p.id === pkg.id
           ? { ...p, status: currentlyActive ? "Active" : "Inactive", isActive: currentlyActive }
           : p
       )));
+      const { isDuplicateDefault } = detectDuplicateDefault(error);
+      if (isDuplicateDefault) {
+        const duplicates = findOtherActiveWaterbusDefaults(pkg.id);
+        showDuplicateDefaultDialog({ duplicates });
+        // Refetch để chắc chắn UI đúng với DB (BE có thể đã đổi isActive ngầm)
+        await loadPackages();
+        return;
+      }
       notify({
         icon: "error",
         title: lang === "VN" ? "Cập nhật thất bại" : "Update failed",
-        text: error.response?.data?.message || (lang === "VN" ? "Không thể đổi trạng thái gói." : "Could not update package status."),
+        text: lang === "VN"
+          ? "Không thể đổi trạng thái gói. Vui lòng thử lại."
+          : "Could not update package status. Please try again.",
         confirmButtonColor: "#124757",
       });
     } finally {
@@ -687,6 +926,34 @@ export function InsuranceManagement() {
         </div>
       )}
 
+      {hasDuplicateWaterbus && (
+        <div className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 p-4 rounded-xl text-xs font-bold border border-amber-200 dark:border-amber-500/30 shadow-sm flex items-start gap-3">
+          <span className="material-symbols-outlined text-[18px] flex-shrink-0 mt-0.5">warning</span>
+          <div className="flex-1">
+            <div className="mb-1.5">
+              {lang === "VN"
+                ? `Đang có ${waterbusDuplicates.length} gói Waterbus mặc định hoạt động cùng lúc. Cần Inactive các gói trùng trước khi chỉnh sửa để tránh tạo thêm gói mặc định trùng.`
+                : `${waterbusDuplicates.length} active Waterbus default packages detected. Inactive duplicates before editing to avoid creating more defaults.`}
+            </div>
+            <div className="text-[10px] font-semibold text-amber-600 dark:text-amber-400/80 space-y-0.5">
+              {waterbusDuplicates.map((pkg) => (
+                <div key={pkg.id ?? pkg.insurancePackageId} className="flex items-center gap-2">
+                  <span>•</span>
+                  <span className="font-mono">{pkg.code}</span>
+                  <span>—</span>
+                  <span>{pkg.name}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-[10px] font-semibold text-amber-600 dark:text-amber-400/80">
+              {lang === "VN"
+                ? "→ Khi mở Edit/Create với providerSource = Waterbus, hệ thống sẽ chặn và yêu cầu Inactive các gói trùng trước."
+                : "→ Opening Edit/Create with providerSource = Waterbus will be blocked; inactive duplicates first."}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex justify-center items-center h-48">
           <div className="w-10 h-10 border-4 border-[#124757] border-t-transparent rounded-full animate-spin" />
@@ -722,14 +989,24 @@ export function InsuranceManagement() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <h3 className="font-headline font-black text-sm text-slate-800 dark:text-white truncate">{pkg.name}</h3>
-                        <span className={`shrink-0 text-[9px] font-bold ${pkg.providerSource === "third_party"
-                          ? "text-violet-600 dark:text-violet-300"
-                          : "text-sky-600 dark:text-sky-300"
-                          }`}>
-                          {pkg.providerSource === "third_party"
-                            ? (lang === "VN" ? "Bên thứ 3" : "3rd party")
-                            : (lang === "VN" ? "Hệ thống" : "System")}
+                        <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                          pkg.isWaterbusDefault === true
+                            ? "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
+                            : "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
+                        }`}>
+                          {pkg.isWaterbusDefault === true
+                            ? (lang === "VN" ? "Hệ thống" : "System")
+                            : (lang === "VN" ? "Bảo hiểm ngoài" : "3rd party")}
                         </span>
+                        {hasDuplicateWaterbus && waterbusDuplicates.some((dup) => (dup.id ?? dup.insurancePackageId) === (pkg.id ?? pkg.insurancePackageId)) && (
+                          <span
+                            title={lang === "VN" ? "Trùng với gói Waterbus mặc định khác — Inactive các gói khác trước khi chỉnh sửa" : "Duplicate of another active Waterbus default — inactive others before editing"}
+                            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30"
+                          >
+                            <span className="material-symbols-outlined text-[9px]">priority_high</span>
+                            {lang === "VN" ? "Trùng" : "Duplicate"}
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-400 font-bold mt-0.5">{pkg.code}</p>
                     </div>
@@ -931,7 +1208,7 @@ export function InsuranceManagement() {
                   <div className="flex gap-2 mt-1">
                     {[
                       { value: "waterbus", labelVn: "Hệ thống", labelEn: "System" },
-                      { value: "third_party", labelVn: "Bên thứ 3", labelEn: "Third party" },
+                      { value: "third_party", labelVn: "Bảo hiểm ngoài", labelEn: "Third party" },
                     ].map((opt) => {
                       const isActive = form.providerSource === opt.value;
                       return (
@@ -949,7 +1226,7 @@ export function InsuranceManagement() {
                       );
                     })}
                   </div>
-                  {/* Warning: đã có gói Waterbus default active */}
+                  {/* Warning: đã có gói Waterbus default active khác */}
                   {waterbusDefaultConflict?.hasActiveWaterbusDefault && (
                     <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 p-3 space-y-1.5">
                       <div className="flex items-start gap-2">
@@ -957,16 +1234,26 @@ export function InsuranceManagement() {
                         <div className="min-w-0">
                           <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 leading-snug">
                             {lang === "VN"
-                              ? "Đã có gói Waterbus mặc định cho loại vé này."
-                              : "A default Waterbus package already exists for this booking type."}
+                              ? `Hiện đang có ${waterbusDefaultConflict.duplicates?.length || 1} gói Waterbus mặc định đang hoạt động. Cần Inactive các gói trùng trước khi lưu gói này làm Waterbus mặc định.`
+                              : `${waterbusDefaultConflict.duplicates?.length || 1} Waterbus default package(s) are currently active. Inactive duplicates before saving this as a default.`}
                           </p>
-                          {waterbusDefaultConflict.existingPackage && (
-                            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-0.5">
-                              {waterbusDefaultConflict.existingPackage.name}
-                              {" — "}
-                              {formatVnd(waterbusDefaultConflict.existingPackage.unitPremiumAmount)}
-                            </p>
+                          {waterbusDefaultConflict.duplicates && waterbusDefaultConflict.duplicates.length > 0 && (
+                            <ul className="mt-1.5 space-y-0.5">
+                              {waterbusDefaultConflict.duplicates.map((pkg) => (
+                                <li key={pkg.id ?? pkg.insurancePackageId} className="text-[10px] text-amber-700 dark:text-amber-300 font-bold flex items-center gap-1.5">
+                                  <span className="material-symbols-outlined text-[10px]">circle</span>
+                                  <span className="font-mono">{pkg.code}</span>
+                                  <span>—</span>
+                                  <span>{pkg.name}</span>
+                                </li>
+                              ))}
+                            </ul>
                           )}
+                          <p className="mt-1.5 text-[10px] font-bold text-red-600 dark:text-red-400">
+                            {lang === "VN"
+                              ? "⛔ Không thể lưu — hãy Inactive từng gói trùng trước."
+                              : "⛔ Cannot save — inactive each duplicate first."}
+                          </p>
                           <button
                             type="button"
                             onClick={() => {
@@ -977,7 +1264,7 @@ export function InsuranceManagement() {
                             }}
                             className="mt-1.5 text-[10px] font-black text-[#124757] dark:text-yellow-400 hover:underline uppercase tracking-wide"
                           >
-                            {lang === "VN" ? "→ Sửa gói hiện tại" : "→ Edit existing package"}
+                            {lang === "VN" ? "→ Sửa gói trùng đầu tiên" : "→ Edit first duplicate"}
                           </button>
                         </div>
                       </div>
@@ -1168,13 +1455,14 @@ export function InsuranceManagement() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h4 className="font-headline font-black text-base text-slate-800 dark:text-white">{viewingPackage.name}</h4>
-                    <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${viewingPackage.providerSource === "third_party"
-                      ? "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
-                      : "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
-                      }`}>
-                      {viewingPackage.providerSource === "third_party"
-                        ? (lang === "VN" ? "Bên thứ 3" : "3rd party")
-                        : (lang === "VN" ? "Hệ thống" : "System")}
+                    <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                      viewingPackage.isWaterbusDefault === true
+                        ? "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
+                        : "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
+                    }`}>
+                      {viewingPackage.isWaterbusDefault === true
+                        ? (lang === "VN" ? "Hệ thống" : "System")
+                        : (lang === "VN" ? "Bảo hiểm ngoài" : "3rd party")}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 font-bold mt-0.5">{viewingPackage.code}</p>

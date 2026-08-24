@@ -879,7 +879,7 @@ export default function Step2CounterSelectTripAndSeats({
                             >
                               {seat.seatNumber}
                               <span className="text-[#124757] dark:text-yellow-400">
-                                {Number(seat.basePrice || 0).toLocaleString()}₫
+                                {Number(seat.effectivePrice || seat.basePrice || 0).toLocaleString()}₫
                               </span>
                             </span>
                           ))}
@@ -889,7 +889,7 @@ export default function Step2CounterSelectTripAndSeats({
                             {lang === "VN" ? "Tạm tính" : "Subtotal"}
                           </span>
                           <span className="text-lg font-headline font-black text-[#124757] dark:text-yellow-400">
-                            {currentSeats.reduce((sum, s) => sum + Number(s.basePrice || 0), 0).toLocaleString()} VND
+                            {currentSeats.reduce((sum, s) => sum + Number(s.effectivePrice || s.basePrice || 0), 0).toLocaleString()} VND
                           </span>
                         </div>
                       </div>
@@ -988,7 +988,7 @@ export default function Step2CounterSelectTripAndSeats({
                                               {seatStatusLabel}
                                             </div>
                                             <div className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
-                                              {lang === "VN" ? "Giá" : "Price"}: {Number(seat.basePrice || 0).toLocaleString()} {lang === "VN" ? "VNĐ" : "VND"}
+                                              {lang === "VN" ? "Giá" : "Price"}: {Number(seat.effectivePrice || seat.basePrice || 0).toLocaleString()} {lang === "VN" ? "VNĐ" : "VND"}
                                             </div>
                                           </div>
                                           <div className="mx-auto -mt-1 h-2 w-2 rotate-45 border-b border-r border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800" />

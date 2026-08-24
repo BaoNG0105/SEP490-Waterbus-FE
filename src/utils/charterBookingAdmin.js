@@ -1765,6 +1765,14 @@ export const normalizeBooking = (item) => {
     note: pick(item, ["specialRequests"], "--"),
     insuranceSelected: resolveInsuranceSelected(item),
     insurancePackageId: getBookingInsurancePackageId(item),
+    includeDefaultInsurance: pick(item, [
+      "includeDefaultInsurance",
+      "insurance.includeDefaultInsurance",
+    ], typeof item?.insuranceSelected === "boolean" ? item.insuranceSelected : false),
+    optionalInsurancePackageId: pick(item, [
+      "optionalInsurancePackageId",
+      "insurance.optionalInsurancePackageId",
+    ], null) || null,
     insurance: normalizeInsuranceFromBooking(item) || pick(item, ["insurance"], null),
     qrToken: pick(item, ["charterBookingQrToken", "qrToken"], ""),
     passengers: Array.isArray(item?.passengers) ? item.passengers : [],

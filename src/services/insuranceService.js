@@ -62,6 +62,7 @@ const normalizeInsurancePackage = (pkg) => {
         bookingType: normalizeBookingType(pkg?.bookingType),
         status,
         isActive: status === 'Active',
+        isWaterbusDefault: Boolean(pkg?.isWaterbusDefault),
         displayOrder: Number(pkg?.displayOrder ?? 0) || 0,
         unitPremiumAmount: Number(pkg?.unitPremiumAmount) || 0,
         coverageAmount: Number(pkg?.coverageAmount) || 0,
@@ -155,6 +156,14 @@ export const removeInsurancePackage = async (id) => {
 };
 
 /**
+ * Lọc bỏ gói "Waterbus mặc định" — chỉ giữ gói bên thứ 3 (đối tác)
+ * cho UI user chọn (checkout, charter request, …).
+ */
+export const filterThirdPartyPackages = (packages = []) => (
+    (Array.isArray(packages) ? packages : []).filter((pkg) => !pkg?.isWaterbusDefault)
+);
+
+/**
  * Gói Active dùng chung mọi booking.
  * 1) GET ?bookingType=PassengerInsurance
  * 2) Fallback GET all + lọc PassengerInsurance / legacy Seat|Charter
@@ -175,7 +184,21 @@ export const fetchActiveInsurancePackages = async (bookingType = INSURANCE_BOOKI
     }
 
     const all = await fetchInsurancePackages({ activeOnly: true });
-    return sortActivePackages(pickPassengerScopedPackages(all));
+    const scoped = pickPassengerScopedPackages(all);
+    // Defensive: BE có thể không respect activeOnly=true, lọc lại bên FE.
+    return scoped.filter((pkg) => pkg.isActive !== false)
+        .sort((a, b) => Number(a.displayOrder ?? 0) - Number(b.displayOrder ?? 0));
+};
+
+/**
+ * Giống `fetchActiveInsurancePackages` nhưng loại bỏ gói "Waterbus mặc định"
+ * — chỉ trả về gói bên thứ 3 để user chọn lúc booking.
+ */
+export const fetchThirdPartyInsurancePackages = async (bookingType) => {
+    const all = await fetchActiveInsurancePackages(bookingType);
+    // Defensive: BE có thể không respect activeOnly=true, lọc lại bên FE để đảm bảo.
+    const activeThirdParty = filterThirdPartyPackages(all).filter((pkg) => pkg.isActive !== false);
+    return activeThirdParty;
 };
 
 export const fetchActiveInsurancePackage = async (bookingType) => {

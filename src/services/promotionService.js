@@ -47,19 +47,14 @@ const extractRows = (data) => {
     return [];
 };
 
-const toNullablePositive = (value, enabled = true) => {
+// Trả về số khi hợp lệ, null nếu không hợp lệ / không nhập.
+// `min` mặc định > 0 (cho usageLimit, maxUsesPerAccount). Truyền `1000` cho
+// các field tiền tệ để đảm bảo giá trị ≥ ngưỡng tối thiểu của backend.
+const toNullablePositive = (value, enabled = true, min = 0) => {
     if (!enabled) return null;
     if (value === '' || value === null || value === undefined) return null;
     const num = Number(value);
-    if (!Number.isFinite(num) || num <= 0) return null;
-    return num;
-};
-
-const toNullableNonNegative = (value, enabled = true) => {
-    if (!enabled) return null;
-    if (value === '' || value === null || value === undefined) return null;
-    const num = Number(value);
-    if (!Number.isFinite(num) || num < 0) return null;
+    if (!Number.isFinite(num) || num <= min) return null;
     return num;
 };
 
@@ -218,14 +213,14 @@ export const buildPromotionPayload = (form, { includeCode = true } = {}) => {
         discountType: isPercent ? PROMOTION_TYPE.PERCENT : PROMOTION_TYPE.FIXED,
         discountValue: Number(form.discountValue) || 0,
         maxDiscountAmount: isPercent
-            ? toNullablePositive(form.maxDiscountAmount, !!form.hasMaxDiscountAmount)
+            ? toNullablePositive(form.maxDiscountAmount, !!form.hasMaxDiscountAmount, 1000)
             : null,
-        minOrderValue: toNullableNonNegative(form.minOrderValue, !!form.hasMinOrderValue),
+        minOrderValue: toNullablePositive(form.minOrderValue, !!form.hasMinOrderValue, 1000),
         startDate: toIsoWithOffset(form.validFrom),
         endDate: toIsoWithOffset(form.validTo),
         maxUsageCount: toNullablePositive(form.usageLimit, !!form.hasUsageLimit),
         maxUsagePerAccount: toNullablePositive(form.maxUsesPerAccount, !!form.hasMaxUsesPerAccount),
-        budgetCap: toNullablePositive(form.budgetCap, !!form.hasBudgetCap),
+        budgetCap: toNullablePositive(form.budgetCap, !!form.hasBudgetCap, 1000),
         firstBookingOnly: !!form.firstBookingOnly,
         scope: buildPromotionScope(form),
         visibility: form.visibility || PROMOTION_VISIBILITY.PUBLIC,
@@ -245,6 +240,10 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
     if (isCreate) {
         if (!code) return lang === 'VN' ? 'Mã khuyến mãi bắt buộc.' : 'Promotion code is required.';
         if (code.length > 50) return lang === 'VN' ? 'Mã tối đa 50 ký tự.' : 'Code max 50 characters.';
+        if (!/^[A-Z0-9]+$/.test(code))
+            return lang === 'VN'
+                ? 'Mã chỉ chứa chữ in hoa và số (A–Z, 0–9).'
+                : 'Code may only contain uppercase letters and digits (A–Z, 0–9).';
     }
 
     const name = String(form.promotionName || '').trim();
@@ -264,19 +263,68 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
         return lang === 'VN' ? 'Phần trăm giảm không được > 100.' : 'Percent discount cannot exceed 100.';
     }
 
+    // ── Money thresholds (≥ 1.000đ) ──
+    if (form.promotionType === PROMOTION_TYPE.PERCENT
+        && form.hasMaxDiscountAmount
+        && form.maxDiscountAmount !== '' && form.maxDiscountAmount != null) {
+        const m = Number(form.maxDiscountAmount);
+        if (!Number.isFinite(m) || m < 1000)
+            return lang === 'VN' ? 'Giảm tối đa phải ≥ 1.000đ.' : 'maxDiscountAmount must be ≥ 1,000.';
+    }
+    if (form.hasMinOrderValue
+        && form.minOrderValue !== '' && form.minOrderValue != null) {
+        const m = Number(form.minOrderValue);
+        if (!Number.isFinite(m) || m < 1000)
+            return lang === 'VN' ? 'Đơn tối thiểu phải ≥ 1.000đ.' : 'minOrderValue must be ≥ 1,000.';
+    }
+    if (form.hasBudgetCap
+        && form.budgetCap !== '' && form.budgetCap != null) {
+        const m = Number(form.budgetCap);
+        if (!Number.isFinite(m) || m < 1000)
+            return lang === 'VN' ? 'Ngân sách phải ≥ 1.000đ.' : 'budgetCap must be ≥ 1,000.';
+    }
+
+    // ── Usage thresholds (≥ 1) ──
+    if (form.hasUsageLimit
+        && form.usageLimit !== '' && form.usageLimit != null) {
+        const n = Number(form.usageLimit);
+        if (!Number.isFinite(n) || n < 1)
+            return lang === 'VN' ? 'Lượt dùng tổng phải ≥ 1.' : 'usageLimit must be ≥ 1.';
+    }
+    if (form.hasMaxUsesPerAccount
+        && form.maxUsesPerAccount !== '' && form.maxUsesPerAccount != null) {
+        const n = Number(form.maxUsesPerAccount);
+        if (!Number.isFinite(n) || n < 1)
+            return lang === 'VN' ? 'Lượt dùng/user phải ≥ 1.' : 'maxUsesPerAccount must be ≥ 1.';
+    }
+
+    // ── Date range ──
     if (!form.validFrom || !form.validTo) {
         return lang === 'VN' ? 'Hiệu lực từ/đến bắt buộc.' : 'Valid from/to are required.';
     }
-    if (form.validTo <= form.validFrom) {
+    const fromTs = new Date(form.validFrom).getTime();
+    const toTs = new Date(form.validTo).getTime();
+    if (Number.isFinite(fromTs) && Number.isFinite(toTs) && toTs <= fromTs) {
         return lang === 'VN' ? 'Ngày kết thúc phải sau ngày bắt đầu.' : 'validTo must be after validFrom.';
     }
 
+    // ── Status enum defence-in-depth ──
+    const ALLOWED_STATUS = new Set([
+        PROMOTION_STATUS.DRAFT,
+        PROMOTION_STATUS.ACTIVE,
+        PROMOTION_STATUS.PAUSED,
+        PROMOTION_STATUS.ARCHIVED,
+    ]);
+    if (form.status != null && !ALLOWED_STATUS.has(form.status)) {
+        return lang === 'VN' ? 'Trạng thái không hợp lệ.' : 'Invalid status value.';
+    }
     if (isCreate && form.status === PROMOTION_STATUS.ARCHIVED) {
         return lang === 'VN'
             ? 'Không tạo mới với trạng thái Archived.'
             : 'Cannot create with Archived status.';
     }
 
+    // ── Departure time range ──
     const from = toHhMm(form.departureFrom);
     const to = toHhMm(form.departureTo);
     if (from && to && from > to) {
@@ -285,6 +333,7 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
             : 'departureFrom must be ≤ departureTo.';
     }
 
+    // ── Image MIME ──
     if (form.imageFile) {
         const type = String(form.imageFile.type || '').toLowerCase();
         const ok = ['image/jpeg', 'image/png', 'image/webp'].includes(type);

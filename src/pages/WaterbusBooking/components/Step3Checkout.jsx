@@ -13,7 +13,7 @@ import { fetchCurrentUserProfile } from "../../../services/authService";
 import { fetchTicketTypes, DEFAULT_TICKET_TYPES, formatTicketTypeLabel, resolveTicketPriceModifier } from "../../../services/ticketTypeService";
 import { fetchMyPointBalance, fetchMyPoints, getMaxPointsToUse, estimateEarnPoints } from "../../../services/pointService";
 import {
-  fetchActiveInsurancePackages,
+  fetchThirdPartyInsurancePackages,
   findInsurancePackageById,
   getInsurancePackageId,
   isSameInsurancePackageId,
@@ -472,7 +472,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     let cancelled = false;
     setIsInsuranceLoading(true);
     setInsuranceLoadError("");
-    fetchActiveInsurancePackages(INSURANCE_BOOKING_TYPES.PASSENGER)
+    fetchThirdPartyInsurancePackages(INSURANCE_BOOKING_TYPES.PASSENGER)
       .then((packages) => {
         if (cancelled) return;
         setInsurancePackages(packages);
@@ -526,11 +526,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
   const insuranceFee = selectedInsurancePackageId ? Number(insurancePreview.total) || 0 : 0;
   const insuranceRequired = insurancePackages.some((pkg) => pkg.isRequired);
 
-  // Ước tính giá vé: finalPrice = seat.basePrice * modifier (SightseeingLoop → sightseeingPriceModifier).
-  // Giá chuẩn cuối cùng vẫn do BE chốt (subtotalAmount / discountAmount / totalAmount).
+  // Ước tính giá vé: finalPrice = seat.effectivePrice * modifier (SightseeingLoop → sightseeingPriceModifier).
+  // effectivePrice đã bao gồm bảo hiểm mặc định. insuranceFee chỉ tính khi chọn gói bảo hiểm khác.
   const sumSeatsPrice = (seats) => seats.reduce((sum, seat, i) => {
     const modifier = getPriceModifier(passengers[i]?.ticketType || "ADULT");
-    return sum + Number(seat.basePrice || 0) * modifier;
+    return sum + Number(seat.effectivePrice || seat.basePrice || 0) * modifier;
   }, 0);
   const subtotal = sumSeatsPrice(selectedSeatsDeparture) + (isRoundTrip ? sumSeatsPrice(selectedSeatsReturn) : 0);
   // Tổng đơn hàng trước giảm giá = giá vé + bảo hiểm (giống base BE dùng để validate mã).
@@ -835,7 +835,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
 
       // Giá chốt: luôn lấy subtotalAmount / totalAmount từ booking response (không tự khóa tổng trên FE).
       const bookingTotalRaw = pick(booking, ["totalAmount", "data.totalAmount"], null);
-      const bookingSubtotalRaw = pick(booking, ["subtotalAmount", "data.subtotalAmount"], null);
+      const bookingSubtotalRaw = pick(booking, ["subtotalAmount", "data.subtotalAmount", "ticketSubtotalAmount", "data.ticketSubtotalAmount"], null);
       const bookingTotal = Number(bookingTotalRaw);
       const orderAmount = Number.isFinite(bookingTotal)
         ? bookingTotal

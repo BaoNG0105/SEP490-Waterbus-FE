@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import {
@@ -17,7 +17,9 @@ export function CreatePromotion() {
   const navigate = useNavigate();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [serverError, setServerError] = useState("");
+  // Mỗi lần inline error đổi, cuộn tới field đầu tiên bị lỗi để user thấy ngay.
+  const [errorTick, setErrorTick] = useState(0);
   const [formData, setFormData] = useState(() => emptyPromotionForm());
   const [fieldErrors, setFieldErrors] = useState({});
 
@@ -25,19 +27,30 @@ export function CreatePromotion() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Cuộn tới field đầu tiên bị lỗi khi submit bị chặn.
+  useEffect(() => {
+    if (errorTick === 0) return;
+    const firstErrField = Object.keys(fieldErrors)[0];
+    if (!firstErrField) return;
+    const el = document.querySelector(`[data-field="${firstErrField}"]`);
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [errorTick, fieldErrors]);
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (Object.keys(fieldErrors).length > 0) return;
+    const inlineErrorCount = Object.keys(fieldErrors).length;
+    const formError = validatePromotionForm(formData, lang, { isCreate: true });
+    if (inlineErrorCount > 0 || formError) {
+      // Inline error đã hiển thị dưới từng ô. Kích hoạt scroll-to-first-error.
+      setServerError("");
+      setErrorTick((t) => t + 1);
+      return;
+    }
     try {
       setIsSubmitting(true);
-      setErrorMsg("");
-
-      const formError = validatePromotionForm(formData, lang, { isCreate: true });
-      if (formError) {
-        setErrorMsg(formError);
-        setIsSubmitting(false);
-        return;
-      }
+      setServerError("");
 
       const payload = buildPromotionPayload(formData, { includeCode: true });
       const created = await addPromotion(payload);
@@ -74,7 +87,7 @@ export function CreatePromotion() {
       if (error.response?.data?.errors) {
         validationError = Object.values(error.response.data.errors).flat().join(" | ");
       }
-      setErrorMsg(
+      setServerError(
         validationError ||
           error.response?.data?.message ||
           (lang === "VN" ? "Tạo khuyến mãi thất bại." : "Failed to create promotion.")
@@ -101,9 +114,12 @@ export function CreatePromotion() {
         </div>
       </div>
 
-      {errorMsg && (
-        <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20 shadow-sm">
-          {errorMsg}
+      {serverError && (
+        <div
+          role="alert"
+          className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20 shadow-sm"
+        >
+          {serverError}
         </div>
       )}
 
@@ -119,7 +135,7 @@ export function CreatePromotion() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          className="sticky bottom-4 z-20 w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {isSubmitting && (
             <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />

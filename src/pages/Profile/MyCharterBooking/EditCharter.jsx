@@ -67,6 +67,20 @@ const buildFormDataFromDetail = (detail, user) => ({
   insuranceSelected: typeof detail?.insuranceSelected === "boolean"
     ? detail.insuranceSelected
     : (typeof detail?.insurance?.selected === "boolean" ? detail.insurance.selected : undefined),
+  includeDefaultInsurance: pick(detail, [
+    "includeDefaultInsurance",
+    "insurance.includeDefaultInsurance",
+    "insurance.hasDefaultInsurance",
+  ], typeof detail?.insuranceSelected === "boolean"
+    ? detail.insuranceSelected
+    : (typeof detail?.insurance?.selected === "boolean" ? detail.insurance.selected : false)),
+  optionalInsurancePackageId: pick(detail, [
+    "optionalInsurancePackageId",
+    "insurance.optionalInsurancePackageId",
+    "insurance.optional.packageId",
+    "insurance.optional.insurancePackageId",
+    "insurance.optionalInsuranceId",
+  ], null) || null,
   insurancePackageId: pick(detail, [
     "insurancePackageId",
     "insurance.insurancePackageId",

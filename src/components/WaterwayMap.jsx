@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
+import { SmartTileLayer, TILE_PROVIDERS } from "./SmartTileLayer";
 import { useApp } from "../context/AppContext";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../utils/charterBookingAdmin";
 import { isBoatUnderMaintenance, resolveBoatLiveStatus } from "../utils/boatTracking";
@@ -665,10 +666,7 @@ export const WaterwayMap = ({
         dragging={mapActivated}
       >
         {interactionGate && <InteractionGateSync active={mapActivated} />}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <SmartTileLayer providers={TILE_PROVIDERS} />
 
         {/* Tuyến nền / tuyến đang xem — active = xanh nổi */}
         {visibleRouteOverlays.map((route) => (

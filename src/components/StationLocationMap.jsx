@@ -1,6 +1,7 @@
 import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
+import { SmartTileLayer, TILE_PROVIDERS } from "./SmartTileLayer";
 
 // react-leaflet không tự resolve được icon mặc định qua bundler — trỏ thẳng về CDN.
 delete L.Icon.Default.prototype._getIconUrl;
@@ -44,10 +45,7 @@ export function StationLocationMap({ latitude, longitude, label, className = "" 
         className="w-full h-full"
       >
         <InvalidateSizeOnMount />
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <SmartTileLayer providers={TILE_PROVIDERS} />
         <Marker position={position}>
           {label ? <Popup>{label}</Popup> : null}
         </Marker>

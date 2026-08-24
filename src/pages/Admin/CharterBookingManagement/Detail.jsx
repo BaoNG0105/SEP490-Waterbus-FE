@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import {
   AdminBookingActionsTab,
   AdminBookingOverviewTab,
+  AdminBookingPassengersTab,
   AdminBookingTicketsTab,
 } from "../../../components/AdminCharterDetailWorkspace";
 
@@ -100,6 +101,7 @@ import {
   resolveQuoteDurationValue,
   readAcknowledgedTabBadges,
   acknowledgeTabBadge,
+  shouldShowTabBadge,
   getAvailableRefundAmount,
 } from "../../../utils/charterBookingAdmin";
 import { fetchCharterSourceRoutes, fetchRouteDetail } from "../../../services/routeService";
@@ -1057,6 +1059,17 @@ export function AdminCharterBookingDetail() {
       tabs.push({ id: "actions", label: lang === "VN" ? "Thao tác" : "Actions" });
     }
     tabs.push({ id: "overview", label: lang === "VN" ? "Tổng quan" : "Overview" });
+    const passengerCount = Number(
+      booking?.passengerCount
+        ?? booking?.totalPassengers
+        ?? (Array.isArray(booking?.passengers) ? booking.passengers.length : 0)
+        ?? 0,
+    );
+    tabs.push({
+      id: "passengers",
+      label: lang === "VN" ? "Hành khách" : "Passengers",
+      badge: passengerCount > 0 ? passengerCount : "",
+    });
     const paymentList = Array.isArray(booking?.payments) ? booking.payments : [];
     const ticketList = canShowCharterTickets(booking)
       ? (Array.isArray(booking?.tickets) ? booking.tickets : [])
@@ -1566,6 +1579,10 @@ export function AdminCharterBookingDetail() {
           useAssignedApi={useAssignedApi}
           onRefresh={loadDetail}
         />
+      )}
+
+      {activeTab === "passengers" && (
+        <AdminBookingPassengersTab lang={lang} booking={booking} />
       )}
     </div>
   );
