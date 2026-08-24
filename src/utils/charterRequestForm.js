@@ -102,6 +102,38 @@ export const countPassengersByType = (passengers) => {
   return { adultCount, childCount, total: adultCount + childCount };
 };
 
+/**
+ * Sort danh sách gói bảo hiểm active cho luồng Charter:
+ * - Gói Waterbus default (`isWaterbusDefault`) luôn lên đầu.
+ * - Sau đó sort theo `displayOrder` tăng dần.
+ * - Giữ nguyên thứ tự BE trả nếu các gói còn lại bằng displayOrder.
+ */
+export const sortActivePackagesForCharter = (packages = []) => {
+  const list = Array.isArray(packages) ? packages : [];
+  return [...list].sort((a, b) => {
+    const aDefault = Boolean(a?.isWaterbusDefault);
+    const bDefault = Boolean(b?.isWaterbusDefault);
+    if (aDefault !== bDefault) return aDefault ? -1 : 1;
+    return Number(a?.displayOrder ?? 0) - Number(b?.displayOrder ?? 0);
+  });
+};
+
+/**
+ * Trả về id gói bảo hiểm mặc định cho Charter (ưu tiên gói Waterbus default).
+ * Trả `null` nếu list rỗng.
+ */
+export const getCharterDefaultPackageId = (packages = []) => {
+  const list = Array.isArray(packages) ? packages : [];
+  const waterbusDefault = list.find((pkg) => pkg?.isWaterbusDefault);
+  return (
+    waterbusDefault?.id
+    ?? waterbusDefault?.insurancePackageId
+    ?? list[0]?.id
+    ?? list[0]?.insurancePackageId
+    ?? null
+  );
+};
+
 /** Validate danh sách hành khách có khớp số lượng adult/child đã khai báo không. Trả về null nếu hợp lệ. */
 export const getPassengerTypeMismatchError = (passengers, adultCount, childCount, lang = "VN") => {
   const declared = Math.max(0, Number(adultCount) || 0) + Math.max(0, Number(childCount) || 0);

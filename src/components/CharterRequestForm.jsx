@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { fetchAllStations } from "../services/stationService";
-import { fetchThirdPartyInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId, buildInsuranceConditionsHtml, INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
+import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId, buildInsuranceConditionsHtml, INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
 import { fetchCurrentUserProfile } from "../services/authService";
 import { updateUserProfile } from "../redux/authSlice";
 import {
@@ -14,6 +14,7 @@ import {
   deckOptionImages,
   deckOptions,
   getCharterDayStartTimeError,
+  getCharterDefaultPackageId,
   getMinDepartureDate,
   getPassengerTypeMismatchError,
   isCharterDayStartTimeValid,
@@ -21,6 +22,7 @@ import {
   normalizeVietnamPhoneInput,
   PASSENGER_TYPE_ADULT,
   PASSENGER_TYPE_CHILD,
+  sortActivePackagesForCharter,
 } from "../utils/charterRequestForm";
 import { getCharterInsuranceNote, getInsurancePendingMessage } from "../utils/insurancePreview";
 import { AppDateInput } from "./AppDateInput";
@@ -201,12 +203,11 @@ export function CharterRequestForm({
 
   const [stations, setStations] = useState([]);
   const [insurancePackages, setInsurancePackages] = useState([]);
-  const [optionalInsurancePackageId, setOptionalInsurancePackageId] = useState(
-    initialFormData?.optionalInsurancePackageId
-      ?? (initialFormData?.insuranceSelected === false ? null : (initialFormData?.insurancePackageId ?? null))
-  );
-  const [includeDefaultInsurance, setIncludeDefaultInsurance] = useState(
-    Boolean(initialFormData?.includeDefaultInsurance ?? initialFormData?.insuranceSelected)
+  const [selectedInsurancePackageId, setSelectedInsurancePackageId] = useState(
+    initialFormData?.selectedInsurancePackageId
+      ?? initialFormData?.optionalInsurancePackageId
+      ?? initialFormData?.insurancePackageId
+      ?? null
   );
   const [isInsuranceDetailsOpen, setIsInsuranceDetailsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -221,7 +222,6 @@ export function CharterRequestForm({
   const formDataRef = useRef(formData);
   useEffect(() => { formDataRef.current = formData; }, [formData]);
   const submitInFlightRef = useRef(false);
-  const lastInsurancePackageIdRef = useRef(null);
 
   const loadStations = useCallback(async () => {
     try {
@@ -238,30 +238,24 @@ export function CharterRequestForm({
 
   useEffect(() => {
     let isMounted = true;
-    fetchThirdPartyInsurancePackages(INSURANCE_BOOKING_TYPES.PASSENGER)
-      .then((packages) => {
+    fetchActiveInsurancePackages(INSURANCE_BOOKING_TYPES.PASSENGER)
+      .then((rawPackages) => {
         if (!isMounted) return;
+        const packages = sortActivePackagesForCharter(rawPackages);
         setInsurancePackages(packages);
-        const initial = initialFormData?.optionalInsurancePackageId
-          ?? (initialFormData?.insuranceSelected === false ? null : (initialFormData?.insurancePackageId ?? null));
-        const initialDefault = Boolean(initialFormData?.includeDefaultInsurance ?? initialFormData?.insuranceSelected);
-        setIncludeDefaultInsurance(initialDefault);
-        setOptionalInsurancePackageId((currentId) => {
-          const preferredId = initialDefault ? initial : currentId;
+        setSelectedInsurancePackageId((currentId) => {
+          // Ưu tiên id user đã chọn từ trước (initial hoặc state hiện tại).
+          const preferredId = currentId
+            ?? initialFormData?.selectedInsurancePackageId
+            ?? initialFormData?.optionalInsurancePackageId
+            ?? initialFormData?.insurancePackageId;
           if (preferredId && packages.some((pkg) => isSameInsurancePackageId(getInsurancePackageId(pkg), preferredId))) {
-            lastInsurancePackageIdRef.current = String(preferredId);
             return String(preferredId);
           }
-          if (initialDefault && !preferredId) {
-            const defaultId = getInsurancePackageId(packages[0]);
-            lastInsurancePackageIdRef.current = defaultId;
-            return defaultId;
-          }
-          if (currentId && packages.some((pkg) => isSameInsurancePackageId(getInsurancePackageId(pkg), currentId))) {
-            lastInsurancePackageIdRef.current = String(currentId);
-            return String(currentId);
-          }
-          return currentId || null;
+          // Mặc định chọn gói Waterbus default (đã được sort lên đầu).
+          return getCharterDefaultPackageId(packages) != null
+            ? String(getCharterDefaultPackageId(packages))
+            : null;
         });
       })
       .catch((error) => {
@@ -270,7 +264,7 @@ export function CharterRequestForm({
     return () => {
       isMounted = false;
     };
-  }, [initialFormData?.insurancePackageId, initialFormData?.insuranceSelected, initialFormData?.optionalInsurancePackageId, initialFormData?.includeDefaultInsurance]);
+  }, [initialFormData?.selectedInsurancePackageId, initialFormData?.optionalInsurancePackageId, initialFormData?.insurancePackageId]);
 
   useEffect(() => {
     if (currentStep !== 3) return;
@@ -903,10 +897,9 @@ export function CharterRequestForm({
       })),
       specialRequests: formData.specialRequests || null,
       rentalUnit: formData.rentalUnit === "Day" ? "Day" : "Hour",
-      insuranceSelected: Boolean(includeDefaultInsurance || optionalInsurancePackageId),
-      includeDefaultInsurance: Boolean(includeDefaultInsurance),
-      insurancePackageId: optionalInsurancePackageId || null,
-      optionalInsurancePackageId: optionalInsurancePackageId || null,
+      insuranceSelected: selectedInsurancePackageId != null,
+      insurancePackageId: selectedInsurancePackageId || null,
+      selectedInsurancePackageId: selectedInsurancePackageId || null,
     };
 
     if (isSubmitting || submitInFlightRef.current) return;
@@ -1372,10 +1365,8 @@ export function CharterRequestForm({
             {/* Bảo hiểm hành khách */}
             {(() => {
               const formatVnd = (value) => (Number(value) || 0).toLocaleString("vi-VN") + "đ";
-              const wantsDefault = includeDefaultInsurance;
-              const wantsOptional = optionalInsurancePackageId != null;
-              const selectedPackage = wantsOptional
-                ? findInsurancePackageById(insurancePackages, optionalInsurancePackageId)
+              const selectedPackage = selectedInsurancePackageId != null
+                ? findInsurancePackageById(insurancePackages, selectedInsurancePackageId)
                 : null;
               const unitPremiumLabel = lang === "VN" ? "khách" : "pax";
               const pendingMessage = getInsurancePendingMessage(INSURANCE_BOOKING_TYPES.PASSENGER, lang);
@@ -1384,51 +1375,16 @@ export function CharterRequestForm({
                 0,
                 (Number(formData.adultCount) || 0) + (Number(formData.childCount) || 0),
               );
+              const selectedUnitPremium = Number(selectedPackage?.unitPremiumAmount) || 0;
+              const totalPreviewAmount = selectedPackage ? selectedUnitPremium * passengerQty : 0;
 
-              // Default insurance price (BE tính theo số khách × unitPremiumAmount của gói mặc định active).
-              // FE estimate tạm dựa trên gói đầu tiên (chỉ để hiển thị xem trước).
-              const defaultCandidatePackage = insurancePackages[0] || null;
-              const defaultPreviewTotal = wantsDefault && defaultCandidatePackage
-                ? (Number(defaultCandidatePackage.unitPremiumAmount) || 0) * passengerQty
-                : 0;
-              const optionalPreviewTotal = wantsOptional && selectedPackage
-                ? (Number(selectedPackage.unitPremiumAmount) || 0) * passengerQty
-                : 0;
-              const totalPreviewAmount = defaultPreviewTotal + optionalPreviewTotal;
-
-              const displayPackage = selectedPackage || insurancePackages[0];
+              const displayPackage = selectedPackage || insurancePackages[0] || null;
               const providerName = displayPackage?.providerName || "";
               const providerLogoUrl = displayPackage?.providerLogoUrl || "";
 
-              const handleSelectMode = (mode) => {
-                if (mode === "none") {
-                  setIncludeDefaultInsurance(false);
-                  if (optionalInsurancePackageId != null) {
-                    lastInsurancePackageIdRef.current = String(optionalInsurancePackageId);
-                  }
-                  setOptionalInsurancePackageId(null);
-                  return;
-                }
-                if (mode === "default") {
-                  setIncludeDefaultInsurance(true);
-                  if (optionalInsurancePackageId != null) {
-                    lastInsurancePackageIdRef.current = String(optionalInsurancePackageId);
-                  }
-                  setOptionalInsurancePackageId(null);
-                  return;
-                }
-                if (mode === "default+optional") {
-                  setIncludeDefaultInsurance(true);
-                  const restoreId = lastInsurancePackageIdRef.current
-                    || getInsurancePackageId(insurancePackages[0]);
-                  setOptionalInsurancePackageId(restoreId);
-                }
-              };
-
               const handleSelectPackage = (pkg) => {
                 const packageId = getInsurancePackageId(pkg);
-                lastInsurancePackageIdRef.current = packageId;
-                setOptionalInsurancePackageId(packageId);
+                setSelectedInsurancePackageId(packageId != null ? String(packageId) : null);
               };
 
               const handleShowTerms = (pkg) => {
@@ -1469,44 +1425,8 @@ export function CharterRequestForm({
                 });
               };
 
-              const insuranceMode = wantsDefault && wantsOptional
-                ? "default+optional"
-                : (wantsDefault ? "default" : (wantsOptional ? "optional" : "none"));
-
-              const modeCard = (mode, label, desc, icon) => {
-                const active = insuranceMode === mode;
-                return (
-                  <button
-                    type="button"
-                    key={mode}
-                    onClick={() => handleSelectMode(mode)}
-                    aria-pressed={active}
-                    className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 px-3.5 py-3 text-left transition-all ${active
-                      ? "border-[#124757] dark:border-yellow-400 bg-[#124757]/5 dark:bg-yellow-400/10 shadow-[0_4px_14px_rgba(18,71,87,0.12)]"
-                      : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-[#124757]/40 dark:hover:border-yellow-400/40"
-                      }`}
-                  >
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${active
-                      ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900"
-                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300"
-                      }`}>
-                      <span className="material-symbols-outlined text-base">{icon}</span>
-                    </span>
-                    <p className={`text-[12px] font-headline font-black ${active ? "text-[#124757] dark:text-yellow-400" : "text-slate-700 dark:text-slate-200"}`}>
-                      {label}
-                    </p>
-                    <p className="text-[10px] font-bold text-slate-400 leading-snug">
-                      {desc}
-                    </p>
-                  </button>
-                );
-              };
-
               return (
-                <div className={`rounded-2xl border overflow-hidden transition-colors ${insuranceMode !== "none"
-                  ? "bg-white dark:bg-slate-900 border-[#124757]/40 dark:border-yellow-400/40"
-                  : "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700"
-                  }`}>
+                <div className="rounded-2xl border overflow-hidden transition-colors bg-white dark:bg-slate-900 border-[#124757]/40 dark:border-yellow-400/40">
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
                     <button
                       type="button"
@@ -1533,11 +1453,9 @@ export function CharterRequestForm({
                           {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
                         </p>
                         <p className="text-[11px] font-bold text-slate-400 truncate">
-                          {insuranceMode === "none"
-                            ? (lang === "VN" ? "Chưa chọn bảo hiểm" : "No insurance selected")
-                            : insuranceMode === "default"
-                              ? `${lang === "VN" ? "Bảo hiểm mặc định" : "Default insurance"} · ${passengerQty} ${unitPremiumLabel}`
-                              : `${lang === "VN" ? "Mặc định + bên thứ 3" : "Default + third-party"} · ${passengerQty} ${unitPremiumLabel}`}
+                          {selectedPackage
+                            ? `${selectedPackage.name || (lang === "VN" ? "Gói đã chọn" : "Selected package")}${selectedPackage.providerName ? ` · ${selectedPackage.providerName}` : ""}`
+                            : (lang === "VN" ? "Chưa có gói bảo hiểm active" : "No active insurance package")}
                         </p>
                       </div>
                       <span className={`material-symbols-outlined shrink-0 text-xl text-slate-400 transition-transform ${isInsuranceDetailsOpen ? "rotate-180" : ""}`}>
@@ -1557,32 +1475,11 @@ export function CharterRequestForm({
 
                   {isInsuranceDetailsOpen && (
                     <div className="border-t border-slate-100 dark:border-slate-700/80 space-y-3 px-4 py-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                        {modeCard(
-                          "none",
-                          lang === "VN" ? "Không bảo hiểm" : "No insurance",
-                          lang === "VN" ? "Không áp dụng gói nào." : "Skip insurance entirely.",
-                          "do_not_disturb_on",
-                        )}
-                        {modeCard(
-                          "default",
-                          lang === "VN" ? "Chỉ bảo hiểm mặc định" : "Default only",
-                          lang === "VN" ? "Phí = đơn giá gói mặc định × số khách." : "Fee = default unit price × pax.",
-                          "shield",
-                        )}
-                        {modeCard(
-                          "default+optional",
-                          lang === "VN" ? "Mặc định + bên thứ 3" : "Default + third-party",
-                          lang === "VN" ? "Cộng thêm gói bên thứ 3 do bạn chọn." : "Adds a third-party package on top.",
-                          "add_moderator",
-                        )}
-                      </div>
-
-                      {insuranceMode === "default+optional" && insurancePackages.length > 0 ? (
+                      {insurancePackages.length > 0 ? (
                         <div className="divide-y divide-slate-100 dark:divide-slate-700/80 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                           {insurancePackages.map((pkg) => {
                             const packageId = getInsurancePackageId(pkg);
-                            const isSelected = isSameInsurancePackageId(optionalInsurancePackageId, packageId);
+                            const isSelected = isSameInsurancePackageId(selectedInsurancePackageId, packageId);
                             const unitPremium = Number(pkg.unitPremiumAmount) || 0;
 
                             return (
@@ -1627,72 +1524,50 @@ export function CharterRequestForm({
                             );
                           })}
                         </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 px-4 py-6 text-center">
+                          <span className="material-symbols-outlined text-2xl text-slate-300 dark:text-slate-600">shield_off</span>
+                          <p className="mt-1 text-xs font-bold text-slate-400">
+                            {lang === "VN" ? "Hiện chưa có gói bảo hiểm nào đang hoạt động." : "No active insurance packages right now."}
+                          </p>
+                        </div>
+                      )}
+
+                      {selectedPackage ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
+                            <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
+                              {insuranceNote.unitLabel}
+                            </p>
+                            <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
+                              {formatVnd(selectedUnitPremium)}/{unitPremiumLabel}
+                            </p>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
+                            <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
+                              {lang === "VN" ? "Tạm tính" : "Preview"}
+                            </p>
+                            <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
+                              {passengerQty > 0 && totalPreviewAmount > 0
+                                ? formatVnd(totalPreviewAmount)
+                                : "--"}
+                            </p>
+                          </div>
+                        </div>
                       ) : null}
 
-                      <div className="space-y-2.5">
-                        {insuranceMode === "default+optional" && selectedPackage ? (
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
-                              <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
-                                {lang === "VN" ? "Phí gói mặc định (ước tính)" : "Default fee (est.)"}
-                              </p>
-                              <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
-                                {passengerQty > 0 && defaultPreviewTotal > 0
-                                  ? formatVnd(defaultPreviewTotal)
-                                  : (lang === "VN" ? "Tính sau" : "Calculated later")}
-                              </p>
-                            </div>
-                            <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
-                              <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
-                                {lang === "VN" ? "Phí gói bên thứ 3" : "Third-party fee"}
-                              </p>
-                              <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
-                                {passengerQty > 0
-                                  ? `${formatVnd(optionalPreviewTotal)} · ${passengerQty} ${unitPremiumLabel}`
-                                  : "--"}
-                              </p>
-                            </div>
-                          </div>
-                        ) : insuranceMode === "default" || insuranceMode === "optional" ? (
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
-                              <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
-                                {insuranceNote.unitLabel}
-                              </p>
-                              <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
-                                {formatVnd(
-                                  (insuranceMode === "default"
-                                    ? defaultCandidatePackage?.unitPremiumAmount
-                                    : selectedPackage?.unitPremiumAmount) || 0
-                                )}/{unitPremiumLabel}
-                              </p>
-                            </div>
-                            <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
-                              <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
-                                {lang === "VN" ? "Tạm tính" : "Preview"}
-                              </p>
-                              <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
-                                {passengerQty > 0 && totalPreviewAmount > 0
-                                  ? formatVnd(totalPreviewAmount)
-                                  : "--"}
-                              </p>
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <div className="flex items-start gap-1.5">
-                          <span className="material-symbols-outlined text-[13px] mt-0.5 shrink-0 text-slate-400">info</span>
-                          <div className="min-w-0 space-y-1">
-                            <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                              {insuranceNote.title}
-                            </p>
-                            <p className="text-[10px] leading-relaxed text-slate-400">
-                              {insuranceNote.body}
-                            </p>
-                            <p className="text-[10px] font-bold text-slate-400">
-                              {pendingMessage}
-                            </p>
-                          </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="material-symbols-outlined text-[13px] mt-0.5 shrink-0 text-slate-400">info</span>
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            {insuranceNote.title}
+                          </p>
+                          <p className="text-[10px] leading-relaxed text-slate-400">
+                            {insuranceNote.body}
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-400">
+                            {pendingMessage}
+                          </p>
                         </div>
                       </div>
                     </div>
