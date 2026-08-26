@@ -10,6 +10,24 @@ import {
 } from "../../../services/insuranceService";
 import { notify } from "../../../utils/swalToast";
 import { FormSelect } from "../../../components/FormSelect";
+import { InsuranceFormModal } from "./InsuranceFormModal";
+import {
+  emptyForm,
+  VALIDATED_FIELDS,
+  REQUIRED_FIELDS,
+  REALTIME_VALIDATED_FIELDS,
+  MIN_PREMIUM,
+  MAX_LOGO_SIZE,
+  MAX_CONDITIONS,
+  MAX_CONDITION_TEXT,
+  labelStyle,
+  inputStyle,
+  buildTouched,
+  buildTouchedFromValidation,
+  validateField,
+  parseVndInput,
+  formatVndDisplay,
+} from "../../../utils/insurancePackageForm";
 
 const escapeHtml = (value) => {
   if (value === null || value === undefined) return "";
@@ -19,100 +37,6 @@ const escapeHtml = (value) => {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-};
-
-const emptyForm = () => ({
-  code: "",
-  name: "",
-  bookingType: INSURANCE_BOOKING_TYPES.PASSENGER,
-  unitPremiumAmount: "",
-  coverageAmount: "",
-  isRequired: false,
-  providerSource: "waterbus",
-  providerName: "",
-  providerLogoUrl: "",
-  providerLogoFile: null,
-  providerLogoPreview: "",
-  removeLogo: false,
-  conditions: [""],
-  termsUrl: "",
-  status: "Active",
-  displayOrder: 1,
-});
-
-const VALIDATED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
-
-const REQUIRED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount"];
-
-// Field cần realtime validate (error hiện ngay khi gõ).
-const REALTIME_VALIDATED_FIELDS = new Set(["unitPremiumAmount", "coverageAmount"]);
-
-const MAX_CODE = 50;
-const MAX_NAME = 150;
-const MAX_PROVIDER_NAME = 150;
-const MAX_URL = 2048;
-const MAX_CONDITIONS = 20;
-const MAX_CONDITION_TEXT = 500;
-const MAX_PREMIUM = 100_000_000_000;
-const MIN_PREMIUM = 1_000;
-const MAX_COVERAGE = 10_000_000_000_00;
-const MAX_LOGO_SIZE = 5 * 1024 * 1024;
-const CODE_REGEX = /^[A-Za-z]\w*$/;
-const URL_REGEX = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
-
-const buildTouched = (fields) => {
-  const next = {};
-  for (const fieldName of fields) next[fieldName] = true;
-  return next;
-};
-
-// Chỉ touch những field thực sự vi phạm (khi mở edit mà data cũ invalid theo rule mới).
-const buildTouchedFromValidation = (formValues) => {
-  const next = {};
-  for (const fieldName of VALIDATED_FIELDS) {
-    if (validateField(fieldName, formValues[fieldName], formValues)?.level === "error") {
-      next[fieldName] = true;
-    }
-  }
-  return next;
-};
-
-const isValidUrl = (value) => {
-  const trimmed = String(value || "").trim();
-  if (!trimmed) return true;
-  if (trimmed.length > MAX_URL) return false;
-  return URL_REGEX.test(trimmed);
-};
-
-// VND: parse chuỗi người dùng nhập thành number.
-// Chấp nhận cả "1.000.000" (có dấu chấm), "1000000" (không dấu), "1,5" -> 1 (chỉ integer).
-const parseVndInput = (raw) => {
-  if (raw === null || raw === undefined) return Number.NaN;
-  const cleaned = String(raw).replace(/\s|\.|,/g, "");
-  if (!cleaned) return Number.NaN;
-  return Number(cleaned);
-};
-
-// Format số VND hiển thị theo locale vi-VN (1.000.000).
-const formatVndDisplay = (value) => {
-  const num = typeof value === "number" ? value : parseVndInput(value);
-  if (!Number.isFinite(num)) return "";
-  return num.toLocaleString("vi-VN");
-};
-
-// Realtime auto-format VND: gõ "1000" -> "1.000" ngay trên input.
-// Đơn giản đặt caret ở cuối (format lại mỗi keystroke).
-const formatVndInput = (raw) => {
-  if (raw === null || raw === undefined) return "";
-  const digits = String(raw).split("").filter((c) => c >= "0" && c <= "9").join("");
-  if (!digits) return "";
-  // Nhóm 3 số từ phải sang trái, phân cách bằng dấu chấm.
-  const out = [];
-  for (let i = 0; i < digits.length; i += 1) {
-    if (i > 0 && (digits.length - i) % 3 === 0) out.push(".");
-    out.push(digits[i]);
-  }
-  return out.join("");
 };
 
 // Map bookingType (enum từ BE) sang nhãn hiển thị.
@@ -126,79 +50,6 @@ const BOOKING_TYPE_LABELS = {
 //   if (!entry) return bookingType || "—";
 //   return lang === "VN" ? entry.vn : entry.en;
 // };
-
-const validateField = (name, value, form = {}) => {
-  const stringValue = String(value ?? "");
-  switch (name) {
-    case "code": {
-      const trimmed = stringValue.trim();
-      if (!trimmed) return { level: "error", message: "Vui lòng nhập mã gói." };
-      if (trimmed.length > MAX_CODE) return { level: "error", message: `Mã gói không được vượt quá ${MAX_CODE} ký tự.` };
-      if (!CODE_REGEX.test(trimmed)) return { level: "error", message: "Mã gói chỉ gồm chữ cái, số, gạch dưới và bắt đầu bằng chữ cái." };
-      return null;
-    }
-    case "name": {
-      const trimmed = stringValue.trim();
-      if (!trimmed) return { level: "error", message: "Vui lòng nhập tên gói bảo hiểm." };
-      if (trimmed.length > MAX_NAME) return { level: "error", message: `Tên gói không được vượt quá ${MAX_NAME} ký tự.` };
-      return null;
-    }
-    case "unitPremiumAmount": {
-      const num = parseVndInput(stringValue);
-      if (!Number.isFinite(num) || !stringValue.trim()) return { level: "error", message: `Phí bảo hiểm phải từ ${MIN_PREMIUM.toLocaleString("vi-VN")} VND trở lên.` };
-      if (num < MIN_PREMIUM) return { level: "error", message: `Phí bảo hiểm phải từ ${MIN_PREMIUM.toLocaleString("vi-VN")} VND trở lên.` };
-      if (num > MAX_PREMIUM) return { level: "error", message: `Phí bảo hiểm không được vượt quá ${MAX_PREMIUM.toLocaleString("vi-VN")} VND.` };
-      return null;
-    }
-    case "coverageAmount": {
-      const num = parseVndInput(stringValue);
-      if (!Number.isFinite(num) || !stringValue.trim()) return { level: "error", message: `Mức bồi thường phải từ ${MIN_PREMIUM.toLocaleString("vi-VN")} VND trở lên.` };
-      if (num < MIN_PREMIUM) return { level: "error", message: `Mức bồi thường phải từ ${MIN_PREMIUM.toLocaleString("vi-VN")} VND trở lên.` };
-      if (num > MAX_COVERAGE) return { level: "error", message: `Mức bồi thường không được vượt quá ${MAX_COVERAGE.toLocaleString("vi-VN")} VND.` };
-      const fee = parseVndInput(form?.unitPremiumAmount);
-      if (Number.isFinite(fee) && fee >= MIN_PREMIUM && num < fee) {
-        return { level: "warning", message: `Mức bồi thường (${num.toLocaleString("vi-VN")}) thấp hơn phí mỗi khách (${fee.toLocaleString("vi-VN")}).` };
-      }
-      return null;
-    }
-    case "providerName": {
-      const trimmed = stringValue.trim();
-      if (trimmed.length > MAX_PROVIDER_NAME) return { level: "error", message: `Tên nhà cung cấp không vượt quá ${MAX_PROVIDER_NAME} ký tự.` };
-      const hasLogo = !!form?.providerLogoFile || !!form?.providerLogoPreview;
-      if (hasLogo && !trimmed) {
-        return { level: "error", message: "Vui lòng nhập tên nhà cung cấp khi đã có logo." };
-      }
-      return null;
-    }
-    case "providerLogoFile": {
-      const file = value instanceof File ? value : null;
-      if (!file) return null;
-      if (!file?.type?.startsWith("image/")) return { level: "error", message: "Logo phải là định dạng hình ảnh (JPG, PNG, WEBP)." };
-      if (file.size > MAX_LOGO_SIZE) return { level: "error", message: `Logo không được vượt quá ${Math.round(MAX_LOGO_SIZE / (1024 * 1024))}MB.` };
-      return null;
-    }
-    case "termsUrl": {
-      const trimmed = stringValue.trim();
-      if (!trimmed) return null;
-      if (trimmed.length > MAX_URL) return { level: "error", message: `Đường dẫn không được vượt quá ${MAX_URL} ký tự.` };
-      if (!isValidUrl(trimmed)) return { level: "error", message: "Vui lòng nhập đúng định dạng URL (https://...)." };
-      return null;
-    }
-    case "conditions": {
-      const list = Array.isArray(value) ? value : [];
-      if (list.length > MAX_CONDITIONS) return { level: "error", message: `Tối đa ${MAX_CONDITIONS} điều kiện.` };
-      for (let i = 0; i < list.length; i += 1) {
-        const item = String(list[i] ?? "").trim();
-        if (item.length > MAX_CONDITION_TEXT) {
-          return { level: "error", message: `Điều kiện #${i + 1} không vượt quá ${MAX_CONDITION_TEXT} ký tự.` };
-        }
-      }
-      return null;
-    }
-    default:
-      return null;
-  }
-};
 
 const formatVnd = (value) => {
   const number = Number(value) || 0;
@@ -217,6 +68,7 @@ export function InsuranceManagement() {
   const [errorMsg, setErrorMsg] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [providerTypeFilter, setProviderTypeFilter] = useState("all");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -226,9 +78,6 @@ export function InsuranceManagement() {
   const [togglingId, setTogglingId] = useState(null);
   const [viewingPackage, setViewingPackage] = useState(null);
   const [waterbusDefaultConflict, setWaterbusDefaultConflict] = useState(null); // { hasActiveWaterbusDefault, existingPackage }
-
-  const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
-  const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-60 disabled:cursor-not-allowed";
 
   const loadPackages = async () => {
     try {
@@ -265,6 +114,8 @@ export function InsuranceManagement() {
       .filter((pkg) => {
         if (statusFilter === "Active" && !isPackageActive(pkg)) return false;
         if (statusFilter === "Inactive" && isPackageActive(pkg)) return false;
+        if (providerTypeFilter === "waterbus" && pkg.isWaterbusDefault !== true) return false;
+        if (providerTypeFilter === "third_party" && pkg.isWaterbusDefault === true) return false;
         if (!keyword) return true;
         return (
           pkg.name?.toLowerCase().includes(keyword) ||
@@ -273,7 +124,7 @@ export function InsuranceManagement() {
         );
       })
       .sort((a, b) => Number(a.displayOrder ?? 0) - Number(b.displayOrder ?? 0));
-  }, [packages, search, statusFilter]);
+  }, [packages, search, statusFilter, providerTypeFilter]);
 
   // Phát hiện nhiều gói Waterbus default Active cùng lúc (vi phạm constraint "chỉ 1 gói Waterbus mặc định").
   // Mục đích: cảnh báo user khi mở form / save. KHÔNG khóa thao tác trên list.
@@ -609,8 +460,7 @@ export function InsuranceManagement() {
   };
 
   const validateForm = () => {
-    const fieldNames = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
-    for (const fieldName of fieldNames) {
+    for (const fieldName of VALIDATED_FIELDS) {
       const result = validateField(fieldName, form[fieldName], form);
       if (result && result.level === "error") {
         return result.message;
@@ -620,13 +470,12 @@ export function InsuranceManagement() {
   };
 
   const errors = useMemo(() => {
-    const fieldNames = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
     const result = {};
-    for (const fieldName of fieldNames) {
+    for (const fieldName of VALIDATED_FIELDS) {
       result[fieldName] = validateField(fieldName, form[fieldName], form);
     }
     return result;
-  }, [form, packages, editingId]);
+  }, [form]);
 
   const hasBlockingError = useMemo(
     () => Object.entries(errors).some(([field, e]) => e && e.level === "error" && touched[field]),
@@ -903,19 +752,35 @@ export function InsuranceManagement() {
               className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400"
             />
           </div>
-          <div className="relative z-10 flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
-            <FormSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              menuAlign="right"
-              options={[
-                { value: "all", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
-                { value: "Active", label: lang === "VN" ? "Đang bật" : "Active" },
-                { value: "Inactive", label: lang === "VN" ? "Đang tắt" : "Inactive" },
-              ]}
-              className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
-            />
+          <div className="relative z-10 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
+              <FormSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                menuAlign="right"
+                options={[
+                  { value: "all", label: lang === "VN" ? "Tất cả trạng thái" : "All Status" },
+                  { value: "Active", label: lang === "VN" ? "Đang bật" : "Active" },
+                  { value: "Inactive", label: lang === "VN" ? "Đang tắt" : "Inactive" },
+                ]}
+                className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Loại bảo hiểm:" : "Type:"}</span>
+              <FormSelect
+                value={providerTypeFilter}
+                onChange={setProviderTypeFilter}
+                menuAlign="right"
+                options={[
+                  { value: "all", label: lang === "VN" ? "Tất cả loại" : "All types" },
+                  { value: "waterbus", label: lang === "VN" ? "Hệ thống" : "System" },
+                  { value: "third_party", label: lang === "VN" ? "Bảo hiểm ngoài" : "Third party" },
+                ]}
+                className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -928,7 +793,7 @@ export function InsuranceManagement() {
 
       {hasDuplicateWaterbus && (
         <div className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 p-4 rounded-xl text-xs font-bold border border-amber-200 dark:border-amber-500/30 shadow-sm flex items-start gap-3">
-          <span className="material-symbols-outlined text-[18px] flex-shrink-0 mt-0.5">warning</span>
+          <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">warning</span>
           <div className="flex-1">
             <div className="mb-1.5">
               {lang === "VN"
@@ -989,10 +854,10 @@ export function InsuranceManagement() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <h3 className="font-headline font-black text-sm text-slate-800 dark:text-white truncate">{pkg.name}</h3>
-                        <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                        <span className={`shrink-0 text-[9px] font-bold ${
                           pkg.isWaterbusDefault === true
-                            ? "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
-                            : "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
+                            ? "text-sky-600 dark:text-sky-300"
+                            : "text-violet-600 dark:text-violet-300"
                         }`}>
                           {pkg.isWaterbusDefault === true
                             ? (lang === "VN" ? "Hệ thống" : "System")
@@ -1084,332 +949,27 @@ export function InsuranceManagement() {
       )}
 
       {isModalOpen && (
-        <div key={editingId || "create"} className="fixed inset-0 z-100 flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Close overlay"
-            className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]"
-            onClick={closeModal}
-            disabled={isSaving}
-          />
-          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-4xl border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:border-slate-700 dark:bg-slate-800">
-            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5 bg-white dark:bg-slate-800 dark:border-slate-700">
-              <div>
-                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
-                  {lang === "VN" ? "Gói bảo hiểm" : "Insurance package"}
-                </p>
-                <h3 className="mt-1 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                  {editingId ? (lang === "VN" ? "Sửa gói bảo hiểm" : "Edit package") : (lang === "VN" ? "Thêm gói bảo hiểm" : "Add package")}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={closeModal}
-                disabled={isSaving}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:hover:text-slate-200"
-              >
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
-            </div>
-
-            <div className="p-6 space-y-5">
-              {/* Row 1: Mã gói + Tên gói */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Mã gói" : "Code"}</label>
-                  <input
-                    value={form.code}
-                    onChange={(e) => updateField("code", e.target.value.toUpperCase())}
-                    onBlur={() => handleBlur("code")}
-                    readOnly={!!editingId}
-                    className={inputClass("code") + " uppercase tracking-wider" + (editingId ? " bg-slate-100 dark:bg-slate-800/60 cursor-not-allowed text-slate-500" : "")}
-                    placeholder="CODE"
-                    maxLength={MAX_CODE}
-                    spellCheck={false}
-                    autoCapitalize="characters"
-                    title={editingId ? (lang === "VN" ? "Mã gói không thể thay đổi sau khi tạo." : "Code is read-only after creation.") : undefined}
-                  />
-                  {renderHint("code")}
-                </div>
-                <div className="sm:col-span-2">
-                  <label className={labelStyle}>{lang === "VN" ? "Tên gói" : "Name"}</label>
-                  <input
-                    value={form.name}
-                    onChange={(e) => updateField("name", e.target.value)}
-                    onBlur={() => handleBlur("name")}
-                    className={inputClass("name")}
-                    placeholder={lang === "VN" ? "Tên bảo hiểm" : "Insurance name"}
-                    maxLength={MAX_NAME}
-                  />
-                  {renderHint("name")}
-                </div>
-              </div>
-
-              {/* Row 2: Phí + Mức bồi thường */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Phí mỗi khách (VND)" : "Fee per passenger (VND)"}</label>
-                  <input
-                    inputMode="numeric"
-                    value={form.unitPremiumAmount}
-                    onChange={(e) => updateField("unitPremiumAmount", formatVndInput(e.target.value))}
-                    onInput={(e) => updateField("unitPremiumAmount", formatVndInput(e.target.value))}
-                    onBlur={() => handleBlur("unitPremiumAmount")}
-                    className={inputClass("unitPremiumAmount")}
-                    placeholder={lang === "VN" ? `Tối thiểu ${MIN_PREMIUM.toLocaleString("vi-VN")}` : `Min ${MIN_PREMIUM.toLocaleString("vi-VN")}`}
-                  />
-                  {renderHint("unitPremiumAmount")}
-                </div>
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Mức bồi thường (VND)" : "Coverage amount (VND)"}</label>
-                  <input
-                    inputMode="numeric"
-                    value={form.coverageAmount}
-                    onChange={(e) => updateField("coverageAmount", formatVndInput(e.target.value))}
-                    onInput={(e) => updateField("coverageAmount", formatVndInput(e.target.value))}
-                    onBlur={() => handleBlur("coverageAmount")}
-                    className={inputClass("coverageAmount")}
-                    placeholder={lang === "VN" ? `Tối thiểu ${MIN_PREMIUM.toLocaleString("vi-VN")}` : `Min ${MIN_PREMIUM.toLocaleString("vi-VN")}`}
-                  />
-                  {renderHint("coverageAmount")}
-                </div>
-              </div>
-
-              {/* Row 3: Trạng thái */}
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  {lang === "VN" ? "Trạng thái" : "Status"}
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-headline font-black uppercase tracking-wider ${form.status === "Active" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`}>
-                    {form.status === "Active" ? (lang === "VN" ? "Bật" : "Active") : (lang === "VN" ? "Tắt" : "Inactive")}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => updateField("status", form.status === "Active" ? "Inactive" : "Active")}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none ${form.status === "Active" ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
-                  >
-                    <span className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-300 ease-in-out ${form.status === "Active" ? "translate-x-4" : "translate-x-0"}`} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Section: Nhà cung cấp + Logo */}
-              <div className="rounded-xl border border-slate-200/70 bg-slate-50/50 p-4 dark:border-slate-700/70 dark:bg-slate-900/40 space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-slate-200/70 dark:border-slate-700/70">
-                  <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    {lang === "VN" ? "Nhà cung cấp bảo hiểm" : "Insurance provider"}
-                  </span>
-                </div>
-
-                {/* Nguồn nhà cung cấp */}
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Nguồn cung cấp" : "Provider source"}</label>
-                  <div className="flex gap-2 mt-1">
-                    {[
-                      { value: "waterbus", labelVn: "Hệ thống", labelEn: "System" },
-                      { value: "third_party", labelVn: "Bảo hiểm ngoài", labelEn: "Third party" },
-                    ].map((opt) => {
-                      const isActive = form.providerSource === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => updateField("providerSource", opt.value)}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg border-2 font-headline font-black text-[10px] uppercase tracking-wide transition-all ${isActive
-                            ? "bg-[#124757] border-[#124757] text-white dark:bg-yellow-400 dark:border-yellow-400 dark:text-slate-900"
-                            : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600"
-                            }`}
-                        >
-                          {lang === "VN" ? opt.labelVn : opt.labelEn}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Warning: đã có gói Waterbus default active khác */}
-                  {waterbusDefaultConflict?.hasActiveWaterbusDefault && (
-                    <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 p-3 space-y-1.5">
-                      <div className="flex items-start gap-2">
-                        <span className="material-symbols-outlined text-amber-500 text-base shrink-0">warning</span>
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 leading-snug">
-                            {lang === "VN"
-                              ? `Hiện đang có ${waterbusDefaultConflict.duplicates?.length || 1} gói Waterbus mặc định đang hoạt động. Cần Inactive các gói trùng trước khi lưu gói này làm Waterbus mặc định.`
-                              : `${waterbusDefaultConflict.duplicates?.length || 1} Waterbus default package(s) are currently active. Inactive duplicates before saving this as a default.`}
-                          </p>
-                          {waterbusDefaultConflict.duplicates && waterbusDefaultConflict.duplicates.length > 0 && (
-                            <ul className="mt-1.5 space-y-0.5">
-                              {waterbusDefaultConflict.duplicates.map((pkg) => (
-                                <li key={pkg.id ?? pkg.insurancePackageId} className="text-[10px] text-amber-700 dark:text-amber-300 font-bold flex items-center gap-1.5">
-                                  <span className="material-symbols-outlined text-[10px]">circle</span>
-                                  <span className="font-mono">{pkg.code}</span>
-                                  <span>—</span>
-                                  <span>{pkg.name}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <p className="mt-1.5 text-[10px] font-bold text-red-600 dark:text-red-400">
-                            {lang === "VN"
-                              ? "⛔ Không thể lưu — hãy Inactive từng gói trùng trước."
-                              : "⛔ Cannot save — inactive each duplicate first."}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              closeModal();
-                              if (waterbusDefaultConflict.existingPackage?.id) {
-                                setTimeout(() => openEditModal(waterbusDefaultConflict.existingPackage), 100);
-                              }
-                            }}
-                            className="mt-1.5 text-[10px] font-black text-[#124757] dark:text-yellow-400 hover:underline uppercase tracking-wide"
-                          >
-                            {lang === "VN" ? "→ Sửa gói trùng đầu tiên" : "→ Edit first duplicate"}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Tên nhà cung cấp" : "Provider name"}</label>
-                  <input
-                    value={form.providerName}
-                    onChange={(e) => updateField("providerName", e.target.value)}
-                    onBlur={() => handleBlur("providerName")}
-                    className={inputClass("providerName")}
-                    maxLength={MAX_PROVIDER_NAME}
-                    placeholder={lang === "VN" ? "Tên nhà cung cấp" : "Provider name"}
-                  />
-                  {renderHint("providerName")}
-                </div>
-
-                <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Logo nhà cung cấp" : "Provider logo"}</label>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <div className="h-28 w-28 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 overflow-hidden flex items-center justify-center transition-all hover:border-slate-300 dark:hover:border-slate-600">
-                      {form.providerLogoPreview ? (
-                        <img src={form.providerLogoPreview} alt="logo" className="h-full w-full object-contain p-2" />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-slate-300 dark:text-slate-600">
-                          <span className="material-symbols-outlined text-3xl">add_photo_alternate</span>
-                          <span className="text-[9px] font-bold uppercase tracking-wider mt-1">No logo</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 flex flex-col gap-2 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600">
-                          <span className="material-symbols-outlined text-base">upload</span>
-                          {(() => {
-                            if (!form.providerLogoPreview) return lang === "VN" ? "Tải ảnh lên" : "Upload";
-                            return lang === "VN" ? "Đổi ảnh" : "Change";
-                          })()}
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                            className="hidden"
-                            onChange={handleLogoChange}
-                          />
-                        </label>
-                        {form.providerLogoPreview && (
-                          <button
-                            type="button"
-                            onClick={removeLogo}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 px-3.5 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-red-500 hover:bg-red-100 dark:hover:bg-red-500/20 transition-all"
-                          >
-                            <span className="material-symbols-outlined text-base">delete</span>
-                            {lang === "VN" ? "Xóa" : "Remove"}
-                          </button>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                        {lang === "VN"
-                          ? `Định dạng JPG, PNG, WEBP hoặc SVG. Dung lượng tối đa ${Math.round(MAX_LOGO_SIZE / (1024 * 1024))}MB`
-                          : `JPG, PNG, WEBP or SVG. Max ${Math.round(MAX_LOGO_SIZE / (1024 * 1024))}MB. Square image with transparent background recommended.`}
-                      </span>
-                    </div>
-                  </div>
-                  {renderHint("providerLogoFile")}
-                </div>
-              </div>
-
-              <div>
-                <label className={labelStyle}>{lang === "VN" ? "Điều khoản (URL)" : "Terms (URL)"}</label>
-                <input
-                  value={form.termsUrl}
-                  onChange={(e) => updateField("termsUrl", e.target.value)}
-                  onBlur={() => handleBlur("termsUrl")}
-                  className={inputClass("termsUrl")}
-                  placeholder=" "
-                  maxLength={MAX_URL}
-                />
-                {renderHint("termsUrl")}
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
-                    {lang === "VN" ? `Điều kiện áp dụng (${form.conditions.length}/${MAX_CONDITIONS})` : `Conditions (${form.conditions.length}/${MAX_CONDITIONS})`}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={addCondition}
-                    disabled={form.conditions.length >= MAX_CONDITIONS}
-                    className="text-[10px] font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400 inline-flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span className="material-symbols-outlined text-sm">add</span>
-                    {lang === "VN" ? "Thêm" : "Add"}
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {form.conditions.map((condition, index) => (
-                    <div key={`condition-${index}`} className="flex gap-2">
-                      <input
-                        value={condition}
-                        onChange={(e) => updateCondition(index, e.target.value)}
-                        onBlur={() => handleBlur("conditions")}
-                        className={inputStyle}
-                        placeholder={lang === "VN" ? "Nhập điều kiện áp dụng" : "Enter condition"}
-                        maxLength={MAX_CONDITION_TEXT}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeCondition(index)}
-                        className="px-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-500 hover:bg-red-100 transition-all shrink-0"
-                      >
-                        <span className="material-symbols-outlined text-base">close</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                {renderHint("conditions")}
-              </div>
-
-            </div>
-
-            <div className="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-slate-100 px-6 py-4 bg-white sm:flex-row sm:justify-end dark:border-slate-700 dark:bg-slate-800">
-              <button
-                type="button"
-                onClick={closeModal}
-                disabled={isSaving}
-                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-              >
-                {lang === "VN" ? "Hủy" : "Cancel"}
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving || hasBlockingError || !!waterbusDefaultConflict?.hasActiveWaterbusDefault}
-                className="rounded-2xl bg-[#124757] px-6 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3541] disabled:opacity-60 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300 inline-flex items-center justify-center gap-2"
-              >
-                {isSaving && <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
-                {editingId ? (lang === "VN" ? "Lưu thay đổi" : "Save changes") : (lang === "VN" ? "Tạo gói" : "Create")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <InsuranceFormModal
+          key={editingId || "create"}
+          lang={lang}
+          form={form}
+          editingId={editingId}
+          isSaving={isSaving}
+          hasBlockingError={hasBlockingError}
+          waterbusDefaultConflict={waterbusDefaultConflict}
+          renderHint={renderHint}
+          inputClass={inputClass}
+          updateField={updateField}
+          handleBlur={handleBlur}
+          handleLogoChange={handleLogoChange}
+          removeLogo={removeLogo}
+          updateCondition={updateCondition}
+          addCondition={addCondition}
+          removeCondition={removeCondition}
+          closeModal={closeModal}
+          handleSave={handleSave}
+          openEditModal={openEditModal}
+        />
       )}
 
       {viewingPackage && (
@@ -1423,9 +983,6 @@ export function InsuranceManagement() {
           <div className="relative my-auto w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-4xl border border-slate-200/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:border-slate-700 dark:bg-slate-800">
             <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5 bg-white dark:bg-slate-800 dark:border-slate-700">
               <div>
-                <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
-                  {lang === "VN" ? "Gói bảo hiểm" : "Insurance package"}
-                </p>
                 <h3 className="mt-1 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
                   {lang === "VN" ? "Chi tiết gói" : "Package details"}
                 </h3>
@@ -1455,10 +1012,10 @@ export function InsuranceManagement() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h4 className="font-headline font-black text-base text-slate-800 dark:text-white">{viewingPackage.name}</h4>
-                    <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                    <span className={`shrink-0 text-[9px] font-bold ${
                       viewingPackage.isWaterbusDefault === true
-                        ? "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
-                        : "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
+                        ? "text-sky-600 dark:text-sky-300"
+                        : "text-violet-600 dark:text-violet-300"
                     }`}>
                       {viewingPackage.isWaterbusDefault === true
                         ? (lang === "VN" ? "Hệ thống" : "System")
@@ -1466,12 +1023,10 @@ export function InsuranceManagement() {
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 font-bold mt-0.5">{viewingPackage.code}</p>
-                  <span className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${(viewingPackage.status || "").toLowerCase() === "active"
-                    ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
-                    : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
+                  <span className={`mt-2 inline-flex items-center text-[10px] font-bold ${(viewingPackage.status || "").toLowerCase() === "active"
+                    ? "text-emerald-600 dark:text-emerald-300"
+                    : "text-slate-500 dark:text-slate-400"
                     }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${(viewingPackage.status || "").toLowerCase() === "active" ? "bg-emerald-500" : "bg-slate-400"
-                      }`} />
                     {(viewingPackage.status || "").toLowerCase() === "active"
                       ? (lang === "VN" ? "Hoạt động" : "Active")
                       : (lang === "VN" ? "Không hoạt động" : "Inactive")}
