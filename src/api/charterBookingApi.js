@@ -190,3 +190,9 @@ export const rejectPassengerAddRequest = (id, requestBatchId, data = {}) =>
             { note: data.note ?? null },
         )
         .then((response) => response.data);
+
+/** Customer: resend tickets email */
+export const resendCharterBookingTickets = (id) =>
+    api
+        .post(`/charter-bookings/${encodeURIComponent(id)}/resend-tickets`)
+        .then((response) => response.data);

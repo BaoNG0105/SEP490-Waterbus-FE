@@ -509,11 +509,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     ? (selectedSeatsDeparture.length + selectedSeatsReturn.length)
     : selectedSeatsDeparture.length;
 
-  // Phí BH theo tổng passenger items (ghế đi + ghế về nếu khứ hồi + em bé).
-  const insurancePassengerCount =
+// Phí BH theo số ghế có khách ngồi (chiều đi + chiều về nếu khứ hồi).
+// Em bé (INFANT) đi cùng người lớn không có ghế, miễn phí vé → không tính phí BH.
+const insurancePassengerCount =
     selectedSeatsDeparture.length
-    + (isRoundTrip ? selectedSeatsReturn.length : 0)
-    + infants.length;
+    + (isRoundTrip ? selectedSeatsReturn.length : 0);
   const selectedInsurancePackage = selectedInsurancePackageId
     ? findInsurancePackageById(insurancePackages, selectedInsurancePackageId)
     : null;

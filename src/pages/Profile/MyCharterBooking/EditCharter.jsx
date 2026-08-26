@@ -5,11 +5,20 @@ import { useApp } from "../../../context/AppContext";
 import { fetchMyCharterBookingDetail, updateMyCharterBooking } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { handleDuplicateCharterBookingError } from "../../../utils/charterDuplicateBooking";
-import { createEmptyBoatRequest, getMinDepartureDate } from "../../../utils/charterRequestForm";
+import {
+  assignPassengerTypesFromCounts,
+  createEmptyBoatRequest,
+  createEmptyPassenger,
+  getMinDepartureDate,
+  PASSENGER_TYPE_ADULT,
+  PASSENGER_TYPE_CHILD,
+} from "../../../utils/charterRequestForm";
+import { listBookingPassengers } from "../../../utils/charterPassengerAdd";
+import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
 import { CharterRequestForm } from "../../../components/CharterRequestForm";
 import { notify } from "../../../utils/swalToast";
 
-const editableStatuses = ["PendingQuote"];
+const editableStatuses = ["PendingQuote", "Confirmed", "Quoted", "DepositPaid", "AwaitingPayment"];
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -41,53 +50,79 @@ const getRequestedBoatDeckCount = (boat, fallback = 1) => {
   return legacySeatSetupType === "StandardAndVip" ? 2 : fallback;
 };
 
-const buildFormDataFromDetail = (detail, user) => ({
-  customerName: pick(detail, ["contactName"], user?.fullName || ""),
-  contactPhone: pick(detail, ["contactPhone"], user?.phoneNumber || user?.phone || ""),
-  contactEmail: pick(detail, ["contactEmail"], user?.email || ""),
-  departureDate: toDateInputValue(pick(detail, ["departureDate"])) || getMinDepartureDate(),
-  adultCount: Number(pick(detail, ["adultCount"], 1)),
-  childCount: Number(pick(detail, ["childCount"], 0)),
-  startTime: pick(detail, ["startTime"], "08:00").slice(0, 5),
-  fromStationId: pick(detail, ["fromStationId"], ""),
-  toStationId: pick(detail, ["toStationId"], ""),
-  requestedBoats: Array.isArray(detail?.requestedBoats) && detail.requestedBoats.length > 0
-    ? detail.requestedBoats.map((boat) => ({ numberOfDecks: getRequestedBoatDeckCount(boat) }))
-    : [createEmptyBoatRequest()],
-  itineraryStops: Array.isArray(detail?.itineraryStops)
-    ? detail.itineraryStops.map((stop, index) => ({
-      stationId: pick(stop, ["stationId"], ""),
-      stopOrder: Number(pick(stop, ["stopOrder"], index + 1)),
-      stayDurationMinutes: Number(pick(stop, ["stayDurationMinutes"], 0)),
-      note: pick(stop, ["note"], ""),
-    }))
-    : [],
-  specialRequests: pick(detail, ["specialRequests"], ""),
-  rentalUnit: pick(detail, ["rentalUnit"], "Hour") === "Day" ? "Day" : "Hour",
-  insuranceSelected: typeof detail?.insuranceSelected === "boolean"
-    ? detail.insuranceSelected
-    : (typeof detail?.insurance?.selected === "boolean" ? detail.insurance.selected : undefined),
-  includeDefaultInsurance: pick(detail, [
-    "includeDefaultInsurance",
-    "insurance.includeDefaultInsurance",
-    "insurance.hasDefaultInsurance",
-  ], typeof detail?.insuranceSelected === "boolean"
-    ? detail.insuranceSelected
-    : (typeof detail?.insurance?.selected === "boolean" ? detail.insurance.selected : false)),
-  optionalInsurancePackageId: pick(detail, [
-    "optionalInsurancePackageId",
-    "insurance.optionalInsurancePackageId",
-    "insurance.optional.packageId",
-    "insurance.optional.insurancePackageId",
-    "insurance.optionalInsuranceId",
-  ], null) || null,
-  insurancePackageId: pick(detail, [
-    "insurancePackageId",
-    "insurance.insurancePackageId",
-    "insurance.packageId",
-    "insurance.id",
-  ], null) || null,
-});
+const buildFormDataFromDetail = (detail, user) => {
+  const adultCount = Number(pick(detail, ["adultCount"], 1));
+  const childCount = Number(pick(detail, ["childCount"], 0));
+
+  // Ưu tiên passengers[], fallback tickets[]
+  const rawPassengers = Array.isArray(detail?.passengers) && detail.passengers.length > 0
+    ? detail.passengers
+    : Array.isArray(detail?.tickets) && detail.tickets.length > 0
+      ? detail.tickets
+      : [];
+
+  const passengers = rawPassengers.length > 0
+    ? rawPassengers.map((p, index) => {
+      const fullName = pick(p, ["fullName", "passengerName", "name", "contactName"], "");
+      const birthYear = getPassengerBirthYear(p);
+      const passengerType = pick(p, ["passengerType", "type"], index < adultCount ? "Adult" : "Child");
+      return {
+        fullName,
+        birthYear: birthYear || "",
+        type: passengerType,
+      };
+    })
+    : [];
+
+  return {
+    customerName: pick(detail, ["contactName"], user?.fullName || ""),
+    contactPhone: pick(detail, ["contactPhone"], user?.phoneNumber || user?.phone || ""),
+    contactEmail: pick(detail, ["contactEmail"], user?.email || ""),
+    departureDate: toDateInputValue(pick(detail, ["departureDate"])) || getMinDepartureDate(),
+    adultCount,
+    childCount,
+    startTime: pick(detail, ["startTime"], "08:00").slice(0, 5),
+    fromStationId: pick(detail, ["fromStationId"], ""),
+    toStationId: pick(detail, ["toStationId"], ""),
+    requestedBoats: Array.isArray(detail?.requestedBoats) && detail.requestedBoats.length > 0
+      ? detail.requestedBoats.map((boat) => ({ numberOfDecks: getRequestedBoatDeckCount(boat) }))
+      : [createEmptyBoatRequest()],
+    itineraryStops: Array.isArray(detail?.itineraryStops)
+      ? detail.itineraryStops.map((stop, index) => ({
+        stationId: pick(stop, ["stationId"], ""),
+        stopOrder: Number(pick(stop, ["stopOrder"], index + 1)),
+        stayDurationMinutes: Number(pick(stop, ["stayDurationMinutes"], 0)),
+        note: pick(stop, ["note"], ""),
+      }))
+      : [],
+    specialRequests: pick(detail, ["specialRequests"], ""),
+    rentalUnit: pick(detail, ["rentalUnit"], "Hour") === "Day" ? "Day" : "Hour",
+    passengers,
+    insuranceSelected: typeof detail?.insuranceSelected === "boolean"
+      ? detail.insuranceSelected
+      : (typeof detail?.insurance?.selected === "boolean" ? detail.insurance.selected : undefined),
+    includeDefaultInsurance: pick(detail, [
+      "includeDefaultInsurance",
+      "insurance.includeDefaultInsurance",
+      "insurance.hasDefaultInsurance",
+    ], typeof detail?.insuranceSelected === "boolean"
+      ? detail.insuranceSelected
+      : (typeof detail?.insurance?.selected === "boolean" ? detail.insurance.selected : false)),
+    optionalInsurancePackageId: pick(detail, [
+      "optionalInsurancePackageId",
+      "insurance.optionalInsurancePackageId",
+      "insurance.optional.packageId",
+      "insurance.optional.insurancePackageId",
+      "insurance.optionalInsuranceId",
+    ], null) || null,
+    insurancePackageId: pick(detail, [
+      "insurancePackageId",
+      "insurance.insurancePackageId",
+      "insurance.packageId",
+      "insurance.id",
+    ], null) || null,
+  };
+};
 
 export function EditCharter() {
   const { lang } = useApp();
@@ -114,13 +149,17 @@ export function EditCharter() {
 
       if (!editableStatuses.includes(status)) {
         setLoadError(lang === "VN"
-          ? "Yêu cầu này đã được báo giá hoặc xử lý nên không thể chỉnh sửa."
-          : "This request has already been quoted or processed and can no longer be edited.");
+          ? "Yêu cầu này đã hoàn tất hoặc không thể chỉnh sửa."
+          : "This request has been completed or can no longer be edited.");
         return;
       }
 
       setBookingCode(pick(detail, ["bookingCode", "code"], "--"));
-      setInitialFormData(buildFormDataFromDetail(detail, user));
+      const baseFormData = buildFormDataFromDetail(detail, user);
+      setInitialFormData({
+        ...baseFormData,
+        isPendingQuote: status === "PendingQuote",
+      });
     } catch (error) {
       setLoadError(getApiErrorMessage(error, lang === "VN"
         ? "Không thể tải chi tiết yêu cầu để chỉnh sửa."
