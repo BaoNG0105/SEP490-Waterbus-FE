@@ -209,7 +209,6 @@ export function CharterRequestForm({
       ?? initialFormData?.insurancePackageId
       ?? null
   );
-  const [isInsuranceDetailsOpen, setIsInsuranceDetailsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [useAccountInfo, setUseAccountInfo] = useState(false);
@@ -219,6 +218,7 @@ export function CharterRequestForm({
   const [formData, setFormData] = useState(initialFormData);
   const [touchedPassengers, setTouchedPassengers] = useState({});
   const [showPassengerErrors, setShowPassengerErrors] = useState(false);
+  const [insuranceCollapsed, setInsuranceCollapsed] = useState(false);
   const formDataRef = useRef(formData);
   useEffect(() => { formDataRef.current = formData; }, [formData]);
   const submitInFlightRef = useRef(false);
@@ -369,6 +369,11 @@ export function CharterRequestForm({
     { titleVn: "Ghi chú", titleEn: "Notes", icon: "notes" },
   ];
   const isLastStep = currentStep === steps.length - 1;
+  const isSingleViewEdit = mode === "edit" && !formData?.isPendingQuote;
+
+  const stepLabel = isSingleViewEdit
+    ? (lang === "VN" ? "Chỉnh sửa trực tiếp" : "Direct edit")
+    : (lang === "VN" ? `Bước ${currentStep + 1}/${steps.length}` : `Step ${currentStep + 1} of ${steps.length}`);
 
   const waterbusStations = useMemo(
     () => filterWaterbusStations(stations),
@@ -442,14 +447,18 @@ export function CharterRequestForm({
     return null;
   };
 
-  const validateScheduleStep = () => {
-    const minDepartureDate = getMinDepartureDate();
+  const initialDepartureDate = initialFormData?.departureDate || "";
 
+  const validateScheduleStep = () => {
     if (!formData.departureDate) {
       return lang === "VN" ? "Vui lòng chọn ngày khởi hành." : "Please choose a departure date.";
     }
-    if (formData.departureDate < minDepartureDate) {
-      return lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today.";
+    // Chỉ check 7 ngày nếu user đổi ngày mới (khác ngày gốc API).
+    if (formData.departureDate !== initialDepartureDate) {
+      const minDepartureDate = getMinDepartureDate();
+      if (formData.departureDate < minDepartureDate) {
+        return lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today.";
+      }
     }
     if (!formData.startTime) {
       return lang === "VN" ? "Vui lòng chọn giờ đi." : "Please choose a start time.";
@@ -752,7 +761,7 @@ export function CharterRequestForm({
       return;
     }
 
-    if (formData.departureDate < minDepartureDate) {
+    if (formData.departureDate < minDepartureDate && formData.departureDate !== initialDepartureDate) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Ngày khởi hành chưa hợp lệ" : "Invalid departure date",
@@ -945,7 +954,7 @@ export function CharterRequestForm({
       <div className={`p-8 md:p-10 border-b space-y-6 text-center ${t.headerBorder} ${t.headerBg}`}>
         <div className="space-y-2">
           <span className={`inline-flex items-center gap-2 text-[10px] font-headline font-black uppercase tracking-widest ${t.badgeText}`}>
-            {lang === "VN" ? `Bước ${currentStep + 1}/${steps.length}` : `Step ${currentStep + 1} of ${steps.length}`}
+            {stepLabel}
           </span>
           <h2 className={`text-2xl md:text-3xl font-headline font-black ${t.headerTitle}`}>
             {mode === "edit"
@@ -957,49 +966,60 @@ export function CharterRequestForm({
               {lang === "VN" ? `Mã yêu cầu ${bookingCode}` : `Request code ${bookingCode}`}
             </p>
           )}
+          {isSingleViewEdit && (
+            <p className={`text-xs max-w-md mx-auto ${t.headerSubtitle}`}>
+              {lang === "VN"
+                ? "Yêu cầu đã được thanh toán. Bạn có thể chỉnh sửa trực tiếp các mục bên dưới."
+                : "Request is already paid. You can edit items directly below."}
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center justify-center gap-1.5 sm:gap-3 overflow-x-auto">
-          {steps.map((step, index) => {
-            const isActive = index === currentStep;
-            const isDone = index < currentStep;
-            return (
-              <div key={step.icon} className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => isDone && setCurrentStep(index)}
-                  disabled={!isDone}
-                  className={`flex items-center gap-2 ${isDone ? "cursor-pointer" : "cursor-default"}`}
-                >
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-headline font-black text-sm shrink-0 transition-colors ${isActive
-                    ? t.stepActiveBg
-                    : isDone
-                      ? "bg-emerald-500 text-white"
-                      : t.stepPendingBg
-                    }`}>
-                    {isDone ? <span className="material-symbols-outlined text-base">check</span> : index + 1}
-                  </span>
-                  <span className={`hidden sm:inline text-[11px] font-headline font-black uppercase tracking-wider whitespace-nowrap ${isActive
-                    ? t.stepLabelActive
-                    : isDone
-                      ? t.stepLabelDone
-                      : t.stepLabelPending
-                    }`}>
-                    {lang === "VN" ? step.titleVn : step.titleEn}
-                  </span>
-                </button>
-                {index < steps.length - 1 && <span className={`w-4 sm:w-10 h-px ${t.stepConnector}`}></span>}
-              </div>
-            );
-          })}
-        </div>
+        {!isSingleViewEdit && (
+          <>
+            <div className="flex items-center justify-center gap-1.5 sm:gap-3 overflow-x-auto">
+              {steps.map((step, index) => {
+                const isActive = index === currentStep;
+                const isDone = index < currentStep;
+                return (
+                  <div key={step.icon} className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => isDone && setCurrentStep(index)}
+                      disabled={!isDone}
+                      className={`flex items-center gap-2 ${isDone ? "cursor-pointer" : "cursor-default"}`}
+                    >
+                      <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-headline font-black text-sm shrink-0 transition-colors ${isActive
+                        ? t.stepActiveBg
+                        : isDone
+                          ? "bg-emerald-500 text-white"
+                          : t.stepPendingBg
+                        }`}>
+                        {isDone ? <span className="material-symbols-outlined text-base">check</span> : index + 1}
+                      </span>
+                      <span className={`hidden sm:inline text-[11px] font-headline font-black uppercase tracking-wider whitespace-nowrap ${isActive
+                        ? t.stepLabelActive
+                        : isDone
+                          ? t.stepLabelDone
+                          : t.stepLabelPending
+                        }`}>
+                        {lang === "VN" ? step.titleVn : step.titleEn}
+                      </span>
+                    </button>
+                    {index < steps.length - 1 && <span className={`w-4 sm:w-10 h-px ${t.stepConnector}`}></span>}
+                  </div>
+                );
+              })}
+            </div>
 
-        <div className={`max-w-md mx-auto h-1.5 rounded-full overflow-hidden ${t.progressTrack}`}>
-          <div
-            className="h-full rounded-full bg-[#FFD100] transition-all duration-500"
-            style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
-          ></div>
-        </div>
+            <div className={`max-w-md mx-auto h-1.5 rounded-full overflow-hidden ${t.progressTrack}`}>
+              <div
+                className="h-full rounded-full bg-[#FFD100] transition-all duration-500"
+                style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+              ></div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="p-6 md:p-12 space-y-8">
@@ -1010,7 +1030,7 @@ export function CharterRequestForm({
           </div>
         )}
         {/* STEP 1: Thông tin khách hàng */}
-        {currentStep === 0 && (
+        {(isSingleViewEdit || currentStep === 0) && (
           <section className="space-y-6 max-w-5xl mx-auto">
             <div className="flex flex-col items-center text-center gap-3">
               <div>
@@ -1055,7 +1075,7 @@ export function CharterRequestForm({
           </section>
         )}
         {/* STEP 2: Lịch trình */}
-        {currentStep === 1 && (
+        {(isSingleViewEdit || currentStep === 1) && (
           <section className="space-y-6 max-w-3xl mx-auto">
             <div className="flex flex-col items-center text-center gap-3">
               <div>
@@ -1067,15 +1087,25 @@ export function CharterRequestForm({
               <div className="flex flex-col gap-2.5">
                 <label className={contactLabelClass}>{lang === "VN" ? "Ngày khởi hành" : "Departure Date"}{requiredMark}</label>
                 <AppDateInput
-                  min={getMinDepartureDate()}
+                  min={formData.departureDate === initialDepartureDate ? "" : getMinDepartureDate()}
                   value={formData.departureDate}
                   onChange={(e) => handleFieldChange("departureDate", e.target.value)}
                   required
                   className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  {lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today."}
-                </p>
+                {mode === "edit" && initialDepartureDate && formData.departureDate !== initialDepartureDate ? (
+                  <button
+                    type="button"
+                    onClick={() => handleFieldChange("departureDate", initialDepartureDate)}
+                    className="text-[11px] font-bold text-[#124757] dark:text-yellow-400 hover:underline text-left"
+                  >
+                    {lang === "VN" ? "↩ Khôi phục ngày gốc" : "↩ Restore original date"}
+                  </button>
+                ) : (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today."}
+                  </p>
+                )}
               </div>
               <div className="flex flex-col gap-2.5">
                 <label className={contactLabelClass}>{lang === "VN" ? "Giờ đi" : "Start Time"}{requiredMark}</label>
@@ -1147,7 +1177,7 @@ export function CharterRequestForm({
         )}
 
         {/* STEP 3: Lộ trình và hành khách */}
-        {currentStep === 2 && (
+        {(isSingleViewEdit || currentStep === 2) && (
           <section className="space-y-6">
             <div className="flex flex-col items-center text-center gap-3">
               <div>
@@ -1427,151 +1457,93 @@ export function CharterRequestForm({
 
               return (
                 <div className="rounded-2xl border overflow-hidden transition-colors bg-white dark:bg-slate-900 border-[#124757]/40 dark:border-yellow-400/40">
-                  <div className="flex items-center justify-between gap-3 px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsInsuranceDetailsOpen((open) => !open)}
-                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                      aria-expanded={isInsuranceDetailsOpen}
-                    >
-                      <span className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${providerLogoUrl
-                        ? "bg-white p-2 ring-1 ring-slate-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.08)] dark:ring-slate-200"
-                        : "bg-linear-to-br from-[#124757] to-[#0d3541] text-white shadow-[0_4px_14px_rgba(18,71,87,0.28)] dark:from-yellow-400 dark:to-yellow-300 dark:text-slate-900"
-                        }`}>
-                        {providerLogoUrl ? (
-                          <img
-                            src={providerLogoUrl}
-                            alt={providerName || (lang === "VN" ? "Logo bảo hiểm" : "Insurance logo")}
-                            className="h-full w-full object-contain"
-                          />
-                        ) : (
-                          <span className="material-symbols-outlined text-xl">verified_user</span>
-                        )}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
-                          {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
-                        </p>
-                        <p className="text-[11px] font-bold text-slate-400 truncate">
-                          {selectedPackage
-                            ? `${selectedPackage.name || (lang === "VN" ? "Gói đã chọn" : "Selected package")}${selectedPackage.providerName ? ` · ${selectedPackage.providerName}` : ""}`
-                            : (lang === "VN" ? "Chưa có gói bảo hiểm active" : "No active insurance package")}
-                        </p>
-                      </div>
-                      <span className={`material-symbols-outlined shrink-0 text-xl text-slate-400 transition-transform ${isInsuranceDetailsOpen ? "rotate-180" : ""}`}>
-                        expand_more
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleShowTerms(displayPackage)}
-                      title={lang === "VN" ? "Xem điều khoản" : "View terms"}
-                      className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-500 hover:text-[#124757] dark:hover:text-yellow-400 hover:border-[#124757]/40 dark:hover:border-yellow-400/40 flex items-center justify-center shrink-0 transition-colors"
-                      aria-label={lang === "VN" ? "Điều khoản bảo hiểm" : "Insurance terms"}
-                    >
-                      <span className="material-symbols-outlined text-[18px]">info</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInsuranceCollapsed((prev) => !prev)}
+                    className="w-full flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    <p className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
+                      {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
+                    </p>
+                    <span className={`material-symbols-outlined text-xl text-slate-400 transition-transform ${insuranceCollapsed ? "" : "rotate-180"}`}>
+                      expand_more
+                    </span>
+                  </button>
 
-                  {isInsuranceDetailsOpen && (
-                    <div className="border-t border-slate-100 dark:border-slate-700/80 space-y-3 px-4 py-3">
+                  {!insuranceCollapsed && (
+                    <>
                       {insurancePackages.length > 0 ? (
-                        <div className="divide-y divide-slate-100 dark:divide-slate-700/80 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                          {insurancePackages.map((pkg) => {
-                            const packageId = getInsurancePackageId(pkg);
-                            const isSelected = isSameInsurancePackageId(selectedInsurancePackageId, packageId);
-                            const unitPremium = Number(pkg.unitPremiumAmount) || 0;
+                        <div className="divide-y divide-slate-100 dark:divide-slate-700/80">
+                      {insurancePackages.map((pkg) => {
+                        const packageId = getInsurancePackageId(pkg);
+                        const isSelected = isSameInsurancePackageId(selectedInsurancePackageId, packageId);
+                        const unitPremium = Number(pkg.unitPremiumAmount) || 0;
 
-                            return (
-                              <button
-                                key={packageId}
-                                type="button"
-                                onClick={() => handleSelectPackage(pkg)}
-                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${isSelected
-                                  ? "bg-[#124757]/5 dark:bg-yellow-400/5"
-                                  : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                                  }`}
-                              >
-                                <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected
-                                  ? "border-[#124757] dark:border-yellow-400"
-                                  : "border-slate-300 dark:border-slate-600"
-                                  }`}>
-                                  {isSelected && (
-                                    <span className="w-2 h-2 rounded-full bg-[#124757] dark:bg-yellow-400" />
-                                  )}
-                                </span>
-                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl ${pkg.providerLogoUrl
-                                  ? "bg-white p-1 ring-1 ring-slate-200/80 shadow-[0_1px_6px_rgba(15,23,42,0.08)] dark:ring-slate-200"
-                                  : "bg-[#124757]/10 dark:bg-yellow-400/10"
-                                  }`}>
-                                  {pkg.providerLogoUrl ? (
-                                    <img src={pkg.providerLogoUrl} alt="" className="h-full w-full object-contain" />
-                                  ) : (
-                                    <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">shield</span>
-                                  )}
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{pkg.name}</span>
-                                  {pkg.providerName ? (
-                                    <span className="block text-[10px] font-bold text-slate-400 truncate">{pkg.providerName}</span>
-                                  ) : null}
-                                </span>
-                                <span className={`text-xs font-headline font-black whitespace-nowrap shrink-0 ${isSelected ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"
-                                  }`}>
-                                  {formatVnd(unitPremium)}/{unitPremiumLabel}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 px-4 py-6 text-center">
-                          <span className="material-symbols-outlined text-2xl text-slate-300 dark:text-slate-600">shield_off</span>
-                          <p className="mt-1 text-xs font-bold text-slate-400">
-                            {lang === "VN" ? "Hiện chưa có gói bảo hiểm nào đang hoạt động." : "No active insurance packages right now."}
-                          </p>
-                        </div>
-                      )}
-
-                      {selectedPackage ? (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
-                            <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
-                              {insuranceNote.unitLabel}
-                            </p>
-                            <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
-                              {formatVnd(selectedUnitPremium)}/{unitPremiumLabel}
-                            </p>
+                        return (
+                          <div
+                            key={packageId}
+                            className={`flex items-center gap-3 px-4 py-3 transition-colors ${isSelected
+                              ? "bg-[#124757]/5 dark:bg-yellow-400/5"
+                              : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                              }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleSelectPackage(pkg)}
+                              className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                            >
+                              <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected
+                                ? "border-[#124757] dark:border-yellow-400"
+                                : "border-slate-300 dark:border-slate-600"
+                                }`}>
+                                {isSelected && (
+                                  <span className="w-2 h-2 rounded-full bg-[#124757] dark:bg-yellow-400" />
+                                )}
+                              </span>
+                              <span className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg ${pkg.providerLogoUrl
+                                ? "bg-white p-1 ring-1 ring-slate-200/80 shadow-[0_1px_4px_rgba(15,23,42,0.08)] dark:ring-slate-200"
+                                : "bg-[#124757]/10 dark:bg-yellow-400/10"
+                                }`}>
+                                {pkg.providerLogoUrl ? (
+                                  <img src={pkg.providerLogoUrl} alt="" className="h-full w-full object-contain" />
+                                ) : (
+                                  <span className="material-symbols-outlined text-sm text-[#124757] dark:text-yellow-400">shield</span>
+                                )}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{pkg.name}</span>
+                                {pkg.providerName ? (
+                                  <span className="block text-[10px] font-bold text-slate-400 truncate">{pkg.providerName}</span>
+                                ) : null}
+                              </span>
+                            </button>
+                            <span className={`text-xs font-headline font-black whitespace-nowrap shrink-0 ${isSelected ? "text-[#124757] dark:text-yellow-400" : "text-slate-400"
+                              }`}>
+                              {formatVnd(unitPremium)}/{unitPremiumLabel}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleShowTerms(pkg)}
+                              title={lang === "VN" ? "Xem điều khoản" : "View terms"}
+                              className="w-7 h-7 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-400 hover:text-[#124757] dark:hover:text-yellow-400 hover:border-[#124757]/40 dark:hover:border-yellow-400/40 flex items-center justify-center shrink-0 transition-colors"
+                              aria-label={lang === "VN" ? "Xem điều khoản" : "View terms"}
+                            >
+                              <span className="text-[11px] font-bold">i</span>
+                            </button>
                           </div>
-                          <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/70">
-                            <p className="text-[9px] font-headline font-black uppercase tracking-wider text-slate-400">
-                              {lang === "VN" ? "Tạm tính" : "Preview"}
-                            </p>
-                            <p className="mt-0.5 text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
-                              {passengerQty > 0 && totalPreviewAmount > 0
-                                ? formatVnd(totalPreviewAmount)
-                                : "--"}
-                            </p>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      <div className="flex items-start gap-1.5">
-                        <span className="material-symbols-outlined text-[13px] mt-0.5 shrink-0 text-slate-400">info</span>
-                        <div className="min-w-0 space-y-1">
-                          <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                            {insuranceNote.title}
-                          </p>
-                          <p className="text-[10px] leading-relaxed text-slate-400">
-                            {insuranceNote.body}
-                          </p>
-                          <p className="text-[10px] font-bold text-slate-400">
-                            {pendingMessage}
-                          </p>
-                        </div>
-                      </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-6 text-center">
+                      <span className="material-symbols-outlined text-2xl text-slate-300 dark:text-slate-600">shield_off</span>
+                      <p className="mt-1 text-xs font-bold text-slate-400">
+                        {lang === "VN" ? "Hiện chưa có gói bảo hiểm nào đang hoạt động." : "No active insurance packages right now."}
+                      </p>
                     </div>
                   )}
+                  </>
+                )}
                 </div>
               );
             })()}
@@ -1579,7 +1551,7 @@ export function CharterRequestForm({
         )}
 
         {/* STEP 4: Danh sách hành khách */}
-        {currentStep === 3 && (
+        {(isSingleViewEdit || currentStep === 3) && (
           <section className="space-y-6 max-w-6xl mx-auto">
             <div className="flex flex-col items-center text-center gap-3">
               <div>
@@ -1757,7 +1729,7 @@ export function CharterRequestForm({
         )}
 
         {/* STEP 5: Ghi chú */}
-        {currentStep === 4 && (
+        {(isSingleViewEdit || currentStep === 4) && (
           <section className="space-y-6 max-w-3xl mx-auto">
             <div className="flex flex-col items-center text-center gap-3">
               <div>
@@ -1775,7 +1747,7 @@ export function CharterRequestForm({
         )}
 
         <div className={`flex items-center justify-between gap-4 pt-2 border-t ${t.footerBorder}`}>
-          {currentStep > 0 ? (
+          {!isSingleViewEdit && currentStep > 0 ? (
             <button
               type="button"
               onClick={handleBackStep}
@@ -1787,7 +1759,13 @@ export function CharterRequestForm({
           ) : (
             <span aria-hidden />
           )}
-          {isLastStep ? (
+          {isSingleViewEdit ? (
+            <button type="submit" disabled={isSubmitting} className={`w-full sm:w-auto min-w-56 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-60 mt-5 ${t.primaryButton}`}>
+              {isSubmitting
+                ? (lang === "VN" ? "Đang lưu..." : "Saving...")
+                : (lang === "VN" ? "Lưu thay đổi" : "Save Changes")}
+            </button>
+          ) : isLastStep ? (
             <button type="submit" disabled={isSubmitting} className={`w-full sm:w-auto min-w-56 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-60 mt-5 ${t.primaryButton}`}>
               {isSubmitting
                 ? (mode === "edit" ? (lang === "VN" ? "Đang lưu..." : "Saving...") : (lang === "VN" ? "Đang gửi..." : "Submitting..."))

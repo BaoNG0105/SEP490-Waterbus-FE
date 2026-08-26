@@ -34,6 +34,7 @@ import {
     exportSelectedCharterBookingTickets as apiExportSelectedCharterBookingTickets,
     exportCharterBookingTicketsPdf as apiExportCharterBookingTicketsPdf,
     exportCharterBookingTicketsPdfByQrToken as apiExportCharterBookingTicketsPdfByQrToken,
+    resendCharterBookingTickets as apiResendCharterBookingTickets,
 } from '../api/charterBookingApi';
 import {
     CHARTER_BOAT_HOLDING_STATUSES,
@@ -43,6 +44,7 @@ import {
     normalizeBooking,
     normalizeCharterScheduleDate,
 } from '../utils/charterBookingAdmin';
+import { charterLog, charterLogError } from '../utils/charterDebugLog';
 
 export const fetchMyCharterBookings = async () => {
     try {
@@ -55,15 +57,39 @@ export const fetchMyCharterBookings = async () => {
 
 export const createMyCharterBooking = async (charterPayload) => {
     try {
-        return await apiCreateCharterBooking(charterPayload);
+        charterLog("create-charter-start", {
+            adultCount: charterPayload.adultCount,
+            childCount: charterPayload.childCount,
+            departureDate: charterPayload.departureDate,
+            selectedBoatCount: charterPayload.selectedBoats?.length,
+        });
+        const result = await apiCreateCharterBooking(charterPayload);
+        const data = result?.data || result;
+        charterLog("create-charter-success", {
+            bookingId: data?.id,
+            bookingCode: data?.bookingCode,
+            bookingStatus: data?.status,
+            passengerCount: data?.passengerCount,
+            hasTickets: Array.isArray(data?.tickets) && data.tickets.length > 0,
+            ticketCount: data?.tickets?.length,
+        });
+        return result;
     } catch (error) {
+        charterLogError("create-charter", error);
         console.error('Lỗi khi tạo yêu cầu charter booking:', error);
         throw error;
     }
 };
 
-export const updateMyCharterBooking = (id, charterPayload) =>
-    apiUpdateCharterBooking(id, charterPayload);
+export const updateMyCharterBooking = (id, charterPayload) => {
+    charterLog("update-charter-start", {
+        bookingId: id,
+        hasAdultCount: "adultCount" in charterPayload,
+        hasChildCount: "childCount" in charterPayload,
+        hasDepartureDate: "departureDate" in charterPayload,
+    });
+    return apiUpdateCharterBooking(id, charterPayload);
+};
 
 export const fetchMyCharterBookingDetail = async (id) => {
     return apiGetCharterBookingById(id);
@@ -80,8 +106,25 @@ export const cancelMyCharterBooking = async (id, cancelPayload) => {
 
 export const updateMyCharterBookingPassengers = async (id, passengersPayload) => {
     try {
-        return await apiUpdateCharterBookingPassengers(id, passengersPayload);
+        const passengerCount = passengersPayload?.passengers?.length ?? 0;
+        charterLog("update-passengers-start", {
+            bookingId: id,
+            passengerCountSent: passengerCount,
+        });
+        const result = await apiUpdateCharterBookingPassengers(id, passengersPayload);
+        const data = result?.data || result;
+        const innerBooking = data?.booking || data;
+        charterLog("update-passengers-success", {
+            bookingId: id,
+            responseHasBooking: Boolean(data?.booking || data),
+            responsePassengerCount: data?.passengers?.length || innerBooking?.passengers?.length,
+            ticketCount: data?.tickets?.length || innerBooking?.tickets?.length,
+            qrToken: data?.qrToken || innerBooking?.qrToken ? "[present]" : "[missing]",
+            paymentStatus: data?.paymentStatus || innerBooking?.paymentStatus,
+        });
+        return result;
     } catch (error) {
+        charterLogError("update-passengers", error);
         console.error(`Lỗi khi cập nhật hành khách charter booking ${id}:`, error);
         throw error;
     }
@@ -113,6 +156,27 @@ export const downloadCharterBookingTicketsPdf = (id, ticketIds) =>
 
 export const downloadCharterBookingTicketsPdfByQrToken = (qrToken) =>
     apiExportCharterBookingTicketsPdfByQrToken(qrToken);
+
+/** Customer: resend tickets email */
+export const resendMyCharterBookingTickets = async (id) => {
+    try {
+        charterLog("resend-tickets-start", { bookingId: id });
+        const result = await apiResendCharterBookingTickets(id);
+        const data = result?.data || result;
+        charterLog("resend-tickets-success", {
+            bookingId: id,
+            bookingCode: data?.bookingCode,
+            httpStatus: result?.status || 200,
+            ticketCount: data?.ticketCount,
+            createdTicketCount: data?.createdTicketCount,
+            hasContactEmail: Boolean(data?.contactEmail),
+        });
+        return result;
+    } catch (error) {
+        charterLogError("resend-tickets", error);
+        throw error;
+    }
+};
 
 export const fetchAdminCharterBookings = async () => {
     try {
