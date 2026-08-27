@@ -10,16 +10,8 @@ import {
   resolveTicketPriceModifier,
 } from "../../../../services/ticketTypeService";
 import { getMaxPointsToUse, estimateEarnPoints } from "../../../../services/pointService";
-import {
-  fetchThirdPartyInsurancePackages,
-  findInsurancePackageById,
-  getInsurancePackageId,
-  isSameInsurancePackageId,
-  INSURANCE_BOOKING_TYPES,
-} from "../../../../services/insuranceService";
 import { lookupCounterCustomers, submitCounterBooking } from "../../../../services/counterBookingService";
 import { syncBookingPayment } from "../../../../services/paymentService";
-import { calculateTicketInsurancePreview } from "../../../../utils/insurancePreview";
 import { getApiErrorMessage } from "../../../../utils/apiError";
 import { notify, showToast } from "../../../../utils/swalToast";
 import {
@@ -402,55 +394,14 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
     });
   };
 
-  // 3. BẢO HIỂM — auto chọn gói mặc định (ưu tiên gói isRequired, không thì gói đầu tiên), không
-  // cho khách/nhân viên bỏ chọn: mọi hành khách luôn được tính phí bảo hiểm này.
-  const [insurancePackages, setInsurancePackages] = useState([]);
-  const [isInsuranceLoading, setIsInsuranceLoading] = useState(true);
-  const [insuranceLoadError, setInsuranceLoadError] = useState("");
-  const [selectedInsurancePackageId, setSelectedInsurancePackageId] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsInsuranceLoading(true);
-    setInsuranceLoadError("");
-    fetchThirdPartyInsurancePackages(INSURANCE_BOOKING_TYPES.PASSENGER)
-      .then((packages) => {
-        if (cancelled) return;
-        setInsurancePackages(packages);
-        setSelectedInsurancePackageId((currentId) => {
-          if (currentId && packages.some((pkg) => isSameInsurancePackageId(getInsurancePackageId(pkg), currentId))) {
-            return currentId;
-          }
-          const required = packages.find((pkg) => pkg.isRequired);
-          const defaultPkg = required || packages[0];
-          return getInsurancePackageId(defaultPkg);
-        });
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setInsurancePackages([]);
-        setInsuranceLoadError(getApiErrorMessage(error, lang === "VN" ? "Không tải được gói bảo hiểm." : "Could not load insurance packages."));
-      })
-      .finally(() => { if (!cancelled) setIsInsuranceLoading(false); });
-    return () => { cancelled = true; };
-  }, [lang]);
-
+  // 3. BẢO HIỂM — đã bỏ, không tự chọn/áp gói bảo hiểm nào cho booking tại quầy.
   const totalSeatsCount = isRoundTrip
     ? (selectedSeatsDeparture.length + selectedSeatsReturn.length)
     : selectedSeatsDeparture.length;
 
-  const insurancePassengerCount = selectedSeatsDeparture.length
-    + (isRoundTrip ? selectedSeatsReturn.length : 0)
-    + infants.length;
-  const selectedInsurancePackage = selectedInsurancePackageId
-    ? findInsurancePackageById(insurancePackages, selectedInsurancePackageId)
-    : null;
-  const insurancePreview = selectedInsurancePackage
-    ? calculateTicketInsurancePreview({ unitPremiumAmount: selectedInsurancePackage.unitPremiumAmount, passengerCount: insurancePassengerCount })
-    : { canPreview: false, quantity: 0, unitPremium: 0, total: 0 };
-  const insuranceFee = selectedInsurancePackageId ? Number(insurancePreview.total) || 0 : 0;
+  const insuranceFee = 0;
 
-  // 4. ƯỚC TÍNH GIÁ — effectivePrice đã bao gồm bảo hiểm mặc định.
+  // 4. ƯỚC TÍNH GIÁ.
   const sumSeatsPrice = (seats) => seats.reduce((sum, seat, i) => {
     const modifier = getPriceModifier(passengers[i]?.ticketType || "ADULT");
     return sum + Number(seat.effectivePrice || seat.basePrice || 0) * modifier;
@@ -581,8 +532,8 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
       contactName: contact.name.trim(),
       contactPhone: contact.phone.trim(),
       contactEmail: contact.email.trim(),
-      insuranceSelected: Boolean(selectedInsurancePackageId),
-      insurancePackageId: selectedInsurancePackageId || null,
+      insuranceSelected: false,
+      insurancePackageId: null,
       paymentMethod,
       customerUserId: linkedCustomer?.customerUserId || null,
       customerConfirmedForPoints: Boolean(linkedCustomer),
@@ -1222,38 +1173,6 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                 {lang === "VN" ? "Ghế" : "Seats"}: {selectedSeatsReturn.map((seat) => seat.seatNumber).join(", ") || "—"}
               </p>
             </div>
-          )}
-        </div>
-
-        {/* Bảo hiểm */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-800">
-          {isInsuranceLoading ? (
-            <p className="text-[11px] text-slate-400">{lang === "VN" ? "Đang tải gói bảo hiểm…" : "Loading insurance…"}</p>
-          ) : !insurancePackages.length ? (
-            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-              {insuranceLoadError || (lang === "VN" ? "Chưa có gói bảo hiểm khả dụng." : "No insurance package available.")}
-            </p>
-          ) : (
-            <>
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-800 dark:text-white">{lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}</p>
-                  <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    {selectedInsurancePackage
-                      ? `${selectedInsurancePackage.name} · ${formatVnd(insuranceFee)}`
-                      : (lang === "VN" ? "Áp dụng cho mọi hành khách" : "Applied to every passenger")}
-                  </p>
-                </div>
-                <span className="shrink-0 rounded-lg bg-emerald-50 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
-                  {lang === "VN" ? "Đã bao gồm" : "Included"}
-                </span>
-              </div>
-              {selectedInsurancePackage ? (
-                <p className="mt-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                  {formatVnd(insurancePreview.unitPremium)} × {insurancePreview.quantity} {lang === "VN" ? "khách" : "pax"}
-                </p>
-              ) : null}
-            </>
           )}
         </div>
 
