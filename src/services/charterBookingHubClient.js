@@ -1,6 +1,7 @@
 import { HubConnectionState } from "@microsoft/signalr";
 import { getCharterBookingHubUrl } from "../utils/hubBaseUrl";
 import { createHubConnection } from "../utils/createHubConnection";
+import { charterLog } from "../utils/charterDebugLog";
 
 class CharterBookingHubClient {
   constructor() {
@@ -23,6 +24,15 @@ class CharterBookingHubClient {
     });
 
     connection.on("CharterBookingChanged", (event) => {
+      charterLog("signalr-event-received", {
+        eventType: "CharterBookingChanged",
+        bookingId: event?.bookingId,
+        bookingStatus: event?.bookingStatus,
+        paymentStatus: event?.paymentStatus,
+        occurredAt: event?.occurredAt || event?.timestamp,
+        hasTickets: Array.isArray(event?.tickets),
+        ticketCount: event?.tickets?.length,
+      });
       this.bookingChangedListeners.forEach((listener) => listener(event));
     });
 

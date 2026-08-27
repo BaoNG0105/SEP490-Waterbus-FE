@@ -31,13 +31,16 @@ export const CHARTER_INSURANCE_NOTE = {
   },
 };
 
-export const SEAT_INSURANCE_PENDING_MESSAGE = {
-  VN: "Phí bảo hiểm = đơn giá × tổng dòng vé (kể cả khứ hồi) + em bé.",
-  EN: "Insurance fee = unit price × total ticket items (including return) + infants.",
+// Giữ alias cũ để tránh vỡ import
+export const TICKET_INSURANCE_PENDING_MESSAGE = {
+  VN: "",
+  EN: "",
 };
 
-// Giữ alias cũ để tránh vỡ import
-export const TICKET_INSURANCE_PENDING_MESSAGE = SEAT_INSURANCE_PENDING_MESSAGE;
+export const SEAT_INSURANCE_PENDING_MESSAGE = {
+  VN: "",
+  EN: "",
+};
 
 export const getTotalSeatCountOfBoats = (boats = []) => (
   (Array.isArray(boats) ? boats : []).reduce(

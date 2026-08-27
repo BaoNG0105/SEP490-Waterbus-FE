@@ -58,6 +58,7 @@ import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDeta
 import { MyCharterPaymentPanel, MyCharterPaymentStickyBar } from "./MyCharterPaymentPanel";
 import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
 import { getRefundPaymentId, isPaymentUuid, normalizeSelectedRoute, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
+import { charterLog, charterLogError } from "../../../utils/charterDebugLog";
 
 
 const pick = (source, keys, fallback = "") => {
@@ -783,6 +784,16 @@ export function CharterDetail() {
         detail = await fetchCharterBookingManifestByCode(bookingCode);
       }
       const normalized = normalizeBooking(detail);
+      charterLog("load-detail-response", {
+        bookingId: normalized?.id,
+        bookingCode: normalized?.bookingCode,
+        bookingStatus: normalized?.status,
+        paymentStatus: normalized?.paymentStatus,
+        passengerCount: normalized?.passengers?.length,
+        ticketCount: normalized?.tickets?.length,
+        hasQrToken: Boolean(normalized?.qrToken),
+        hasPayments: Array.isArray(normalized?.payments) && normalized.payments.length > 0,
+      });
       setBooking(normalized);
       const passengerSource = normalized.passengers.length > 0 ? normalized.passengers : normalized.tickets;
       const initialPassengers = passengerSource.length > 0
@@ -1063,8 +1074,15 @@ export function CharterDetail() {
 
     try {
       if (!silent) setIsSubmitting(true);
+      charterLog("sync-payment-start", { paymentId, bookingId: booking?.id });
       await syncBookingPayment(paymentId);
-      await loadDetail();
+      await loadDetail({ silent: true });
+      charterLog("sync-payment-reload", {
+        paymentId,
+        bookingId: booking?.id,
+        paymentStatus: booking?.paymentStatus,
+        ticketCount: booking?.tickets?.length,
+      });
       if (!silent) {
         showAlertDialog({
           icon: "success",
@@ -1072,6 +1090,7 @@ export function CharterDetail() {
         });
       }
     } catch (error) {
+      charterLogError("sync-payment", error);
       if (!silent) {
         const detail = String(error?.response?.data?.detail || error?.response?.data?.title || "");
         const isNotFound = error?.response?.status === 404 || /payment not found/i.test(detail);
@@ -1088,15 +1107,23 @@ export function CharterDetail() {
     } finally {
       if (!silent) setIsSubmitting(false);
     }
-  }, [lang, loadDetail]);
+  }, [lang, loadDetail, booking]);
 
   const handleSyncPaymentByOrderCode = useCallback(async (orderCode, { silent = false } = {}) => {
     if (!orderCode) return;
 
     try {
       if (!silent) setIsSubmitting(true);
+      charterLog("sync-payment-by-ordercode-start", { orderCode, bookingId: booking?.id });
       await syncBookingPaymentByOrderCode(orderCode);
-      await loadDetail();
+      await loadDetail({ silent: true });
+      charterLog("sync-payment-by-ordercode-reload", {
+        orderCode,
+        bookingId: booking?.id,
+        paymentStatus: booking?.paymentStatus,
+        ticketCount: booking?.tickets?.length,
+        hasTickets: Array.isArray(booking?.tickets) && booking.tickets.length > 0,
+      });
       if (!silent) {
         showAlertDialog({
           icon: "success",
@@ -1104,6 +1131,7 @@ export function CharterDetail() {
         });
       }
     } catch (error) {
+      charterLogError("sync-payment-by-ordercode", error);
       if (!silent) {
         showAlertDialog({
           icon: "error",
@@ -1114,7 +1142,7 @@ export function CharterDetail() {
     } finally {
       if (!silent) setIsSubmitting(false);
     }
-  }, [lang, loadDetail]);
+  }, [lang, loadDetail, booking]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -1380,27 +1408,36 @@ export function CharterDetail() {
       const paymentPayload = {
         bookingId: booking.id,
         paymentOption: paymentSelectValue,
-        // Xóa mã = null; không lấy lại booking.promotionCode. Lần tạo PayOS sau dùng đúng mã hiện tại (hoặc không có).
         promotionCode: promoClearedByUserRef.current
           ? null
           : (String(paymentPromotionCode || "").trim() || null),
       };
-      console.log("🔵 [DEBUG] createPayment payload:", JSON.stringify(paymentPayload, null, 2));
-      console.log("🔵 [DEBUG] paymentSelectValue:", paymentSelectValue);
-      console.log("🔵 [DEBUG] normalizedPaymentOption:", normalizedPaymentOption);
-      console.log("🔵 [DEBUG] booking.hasDepositPaid:", booking.hasDepositPaid);
-      console.log("🔵 [DEBUG] needsBalancePayment:", needsBalancePayment);
-      console.log("🔵 [DEBUG] remainingAmount:", remainingAmount);
-      console.log("🔵 [DEBUG] depositPaymentAmount:", depositPaymentAmount);
-      console.log("🔵 [DEBUG] selectedPaymentAmount:", selectedPaymentAmount);
-      console.log("🔵 [DEBUG] booking.requiresAdditionalPayment:", booking.requiresAdditionalPayment);
-      console.log("🔵 [DEBUG] booking.additionalInsuranceAmount:", booking.additionalInsuranceAmount);
-      console.log("🔵 [DEBUG] effectivePaidAmount:", effectivePaidAmount);
+      charterLog("create-payment-start", {
+        bookingId: booking.id,
+        bookingCode: booking.bookingCode,
+        paymentOption: paymentPayload.paymentOption,
+        selectedPaymentAmount,
+        hasPromotionCode: Boolean(paymentPayload.promotionCode),
+      });
       const payment = await createBookingPayment(paymentPayload);
-      console.log("🟢 [DEBUG] createPayment response:", JSON.stringify(payment, null, 2));
+      charterLog("create-payment-success", {
+        bookingId: booking.id,
+        paymentId: payment?.paymentId,
+        paymentCode: payment?.paymentCode,
+        paymentPurpose: payment?.paymentPurpose,
+        amount: payment?.amount,
+        paymentStatus: payment?.status,
+        hasCheckoutUrl: Boolean(payment?.checkoutUrl),
+      });
       const applied = applyCreatedPayOsPayment(payment, {
         fallbackAmount: selectedPaymentAmount,
         openCheckout: true,
+      });
+
+      charterLog("payos-checkout-navigation", {
+        bookingId: booking.id,
+        checkoutOpened: applied.opened,
+        checkoutUrl: applied.checkoutUrl ? "[present]" : "[missing]",
       });
 
       if (!applied.opened) {
@@ -1412,6 +1449,7 @@ export function CharterDetail() {
       }
     } catch (error) {
       setPaymentWatcher((current) => ({ ...current, isActive: false }));
+      charterLogError("create-payment", error);
       showAlertDialog({
         icon: "error",
         title: lang === "VN" ? "Không thể tạo thanh toán" : "Unable to create payment",
