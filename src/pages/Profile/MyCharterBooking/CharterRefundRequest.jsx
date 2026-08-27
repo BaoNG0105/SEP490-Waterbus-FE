@@ -200,7 +200,7 @@ export function CharterRefund() {
 
   const hasPaidPayment = booking
     && (["paid", "depositpaid"].includes(String(booking.paymentStatus).toLowerCase()) || Number(booking.paidAmount || 0) > 0 || isPaidPayment(payment));
-  const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
+  const currencyFormatter = { format: (value) => `${Number(value || 0).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} VND` };
   /** Lấy từ refundablePayments — tránh dùng outstandingRefundAmount (số dư sổ sách).
    *  refundablePayments = [] ⇒ BE policy 0% (không hoàn) ⇒ không được fallback sang paidAmount. */
   const refundAmountFromPolicy = booking?.refundablePayments?.length > 0

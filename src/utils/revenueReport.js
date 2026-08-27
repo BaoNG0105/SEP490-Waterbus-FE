@@ -1,5 +1,5 @@
 // Helpers riêng cho báo cáo doanh thu (GET /reports/revenue) — số liệu theo Payments đã Paid.
-import { categorical } from "./chartPalette";
+import { categorical, pickColor } from "./chartPalette";
 
 // Rút gọn số tiền lớn để hiện trên trục/nhãn biểu đồ (1.535.000 -> "1,5tr"); giá trị đầy đủ
 // vẫn dùng formatCurrency (bookingReport.js) ở tooltip/thẻ số liệu.
@@ -30,5 +30,17 @@ const paymentMethodColorByKey = {
   Free: categorical[3],
 };
 
-export const getServiceTypeColor = (key) => serviceTypeColorByKey[key] || categorical[4];
-export const getPaymentMethodColor = (key) => paymentMethodColorByKey[key] || categorical[4];
+// Trả thẳng chuỗi màu theo theme (SVG fill/stroke cần string, không phải object).
+export const getServiceTypeColor = (key, isDarkMode = false) =>
+  pickColor(serviceTypeColorByKey[key] || categorical[4], isDarkMode);
+export const getPaymentMethodColor = (key, isDarkMode = false) =>
+  pickColor(paymentMethodColorByKey[key] || categorical[4], isDarkMode);
+
+export const getPaymentMethodLabel = (key, lang = "VN") => {
+  const labels = {
+    Cash: { VN: "Tiền mặt", EN: "Cash" },
+    PayOS: { VN: "PayOS", EN: "PayOS" },
+    Free: { VN: "Miễn phí", EN: "Free" },
+  };
+  return labels[key]?.[lang] || key || "";
+};

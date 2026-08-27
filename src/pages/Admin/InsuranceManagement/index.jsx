@@ -67,10 +67,11 @@ const buildTouched = (fields) => {
 };
 
 // Chỉ touch những field thực sự vi phạm (khi mở edit mà data cũ invalid theo rule mới).
-const buildTouchedFromValidation = (formValues) => {
+// Truyền packages + editingId để validateField check được duplicate code.
+const buildTouchedFromValidation = (formValues, ctx = {}) => {
   const next = {};
   for (const fieldName of VALIDATED_FIELDS) {
-    if (validateField(fieldName, formValues[fieldName], formValues)?.level === "error") {
+    if (validateField(fieldName, formValues[fieldName], formValues, ctx)?.level === "error") {
       next[fieldName] = true;
     }
   }
@@ -100,8 +101,7 @@ const formatVndDisplay = (value) => {
   return num.toLocaleString("vi-VN");
 };
 
-// Realtime auto-format VND: gõ "1000" -> "1.000" ngay trên input.
-// Đơn giản đặt caret ở cuối (format lại mỗi keystroke).
+
 const formatVndInput = (raw) => {
   if (raw === null || raw === undefined) return "";
   const digits = String(raw).split("").filter((c) => c >= "0" && c <= "9").join("");
@@ -115,7 +115,7 @@ const formatVndInput = (raw) => {
   return out.join("");
 };
 
-// Map bookingType (enum từ BE) sang nhãn hiển thị.
+
 const BOOKING_TYPE_LABELS = {
   PassengerInsurance: { vn: "Bảo hiểm hành khách", en: "Passenger insurance" },
   SeatInsurance: { vn: "Bảo hiểm vé", en: "Ticket insurance" },
@@ -127,7 +127,7 @@ const BOOKING_TYPE_LABELS = {
 //   return lang === "VN" ? entry.vn : entry.en;
 // };
 
-const validateField = (name, value, form = {}) => {
+const validateField = (name, value, form = {}, ctx = {}) => {
   const stringValue = String(value ?? "");
   switch (name) {
     case "code": {
@@ -135,6 +135,19 @@ const validateField = (name, value, form = {}) => {
       if (!trimmed) return { level: "error", message: "Vui lòng nhập mã gói." };
       if (trimmed.length > MAX_CODE) return { level: "error", message: `Mã gói không được vượt quá ${MAX_CODE} ký tự.` };
       if (!CODE_REGEX.test(trimmed)) return { level: "error", message: "Mã gói chỉ gồm chữ cái, số, gạch dưới và bắt đầu bằng chữ cái." };
+      const packages = Array.isArray(ctx.packages) ? ctx.packages : [];
+      const excludeId = ctx.editingId;
+      const normalized = trimmed.toLowerCase();
+      const isDuplicate = packages.some(
+        (pkg) => String(pkg.id ?? pkg.insurancePackageId) !== String(excludeId || "")
+          && String(pkg.code || "").trim().toLowerCase() === normalized,
+      );
+      if (isDuplicate) {
+        return {
+          level: "error",
+          message: `Mã "${trimmed}" đã tồn tại. Vui lòng chọn mã khác.`,
+        };
+      }
       return null;
     }
     case "name": {
@@ -290,6 +303,16 @@ export function InsuranceManagement() {
     return waterbusDuplicates.filter(
       (pkg) => String(pkg.id ?? pkg.insurancePackageId) !== String(excludeId || ""),
     );
+  };
+
+  // Trả về các gói khác (không phải chính gói đang edit) có cùng code đã trim+lowercase.
+  const findOtherWithSameCode = (code, excludeId) => {
+    const normalized = String(code || "").trim().toLowerCase();
+    if (!normalized) return [];
+    return packages.filter((pkg) => {
+      if (String(pkg.id ?? pkg.insurancePackageId) === String(excludeId || "")) return false;
+      return String(pkg.code || "").trim().toLowerCase() === normalized;
+    });
   };
 
   /**
@@ -449,20 +472,21 @@ export function InsuranceManagement() {
     setWaterbusDefaultConflict(null);
     // Chỉ báo lỗi cho những field thực sự invalid (vd: data cũ vi phạm rule mới).
     // Field hợp lệ sẽ được re-validate khi user thao tác.
-    setTouched(buildTouchedFromValidation(nextForm));
+    setTouched(buildTouchedFromValidation(nextForm, { packages, editingId: pkg.id }));
     // Realtime validate cho các field tiền/số — touch luôn để error hiện ngay nếu data cũ vi phạm rule.
     setTouched((prev) => {
       const next = { ...prev };
       for (const field of REALTIME_VALIDATED_FIELDS) {
-        const result = validateField(field, nextForm[field], nextForm);
+        const result = validateField(field, nextForm[field], nextForm, { packages, editingId: pkg.id });
         if (result?.level === "error") next[field] = true;
       }
       return next;
     });
     setIsModalOpen(true);
-    // Check conflict nếu là Waterbus
+    // Check conflict nếu là Waterbus. Truyền pkg.id trực tiếp vì setEditingId là async,
+    // đọc editingId qua closure tại đây sẽ ra giá trị cũ.
     if (nextForm.providerSource === "waterbus") {
-      checkWaterbusConflict();
+      checkWaterbusConflict(pkg.id);
     }
   };
 
@@ -516,10 +540,12 @@ export function InsuranceManagement() {
     }
   };
 
-  const checkWaterbusConflict = () => {
+  const checkWaterbusConflict = (excludeIdOverride) => {
     // Check từ packages đã load (BE đánh dấu Waterbus default qua isWaterbusDefault).
-    // Tìm gói Waterbus default Active KHÁC gói đang edit.
-    const otherActiveWaterbus = findOtherActiveWaterbusDefaults(editingId);
+    // Tìm gói Waterbus default Active KHÁC gói đang edit. Cho phép truyền overrideId
+    // để xử lý trường hợp state editingId chưa cập nhật xong (setEditingId là async).
+    const excludeId = excludeIdOverride ?? editingId;
+    const otherActiveWaterbus = findOtherActiveWaterbusDefaults(excludeId);
     if (otherActiveWaterbus.length === 0) {
       setWaterbusDefaultConflict({ hasActiveWaterbusDefault: false, existingPackage: null });
       return;
@@ -610,8 +636,9 @@ export function InsuranceManagement() {
 
   const validateForm = () => {
     const fieldNames = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
+    const ctx = { packages, editingId };
     for (const fieldName of fieldNames) {
-      const result = validateField(fieldName, form[fieldName], form);
+      const result = validateField(fieldName, form[fieldName], form, ctx);
       if (result && result.level === "error") {
         return result.message;
       }
@@ -621,9 +648,10 @@ export function InsuranceManagement() {
 
   const errors = useMemo(() => {
     const fieldNames = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
+    const ctx = { packages, editingId };
     const result = {};
     for (const fieldName of fieldNames) {
-      result[fieldName] = validateField(fieldName, form[fieldName], form);
+      result[fieldName] = validateField(fieldName, form[fieldName], form, ctx);
     }
     return result;
   }, [form, packages, editingId]);
@@ -1116,7 +1144,10 @@ export function InsuranceManagement() {
               {/* Row 1: Mã gói + Tên gói */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Mã gói" : "Code"}</label>
+                  <label className={labelStyle}>
+                    <span className="text-red-500 mr-0.5">*</span>
+                    {lang === "VN" ? "Mã gói" : "Code"}
+                  </label>
                   <input
                     value={form.code}
                     onChange={(e) => updateField("code", e.target.value.toUpperCase())}
@@ -1132,7 +1163,10 @@ export function InsuranceManagement() {
                   {renderHint("code")}
                 </div>
                 <div className="sm:col-span-2">
-                  <label className={labelStyle}>{lang === "VN" ? "Tên gói" : "Name"}</label>
+                  <label className={labelStyle}>
+                    <span className="text-red-500 mr-0.5">*</span>
+                    {lang === "VN" ? "Tên gói" : "Name"}
+                  </label>
                   <input
                     value={form.name}
                     onChange={(e) => updateField("name", e.target.value)}
@@ -1148,7 +1182,10 @@ export function InsuranceManagement() {
               {/* Row 2: Phí + Mức bồi thường */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Phí mỗi khách (VND)" : "Fee per passenger (VND)"}</label>
+                  <label className={labelStyle}>
+                    <span className="text-red-500 mr-0.5">*</span>
+                    {lang === "VN" ? "Phí mỗi khách (VND)" : "Fee per passenger (VND)"}
+                  </label>
                   <input
                     inputMode="numeric"
                     value={form.unitPremiumAmount}
@@ -1161,7 +1198,10 @@ export function InsuranceManagement() {
                   {renderHint("unitPremiumAmount")}
                 </div>
                 <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Mức bồi thường (VND)" : "Coverage amount (VND)"}</label>
+                  <label className={labelStyle}>
+                    <span className="text-red-500 mr-0.5">*</span>
+                    {lang === "VN" ? "Mức bồi thường (VND)" : "Coverage amount (VND)"}
+                  </label>
                   <input
                     inputMode="numeric"
                     value={form.coverageAmount}
@@ -1273,7 +1313,10 @@ export function InsuranceManagement() {
                 </div>
 
                 <div>
-                  <label className={labelStyle}>{lang === "VN" ? "Tên nhà cung cấp" : "Provider name"}</label>
+                  <label className={labelStyle}>
+                    <span className="text-red-500 mr-0.5">*</span>
+                    {lang === "VN" ? "Tên nhà cung cấp" : "Provider name"}
+                  </label>
                   <input
                     value={form.providerName}
                     onChange={(e) => updateField("providerName", e.target.value)}
@@ -1439,90 +1482,116 @@ export function InsuranceManagement() {
               </button>
             </div>
 
-            <div className="p-6 space-y-5">
-              {/* Header: logo + name + status */}
+            <div className="p-6 space-y-4">
+              {/* Header: logo + name + badges */}
               <div className="flex items-start gap-4">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden ${viewingPackage.providerLogoUrl
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden ${viewingPackage.providerLogoUrl
                   ? "bg-white dark:bg-white border border-slate-200 dark:border-slate-600 p-1.5"
                   : "bg-[#124757]/10 dark:bg-yellow-400/10"
                   }`}>
                   {viewingPackage.providerLogoUrl ? (
                     <img src={viewingPackage.providerLogoUrl} alt={viewingPackage.providerName || viewingPackage.name} className="w-full h-full object-contain" />
                   ) : (
-                    <span className="material-symbols-outlined text-2xl text-[#124757] dark:text-yellow-400">shield</span>
+                    <span className="material-symbols-outlined text-3xl text-[#124757] dark:text-yellow-400">shield</span>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-headline font-black text-base text-slate-800 dark:text-white">{viewingPackage.name}</h4>
-                    <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                  <h4 className="font-headline font-black text-lg text-slate-800 dark:text-white leading-tight">{viewingPackage.name}</h4>
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                    <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                       viewingPackage.isWaterbusDefault === true
                         ? "bg-sky-50 text-sky-600 border-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20"
                         : "bg-violet-50 text-violet-600 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20"
                     }`}>
+                      <span className="material-symbols-outlined text-[12px]">
+                        {viewingPackage.isWaterbusDefault === true ? "water_drop" : "storefront"}
+                      </span>
                       {viewingPackage.isWaterbusDefault === true
                         ? (lang === "VN" ? "Hệ thống" : "System")
                         : (lang === "VN" ? "Bảo hiểm ngoài" : "3rd party")}
                     </span>
+                    <span className={`shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${(viewingPackage.status || "").toLowerCase() === "active"
+                      ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
+                      : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
+                      }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${(viewingPackage.status || "").toLowerCase() === "active" ? "bg-emerald-500" : "bg-slate-400"
+                        }`} />
+                      {(viewingPackage.status || "").toLowerCase() === "active"
+                        ? (lang === "VN" ? "Hoạt động" : "Active")
+                        : (lang === "VN" ? "Không hoạt động" : "Inactive")}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 font-bold mt-0.5">{viewingPackage.code}</p>
-                  <span className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${(viewingPackage.status || "").toLowerCase() === "active"
-                    ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
-                    : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
-                    }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${(viewingPackage.status || "").toLowerCase() === "active" ? "bg-emerald-500" : "bg-slate-400"
-                      }`} />
-                    {(viewingPackage.status || "").toLowerCase() === "active"
-                      ? (lang === "VN" ? "Hoạt động" : "Active")
-                      : (lang === "VN" ? "Không hoạt động" : "Inactive")}
-                  </span>
+                  <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-900/60 px-2 py-1 rounded-md">
+                    <span className="material-symbols-outlined text-[12px] text-slate-400">tag</span>
+                    {viewingPackage.code}
+                  </div>
                 </div>
               </div>
 
-              {/* Fees row */}
+              {/* Stats: Phí / Mức bồi thường */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <div className="rounded-2xl bg-gradient-to-br from-[#124757] to-[#0d3541] dark:from-yellow-400 dark:to-yellow-500 p-4 text-white dark:text-slate-900 shadow-md">
+                  <div className="flex items-center gap-1.5 text-[10px] font-headline font-black uppercase tracking-wider opacity-80">
+                    <span className="material-symbols-outlined text-[14px]">payments</span>
                     {lang === "VN" ? "Phí / khách" : "Fee / passenger"}
-                  </p>
-                  <p className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400 mt-1">
+                  </div>
+                  <p className="mt-1.5 text-xl font-headline font-black tabular-nums tracking-tight">
                     {formatVnd(viewingPackage.unitPremiumAmount)}
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 p-4">
+                  <div className="flex items-center gap-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <span className="material-symbols-outlined text-[14px]">verified_user</span>
                     {lang === "VN" ? "Mức bồi thường" : "Coverage"}
-                  </p>
-                  <p className="text-sm font-headline font-black text-slate-700 dark:text-slate-200 mt-1">
+                  </div>
+                  <p className="mt-1.5 text-xl font-headline font-black tabular-nums tracking-tight text-slate-800 dark:text-slate-100">
                     {formatVnd(viewingPackage.coverageAmount)}
                   </p>
                 </div>
               </div>
 
               {/* Provider */}
-              <div>
-                <p className={labelStyle}>{lang === "VN" ? "Nhà cung cấp" : "Provider"}</p>
-                <p className="text-xs font-bold text-slate-800 dark:text-white">{viewingPackage.providerName || "—"}</p>
+              <div className="rounded-2xl border border-slate-100 dark:border-slate-700 px-4 py-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[18px] text-[#124757] dark:text-yellow-400">business</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {lang === "VN" ? "Nhà cung cấp" : "Provider"}
+                  </p>
+                  <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{viewingPackage.providerName || "—"}</p>
+                </div>
               </div>
 
               {/* Terms URL */}
-              {viewingPackage.termsUrl && (
-                <div>
-                  <p className={labelStyle}>{lang === "VN" ? "Điều khoản" : "Terms"}</p>
+              {viewingPackage.termsUrl ? (
+                <div className="rounded-2xl border border-slate-100 dark:border-slate-700 px-4 py-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="material-symbols-outlined text-[14px] text-slate-400">link</span>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {lang === "VN" ? "Điều khoản" : "Terms"}
+                    </p>
+                  </div>
                   <a
                     href={viewingPackage.termsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs font-bold text-[#124757] dark:text-yellow-400 hover:underline break-all"
+                    className="text-xs font-bold text-[#124757] dark:text-yellow-400 hover:underline break-all inline-flex items-center gap-1"
                   >
-                    {viewingPackage.termsUrl}
+                    <span className="truncate">{viewingPackage.termsUrl}</span>
+                    <span className="material-symbols-outlined text-[12px] shrink-0">open_in_new</span>
                   </a>
                 </div>
-              )}
+              ) : null}
 
               {/* Conditions */}
-              <div>
-                <p className={labelStyle}>{lang === "VN" ? "Điều kiện áp dụng" : "Conditions"}</p>
+              <div className="rounded-2xl border border-slate-100 dark:border-slate-700 px-4 py-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-[14px] text-slate-400">rule</span>
+                  <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
+                    {lang === "VN" ? "Điều kiện áp dụng" : "Conditions"}
+                  </p>
+                </div>
                 {Array.isArray(viewingPackage.conditions) && viewingPackage.conditions.length > 0 ? (
                   <ul className="space-y-2">
                     {viewingPackage.conditions
@@ -1531,10 +1600,10 @@ export function InsuranceManagement() {
                       .map((text, i) => (
                         <li
                           key={i}
-                          className="flex items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 p-3"
+                          className="flex items-start gap-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 px-3 py-2.5"
                         >
-                          <span className="material-symbols-outlined text-lg leading-none text-[#124757] dark:text-yellow-400 shrink-0 self-start -mt-px">check_circle</span>
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1">{text}</span>
+                          <span className="material-symbols-outlined text-[16px] leading-none text-[#124757] dark:text-yellow-400 shrink-0 self-start mt-0.5">check_circle</span>
+                          <span className="text-xs font-medium text-slate-700 dark:text-slate-200 flex-1 leading-relaxed">{text}</span>
                         </li>
                       ))}
                   </ul>

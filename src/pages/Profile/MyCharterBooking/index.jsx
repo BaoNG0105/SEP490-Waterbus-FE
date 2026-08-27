@@ -15,7 +15,7 @@ import {
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
 import { resolveCharterBookingStatus, resolveCharterPaymentStatus, matchesCharterStatusFilter } from "../../../utils/charterBookingAdmin";
 
-const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired"];
+const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Approved", "PendingApproval"];
 const ITEMS_PER_PAGE = 6;
 
 const pick = (source, keys, fallback = "") => {
@@ -26,6 +26,12 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
+const getPaymentAmount = (payment) =>
+  Number(pick(payment, ["amount", "paymentAmount", "paidAmount", "totalAmount"], 0)) || 0;
+
+const getPaymentPurpose = (payment) =>
+  String(pick(payment, ["paymentPurpose", "purpose", "type"], "")).toLowerCase();
+
 const normalizeBooking = (item) => {
   const adultCount = Number(pick(item, ["adultCount"], 0));
   const childCount = Number(pick(item, ["childCount"], 0));
@@ -33,8 +39,54 @@ const normalizeBooking = (item) => {
   const fromName = pick(item, ["fromStationName", "fromStation.stationName", "fromStation.name"]);
   const toName = pick(item, ["toStationName", "toStation.stationName", "toStation.name"]);
 
+  const itemId = pick(item, ["id", "charterBookingId", "bookingId"], "");
+  const payments = (() => {
+    const fromItem = pick(item, ["payments"], []);
+    if (Array.isArray(fromItem) && fromItem.length > 0) return fromItem;
+    if (itemId) {
+      try {
+        const cached = sessionStorage.getItem(`charterPayments:${itemId}`);
+        if (cached) return JSON.parse(cached);
+      } catch (_) { /* ignore parse errors */ }
+    }
+    return [];
+  })();
+  const paidPaymentAmount = payments.reduce((total, payment) => total + getPaymentAmount(payment), 0);
+  const paidDepositAmount = payments
+    .filter((payment) => getPaymentPurpose(payment) === "deposit")
+    .reduce((total, payment) => total + getPaymentAmount(payment), 0);
+  const paymentStatus = pick(item, ["paymentStatus"], "--");
+  const hasDepositPaid = paidDepositAmount > 0 || String(paymentStatus).toLowerCase() === "depositpaid";
+  const rawDepositAmount = Number(pick(item, ["depositAmount", "requiredDepositAmount"], 0)) || 0;
+  const finalDepositAmount = paidDepositAmount || (hasDepositPaid ? rawDepositAmount : 0);
+
+  const estimatedPrice = Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0));
+  const topLevelPaidAmount = Number(pick(item, ["paidAmount", "amountPaid", "paid"], 0));
+  const topLevelPaidDeposit = Number(pick(item, ["paidDepositAmount", "paidDeposit"], 0));
+  const paidAmount = paidPaymentAmount || topLevelPaidAmount || (hasDepositPaid ? finalDepositAmount : 0);
+  const totalPaidDeposit = paidDepositAmount || topLevelPaidDeposit || (hasDepositPaid ? finalDepositAmount : 0);
+
+  // remainingAmount: ưu tiên field BE trả về (cả balanceDue & remainingAmount).
+  // pick() trả "" cho key không tồn tại → phân biệt được "BE không trả" vs "BE trả 0".
+  // Tính lại fallback chỉ khi BE thật sự không trả field nào, và có đủ data
+  // (estimatedPrice + paidAmount từ payments[] hoặc topLevel fields).
+  const rawRemaining = pick(item, ["balanceDue", "remainingAmount"], "");
+  const remainingAmount = (() => {
+    if (rawRemaining !== "" && rawRemaining !== null && rawRemaining !== undefined) {
+      const value = Number(rawRemaining);
+      if (Number.isFinite(value)) return Math.max(0, value);
+    }
+    // Fallback: ước tính lại từ tổng tiền - đã trả (chỉ tin payments[], bỏ qua
+    // topLevel để tránh 0 giả khi list API không trả payments chi tiết).
+    if (estimatedPrice > 0 && paidPaymentAmount > 0) {
+      return Math.max(0, estimatedPrice - paidPaymentAmount);
+    }
+    return 0;
+  })();
+  const balanceDue = remainingAmount;
+
   return {
-    id: pick(item, ["id", "charterBookingId", "bookingId"]),
+    id: itemId,
     bookingCode: pick(item, ["bookingCode", "code"], "--"),
     boatName: pick(item, ["boatName", "boat.name"], "--"),
     route: pick(item, ["routeName", "route", "itineraryName"], fromName || toName ? `${fromName || "--"} - ${toName || "--"}` : "--"),
@@ -46,8 +98,13 @@ const normalizeBooking = (item) => {
     childCount,
     passengerCount,
     status: resolveCharterBookingStatus(item),
-    paymentStatus: resolveCharterPaymentStatus(item),
-    estimatedPrice: Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0)),
+    paymentStatus,
+    estimatedPrice,
+    paidAmount,
+    paidDepositAmount: totalPaidDeposit,
+    hasDepositPaid,
+    balanceDue,
+    remainingAmount,
     holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
   };
 };
@@ -111,7 +168,9 @@ export function CharterList() {
   }, [bookings, isLoading, navigate, pendingOpenCode]);
 
   const currencyFormatter = useMemo(
-    () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }),
+    () => ({
+      format: (value) => `${Number(value || 0).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} VND`,
+    }),
     []
   );
 
@@ -333,18 +392,33 @@ export function CharterList() {
                       </p>
 
                       {!isClosed ? (
-                        <CharterWorkflowStepper status={booking.status} lang={lang} compact />
+                        <CharterWorkflowStepper status={booking.status} paymentStatus={booking.paymentStatus} booking={booking} lang={lang} compact />
                       ) : null}
                     </div>
 
                     <div className="flex shrink-0 items-center justify-between gap-4 sm:min-w-44 sm:flex-col sm:items-end sm:justify-center sm:gap-2.5">
                       <div className="text-left sm:text-right">
-                        <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                          {lang === "VN" ? "Giá chốt" : "Quote"}
-                        </p>
-                        <p className="font-headline text-xl font-black text-[#124757] dark:text-yellow-400 sm:text-2xl">
-                          {booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--"}
-                        </p>
+                        {booking.status === "Approved" ? (
+                          <>
+                            <p className="text-[10px] font-headline font-black uppercase tracking-widest text-rose-500">
+                              {lang === "VN" ? "Còn phải trả" : "Balance due"}
+                            </p>
+                            <p className="font-headline text-xl font-black text-rose-600 dark:text-rose-400 sm:text-2xl">
+                              {booking.estimatedPrice > 0
+                                ? currencyFormatter.format(booking.remainingAmount > 0 ? booking.remainingAmount : 0)
+                                : "--"}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                              {lang === "VN" ? "Giá chốt" : "Quote"}
+                            </p>
+                            <p className="font-headline text-xl font-black text-[#124757] dark:text-yellow-400 sm:text-2xl">
+                              {booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--"}
+                            </p>
+                          </>
+                        )}
                       </div>
 
                       <button

@@ -1,9 +1,9 @@
 export const WORKFLOW_STEPS = [
   { id: "PendingQuote", icon: "edit_note", labelVn: "Yêu cầu", labelEn: "Request" },
-  { id: "Quoted", icon: "receipt_long", labelVn: "Báo giá", labelEn: "Quote" },
-  { id: "PendingPayment", icon: "payments", labelVn: "Thanh toán", labelEn: "Payment" },
-  { id: "Confirmed", icon: "verified", labelVn: "Xác nhận", labelEn: "Confirmed" },
-  { id: "Completed", icon: "sailing", labelVn: "Hoàn tất", labelEn: "Done" },
+  { id: "Quoted", icon: "request_quote", labelVn: "Báo giá", labelEn: "Quote" },
+  { id: "PendingPayment", icon: "account_balance_wallet", labelVn: "Thanh toán", labelEn: "Payment" },
+  { id: "Confirmed", icon: "verified", labelVn: "Đã xác nhận", labelEn: "Confirmed" },
+  { id: "Completed", icon: "task_alt", labelVn: "Hoàn tất", labelEn: "Done" },
 ];
 
 const TERMINAL_STATUSES = ["Cancelled", "Expired", "Refunded"];
@@ -179,7 +179,46 @@ export const getCustomerActionInfo = (booking, lang) => {
     };
   }
 
-  if (["Confirmed", "Completed"].includes(status) || paymentStatus === "paid") {
+  // Đã thanh toán đủ: chuyển thẳng sang xem chi tiết
+  if (paymentStatus === "paid") {
+    return {
+      icon: "confirmation_number",
+      label: lang === "VN" ? "Thanh toán thành công — xem chi tiết booking" : "Payment successful — view booking details",
+      cta: lang === "VN" ? "Xem chi tiết" : "View details",
+      tone: "view",
+      urgent: false,
+      classes: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
+      buttonClasses: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-500/20",
+    };
+  }
+
+  // Approved (đã admin duyệt báo giá — chờ khách thanh toán)
+  if (status === "Approved" && paymentStatus !== "paid") {
+    return {
+      icon: "payments",
+      label: lang === "VN" ? "Đã duyệt — thanh toán để chốt booking" : "Approved — pay to finalize booking",
+      cta: lang === "VN" ? "Thanh toán ngay" : "Pay now",
+      tone: "pay",
+      urgent: true,
+      classes: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
+      buttonClasses: "bg-[#124757] text-white hover:bg-[#0d3541] shadow-[#124757]/20 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300",
+    };
+  }
+
+  // PendingApproval (chờ admin duyệt)
+  if (status === "PendingApproval") {
+    return {
+      icon: "pending_actions",
+      label: lang === "VN" ? "Chờ admin duyệt yêu cầu" : "Waiting for admin to approve the request",
+      cta: lang === "VN" ? "Xem tiến độ" : "Track progress",
+      tone: "wait",
+      urgent: false,
+      classes: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
+      buttonClasses: "bg-amber-500 text-white hover:bg-amber-600 shadow-amber-500/20",
+    };
+  }
+
+  if (["Confirmed", "Completed"].includes(status)) {
     return {
       icon: "confirmation_number",
       label: lang === "VN" ? "Sẵn sàng quản lý hành khách & vé" : "Ready to manage passengers & tickets",

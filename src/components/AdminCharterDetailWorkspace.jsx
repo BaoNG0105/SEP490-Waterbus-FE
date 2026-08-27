@@ -2331,16 +2331,11 @@ export function AdminBookingTicketsTab({
                   className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-slate-800 dark:text-white">
-                        {lang === "VN" ? "Người gửi" : "Sender"}: {batch.senderName || booking.customerName || "—"}
-                      </p>
-                      <p className="mt-1 text-xs font-medium text-slate-400">
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs font-medium text-slate-400">
                         {lang === "VN" ? "Thời gian gửi" : "Submitted"}: {batch.requestedAt ? formatDate(batch.requestedAt) : "—"}
-                        {" · "}
-                        {lang === "VN" ? "Số lượng" : "Qty"}: {batch.passengers.length}
                       </p>
-                      <span className={`mt-2 inline-flex px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(batch.status)
+                      <span className={`inline-flex self-start px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(batch.status)
                           .split(" ")
                           .filter((cls) => cls.includes("text-"))
                           .join(" ")

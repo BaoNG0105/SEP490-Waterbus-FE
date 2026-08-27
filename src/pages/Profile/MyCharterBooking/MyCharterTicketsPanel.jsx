@@ -7,6 +7,7 @@ import {
   getPassengerApprovalTone,
   normalizePassengerApprovalStatus,
 } from "../../../utils/charterPassengerAdd";
+import { pick } from "../../../utils/charterBookingAdmin";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const MIN_BIRTH_YEAR = 1900;
@@ -89,18 +90,59 @@ export function MyCharterTicketsPanel({
   handlePassengerChange,
   handleSavePassengers,
   handleAddPassengers,
+  readOnlyMode = false,
 }) {
   const [addRows, setAddRows] = useState([{ fullName: "", birthYear: "" }]);
-  const [isManifestOpen, setIsManifestOpen] = useState(false);
+  // List mặc định luôn mở. > 5 khách sẽ có nút "Xem thêm / Thu gọn" ở cuối list.
+  const [isExpanded, setIsExpanded] = useState(false);
+  const COLLAPSED_LIMIT = 5;
   const summary = getCharterPassengerAddSummary(booking);
   const canAdd = canCustomerRequestAddPassengers(booking);
 
+  // Merge BE passengers + placeholder slots so customer always sees the full count
+  // — replaces the old CustomerPassengerManifest duplicate card.
+  const approvedNamedRows = passengerRows.filter((row) => {
+    const status = normalizePassengerApprovalStatus(row.approvalStatus);
+    return status !== "Rejected";
+  });
+  const seatCount = Math.max(
+    0,
+    Number(pick(booking, ["passengerCount", "totalPassengers", "seats"], 0)) || 0,
+  );
+  const placeholderRows = (readOnlyMode && approvedNamedRows.length === 0 && seatCount > 0)
+    ? Array.from({ length: seatCount }, (_, idx) => ({
+        __placeholder: true,
+        id: `placeholder-${idx}`,
+        fullName: "",
+        birthYear: "",
+        approvalStatus: "Pending",
+        passengerType: "Adult",
+      }))
+    : [];
+
+  // Tổng số slot sẽ hiển thị: placeholder + rows BE — dùng cho header counter & collapse.
+  const displayRows = [...placeholderRows, ...passengerRows];
+  const canCollapseList = displayRows.length > COLLAPSED_LIMIT;
+  const visibleRows = canCollapseList && !isExpanded
+    ? displayRows.slice(0, COLLAPSED_LIMIT)
+    : displayRows;
+  const remainingCount = displayRows.length - COLLAPSED_LIMIT;
+
   const isPassengerRowLocked = (row) => {
-    if (!isPaid) return true;
+    if (readOnlyMode) return true;
+    // Chỉ khóa khi hành khách đã có ticket thật (BE đã phát hành) HOẶC đã được duyệt.
+    // Trước đó (PendingQuote / Quoted / chưa cọc) user vẫn phải được sửa tên + năm sinh
+    // để admin tính giá chính xác theo danh sách khách.
     const rawApproval = String(row.approvalStatus || "").trim();
     const approval = normalizePassengerApprovalStatus(row.approvalStatus);
     const isDraftSlot = !row.id && !row.requestBatchId && !rawApproval;
-    return Boolean(row.requestBatchId) || (!isDraftSlot && approval === "Approved");
+    // Có id (BE đã phát hành) → khóa.
+    if (row.id && !String(row.id).startsWith("placeholder-")) return true;
+    // Chờ duyệt thêm → khóa.
+    if (row.requestBatchId) return true;
+    // Đã được duyệt (đã có tên + năm sinh hợp lệ) → khóa.
+    if (!isDraftSlot && approval === "Approved" && !row.__placeholder) return true;
+    return false;
   };
 
   const canEditManifest = passengerRows.some((row) => !isPassengerRowLocked(row));
@@ -163,27 +205,12 @@ export function MyCharterTicketsPanel({
         </div>
 
         <div className="mt-6 border-t border-slate-100 pt-6 dark:border-slate-700/50">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            onClick={() => setIsManifestOpen((open) => !open)}
-            className="flex flex-1 items-center justify-between gap-3 text-left sm:justify-start"
-            aria-expanded={isManifestOpen}
-          >
-            <div>
-              <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"} ({passengerRows.length})</h2>
-            </div>
-            <span className={`material-symbols-outlined shrink-0 text-2xl text-slate-400 transition-transform ${isManifestOpen ? "rotate-180" : ""}`}>
-              expand_more
-            </span>
-          </button>
-          <button type="button" onClick={() => importInputRef.current?.click()} disabled={isSubmitting || !isPaid || !canEditManifest} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-yellow-400 sm:w-auto">
-            {lang === "VN" ? "Nhập file khách" : "Import Passengers"}
-          </button>
-          <input ref={importInputRef} type="file" accept=".xlsx,.csv,.tsv,.txt" onChange={handleImportPassengers} className="hidden" />
-        </div>
+          <h2 className="text-xl font-headline font-black text-[#124757] dark:text-yellow-400">
+            {lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"} ({displayRows.length})
+          </h2>
 
-        {isPaid && isManifestOpen && (
+          {/* Section hiển thị khi: đã paid (xem vé), có dòng hành khách có thể sửa, hoặc đang ở readOnlyMode (chưa paid nhưng booking có số chỗ). */}
+        {(isPaid || canEditManifest || readOnlyMode) && (
         <>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {[
@@ -202,37 +229,36 @@ export function MyCharterTicketsPanel({
         </div>
 
         <div className="space-y-3 mt-6">
-          {canUseContactAsSinglePassenger ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-              <p className="text-[10px] font-headline font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                {lang === "VN" ? "Người đặt / hành khách" : "Booker / passenger"}
-              </p>
-              <p className="mt-1 text-sm font-bold text-slate-800 dark:text-white">
-                {passengerRows[0]?.fullName || "--"}
-              </p>
-              <p className="mt-1 text-xs font-bold text-slate-500 dark:text-slate-300">
-                {[booking.contactPhone, booking.contactEmail].filter(isUsableText).join(" · ") || "--"}
-              </p>
+          {displayRows.length === 0 ? (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
+              <span className="material-symbols-outlined mt-0.5 shrink-0 text-amber-500">info</span>
+              <div className="text-xs leading-relaxed">
+                <p className="font-bold text-slate-700 dark:text-slate-200">
+                  {lang === "VN" ? "Chưa có hành khách nào" : "No passengers yet"}
+                </p>
+                <p className="mt-0.5 text-slate-500 dark:text-slate-400">
+                  {lang === "VN"
+                    ? "Booking chưa ghi nhận hành khách. Danh sách sẽ được thêm sau."
+                    : "This booking has no passengers on record yet. The manifest will be added later."}
+                </p>
+              </div>
             </div>
           ) : null}
 
-          {passengerRows.map((row, index) => {
-            const approval = normalizePassengerApprovalStatus(row.approvalStatus);
-            const isLocked = isPassengerRowLocked(row);
-            const isBookerRow = (canUseContactAsSinglePassenger || bookerAsFirstPassenger || row.isContactPassenger) && index === 0;
-            const isBookerOnly = canUseContactAsSinglePassenger && index === 0;
-            const displayName = String(row.fullName || "").trim() || (index === 0 ? bookerName : "");
-            // Không khóa tên hành khách số 1 theo người đặt nữa — khách có thể nhập tên khác (vd đặt hộ người khác).
-            const nameLocked = isLocked;
-            return (
-              <div key={row.id || `passenger-${index}`} className="space-y-2">
-                <div className={`grid gap-2 items-center ${isBookerOnly
-                    ? "grid-cols-1 md:grid-cols-[1fr]"
-                    : "grid-cols-[42px_1fr] md:grid-cols-[42px_1fr_170px]"
-                  }`}>
-                  {!isBookerOnly ? (
+          {visibleRows.map((row, index) => {
+              const approval = row.__placeholder
+                ? "Pending"
+                : normalizePassengerApprovalStatus(row.approvalStatus);
+              const isLocked = isPassengerRowLocked(row);
+              const isPlaceholder = Boolean(row.__placeholder);
+              const placeholderLabel = lang === "VN" ? `Khách #${index + 1} (chưa nhập)` : `Passenger #${index + 1} (pending)`;
+              const displayName = row.fullName ? String(row.fullName).trim() : (isPlaceholder ? placeholderLabel : "");
+              const nameLocked = isLocked;
+              return (
+                <div key={row.id || `passenger-${index}`} className="space-y-2">
+                  <div className="grid gap-2 items-center grid-cols-[42px_1fr] md:grid-cols-[42px_1fr_170px]">
                     <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400" title={row.ticketCode || undefined}>
-                      {row.id ? (
+                      {row.id && !isPlaceholder ? (
                         <input
                           type="checkbox"
                           checked={selectedTicketIds.includes(row.id)}
@@ -241,48 +267,77 @@ export function MyCharterTicketsPanel({
                         />
                       ) : index + 1}
                     </label>
-                  ) : null}
-                  {!isBookerOnly ? (
                     <div className="relative">
-                      <input
-                        value={displayName}
-                        onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)}
-                        disabled={nameLocked}
-                        placeholder={lang === "VN" ? "Họ tên" : "Full name"}
-                        className={`w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60 ${isBookerRow ? "pr-20" : ""}`}
-                      />
-                      {isBookerRow ? (
-                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[9px] font-headline font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                          {lang === "VN" ? "Người đặt" : "Booker"}
-                        </span>
-                      ) : null}
+                      {isPlaceholder ? (
+                        <div className="w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 text-xs italic font-bold text-slate-400 dark:text-slate-500">
+                          {displayName}
+                        </div>
+                      ) : (
+                        <input
+                          value={displayName}
+                          onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)}
+                          readOnly={nameLocked}
+                          placeholder={lang === "VN" ? "Họ tên" : "Full name"}
+                          className="w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] read-only:cursor-default read-only:opacity-90"
+                        />
+                      )}
                     </div>
+                    {isPlaceholder ? (
+                      <div className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 text-xs italic font-bold text-slate-400 dark:text-slate-500">
+                        —
+                      </div>
+                    ) : (
+                      <input
+                        type="number"
+                        min={MIN_BIRTH_YEAR}
+                        max={CURRENT_YEAR}
+                        value={row.birthYear}
+                        onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
+                        readOnly={isLocked}
+                        placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
+                        className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] read-only:cursor-default read-only:opacity-90"
+                      />
+                    )}
+                  </div>
+                  {/* Chỉ hiện khi chờ duyệt / từ chối. Đã duyệt = đã gộp vào danh sách, không cần badge. */}
+                  {!isPlaceholder && row.requestBatchId && approval !== "Approved" ? (
+                    <p className={`ml-12 inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(approval)}`}>
+                      {formatPassengerApprovalStatus(approval, lang, row.reviewNote)}
+                    </p>
                   ) : null}
-                  <input
-                    type="number"
-                    min={MIN_BIRTH_YEAR}
-                    max={CURRENT_YEAR}
-                    value={row.birthYear}
-                    onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
-                    disabled={isLocked}
-                    placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
-                    className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-60"
-                  />
+                  {isPlaceholder ? (
+                    <p className="ml-12 inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                      <span className="material-symbols-outlined text-[12px]">schedule</span>
+                      {lang === "VN" ? "Danh sách sẽ được nhập sau khi thanh toán" : "Manifest will be entered after payment"}
+                    </p>
+                  ) : null}
                 </div>
-                {/* Chỉ hiện khi chờ duyệt / từ chối. Đã duyệt = đã gộp vào danh sách, không cần badge. */}
-                {row.requestBatchId && approval !== "Approved" ? (
-                  <p className={`ml-12 inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(approval)}`}>
-                    {formatPassengerApprovalStatus(approval, lang, row.reviewNote)}
-                  </p>
-                ) : null}
+              );
+            })}
+            {canCollapseList ? (
+              <div className="flex justify-center mt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsExpanded((prev) => !prev)}
+                  aria-expanded={isExpanded}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#124757]/20 bg-[#124757]/5 px-4 py-2 text-[11px] font-headline font-black uppercase tracking-widest text-[#124757] transition hover:bg-[#124757]/10 active:scale-95 dark:border-yellow-400/30 dark:bg-yellow-400/10 dark:text-yellow-400 dark:hover:bg-yellow-400/20"
+                >
+                  <span className="material-symbols-outlined text-[14px]">
+                    {isExpanded ? "expand_less" : "expand_more"}
+                  </span>
+                  {isExpanded
+                    ? (lang === "VN" ? "Thu gọn" : "Collapse")
+                    : (lang === "VN"
+                      ? `Xem thêm ${remainingCount} khách`
+                      : `Show ${remainingCount} more`)}
+                </button>
               </div>
-            );
-          })}
+            ) : null}
         </div>
 
         {canEditManifest ? (
           <div className="flex justify-end mt-6">
-            <button onClick={handleSavePassengers} disabled={isSubmitting || !isPaid} className="w-full sm:w-auto min-w-56 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 py-3 px-6 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60">
+            <button onClick={handleSavePassengers} disabled={isSubmitting} className="w-full sm:w-auto min-w-56 rounded-xl bg-[#124757] dark:bg-yellow-400 text-white dark:text-slate-900 py-3 px-6 font-headline font-black uppercase text-xs tracking-widest disabled:opacity-60">
               {isSubmitting
                 ? (lang === "VN" ? "Đang lưu..." : "Saving...")
                 : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}

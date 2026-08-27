@@ -1407,7 +1407,7 @@ const insurancePassengerCount =
               const conditionsHtml = buildInsuranceConditionsHtml(pkg.conditions, { lang, escapeHtml });
               const termsHtml = pkg.termsUrl
                 ? `<a href="${escapeHtml(pkg.termsUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 14px;border-radius:12px;background:#124757;color:#fff;font-weight:800;font-size:12px;text-decoration:none;">${lang === "VN" ? "Mở điều khoản đầy đủ" : "Open full terms"}</a>`
-                : `<p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có link điều khoản." : "No terms link available."}</p>`;
+                : "";
 
               notify({
                 dialog: true,

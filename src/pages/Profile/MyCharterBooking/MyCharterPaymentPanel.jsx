@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { PayOSLogo, payosButtonClassName, payosButtonLgClassName } from "../../../components/PayOSLogo";
 import { SelectablePublicVouchers } from "../../../components/SelectablePublicVouchers";
 
@@ -8,35 +7,6 @@ import { shouldShowPaymentDeadlineCountdown } from "../../../utils/charterBookin
 
 const CURRENT_YEAR = new Date().getFullYear();
 const MIN_BIRTH_YEAR = 1900;
-
-function PassengerRowInput({ row, index, lang, onChange, disabled }) {
-  const fallbackName = index === 0 && row.isContactPassenger ? (row.fullName || "") : "";
-  const displayName = String(row.fullName || "").trim() || fallbackName;
-  return (
-    <div className="grid grid-cols-[42px_1fr_160px] gap-2 items-center">
-      <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400">
-        {index + 1}
-      </label>
-      <input
-        value={displayName}
-        onChange={(e) => onChange(index, "fullName", e.target.value)}
-        disabled={disabled}
-        placeholder={lang === "VN" ? "Họ tên" : "Full name"}
-        className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 disabled:opacity-60"
-      />
-      <input
-        type="number"
-        min={MIN_BIRTH_YEAR}
-        max={CURRENT_YEAR}
-        value={row.birthYear}
-        onChange={(e) => onChange(index, "birthYear", e.target.value)}
-        disabled={disabled}
-        placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
-        className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 disabled:opacity-60"
-      />
-    </div>
-  );
-}
 
 const formatCountdown = (milliseconds) => {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -64,17 +34,25 @@ const getPaymentStatusMeta = (status, lang) => {
     case "success":
     case "succeeded":
     case "completed":
+    case "approved":
+    case "approval":
       return { label: lang === "VN" ? "Đã thanh toán" : "Paid", classes: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20" };
     case "depositpaid":
       return { label: lang === "VN" ? "Đã đặt cọc" : "Deposit paid", classes: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/20" };
     case "pending":
+    case "processing":
+    case "created":
+    case "submitted":
       return { label: lang === "VN" ? "Đang chờ" : "Pending", classes: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20" };
     case "expired":
       return { label: lang === "VN" ? "Hết hạn" : "Expired", classes: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700" };
     case "refunded":
+    case "partiallyrefunded":
       return { label: lang === "VN" ? "Đã hoàn" : "Refunded", classes: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20" };
     case "failed":
     case "cancelled":
+    case "rejected":
+    case "denied":
       return { label: lang === "VN" ? "Thất bại" : "Failed", classes: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20" };
     default:
       return { label: status || "--", classes: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700" };
@@ -233,6 +211,9 @@ export function MyCharterPaymentPanel({
   isPaymentLinkExpired,
   hasPendingPayOs,
   canCreatePayment,
+  isInPassengerAddGrace,
+  passengerAddRemainingMs,
+  passengerAddDeadline,
   selectablePaymentChoices,
   paymentSelectValue,
   setPaymentOption,
@@ -259,11 +240,14 @@ export function MyCharterPaymentPanel({
   handleSyncPayment,
   handleSyncPaymentByOrderCode,
   loadDetail,
-  // Passenger manifest props
-  passengerRows,
-  handlePassengerChange,
-  handleSavePassengers,
-  canEditManifest,
+  useAllPoints,
+  setUseAllPoints,
+  pointBalance,
+  pointBalanceLoaded,
+  pointsToUse,
+  maxPointsToUse,
+  estimatedPayable,
+  hasBlockingPaymentForPoints,
 }) {
   return (
     <>
@@ -339,48 +323,6 @@ export function MyCharterPaymentPanel({
 
         {canShowPayOsSection ? (
           <div className="space-y-5">
-            {/* ===== PASSENGER MANIFEST — before payment ===== */}
-            {passengerRows && passengerRows.length > 0 && (
-              <div className="overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-white dark:border-slate-700 dark:bg-slate-900 shadow-sm">
-                <div className="border-b border-[#D8E7EA]/80 bg-[#F7FAFB]/80 px-5 py-4 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
-                  <h4 className="font-headline text-sm font-black uppercase tracking-wide text-[#0E4050] dark:text-yellow-400">
-                    {lang === "VN" ? "Danh sách hành khách" : "Passenger Manifest"}
-                  </h4>
-                  <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                    {lang === "VN"
-                      ? "Nhập thông tin hành khách trước khi thanh toán."
-                      : "Enter passenger details before paying."}
-                  </p>
-                </div>
-                <div className="space-y-2.5 px-5 py-4 md:px-6">
-                  {passengerRows.map((row, index) => (
-                    <PassengerRowInput
-                      key={row.id || `passenger-${index}`}
-                      row={row}
-                      index={index}
-                      lang={lang}
-                      onChange={handlePassengerChange}
-                      disabled={!canEditManifest}
-                    />
-                  ))}
-                </div>
-                {canEditManifest && (
-                  <div className="flex justify-end px-5 pb-4 md:px-6">
-                    <button
-                      type="button"
-                      onClick={handleSavePassengers}
-                      disabled={isSubmitting || !canEditManifest}
-                      className="rounded-xl bg-[#124757] dark:bg-yellow-400 px-6 py-3 text-[10px] font-headline font-black uppercase tracking-wider text-white dark:text-slate-900 disabled:opacity-50 transition-colors hover:bg-[#0d3541] dark:hover:bg-yellow-300"
-                    >
-                      {isSubmitting
-                        ? (lang === "VN" ? "Đang lưu..." : "Saving...")
-                        : (lang === "VN" ? "Lưu hành khách" : "Save Passengers")}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* ===== PAYOS PAYMENT CARD ===== */}
             <div className="overflow-hidden rounded-[1.75rem] border border-[#D8E7EA] bg-gradient-to-br from-[#F7FAFB] via-white to-[#F2F8F9] shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
               <div className="border-b border-[#D8E7EA]/80 bg-white/80 px-5 py-5 dark:border-slate-700 dark:bg-slate-800/80 md:px-6">
@@ -488,7 +430,7 @@ export function MyCharterPaymentPanel({
                 </div>
               ) : canCreatePayment ? (
                 <div className="space-y-5">
-                  {selectablePaymentChoices.length > 1 ? (
+                  {selectablePaymentChoices.length > 1 && !booking.requiresAdditionalPayment ? (
                     <div>
                       <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
                         {lang === "VN" ? "Hình thức thanh toán" : "Payment option"}
@@ -537,7 +479,9 @@ export function MyCharterPaymentPanel({
                   ) : (
                     <div className="rounded-2xl border border-[#124757]/15 bg-[#124757]/5 px-4 py-4 dark:border-yellow-400/20 dark:bg-yellow-400/10">
                       <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
-                        {lang === "VN" ? "Số tiền thanh toán" : "Payment amount"}
+                        {lang === "VN"
+                          ? (booking.requiresAdditionalPayment ? "Số tiền cần thanh toán" : "Số tiền thanh toán")
+                          : (booking.requiresAdditionalPayment ? "Amount due" : "Payment amount")}
                       </p>
                       <p className="mt-1 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
                         {currencyFormatter.format(selectedPaymentAmount)}
@@ -552,14 +496,6 @@ export function MyCharterPaymentPanel({
                     </div>
                   )}
 
-                  {booking.hasDepositPaid && (
-                    <p className="text-xs font-bold leading-5 text-emerald-700 dark:text-emerald-300">
-                      {lang === "VN"
-                        ? `Đã thanh toán ${currencyFormatter.format(effectivePaidAmount)}. Lần này chỉ thu phần còn lại ${currencyFormatter.format(remainingAmount)}.`
-                        : `Paid ${currencyFormatter.format(effectivePaidAmount)}. This payment only charges the remaining ${currencyFormatter.format(remainingAmount)}.`}
-                    </p>
-                  )}
-
                   {(booking.requiresAdditionalPayment || Number(booking.additionalInsuranceAmount) > 0) && (
                     <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
                       {lang === "VN"
@@ -568,28 +504,115 @@ export function MyCharterPaymentPanel({
                     </p>
                   )}
 
+                  {/* Dùng điểm (1 điểm = 1 VND, tối đa 50% số tiền).
+                      Workaround: ẩn hoàn toàn khi booking đã có payment pending/paid vì BE
+                      đang reject dùng điểm trong trường hợp đó. Khi BE fix, chỉ cần đổi điều
+                      kiện render về `pointBalanceLoaded && pointBalance > 0 && selectedPaymentAmount > 0`. */}
+                  {!hasBlockingPaymentForPoints && pointBalanceLoaded && pointBalance > 0 && selectedPaymentAmount > 0 && (
+                    <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/40 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          id="use-points-checkbox"
+                          type="checkbox"
+                          aria-label={lang === "VN" ? "Dùng điểm thanh toán" : "Use points for payment"}
+                          checked={useAllPoints}
+                          onChange={(e) => !isSubmitting && setUseAllPoints(e.target.checked)}
+                          disabled={isSubmitting || maxPointsToUse <= 0}
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50 cursor-pointer"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-headline text-xs font-black uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+                              {lang === "VN"
+                                ? `Dùng điểm (${pointBalance.toLocaleString("vi-VN")} điểm)`
+                                : `Use points (${pointBalance.toLocaleString("vi-VN")} pts)`}
+                            </span>
+                            <span className="material-symbols-outlined text-[16px] text-emerald-600 dark:text-emerald-300">redeem</span>
+                          </div>
+                          <p className="mt-0.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            {lang === "VN"
+                              ? `1 điểm = 1 VND, tối đa 50% số tiền. Áp dụng tối đa ${maxPointsToUse.toLocaleString("vi-VN")} điểm.`
+                              : `1 point = 1 VND, capped at 50% of the amount. Up to ${maxPointsToUse.toLocaleString("vi-VN")} pts.`}
+                          </p>
+                        </div>
+                      </label>
+                      {useAllPoints && pointsToUse > 0 && (
+                        <div className="mt-3 space-y-1 border-t border-emerald-200/60 pt-3 dark:border-emerald-500/20">
+                          <div className="flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                            <span>{lang === "VN" ? "Số tiền ban đầu" : "Original amount"}</span>
+                            <span>{currencyFormatter.format(selectedPaymentAmount)}</span>
+                          </div>
+                          <div className="flex justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                            <span>{lang === "VN" ? "Điểm dùng" : "Points used"}</span>
+                            <span className="font-bold">-{pointsToUse.toLocaleString("vi-VN")}</span>
+                          </div>
+                          <div className="flex justify-between border-t border-dashed border-emerald-200/60 pt-2 text-xs font-black text-[#124757] dark:text-yellow-400 dark:border-emerald-500/20">
+                            <span>{lang === "VN" ? "Số tiền qua PayOS" : "Amount via PayOS"}</span>
+                            <span>{currencyFormatter.format(estimatedPayable)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Banner đếm ngược 12h sau khi admin duyệt thêm hành khách mới.
+                      Sau khi hết 12h, nút Pay sẽ tự disable — BE sẽ quyết hành vi cuối (giữ/cancel). */}
+                  {isInPassengerAddGrace && (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      data-testid="passenger-add-countdown-banner"
+                      className="rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="material-symbols-outlined mt-0.5 text-[18px] text-amber-600 dark:text-amber-300">hourglass_top</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-headline text-xs font-black uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                            {lang === "VN"
+                              ? "Thời hạn thanh toán sau khi thêm hành khách"
+                              : "Payment deadline after adding passengers"}
+                          </p>
+                          <p className="mt-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                            {lang === "VN" ? (
+                              <>
+                                Còn <span className="font-black tabular-nums">{formatCountdown(passengerAddRemainingMs)}</span> để hoàn tất thanh toán. Sau thời điểm này, thanh toán sẽ bị khoá — vui lòng liên hệ CSKH nếu cần hỗ trợ.
+                              </>
+                            ) : (
+                              <>
+                                <span className="font-black tabular-nums">{formatCountdown(passengerAddRemainingMs)}</span> left to complete payment. After this deadline, payment will be locked — please contact support.
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                    <SelectablePublicVouchers
-                      lang={lang}
-                      bookingType={PROMOTION_BOOKING_TYPES.CHARTER}
-                      selectedCode={paymentPromotionCode}
-                      disabled={isSubmitting || promoChecking}
-                      onChangeCode={(code) => setPaymentPromotionCode?.(code)}
-                      onSelect={(code) => {
-                        setPaymentPromotionCode?.(code);
-                        onApplyPromotionCode?.(code);
-                      }}
-                      onClear={() => onClearPromotionCode?.()}
-                      hint={lang === "VN"
-                        ? "Chọn voucher hoặc nhập mã rồi Enter để áp dụng."
-                        : "Pick a voucher or type a code and press Enter to apply."}
-                    />
-                    {promoChecking ? (
+                    {/* Voucher: ẩn khi top-up BH vì khoản phát sinh không cho áp voucher. */}
+                    {!booking.requiresAdditionalPayment && (
+                      <SelectablePublicVouchers
+                        lang={lang}
+                        bookingType={PROMOTION_BOOKING_TYPES.CHARTER}
+                        selectedCode={paymentPromotionCode}
+                        disabled={isSubmitting || promoChecking}
+                        onChangeCode={(code) => setPaymentPromotionCode?.(code)}
+                        onSelect={(code) => {
+                          setPaymentPromotionCode?.(code);
+                          onApplyPromotionCode?.(code);
+                        }}
+                        onClear={() => onClearPromotionCode?.()}
+                        hint={lang === "VN"
+                          ? "Chọn voucher hoặc nhập mã rồi Enter để áp dụng."
+                          : "Pick a voucher or type a code and press Enter to apply."}
+                      />
+                    )}
+                    {!booking.requiresAdditionalPayment && promoChecking ? (
                       <p className="mt-2 text-xs font-bold text-slate-400">
                         {lang === "VN" ? "Đang kiểm tra mã…" : "Validating code…"}
                       </p>
                     ) : null}
-                    {promoPreview?.ok ? (
+                    {!booking.requiresAdditionalPayment && promoPreview?.ok ? (
                       <p className="mt-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
                         {lang === "VN"
                           ? `Đã giảm ${currencyFormatter.format(promoPreview.discountAmount || 0)}`
@@ -597,7 +620,7 @@ export function MyCharterPaymentPanel({
                         {promoPreview.message ? ` · ${promoPreview.message}` : ""}
                       </p>
                     ) : null}
-                    {promoPreview?.error ? (
+                    {!booking.requiresAdditionalPayment && promoPreview?.error ? (
                       <p className="mt-2 text-xs font-bold text-rose-600 dark:text-rose-300">{promoPreview.error}</p>
                     ) : null}
                     <button
@@ -610,7 +633,10 @@ export function MyCharterPaymentPanel({
                       <span>
                         {isSubmitting
                           ? (lang === "VN" ? "Đang tạo giao dịch..." : "Creating payment...")
-                          : `${lang === "VN" ? "Thanh toán" : "Pay"} ${selectedPaymentAmount > 0 ? currencyFormatter.format(selectedPaymentAmount) : ""}`}
+                          : (() => {
+                              const displayAmount = useAllPoints && pointsToUse > 0 ? estimatedPayable : selectedPaymentAmount;
+                              return `${lang === "VN" ? "Thanh toán" : "Pay"} ${displayAmount > 0 ? currencyFormatter.format(displayAmount) : ""}`;
+                            })()}
                       </span>
                     </button>
                   </div>
@@ -644,8 +670,15 @@ export function MyCharterPaymentStickyBar({
   currencyFormatter,
   openPaymentPage,
   handleCreatePayment,
+  useAllPoints,
+  pointsToUse,
+  estimatedPayable,
 }) {
   if ((!canCreatePayment && !hasPendingPayOs) || isPaid) return null;
+  // Trên mobile sticky bar: ưu tiên hiển thị số tiền đã trừ điểm để user thấy rõ.
+  const displayAmount = hasPendingPayOs
+    ? effectivePendingPaymentAmount
+    : (useAllPoints && pointsToUse > 0 ? estimatedPayable : selectedPaymentAmount);
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 backdrop-blur-lg shadow-[0_-8px_30px_rgba(15,23,42,0.08)] dark:border-slate-700 dark:bg-slate-900/95 md:hidden">
@@ -657,8 +690,13 @@ export function MyCharterPaymentStickyBar({
               : (lang === "VN" ? "Cần thanh toán" : "Payment due")}
           </p>
           <p className="font-headline text-sm font-black text-[#124757] dark:text-yellow-400">
-            {selectedPaymentAmount > 0 ? currencyFormatter.format(hasPendingPayOs ? effectivePendingPaymentAmount : selectedPaymentAmount) : "--"}
+            {displayAmount > 0 ? currencyFormatter.format(displayAmount) : "--"}
           </p>
+          {!hasPendingPayOs && useAllPoints && pointsToUse > 0 && (
+            <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-300">
+              -{pointsToUse.toLocaleString("vi-VN")} {lang === "VN" ? "điểm" : "pts"}
+            </p>
+          )}
         </div>
         {hasPendingPayOs && effectiveCheckoutUrl ? (
           <button

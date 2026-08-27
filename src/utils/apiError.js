@@ -105,6 +105,11 @@ export const rewriteCharterValidationMessage = (message) => {
     return "Mỗi booking chỉ được gửi yêu cầu thêm hành khách 1 lần. Bạn đã gửi rồi nên không gửi thêm được.";
   }
 
+  // Anti-spam lock cho PUT /passengers: "Mỗi lần đã được cập nhật một yêu cầu khác."
+  if (/mỗi\s*lần\s*đã\s*được\s*cập\s*nhật|already\s*updated.*request|another\s*update\s*request|too\s*many\s*updates/i.test(text)) {
+    return "Bạn vừa cập nhật hành khách xong. Vui lòng đợi vài giây rồi thử lại — máy chủ đang khóa tạm thời để tránh gửi trùng yêu cầu.";
+  }
+
   // Soft rename leftover "bến đi/đến" → UI labels when they appear alone in short validation texts.
   if (/\bbến đi\b/i.test(text) || /\bbến đến\b/i.test(text)) {
     return text

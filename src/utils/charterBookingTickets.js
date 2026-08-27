@@ -20,6 +20,18 @@ export const isCharterFullyPaid = (booking) => {
   return String(booking?.paymentStatus || "").toLowerCase() === "paid";
 };
 
+/**
+ * Đã đặt cọc trở lên (DepositPaid / Paid). Dùng cho các flow cho phép
+ * khi khách đã cam kết thanh toán (vd. thêm hành khách) — không cần trả hết.
+ */
+export const hasCharterDepositOrFullPaid = (booking) => {
+  const status = String(booking?.paymentStatus || "").toLowerCase();
+  if (["paid", "depositpaid"].includes(status)) return true;
+  // BE đôi khi trả Paid nhưng còn dư nợ — fallback check số dư.
+  if (status === "paid" && isCharterFullyPaid(booking)) return true;
+  return false;
+};
+
 export const hasCharterPassengerManifest = (source) => {
   const passengers = Array.isArray(source?.passengers) ? source.passengers : [];
   const tickets = Array.isArray(source?.tickets) ? source.tickets : [];

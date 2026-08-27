@@ -6,79 +6,207 @@ import { getBookingsReport, getRevenueReport } from "../../../api/reportApi";
 import { fetchAllStations } from "../../../services/stationService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { FormSelect } from "../../../components/FormSelect";
-import { CompositionBar } from "../../../components/charts/CompositionBar";
-import { RevenueTrendChart } from "../../../components/charts/RevenueTrendChart";
-import { categorical, otherColor } from "../../../utils/chartPalette";
-import { getServiceTypeColor, getPaymentMethodColor } from "../../../utils/revenueReport";
+import { Sparkline } from "../../../components/charts/Sparkline";
+import { RevenueDonutChart } from "../../../components/charts/RevenueDonutChart";
+import { RevenueBarChart } from "../../../components/charts/RevenueBarChart";
+import { getServiceTypeColor, getPaymentMethodColor, formatCompactCurrency } from "../../../utils/revenueReport";
 import {
   serviceTypeOptions,
   paymentMethodOptions,
   getBookingStatusLabel,
   getServiceTypeLabel,
   getPaymentMethodLabel,
+  getPaymentStatusLabel,
+  getBookingStatusClass,
+  getPaymentStatusClass,
   formatCurrency,
+  formatDateTime,
 } from "../../../utils/bookingReport";
+
+/** Trả về kỳ hiện tại (7 ngày gần nhất) + kỳ trước cùng độ dài để tính delta. */
+const buildPeriods = () => {
+  const now = new Date();
+  const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const todayStr = vnNow.toISOString().slice(0, 10);
+
+  const end = new Date(vnNow);
+  const start = new Date(end);
+  start.setUTCDate(end.getUTCDate() - 29); // 30 ngày gần nhất (gồm hôm nay)
+  const startStr = start.toISOString().slice(0, 10);
+
+  const prevEnd = new Date(start);
+  prevEnd.setUTCDate(prevEnd.getUTCDate() - 1);
+  const prevStart = new Date(prevEnd);
+  prevStart.setUTCDate(prevEnd.getUTCDate() - 6);
+  const prevEndStr = prevEnd.toISOString().slice(0, 10);
+  const prevStartStr = prevStart.toISOString().slice(0, 10);
+
+  return {
+    current: { fromDate: startStr, toDate: todayStr },
+    previous: { fromDate: prevStartStr, toDate: prevEndStr },
+  };
+};
+
+const computeDeltaTone = (pct, invert) => {
+  if (pct === 0) return "neutral";
+  const rising = pct > 0;
+  if (!invert) return rising ? "up" : "down";
+  return rising ? "down" : "up";
+};
+
+const invertTone = (tone) => {
+  if (tone === "up") return "down";
+  if (tone === "down") return "up";
+  return "neutral";
+};
+
+const computeNewTone = (curRising, invert) => {
+  if (!invert) return curRising ? "up" : "down";
+  return curRising ? "down" : "up";
+};
+
+const formatDelta = (current, previous, opts = {}) => {
+  const cur = Number(current) || 0;
+  const prev = Number(previous) || 0;
+  const invert = opts.invert === true;
+  const fmtValue = opts.formatValue || ((v) => v.toString());
+
+  let pctText;
+  let rawTone;
+
+  if (prev === 0 && cur === 0) {
+    pctText = "0%";
+    rawTone = "neutral";
+  } else if (prev === 0) {
+    pctText = "—";
+    rawTone = computeNewTone(cur > 0, invert);
+  } else {
+    const pct = ((cur - prev) / prev) * 100;
+    const rounded = Math.round(pct * 10) / 10;
+    const sign = rounded > 0 ? "+" : "";
+    pctText = `${sign}${rounded}%`;
+    rawTone = computeDeltaTone(rounded, false);
+  }
+
+  const tone = invert ? invertTone(rawTone) : rawTone;
+
+  let absoluteText = "";
+  if (prev > 0 || cur > 0) {
+    const abs = cur - prev;
+    if (abs === 0) {
+      absoluteText = fmtValue(0);
+    } else {
+      const sign = abs > 0 ? "+" : "−";
+      absoluteText = `${sign}${fmtValue(Math.abs(abs))}`;
+    }
+  }
+
+  return { text: pctText, abs: absoluteText, tone };
+};
+
+const DELTA_BADGE = {
+  up: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  down: "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+  neutral: "bg-slate-100 text-slate-500 dark:bg-slate-700/40 dark:text-slate-300",
+};
+
+const DELTA_ICON = { up: "trending_up", down: "trending_down", neutral: "trending_flat" };
+
+// "All" là sentinel phía FE — BE nhận enum/int, gửi "All" sẽ gây 400. Bỏ qua key có value === "All" / rỗng.
+const stripAllSentinels = (params) => {
+  const out = {};
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === "") return;
+    if (typeof v === "string" && v.trim().toLowerCase() === "all") return;
+    out[k] = v;
+  });
+  return out;
+};
+
+// Trích message thân thiện từ axios error theo status code.
+const extractApiMessage = (error, fallback) => {
+  const data = error?.response?.data;
+  if (typeof data === "string" && data.trim()) return data;
+  if (data && typeof data === "object") {
+    return data.message || data.title || data.error || fallback;
+  }
+  return fallback;
+};
+
+const withDetail = (label, msg) => (msg ? `${label}: ${msg}` : `${label}.`);
+
+const revenueErrorMessages = {
+  401: { VN: "Phiên đăng nhập đã hết hạn.", EN: "Session expired." },
+  403: {
+    VN: "Bạn không có quyền xem báo cáo doanh thu.",
+    EN: "You don't have permission to view the revenue report.",
+  },
+  404: {
+    VN: "Chưa có dữ liệu doanh thu trong khoảng đã chọn.",
+    EN: "No revenue data for the selected range.",
+  },
+  500: {
+    VN: "Máy chủ đang bận, vui lòng thử lại sau ít phút.",
+    EN: "Server is busy. Please try again in a few minutes.",
+  },
+};
+
+const formatRevenueError = (error, lang) => {
+  const status = error?.response?.status;
+  const vn = lang === "VN";
+
+  if (status === 400) {
+    const msg = extractApiMessage(error, "");
+    return vn
+      ? withDetail("Bộ lọc không hợp lệ", msg)
+      : withDetail("Invalid filter", msg);
+  }
+
+  const bucket = revenueErrorMessages[status] || (status >= 500 ? revenueErrorMessages[500] : null);
+  if (bucket) return vn ? bucket.VN : bucket.EN;
+
+  return vn
+    ? "Không thể tải dữ liệu tổng quan doanh thu."
+    : "Failed to load the revenue overview.";
+};
+
+const bookingsErrorMessages = {
+  401: { VN: "Phiên đăng nhập đã hết hạn.", EN: "Session expired." },
+  403: {
+    VN: "Bạn không có quyền xem báo cáo booking.",
+    EN: "You don't have permission to view the booking report.",
+  },
+  500: {
+    VN: "Máy chủ đang bận, vui lòng thử lại sau ít phút.",
+    EN: "Server is busy. Please try again in a few minutes.",
+  },
+};
+
+const formatBookingsError = (error, lang) => {
+  const status = error?.response?.status;
+  const vn = lang === "VN";
+  const bucket = bookingsErrorMessages[status] || (status >= 500 ? bookingsErrorMessages[500] : null);
+  if (bucket) return vn ? bucket.VN : bucket.EN;
+  return vn
+    ? "Không thể tải dữ liệu báo cáo booking."
+    : "Failed to load the booking report.";
+};
 
 export const Dashboard = () => {
   const { lang, isDarkMode } = useApp();
   const { user } = useSelector((state) => state.auth);
   const canAccess = isAdminUser(user);
 
-  // Chỉ cần summary tổng hợp cho 2 khối "Phân bổ trạng thái" / "Kênh bán" — danh sách booking
-  // chi tiết đã chuyển sang trang Tổng hợp Booking (/admin/booking-summary), nên gọi API với page/pageSize tối thiểu.
-  const [data, setData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
+  // ===== Data =====
+  const [recentBookings, setRecentBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
+  const [bookingsErrorMsg, setBookingsErrorMsg] = useState("");
 
-  const loadSummary = useCallback(async () => {
-    if (!canAccess) return;
-    try {
-      setIsLoading(true);
-      setErrorMsg("");
-      const result = await getBookingsReport({ page: 1, pageSize: 1 });
-      setData(result);
-    } catch (error) {
-      console.error("Lỗi tải báo cáo booking:", error);
-      setErrorMsg(
-        lang === "VN"
-          ? "Không thể tải dữ liệu báo cáo booking."
-          : "Failed to load the booking report."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [canAccess, lang]);
+  const [revenueCurrent, setRevenueCurrent] = useState(null);
+  const [revenuePrevious, setRevenuePrevious] = useState(null);
+  const [revenueLoading, setRevenueLoading] = useState(true);
+  const [revenueErrorMsg, setRevenueErrorMsg] = useState("");
 
-  useEffect(() => {
-    loadSummary();
-  }, [loadSummary]);
-
-  const summary = useMemo(() => data?.summary || {}, [data]);
-
-  // Phân bổ trạng thái booking — 5 trạng thái chính theo màu categorical cố định + "Khác" gộp phần dư.
-  const statusSegments = useMemo(() => {
-    const known = [
-      { key: "pending", label: getBookingStatusLabel("PendingPayment", lang), value: summary.pendingPaymentCount || 0, color: categorical[3] },
-      { key: "confirmed", label: getBookingStatusLabel("Confirmed", lang), value: summary.confirmedCount || 0, color: categorical[0] },
-      { key: "completed", label: getBookingStatusLabel("Completed", lang), value: summary.completedCount || 0, color: categorical[2] },
-      { key: "cancelled", label: getBookingStatusLabel("Cancelled", lang), value: summary.cancelledCount || 0, color: categorical[4] },
-      { key: "expired", label: getBookingStatusLabel("Expired", lang), value: summary.expiredCount || 0, color: categorical[1] },
-    ];
-    const knownSum = known.reduce((sum, s) => sum + s.value, 0);
-    const otherCount = Math.max(0, (summary.totalBookings || 0) - knownSum);
-    if (otherCount > 0) {
-      known.push({ key: "other", label: lang === "VN" ? "Khác" : "Other", value: otherCount, color: otherColor });
-    }
-    return known;
-  }, [summary, lang]);
-
-  // Kênh bán: quầy (counter) vs trực tuyến (online).
-  const channelSegments = useMemo(() => ([
-    { key: "counter", label: lang === "VN" ? "Bán tại quầy" : "Counter", value: summary.counterBookingCount || 0, color: categorical[0] },
-    { key: "online", label: lang === "VN" ? "Bán trực tuyến" : "Online", value: summary.onlineBookingCount || 0, color: categorical[1] },
-  ]), [summary, lang]);
-
-  // ===== Tổng quan doanh thu (GET /reports/revenue) =====
   const [stations, setStations] = useState([]);
   const [revenueFilters, setRevenueFilters] = useState({
     fromDate: "",
@@ -88,39 +216,98 @@ export const Dashboard = () => {
     fromStationId: "All",
     toStationId: "All",
   });
-  const [revenueData, setRevenueData] = useState(null);
-  const [revenueLoading, setRevenueLoading] = useState(true);
-  const [revenueErrorMsg, setRevenueErrorMsg] = useState("");
 
   useEffect(() => {
     if (!canAccess) return;
-    fetchAllStations().then(setStations).catch((error) => {
-      console.error("Lỗi tải danh sách nhà ga cho bộ lọc doanh thu:", error);
-    });
+    fetchAllStations().then(setStations).catch(() => {});
   }, [canAccess]);
 
+  // ===== Load: bookings summary + recent =====
+  const loadBookings = useCallback(async () => {
+    if (!canAccess) return;
+    try {
+      setBookingsLoading(true);
+      setBookingsErrorMsg("");
+      const recentRes = await getBookingsReport({ page: 1, pageSize: 5 });
+      setRecentBookings(recentRes?.items || []);
+    } catch (error) {
+      console.error("Lỗi tải báo cáo booking:", error);
+      setBookingsErrorMsg(formatBookingsError(error, lang));
+      setRecentBookings([]);
+    } finally {
+      setBookingsLoading(false);
+    }
+  }, [canAccess]); // lang removed to avoid unnecessary re-fetch
+
+  useEffect(() => {
+    loadBookings();
+  }, [loadBookings]);
+
+  // ===== Load: revenue current + previous (cùng filter) =====
   const loadRevenue = useCallback(async () => {
     if (!canAccess) return;
     try {
       setRevenueLoading(true);
       setRevenueErrorMsg("");
-      const params = {};
-      if (revenueFilters.fromDate) params.fromDate = revenueFilters.fromDate;
-      if (revenueFilters.toDate) params.toDate = revenueFilters.toDate;
-      if (revenueFilters.serviceType !== "All") params.serviceType = revenueFilters.serviceType;
-      if (revenueFilters.paymentMethod !== "All") params.paymentMethod = revenueFilters.paymentMethod;
-      if (revenueFilters.fromStationId !== "All") params.fromStationId = revenueFilters.fromStationId;
-      if (revenueFilters.toStationId !== "All") params.toStationId = revenueFilters.toStationId;
+      const periods = buildPeriods();
+      // Strip "All" sentinels — BE expects enum/int, chuỗi "All" sẽ gây 400.
+      const baseParams = stripAllSentinels({
+        serviceType: revenueFilters.serviceType,
+        paymentMethod: revenueFilters.paymentMethod,
+        fromStationId: revenueFilters.fromStationId,
+        toStationId: revenueFilters.toStationId,
+      });
 
-      const result = await getRevenueReport(params);
-      setRevenueData(result);
+      const effectiveCurrent = {
+        fromDate: revenueFilters.fromDate || periods.current.fromDate,
+        toDate: revenueFilters.toDate || periods.current.toDate,
+      };
+
+      const currentRes = await getRevenueReport({ ...baseParams, ...effectiveCurrent });
+
+      // FALLBACK: nếu filter mặc định (All) không trả daily, gọi không filter
+      // để lấy full daily series cho chart + sparkline.
+      let dailyFallbackRes = null;
+      const allFiltersDefault =
+        revenueFilters.serviceType === "All" &&
+        revenueFilters.paymentMethod === "All" &&
+        revenueFilters.fromStationId === "All" &&
+        revenueFilters.toStationId === "All";
+
+      if (
+        (!currentRes?.daily || currentRes.daily.length === 0) &&
+        allFiltersDefault
+      ) {
+        try {
+          dailyFallbackRes = await getRevenueReport({});
+        } catch (e) {
+          console.warn("[Dashboard] Daily fallback failed:", e);
+        }
+      }
+
+      // Kỳ trước cùng độ dài — dùng làm baseline cho delta%.
+      const curStart = new Date(effectiveCurrent.fromDate);
+      const curEnd = new Date(effectiveCurrent.toDate);
+      const lengthMs = Math.max(curEnd.getTime() - curStart.getTime(), 24 * 60 * 60 * 1000);
+      const prevEnd = new Date(curStart.getTime() - 24 * 60 * 60 * 1000);
+      const prevStart = new Date(prevEnd.getTime() - lengthMs);
+      const previousRes = await getRevenueReport({
+        ...baseParams,
+        fromDate: prevStart.toISOString().slice(0, 10),
+        toDate: prevEnd.toISOString().slice(0, 10),
+      });
+
+      const finalCurrent = (currentRes?.daily && currentRes.daily.length > 0)
+        ? currentRes
+        : (dailyFallbackRes || currentRes);
+
+      setRevenueCurrent(finalCurrent);
+      setRevenuePrevious(previousRes);
     } catch (error) {
       console.error("Lỗi tải tổng quan doanh thu:", error);
-      setRevenueErrorMsg(
-        lang === "VN"
-          ? "Không thể tải dữ liệu tổng quan doanh thu."
-          : "Failed to load the revenue overview."
-      );
+      setRevenueErrorMsg(formatRevenueError(error, lang));
+      setRevenueCurrent(null);
+      setRevenuePrevious(null);
     } finally {
       setRevenueLoading(false);
     }
@@ -130,6 +317,7 @@ export const Dashboard = () => {
     loadRevenue();
   }, [loadRevenue]);
 
+  // ===== Derived =====
   const updateRevenueFilter = (key, value) => {
     setRevenueFilters((prev) => ({ ...prev, [key]: value }));
   };
@@ -140,30 +328,160 @@ export const Dashboard = () => {
   ]), [stations, lang]);
 
   const serviceTypeRevenueSegments = useMemo(() => (
-    (revenueData?.byServiceType || []).map((item) => ({
+    (revenueCurrent?.byServiceType || []).map((item) => ({
       key: item.key,
       label: getServiceTypeLabel(item.key, lang),
       value: item.netRevenue || 0,
-      color: getServiceTypeColor(item.key),
+      color: getServiceTypeColor(item.key, isDarkMode),
     }))
-  ), [revenueData, lang]);
+  ), [revenueCurrent, lang, isDarkMode]);
 
   const paymentMethodRevenueSegments = useMemo(() => (
-    (revenueData?.byPaymentMethod || []).map((item) => ({
+    (revenueCurrent?.byPaymentMethod || []).map((item) => ({
       key: item.key,
       label: getPaymentMethodLabel(item.key, lang),
       value: item.netRevenue || 0,
-      color: getPaymentMethodColor(item.key),
+      color: getPaymentMethodColor(item.key, isDarkMode),
     }))
-  ), [revenueData, lang]);
+  ), [revenueCurrent, lang, isDarkMode]);
 
-  // Thẻ thống kê đầu trang: tổng doanh thu (ròng), đã hoàn tiền, số booking, số vé.
-  const revenueStatCards = useMemo(() => ([
-    { key: "net", labelVn: "Tổng doanh thu", labelEn: "Total Revenue", value: formatCurrency(revenueData?.netRevenue), color: "text-[#124757] dark:text-yellow-400" },
-    { key: "refund", labelVn: "Đã hoàn tiền", labelEn: "Refunded", value: formatCurrency(revenueData?.refundAmount), color: "text-rose-500 dark:text-rose-400" },
-    { key: "bookings", labelVn: "Số booking", labelEn: "Bookings", value: revenueData?.bookingCount ?? 0, color: "text-sky-600 dark:text-sky-400" },
-    { key: "tickets", labelVn: "Số vé", labelEn: "Tickets", value: revenueData?.ticketCount ?? 0, color: "text-indigo-600 dark:text-indigo-400" },
-  ]), [revenueData]);
+  // Payment lines for bar chart (daily breakdown by payment method)
+  const paymentLines = useMemo(() => {
+    const byPayment = revenueCurrent?.byPaymentMethod || [];
+    if (byPayment.length === 0) return [];
+    const daily = revenueCurrent?.daily || [];
+    if (daily.length === 0) return [];
+    return byPayment.slice(0, 4).map((pm, idx) => ({
+      method: pm.key,
+      label: getPaymentMethodLabel(pm.key, lang),
+      values: daily.map((d) => d[`netRevenue_${pm.key}`] || d[`payment_${pm.key}`] || d[pm.key?.toLowerCase()] || 0),
+    }));
+  }, [revenueCurrent, lang]);
+
+  // Sparkline data - revenue is always available from daily[]
+  const dailyRevenuePoints = useMemo(
+    () => (revenueCurrent?.daily || []).map((p) => p.netRevenue || 0),
+    [revenueCurrent]
+  );
+
+  // Booking/ticket trends - fallback to revenue if daily doesn't have these fields
+  const dailyBookingPoints = useMemo(() => {
+    const daily = revenueCurrent?.daily || [];
+    if (daily.length > 0 && daily[0]?.bookingCount !== undefined) {
+      return daily.map((p) => p.bookingCount || 0);
+    }
+    return dailyRevenuePoints; // fallback to revenue trend
+  }, [revenueCurrent, dailyRevenuePoints]);
+
+  const dailyTicketPoints = useMemo(() => {
+    const daily = revenueCurrent?.daily || [];
+    if (daily.length > 0 && daily[0]?.ticketCount !== undefined) {
+      return daily.map((p) => p.ticketCount || 0);
+    }
+    return dailyRevenuePoints; // fallback to revenue trend
+  }, [revenueCurrent, dailyRevenuePoints]);
+
+  const dailyRefundPoints = useMemo(() => {
+    const daily = revenueCurrent?.daily || [];
+    if (daily.length > 0 && daily[0]?.refundAmount !== undefined) {
+      return daily.map((p) => p.refundAmount || 0);
+    }
+    return dailyRevenuePoints; // fallback to revenue trend
+  }, [revenueCurrent, dailyRevenuePoints]);
+
+  // Suy ra tổng số booking/ vé — ưu tiên field root (bookingCount/ticketCount), fallback cộng dồn từ byServiceType
+  // (một số BE không trả field top-level mà chỉ có trong segment) — nếu cả 2 đều không có thì trả 0.
+  const deriveCount = (rootVal, segments, key) => {
+    const fromRoot = Number(rootVal);
+    if (Number.isFinite(fromRoot) && fromRoot >= 0) return fromRoot;
+    const arr = Array.isArray(segments) ? segments : [];
+    const sum = arr.reduce((acc, s) => Math.max(acc, 0) + Math.max(Number(s?.[key]) || 0, 0), 0);
+    return Math.max(sum, 0);
+  };
+  const totalBookings = useMemo(
+    () => deriveCount(revenueCurrent?.bookingCount, revenueCurrent?.byServiceType, "bookingCount"),
+    [revenueCurrent]
+  );
+  const totalTickets = useMemo(
+    () => deriveCount(revenueCurrent?.ticketCount, revenueCurrent?.byServiceType, "ticketCount"),
+    [revenueCurrent]
+  );
+
+  const totalBookingsPrev = useMemo(
+    () => deriveCount(revenuePrevious?.bookingCount, revenuePrevious?.byServiceType, "bookingCount"),
+    [revenuePrevious]
+  );
+  const totalTicketsPrev = useMemo(
+    () => deriveCount(revenuePrevious?.ticketCount, revenuePrevious?.byServiceType, "ticketCount"),
+    [revenuePrevious]
+  );
+
+  // ==== KPI cards ====
+  const kpiCards = useMemo(() => {
+    const netRevDelta = formatDelta(revenueCurrent?.netRevenue, revenuePrevious?.netRevenue, {
+      formatValue: (v) => formatCompactCurrency(v, lang),
+    });
+    const refundDelta = formatDelta(revenueCurrent?.refundAmount, revenuePrevious?.refundAmount, {
+      invert: true,
+      formatValue: (v) => formatCompactCurrency(v, lang),
+    });
+    const bookingsDelta = formatDelta(totalBookings, totalBookingsPrev, {
+      formatValue: (v) => v.toLocaleString(lang === "VN" ? "vi-VN" : "en-US"),
+    });
+    const ticketsDelta = formatDelta(totalTickets, totalTicketsPrev, {
+      formatValue: (v) => v.toLocaleString(lang === "VN" ? "vi-VN" : "en-US"),
+    });
+
+    return [
+      {
+        key: "net",
+        title: lang === "VN" ? "Tổng doanh thu" : "Total Revenue",
+        value: formatCurrency(revenueCurrent?.netRevenue),
+        delta: netRevDelta,
+        icon: "payments",
+        iconBg: "bg-[#FFD100] text-slate-900",
+        sparkColor: isDarkMode ? "#facc15" : "#124757",
+        sparkPoints: dailyRevenuePoints,
+      },
+      {
+        key: "refund",
+        title: lang === "VN" ? "Đã hoàn tiền" : "Refunded",
+        value: formatCurrency(revenueCurrent?.refundAmount),
+        delta: refundDelta,
+        icon: "undo",
+        iconBg: "bg-rose-500 text-white",
+        sparkColor: "#f43f5e",
+        sparkPoints: dailyRefundPoints,
+      },
+      {
+        key: "bookings",
+        title: lang === "VN" ? "Số booking" : "Bookings",
+        value: totalBookings,
+        delta: bookingsDelta,
+        icon: "confirmation_number",
+        iconBg: "bg-sky-500 text-white",
+        sparkColor: "#0ea5e9",
+        sparkPoints: dailyBookingPoints,
+      },
+      {
+        key: "tickets",
+        title: lang === "VN" ? "Số vé" : "Tickets",
+        value: totalTickets,
+        delta: ticketsDelta,
+        icon: "airplane_ticket",
+        iconBg: "bg-indigo-500 text-white",
+        sparkColor: "#6366f1",
+        sparkPoints: dailyTicketPoints,
+      },
+    ];
+  }, [revenueCurrent, revenuePrevious, lang, isDarkMode, dailyRevenuePoints, dailyBookingPoints, dailyTicketPoints, dailyRefundPoints]);
+
+  const topStations = useMemo(() => {
+    const byStation = revenueCurrent?.byStation || [];
+    return [...byStation]
+      .sort((a, b) => (b.netRevenue || 0) - (a.netRevenue || 0))
+      .slice(0, 4);
+  }, [revenueCurrent]);
 
   if (!canAccess) {
     return (
@@ -177,184 +495,347 @@ export const Dashboard = () => {
   }
 
   return (
-    <div className="space-y-4 font-body pb-10 px-1.5 md:px-4 animate-fade-in">
+    <div className="space-y-3 font-body pb-4 px-1.5 md:px-3 animate-fade-in">
 
-      {/* HEADER */}
-      <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-            {lang === "VN" ? "Bảng điều khiển doanh thu" : "Sales Dashboard"}
+      {/* ===================== HEADER ===================== */}
+      <div className="bg-white dark:bg-slate-800 px-4 py-3 rounded-3xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-lg md:text-xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide truncate">
+            {lang === "VN" ? "Bảng điều khiển" : "Sales Dashboard"}
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-[11px] text-slate-400 mt-0.5 truncate">
             {lang === "VN"
-              ? "Theo dõi tổng quan booking, doanh thu và trạng thái thanh toán toàn hệ thống."
-              : "Monitor bookings, revenue and payment status across the system."}
+              ? "Theo dõi doanh thu, booking và hoạt động gần đây."
+              : "Monitor revenue, bookings and recent activity."}
           </p>
         </div>
-        <Link
-          to="/admin/booking-summary"
-          className="inline-flex items-center gap-2 self-start rounded-2xl bg-[#FFD100] dark:bg-yellow-400 px-4 py-2.5 text-xs font-headline font-black uppercase tracking-wider text-slate-900 hover:opacity-90 transition-opacity shrink-0"
-        >
-          {lang === "VN" ? "Xem danh sách chi tiết" : "View detailed list"}
-        </Link>
-      </div>
-
-      {errorMsg && (
-        <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20">
-          {errorMsg}
-        </div>
-      )}
-      {revenueErrorMsg && (
-        <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-xs font-bold border border-red-100 dark:border-red-500/20">
-          {revenueErrorMsg}
-        </div>
-      )}
-
-      {/* ===== TRÊN: BỘ LỌC + THẺ TỔNG DOANH THU / HOÀN TIỀN / BOOKING / VÉ ===== */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-1">
-          <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider">
-            {lang === "VN" ? "Tổng quan doanh thu" : "Revenue Overview"}
-          </h3>
-          {revenueData?.from && revenueData?.to && (
-            <span className="text-[11px] font-bold text-slate-400">
-              {new Date(revenueData.from).toLocaleDateString("vi-VN")} — {new Date(revenueData.to).toLocaleDateString("vi-VN")}
+        <div className="flex items-center gap-2 shrink-0">
+          {revenueCurrent?.from && revenueCurrent?.to && (
+            <span className="hidden md:inline-flex items-center gap-1.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-300 border border-slate-100 dark:border-slate-600 dark:border-opacity-50">
+              <span className="material-symbols-outlined text-[12px]">calendar_month</span>
+              {new Date(revenueCurrent.from).toLocaleDateString("vi-VN")} — {new Date(revenueCurrent.to).toLocaleDateString("vi-VN")}
             </span>
           )}
+          <Link
+            to="/admin/booking-summary"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#FFD100] dark:bg-yellow-400 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-900 hover:opacity-90 transition-opacity"
+          >
+            <span className="material-symbols-outlined text-[14px]">list_alt</span>
+            {lang === "VN" ? "Chi tiết" : "Details"}
+          </Link>
         </div>
+      </div>
 
-        {/* Bộ lọc doanh thu */}
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      {(bookingsErrorMsg || revenueErrorMsg) && (
+        <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 px-4 py-2.5 rounded-2xl text-[11px] font-bold border border-red-100 dark:border-red-500/20">
+          {bookingsErrorMsg || revenueErrorMsg}
+        </div>
+      )}
+
+      {/* ===================== FILTER ROW (compact) ===================== */}
+      <div className="bg-white dark:bg-slate-800 px-4 py-3 rounded-3xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-2.5">
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">{lang === "VN" ? "Từ ngày" : "From Date"}</span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">{lang === "VN" ? "Từ ngày" : "From"}</span>
             <input
               type="date"
               value={revenueFilters.fromDate}
               onChange={(e) => updateRevenueFilter("fromDate", e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">{lang === "VN" ? "Đến ngày" : "To Date"}</span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">{lang === "VN" ? "Đến ngày" : "To"}</span>
             <input
               type="date"
               value={revenueFilters.toDate}
               onChange={(e) => updateRevenueFilter("toDate", e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">{lang === "VN" ? "Dịch vụ" : "Service Type"}</span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">{lang === "VN" ? "Dịch vụ" : "Service"}</span>
             <FormSelect
               value={revenueFilters.serviceType}
               onChange={(v) => updateRevenueFilter("serviceType", v)}
               options={serviceTypeOptions.map((o) => ({ value: o.value, label: lang === "VN" ? o.labelVn : o.labelEn }))}
-              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">{lang === "VN" ? "Phương thức TT" : "Payment Method"}</span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">{lang === "VN" ? "Phương thức TT" : "Payment"}</span>
             <FormSelect
               value={revenueFilters.paymentMethod}
               onChange={(v) => updateRevenueFilter("paymentMethod", v)}
               options={paymentMethodOptions.map((o) => ({ value: o.value, label: lang === "VN" ? o.labelVn : o.labelEn }))}
-              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">{lang === "VN" ? "Bến đi" : "From Station"}</span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">{lang === "VN" ? "Bến đi" : "From"}</span>
             <FormSelect
               value={revenueFilters.fromStationId}
               onChange={(v) => updateRevenueFilter("fromStationId", v)}
               searchable
-              searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
-              emptyLabel={lang === "VN" ? "Không có kết quả" : "No results"}
+              searchPlaceholder={lang === "VN" ? "Tìm..." : "Search..."}
+              emptyLabel={lang === "VN" ? "Không có" : "None"}
               options={stationOptions}
-              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">{lang === "VN" ? "Bến đến" : "To Station"}</span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">{lang === "VN" ? "Bến đến" : "To"}</span>
             <FormSelect
               value={revenueFilters.toStationId}
               onChange={(v) => updateRevenueFilter("toStationId", v)}
               searchable
-              searchPlaceholder={lang === "VN" ? "Tìm bến..." : "Search station..."}
-              emptyLabel={lang === "VN" ? "Không có kết quả" : "No results"}
+              searchPlaceholder={lang === "VN" ? "Tìm..." : "Search..."}
+              emptyLabel={lang === "VN" ? "Không có" : "None"}
               options={stationOptions}
-              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ===================== KPI CARDS (4 ngang) ===================== */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {kpiCards.map((card) => (
+          <div
+            key={card.key}
+            className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col"
+            style={{ minHeight: "120px" }}
+          >
+            {/* Subtle decorative blob */}
+            <div className="pointer-events-none absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-[0.08]" style={{ backgroundColor: card.sparkColor }} />
+
+            <div className="relative flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">
+                  {card.title}
+                </p>
+                <h4 className="mt-0.5 text-lg font-black font-headline text-[#124757] dark:text-white truncate">
+                  {revenueLoading ? "--" : card.value}
+                </h4>
+              </div>
+              <div className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${card.iconBg}`}>
+                <span className="material-symbols-outlined text-[18px]">{card.icon}</span>
+              </div>
+            </div>
+
+            <div className="relative mt-1.5 flex items-center gap-1.5 min-w-0">
+              <span
+                className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-black shrink-0 ${DELTA_BADGE[card.delta.tone]}`}
+                title={
+                  card.delta.abs
+                    ? `${lang === "VN" ? "Thay đổi" : "Change"}: ${card.delta.abs}`
+                    : undefined
+                }
+              >
+                <span className="material-symbols-outlined text-[10px]">
+                  {DELTA_ICON[card.delta.tone]}
+                </span>
+                {card.delta.text}
+              </span>
+              {card.delta.abs && (
+                <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 truncate">
+                  {card.delta.abs}
+                </span>
+              )}
+              <span className="text-[9px] text-slate-400 font-bold truncate ml-auto">
+                {lang === "VN" ? "vs kỳ trước" : "vs prior"}
+              </span>
+            </div>
+
+            <div className="relative mt-1.5 h-8">
+              {revenueLoading ? (
+                <div className="h-full rounded-md bg-slate-100 dark:bg-slate-900 animate-pulse" />
+              ) : (
+                <Sparkline points={card.sparkPoints} color={card.sparkColor} />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ===================== MAIN CHART: BAR + DONUTS ROW ===================== */}
+      {/* Donuts ngang hàng trên */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Donut: by service */}
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+          <h4 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
+            {lang === "VN" ? "Theo dịch vụ" : "By service"}
+          </h4>
+          <div className="h-[calc(100%-22px)] min-h-[140px]">
+            <RevenueDonutChart
+              data={serviceTypeRevenueSegments}
+              lang={lang}
+              isDarkMode={isDarkMode}
+              isLoading={revenueLoading}
             />
           </div>
         </div>
 
-        {/* Thẻ: tổng doanh thu, đã hoàn tiền, số booking, số vé */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {revenueStatCards.map((item) => (
-            <div key={item.key} className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 flex flex-col justify-center">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">{lang === "VN" ? item.labelVn : item.labelEn}</p>
-              <h4 className={`text-base font-black font-headline mt-0.5 ${item.color}`}>
-                {revenueLoading ? "..." : item.value}
-              </h4>
+        {/* Donut: by payment */}
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+          <h4 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
+            {lang === "VN" ? "Theo thanh toán" : "By payment"}
+          </h4>
+          <div className="h-[calc(100%-22px)] min-h-[140px]">
+            <RevenueDonutChart
+              data={paymentMethodRevenueSegments}
+              lang={lang}
+              isDarkMode={isDarkMode}
+              isLoading={revenueLoading}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Bar chart doanh thu - full width */}
+      <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+        <div className="flex items-center justify-between mb-1 gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider truncate">
+              {lang === "VN" ? "Xu hướng doanh thu" : "Revenue Trend"}
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+              {lang === "VN" ? "Doanh thu ròng theo ngày trong khoảng đã chọn." : "Net revenue by day for the selected range."}
+            </p>
+          </div>
+        </div>
+        <div className="mt-2">
+          <RevenueBarChart
+            points={revenueCurrent?.daily || []}
+            paymentLines={paymentLines}
+            lang={lang}
+            isDarkMode={isDarkMode}
+            isLoading={revenueLoading}
+          />
+        </div>
+      </div>
+
+      {/* ===================== LOWER ROW: RECENT BOOKINGS + STATUS + TOP STATIONS ===================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        {/* Recent bookings (chiếm 2/3) */}
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider">
+                {lang === "VN" ? "Booking gần đây" : "Recent bookings"}
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">5 {lang === "VN" ? "mới nhất" : "most recent"}</p>
             </div>
-          ))}
+            <Link
+              to="/admin/booking-summary"
+              className="inline-flex items-center gap-1 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400 hover:opacity-80"
+            >
+              {lang === "VN" ? "Xem tất cả" : "View all"}
+              <span className="material-symbols-outlined text-[12px]">arrow_forward</span>
+            </Link>
+          </div>
+
+          {bookingsLoading ? (
+            <div className="space-y-1.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-900 animate-pulse" />
+              ))}
+            </div>
+          ) : recentBookings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+              <span className="material-symbols-outlined text-2xl">inbox</span>
+              <p className="mt-1.5 text-[11px] font-bold">{lang === "VN" ? "Chưa có booking nào." : "No bookings yet."}</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto -mx-2">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="text-left py-1.5 px-2 font-bold">{lang === "VN" ? "Mã" : "Code"}</th>
+                    <th className="text-left py-1.5 px-2 font-bold">{lang === "VN" ? "Khách" : "Customer"}</th>
+                    <th className="text-left py-1.5 px-2 font-bold hidden md:table-cell">{lang === "VN" ? "DV" : "Svc"}</th>
+                    <th className="text-right py-1.5 px-2 font-bold">{lang === "VN" ? "Tổng" : "Total"}</th>
+                    <th className="text-center py-1.5 px-2 font-bold">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                  {recentBookings.map((booking) => (
+                    <tr
+                      key={booking.bookingId || booking.id}
+                      className="hover:bg-slate-50/60 dark:hover:bg-slate-900/30 transition-colors cursor-pointer"
+                      onClick={() => window.location.href = `/admin/bookings/${booking.bookingId || booking.id}`}
+                    >
+                      <td className="py-2 px-2 font-bold text-[#124757] dark:text-yellow-400 whitespace-nowrap">
+                        {booking.bookingCode || "--"}
+                      </td>
+                      <td className="py-2 px-2">
+                        <div className="font-bold text-slate-700 dark:text-slate-200 truncate max-w-[180px]">
+                          {booking.contactName || "--"}
+                        </div>
+                        <div className="text-[9px] text-slate-400 truncate max-w-[180px]">
+                          {formatDateTime(booking.bookedAt)}
+                        </div>
+                      </td>
+                      <td className="py-2 px-2 hidden md:table-cell">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 dark:text-slate-300">
+                          {getServiceTypeLabel(booking.serviceType, lang)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-right font-black text-slate-800 dark:text-white whitespace-nowrap">
+                        {formatCurrency(booking.totalAmount)}
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className={`text-[10px] font-headline font-black uppercase tracking-wide ${getBookingStatusClass(booking.bookingStatus)}`}>
+                            {getBookingStatusLabel(booking.bookingStatus, lang)}
+                          </span>
+                          <span className={`text-[9px] font-bold ${getPaymentStatusClass(booking.paymentStatus)}`}>
+                            {getPaymentStatusLabel(booking.paymentStatus, lang)}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
+
+        {/* Top stations */}
+        {topStations.length > 0 && (
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+            <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider mb-2">
+              {lang === "VN" ? "Top bến" : "Top stations"}
+            </h3>
+            <div className="space-y-2">
+              {topStations.map((station, index) => {
+                const maxRev = Math.max(...topStations.map((s) => s.netRevenue || 0), 1);
+                const pct = ((station.netRevenue || 0) / maxRev) * 100;
+                return (
+                  <div key={`${station.stationId || station.stationName || index}`} className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-bold text-slate-700 dark:text-slate-200 truncate max-w-[60%]">
+                        <span className="text-slate-400 mr-1">#{index + 1}</span>
+                        {station.stationName || station.fromStationName || station.key || station.stationId || "--"}
+                      </span>
+                      <span className="font-black text-[#124757] dark:text-yellow-400">
+                        {formatCurrency(station.netRevenue)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-[#124757] to-[#FFD100] dark:from-yellow-400 dark:to-amber-500 rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* ===== DƯỚI: BIỂU ĐỒ DOANH THU THEO NGÀY (TRÁI) + CÁC KHỐI PHÂN BỔ (PHẢI) ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {/* Trái: biểu đồ doanh thu theo ngày */}
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-          <h3 className="text-[11px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
-            {lang === "VN" ? "Doanh thu theo ngày" : "Revenue by day"}
-          </h3>
-          <RevenueTrendChart points={revenueData?.daily || []} lang={lang} isDarkMode={isDarkMode} isLoading={revenueLoading} />
-        </div>
-
-        {/* Phải: phân bổ trạng thái, kênh bán, doanh thu theo dịch vụ, doanh thu theo phương thức TT */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-            <h3 className="text-[11px] font-headline font-black uppercase text-slate-400 tracking-wider mb-3">
-              {lang === "VN" ? "Phân bổ trạng thái booking" : "Booking status breakdown"}
-            </h3>
-            {isLoading ? (
-              <div className="h-6 rounded-full bg-slate-100 dark:bg-slate-900 animate-pulse" />
-            ) : (
-              <CompositionBar segments={statusSegments} isDarkMode={isDarkMode} />
-            )}
-          </div>
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-            <h3 className="text-[11px] font-headline font-black uppercase text-slate-400 tracking-wider mb-3">
-              {lang === "VN" ? "Kênh bán" : "Sales channel"}
-            </h3>
-            {isLoading ? (
-              <div className="h-6 rounded-full bg-slate-100 dark:bg-slate-900 animate-pulse" />
-            ) : (
-              <CompositionBar segments={channelSegments} isDarkMode={isDarkMode} />
-            )}
-          </div>
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-            <h3 className="text-[11px] font-headline font-black uppercase text-slate-400 tracking-wider mb-3">
-              {lang === "VN" ? "Doanh thu theo dịch vụ" : "Revenue by service"}
-            </h3>
-            {revenueLoading ? (
-              <div className="h-6 rounded-full bg-slate-100 dark:bg-slate-900 animate-pulse" />
-            ) : (
-              <CompositionBar segments={serviceTypeRevenueSegments} isDarkMode={isDarkMode} valueFormatter={formatCurrency} />
-            )}
-          </div>
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-            <h3 className="text-[11px] font-headline font-black uppercase text-slate-400 tracking-wider mb-3">
-              {lang === "VN" ? "Doanh thu theo phương thức TT" : "Revenue by payment method"}
-            </h3>
-            {revenueLoading ? (
-              <div className="h-6 rounded-full bg-slate-100 dark:bg-slate-900 animate-pulse" />
-            ) : (
-              <CompositionBar segments={paymentMethodRevenueSegments} isDarkMode={isDarkMode} valueFormatter={formatCurrency} />
-            )}
-          </div>
-        </div>
-      </div>
-
     </div>
   );
 };
