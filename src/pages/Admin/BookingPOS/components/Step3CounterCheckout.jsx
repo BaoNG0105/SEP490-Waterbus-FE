@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../../../../context/AppContext";
 import { FormSelect } from "../../../../components/FormSelect";
 import { YearPickerInput } from "../../../../components/YearPickerInput";
+import { RequiredStar } from "../../../../utils/requiredStar";
 import { isBlank, isValidEmailFormat, isValidPhoneFormat } from "../../../../utils/formValidation";
 import {
   fetchTicketTypes,
@@ -813,7 +814,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Họ và tên *" : "Full Name *"}</label>
+              <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Họ và tên" : "Full Name"}<RequiredStar /></label>
               <input
                 type="text"
                 placeholder="Nguyễn Văn A"
@@ -831,7 +832,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
               )}
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Số điện thoại *" : "Phone Number *"}</label>
+              <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Số điện thoại" : "Phone Number"}<RequiredStar /></label>
               <input
                 type="tel"
                 placeholder="0901234567"
@@ -850,7 +851,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Địa chỉ Email *" : "Email Address *"}</label>
+            <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Địa chỉ Email" : "Email Address"}<RequiredStar /></label>
             <input
               type="email"
               placeholder="example@domain.com"
@@ -921,7 +922,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên *" : "Full Name *"}</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên" : "Full Name"}<RequiredStar /></label>
                     <input
                       type="text"
                       value={passenger.name}
@@ -940,7 +941,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                   </div>
 
                   <div className="relative z-10 space-y-1.5">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Loại hành khách *" : "Passenger type *"}</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Loại hành khách" : "Passenger type"}<RequiredStar /></label>
                     <FormSelect
                       value={passenger.ticketType}
                       onChange={(next) => handlePassengerChange(index, "ticketType", next)}
@@ -960,7 +961,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh *" : "Birth year *"}</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh" : "Birth year"}<RequiredStar /></label>
                     <YearPickerInput
                       min={getBirthYearRangeForTicketType(passenger.ticketType, travelYear).min}
                       max={getBirthYearRangeForTicketType(passenger.ticketType, travelYear).max}
@@ -1047,7 +1048,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                       </div>
                       <div className="flex flex-col gap-3 sm:flex-row">
                         <div className="flex-1 space-y-1.5">
-                          <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên em bé *" : "Infant Full Name *"}</label>
+                          <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên em bé" : "Infant Full Name"}<RequiredStar /></label>
                           <input
                             type="text"
                             value={passenger.infant.name}
@@ -1064,7 +1065,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                           )}
                         </div>
                         <div className="w-full space-y-1.5 sm:w-32">
-                          <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh *" : "Birth Year *"}</label>
+                          <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh" : "Birth Year"}<RequiredStar /></label>
                           <YearPickerInput
                             min={infantBirthYearMin}
                             max={travelYear}

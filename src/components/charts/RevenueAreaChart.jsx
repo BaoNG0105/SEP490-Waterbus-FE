@@ -3,10 +3,10 @@ import { formatCompactCurrency } from "../../utils/revenueReport";
 
 const W = 900;
 const H = 380;
-const PAD_L = 40;
-const PAD_R = 20;
-const PAD_T = 20;
-const PAD_B =40;
+const PAD_L = 44;
+const PAD_R = 56;
+const PAD_T = 24;
+const PAD_B = 44;
 const PLOT_RIGHT = W - PAD_R;
 const PLOT_BOTTOM = H - PAD_B;
 const PLOT_H = PLOT_BOTTOM - PAD_T;
@@ -138,7 +138,7 @@ export function RevenueAreaChart({ points = [], lang, isDarkMode, isLoading }) {
         preserveAspectRatio="xMidYMid meet"
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIdx(null)}
-        className="overflow-visible cursor-crosshair"
+        className="overflow-hidden cursor-crosshair"
       >
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -222,20 +222,24 @@ export function RevenueAreaChart({ points = [], lang, isDarkMode, isLoading }) {
         )}
 
         {/* Dot at peak */}
-        {maxCoord && (
-          <>
-            <circle cx={maxCoord.x} cy={maxCoord.y} r={7} fill={strokeColor} stroke="#fff" strokeWidth={2.5} />
-            <text
-              x={maxCoord.x + 10}
-              y={maxCoord.y - 8}
-              fontSize={14}
-              fontWeight={800}
-              fill={isDarkMode ? "#e2e8f0" : "#1e293b"}
-            >
-              {formatCompactCurrency(maxCoord.netRevenue, lang)}
-            </text>
-          </>
-        )}
+        {maxCoord && (() => {
+          const nearRight = maxCoord.x > PLOT_RIGHT - 40;
+          return (
+            <>
+              <circle cx={maxCoord.x} cy={maxCoord.y} r={7} fill={strokeColor} stroke="#fff" strokeWidth={2.5} />
+              <text
+                x={nearRight ? maxCoord.x - 10 : maxCoord.x + 10}
+                y={maxCoord.y - 8}
+                fontSize={14}
+                fontWeight={800}
+                fill={isDarkMode ? "#e2e8f0" : "#1e293b"}
+                textAnchor={nearRight ? "end" : "start"}
+              >
+                {formatCompactCurrency(maxCoord.netRevenue, lang)}
+              </text>
+            </>
+          );
+        })()}
 
         {/* End dot */}
         {n > 0 && (
@@ -290,26 +294,31 @@ export function RevenueAreaChart({ points = [], lang, isDarkMode, isLoading }) {
         })()}
 
         {/* Hover tooltip */}
-        {hovered && (
-          <g>
-            <rect
-              x={hovered.x - 60}
-              y={hovered.y - 50}
-              width={120}
-              height={38}
-              rx={6}
-              fill={isDarkMode ? "#0f172a" : "#fff"}
-              stroke={strokeColor}
-              strokeWidth={1.5}
-            />
-            <text x={hovered.x} y={hovered.y - 32} fontSize={12} fontWeight={700} fill={labelColor} textAnchor="middle">
-              {hovered.date}
-            </text>
-            <text x={hovered.x} y={hovered.y - 16} fontSize={14} fontWeight={900} fill={strokeColor} textAnchor="middle">
-              {formatCompactCurrency(hovered.netRevenue, lang)}
-            </text>
-          </g>
-        )}
+        {hovered && (() => {
+          const tipW = 120;
+          const tipX = Math.min(W - tipW - 4, Math.max(4, hovered.x - tipW / 2));
+          const tipY = Math.max(4, hovered.y - 50);
+          return (
+            <g>
+              <rect
+                x={tipX}
+                y={tipY}
+                width={tipW}
+                height={38}
+                rx={6}
+                fill={isDarkMode ? "#0f172a" : "#fff"}
+                stroke={strokeColor}
+                strokeWidth={1.5}
+              />
+              <text x={tipX + tipW / 2} y={tipY + 16} fontSize={12} fontWeight={700} fill={labelColor} textAnchor="middle">
+                {hovered.date}
+              </text>
+              <text x={tipX + tipW / 2} y={tipY + 32} fontSize={14} fontWeight={900} fill={strokeColor} textAnchor="middle">
+                {formatCompactCurrency(hovered.netRevenue, lang)}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );

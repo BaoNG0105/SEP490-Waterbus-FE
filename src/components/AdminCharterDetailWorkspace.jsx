@@ -1653,11 +1653,11 @@ export function AdminBookingActionsTab({
                   <p className="mt-2 text-xs font-bold text-sky-700 dark:text-sky-200">
                     {lang === "VN"
                       ? (linkedTripIds.length > 1
-                        ? `Đã gắn ${linkedTripIds.length} chuyến Charter.`
+                        ? `Đã gắn ${linkedTripIds.length} chuyến Request.`
                         : "Booking đã được gắn chuyến theo yêu cầu.")
                       : (linkedTripIds.length > 1
-                        ? `${linkedTripIds.length} Charter trips linked.`
-                        : "Request trip is linked to this booking.")}
+                        ? `${linkedTripIds.length} Request trips linked.`
+                        : "Request is linked to this booking.")}
                   </p>
                 )}
               </div>

@@ -2,37 +2,66 @@ import { useMemo, useState } from "react";
 import { formatCompactCurrency, getPaymentMethodLabel } from "../../utils/revenueReport";
 
 const W = 900;
-const H = 320;
-const PAD_L = 60;
-const PAD_R = 30;
-const PAD_T = 30;
-const PAD_B = 55;
+const H = 340;
+const PAD_L = 64;
+const PAD_R = 28;
+const PAD_T = 36;
+const PAD_B = 56;
 const PLOT_RIGHT = W - PAD_R;
 const PLOT_BOTTOM = H - PAD_B;
 const PLOT_H = PLOT_BOTTOM - PAD_T;
 
-const PAYMENT_COLORS = [
-  "#3B82F6", // blue - CASH
-  "#10B981", // green - BANKING
-  "#8B5CF6", // purple - MOMO
-  "#F59E0B", // amber - ZALO
-  "#EF4444", // red
-  "#06B6D4", // cyan
-];
+const PAYMENT_COLORS = {
+  Cash: "#F97316", // orange
+  PayOS: "#EC4899", // pink
+  Free: "#6B7280", // slate
+};
+const PAYMENT_FALLBACK = ["#F97316", "#EC4899", "#6B7280", "#A855F7", "#10B981", "#EF4444"];
+
+const MONTH_LABELS_VN = ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"];
+const MONTH_LABELS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /**
- * Combo chart: Bar (doanh thu ròng theo ngày) + Line (từng phương thức thanh toán).
+ * Combo chart: Bar (doanh thu theo ngày) + Lines (Tiền mặt / Chuyển khoản / Miễn phí).
+ * Trục X gọn: chỉ ngày đầu/cuối + dòng "From – To" ở giữa.
+ *
  * points: [{ date: "dd/MM/yyyy", netRevenue }]
- * paymentLines: [{ method: "CASH", label: "Tiền mặt", values: [v1, v2, ...] }]
+ * paymentLines: [{ method, label, values: [v1, v2, ...] }]
  */
 export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMode, isLoading }) {
   const [hoverIdx, setHoverIdx] = useState(null);
 
-  const values = points.map((p) => p.netRevenue || 0);
+  const parsedPoints = useMemo(
+    () => points.map((p) => {
+      const str = String(p.date || "");
+      let _day, _month, _year;
+      if (str.includes("/")) {
+        const [d, m, y] = str.split("/");
+        _day = Number(d); _month = Number(m); _year = Number(y);
+      } else {
+        const parts = str.split("-");
+        _year = Number(parts[0]); _month = Number(parts[1]); _day = Number(parts[2]);
+      }
+      return { ...p, _day, _month, _year };
+    }),
+    [points]
+  );
+
+  const yearsInfo = useMemo(() => {
+    const years = [...new Set(parsedPoints.map((p) => p._year).filter(Boolean))].sort((a, b) => a - b);
+    return { years, hasMultiple: years.length > 1 };
+  }, [parsedPoints]);
+
+  const monthLabels = lang === "VN" ? MONTH_LABELS_VN : MONTH_LABELS_EN;
+  const formatXLabel = (p) => {
+    if (!p._month || !p._day) return "";
+    return `${monthLabels[p._month - 1]} ${p._day}`;
+  };
+
+  const values = parsedPoints.map((p) => p.netRevenue || 0);
   const maxValue = Math.max(0, ...values);
   const minValue = Math.min(0, ...values);
 
-  // Scale cho bars (dùng maxValue)
   const barScale = useMemo(() => {
     if (maxValue === 0) return { top: 0, step: 1 };
     const targetSteps = 5;
@@ -51,23 +80,24 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
     return { top, step };
   }, [maxValue]);
 
-  // Y scale dùng max của cả 2 - CHUNG TRỤC
   const yMax = barScale.top;
   const yMin = minValue >= 0 ? 0 : minValue;
   const yRange = yMax - yMin || 1;
-  const n = points.length;
-  const barGap = 4;
+  const n = parsedPoints.length;
+  const barGap = 5;
   const barW = n > 0 ? Math.max(4, (PLOT_RIGHT - PAD_L) / n - barGap) : 0;
 
+  // Theme tokens
+  const plotBgTop = isDarkMode ? "rgba(30, 41, 59, 0.45)" : "rgba(248, 250, 252, 0.7)";
+  const plotBgBot = isDarkMode ? "rgba(15, 23, 42, 0.25)" : "rgba(241, 245, 249, 0.3)";
   const gridColor = isDarkMode ? "#334155" : "#E2E8F0";
   const labelColor = isDarkMode ? "#cbd5e1" : "#475569";
+  const subLabelColor = isDarkMode ? "#94a3b8" : "#64748b";
   const axisColor = isDarkMode ? "#64748b" : "#94A3B8";
-  const barColor = isDarkMode ? "#60a5fa" : "#3B82F6";
-  const barHoverColor = isDarkMode ? "#93C5FD" : "#2563EB";
+  const barColor = isDarkMode ? "url(#barGradDark)" : "url(#barGradLight)";
+  const barHoverColor = isDarkMode ? "#93C5FD" : "#1D4ED8";
   const barNegColor = isDarkMode ? "#F87171" : "#EF4444";
-  const avgLineColor = isDarkMode ? "#FBBF24" : "#F59E0B";
 
-  // Y-axis labels
   const yAxisLabels = useMemo(() => {
     if (barScale.top === 0) return [];
     const steps = Math.round(barScale.top / barScale.step);
@@ -77,22 +107,6 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
       return { val, y, label: formatCompactCurrency(val, lang) };
     });
   }, [barScale, yMin, yRange, lang]);
-
-  // Avg line
-  const avgValue = n > 0 ? maxValue / n : 0;
-  const avgY = avgValue > 0 ? PLOT_BOTTOM - ((avgValue - yMin) / yRange) * PLOT_H : 0;
-  const avgLabel = avgValue > 0 ? `${lang === "VN" ? "TB" : "Avg"} ${formatCompactCurrency(avgValue, lang)}` : null;
-
-  // X labels
-  const xLabelIndices = useMemo(() => {
-    if (n === 0) return [];
-    const count = Math.min(n, 7);
-    const step = Math.max(1, Math.floor((n - 1) / (count - 1)));
-    const idxs = [];
-    for (let i = 0; i < n && idxs.length < count; i += step) idxs.push(i);
-    if (idxs[idxs.length - 1] !== n - 1) idxs[idxs.length - 1] = n - 1;
-    return idxs;
-  }, [n]);
 
   const handleMove = (e) => {
     if (n === 0) return;
@@ -104,20 +118,35 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
     setHoverIdx(Math.min(n - 1, Math.max(0, idx)));
   };
 
-  const hoverPoint = hoverIdx !== null ? points[hoverIdx] : null;
+  const hoverPoint = hoverIdx !== null ? parsedPoints[hoverIdx] : null;
 
-  // Tạo line path cho payment lines (cùng scale với bars)
+  // Smooth path (Catmull-Rom-ish) cho line
   const getPaymentPath = (values) => {
     if (n === 0 || barScale.top === 0) return null;
     const scaleY = (v) => PLOT_BOTTOM - (v / barScale.top) * PLOT_H;
     const xStep = (PLOT_RIGHT - PAD_L) / Math.max(n - 1, 1);
-    const pts = values.map((v, i) => {
-      const x = PAD_L + i * xStep;
-      const y = scaleY(v || 0);
-      return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-    });
-    return pts.join(" ");
+    const pts = values.map((v, i) => ({ x: PAD_L + i * xStep, y: scaleY(v || 0) }));
+    if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+    if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+    }
+    return d;
   };
+
+  const getPaymentColor = (method, idx) => PAYMENT_COLORS[method] || PAYMENT_FALLBACK[idx % PAYMENT_FALLBACK.length];
+
+  // Map method -> friendly label (Tiền mặt, Chuyển khoản, Miễn phí)
+  const FRIENDLY = { Cash: "Tiền mặt", PayOS: "Chuyển khoản", Free: "Miễn phí" };
 
   if (isLoading) {
     return (
@@ -136,6 +165,11 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
     );
   }
 
+  const first = parsedPoints[0];
+  const last = parsedPoints[parsedPoints.length - 1];
+  const totalRevenue = values.reduce((s, v) => s + v, 0);
+  const colW = (PLOT_RIGHT - PAD_L) / n;
+
   return (
     <div className="relative w-full" style={{ aspectRatio: `${W} / ${H}` }}>
       <svg
@@ -147,9 +181,30 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIdx(null)}
       >
+        <defs>
+          <linearGradient id="plotBg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={plotBgTop} />
+            <stop offset="100%" stopColor={plotBgBot} />
+          </linearGradient>
+        <linearGradient id="barGradLight" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#3B82F6" />
+          <stop offset="100%" stopColor="#3B82F6" />
+        </linearGradient>
+        <linearGradient id="barGradDark" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#60A5FA" />
+          <stop offset="100%" stopColor="#60A5FA" />
+        </linearGradient>
+          <filter id="tipShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000" floodOpacity="0.18" />
+          </filter>
+        </defs>
+
+        {/* Plot background */}
+        <rect x={PAD_L} y={PAD_T} width={PLOT_RIGHT - PAD_L} height={PLOT_H} fill="url(#plotBg)" rx={6} />
+
         {/* Y-axis gridlines */}
         {yAxisLabels.map((lbl, i) => (
-          <line key={`y-grid-${i}`} x1={PAD_L} x2={PLOT_RIGHT} y1={lbl.y} y2={lbl.y} stroke={gridColor} strokeWidth={1} strokeDasharray="3 3" />
+          <line key={`y-grid-${i}`} x1={PAD_L} x2={PLOT_RIGHT} y1={lbl.y} y2={lbl.y} stroke={gridColor} strokeWidth={1} strokeDasharray="3 3" opacity={0.6} />
         ))}
 
         {/* X-axis baseline */}
@@ -157,20 +212,38 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
 
         {/* Y-axis labels */}
         {yAxisLabels.map((lbl, i) => (
-          <text key={`y-label-${i}`} x={PAD_L - 8} y={lbl.y + 4} fontSize={11} fontWeight={700} fill={labelColor} textAnchor="end">
+          <text key={`y-label-${i}`} x={PAD_L - 10} y={lbl.y + 4} fontSize={11} fontWeight={700} fill={labelColor} textAnchor="end">
             {lbl.label}
           </text>
         ))}
 
-        {/* X-axis date labels */}
-        {xLabelIndices.map((idx) => {
-          const x = PAD_L + (idx + 0.5) * ((PLOT_RIGHT - PAD_L) / n);
+        {/* X-axis: gọn - đầu / "From–To" / cuối */}
+        {(() => {
+          const fromLabel = `${formatXLabel(first)}${yearsInfo.hasMultiple ? `, ${first._year}` : ""}`;
+          const toLabel = `${formatXLabel(last)}${yearsInfo.hasMultiple ? `, ${last._year}` : ""}`;
+          const rangeText = n > 1
+            ? `${lang === "VN" ? "Từ" : "From"} ${formatXLabel(first)}${yearsInfo.hasMultiple ? `, ${first._year}` : ""}  →  ${lang === "VN" ? "đến" : "to"} ${formatXLabel(last)}${yearsInfo.hasMultiple ? `, ${last._year}` : ""}`
+            : `${formatXLabel(first)}${yearsInfo.hasMultiple ? `, ${first._year}` : ""}`;
+          const onlyYear = yearsInfo.years.length === 1 ? yearsInfo.years[0] : null;
           return (
-            <text key={`x-label-${idx}`} x={x} y={H - 12} fontSize={11} fontWeight={700} fill={labelColor} textAnchor="middle">
-              {points[idx].date}
-            </text>
+            <g>
+              <text x={PAD_L} y={PLOT_BOTTOM + 22} fontSize={11} fontWeight={700} fill={labelColor} textAnchor="start">
+                {fromLabel}
+              </text>
+              <text x={PAD_L + (PLOT_RIGHT - PAD_L) / 2} y={PLOT_BOTTOM + 22} fontSize={11} fontWeight={800} fill={subLabelColor} textAnchor="middle">
+                {rangeText}
+              </text>
+              <text x={PLOT_RIGHT} y={PLOT_BOTTOM + 22} fontSize={11} fontWeight={700} fill={labelColor} textAnchor="end">
+                {toLabel}
+              </text>
+              {onlyYear && (
+                <text x={PAD_L + (PLOT_RIGHT - PAD_L) / 2} y={PLOT_BOTTOM + 40} fontSize={10} fontWeight={800} fill={subLabelColor} textAnchor="middle">
+                  {onlyYear}
+                </text>
+              )}
+            </g>
           );
-        })}
+        })()}
 
         {/* Baseline 0 */}
         {yMin < 0 && (
@@ -178,95 +251,135 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
         )}
 
         {/* Bars */}
-        {points.map((p, i) => {
+        {parsedPoints.map((p, i) => {
           const val = p.netRevenue || 0;
-          const colW = (PLOT_RIGHT - PAD_L) / n;
           const x = PAD_L + i * colW + (colW - barW) / 2;
           const zeroY = PLOT_BOTTOM - ((0 - yMin) / yRange) * PLOT_H;
           const valY = PLOT_BOTTOM - ((val - yMin) / yRange) * PLOT_H;
           const top = Math.min(zeroY, valY);
           const h = Math.abs(zeroY - valY);
           const isHover = hoverIdx === i;
-          const color = val < 0 ? barNegColor : (isHover ? barHoverColor : barColor);
+          const dimmed = hoverIdx !== null && !isHover;
+          const fill = val < 0 ? barNegColor : barColor;
           return (
-            <rect key={`bar-${i}`} x={x} y={top} width={barW} height={h} fill={color} rx={3} opacity={hoverIdx === null || isHover ? 1 : 0.4} />
+            <rect
+              key={`bar-${i}`}
+              x={x}
+              y={top}
+              width={barW}
+              height={h}
+              fill={fill}
+              rx={4}
+              opacity={dimmed ? 0.32 : 1}
+              style={{ transition: "opacity 120ms ease" }}
+            />
           );
         })}
 
-        {/* Payment lines */}
+        {/* Payment lines (smooth) + TB dashed */}
         {paymentLines.map((line, li) => {
-          const color = PAYMENT_COLORS[li % PAYMENT_COLORS.length];
+          const color = getPaymentColor(line.method, li);
           const path = getPaymentPath(line.values || []);
           if (!path) return null;
+          const vals = line.values || [];
+          const sum = vals.reduce((s, v) => s + (v || 0), 0);
+          const avg = vals.length > 0 ? sum / vals.length : 0;
+          const avgLineY = avg > 0 ? PLOT_BOTTOM - (avg / barScale.top) * PLOT_H : null;
           return (
             <g key={`pm-line-${li}`}>
-              <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
-              {/* Dots */}
-              {line.values?.map((v, i) => {
+              {avgLineY !== null && (
+                <line x1={PAD_L} x2={PLOT_RIGHT} y1={avgLineY} y2={avgLineY} stroke={color} strokeWidth={1.2} strokeDasharray="5 5" opacity={0.55} />
+              )}
+              <path d={path} fill="none" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+              {(line.values || []).map((v, i) => {
                 if (barScale.top === 0) return null;
                 const xStep = (PLOT_RIGHT - PAD_L) / Math.max(n - 1, 1);
                 const x = PAD_L + i * xStep;
                 const y = PLOT_BOTTOM - ((v || 0) / barScale.top) * PLOT_H;
                 const isHover = hoverIdx === i;
-                return <circle key={`dot-${li}-${i}`} cx={x} cy={y} r={isHover ? 5 : 3} fill={color} stroke={isDarkMode ? "#1e293b" : "#fff"} strokeWidth={1.5} opacity={hoverIdx === null || isHover ? 1 : 0.5} />;
+                const dimmed = hoverIdx !== null && !isHover;
+                return (
+                  <circle
+                    key={`dot-${li}-${i}`}
+                    cx={x}
+                    cy={y}
+                    r={isHover ? 6 : 3.2}
+                    fill={color}
+                    stroke={isDarkMode ? "#0f172a" : "#ffffff"}
+                    strokeWidth={1.8}
+                    opacity={dimmed ? 0.35 : 1}
+                    style={{ transition: "r 120ms ease, opacity 120ms ease" }}
+                  />
+                );
               })}
             </g>
           );
         })}
 
-        {/* Avg line */}
-        {avgLabel && (
-          <>
-            <line x1={PAD_L} x2={PLOT_RIGHT} y1={avgY} y2={avgY} stroke={avgLineColor} strokeWidth={1.5} strokeDasharray="6 4" />
-            <rect x={PLOT_RIGHT - 90} y={avgY - 20} width={86} height={18} fill={isDarkMode ? "#1e293b" : "#fff"} stroke={avgLineColor} strokeWidth={1} rx={4} />
-            <text x={PLOT_RIGHT - 47} y={avgY - 7} textAnchor="middle" fontSize={11} fontWeight={800} fill={avgLineColor}>
-              {avgLabel}
-            </text>
-          </>
+        {/* Hover vertical guide */}
+        {hoverIdx !== null && (
+          <line
+            x1={PAD_L + hoverIdx * colW + colW / 2}
+            x2={PAD_L + hoverIdx * colW + colW / 2}
+            y1={PAD_T}
+            y2={PLOT_BOTTOM}
+            stroke={barHoverColor}
+            strokeWidth={1}
+            strokeDasharray="2 3"
+            opacity={0.5}
+          />
         )}
 
         {/* Max value label */}
         {(() => {
-          const maxIdx = points.reduce((best, p, i) => ((p.netRevenue || 0) > (points[best]?.netRevenue || 0) ? i : best), 0);
-          const val = points[maxIdx]?.netRevenue || 0;
+          const maxIdx = parsedPoints.reduce((best, p, i) => ((p.netRevenue || 0) > (parsedPoints[best]?.netRevenue || 0) ? i : best), 0);
+          const val = parsedPoints[maxIdx]?.netRevenue || 0;
           if (val <= 0) return null;
-          const colW = (PLOT_RIGHT - PAD_L) / n;
           const x = PAD_L + maxIdx * colW + colW / 2;
-          const y = PLOT_BOTTOM - ((val - yMin) / yRange) * PLOT_H - 6;
+          const y = PLOT_BOTTOM - ((val - yMin) / yRange) * PLOT_H - 8;
           return (
-            <text x={x} y={y} textAnchor="middle" fontSize={12} fontWeight={900} fill={isDarkMode ? "#93C5FD" : "#1D4ED8"}>
-              {formatCompactCurrency(val, lang)}
-            </text>
+            <g>
+              <rect x={x - 32} y={y - 14} width={64} height={18} rx={9} fill={isDarkMode ? "#1e3a8a" : "#DBEAFE"} stroke={isDarkMode ? "#3B82F6" : "#3B82F6"} strokeWidth={1} />
+              <text x={x} y={y} textAnchor="middle" fontSize={11} fontWeight={900} fill={isDarkMode ? "#BFDBFE" : "#1D4ED8"}>
+                {formatCompactCurrency(val, lang)}
+              </text>
+            </g>
           );
         })()}
 
         {/* Hover tooltip */}
         {hoverPoint && hoverIdx !== null && (() => {
-          const colW = (PLOT_RIGHT - PAD_L) / n;
           const x = PAD_L + hoverIdx * colW + colW / 2;
           const val = hoverPoint.netRevenue || 0;
           const y = PLOT_BOTTOM - ((val - yMin) / yRange) * PLOT_H;
-          const tipW = 160;
-          const tipH = 36 + (paymentLines.length > 0 ? paymentLines.length * 18 : 0);
+          const tipW = 200;
+          const tipH = 44 + (paymentLines.length > 0 ? paymentLines.length * 18 : 0);
           let tipX = x - tipW / 2;
-          let tipY = y - tipH - 10;
-          if (tipY < 4) tipY = y + 10;
+          let tipY = y - tipH - 14;
+          if (tipY < 4) tipY = y + 14;
           if (tipX < 4) tipX = 4;
           if (tipX + tipW > W - 4) tipX = W - tipW - 4;
+          const tipBg = isDarkMode ? "#0f172a" : "#ffffff";
+          const tipBorder = isDarkMode ? "#475569" : "#E2E8F0";
           return (
-            <g pointerEvents="none">
-              <line x1={x} x2={x} y1={PAD_T} y2={PLOT_BOTTOM} stroke={barHoverColor} strokeWidth={1} strokeDasharray="2 3" opacity={0.5} />
-              <rect x={tipX} y={tipY} width={tipW} height={tipH} rx={6} fill={isDarkMode ? "#0f172a" : "#fff"} stroke={isDarkMode ? "#475569" : "#cbd5e1"} />
-              <text x={tipX + 10} y={tipY + 18} fontSize={11} fontWeight={700} fill={labelColor}>{hoverPoint.date}</text>
-              <text x={tipX + 10} y={tipY + 34} fontSize={13} fontWeight={900} fill={barHoverColor}>{formatCompactCurrency(val, lang)}</text>
+            <g pointerEvents="none" filter="url(#tipShadow)">
+              <rect x={tipX} y={tipY} width={tipW} height={tipH} rx={10} fill={tipBg} stroke={tipBorder} strokeWidth={1} />
+              <text x={tipX + 12} y={tipY + 18} fontSize={11} fontWeight={700} fill={subLabelColor}>
+                {formatXLabel(hoverPoint)}{hoverPoint._year ? `, ${hoverPoint._year}` : ""}
+              </text>
+              <text x={tipX + 12} y={tipY + 38} fontSize={14} fontWeight={900} fill={barHoverColor}>
+                {formatCompactCurrency(val, lang)}
+              </text>
               {paymentLines.slice(0, 3).map((l, li) => {
-                const color = PAYMENT_COLORS[li % PAYMENT_COLORS.length];
+                const color = getPaymentColor(l.method, li);
                 const pv = l.values?.[hoverIdx] || 0;
+                const rowY = tipY + 58 + li * 18;
+                const friendlyLabel = FRIENDLY[l.method] || l.label || getPaymentMethodLabel(l.method, lang);
                 return (
                   <g key={`tip-pm-${li}`}>
-                    <circle cx={tipX + 10} cy={tipY + 50 + li * 18} r={4} fill={color} />
-                    <text x={tipX + 20} y={tipY + 54 + li * 18} fontSize={10} fontWeight={700} fill={labelColor}>{l.label || getPaymentMethodLabel(l.method, lang)}:</text>
-                    <text x={tipX + tipW - 10} y={tipY + 54 + li * 18} fontSize={10} fontWeight={800} fill={color} textAnchor="end">{formatCompactCurrency(pv, lang)}</text>
+                    <circle cx={tipX + 16} cy={rowY - 4} r={4} fill={color} />
+                    <text x={tipX + 26} y={rowY} fontSize={10.5} fontWeight={700} fill={labelColor}>{friendlyLabel}</text>
+                    <text x={tipX + tipW - 12} y={rowY} fontSize={10.5} fontWeight={800} fill={color} textAnchor="end">{formatCompactCurrency(pv, lang)}</text>
                   </g>
                 );
               })}
@@ -275,20 +388,40 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
         })()}
       </svg>
 
-      {/* Legend */}
+      {/* Legend - pill style */}
       {paymentLines.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 px-1">
-          {paymentLines.map((l, li) => {
-            const color = PAYMENT_COLORS[li % PAYMENT_COLORS.length];
-            return (
-              <div key={`legend-${li}`} className="flex items-center gap-1.5">
-                <svg width="20" height="10" className="inline-block">
-                  <line x1="0" y1="5" x2="20" y2="5" stroke={color} strokeWidth={2} />
-                </svg>
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{l.label || getPaymentMethodLabel(l.method, lang)}</span>
-              </div>
-            );
-          })}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mt-3 px-1">
+          <div className="flex flex-wrap items-center gap-2">
+            {paymentLines.slice(0, 3).map((l, li) => {
+              const color = getPaymentColor(l.method, li);
+              const friendlyLabel = FRIENDLY[l.method] || l.label || getPaymentMethodLabel(l.method, lang);
+              return (
+                <div
+                  key={`legend-${li}`}
+                  className="flex items-center gap-2 px-2.5 py-1 rounded-full border text-[11px] font-bold"
+                  style={{
+                    borderColor: isDarkMode ? `${color}55` : `${color}55`,
+                    background: isDarkMode ? `${color}1A` : `${color}14`,
+                    color: isDarkMode ? "#e2e8f0" : "#334155",
+                  }}
+                >
+                  <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                  <span>{friendlyLabel}</span>
+                  <span style={{ color }}>·</span>
+                  <span className="tabular-nums">
+                    {formatCompactCurrency((l.values || []).reduce((s, v) => s + (v || 0), 0), lang)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800/60 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+            <span className="material-symbols-outlined text-[14px]">payments</span>
+            <span>{lang === "VN" ? "Tổng" : "Total"}</span>
+            <span className="font-black text-[#124757] dark:text-yellow-400 tabular-nums">
+              {formatCompactCurrency(totalRevenue, lang)}
+            </span>
+          </div>
         </div>
       )}
     </div>

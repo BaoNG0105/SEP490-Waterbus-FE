@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { getBookingsReport, getRevenueReport } from "../../../api/reportApi";
+import { getBookingsReport, getRevenueReport, getRevenueToday, getBookingsByStatus, getTopRoutes } from "../../../api/reportApi";
 import { fetchAllStations } from "../../../services/stationService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { FormSelect } from "../../../components/FormSelect";
@@ -192,6 +192,23 @@ const formatBookingsError = (error, lang) => {
     : "Failed to load the booking report.";
 };
 
+// Map màu thanh ngang cho từng bookingStatus — dùng trong breakdown section.
+const bookingStatusBarColors = {
+  Pending: "bg-amber-400 dark:bg-amber-500",
+  AwaitingPayment: "bg-orange-400 dark:bg-orange-500",
+  Confirmed: "bg-sky-500 dark:bg-sky-400",
+  CheckedIn: "bg-indigo-500 dark:bg-indigo-400",
+  Completed: "bg-emerald-500 dark:bg-emerald-400",
+  Cancelled: "bg-rose-400 dark:bg-rose-500",
+  Refunded: "bg-violet-400 dark:bg-violet-500",
+  Expired: "bg-slate-400 dark:bg-slate-500",
+  Rejected: "bg-red-500 dark:bg-red-400",
+  Draft: "bg-slate-300 dark:bg-slate-600",
+};
+
+const barColorForStatus = (status) =>
+  bookingStatusBarColors[status] || "bg-[#124757] dark:bg-yellow-400";
+
 export const Dashboard = () => {
   const { lang, isDarkMode } = useApp();
   const { user } = useSelector((state) => state.auth);
@@ -216,6 +233,19 @@ export const Dashboard = () => {
     fromStationId: "All",
     toStationId: "All",
   });
+
+  // ===== Data: today snapshot + booking-status breakdown + top routes =====
+  const [revenueToday, setRevenueToday] = useState(null);
+  const [revenueTodayLoading, setRevenueTodayLoading] = useState(true);
+  const [revenueTodayError, setRevenueTodayError] = useState("");
+
+  const [bookingsByStatus, setBookingsByStatus] = useState(null);
+  const [bookingsByStatusLoading, setBookingsByStatusLoading] = useState(true);
+  const [bookingsByStatusError, setBookingsByStatusError] = useState("");
+
+  const [topRoutes, setTopRoutes] = useState([]);
+  const [topRoutesLoading, setTopRoutesLoading] = useState(true);
+  const [topRoutesError, setTopRoutesError] = useState("");
 
   useEffect(() => {
     if (!canAccess) return;
@@ -317,6 +347,94 @@ export const Dashboard = () => {
     loadRevenue();
   }, [loadRevenue]);
 
+  // ===== Load: revenue today snapshot =====
+  const loadRevenueToday = useCallback(async () => {
+    if (!canAccess) return;
+    try {
+      setRevenueTodayLoading(true);
+      setRevenueTodayError("");
+      const res = await getRevenueToday();
+      setRevenueToday(res);
+    } catch (error) {
+      console.error("Lỗi tải doanh thu hôm nay:", error);
+      const status = error?.response?.status;
+      setRevenueTodayError(
+        status === 401 || status === 403
+          ? (lang === "VN" ? "Không có quyền truy cập." : "Access denied.")
+          : (lang === "VN" ? "Không thể tải doanh thu hôm nay." : "Failed to load today's revenue.")
+      );
+      setRevenueToday(null);
+    } finally {
+      setRevenueTodayLoading(false);
+    }
+  }, [canAccess]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadRevenueToday();
+  }, [loadRevenueToday]);
+
+  // ===== Load: bookings by status =====
+  const loadBookingsByStatus = useCallback(async () => {
+    if (!canAccess) return;
+    try {
+      setBookingsByStatusLoading(true);
+      setBookingsByStatusError("");
+      const params = stripAllSentinels({
+        serviceType: revenueFilters.serviceType,
+        paymentMethod: revenueFilters.paymentMethod,
+      });
+      const res = await getBookingsByStatus(params);
+      setBookingsByStatus(res);
+    } catch (error) {
+      console.error("Lỗi tải booking theo trạng thái:", error);
+      const status = error?.response?.status;
+      setBookingsByStatusError(
+        status === 401 || status === 403
+          ? (lang === "VN" ? "Không có quyền truy cập." : "Access denied.")
+          : (lang === "VN" ? "Không thể tải phân bổ trạng thái." : "Failed to load status breakdown.")
+      );
+      setBookingsByStatus(null);
+    } finally {
+      setBookingsByStatusLoading(false);
+    }
+  }, [canAccess, revenueFilters.serviceType, revenueFilters.paymentMethod]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadBookingsByStatus();
+  }, [loadBookingsByStatus]);
+
+  // ===== Load: top routes =====
+  const loadTopRoutes = useCallback(async () => {
+    if (!canAccess) return;
+    try {
+      setTopRoutesLoading(true);
+      setTopRoutesError("");
+      const params = stripAllSentinels({
+        serviceType: revenueFilters.serviceType,
+        fromStationId: revenueFilters.fromStationId,
+        toStationId: revenueFilters.toStationId,
+        limit: 10,
+      });
+      const res = await getTopRoutes(params);
+      setTopRoutes(res?.items || []);
+    } catch (error) {
+      console.error("Lỗi tải top tuyến:", error);
+      const status = error?.response?.status;
+      setTopRoutesError(
+        status === 401 || status === 403
+          ? (lang === "VN" ? "Không có quyền truy cập." : "Access denied.")
+          : (lang === "VN" ? "Không thể tải top tuyến." : "Failed to load top routes.")
+      );
+      setTopRoutes([]);
+    } finally {
+      setTopRoutesLoading(false);
+    }
+  }, [canAccess, revenueFilters.serviceType, revenueFilters.fromStationId, revenueFilters.toStationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadTopRoutes();
+  }, [loadTopRoutes]);
+
   // ===== Derived =====
   const updateRevenueFilter = (key, value) => {
     setRevenueFilters((prev) => ({ ...prev, [key]: value }));
@@ -346,16 +464,33 @@ export const Dashboard = () => {
   ), [revenueCurrent, lang, isDarkMode]);
 
   // Payment lines for bar chart (daily breakdown by payment method)
+  // Nếu API không trả daily payment breakdown thì phân bổ theo tỷ lệ byPaymentMethod.
   const paymentLines = useMemo(() => {
     const byPayment = revenueCurrent?.byPaymentMethod || [];
     if (byPayment.length === 0) return [];
     const daily = revenueCurrent?.daily || [];
     if (daily.length === 0) return [];
-    return byPayment.slice(0, 4).map((pm, idx) => ({
-      method: pm.key,
-      label: getPaymentMethodLabel(pm.key, lang),
-      values: daily.map((d) => d[`netRevenue_${pm.key}`] || d[`payment_${pm.key}`] || d[pm.key?.toLowerCase()] || 0),
-    }));
+    const totalRevenue = byPayment.reduce((s, p) => s + (p.netRevenue || 0), 0) || 0;
+
+    // Ưu tiên field breakdown trực tiếp từ API
+    const hasBreakdown = daily.some((d) =>
+      byPayment.some((pm) => d[`netRevenue_${pm.key}`] !== undefined || d[`payment_${pm.key}`] !== undefined)
+    );
+
+    return byPayment.slice(0, 4).map((pm) => {
+      const values = hasBreakdown
+        ? daily.map((d) => d[`netRevenue_${pm.key}`] ?? d[`payment_${pm.key}`] ?? d[pm.key?.toLowerCase()] ?? 0)
+        : (() => {
+            // Phân bổ daily netRevenue theo tỷ lệ % của payment method
+            const ratio = totalRevenue > 0 ? (pm.netRevenue || 0) / totalRevenue : 0;
+            return daily.map((d) => Math.round((d.netRevenue || 0) * ratio));
+          })();
+      return {
+        method: pm.key,
+        label: getPaymentMethodLabel(pm.key, lang),
+        values,
+      };
+    });
   }, [revenueCurrent, lang]);
 
   // Sparkline data - revenue is always available from daily[]
@@ -363,6 +498,34 @@ export const Dashboard = () => {
     () => (revenueCurrent?.daily || []).map((p) => p.netRevenue || 0),
     [revenueCurrent]
   );
+
+  // Sparkline chính xác từ /reports/revenue/today (7 ngày gần nhất).
+  // Ưu tiên dùng series của revenueToday; fallback về daily của revenueCurrent.
+  const weeklyPoints = useMemo(() => {
+    const series = revenueToday?.series?.netRevenue;
+    if (Array.isArray(series) && series.length > 0) return series;
+    return dailyRevenuePoints.slice(-7);
+  }, [revenueToday, dailyRevenuePoints]);
+
+  const weeklyBookingPoints = useMemo(() => {
+    const series = revenueToday?.series?.bookingCount;
+    if (Array.isArray(series) && series.length > 0) return series;
+    const daily = revenueCurrent?.daily || [];
+    const fromDaily = daily.length > 0 && daily[0]?.bookingCount !== undefined
+      ? daily.map((p) => p.bookingCount || 0)
+      : dailyRevenuePoints;
+    return fromDaily.slice(-7);
+  }, [revenueToday, revenueCurrent, dailyRevenuePoints]);
+
+  const weeklyTicketPoints = useMemo(() => {
+    const series = revenueToday?.series?.ticketCount;
+    if (Array.isArray(series) && series.length > 0) return series;
+    const daily = revenueCurrent?.daily || [];
+    const fromDaily = daily.length > 0 && daily[0]?.ticketCount !== undefined
+      ? daily.map((p) => p.ticketCount || 0)
+      : dailyRevenuePoints;
+    return fromDaily.slice(-7);
+  }, [revenueToday, revenueCurrent, dailyRevenuePoints]);
 
   // Booking/ticket trends - fallback to revenue if daily doesn't have these fields
   const dailyBookingPoints = useMemo(() => {
@@ -432,7 +595,37 @@ export const Dashboard = () => {
       formatValue: (v) => v.toLocaleString(lang === "VN" ? "vi-VN" : "en-US"),
     });
 
+    // === Today KPI (snapshot từ /reports/revenue/today) ===
+    const todayRevenue = Number(revenueToday?.todayNetRevenue) || 0;
+    const yesterdayRevenue = Number(revenueToday?.yesterdayNetRevenue) || 0;
+    const todayBookings = Number(revenueToday?.todayBookingCount) || 0;
+    const yesterdayBookings = Number(
+      revenueToday?.last7Days?.[revenueToday.last7Days.length - 2]?.bookingCount
+    ) || 0;
+    const todayDelta = formatDelta(todayRevenue, yesterdayRevenue, {
+      formatValue: (v) => formatCompactCurrency(v, lang),
+    });
+    const todayBookingsDelta = formatDelta(todayBookings, yesterdayBookings, {
+      formatValue: (v) => v.toLocaleString(lang === "VN" ? "vi-VN" : "en-US"),
+    });
+    const todayDateLabel = revenueToday?.date
+      ? new Date(revenueToday.date).toLocaleDateString(lang === "VN" ? "vi-VN" : "en-US", {
+          weekday: "short", day: "2-digit", month: "2-digit",
+        })
+      : (lang === "VN" ? "Hôm nay" : "Today");
+
     return [
+      {
+        key: "today",
+        title: lang === "VN" ? `Doanh thu ${todayDateLabel}` : `Revenue ${todayDateLabel}`,
+        value: formatCurrency(todayRevenue),
+        delta: todayDelta,
+        icon: "today",
+        iconBg: "bg-emerald-500 text-white",
+        sparkColor: "#10b981",
+        sparkPoints: weeklyPoints,
+        loading: revenueTodayLoading,
+      },
       {
         key: "net",
         title: lang === "VN" ? "Tổng doanh thu" : "Total Revenue",
@@ -464,6 +657,17 @@ export const Dashboard = () => {
         sparkPoints: dailyBookingPoints,
       },
       {
+        key: "today_bookings",
+        title: lang === "VN" ? `Booking ${todayDateLabel}` : `Bookings ${todayDateLabel}`,
+        value: todayBookings,
+        delta: todayBookingsDelta,
+        icon: "event_available",
+        iconBg: "bg-violet-500 text-white",
+        sparkColor: "#8b5cf6",
+        sparkPoints: weeklyBookingPoints,
+        loading: revenueTodayLoading,
+      },
+      {
         key: "tickets",
         title: lang === "VN" ? "Số vé" : "Tickets",
         value: totalTickets,
@@ -474,7 +678,14 @@ export const Dashboard = () => {
         sparkPoints: dailyTicketPoints,
       },
     ];
-  }, [revenueCurrent, revenuePrevious, lang, isDarkMode, dailyRevenuePoints, dailyBookingPoints, dailyTicketPoints, dailyRefundPoints]);
+  }, [
+    revenueCurrent, revenuePrevious, revenueToday,
+    lang, isDarkMode,
+    dailyRevenuePoints, dailyBookingPoints, dailyTicketPoints, dailyRefundPoints,
+    weeklyPoints, weeklyBookingPoints, weeklyTicketPoints,
+    totalBookings, totalTickets, totalBookingsPrev, totalTicketsPrev,
+    revenueTodayLoading,
+  ]);
 
   const topStations = useMemo(() => {
     const byStation = revenueCurrent?.byStation || [];
@@ -495,7 +706,7 @@ export const Dashboard = () => {
   }
 
   return (
-    <div className="space-y-3 font-body pb-4 px-1.5 md:px-3 animate-fade-in">
+    <div className="space-y-3 font-body pb-4 px-1.5 md:px-3 pt-16 animate-fade-in">
 
       {/* ===================== HEADER ===================== */}
       <div className="bg-white dark:bg-slate-800 px-4 py-3 rounded-3xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -526,9 +737,14 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      {(bookingsErrorMsg || revenueErrorMsg) && (
-        <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 px-4 py-2.5 rounded-2xl text-[11px] font-bold border border-red-100 dark:border-red-500/20">
-          {bookingsErrorMsg || revenueErrorMsg}
+      {(bookingsErrorMsg || revenueErrorMsg || revenueTodayError || bookingsByStatusError || topRoutesError) && (
+        <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 px-4 py-2.5 rounded-2xl text-[11px] font-bold border border-red-100 dark:border-red-500/20 space-y-1">
+          <div>{bookingsErrorMsg || revenueErrorMsg}</div>
+          {(revenueTodayError || bookingsByStatusError || topRoutesError) && (
+            <div className="text-[10px] opacity-80">
+              {[revenueTodayError, bookingsByStatusError, topRoutesError].filter(Boolean).join(" · ")}
+            </div>
+          )}
         </div>
       )}
 
@@ -598,8 +814,8 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      {/* ===================== KPI CARDS (4 ngang) ===================== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* ===================== KPI CARDS (6 ngang) ===================== */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {kpiCards.map((card) => (
           <div
             key={card.key}
@@ -615,7 +831,7 @@ export const Dashboard = () => {
                   {card.title}
                 </p>
                 <h4 className="mt-0.5 text-lg font-black font-headline text-[#124757] dark:text-white truncate">
-                  {revenueLoading ? "--" : card.value}
+                  {card.loading ? "--" : card.value}
                 </h4>
               </div>
               <div className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${card.iconBg}`}>
@@ -625,30 +841,20 @@ export const Dashboard = () => {
 
             <div className="relative mt-1.5 flex items-center gap-1.5 min-w-0">
               <span
-                className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-black shrink-0 ${DELTA_BADGE[card.delta.tone]}`}
-                title={
-                  card.delta.abs
-                    ? `${lang === "VN" ? "Thay đổi" : "Change"}: ${card.delta.abs}`
-                    : undefined
-                }
+                className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-black shrink-0 ${DELTA_BADGE[card.delta.tone]}`}
               >
                 <span className="material-symbols-outlined text-[10px]">
                   {DELTA_ICON[card.delta.tone]}
                 </span>
                 {card.delta.text}
               </span>
-              {card.delta.abs && (
-                <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 truncate">
-                  {card.delta.abs}
-                </span>
-              )}
-              <span className="text-[9px] text-slate-400 font-bold truncate ml-auto">
+              <span className="text-[9px] text-slate-400 font-bold truncate">
                 {lang === "VN" ? "vs kỳ trước" : "vs prior"}
               </span>
             </div>
 
             <div className="relative mt-1.5 h-8">
-              {revenueLoading ? (
+              {(revenueLoading || card.loading) ? (
                 <div className="h-full rounded-md bg-slate-100 dark:bg-slate-900 animate-pulse" />
               ) : (
                 <Sparkline points={card.sparkPoints} color={card.sparkColor} />
@@ -712,6 +918,151 @@ export const Dashboard = () => {
             isDarkMode={isDarkMode}
             isLoading={revenueLoading}
           />
+        </div>
+      </div>
+
+      {/* ===================== BOOKING STATUS BREAKDOWN + TOP ROUTES ===================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        {/* Booking status breakdown (1/3) */}
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider">
+                {lang === "VN" ? "Booking theo trạng thái" : "Bookings by status"}
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {bookingsByStatus?.from && bookingsByStatus?.to
+                  ? `${new Date(bookingsByStatus.from).toLocaleDateString("vi-VN")} — ${new Date(bookingsByStatus.to).toLocaleDateString("vi-VN")}`
+                  : (lang === "VN" ? "Phân bổ trong kỳ" : "Breakdown for the period")}
+              </p>
+            </div>
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-300">
+              {bookingsByStatus?.total != null && (
+                <>{bookingsByStatus.total.toLocaleString(lang === "VN" ? "vi-VN" : "en-US")} {lang === "VN" ? "booking" : "bookings"}</>
+              )}
+            </span>
+          </div>
+
+          {bookingsByStatusLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-7 rounded-lg bg-slate-100 dark:bg-slate-900 animate-pulse" />
+              ))}
+            </div>
+          ) : !bookingsByStatus?.statuses?.length ? (
+            <div className="flex flex-col items-center justify-center py-6 text-slate-400">
+              <span className="material-symbols-outlined text-2xl">donut_small</span>
+              <p className="mt-1 text-[11px] font-bold">{lang === "VN" ? "Chưa có dữ liệu." : "No data yet."}</p>
+            </div>
+          ) : (() => {
+            const maxCount = Math.max(...bookingsByStatus.statuses.map(s => s.bookingCount || 0), 1);
+            return (
+              <div className="space-y-2">
+                {bookingsByStatus.statuses.map((s) => {
+                  const pct = ((s.bookingCount || 0) / maxCount) * 100;
+                  const totalCount = bookingsByStatus.total || 0;
+                  const share = totalCount > 0 ? ((s.bookingCount || 0) / totalCount) * 100 : 0;
+                  return (
+                    <div key={s.status} className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className={`font-bold uppercase tracking-wide ${getBookingStatusClass(s.status)}`}>
+                          {getBookingStatusLabel(s.status, lang)}
+                        </span>
+                        <span className="font-black text-slate-700 dark:text-slate-200">
+                          {(s.bookingCount || 0).toLocaleString(lang === "VN" ? "vi-VN" : "en-US")}
+                          <span className="text-slate-400 ml-1">({share.toFixed(1)}%)</span>
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${barColorForStatus(s.status)}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Top routes (2/3) */}
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider">
+                {lang === "VN" ? "Top tuyến phổ biến" : "Top popular routes"}
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {lang === "VN" ? "Xếp theo số booking trong kỳ đang chọn." : "Ranked by bookings in the selected period."}
+              </p>
+            </div>
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-300">
+              {topRoutes.length} {lang === "VN" ? "tuyến" : "routes"}
+            </span>
+          </div>
+
+          {topRoutesLoading ? (
+            <div className="space-y-1.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-900 animate-pulse" />
+              ))}
+            </div>
+          ) : topRoutes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+              <span className="material-symbols-outlined text-2xl">route</span>
+              <p className="mt-1.5 text-[11px] font-bold">{lang === "VN" ? "Chưa có tuyến nào." : "No routes yet."}</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto -mx-2">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="text-left py-1.5 px-2 font-bold w-10">#</th>
+                    <th className="text-left py-1.5 px-2 font-bold">{lang === "VN" ? "Tuyến" : "Route"}</th>
+                    <th className="text-right py-1.5 px-2 font-bold">{lang === "VN" ? "Booking" : "Bookings"}</th>
+                    <th className="text-right py-1.5 px-2 font-bold hidden md:table-cell">{lang === "VN" ? "Vé" : "Tickets"}</th>
+                    <th className="text-right py-1.5 px-2 font-bold">{lang === "VN" ? "Doanh thu" : "Revenue"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                  {topRoutes.map((r, idx) => {
+                    const maxBook = Math.max(...topRoutes.map(x => x.bookingCount || 0), 1);
+                    const pct = ((r.bookingCount || 0) / maxBook) * 100;
+                    const routeName = r.routeName
+                      || [r.fromStationName, r.toStationName].filter(Boolean).join(" → ")
+                      || (lang === "VN" ? "Tuyến không tên" : "Unnamed route");
+                    return (
+                      <tr key={r.routeId || `${idx}-${routeName}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/30 transition-colors">
+                        <td className="py-2 px-2 text-slate-400 font-black">#{idx + 1}</td>
+                        <td className="py-2 px-2">
+                          <div className="font-bold text-slate-700 dark:text-slate-200 truncate max-w-[280px]">
+                            {routeName}
+                          </div>
+                          <div className="mt-1 h-1 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-[#124757] to-[#FFD100] dark:from-yellow-400 dark:to-amber-500 rounded-full transition-all duration-700"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="py-2 px-2 text-right font-black text-[#124757] dark:text-yellow-400 whitespace-nowrap">
+                          {(r.bookingCount || 0).toLocaleString(lang === "VN" ? "vi-VN" : "en-US")}
+                        </td>
+                        <td className="py-2 px-2 text-right font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap hidden md:table-cell">
+                          {(r.ticketCount || 0).toLocaleString(lang === "VN" ? "vi-VN" : "en-US")}
+                        </td>
+                        <td className="py-2 px-2 text-right font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                          {formatCurrency(r.netRevenue)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
@@ -803,38 +1154,53 @@ export const Dashboard = () => {
         </div>
 
         {/* Top stations */}
-        {topStations.length > 0 && (
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
-            <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider mb-2">
-              {lang === "VN" ? "Top bến" : "Top stations"}
-            </h3>
-            <div className="space-y-2">
-              {topStations.map((station, index) => {
-                const maxRev = Math.max(...topStations.map((s) => s.netRevenue || 0), 1);
-                const pct = ((station.netRevenue || 0) / maxRev) * 100;
-                return (
-                  <div key={`${station.stationId || station.stationName || index}`} className="space-y-1">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="font-bold text-slate-700 dark:text-slate-200 truncate max-w-[60%]">
-                        <span className="text-slate-400 mr-1">#{index + 1}</span>
-                        {station.stationName || station.fromStationName || station.key || station.stationId || "--"}
-                      </span>
-                      <span className="font-black text-[#124757] dark:text-yellow-400">
-                        {formatCurrency(station.netRevenue)}
-                      </span>
+        {(() => {
+          const validStations = topStations.filter(s => (s.netRevenue || 0) > 0);
+          if (validStations.length === 0) {
+            return (
+              <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+                <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider mb-2">
+                  {lang === "VN" ? "Top bến" : "Top stations"}
+                </h3>
+                <p className="text-xs text-slate-400 text-center py-4">
+                  {lang === "VN" ? "Dữ liệu theo bến đang được cập nhật" : "Station breakdown data is being updated"}
+                </p>
+              </div>
+            );
+          }
+          return (
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+              <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider mb-2">
+                {lang === "VN" ? "Top bến" : "Top stations"}
+              </h3>
+              <div className="space-y-2">
+                {validStations.map((station, index) => {
+                  const maxRev = Math.max(...validStations.map((s) => s.netRevenue || 0), 1);
+                  const pct = ((station.netRevenue || 0) / maxRev) * 100;
+                  return (
+                    <div key={`${station.stationId || station.stationName || index}`} className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-slate-700 dark:text-slate-200 truncate max-w-[60%]">
+                          <span className="text-slate-400 mr-1">#{index + 1}</span>
+                          {station.stationName || station.fromStationName || station.key || station.stationId || "--"}
+                        </span>
+                        <span className="font-black text-[#124757] dark:text-yellow-400">
+                          {formatCurrency(station.netRevenue)}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-[#124757] to-[#FFD100] dark:from-yellow-400 dark:to-amber-500 rounded-full transition-all duration-700"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#124757] to-[#FFD100] dark:from-yellow-400 dark:to-amber-500 rounded-full transition-all duration-700"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

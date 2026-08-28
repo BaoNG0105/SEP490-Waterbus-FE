@@ -7,6 +7,7 @@ import { registerCustomer, verifyRegisterOtp, resendRegisterOtp } from "../../se
 import { FormSelect } from "../../components/FormSelect";
 import { AppDateInput } from "../../components/AppDateInput";
 import { NationalitySelect } from "../../components/NationalitySelect";
+import { required } from "../../utils/requiredStar";
 
 import { getApiErrorMessage } from "../../utils/apiError";
 import { getTodayDateString } from "../../utils/dateOnly";
@@ -440,7 +441,7 @@ export const Register = () => {
                {/* HỌ VÀ TÊN */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                    {lang === "VN" ? "Họ và Tên (*)" : "Full Name (*)"}
+                    {<>{lang === "VN" ? "Họ và Tên" : "Full Name"}{required()}</>}
                   </label>
                   <input
                     type="text" name="fullName" required
@@ -550,7 +551,7 @@ export const Register = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                    {lang === "VN" ? "Mật khẩu (*)" : "Password (*)"}
+                    {<>{lang === "VN" ? "Mật khẩu" : "Password"}{required()}</>}
                   </label>
                   <div className="relative">
                     <input
@@ -613,7 +614,7 @@ export const Register = () => {
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                    {lang === "VN" ? "Xác nhận mật khẩu (*)" : "Confirm (*)"}
+                    {<>{lang === "VN" ? "Xác nhận mật khẩu" : "Confirm"}{required()}</>}
                   </label>
                   <div className="relative">
                     <input

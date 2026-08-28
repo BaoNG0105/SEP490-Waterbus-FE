@@ -32,6 +32,7 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { getUserId, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { getRangeForScheduleMode, toDateKey } from "../../../utils/staffAssignmentCalendarUtils";
 import { notify } from "../../../utils/swalToast";
+import { required } from "../../../utils/requiredStar";
 //component
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
 import { AppDateInput } from "../../../components/AppDateInput";
@@ -1367,7 +1368,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
 
                 <div>
                   <label className={labelStyle}>
-                    {lang === "VN" ? "Vị trí công việc (*)" : "Work location (*)"}
+                    {<>{lang === "VN" ? "Vị trí công việc" : "Work location"}{required()}</>}
                   </label>
                   {(() => {
                     const createTypeOptions = [
@@ -1417,12 +1418,8 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                 <div>
                   <label className={labelStyle}>
                     {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT
-                      ? lang === "VN"
-                        ? "Nhân viên tàu (*)"
-                        : "Boat crew (*)"
-                      : lang === "VN"
-                        ? "Nhân viên bến (*)"
-                        : "Station staff (*)"}
+                      ? <>{lang === "VN" ? "Nhân viên tàu" : "Boat crew"}{required()}</>
+                      : <>{lang === "VN" ? "Nhân viên bến" : "Station staff"}{required()}</>}
                   </label>
                   <FormSelect
                     required
@@ -1446,7 +1443,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                 {createForm.assignmentType === ASSIGNMENT_TYPE.BOAT ? (
                   <div>
                     <label className={labelStyle}>
-                      {lang === "VN" ? "Tàu được gán (*)" : "Assigned boat (*)"}
+                      {<>{lang === "VN" ? "Tàu được gán" : "Assigned boat"}{required()}</>}
                     </label>
                     <FormSelect
                       required
@@ -1470,7 +1467,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                 ) : (
                   <>
                     <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Bến làm việc (*)" : "Work station (*)"}</label>
+                      <label className={labelStyle}>{<>{lang === "VN" ? "Bến làm việc" : "Work station"}{required()}</>}</label>
                       <div className={`${visibleCreateFieldErrors.stationId ? errorInputStyle : inputStyle} flex items-center gap-2 font-bold text-[#124757] dark:text-yellow-400`}>
                         {!createForm.staffUserId
                           ? (lang === "VN" ? "-- Chọn nhân viên trước --" : "-- Select staff first --")
@@ -1487,7 +1484,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "Start date (*)"}</label>
+                    <label className={labelStyle}>{<>{lang === "VN" ? "Từ ngày" : "Start date"}{required()}</>}</label>
                     <AppDateInput
                       required
                       min={toDateInputValue(new Date())}
@@ -1498,7 +1495,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
                     {visibleCreateFieldErrors.fromDate && <p className={errorTextStyle}>{visibleCreateFieldErrors.fromDate}</p>}
                   </div>
                   <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "End date (*)"}</label>
+                    <label className={labelStyle}>{<>{lang === "VN" ? "Đến ngày" : "End date"}{required()}</>}</label>
                     <AppDateInput
                       required
                       min={createForm.fromDate || toDateInputValue(new Date())}
@@ -1594,7 +1591,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
               {lang === "VN" ? "Ca hiện tại" : "Current"}: {replaceForm.staffName || "—"}
             </p>
             <label className="block space-y-1.5">
-              <span className={labelStyle}>{lang === "VN" ? "Nhân viên mới (*)" : "New staff (*)"}</span>
+              <span className={labelStyle}>{<>{lang === "VN" ? "Nhân viên mới" : "New staff"}{required()}</>}</span>
               <FormSelect
                 required
                 value={replaceForm.staffUserId}
@@ -1617,7 +1614,7 @@ export function StaffAssignmentManagement({ viewTabs = null }) {
               {visibleReplaceFieldErrors.staffUserId && <p className={errorTextStyle}>{visibleReplaceFieldErrors.staffUserId}</p>}
             </label>
             <label className="block space-y-1.5">
-              <span className={labelStyle}>{lang === "VN" ? "Lý do thay (*)" : "Reason (*)"}</span>
+              <span className={labelStyle}>{<>{lang === "VN" ? "Lý do thay" : "Reason"}{required()}</>}</span>
               <input
                 type="text"
                 required

@@ -3,6 +3,7 @@ import { AppDateInput } from "../../../components/AppDateInput";
 import { NationalitySelect } from "../../../components/NationalitySelect";
 import { StationAssignField } from "../../../components/StationAssignField";
 import { getTodayDateString } from "../../../utils/dateOnly";
+import { required } from "../../../utils/requiredStar";
 
 const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
 const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
@@ -48,7 +49,7 @@ export function ManagerFormFields({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
-            <label className={labelStyle}>{lang === "VN" ? "Họ và Tên (*)" : "Full Name (*)"}</label>
+            <label className={labelStyle}>{<>{lang === "VN" ? "Họ và Tên" : "Full Name"}{required()}</>}</label>
             <input
               type="text"
               required
@@ -68,7 +69,7 @@ export function ManagerFormFields({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
-            <label className={labelStyle}>{lang === "VN" ? "Số điện thoại (*)" : "Phone Number (*)"}</label>
+            <label className={labelStyle}>{<>{lang === "VN" ? "Số điện thoại" : "Phone Number"}{required()}</>}</label>
             <input
               type="tel"
               required
@@ -81,7 +82,7 @@ export function ManagerFormFields({
             {errors.phoneNumber && <p className={errorTextStyle}>{errors.phoneNumber}</p>}
           </div>
           <div>
-            <label className={labelStyle}>Email (*)</label>
+            <label className={labelStyle}>Email{required()}</label>
             <input
               type="email"
               required
@@ -118,7 +119,7 @@ export function ManagerFormFields({
 
       <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-          {lang === "VN" ? "Khu vực phụ trách (*)" : "Assigned Stations (*)"}
+          {<>{lang === "VN" ? "Khu vực phụ trách" : "Assigned Stations"}{required()}</>}
         </h3>
 
         <StationAssignField

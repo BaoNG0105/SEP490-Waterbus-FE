@@ -46,7 +46,7 @@ export function CreateSystemData() {
   }, [fieldErrors, touchedFields]);
 
   if (!canManage) {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/reports/revenue" replace />;
   }
 
   const updateField = (field, value) => {

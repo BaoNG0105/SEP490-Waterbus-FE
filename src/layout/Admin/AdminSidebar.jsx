@@ -16,7 +16,7 @@ const MENU_GROUPS = [
     labelVn: "Tổng quan",
     labelEn: "Overview",
     items: [
-      { path: "/admin", labelVn: "Dashboard", labelEn: "Dashboard", roles: ["ADMIN"] },
+      { path: "/admin/reports/revenue", labelVn: "Dashboard", labelEn: "Dashboard", roles: ["ADMIN", "MANAGER"] },
       { path: "/admin/booking-summary", labelVn: "Tổng hợp Booking", labelEn: "Booking Summary", roles: ["ADMIN", "MANAGER"] },
     ],
   },
@@ -106,13 +106,15 @@ const isNavItemVisible = (user, item, staffOnly) => {
 };
 
 /**
- * Trang landing mặc định sau đăng nhập / khi bấm nút "Trang quản trị" — mục đầu tiên
- * (theo đúng thứ tự sidebar) mà user hiện tại có quyền xem. Dùng ở Login và Header vì
- * Dashboard "/admin" giờ chỉ dành riêng Admin, Manager/Staff cần rơi vào trang khác.
+ * Hub Revenue Report được ưu tiên sau đăng nhập / khi bấm "Trang quản trị".
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export const getDefaultAdminLandingPath = (user) => {
   const staffOnly = isStaffOnlyUser(user);
+  const revenueItem = MENU_GROUPS
+    .flatMap((group) => group.items)
+    .find((item) => item.path === "/admin/reports/revenue" && isNavItemVisible(user, item, staffOnly));
+  if (revenueItem) return revenueItem.path;
   const firstItem = MENU_GROUPS
     .flatMap((group) => group.items)
     .find((item) => isNavItemVisible(user, item, staffOnly));

@@ -8,6 +8,7 @@ import {
     verifyPhoneChangeOtp
 } from "../../services/authService";
 import "flag-icons/css/flag-icons.min.css";
+import { required } from "../../utils/requiredStar";
 import { notify, showValidationMessage } from "../../utils/swalToast";
 import { AppDateInput } from "../../components/AppDateInput";
 import { UserAvatar } from "../../components/UserAvatar";
@@ -403,7 +404,7 @@ export const EditProfile = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-1">
-                            <label className={labelClasses}>{lang === "VN" ? "Họ và Tên (*)" : "Full Name (*)"}</label>
+                            <label className={labelClasses}>{<>{lang === "VN" ? "Họ và Tên" : "Full Name"}{required()}</>}</label>
                             <input
                                 required name="fullName" type="text"
                                 value={profileData.fullName} onChange={handleProfileDataChange} onBlur={handleFieldBlur}

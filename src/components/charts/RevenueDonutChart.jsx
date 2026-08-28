@@ -21,11 +21,32 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
     let cumAngle = -Math.PI / 2; // start at top
     return data.map((d, i) => {
       const slice = ((d.value || 0) / total) * 2 * Math.PI;
+      const value = d.value || 0;
+      const midAngle = cumAngle + slice / 2;
+      const labelR = R_OUTER + 16;
+      const lx = CENTER + labelR * Math.cos(midAngle);
+      const ly = CENTER + labelR * Math.sin(midAngle);
+
+      // Trường hợp segment = 100% (toàn bộ vòng tròn): arc A từ 0° đến 0° không vẽ được
+      // → vẽ full circle ring bằng 2 nửa bán nguyệt.
+      if (slice >= 2 * Math.PI - 1e-6) {
+        const fullRing = [
+          `M ${CENTER + R_OUTER} ${CENTER}`,
+          `A ${R_OUTER} ${R_OUTER} 0 1 1 ${CENTER - R_OUTER} ${CENTER}`,
+          `A ${R_OUTER} ${R_OUTER} 0 1 1 ${CENTER + R_OUTER} ${CENTER}`,
+          `M ${CENTER + R_INNER} ${CENTER}`,
+          `A ${R_INNER} ${R_INNER} 0 1 0 ${CENTER - R_INNER} ${CENTER}`,
+          `A ${R_INNER} ${R_INNER} 0 1 0 ${CENTER + R_INNER} ${CENTER}`,
+          "Z",
+        ].join(" ");
+        cumAngle += slice;
+        return { path: fullRing, color: d.color, value, pct: 100, lx, ly };
+      }
+
       const startAngle = cumAngle;
       const endAngle = cumAngle + slice;
       cumAngle = endAngle;
 
-      const value = d.value || 0;
       const cosS = Math.cos(startAngle), sinS = Math.sin(startAngle);
       const cosE = Math.cos(endAngle), sinE = Math.sin(endAngle);
       const largeArc = slice > Math.PI ? 1 : 0;
@@ -42,11 +63,6 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
         `A ${R_INNER} ${R_INNER} 0 ${largeArc} 0 ${x1i} ${y1i}`,
         "Z",
       ].join(" ");
-
-      const midAngle = startAngle + slice / 2;
-      const labelR = R_OUTER + 16;
-      const lx = CENTER + labelR * Math.cos(midAngle);
-      const ly = CENTER + labelR * Math.sin(midAngle);
 
       return { path, color: d.color, value, pct: (value / total) * 100, lx, ly };
     });
@@ -102,9 +118,9 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
             <text x={CENTER} y={CENTER + 12} textAnchor="middle" fontSize={16} fontWeight={900} fill={isDarkMode ? "#e2e8f0" : "#0b0b0b"}>
               {formatCurrency(total)}
             </text>
-            {hoverIdx !== null && arcs[hoverIdx] && (
-              <text x={CENTER} y={CENTER + 32} textAnchor="middle" fontSize={14} fontWeight={800} fill={arcs[hoverIdx].color}>
-                {arcs[hoverIdx].pct.toFixed(1)}%
+            {hoverIdx !== null && data[hoverIdx] && (
+              <text x={CENTER} y={CENTER + 32} textAnchor="middle" fontSize={14} fontWeight={800} fill={data[hoverIdx].color}>
+                {total > 0 ? `${((data[hoverIdx].value || 0) / total * 100).toFixed(1)}%` : "0%"}
               </text>
             )}
           </svg>
@@ -119,12 +135,15 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
               onMouseEnter={() => setHoverIdx(i)}
               onMouseLeave={() => setHoverIdx(null)}
             >
-              <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+              <span
+                className={`w-3.5 h-3.5 rounded-full shrink-0 ${d.value === 0 ? "opacity-30" : ""}`}
+                style={{ backgroundColor: d.color }}
+              />
               <span className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate flex-1">
                 {d.label}
               </span>
               <span className="text-xs font-black text-slate-800 dark:text-white shrink-0">
-                {((d.value || 0) / total * 100).toFixed(0)}%
+                {total > 0 ? `${((d.value || 0) / total * 100).toFixed(0)}%` : "0%"}
               </span>
             </div>
           ))}

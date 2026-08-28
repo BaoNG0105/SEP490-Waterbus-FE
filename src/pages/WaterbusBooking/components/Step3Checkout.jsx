@@ -4,6 +4,7 @@ import { useApp } from "../../../context/AppContext";
 //component
 import { FormSelect } from "../../../components/FormSelect";
 import { YearPickerInput } from "../../../components/YearPickerInput";
+import { RequiredStar } from "../../../utils/requiredStar";
 import { PayOSLogo, payosButtonLgClassName } from "../../../components/PayOSLogo";
 import { SelectablePublicVouchers } from "../../../components/SelectablePublicVouchers";
 //service
@@ -92,6 +93,22 @@ const pick = (source, keys, fallback = "") => {
     if (value !== undefined && value !== null && value !== "") return value;
   }
   return fallback;
+};
+
+// Ghế có thể vừa được khách khác chốt trong lúc người dùng đang ở checkout.
+// Tách lỗi này khỏi ValidationProblemDetails chung để hướng dẫn người dùng quay lại chọn ghế.
+const getSeatUnavailableMessage = (error, lang) => {
+  const messages = Object.values(error?.response?.data?.errors || {})
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value) => typeof value === "string")
+    .map((value) => value.trim());
+  const message = messages.find((value) => /seat\s+['"]?[^'"\s]+['"]?\s+is\s+already\s+booked|ghế.*đã.*đặt/i.test(value));
+  if (!message) return "";
+
+  const seat = message.match(/seat\s+['"]?([^'"\s]+)['"]?/i)?.[1] || "";
+  return lang === "VN"
+    ? `Ghế ${seat ? `“${seat}” ` : ""}vừa được khách khác đặt. Vui lòng quay lại chọn ghế khác.`
+    : `Seat ${seat ? `“${seat}” ` : ""}was just booked by another customer. Please go back and choose another seat.`;
 };
 
 // Mã bến lấy từ catalog Step1 — không đọc stationCode trên trip.stops.
@@ -957,12 +974,13 @@ const insurancePassengerCount =
       window.location.assign(checkoutUrl);
     } catch (error) {
       console.error("Lỗi khi tạo booking/thanh toán:", error);
+      const seatUnavailable = getSeatUnavailableMessage(error, lang);
       const raw = getApiErrorMessage(
         error,
         lang === "VN" ? "Không thể tạo booking hoặc thanh toán. Vui lòng thử lại." : "Unable to create the booking or payment. Please try again."
       );
       const soft = String(error?.message || "").trim();
-      setSubmitError(soft && !error?.response ? soft : raw);
+      setSubmitError(seatUnavailable || (soft && !error?.response ? soft : raw));
     } finally {
       setIsSubmitting(false);
     }
@@ -995,7 +1013,7 @@ const insurancePassengerCount =
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Họ và tên *" : "Full Name *"}</label>
+              <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Họ và tên" : "Full Name"}<RequiredStar /></label>
               <input
                 type="text" placeholder="Nguyễn Văn A" value={contact.name}
                 onChange={(e) => setContact({ ...contact, name: e.target.value })}
@@ -1006,7 +1024,7 @@ const insurancePassengerCount =
               {touched.contact.name && fieldErrors.contact.name && <p className={fieldErrorText}>{fieldErrors.contact.name}</p>}
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Số điện thoại *" : "Phone Number *"}</label>
+              <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Số điện thoại" : "Phone Number"}<RequiredStar /></label>
               <input
                 type="tel" placeholder="0901234567" value={contact.phone}
                 onChange={(e) => setContact({ ...contact, phone: e.target.value })}
@@ -1019,7 +1037,7 @@ const insurancePassengerCount =
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Địa chỉ Email *" : "Email Address *"}</label>
+            <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Địa chỉ Email" : "Email Address"}<RequiredStar /></label>
             <input
               type="email" placeholder="example@gmail.com" value={contact.email}
               onChange={(e) => setContact({ ...contact, email: e.target.value })}
@@ -1096,7 +1114,7 @@ const insurancePassengerCount =
                 {/* Các trường điền thông tin */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên *" : "Full Name *"}</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên" : "Full Name"}<RequiredStar /></label>
                     <input
                       type="text"
                       value={passenger.name}
@@ -1113,7 +1131,7 @@ const insurancePassengerCount =
 
                   <div className="relative z-10 space-y-1.5">
                     <label className="text-[11px] font-bold uppercase text-slate-500">
-                      {lang === "VN" ? "Loại hành khách *" : "Passenger type *"}
+                      {lang === "VN" ? "Loại hành khách" : "Passenger type"}<RequiredStar />
                     </label>
                     <FormSelect
                       value={passenger.ticketType}
@@ -1135,7 +1153,7 @@ const insurancePassengerCount =
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase text-slate-500">
-                      {lang === "VN" ? "Năm sinh *" : "Birth year *"}
+                      {lang === "VN" ? "Năm sinh" : "Birth year"}<RequiredStar />
                     </label>
                     <YearPickerInput
                       min={getBirthYearRangeForTicketType(passenger.ticketType, travelYear).min}
@@ -1217,7 +1235,7 @@ const insurancePassengerCount =
                         </div>
                         <div className="flex flex-col sm:flex-row gap-3">
                           <div className="flex-1 space-y-1.5">
-                            <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên em bé *" : "Infant Full Name *"}</label>
+                            <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Họ và tên em bé" : "Infant Full Name"}<RequiredStar /></label>
                             <input
                               type="text"
                               value={passenger.infant.name}
@@ -1231,7 +1249,7 @@ const insurancePassengerCount =
                             )}
                           </div>
                           <div className="w-full sm:w-32 space-y-1.5">
-                            <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh *" : "Birth Year *"}</label>
+                            <label className="text-[11px] font-bold uppercase text-slate-500">{lang === "VN" ? "Năm sinh" : "Birth Year"}<RequiredStar /></label>
                             <YearPickerInput
                               min={infantBirthYearMin}
                               max={travelYear}
@@ -1618,8 +1636,8 @@ const insurancePassengerCount =
           {maxPointsToUse <= 0 && (
             <p className="mt-1 text-[10px] text-slate-400">
               {lang === "VN"
-                ? "Không đủ điểm hoặc đơn hàng quá nhỏ (tối đa 50% giá trị đơn)"
-                : "Not enough points or order too small (max 50% of order total)"}
+                ? "Không đủ điểm hoặc đơn hàng quá nhỏ (tối đa 50% giá trị đơn và 50% số dư)"
+                : "Not enough points or order too small (max 50% of order total and balance)"}
             </p>
           )}
         </div>

@@ -3,13 +3,17 @@ import {
     backfillCompletedBookingPoints as apiBackfillCompletedBookingPoints,
 } from '../api/pointApi';
 
-/** 1 điểm = 1 VND; tối đa dùng điểm = 50% giá trị đơn. */
+/** 1 điểm = 1 VND; tối đa dùng điểm = 50% giá trị đơn và 50% số dư hiện có. */
 export const POINTS_MAX_ORDER_RATIO = 0.5;
+export const POINTS_MAX_BALANCE_RATIO = 0.5;
 
 export const getMaxPointsToUse = (pointBalance, orderAmount) => {
     const balance = Math.max(0, Math.floor(Number(pointBalance) || 0));
     const amount = Math.max(0, Number(orderAmount) || 0);
-    return Math.min(balance, Math.floor(amount * POINTS_MAX_ORDER_RATIO));
+    return Math.min(
+        Math.floor(balance * POINTS_MAX_BALANCE_RATIO),
+        Math.floor(amount * POINTS_MAX_ORDER_RATIO),
+    );
 };
 
 /** Ước điểm sẽ cộng sau khi chuyến Completed: floor(netPaid * 1%). */

@@ -40,6 +40,7 @@ import { PaymentResult } from "./pages/PaymentResult";
 //Admin
 import { Dashboard } from "./pages/Admin/Dashboard";
 import { BookingSummary } from "./pages/Admin/BookingSummary";
+import { RevenueReport } from "./pages/Admin/RevenueReport";
 import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor, BoatCrewSchedule } from "./pages/Admin/BoatManagement";
 import { TripManagement, CreateTrip, TripDetail } from "./pages/Admin/TripManagement";
 import { SeatTypeManagement } from "./pages/Admin/SeatTypeManagement";
@@ -373,6 +374,16 @@ function App() {
             element={
               <AdminLayout title="Booking Summary">
                 <BookingSummary />
+              </AdminLayout>
+            }
+          />
+
+          {/* ******* Revenue Report Page ******* */}
+          <Route
+            path="/admin/reports/revenue"
+            element={
+              <AdminLayout title="Revenue Report">
+                <RevenueReport />
               </AdminLayout>
             }
           />

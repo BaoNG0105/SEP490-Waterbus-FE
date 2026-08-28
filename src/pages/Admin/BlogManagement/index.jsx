@@ -110,7 +110,7 @@ export function BlogManagement() {
     const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, filteredBlogs.length);
 
     if (!canManage) {
-        return <Navigate to="/admin" replace />;
+        return <Navigate to="/admin/reports/revenue" replace />;
     }
 
     const getPaginationGroup = () => {

@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext";
 import { useSelector } from "react-redux";
 import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
+import { RequiredStar } from "../../../utils/requiredStar";
 import { fetchActiveBoatsByServiceType, fetchAllBoats } from "../../../services/boatService";
 import { fetchAllTrips, filterAttachableTripsForBoat, pickActiveTripForBoat, toDdMmYyyy } from "../../../services/tripService";
 import { fetchManagerUsers } from "../../../services/userService";
@@ -1208,7 +1209,7 @@ export function IncidentManagement({
             ) : null}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                {lang === "VN" ? "Tàu cứu hộ (kéo) *" : "Rescue boat *"}
+                {lang === "VN" ? "Tàu cứu hộ (kéo)" : "Rescue boat"}<RequiredStar />
               </span>
               <select
                 required
@@ -1244,7 +1245,7 @@ export function IncidentManagement({
               <label className="block space-y-1.5">
                 <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
                   {needsReplacementBoat
-                    ? (lang === "VN" ? "Tàu thay thế (chở khách) *" : "Replacement passenger boat *")
+                    ? <>{lang === "VN" ? "Tàu thay thế (chở khách)" : "Replacement passenger boat"}<RequiredStar /></>
                     : (lang === "VN" ? "Tàu thay thế (tuỳ chọn)" : "Replacement boat (optional)")}
                 </span>
                 <select
@@ -1340,7 +1341,7 @@ export function IncidentManagement({
             </p>
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                {lang === "VN" ? "Ghi chú xử lý *" : "Resolution note *"}
+                {lang === "VN" ? "Ghi chú xử lý" : "Resolution note"}<RequiredStar />
               </span>
               <textarea
                 required

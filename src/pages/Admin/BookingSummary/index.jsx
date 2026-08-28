@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { getBookingsReport } from "../../../api/reportApi";
+import { getBookingsReport, getWaterbusStationRevenue } from "../../../api/reportApi";
+import { WaterbusStationSummaryTable } from "../../../components/WaterbusStationSummaryTable";
 import { hasRole } from "../../../utils/roleHelpers";
 import { FormSelect } from "../../../components/FormSelect";
 import {
@@ -12,6 +13,7 @@ import {
   getVisibleStatusOptions,
   getBookingStatusLabel,
   getPaymentStatusLabel,
+  getServiceTypeLabel,
   getBookingStatusClass,
   getPaymentStatusClass,
   formatCurrency,
@@ -40,10 +42,13 @@ export const BookingSummary = () => {
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [activeTab, setActiveTab] = useState("bookings");
 
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [waterbusData, setWaterbusData] = useState(null);
+  const [waterbusLoading, setWaterbusLoading] = useState(true);
 
   // Debounce ô tìm kiếm để tránh gọi API liên tục khi đang gõ.
   useEffect(() => {
@@ -88,6 +93,29 @@ export const BookingSummary = () => {
   useEffect(() => {
     loadReport();
   }, [loadReport]);
+
+  const loadWaterbusSummary = useCallback(async () => {
+    if (!canAccess) return;
+    try {
+      setWaterbusLoading(true);
+      const params = {};
+      const fromDate = filters.departureFrom || filters.createdFrom;
+      const toDate = filters.departureTo || filters.createdTo;
+      if (fromDate) params.fromDate = fromDate;
+      if (toDate) params.toDate = toDate;
+      if (filters.serviceType !== "All") params.serviceType = filters.serviceType;
+      setWaterbusData(await getWaterbusStationRevenue(params));
+    } catch (error) {
+      console.error("Lỗi tải tổng hợp Waterbus theo bến:", error);
+      setWaterbusData(null);
+    } finally {
+      setWaterbusLoading(false);
+    }
+  }, [canAccess, filters.createdFrom, filters.createdTo, filters.departureFrom, filters.departureTo, filters.serviceType]);
+
+  useEffect(() => {
+    loadWaterbusSummary();
+  }, [loadWaterbusSummary]);
 
   const updateFilter = (key, value) => {
     setFilters((prev) => {
@@ -244,6 +272,16 @@ export const BookingSummary = () => {
         </div>
       </div>
 
+      <div className="inline-flex items-center gap-1 rounded-2xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-1 shadow-sm">
+        <button type="button" onClick={() => setActiveTab("bookings")} className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-headline font-black uppercase tracking-wide transition-colors ${activeTab === "bookings" ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900" : "text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"}`}>
+          <span className="material-symbols-outlined text-[15px]">receipt_long</span>{lang === "VN" ? "Booking" : "Bookings"}
+        </button>
+        <button type="button" onClick={() => setActiveTab("stations")} className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-headline font-black uppercase tracking-wide transition-colors ${activeTab === "stations" ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900" : "text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"}`}>
+          <span className="material-symbols-outlined text-[15px]">directions_boat</span>{lang === "VN" ? "Theo bến" : "By station"}
+        </button>
+      </div>
+
+      {activeTab === "bookings" && <>
       {/* BẢNG DANH SÁCH BOOKING */}
       <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
@@ -294,7 +332,7 @@ export const BookingSummary = () => {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{item.serviceType}</p>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{getServiceTypeLabel(item.serviceType, lang)}</p>
                     </td>
                     <td className="py-4 px-4">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{formatDateTime(item.departureAt)}</span>
@@ -368,6 +406,11 @@ export const BookingSummary = () => {
           </button>
         </div>
       </div>
+      </>}
+
+      {activeTab === "stations" && (
+        <WaterbusStationSummaryTable data={waterbusData} isLoading={waterbusLoading} lang={lang} />
+      )}
 
     </div>
   );

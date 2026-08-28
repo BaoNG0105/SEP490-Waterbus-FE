@@ -1,5 +1,6 @@
 import { WaterwayMap } from "../../../components/WaterwayMap";
 import { AppTimeInput } from "../../../components/AppTimeInput";
+import { required } from "../../../utils/requiredStar";
 
 const labelStyle = "mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500";
 const inputStyle = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-800 outline-none shadow-inner transition-all focus:ring-2 focus:ring-[#124757] dark:border-slate-700/60 dark:bg-slate-900 dark:text-white dark:focus:ring-yellow-400";
@@ -54,7 +55,7 @@ export function StationFormFields({
                 <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-3">
                     <div>
                         <label className={labelStyle}>
-                            {lang === "VN" ? "Mã nhà ga (*)" : "Station Code (*)"}
+                            {lang === "VN" ? "Mã nhà ga " : "Station Code "}{required()}
                         </label>
                         <input
                             type="text"
@@ -72,7 +73,7 @@ export function StationFormFields({
                     </div>
                     <div className="sm:col-span-2">
                         <label className={labelStyle}>
-                            {lang === "VN" ? "Tên nhà ga (*)" : "Station Name (*)"}
+                            {lang === "VN" ? "Tên nhà ga " : "Station Name "}{required()}
                         </label>
                         <input
                             type="text"

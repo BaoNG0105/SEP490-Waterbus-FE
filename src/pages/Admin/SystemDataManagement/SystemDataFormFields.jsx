@@ -5,7 +5,7 @@ import {
   KNOWLEDGE_CONTENT_AI_LIMIT,
 } from "../../../services/knowledgeEntryService";
 
-const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
+import { required } from "../../../utils/requiredStar";
 const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
 const errorInputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all disabled:opacity-50";
 const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
@@ -44,7 +44,7 @@ export function SystemDataFormFields({ lang, formData, onChange, disabled = fals
   return (
     <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
       <div>
-        <label className={labelStyle}>{lang === "VN" ? "Tiêu đề / Câu hỏi (*)" : "Title / Question (*)"}</label>
+        <label className={labelStyle}>{<>{lang === "VN" ? "Tiêu đề / Câu hỏi" : "Title / Question"}{required()}</>}</label>
         <input
           value={formData.title}
           onChange={(e) => setField("title", e.target.value)}
@@ -58,7 +58,7 @@ export function SystemDataFormFields({ lang, formData, onChange, disabled = fals
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className={labelStyle}>{lang === "VN" ? "Chuyên mục (*)" : "Category (*)"}</label>
+          <label className={labelStyle}>{<>{lang === "VN" ? "Chuyên mục" : "Category"}{required()}</>}</label>
           <FormSelect
             value={formData.category}
             onChange={(value) => {
@@ -72,7 +72,7 @@ export function SystemDataFormFields({ lang, formData, onChange, disabled = fals
           {errors.category && <p className={errorTextStyle}>{errors.category}</p>}
         </div>
         <div>
-          <label className={labelStyle}>{lang === "VN" ? "Thứ tự hiển thị (*)" : "Display order (*)"}</label>
+          <label className={labelStyle}>{<>{lang === "VN" ? "Thứ tự hiển thị" : "Display order"}{required()}</>}</label>
           <input
             type="number"
             min={1}
@@ -89,7 +89,7 @@ export function SystemDataFormFields({ lang, formData, onChange, disabled = fals
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
-            {lang === "VN" ? "Nội dung (*)" : "Content (*)"}
+            {<>{lang === "VN" ? "Nội dung" : "Content"}{required()}</>}
           </label>
           <span className={`text-[10px] font-bold ${formData.content.length > KNOWLEDGE_CONTENT_AI_LIMIT ? "text-amber-500" : "text-slate-400"}`}>
             {formData.content.length}/{KNOWLEDGE_CONTENT_AI_LIMIT}
@@ -113,7 +113,7 @@ export function SystemDataFormFields({ lang, formData, onChange, disabled = fals
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
-            {lang === "VN" ? "Từ khóa tìm kiếm (*)" : "Search keywords (*)"}
+            {<>{lang === "VN" ? "Từ khóa tìm kiếm" : "Search keywords"}{required()}</>}
           </label>
           <button type="button" onClick={addKeyword} disabled={disabled} className="text-[10px] font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400 inline-flex items-center gap-1 disabled:opacity-50">
             <span className="material-symbols-outlined text-sm">add</span>

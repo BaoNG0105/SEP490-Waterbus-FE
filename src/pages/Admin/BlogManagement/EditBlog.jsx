@@ -199,7 +199,7 @@ export function EditBlog() {
     const coverPreview = newCoverPreview || existingImageUrls[0] || "";
 
     if (!canManage) {
-        return <Navigate to="/admin" replace />;
+        return <Navigate to="/admin/reports/revenue" replace />;
     }
 
     if (isLoading) {
