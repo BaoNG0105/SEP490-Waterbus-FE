@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
-import { changePasswordService } from "../../services/authService";
+import { required } from "../../utils/requiredStar";
 import { useDispatch } from "react-redux";
 import { logout } from "../../redux/authSlice";
 import { notify } from "../../utils/swalToast";
@@ -207,7 +207,7 @@ export const ChangePassword = () => {
           {/* MẬT KHẨU HIỆN TẠI */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-              {lang === "VN" ? "Mật khẩu hiện tại (*)" : "Current Password (*)"}
+              {<>{lang === "VN" ? "Mật khẩu hiện tại" : "Current Password"}{required()}</>}
             </label>
             <div className="relative">
               <input
@@ -235,7 +235,7 @@ export const ChangePassword = () => {
           {/* MẬT KHẨU MỚI & THANH TIẾN TRÌNH */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider flex justify-between">
-              <span>{lang === "VN" ? "Mật khẩu mới (*)" : "New Password (*)"}</span>
+              <span>{<>{lang === "VN" ? "Mật khẩu mới" : "New Password"}{required()}</>}</span>
             </label>
             <div className="relative">
               <input
@@ -272,7 +272,7 @@ export const ChangePassword = () => {
           {/* NHẬP LẠI MẬT KHẨU MỚI */}
           <div className="space-y-1 pt-1">
             <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-              {lang === "VN" ? "Xác nhận mật khẩu mới (*)" : "Confirm New Password (*)"}
+              {<>{lang === "VN" ? "Xác nhận mật khẩu mới" : "Confirm New Password"}{required()}</>}
             </label>
             <div className="relative">
               <input

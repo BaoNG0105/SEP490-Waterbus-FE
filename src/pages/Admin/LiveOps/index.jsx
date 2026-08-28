@@ -29,7 +29,7 @@ export function LiveOps() {
   const effectiveView = !canMap && canIncidents ? "incidents" : view;
 
   if (!canMap && !canIncidents) {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/reports/revenue" replace />;
   }
 
   const setView = (next) => {

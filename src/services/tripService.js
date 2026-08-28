@@ -1321,3 +1321,121 @@ export const cancelTripNoShow = async (tripId, { statusNote } = {}) => {
         throw error;
     }
 };
+
+// =============================================================================
+// One-way / WaterSightseeing bulk preview — reuse /trips/schedule/round-trip-preview
+// =============================================================================
+
+/**
+ * Body cho preview 1 chiều (Waterbus một chiều bulk + WaterSightseeing).
+ * Dùng chung endpoint /trips/schedule/round-trip-preview nhưng chỉ gửi
+ * outbound, không gửi inboundRouteCode → BE trả gợi ý 1 chiều.
+ */
+export const buildOneWayPreviewPayload = (form) => {
+    const days = Array.isArray(form.daysOfWeek)
+        ? form.daysOfWeek.map((d) => Number(d)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+        : [];
+    const stops = (Array.isArray(form.stops) ? form.stops : [])
+        .map((stop) => ({
+            stopOrder: Number(stop.stopOrder),
+            stayDurationMinutes: Math.max(0, Number(stop.stayDurationMinutes) || 0),
+        }))
+        .filter((stop) => Number.isFinite(stop.stopOrder) && stop.stopOrder > 0);
+
+    return {
+        boatCode: String(form.boatCode || '').trim(),
+        outboundRouteCode: String(form.routeCode || '').trim(),
+        inboundRouteCode: null,
+        fromDate: String(form.fromDate || '').trim() || null,
+        toDate: String(form.toDate || '').trim() || null,
+        startTime: toHms(form.startTime),
+        endTime: toHms(form.endTime),
+        daysOfWeek: days.length > 0 ? days : null,
+        outboundStops: mapScheduleStops(stops),
+        inboundStops: null,
+    };
+};
+
+/**
+ * Gọi preview cho one-way. Kết quả chuẩn hoá giống normalizeRoundTripPreviewResult
+ * nhưng direction luôn là "outbound".
+ */
+export const previewOneWayScheduleBatch = async (form) => {
+    try {
+        return normalizeRoundTripPreviewResult(
+            await apiPreviewRoundTripSchedule(buildOneWayPreviewPayload(form)),
+        );
+    } catch (error) {
+        console.error('Lỗi khi preview one-way schedule:', error);
+        throw error;
+    }
+};
+
+/**
+ * buildSchedulePayloadsFromRoundTripSelection dùng cho cả one-way vì payload
+ * chỉ cần routeCode + operatingDate + departureTime. Không cần thêm helper riêng.
+ */
+
+/**
+ * Gọi schedule lần lượt cho các khung one-way đã chọn.
+ * selectedItems có cùng shape với normalizeRoundTripPreviewResult.items.
+ */
+export const scheduleOneWaySelection = async ({ form, selectedItems }) => {
+    const boat = String(form.boatCode || '').trim();
+    const routeCode = String(form.routeCode || '').trim();
+    const stops = (Array.isArray(form.stops) ? form.stops : [])
+        .map((stop) => ({
+            stopOrder: Number(stop.stopOrder),
+            stayDurationMinutes: Math.max(0, Number(stop.stayDurationMinutes) || 0),
+        }))
+        .filter((stop) => Number.isFinite(stop.stopOrder) && stop.stopOrder > 0);
+
+    const rows = (selectedItems || [])
+        .filter((item) => item && item.canCreate !== false)
+        .map((item) => {
+            const operatingDate = toYmd(item.operatingDate) || pickPreviewOperatingDate(item);
+            const time = item.departureHms || isoToHms(item.departureTime);
+            let sortMs = Number(item.departureMs);
+            if (!Number.isFinite(sortMs)) {
+                sortMs = Date.parse(String(item.departureTime || ''));
+            }
+            if (!Number.isFinite(sortMs) && operatingDate && time) {
+                const iso = combineOperatingDateAndTime(operatingDate, String(time).slice(0, 5));
+                sortMs = iso ? Date.parse(iso) : Number.POSITIVE_INFINITY;
+            }
+            return { operatingDate, time, sortMs };
+        })
+        .filter((row) => row.operatingDate && row.time)
+        .sort((a, b) => (a.sortMs - b.sortMs) || 0);
+
+    const totals = {
+        created: 0, skipped: 0, skippedBoatBusy: 0, skippedStationBusy: 0,
+        skippedPast: 0, skippedMissingOnBoardStaff: 0, skippedItems: [],
+        createdTripCodes: [], requested: rows.length, calls: rows.length,
+    };
+
+    for (const row of rows) {
+        const payload = {
+            routeCode,
+            boatCode: boat,
+            fromDate: row.operatingDate,
+            toDate: row.operatingDate,
+            daysOfWeek: null,
+            departureTimes: [row.time],
+            startTime: null,
+            endTime: null,
+            intervalMinutes: null,
+            stops: mapScheduleStops(stops),
+        };
+        const result = await scheduleTripsBatch(payload);
+        totals.created += result.created;
+        totals.skipped += result.skipped;
+        totals.skippedBoatBusy += result.skippedBoatBusy;
+        totals.skippedStationBusy += result.skippedStationBusy;
+        totals.skippedPast += result.skippedPast;
+        totals.skippedMissingOnBoardStaff += result.skippedMissingOnBoardStaff;
+        totals.skippedItems.push(...(result.skippedItems || []));
+        totals.createdTripCodes.push(...(result.createdTripCodes || []));
+    }
+    return totals;
+};

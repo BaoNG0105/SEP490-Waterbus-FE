@@ -176,6 +176,7 @@ export function EditCharter() {
 
   const handleSubmit = async (payload) => {
     try {
+      setIsLoading(true);
       await updateMyCharterBooking(id, payload);
 
       await notify({
@@ -185,6 +186,14 @@ export function EditCharter() {
           ? (lang === "VN" ? `Mã yêu cầu: ${bookingCode}` : `Request code: ${bookingCode}`)
           : "",
         confirmButtonColor: "#124757",
+      });
+
+      const detail = await fetchMyCharterBookingDetail(id);
+      const baseFormData = buildFormDataFromDetail(detail, user);
+      const status = pick(detail, ["bookingStatus", "status"], "PendingQuote");
+      setInitialFormData({
+        ...baseFormData,
+        isPendingQuote: status === "PendingQuote",
       });
 
       navigate(`/profile/my-charter-booking/${id}`);
@@ -201,14 +210,19 @@ export function EditCharter() {
       if (handledDuplicate) return;
 
       const isConflict = error.response?.status === 409;
+      const errorTitle = String(error?.response?.data?.title || error?.response?.data?.message || "");
+      const isAntiSpamLock = /mỗi\s*lần\s*đã\s*được\s*cập\s*nhật|already\s*updated|another\s*update\s*request/i.test(errorTitle);
+      const conflictText = isAntiSpamLock
+        ? (lang === "VN"
+          ? "Bạn vừa lưu yêu cầu xong. Vui lòng đợi vài giây rồi thử lại — máy chủ đang khóa tạm thời để tránh gửi trùng yêu cầu."
+          : "You just saved this request. Please wait a few seconds and retry — the server is briefly locked to prevent duplicate requests.")
+        : (lang === "VN"
+          ? "Dữ liệu yêu cầu vừa thay đổi hoặc đã có một lần lưu đang xử lý. Vui lòng tải lại rồi thử lại."
+          : "This request was just changed or another save is still being processed. Please reload and try again.");
       const result = await notify({
         icon: "error",
         title: lang === "VN" ? "Không thể cập nhật" : "Unable to update request",
-        text: isConflict
-          ? (lang === "VN"
-            ? "Dữ liệu yêu cầu vừa thay đổi hoặc đã có một lần lưu đang xử lý. Vui lòng tải lại rồi thử lại."
-            : "This request was just changed or another save is still being processed. Please reload and try again.")
-          : getApiErrorMessage(error, fallback),
+        text: isConflict ? conflictText : getApiErrorMessage(error, fallback),
         confirmButtonColor: "#124757",
         confirmButtonText: isConflict ? (lang === "VN" ? "Tải lại dữ liệu" : "Reload") : "OK",
         showCancelButton: isConflict,

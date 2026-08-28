@@ -1,4 +1,5 @@
 import { WaterwayMap } from "../../../components/WaterwayMap";
+import { required } from "../../../utils/requiredStar";
 
 const labelStyle = "mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500";
 const inputStyle = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-800 outline-none shadow-inner transition-all focus:ring-2 focus:ring-[#124757] dark:border-slate-700/60 dark:bg-slate-900 dark:text-white dark:focus:ring-yellow-400";
@@ -39,7 +40,7 @@ export function LandmarkFormFields({ lang, formData, onChange, errors = {}, onFi
                 </div>
 
                 <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Tên landmark (*)" : "Landmark Name (*)"}</label>
+                    <label className={labelStyle}>{<>{lang === "VN" ? "Tên landmark" : "Landmark Name"}{required()}</>}</label>
                     <input
                         type="text"
                         required
@@ -53,7 +54,7 @@ export function LandmarkFormFields({ lang, formData, onChange, errors = {}, onFi
                 </div>
 
                 <div>
-                    <label className={labelStyle}>{lang === "VN" ? "Mô tả (nội dung sẽ được bake thành audio) (*)" : "Description (text used to bake audio) (*)"}</label>
+                    <label className={labelStyle}>{<>{lang === "VN" ? "Mô tả (nội dung sẽ được bake thành audio)" : "Description (text used to bake audio)"}{required()}</>}</label>
                     <textarea
                         rows={4}
                         required
@@ -67,7 +68,7 @@ export function LandmarkFormFields({ lang, formData, onChange, errors = {}, onFi
 
                 <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Thứ tự hiển thị (*)" : "Display Order (*)"}</label>
+                        <label className={labelStyle}>{<>{lang === "VN" ? "Thứ tự hiển thị" : "Display Order"}{required()}</>}</label>
                         <input
                             type="number"
                             required
@@ -80,7 +81,7 @@ export function LandmarkFormFields({ lang, formData, onChange, errors = {}, onFi
                         {errors.displayOrder && <p className={errorTextStyle}>{errors.displayOrder}</p>}
                     </div>
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Bán kính kích hoạt (m) (*)" : "Trigger Radius (m) (*)"}</label>
+                        <label className={labelStyle}>{<>{lang === "VN" ? "Bán kính kích hoạt (m)" : "Trigger Radius (m)"}{required()}</>}</label>
                         <input
                             type="number"
                             required

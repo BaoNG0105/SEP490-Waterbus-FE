@@ -19,13 +19,21 @@ const pick = (source, keys, fallback = "") => {
 export const getCharterBalanceDue = (booking) => {
   if (!booking || typeof booking !== "object") return 0;
 
+  const additional = Number(booking.additionalInsuranceAmount);
+  const hasAdditional = Number.isFinite(additional) && additional > 0;
+
   if (booking.remainingAmount !== undefined && booking.remainingAmount !== null && booking.remainingAmount !== "") {
     const remaining = Number(booking.remainingAmount);
-    if (Number.isFinite(remaining)) return Math.max(remaining, 0);
+    if (Number.isFinite(remaining) && remaining > 0) {
+      // Nếu booking đang top-up BH (additionalInsuranceAmount > 0) mà remainingAmount = 0
+      // (BE chưa refresh), ưu tiên additional để không làm nút Pay biến mất.
+      return hasAdditional ? Math.max(remaining, additional) : Math.max(remaining, 0);
+    }
   }
 
-  const additional = Number(booking.additionalInsuranceAmount);
-  if (Number.isFinite(additional) && additional > 0) return additional;
+  // Fallback cuối: nếu BE đánh dấu requiresAdditionalPayment nhưng remainingAmount chưa update,
+  // ưu tiên additionalInsuranceAmount trước khi tính total-paid.
+  if (hasAdditional) return additional;
 
   const total = Number(booking.totalAmount ?? booking.estimatedPrice ?? booking.finalAmount ?? 0) || 0;
   const paid = Number(booking.paidAmount ?? 0) || 0;

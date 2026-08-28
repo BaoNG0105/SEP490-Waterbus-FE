@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
@@ -20,6 +20,7 @@ import {
 import { listBookingPassengers, normalizePassengerApprovalStatus } from "../../../utils/charterPassengerAdd";
 import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
 import { createBookingPayment, syncBookingPayment, syncBookingPaymentByOrderCode } from "../../../services/paymentService";
+import { fetchMyPointBalance, getMaxPointsToUse } from "../../../services/pointService";
 import { fetchBoatDetail } from "../../../services/boatService";
 
 import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
@@ -49,6 +50,7 @@ import {
   extractCharterAdditionalPaymentMeta,
   extractPayOsPaymentFields,
   getCharterBalanceDue,
+  hasCharterBalanceDue,
   markCharterTopUpPayOsStarted,
   rememberCharterPayOsSession,
 } from "../../../utils/charterPayOs";
@@ -97,156 +99,67 @@ const getPaymentPurpose = (payment) =>
 const isPaidPayment = (payment) =>
   ["paid", "depositpaid"].includes(String(payment?.paymentStatus || "").toLowerCase());
 
-function CustomerPassengerManifest({ booking, lang, onEdit }) {
-  const passengers = listBookingPassengers(booking).filter(hasCharterPassengerName);
-  const isPaid = String(booking?.paymentStatus || "").toLowerCase() === "paid";
-  const isConfirmed = String(booking?.status || "") === "Confirmed";
-  const isLocked = !isPaid || !isConfirmed;
-
-  const typeLabel = (row) => {
-    const type = String(pick(row, ["passengerType", "type"], "") || "").toLowerCase();
-    if (type === "adult") return lang === "VN" ? "Người lớn" : "Adult";
-    if (type === "child") return lang === "VN" ? "Trẻ em" : "Child";
-    return lang === "VN" ? "Khách" : "Guest";
+/**
+ * Trả về timestamp (ms) khi admin duyệt thêm hành khách gần nhất, hoặc null nếu không có.
+ *
+ * Lưu ý BE: hiện tại chưa trả field này. Khi BE thêm, cập nhật helper này để đọc từ:
+ *   - booking.latestPassengerAddedAt          (ISO string, ưu tiên)
+ *   - booking.passengers[*].approvedAt        (fallback: max timestamp)
+ *   - booking.tickets[*].createdAt / approvedAt
+ *
+ * Đây là anchor để tính đếm ngược 12h "grace period" sau khi thêm HK mới.
+ */
+const getLatestPassengerAddedAt = (booking) => {
+  if (!booking) return null;
+  // Ưu tiên 1: field explicit từ BE
+  const explicit = pick(booking, ["latestPassengerAddedAt"], null);
+  if (explicit) {
+    const ts = Date.parse(explicit);
+    if (!Number.isNaN(ts)) return ts;
+  }
+  // Fallback: tìm max approvedAt/createdAt trong passengers/tickets
+  const candidates = [];
+  const collect = (arr, keys) => {
+    if (!Array.isArray(arr)) return;
+    arr.forEach((row) => {
+      keys.forEach((k) => {
+        const v = row?.[k];
+        if (v) {
+          const ts = Date.parse(v);
+          if (!Number.isNaN(ts)) candidates.push(ts);
+        }
+      });
+    });
   };
+  collect(booking.passengers, ["approvedAt", "updatedAt", "createdAt"]);
+  collect(booking.tickets, ["approvedAt", "updatedAt", "createdAt"]);
+  return candidates.length ? Math.max(...candidates) : null;
+};
 
-  const typeTone = (row) => {
-    const type = String(pick(row, ["passengerType", "type"], "") || "").toLowerCase();
-    if (type === "child")
-      return "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30";
-    return "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/30";
-  };
+/**
+ * Grace period 12h sau khi admin duyệt thêm HK mới.
+ * Sau thời điểm này, nút thanh toán nên disable (BE sẽ quyết định hành vi cuối).
+ */
+const PASSENGER_ADD_GRACE_MS = 12 * 60 * 60 * 1000;
+const isPastPassengerAddGrace = (booking, nowMs = Date.now()) => {
+  const anchor = getLatestPassengerAddedAt(booking);
+  if (!anchor) return false;
+  return nowMs - anchor >= PASSENGER_ADD_GRACE_MS;
+};
+const getPassengerAddDeadline = (booking) => {
+  const anchor = getLatestPassengerAddedAt(booking);
+  return anchor ? anchor + PASSENGER_ADD_GRACE_MS : null;
+};
+const formatCountdown = (ms) => {
+  if (ms <= 0) return "00:00:00";
+  const totalSec = Math.floor(ms / 1000);
+  const h = String(Math.floor(totalSec / 3600)).padStart(2, "0");
+  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
+  const s = String(totalSec % 60).padStart(2, "0");
+  return `${h}:${m}:${s}`;
+};
 
-  const summaryText =
-    passengers.length > 0
-      ? lang === "VN"
-        ? `${passengers.length} / ${booking.passengerCount || passengers.length} hành khách đã lưu`
-        : `${passengers.length} / ${booking.passengerCount || passengers.length} passengers saved`
-      : lang === "VN"
-        ? "Chưa có hành khách nào"
-        : "No passengers saved yet";
-
-  return (
-    <section className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-700 dark:bg-slate-900">
-      {/* Header — đồng bộ style với các card scheduleItems ở trên */}
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#F7FAFB] via-white to-white px-5 py-4 dark:border-slate-700/70 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400">
-            <span className="material-symbols-outlined text-[22px]">groups</span>
-          </span>
-          <div className="min-w-0">
-            <p className="font-headline text-[10px] font-black uppercase tracking-widest text-slate-400">
-              {lang === "VN" ? "Danh sách hành khách" : "Passenger manifest"}
-            </p>
-            <p className="mt-0.5 truncate text-base font-headline font-black text-slate-800 dark:text-white">
-              {summaryText}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {isLocked && passengers.length === 0 ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-headline font-black uppercase tracking-widest text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-              <span className="material-symbols-outlined text-[14px]">lock</span>
-              {lang === "VN" ? "Mở sau thanh toán" : "Unlocks after payment"}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#124757]/10 px-3 py-1 text-[10px] font-headline font-black uppercase tracking-widest text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400">
-              <span className="material-symbols-outlined text-[14px]">person</span>
-              {passengers.length > 0
-                ? lang === "VN"
-                  ? `${passengers.length} khách`
-                  : `${passengers.length} pax`
-                : lang === "VN"
-                  ? `${booking.passengerCount || 0} chỗ`
-                  : `${booking.passengerCount || 0} seats`}
-            </span>
-          )}
-
-          {onEdit && passengers.length > 0 ? (
-            <button
-              type="button"
-              onClick={onEdit}
-              className="inline-flex items-center gap-1.5 rounded-full bg-[#124757] px-3 py-1 text-[10px] font-headline font-black uppercase tracking-widest text-white shadow-sm transition hover:bg-[#0f3d4b] active:scale-95 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
-            >
-              <span className="material-symbols-outlined text-[14px]">edit</span>
-              {lang === "VN" ? "Chỉnh sửa" : "Edit"}
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      {/* Body */}
-      <div className="px-5 py-4">
-        {passengers.length > 0 ? (
-          <>
-          <div className="flex items-center gap-4 rounded-xl bg-slate-50 px-4 py-2 font-headline text-[10px] font-black uppercase tracking-widest text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-            <span className="flex h-6 w-9 shrink-0 items-center justify-center">#</span>
-            <span className="min-w-0 flex-1">{lang === "VN" ? "Họ tên" : "Full name"}</span>
-            <span className="w-20 shrink-0 text-center sm:w-24">{lang === "VN" ? "Năm sinh" : "Birth year"}</span>
-            <span className="w-[88px] shrink-0 text-center">{lang === "VN" ? "Loại" : "Type"}</span>
-          </div>
-          <ol className="mt-2 grid gap-2">
-            {passengers.map((row, idx) => {
-              const name = pick(row, ["fullName", "passengerName", "name", "contactName"], "");
-              const birthYear = getPassengerBirthYear(row);
-              const idNumber = pick(row, ["idNumber", "identityNumber", "nationalId", "citizenId", "passport"], "");
-              const meta = [birthYear || null, idNumber || null]
-                .filter(Boolean)
-                .join(" · ");
-              return (
-                <li
-                  key={`${name}-${idx}`}
-                  className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm transition hover:border-slate-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 font-headline text-xs font-black text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                    {idx + 1}
-                  </span>
-                  <div className="min-w-0 flex-1 truncate text-sm font-bold text-slate-800 dark:text-white">
-                    {name}
-                  </div>
-                  <div className="w-20 shrink-0 text-center text-sm font-bold text-slate-800 dark:text-white sm:w-24">
-                    {birthYear || "—"}
-                  </div>
-                  <span
-                    className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-headline font-black uppercase tracking-wide ring-1 ${typeTone(row)}`}
-                  >
-                    {typeLabel(row)}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-          </>
-        ) : (
-          <div className="flex items-start gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
-            <span className="material-symbols-outlined mt-0.5 shrink-0 text-amber-500">info</span>
-            <div className="text-xs leading-relaxed">
-              <p className="font-bold text-slate-700 dark:text-slate-200">
-                {lang === "VN" ? "Chưa có danh sách hành khách" : "Manifest not provided"}
-              </p>
-              <p className="mt-0.5 text-slate-500 dark:text-slate-400">
-                {lang === "VN"
-                  ? `Vào mục \"Nhập vé\" sau khi thanh toán đủ để nhập ${booking.passengerCount || 0} khách.`
-                  : `Open the \"Manage tickets\" tab after full payment to enter ${booking.passengerCount || 0} guests.`}
-              </p>
-            </div>
-            {onEdit && !isLocked ? (
-              <button
-                type="button"
-                onClick={onEdit}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[#124757] px-4 py-2 text-[11px] font-headline font-black uppercase tracking-widest text-white shadow-sm transition hover:bg-[#0f3d4b] active:scale-95 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
-              >
-                <span className="material-symbols-outlined text-[14px]">edit</span>
-                {lang === "VN" ? "Nhập danh sách" : "Enter manifest"}
-              </button>
-            ) : null}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
+// CustomerPassengerManifest has been merged into MyCharterTicketsPanel — see that file.
 
 const getPaymentId = (payment) => getRefundPaymentId(payment);
 
@@ -635,17 +548,12 @@ const getPassengerAgeFromBirthYear = (birthYear, referenceDate) => {
 /** BE bắt buộc BirthYear hợp lệ — không cho gửi 0 / bỏ trống. */
 const buildPassengerPayload = (booking, rows, lang, user = null) => {
   const passengerCount = getBookingPassengerCount(booking);
-  const bookerName = getBookerPassengerName(booking, user);
   const normalizedRows = rows.map((row, index) => ({
     ...row,
-    fullName: index === 0 && bookerName ? bookerName : row.fullName,
-    isContactPassenger: index === 0 && Boolean(bookerName),
     passengerType: row.passengerType || (index < Number(booking?.adultCount || 0) ? "Adult" : "Child"),
   }));
   const filledRows = normalizedRows.filter((row) => row.fullName?.trim() || String(row.birthYear || "").trim());
-  const rowsToSubmit = isSinglePassengerWithContact(booking, user)
-    ? (filledRows.length > 0 ? [filledRows[0]] : buildEmptyPassengerRows(booking, user))
-    : filledRows;
+  const rowsToSubmit = filledRows;
 
   if (rowsToSubmit.length === 0) {
     return {
@@ -723,6 +631,9 @@ export function CharterDetail() {
   const [qrImageUrl, setQrImageUrl] = useState("");
   const [paymentOption, setPaymentOption] = useState("Full");
   const [paymentPromotionCode, setPaymentPromotionCode] = useState("");
+  const [useAllPoints, setUseAllPoints] = useState(false);
+  const [pointBalance, setPointBalance] = useState(0);
+  const [pointBalanceLoaded, setPointBalanceLoaded] = useState(false);
   const [promoPreview, setPromoPreview] = useState(null);
   const [promoChecking, setPromoChecking] = useState(false);
   const promoValidateSeqRef = useRef(0);
@@ -762,7 +673,9 @@ export function CharterDetail() {
     setAcknowledgedTabBadges((prev) => ({ ...prev, [tabId]: String(badgeValue) }));
   };
 
-  const currencyFormatter = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
+  const currencyFormatter = useMemo(() => ({
+    format: (value) => `${Number(value || 0).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} VND`,
+  }), []);
 
   const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
 
@@ -795,38 +708,55 @@ export function CharterDetail() {
         hasPayments: Array.isArray(normalized?.payments) && normalized.payments.length > 0,
       });
       setBooking(normalized);
+      // Cache payments[] so list page can show correct balance
+      if (normalized?.id && Array.isArray(normalized?.payments) && normalized.payments.length > 0) {
+        try {
+          sessionStorage.setItem(`charterPayments:${normalized.id}`, JSON.stringify(normalized.payments));
+        } catch (_) { /* quota full — ignore */ }
+      }
       const passengerSource = normalized.passengers.length > 0 ? normalized.passengers : normalized.tickets;
       const initialPassengers = passengerSource.length > 0
-        ? passengerSource.map((passenger, index) => {
-          const matchingTicket = normalized.tickets[index] || {};
-          const yearFromPassenger = getPassengerBirthYear(passenger) || getPassengerBirthYear(matchingTicket);
-          const savedName = pick(passenger, ["fullName", "passengerName", "name"], "");
-          const bookerName = getBookerPassengerName(normalized, user);
-          return {
-            id: pick(passenger, ["ticketId", "id"], pick(matchingTicket, ["ticketId", "id"])),
-            ticketCode: pick(passenger, ["ticketCode", "code"], pick(matchingTicket, ["ticketCode", "code"], "")),
-            qrToken: pick(passenger, ["qrToken"], pick(matchingTicket, ["qrToken"], "")),
-            fullName: index === 0 && bookerName ? bookerName : savedName,
-            // Chỉ lấy năm sinh đã lưu — người đặt tự nhập năm sinh nếu thiếu.
-            birthYear: yearFromPassenger || "",
-            passengerType: index < normalized.adultCount ? "Adult" : "Child",
-            approvalStatus: pick(passenger, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], ""),
-            requestBatchId: pick(passenger, ["requestBatchId", "passengerAddRequestId", "addRequestId", "batchId"], ""),
-            reviewNote: pick(passenger, ["reviewNote", "rejectNote", "note"], ""),
-            isContactPassenger: index === 0 && Boolean(bookerName),
-          };
-        })
+        ? (() => {
+          const mapped = passengerSource.map((passenger, index) => {
+            const matchingTicket = normalized.tickets[index] || {};
+            const yearFromPassenger = getPassengerBirthYear(passenger) || getPassengerBirthYear(matchingTicket);
+            const savedName = pick(passenger, ["fullName", "passengerName", "name"], "");
+            return {
+              id: pick(passenger, ["ticketId", "id"], pick(matchingTicket, ["ticketId", "id"])),
+              ticketCode: pick(passenger, ["ticketCode", "code"], pick(matchingTicket, ["ticketCode", "code"], "")),
+              qrToken: pick(passenger, ["qrToken"], pick(matchingTicket, ["qrToken"], "")),
+              fullName: savedName,
+              birthYear: yearFromPassenger || "",
+              passengerType: index < normalized.adultCount ? "Adult" : "Child",
+              approvalStatus: pick(passenger, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], ""),
+              requestBatchId: pick(passenger, ["requestBatchId", "passengerAddRequestId", "addRequestId", "batchId"], ""),
+              reviewNote: pick(passenger, ["reviewNote", "rejectNote", "note"], ""),
+              isContactPassenger: false,
+            };
+          });
+          // BE đôi khi trả passengers chỉ có 1 record dù booking khai báo nhiều khách hơn.
+          // Pad thêm row trống theo adultCount/childCount để user nhập tiếp cho đủ.
+          const expectedTotal = getBookingPassengerCount(normalized);
+          if (mapped.length >= expectedTotal) return mapped;
+          const padded = [...mapped];
+          for (let i = mapped.length; i < expectedTotal; i += 1) {
+            padded.push({
+              id: "",
+              ticketCode: "",
+              qrToken: "",
+              fullName: "",
+              birthYear: "",
+              passengerType: i < Number(normalized.adultCount || 0) ? "Adult" : "Child",
+              approvalStatus: "",
+              requestBatchId: "",
+              reviewNote: "",
+              isContactPassenger: false,
+            });
+          }
+          return padded;
+        })()
         : buildEmptyPassengerRows(normalized, user);
       setPassengerRows(initialPassengers);
-      // Đảm bảo dòng #1 luôn có tên người đặt khi user chưa nhập / BE trả rỗng.
-      const bookerName = getBookerPassengerName(normalized, user);
-      if (bookerName) {
-        setPassengerRows((prev) => prev.map((row, idx) => (
-          idx === 0 && !String(row.fullName || "").trim()
-            ? { ...row, fullName: bookerName, isContactPassenger: true }
-            : row
-        )));
-      }
       setSelectedTicketIds([]);
       return normalized;
     } catch (error) {
@@ -860,6 +790,32 @@ export function CharterDetail() {
     loadedIdRef.current = id;
     loadDetail();
   }, [id, loadDetail]);
+
+  // Fetch point balance khi component mount và user authenticated.
+  // Charter chỉ áp dụng dùng điểm 1 lần khi tạo payment — BE dùng /payments tổng quát,
+  // giống trip. Sau khi booking Completed, điểm sẽ được cộng tự động bởi BE.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setPointBalance(0);
+      setPointBalanceLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    setPointBalanceLoaded(false);
+    fetchMyPointBalance()
+      .then((balance) => {
+        if (cancelled) return;
+        setPointBalance(Math.max(0, Number(balance) || 0));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPointBalance(0);
+      })
+      .finally(() => {
+        if (!cancelled) setPointBalanceLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     setAcknowledgedTabBadges(readAcknowledgedCustomerTabBadges(id));
@@ -1284,6 +1240,9 @@ export function CharterDetail() {
         promotionCode: promoClearedByUserRef.current
           ? null
           : (String(paymentPromotionCode || "").trim() || null),
+        // Áp dụng điểm cho cả top-up BH (vẫn cap 50% số tiền).
+        useAllPoints: pointsToUse > 0,
+        pointsToUse: pointsToUse > 0 ? pointsToUse : 0,
       });
       const applied = applyCreatedPayOsPayment(payment, {
         fallbackAmount: balanceDue,
@@ -1411,6 +1370,9 @@ export function CharterDetail() {
         promotionCode: promoClearedByUserRef.current
           ? null
           : (String(paymentPromotionCode || "").trim() || null),
+        // Áp dụng điểm: cap 50% tổng tiền lần thanh toán này (BE sẽ validate lại).
+        useAllPoints: pointsToUse > 0,
+        pointsToUse: pointsToUse > 0 ? pointsToUse : 0,
       };
       charterLog("create-payment-start", {
         bookingId: booking.id,
@@ -1689,10 +1651,6 @@ export function CharterDetail() {
   const handlePassengerChange = (index, field, value) => {
     setPassengerRows((prev) => prev.map((row, rowIndex) => {
       if (rowIndex !== index) return row;
-      // Người đặt luôn là dòng #1 — không cho sửa họ tên.
-      if (index === 0 && field === "fullName" && getBookerPassengerName(booking, user)) {
-        return row;
-      }
       return { ...row, [field]: value };
     }));
   };
@@ -1701,7 +1659,10 @@ export function CharterDetail() {
     const [file] = event.target.files || [];
     event.target.value = "";
     if (!file || !booking?.id) return;
-    if (String(booking.paymentStatus).toLowerCase() !== "paid") return;
+    // Trước paid vẫn cho nhập file khách — danh sách cần để admin quote.
+    const normalizedStatusForImport = String(booking.status || "").toLowerCase();
+    const isPrePaymentForImport = ["pendingquote", "quoted", "pendingpayment"].includes(normalizedStatusForImport);
+    if (!isPrePaymentForImport && String(booking.paymentStatus).toLowerCase() !== "paid") return;
 
     try {
       setIsSubmitting(true);
@@ -1803,11 +1764,18 @@ export function CharterDetail() {
 
   const handleSavePassengers = async () => {
     if (!booking?.id) return;
-    if (String(booking.paymentStatus).toLowerCase() !== "paid") {
+    // Trước khi thanh toán (PendingQuote / Quoted) user vẫn phải nhập được hành khách
+    // để admin tính giá theo danh sách. Sau khi thanh toán: đã có ticket → khóa.
+    const normalizedStatus = String(booking.status || "").toLowerCase();
+    const isPrePayment = ["pendingquote", "quoted", "pendingpayment"].includes(normalizedStatus);
+    const isPaidStatus = String(booking.paymentStatus).toLowerCase() === "paid";
+    if (!isPrePayment && !isPaidStatus && !booking.hasDepositPaid) {
       showAlertDialog({
         icon: "info",
-        title: lang === "VN" ? "Booking chưa thanh toán đủ" : "Booking is not fully paid",
-        text: lang === "VN" ? "Chỉ có thể nhập hành khách sau khi đã thanh toán đủ." : "Passengers can only be entered after the booking is fully paid.",
+        title: lang === "VN" ? "Booking chưa thanh toán" : "Booking is not paid",
+        text: lang === "VN"
+          ? "Chỉ có thể nhập hành khách sau khi đã đặt cọc hoặc thanh toán đủ."
+          : "Passengers can only be entered after a deposit is paid or the booking is fully paid.",
       });
       return;
     }
@@ -1859,6 +1827,57 @@ export function CharterDetail() {
         title: lang === "VN" ? "Đã lưu danh sách hành khách" : "Passenger list saved",
       });
     } catch (error) {
+      // BE trả 409 cho 2 trường hợp:
+      //   1) RowVersion concurrency (DbUpdateConcurrencyException) — retry sau khi refetch.
+      //   2) Anti-spam lock "Mỗi lần đã được cập nhật một yêu cầu khác." — BE chặn
+      //      2 PUT passengers liên tiếp quá nhanh. Phải đợi BE cooldown.
+      const status = Number(error?.response?.status || 0);
+      const errorTitle = String(error?.response?.data?.title || error?.response?.data?.message || "");
+      const isAntiSpamLock = /mỗi\s*lần\s*đã\s*được\s*cập\s*nhật|already\s*updated|another\s*update\s*request/i.test(errorTitle);
+
+      if (status === 409 && !isAntiSpamLock) {
+        try {
+          charterLog("update-passengers-retry-on-409", { bookingId: booking.id });
+          await loadDetail({ silent: true });
+          const retryResponse = await updateMyCharterBookingPassengers(booking.id, {
+            passengers: passengerPayload.passengers,
+          });
+          const paymentMetaRetry = extractCharterAdditionalPaymentMeta(retryResponse);
+          const embeddedPaymentRetry = extractPayOsPaymentFields(retryResponse);
+          const refreshedRetry = await loadDetail({ silent: true });
+          const afterBalanceRetry = Math.max(
+            getCharterBalanceDue(refreshedRetry || booking),
+            paymentMetaRetry.remainingAmount,
+            embeddedPaymentRetry?.amount || 0,
+          );
+          const afterInsuranceTotalRetry = Number((refreshedRetry || booking)?.insurance?.totalAmount || 0) || 0;
+          const insuranceGrewRetry = afterInsuranceTotalRetry > beforeInsuranceTotal
+            || paymentMetaRetry.additionalInsuranceAmount > 0
+            || paymentMetaRetry.requiresAdditionalPayment;
+
+          if (embeddedPaymentRetry?.checkoutUrl) {
+            rememberCharterPayOsSession(booking.id, embeddedPaymentRetry);
+            applyCreatedPayOsPayment(embeddedPaymentRetry, {
+              fallbackAmount: afterBalanceRetry || embeddedPaymentRetry.amount,
+              openCheckout: true,
+            });
+            return;
+          }
+
+          if ((insuranceGrewRetry || afterBalanceRetry > beforeBalance || paymentMetaRetry.requiresAdditionalPayment) && afterBalanceRetry > 0) {
+            await createInsuranceTopUpPayOs(afterBalanceRetry, { openCheckout: true });
+            return;
+          }
+
+          showAlertDialog({
+            icon: "success",
+            title: lang === "VN" ? "Đã lưu danh sách hành khách" : "Passenger list saved",
+          });
+          return;
+        } catch (retryError) {
+          console.error("Retry save passengers failed:", retryError);
+        }
+      }
       console.error("Không thể lưu hành khách charter:", {
         bookingId: booking.id,
         passengerCount: booking.passengerCount,
@@ -1867,15 +1886,17 @@ export function CharterDetail() {
         submittedPassengers: passengerPayload.passengers,
         response: error.response?.data,
       });
+      const fallbackText = isAntiSpamLock
+        ? lang === "VN"
+          ? "Bạn vừa cập nhật hành khách xong. Vui lòng đợi vài giây rồi thử lại — máy chủ đang khóa tạm thời để tránh gửi trùng yêu cầu."
+          : "You just updated the passenger list. Please wait a few seconds and retry — the server is briefly locked to prevent duplicate requests."
+        : (lang === "VN"
+            ? "Hệ thống chưa lưu được danh sách hành khách này. Vui lòng kiểm tra lại tổng số khách, số người lớn và số trẻ em của booking."
+            : "The system could not save this passenger list. Please verify the booking passenger totals, adult count, and child count.");
       showAlertDialog({
         icon: "error",
         title: lang === "VN" ? "Không thể lưu hành khách" : "Unable to save passengers",
-        text: getApiErrorMessage(
-          error,
-          lang === "VN"
-            ? "Hệ thống chưa lưu được danh sách hành khách này. Vui lòng kiểm tra lại tổng số khách, số người lớn và số trẻ em của booking."
-            : "The system could not save this passenger list. Please verify the booking passenger totals, adult count, and child count.",
-        ),
+        text: getApiErrorMessage(error, fallbackText),
       });
     } finally {
       setIsSubmitting(false);
@@ -2051,9 +2072,9 @@ export function CharterDetail() {
   const isPaymentStatusPaid = String(booking.paymentStatus).toLowerCase() === "paid";
   const isPaid = isPaymentStatusPaid && balanceDue <= 0;
   const isTerminalBooking = ["Cancelled", "Expired", "Refunded"].includes(booking.status);
-  const canShowPayOsSection = balanceDue > 0
-    && !isTerminalBooking
-    && !["Quoted", "PendingQuote", "Completed"].includes(booking.status);
+  const canShowPayOsSection = !isTerminalBooking
+    && !["Quoted", "PendingQuote", "Completed"].includes(booking.status)
+    && hasCharterBalanceDue(booking);
   const canUseContactAsSinglePassenger = isSinglePassengerWithContact(booking, user) && !hasSavedPassengerManifest(booking);
   const bookerAsFirstPassenger = canPrefillBookerAsFirstPassenger(booking, user);
   const paidAmount = Number(booking.paidAmount || 0);
@@ -2142,15 +2163,33 @@ export function CharterDetail() {
   const isPaymentLinkExpired = hasPaymentDeadline && paymentRemainingMs <= 0;
   const isBookingHoldExpired = isQuotePaymentExpired;
   const hasPendingPayOs = Boolean(pendingPaymentId || effectiveCheckoutUrl);
+  // BE đang block việc dùng điểm khi booking đã có payment pending/paid (xem validation
+  // `Booking.Payments.Any(p => Status in {Pending, Paid})` trong service BE). Workaround
+  // phía FE: ẩn checkbox "Dùng điểm" cho tới khi BE cho phép. Khi BE fix xong, xoá block này.
+  const hasBlockingPaymentForPoints = Boolean(
+    Array.isArray(booking.payments)
+    && booking.payments.some((payment) => {
+      const status = String(payment?.paymentStatus || "").toLowerCase();
+      return status === "pending" || isPaidPayment(payment);
+    })
+  );
   const canCreatePayment = (
     ["PendingPayment", "Confirmed"].includes(booking.status)
-    || (balanceDue > 0 && ["Confirmed", "PendingPayment"].includes(booking.status))
+    || (balanceDue > 0 && ["Approved", "Confirmed", "PendingPayment"].includes(booking.status))
   )
     && balanceDue > 0
     && !hasPendingPayOs
     && !isQuoteHoldExpired
     && !isBookingHoldExpired
+    && !isPastPassengerAddGrace(booking, nowTick)
     && !["Expired", "Cancelled", "Completed", "Refunded"].includes(booking.status);
+  const passengerAddDeadline = getPassengerAddDeadline(booking);
+  const isInPassengerAddGrace = Boolean(passengerAddDeadline)
+    && nowTick < passengerAddDeadline
+    && getLatestPassengerAddedAt(booking);
+  const passengerAddRemainingMs = isInPassengerAddGrace
+    ? Math.max(0, passengerAddDeadline - nowTick)
+    : 0;
   const paidDepositAmount = Number(booking.paidDepositAmount || 0);
   const promoApplied =
     Boolean(promoPreview?.ok)
@@ -2217,6 +2256,13 @@ export function CharterDetail() {
       : booking.hasDepositPaid
         ? remainingAmount
         : payableQuoteTotal;
+  // User chỉ có 2 lựa chọn: KHÔNG dùng điểm (0) hoặc dùng TỐI ĐA (maxPointsToUse).
+  // Áp dụng cho cả Deposit/Full/Remaining — tương tự flow trip.
+  const maxPointsToUse = pointBalanceLoaded
+    ? getMaxPointsToUse(pointBalance, selectedPaymentAmount)
+    : 0;
+  const pointsToUse = useAllPoints ? maxPointsToUse : 0;
+  const estimatedPayable = Math.max(0, selectedPaymentAmount - pointsToUse);
   const effectivePendingPaymentAmount = activePendingPayment
     ? getPaymentAmount(activePendingPayment) || selectedPaymentAmount
     : Number(paymentAmount || booking.latestPaymentAmount || selectedPaymentAmount) || selectedPaymentAmount;
@@ -2279,7 +2325,7 @@ export function CharterDetail() {
       seatSetupType: pick(boat, ["requiredSeatSetupType", "seatSetupType", "preferredSeatSetupType"], "--"),
     }))
     : [];
-  const showTicketsTab = isPaymentStatusPaid || canShowCharterTicketsWithBalance(booking);
+  const showTicketsTab = isPaymentStatusPaid || canShowCharterTicketsWithBalance(booking) || booking.hasDepositPaid;
   // Badge tab: "!" khi có hành động khẩn (báo giá cần trả lời, cần thanh toán, chờ nhập hoàn tiền);
   // số lượng payments/tickets khi tab đó có dữ liệu mới — giống cơ chế bên Admin.
   const actionInfo = getCustomerActionInfo(booking, lang);
@@ -2288,21 +2334,24 @@ export function CharterDetail() {
   const paymentBadge = needsPaymentAttention ? "!" : (paymentsCount || "");
   const ticketsCount = Array.isArray(booking.tickets) ? booking.tickets.length : 0;
   const ticketsBadge = showTicketsTab ? (ticketsCount || "") : "";
-  const manifestRows = listBookingPassengers(booking).filter(hasCharterPassengerName);
+  const manifestRows = listBookingPassengers(booking).filter((row) => {
+    if (!hasCharterPassengerName(row)) return false;
+    return normalizePassengerApprovalStatus(
+      pick(row, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], "Approved"),
+    ) === "Approved";
+  });
   const passengersCount = manifestRows.length;
   const passengersBadge = passengersCount > 0 ? String(passengersCount) : "";
 
-  const goToTicketsTab = () => goToTab("tickets", ticketsBadge);
   const detailTabs = [
     { id: "overview", label: lang === "VN" ? "Tổng quan" : "Overview" },
     { id: "quote", label: lang === "VN" ? "Tàu/báo giá" : "Boat/Quote" },
     { id: "payment", label: lang === "VN" ? "Thanh toán" : "Payment", badge: paymentBadge },
     {
-      id: "passengers",
-      label: lang === "VN" ? "Danh sách khách" : "Passengers",
-      badge: passengersBadge,
+      id: "tickets",
+      label: lang === "VN" ? "Hành khách & vé" : "Passengers & tickets",
+      badge: ticketsBadge || passengersBadge,
     },
-    ...(showTicketsTab ? [{ id: "tickets", label: lang === "VN" ? "Nhập vé" : "Manage tickets", badge: ticketsBadge }] : []),
   ];
 
   return (
@@ -2420,7 +2469,7 @@ export function CharterDetail() {
             <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
               {lang === "VN" ? "Tiến trình booking" : "Booking progress"}
             </p>
-            <CharterWorkflowStepper status={booking.status} lang={lang} />
+            <CharterWorkflowStepper status={booking.status} lang={lang} booking={booking} paymentStatus={booking.paymentStatus} />
           </div>
 
           {/* ===== SECTION 1: REQUEST OVERVIEW ===== */}
@@ -2440,7 +2489,7 @@ export function CharterDetail() {
               </div>
 
               <div className="px-6 py-6 md:px-8">
-                <div className="grid items-start gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className="grid items-stretch gap-4 xl:grid-cols-[1.05fr_0.95fr]">
                   <div className="rounded-2xl border border-[#D8E7EA] bg-[#F7FAFB] p-4 dark:border-slate-700 dark:bg-slate-900">
                     <div className="min-w-0">
                       <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
@@ -2498,10 +2547,13 @@ export function CharterDetail() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-slate-200 bg-[#F8FBFC] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
-                    <div className="flex flex-col gap-3">
+                  <div className="flex flex-col rounded-3xl border border-slate-200 bg-[#F8FBFC] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
+                    <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
+                      {lang === "VN" ? "Thông tin liên hệ" : "Contact details"}
+                    </p>
+                    <div className="mt-3 grid flex-1 gap-3 sm:grid-cols-2">
                       {contactItems.map((item) => (
-                        <div key={item.label}>
+                        <div key={item.label} className="rounded-2xl border border-slate-200/70 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
                           <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">{item.label}</p>
                           <p className="mt-1 wrap-break-words text-sm font-bold text-slate-700 dark:text-slate-200">{item.value}</p>
                         </div>
@@ -2545,27 +2597,44 @@ export function CharterDetail() {
                       )}
                     </div>
                   </div>
-                  <CharterInsuranceInfo
-                    booking={booking}
-                    lang={lang}
-                    currencyFormatter={currencyFormatter}
-                  />
+                  <div className="flex">
+                    <CharterInsuranceInfo
+                      booking={booking}
+                      lang={lang}
+                      currencyFormatter={currencyFormatter}
+                      className="flex w-full flex-col"
+                    />
+                  </div>
                 </div>
               </div>
             </section>
           )}
 
-          {/* ===== SECTION 1B: PASSENGER LIST ===== */}
-          {activeTab === "passengers" && (
-            <section className="overflow-hidden bg-white dark:bg-slate-800 rounded-4xl shadow-[0_18px_50px_rgba(15,23,42,0.06)] border border-slate-200/70 dark:border-slate-700/70">
-              <div className="px-6 py-6 md:px-8">
-                <CustomerPassengerManifest
-                  booking={booking}
-                  lang={lang}
-                  onEdit={showTicketsTab ? goToTicketsTab : undefined}
-                />
-              </div>
-            </section>
+          {/* ===== SECTION 1B + 3: PASSENGER LIST + TICKETS (merged) ===== */}
+          {activeTab === "tickets" && (
+            <div className="space-y-6">
+              <MyCharterTicketsPanel
+                lang={lang}
+                booking={booking}
+                isPaid={isPaid || canShowCharterTicketsWithBalance(booking) || booking.hasDepositPaid}
+                isSubmitting={isSubmitting}
+                qrImageUrl={qrImageUrl}
+                selectedTicketIds={selectedTicketIds}
+                setSelectedTicketIds={setSelectedTicketIds}
+                passengerRows={passengerRows}
+                canUseContactAsSinglePassenger={canUseContactAsSinglePassenger}
+                bookerAsFirstPassenger={bookerAsFirstPassenger}
+                bookerName={getBookerPassengerName(booking, user)}
+                importInputRef={importInputRef}
+                isUsableText={isUsableText}
+                handleTicketFileAction={handleTicketFileAction}
+                handleImportPassengers={handleImportPassengers}
+                handlePassengerChange={handlePassengerChange}
+                handleSavePassengers={handleSavePassengers}
+                handleAddPassengers={handleAddPassengers}
+                readOnlyMode={!showTicketsTab}
+              />
+            </div>
           )}
 
           {/* ===== SECTION 2: BOAT & QUOTE ===== */}
@@ -2791,6 +2860,9 @@ export function CharterDetail() {
                   isPaymentLinkExpired={isPaymentLinkExpired}
                   hasPendingPayOs={hasPendingPayOs}
                   canCreatePayment={canCreatePayment}
+                  isInPassengerAddGrace={isInPassengerAddGrace}
+                  passengerAddRemainingMs={passengerAddRemainingMs}
+                  passengerAddDeadline={passengerAddDeadline}
                   selectablePaymentChoices={selectablePaymentChoices}
                   paymentSelectValue={paymentSelectValue}
                   setPaymentOption={setPaymentOption}
@@ -2817,19 +2889,14 @@ export function CharterDetail() {
                   handleSyncPayment={handleSyncPayment}
                   handleSyncPaymentByOrderCode={handleSyncPaymentByOrderCode}
                   loadDetail={loadDetail}
-                  passengerRows={passengerRows}
-                  handlePassengerChange={handlePassengerChange}
-                  handleSavePassengers={handleSavePassengers}
-                  canEditManifest={(() => {
-                    if (!isPaid) return false;
-                    return passengerRows.some((row) => {
-                      const rawApproval = String(row.approvalStatus || "").trim();
-                      const approval = normalizePassengerApprovalStatus(row.approvalStatus);
-                      const isDraftSlot = !row.id && !row.requestBatchId && !rawApproval;
-                      const isLocked = Boolean(row.requestBatchId) || (!isDraftSlot && approval === "Approved");
-                      return !isLocked;
-                    });
-                  })()}
+                  useAllPoints={useAllPoints}
+                  setUseAllPoints={setUseAllPoints}
+                  pointBalance={pointBalance}
+                  pointBalanceLoaded={pointBalanceLoaded}
+                  pointsToUse={pointsToUse}
+                  maxPointsToUse={maxPointsToUse}
+                  estimatedPayable={estimatedPayable}
+                  hasBlockingPaymentForPoints={hasBlockingPaymentForPoints}
                 />
               ) : (
                 <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
@@ -2840,29 +2907,7 @@ export function CharterDetail() {
             </section>
           )}
 
-          {/* ===== SECTION 3: TICKETS & PASSENGERS ===== */}
-          {activeTab === "tickets" && showTicketsTab && (
-            <MyCharterTicketsPanel
-              lang={lang}
-              booking={booking}
-              isPaid={isPaid || canShowCharterTicketsWithBalance(booking)}
-              isSubmitting={isSubmitting}
-              qrImageUrl={qrImageUrl}
-              selectedTicketIds={selectedTicketIds}
-              setSelectedTicketIds={setSelectedTicketIds}
-              passengerRows={passengerRows}
-              canUseContactAsSinglePassenger={canUseContactAsSinglePassenger}
-              bookerAsFirstPassenger={bookerAsFirstPassenger}
-              bookerName={getBookerPassengerName(booking, user)}
-              importInputRef={importInputRef}
-              isUsableText={isUsableText}
-              handleTicketFileAction={handleTicketFileAction}
-              handleImportPassengers={handleImportPassengers}
-              handlePassengerChange={handlePassengerChange}
-              handleSavePassengers={handleSavePassengers}
-              handleAddPassengers={handleAddPassengers}
-            />
-          )}
+          {/* ===== SECTION 3: TICKETS & PASSENGERS (merged into "tickets" tab above) ===== */}
         </main>
       </div>
 
@@ -2880,6 +2925,9 @@ export function CharterDetail() {
         currencyFormatter={currencyFormatter}
         openPaymentPage={openPaymentPage}
         handleCreatePayment={handleCreatePayment}
+        useAllPoints={useAllPoints}
+        pointsToUse={pointsToUse}
+        estimatedPayable={estimatedPayable}
       />
     </>
   );

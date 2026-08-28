@@ -4,6 +4,7 @@ import { notify } from "../utils/swalToast";
 import { getApiErrorMessage } from "../utils/apiError";
 import { sendContactMessage } from "../services/contactService";
 import { COMPANY_EMAIL } from "../data/homeData";
+import { RequiredStar } from "../utils/requiredStar";
 
 const INITIAL_FORM_STATE = {
   fullName: "",
@@ -78,7 +79,7 @@ export const ContactForm = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
-              {lang === "VN" ? "Họ và tên *" : "Full Name *"}
+              {lang === "VN" ? "Họ và tên" : "Full Name"}<RequiredStar />
             </label>
             <input
               type="text"
@@ -94,7 +95,7 @@ export const ContactForm = () => {
           </div>
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
-              {lang === "VN" ? "Địa chỉ Email *" : "Email Address *"}
+              {lang === "VN" ? "Địa chỉ Email" : "Email Address"}<RequiredStar />
             </label>
             <input
               type="email"
@@ -127,7 +128,7 @@ export const ContactForm = () => {
 
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
-            {lang === "VN" ? "Nội dung lời nhắn *" : "Message Contents *"}
+            {lang === "VN" ? "Nội dung lời nhắn" : "Message Contents"}<RequiredStar />
           </label>
           <textarea
             rows={4}

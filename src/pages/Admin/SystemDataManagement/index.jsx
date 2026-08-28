@@ -147,7 +147,7 @@ export function SystemDataManagement() {
   }, [canManage, categoryFilter, currentPage, keyword, lang, statusFilter]);
 
   if (!canManage) {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/reports/revenue" replace />;
   }
 
   const reloadCurrentPage = async () => {

@@ -7,9 +7,17 @@ L.TileLayer.prototype.options.referrerPolicy = "strict-origin-when-cross-origin"
 L.TileLayer.prototype.options.crossOrigin = true;
 
 // ───── Tile providers (ưu tiên → fallback) ─────
-// Chỉ dùng CartoDB Voyager — OSM tile server (.tile.openstreetmap.org) thường
-// xuyên block request từ VN/CN IP range với lý do "heavy usage".
+// Ưu tiên OpenStreetMap — miễn phí, ổn định, không cần API key.
+// CartoDB Voyager là fallback khi OSM bị quá tải.
 const TILE_PROVIDERS = [
+  {
+    name: "openstreetmap",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    subdomains: ["a", "b", "c"],
+    maxZoom: 19,
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  },
   {
     name: "cartodb-voyager",
     url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
@@ -20,14 +28,6 @@ const TILE_PROVIDERS = [
   },
 ];
 
-// ───── Smart fallback layer ─────
-// Strategy (với 1 provider):
-//   1. CartoDB Voyager có 4 subdomain (a/b/c/d) — spread load qua CDN.
-//   2. Khi tile fail:
-//      - Mark subdomain fail 5 phút → tránh spam subdomain đó.
-//      - Retry tile này với subdomain khác trong cùng provider.
-//      - Nếu cả 4 subdomain đều fail (hiếm) → tile đó hiển thị error,
-//        user reload sẽ thử lại.
 const FAILED_SUBDOMAIN_TTL_MS = 5 * 60 * 1000;
 
 class SmartFallbackLayer extends L.TileLayer {
@@ -83,9 +83,10 @@ class SmartFallbackLayer extends L.TileLayer {
 
   _buildTileUrl(coords) {
     const provider = this._providers[this._activeIdx];
+    const subdomain = coords._pickedSubdomain || "a";
     const r = coords.retina ? "@2x" : "";
     return provider.url
-      .replace("{s}", coords._pickedSubdomain)
+      .replace("{s}", subdomain)
       .replace("{z}", coords.z)
       .replace("{x}", coords.x)
       .replace("{y}", coords.y)

@@ -72,7 +72,7 @@ export function CreateBlog() {
     const hasPublishBlockingErrors = hasFieldErrors || Boolean(coverError);
 
     if (!canManage) {
-        return <Navigate to="/admin" replace />;
+        return <Navigate to="/admin/reports/revenue" replace />;
     }
 
     const handleFieldChange = (field, value) => {

@@ -1090,17 +1090,15 @@ export function CharterRequestForm({
                   min={formData.departureDate === initialDepartureDate ? "" : getMinDepartureDate()}
                   value={formData.departureDate}
                   onChange={(e) => handleFieldChange("departureDate", e.target.value)}
+                  disabled={mode === "edit"}
                   required
-                  className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800/50 dark:disabled:text-slate-500"
+                  placeholderClassName="text-slate-400 dark:text-slate-500"
                 />
-                {mode === "edit" && initialDepartureDate && formData.departureDate !== initialDepartureDate ? (
-                  <button
-                    type="button"
-                    onClick={() => handleFieldChange("departureDate", initialDepartureDate)}
-                    className="text-[11px] font-bold text-[#124757] dark:text-yellow-400 hover:underline text-left"
-                  >
-                    {lang === "VN" ? "↩ Khôi phục ngày gốc" : "↩ Restore original date"}
-                  </button>
+                {mode === "edit" ? (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {lang === "VN" ? "Ngày khởi hành không thể thay đổi khi chỉnh sửa yêu cầu." : "Departure date cannot be changed when editing a request."}
+                  </p>
                 ) : (
                   <p className="text-[11px] text-slate-400 mt-1">
                     {lang === "VN" ? "Ngày khởi hành cần cách hiện tại ít nhất 7 ngày." : "Departure date must be at least 7 days from today."}
@@ -1254,7 +1252,14 @@ export function CharterRequestForm({
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thứ tự" : "Order"}</label>
-                        <input type="number" min="0" value={stop.stopOrder} onChange={(e) => handleStopChange(index, "stopOrder", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={formData.itineraryStops.length <= 1}
+                          value={stop.stopOrder}
+                          onChange={(e) => handleStopChange(index, "stopOrder", e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-800/50 dark:disabled:text-slate-500"
+                        />
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thời gian dừng" : "Stay Minutes"}</label>
@@ -1437,7 +1442,7 @@ export function CharterRequestForm({
                 const conditionsHtml = buildInsuranceConditionsHtml(pkg.conditions, { lang, escapeHtml });
                 const termsHtml = pkg.termsUrl
                   ? `<a href="${safeTermsUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 14px;border-radius:12px;background:#124757;color:#fff;font-weight:800;font-size:12px;text-decoration:none;">${lang === "VN" ? "Mở điều khoản đầy đủ" : "Open full terms"}</a>`
-                  : `<p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">${lang === "VN" ? "Chưa có link điều khoản." : "No terms link available."}</p>`;
+                  : "";
 
                 notify({
                   dialog: true,
@@ -1577,6 +1582,7 @@ export function CharterRequestForm({
                   {(() => {
                     const declaredAdults = Number(formData.adultCount) || 0;
                     const declaredChildren = Number(formData.childCount) || 0;
+                    if (declaredAdults === 0 && declaredChildren === 0) return null;
                     const actualAdults = passengers.filter((p) => p?.type !== PASSENGER_TYPE_CHILD && p?.type !== "Child").length;
                     const actualChildren = passengers.filter((p) => p?.type === PASSENGER_TYPE_CHILD || p?.type === "Child").length;
                     const adultMatch = actualAdults === declaredAdults;
@@ -1586,49 +1592,49 @@ export function CharterRequestForm({
                     const chipMatch = "bg-emerald-500 text-white border-emerald-500 shadow-sm";
                     const chipMismatch = "bg-rose-500 text-white border-rose-500 shadow-sm";
                     return (
-                      <div className="flex items-center gap-2.5 px-1 py-1.5">
-                        <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full flex-shrink-0 border-2 shadow-md ${
-                          allMatch
-                            ? "bg-emerald-500 text-white border-emerald-400"
-                            : "bg-rose-500 text-white border-rose-400"
-                        }`}>
-                          <span className="material-symbols-outlined text-lg leading-none">
-                            {allMatch ? "check_circle" : "priority_high"}
+                        <div className="flex items-center gap-2.5 px-1 py-1.5">
+                          <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full flex-shrink-0 border-2 shadow-md ${
+                            allMatch
+                              ? "bg-emerald-500 text-white border-emerald-400"
+                              : "bg-rose-500 text-white border-rose-400"
+                          }`}>
+                            <span className="material-symbols-outlined text-lg leading-none">
+                              {allMatch ? "check_circle" : "priority_high"}
+                            </span>
                           </span>
-                        </span>
-                        <span className="text-xs font-headline font-black uppercase tracking-wider text-[#FFD100] whitespace-nowrap">
-                          {lang === "VN" ? "Hiện tại / Yêu cầu" : "Current / Required"}
-                        </span>
-                        <span className={`${chipBase} ${adultMatch ? chipMatch : chipMismatch}`}>
-                          <span className="material-symbols-outlined text-sm leading-none">
-                            {adultMatch ? "check_circle" : "person_off"}
+                          <span className="text-xs font-headline font-black uppercase tracking-wider text-[#FFD100] whitespace-nowrap">
+                            {lang === "VN" ? "Hiện tại / Yêu cầu" : "Current / Required"}
                           </span>
-                          <span className="opacity-90">{lang === "VN" ? "Người lớn" : "Adults"}</span>
-                          <span className="inline-flex items-baseline gap-0.5">
-                            <span className="text-sm font-black">{actualAdults}</span>
-                            <span className="opacity-70">/</span>
-                            <span className="opacity-90">{declaredAdults}</span>
+                          <span className={`${chipBase} ${adultMatch ? chipMatch : chipMismatch}`}>
+                            <span className="material-symbols-outlined text-sm leading-none">
+                              {adultMatch ? "check_circle" : "person_off"}
+                            </span>
+                            <span className="opacity-90">{lang === "VN" ? "Người lớn" : "Adults"}</span>
+                            <span className="inline-flex items-baseline gap-0.5">
+                              <span className="text-sm font-black">{actualAdults}</span>
+                              <span className="opacity-70">/</span>
+                              <span className="opacity-90">{declaredAdults}</span>
+                            </span>
                           </span>
-                        </span>
-                        <span className={`${chipBase} ${childMatch ? chipMatch : chipMismatch}`}>
-                          <span className="material-symbols-outlined text-sm leading-none">
-                            {childMatch ? "check_circle" : "person_off"}
+                          <span className={`${chipBase} ${childMatch ? chipMatch : chipMismatch}`}>
+                            <span className="material-symbols-outlined text-sm leading-none">
+                              {childMatch ? "check_circle" : "person_off"}
+                            </span>
+                            <span className="opacity-90">{lang === "VN" ? "Trẻ em" : "Children"}</span>
+                            <span className="inline-flex items-baseline gap-0.5">
+                              <span className="text-sm font-black">{actualChildren}</span>
+                              <span className="opacity-70">/</span>
+                              <span className="opacity-90">{declaredChildren}</span>
+                            </span>
                           </span>
-                          <span className="opacity-90">{lang === "VN" ? "Trẻ em" : "Children"}</span>
-                          <span className="inline-flex items-baseline gap-0.5">
-                            <span className="text-sm font-black">{actualChildren}</span>
-                            <span className="opacity-70">/</span>
-                            <span className="opacity-90">{declaredChildren}</span>
-                          </span>
-                        </span>
-                        {!allMatch && (
-                          <span className="text-[11px] whitespace-nowrap font-extrabold uppercase tracking-wide text-rose-300 ml-auto">
-                            {lang === "VN" ? "Chưa khớp yêu cầu!" : "Mismatch!"}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
+                          {!allMatch && (
+                            <span className="text-[11px] whitespace-nowrap font-extrabold uppercase tracking-wide text-rose-300 ml-auto">
+                              {lang === "VN" ? "Chưa khớp yêu cầu!" : "Mismatch!"}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   <div className={`flex items-center text-[10px] font-headline font-black uppercase tracking-wider ${t.sectionSubtitle}`}>
                     <span>{lang === "VN" ? `Tổng cộng ${passengers.length} hành khách` : `${passengers.length} passengers in total`}</span>
                   </div>

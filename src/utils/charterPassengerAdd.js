@@ -1,5 +1,5 @@
 import { getBoatSeatCount, normalizeCharterScheduleDate, normalizeCharterScheduleTime, pick } from "./charterBookingAdmin";
-import { getPassengerBirthYear, hasCharterPassengerName, isCharterFullyPaid } from "./charterBookingTickets";
+import { getPassengerBirthYear, hasCharterPassengerName, hasCharterDepositOrFullPaid } from "./charterBookingTickets";
 
 /** BE: mỗi charter booking chỉ được gửi yêu cầu thêm hành khách 1 lần. */
 export const CHARTER_MAX_PASSENGER_ADD_ATTEMPTS = 1;
@@ -115,8 +115,12 @@ export const getCharterBoatCapacity = (booking) => {
 };
 
 export const listBookingPassengers = (booking) => {
-  if (Array.isArray(booking?.passengers) && booking.passengers.length > 0) return booking.passengers;
-  if (Array.isArray(booking?.tickets) && booking.tickets.length > 0) return booking.tickets;
+  const passengers = Array.isArray(booking?.passengers) ? booking.passengers : [];
+  const tickets = Array.isArray(booking?.tickets) ? booking.tickets : [];
+  if (passengers.some(hasCharterPassengerName)) return passengers;
+  if (tickets.some(hasCharterPassengerName)) return tickets;
+  if (passengers.length > 0) return passengers;
+  if (tickets.length > 0) return tickets;
   return [];
 };
 
@@ -217,12 +221,15 @@ export const hasCharterAttendanceStarted = (booking) => {
   });
 };
 
+export const CHARTER_PASSENGER_ADD_WINDOW_HOURS = 48;
+export const CHARTER_PASSENGER_ADD_PAYMENT_DEADLINE_HOURS = 12;
+
 export const isWithinPassengerAddWindow = (booking, now = Date.now()) => {
   const departure = getCharterDepartureDateTime(booking);
   if (!departure) return false;
   const msLeft = departure.getTime() - now;
-  // Được thêm khi còn hơn 24 giờ trước giờ đi — khóa trong 24h cuối / sau giờ đi.
-  return msLeft > 24 * 60 * 60 * 1000;
+  // Được thêm khi còn hơn 48 giờ trước giờ đi — khóa trong 48h cuối / sau giờ đi (contract BE).
+  return msLeft > CHARTER_PASSENGER_ADD_WINDOW_HOURS * 60 * 60 * 1000;
 };
 
 export const getCharterPassengerAddSummary = (booking) => {
@@ -265,10 +272,10 @@ export const getPassengerAddBlockedReason = (booking, lang = "VN") => {
       ? "Chỉ thêm hành khách khi chuyến đã được xác nhận."
       : "Passengers can only be added after the trip is confirmed.";
   }
-  if (!isCharterFullyPaid(booking)) {
+  if (!hasCharterDepositOrFullPaid(booking)) {
     return lang === "VN"
-      ? "Cần thanh toán đủ trước khi thêm hành khách."
-      : "The booking must be fully paid before adding passengers.";
+      ? "Cần đặt cọc hoặc thanh toán trước khi thêm hành khách."
+      : "A deposit or full payment is required before adding passengers.";
   }
   if (hasCharterAttendanceStarted(booking)) {
     return lang === "VN"
@@ -309,12 +316,15 @@ export const getPassengerAddBlockedReason = (booking, lang = "VN") => {
     : "Passengers can’t be added right now.";
 };
 
-/** Customer: hiện nút thêm HK theo contract BE (Paid) + rule nghiệp vụ. */
+/** Customer: hiện nút thêm HK theo contract BE. */
 export const canCustomerRequestAddPassengers = (booking) => {
   if (!booking?.id) return false;
-  if (String(booking.status || "") !== "Confirmed") return false;
-  if (!isCharterFullyPaid(booking)) return false;
-  if (TERMINAL_STATUSES.has(String(booking.status || ""))) return false;
+  // BE: chỉ mở khi booking Confirmed (Approved cũng là Confirmed hậu duyệt thêm HK).
+  const status = String(booking.status || "");
+  if (status !== "Confirmed" && status !== "Approved") return false;
+  // Đã đặt cọc hoặc thanh toán đủ mới được thêm HK (rule nghiệp vụ).
+  if (!hasCharterDepositOrFullPaid(booking)) return false;
+  if (TERMINAL_STATUSES.has(status)) return false;
   if (hasCharterAttendanceStarted(booking)) return false;
   if (!isWithinPassengerAddWindow(booking)) return false;
 
@@ -322,6 +332,18 @@ export const canCustomerRequestAddPassengers = (booking) => {
   if (summary.remainingAddAttempts <= 0) return false;
   if (summary.boatCapacity > 0 && summary.canAddMore <= 0) return false;
   return true;
+};
+
+/** Customer: còn yêu cầu thêm HK nào đang chờ duyệt không (per-passenger status). */
+export const hasPendingAddPassengerRequests = (booking) => {
+  const rows = listBookingPassengers(booking);
+  return rows.some((row) => {
+    if (!hasCharterPassengerName(row)) return false;
+    if (!pick(row, ["requestBatchId", "passengerAddRequestId", "addRequestId", "batchId"], "")) return false;
+    return normalizePassengerApprovalStatus(
+      pick(row, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], ""),
+    ) === "Pending";
+  });
 };
 
 export const canReviewPassengerAddRequests = (capabilities = {}) =>

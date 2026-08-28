@@ -83,7 +83,7 @@ export function AssistantPromptManagement() {
   }, [canManage]);
 
   if (!canManage) {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/reports/revenue" replace />;
   }
 
   const isDirty = promptState ? content !== (promptState.content || "") : false;

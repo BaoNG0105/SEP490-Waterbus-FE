@@ -95,7 +95,7 @@ export function EditSystemData() {
   }, [id]);
 
   if (!canManage) {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/reports/revenue" replace />;
   }
 
   const updateField = (field, value) => {

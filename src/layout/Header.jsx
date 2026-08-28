@@ -94,8 +94,8 @@ export const Header = ({ isNoticeVisible }) => {
   // Kiểm tra quyền quản trị để hiển thị nút chuyển đến trang Admin Dashboard
   const adminRoles = ["ADMIN", "STAFF", "MANAGER"];
   const isAdminUser = isAuthenticated && user?.roles?.some((role) => adminRoles.includes(role.systemName));
-  // Dashboard "/admin" giờ chỉ dành riêng Admin — Manager/Staff bấm nút này vào thẳng trang
-  // quản lý đầu tiên họ có quyền xem (xem AdminSidebar.jsx).
+  // Sau đăng nhập Admin/Manager/Staff được đưa về Dashboard (/admin/reports/revenue)
+  // hoặc trang đầu tiên họ có quyền xem.
   const adminEntryPath = getDefaultAdminLandingPath(user);
 
   // Logic tự động đăng xuất sau 30p bảo mật

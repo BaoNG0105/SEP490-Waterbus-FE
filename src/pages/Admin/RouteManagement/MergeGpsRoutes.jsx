@@ -12,6 +12,7 @@ import {
 } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
 import { REGISTRATION_NUMBER_REGEX } from "../../../utils/boatValidation";
+import { required } from "../../../utils/requiredStar";
 
 const getRouteId = (route) => String(route?.routeId || route?.id || "");
 
@@ -255,7 +256,7 @@ export function MergeGpsRoutes() {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Mã tuyến (*)" : "Route code (*)"}</label>
+              <label className={labelStyle}>{lang === "VN" ? "Mã tuyến" : "Route code"}{required()}</label>
               <input
                 required
                 value={formData.routeCode}
@@ -267,7 +268,7 @@ export function MergeGpsRoutes() {
               {visibleFieldErrors.routeCode && <p className={errorTextStyle}>{visibleFieldErrors.routeCode}</p>}
             </div>
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Tên tuyến (*)" : "Route name (*)"}</label>
+              <label className={labelStyle}>{lang === "VN" ? "Tên tuyến" : "Route name"}{required()}</label>
               <input
                 required
                 value={formData.routeName}

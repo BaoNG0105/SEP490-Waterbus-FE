@@ -1,5 +1,5 @@
 // Helpers riêng cho báo cáo doanh thu (GET /reports/revenue) — số liệu theo Payments đã Paid.
-import { categorical } from "./chartPalette";
+import { categorical, pickColor } from "./chartPalette";
 
 // Rút gọn số tiền lớn để hiện trên trục/nhãn biểu đồ (1.535.000 -> "1,5tr"); giá trị đầy đủ
 // vẫn dùng formatCurrency (bookingReport.js) ở tooltip/thẻ số liệu.
@@ -30,5 +30,36 @@ const paymentMethodColorByKey = {
   Free: categorical[3],
 };
 
-export const getServiceTypeColor = (key) => serviceTypeColorByKey[key] || categorical[4];
-export const getPaymentMethodColor = (key) => paymentMethodColorByKey[key] || categorical[4];
+// Trả thẳng chuỗi màu theo theme (SVG fill/stroke cần string, không phải object).
+export const getServiceTypeColor = (key, isDarkMode = false) =>
+  pickColor(serviceTypeColorByKey[key] || categorical[4], isDarkMode);
+export const getPaymentMethodColor = (key, isDarkMode = false) =>
+  pickColor(paymentMethodColorByKey[key] || categorical[4], isDarkMode);
+
+export const getPaymentMethodLabel = (key, lang = "VN") => {
+  const labels = {
+    Cash: { VN: "Tiền mặt", EN: "Cash" },
+    PayOS: { VN: "PayOS", EN: "PayOS" },
+    Free: { VN: "Miễn phí", EN: "Free" },
+  };
+  return labels[key]?.[lang] || key || "";
+};
+
+// Đảm bảo donut luôn render đủ các category (kể cả khi API trả về thiếu hoặc value = 0).
+// - masterKeys: danh sách key đầy đủ cần hiển thị.
+// - getLabel / getColor: map key -> label/color.
+// - items: mảng segment từ API (mỗi item có key + value).
+// Kết quả: mảng segments đủ slot, segment nào API không trả về sẽ value = 0.
+export const normalizeSegments = ({ items, masterKeys, getLabel, getColor, lang, isDarkMode }) => {
+  const safeItems = Array.isArray(items) ? items : [];
+  const present = new Map(safeItems.map((it) => [it.key, it]));
+  return masterKeys.map((key) => {
+    const it = present.get(key);
+    return {
+      key,
+      label: getLabel(key, lang),
+      value: Number(it?.netRevenue ?? it?.value ?? 0) || 0,
+      color: getColor(key, isDarkMode),
+    };
+  });
+};

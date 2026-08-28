@@ -65,13 +65,23 @@ export const getCharterCancelledPaymentSubLabel = (paymentStatus, lang) => {
   return isVn ? "Chưa thanh toán" : "Unpaid";
 };
 
-export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang) => {
+export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang, booking) => {
   const status = String(bookingStatus || "").toLowerCase().replace(/[_-\s]/g, "");
   const payment = String(paymentStatus || "").toLowerCase().replace(/[_-\s]/g, "");
   const isVn = lang === "VN";
   const isCancelled = ["cancelled", "canceled", "cancel"].includes(status);
   const isRefundedPayment = ["refunded", "partiallyrefunded"].includes(payment);
   const cancelledLabel = isVn ? "Đã hủy" : "Cancelled";
+
+  // BE đôi khi trả paymentStatus="Paid" cho cả booking mới đặt cọc (còn dư nợ).
+  // Tránh hiển thị "Đã thanh toán" khi còn balance dương — hiện "Đã đặt cọc" thay thế.
+  const hasRemainingBalance = Boolean(
+    booking
+    && (
+      booking.hasDepositPaid === true
+      || Number(booking.charterBalanceDue ?? booking.balanceDue ?? 0) > 0
+    ),
+  );
 
   // Trạng thái chính luôn "Đã hủy"; chi tiết thanh toán/hoàn tiền ở dòng phụ.
   if (isCancelled || status === "refunded" || isRefundedPayment) {
@@ -95,14 +105,24 @@ export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang) 
     return { label: isVn ? "Đã báo giá" : "Quoted", ...baseClasses.quoted };
   }
   if (status === "confirmed" && payment === "depositpaid") {
-    return { label: isVn ? "Đã xác nhận" : "Confirmed", ...baseClasses.pendingPayment };
+    return { label: isVn ? "Đã đặt cọc" : "Deposit paid", ...baseClasses.pendingPayment };
   }
-  // Chỉ hiện "Đã thanh toán" khi còn Confirmed và payment vẫn Paid (chưa hủy/hoàn).
+  // Chỉ hiện "Đã xác nhận" khi còn Confirmed và payment vẫn Paid (chưa hủy/hoàn).
+  // Nếu còn dư nợ (đã đặt cọc nhưng chưa thanh toán hết), hiển thị "Đã đặt cọc".
   if (status === "confirmed" && payment === "paid") {
-    return { label: isVn ? "Đã thanh toán" : "Paid", ...baseClasses.completed };
+    if (hasRemainingBalance) {
+      return { label: isVn ? "Đã đặt cọc" : "Deposit paid", ...baseClasses.pendingPayment };
+    }
+    return { label: isVn ? "Đã xác nhận" : "Confirmed", ...baseClasses.confirmed };
   }
   if (status === "pendingpayment") {
     return { label: isVn ? "Chờ thanh toán" : "Pending payment", ...baseClasses.pendingPayment };
+  }
+  if (status === "approved") {
+    return { label: isVn ? "Đã duyệt" : "Approved", ...baseClasses.quoted };
+  }
+  if (status === "pendingapproval") {
+    return { label: isVn ? "Chờ duyệt" : "Pending approval", ...baseClasses.pendingQuote };
   }
   if (status === "quoted") {
     return { label: isVn ? "Đã báo giá" : "Quoted", ...baseClasses.quoted };

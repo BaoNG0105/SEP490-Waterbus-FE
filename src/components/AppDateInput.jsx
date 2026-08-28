@@ -106,6 +106,7 @@ export function AppDateInput({
   id,
   className = "",
   placeholder,
+  placeholderClassName = "",
 }) {
   const { lang } = useApp();
   const isVn = lang === "VN";
@@ -401,7 +402,7 @@ export function AppDateInput({
           }}
           className={`h-full min-w-0 flex-1 bg-transparent text-inherit leading-none outline-none ${
             isInvalid ? "text-rose-600 dark:text-rose-400" : ""
-          }`}
+          } ${disabled ? `placeholder:text-slate-400 dark:placeholder:text-slate-500 ${placeholderClassName}` : ""}`}
         />
         <button
           type="button"

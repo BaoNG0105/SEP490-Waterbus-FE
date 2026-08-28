@@ -11,8 +11,7 @@ import {
   isRouteSelectableForPromotion,
 } from "../../../services/promotionService";
 
-const labelStyle =
-  "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
+import { required, RequiredStar } from "../../../utils/requiredStar";
 const inputStyle =
   "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
 
@@ -512,7 +511,7 @@ export function PromotionFormFields({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div data-field="promotionCode">
             <label className={labelStyle}>
-              {lang === "VN" ? "Mã khuyến mãi (*)" : "Promotion Code (*)"}
+              {<>{lang === "VN" ? "Mã khuyến mãi" : "Promotion Code"}{required()}</>}
             </label>
             <input
               type="text"
@@ -540,7 +539,7 @@ export function PromotionFormFields({
           </div>
           <div data-field="promotionName">
             <label className={labelStyle}>
-              {lang === "VN" ? "Tên khuyến mãi (*)" : "Promotion Name (*)"}
+              {<>{lang === "VN" ? "Tên khuyến mãi" : "Promotion Name"}{required()}</>}
             </label>
             <input
               type="text"
@@ -641,14 +640,12 @@ export function PromotionFormFields({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-stretch">
           <RequiredNumberField
             lang={lang}
-            labelVn={
-              isPercent ? "Phần trăm giảm (%) (*)" : "Số tiền giảm (VND) (*)"
-            }
-            labelEn={
-              isPercent
-                ? "Discount Percent (%) (*)"
-                : "Discount Amount (VND) (*)"
-            }
+            labelVn={isPercent
+              ? <span>Phần trăm giảm (%)<RequiredStar /></span>
+              : <span>Số tiền giảm (VND)<RequiredStar /></span>}
+            labelEn={isPercent
+              ? <span>Discount Percent (%)<RequiredStar /></span>
+              : <span>Discount Amount (VND)<RequiredStar /></span>}
             value={formData.discountValue}
             onChange={(v) => setField("discountValue", v)}
             error={errors.discountValue}
@@ -847,7 +844,7 @@ export function PromotionFormFields({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div data-field="validFrom">
-            <label className={labelStyle}>{lang === "VN" ? "Hiệu lực từ (*)" : "Valid from (*)"}</label>
+            <label className={labelStyle}>{<>{lang === "VN" ? "Hiệu lực từ" : "Valid from"}{required()}</>}</label>
             <input
               type="datetime-local"
               required
@@ -859,7 +856,7 @@ export function PromotionFormFields({
             <FieldError error={errors.validFrom} />
           </div>
           <div data-field="validTo">
-            <label className={labelStyle}>{lang === "VN" ? "Hiệu lực đến (*)" : "Valid to (*)"}</label>
+            <label className={labelStyle}>{<>{lang === "VN" ? "Hiệu lực đến" : "Valid to"}{required()}</>}</label>
             <input
               type="datetime-local"
               required

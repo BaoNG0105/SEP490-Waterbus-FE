@@ -27,7 +27,7 @@ export function StaffHub() {
   const effectiveView = !canAccounts && canAssignments ? "assignments" : view;
 
   if (!canAccounts && !canAssignments) {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/reports/revenue" replace />;
   }
 
   const setView = (next) => {

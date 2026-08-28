@@ -21,6 +21,8 @@ export const paymentStatusOptions = [
   { value: "Paid", labelVn: "Đã thanh toán", labelEn: "Paid" },
   { value: "Refunded", labelVn: "Đã hoàn tiền", labelEn: "Refunded", requestOnly: true },
   { value: "PartiallyRefunded", labelVn: "Hoàn tiền một phần", labelEn: "Partially Refunded", requestOnly: true },
+  { value: "PendingApproval", labelVn: "Chờ phê duyệt", labelEn: "Pending Approval" },
+  { value: "Approved", labelVn: "Đã phê duyệt", labelEn: "Approved" },
 ];
 
 export const serviceTypeOptions = [
@@ -60,6 +62,8 @@ const paymentStatusStyles = {
   Paid: "text-emerald-600 dark:text-emerald-400",
   Refunded: "text-violet-600 dark:text-violet-400",
   PartiallyRefunded: "text-violet-600 dark:text-violet-400",
+  PendingApproval: "text-amber-600 dark:text-amber-400",
+  Approved: "text-sky-600 dark:text-sky-400",
 };
 
 const findLabel = (options, value) => options.find((o) => o.value === value);
@@ -94,7 +98,8 @@ export const getBookingStatusClass = (status) =>
 export const getPaymentStatusClass = (status) =>
   paymentStatusStyles[status] || "text-slate-500 dark:text-slate-400";
 
-export const formatCurrency = (value) => `${(Number(value) || 0).toLocaleString("vi-VN")} VND`;
+export const formatCurrency = (value, _lang) =>
+    `${(Math.round(Number(value) || 0)).toLocaleString("vi-VN")} VND`;
 
 export const formatDateTime = (value) => {
   if (!value) return "--";

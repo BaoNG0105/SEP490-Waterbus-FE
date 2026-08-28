@@ -32,6 +32,9 @@ const TICKET_SECTIONS = [
 ];
 
 const ROUNDING_DISPLAY = 1000;
+const MAX_TICKET_PRICE_VND = 100_000_000;
+const MAX_DISTANCE_FARE_PER_KM_VND = 1_000_000;
+const MAX_RENTAL_PRICE_VND = 1_000_000_000;
 
 const formatVnd = (value) => {
   const n = Number(value);
@@ -55,13 +58,18 @@ const labelStyle = "mb-1.5 block text-[10px] font-bold uppercase tracking-wider 
 
 const digitsOnly = (value) => String(value ?? "").replace(/\D/g, "");
 
+const isWholeVndInRange = (value, min, max) => {
+  const amount = Number(value);
+  return Number.isInteger(amount) && amount >= min && amount <= max;
+};
+
 const groupThousands = (value) => {
   const digits = digitsOnly(value);
   return digits ? Number(digits).toLocaleString("vi-VN") : "";
 };
 
 /** Ô nhập tiền: gõ số trần, hiển thị có dấu chấm, trả về chuỗi chỉ gồm chữ số. */
-function MoneyInput({ value, onChange, className = "", wrapperClassName = "w-full", suffix = "VND", ...rest }) {
+function MoneyInput({ value, onChange, max, className = "", wrapperClassName = "w-full", suffix = "VND", ...rest }) {
   return (
     <div className={`relative ${wrapperClassName}`}>
       <input
@@ -69,7 +77,10 @@ function MoneyInput({ value, onChange, className = "", wrapperClassName = "w-ful
         type="text"
         inputMode="numeric"
         value={groupThousands(value)}
-        onChange={(e) => onChange(digitsOnly(e.target.value))}
+        onChange={(e) => {
+          const next = digitsOnly(e.target.value);
+          if (!next || max == null || Number(next) <= max) onChange(next);
+        }}
         className={`${className} ${suffix ? (String(suffix).length > 3 ? "pr-16" : "pr-12") : ""} text-right tabular-nums`}
       />
       {suffix ? (
@@ -90,6 +101,9 @@ function SeatTypesTab({ lang, onGoToDistanceTab, deckMode = "deck1", concessionP
   const [draftPrice, setDraftPrice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const showConcessionCol = deckMode === "deck2";
+  const draftPriceError = String(draftPrice).trim() && !isWholeVndInRange(draftPrice, 0, MAX_TICKET_PRICE_VND)
+    ? (lang === "VN" ? "Nhập số nguyên từ 0 đến 100.000.000 VND." : "Enter a whole number from 0 to 100,000,000 VND.")
+    : "";
 
   const load = async () => {
     try {
@@ -154,11 +168,11 @@ function SeatTypesTab({ lang, onGoToDistanceTab, deckMode = "deck1", concessionP
       return;
     }
     const price = Number(draftPrice);
-    if (!Number.isFinite(price) || price <= 1000) {
+    if (!isWholeVndInRange(price, 0, MAX_TICKET_PRICE_VND)) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Giá không hợp lệ" : "Invalid price",
-        text: lang === "VN" ? "Giá gốc phải lớn hơn 1.000 VND." : "Base price must be greater than 1,000 VND.",
+        text: lang === "VN" ? "Giá ghế phải là số nguyên từ 0 đến 100.000.000 VND." : "Seat price must be a whole number from 0 to 100,000,000 VND.",
       });
       return;
     }
@@ -254,13 +268,17 @@ function SeatTypesTab({ lang, onGoToDistanceTab, deckMode = "deck1", concessionP
                       <td className="px-4 py-3.5 font-bold text-slate-700 dark:text-slate-200">{row.name}</td>
                       <td className="px-4 py-3.5">
                         {editing ? (
-                          <MoneyInput
-                            value={draftPrice}
-                            onChange={setDraftPrice}
-                            wrapperClassName="w-36"
-                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-600 dark:bg-slate-900 dark:text-white"
-                            autoFocus
-                          />
+                          <div>
+                            <MoneyInput
+                              value={draftPrice}
+                              onChange={setDraftPrice}
+                              max={MAX_TICKET_PRICE_VND}
+                              wrapperClassName="w-36"
+                              className={`w-full rounded-lg border bg-white px-3 py-2 text-xs font-black outline-none focus:ring-2 focus:ring-[#FFD100] dark:bg-slate-900 dark:text-white ${draftPriceError ? "border-rose-500" : "border-slate-200 dark:border-slate-600"}`}
+                              autoFocus
+                            />
+                            {draftPriceError ? <p className="mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">{draftPriceError}</p> : null}
+                          </div>
                         ) : locked ? (
                           <span className="text-[11px] font-bold text-slate-400">
                             {lang === "VN" ? "Theo km" : "Per km"}
@@ -340,6 +358,12 @@ function DistanceFareTab({ lang }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const baseFareError = String(form.baseFare ?? "").trim() && !isWholeVndInRange(form.baseFare, 0, MAX_TICKET_PRICE_VND)
+    ? (lang === "VN" ? "Nhập số nguyên từ 0 đến 100.000.000 VND." : "Enter a whole number from 0 to 100,000,000 VND.")
+    : "";
+  const pricePerKmError = String(form.pricePerKm ?? "").trim() && !isWholeVndInRange(form.pricePerKm, 1, MAX_DISTANCE_FARE_PER_KM_VND)
+    ? (lang === "VN" ? "Nhập số nguyên từ 1 đến 1.000.000 VND/km." : "Enter a whole number from 1 to 1,000,000 VND/km.")
+    : "";
 
   const load = async () => {
     try {
@@ -380,20 +404,20 @@ function DistanceFareTab({ lang }) {
       return;
     }
     const baseFare = Number(form.baseFare);
-    if (!Number.isFinite(baseFare) || baseFare <= 1000) {
+    if (!isWholeVndInRange(baseFare, 0, MAX_TICKET_PRICE_VND)) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Giá cơ bản không hợp lệ" : "Invalid base fare",
-        text: lang === "VN" ? "Giá cơ bản phải lớn hơn 1.000 VND." : "Base fare must be greater than 1,000 VND.",
+        text: lang === "VN" ? "Giá cơ bản phải là số nguyên từ 0 đến 100.000.000 VND." : "Base fare must be a whole number from 0 to 100,000,000 VND.",
       });
       return;
     }
     const pricePerKm = Number(form.pricePerKm);
-    if (!Number.isFinite(pricePerKm) || pricePerKm <= 0) {
+    if (!isWholeVndInRange(pricePerKm, 1, MAX_DISTANCE_FARE_PER_KM_VND)) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Giá/km không hợp lệ" : "Invalid price per km",
-        text: lang === "VN" ? "Giá/km phải lớn hơn 0." : "Price per km must be greater than 0.",
+        text: lang === "VN" ? "Giá/km phải là số nguyên lớn hơn 0 và không quá 1.000.000 VND/km." : "Price per km must be a whole number above 0 and no more than 1,000,000 VND/km.",
       });
       return;
     }
@@ -448,8 +472,10 @@ function DistanceFareTab({ lang }) {
                   required
                   value={form.baseFare}
                   onChange={(next) => setForm((prev) => ({ ...prev, baseFare: next }))}
-                  className={inputStyle}
+                  max={MAX_TICKET_PRICE_VND}
+                  className={`${inputStyle} ${baseFareError ? "border-rose-500 focus:ring-rose-500" : ""}`}
                 />
+                {baseFareError ? <p className="mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">{baseFareError}</p> : null}
               </div>
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Giá / km" : "Price per km"}</label>
@@ -457,9 +483,11 @@ function DistanceFareTab({ lang }) {
                   required
                   value={form.pricePerKm}
                   onChange={(next) => setForm((prev) => ({ ...prev, pricePerKm: next }))}
-                  className={inputStyle}
+                  max={MAX_DISTANCE_FARE_PER_KM_VND}
+                  className={`${inputStyle} ${pricePerKmError ? "border-rose-500 focus:ring-rose-500" : ""}`}
                   suffix="VND/km"
                 />
+                {pricePerKmError ? <p className="mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">{pricePerKmError}</p> : null}
               </div>
               <div className="flex items-end">
                 <button
@@ -954,6 +982,14 @@ function SightseeingConcessionTab({ lang, onPercentChange }) {
   }, [lang]);
 
   const discountPercent = Number(percent);
+  const percentError = String(percent).trim() && (
+    !Number.isFinite(discountPercent)
+    || discountPercent < 0
+    || discountPercent > 100
+    || !/^\d+(?:\.\d{1,2})?$/.test(String(percent))
+  )
+    ? (lang === "VN" ? "Nhập từ 0 đến 100%, tối đa 2 chữ số thập phân." : "Enter 0–100%, with at most 2 decimal places.")
+    : "";
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -965,11 +1001,11 @@ function SightseeingConcessionTab({ lang, onPercentChange }) {
       });
       return;
     }
-    if (!Number.isFinite(discountPercent) || discountPercent <= 0 || discountPercent > 100) {
+    if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100 || !/^\d+(?:\.\d{1,2})?$/.test(String(percent))) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Mức giảm không hợp lệ" : "Invalid discount",
-        text: lang === "VN" ? "Nhập số lớn hơn 0 và tối đa 100." : "Enter a number greater than 0, up to 100.",
+        text: lang === "VN" ? "Nhập từ 0 đến 100%, tối đa 2 chữ số thập phân." : "Enter 0–100%, with at most 2 decimal places.",
       });
       return;
     }
@@ -1020,24 +1056,28 @@ function SightseeingConcessionTab({ lang, onPercentChange }) {
           <div className="flex items-center gap-2">
             <div className="relative w-24">
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 min={0}
                 max={100}
                 step={1}
                 value={percent}
                 onChange={(e) => {
                   const next = e.target.value;
-                  setPercent(next);
+                  if (!/^\d*(?:\.\d{0,2})?$/.test(next)) return;
                   const n = Number(next);
-                  if (Number.isFinite(n) && n >= 0 && n <= 100) onPercentChange?.(n);
+                  if (next && (!Number.isFinite(n) || n > 100)) return;
+                  setPercent(next);
+                  if (next && Number.isFinite(n)) onPercentChange?.(n);
                 }}
-                className={`${inputStyle} pr-8 text-right tabular-nums`}
+                className={`${inputStyle} pr-8 text-right tabular-nums ${percentError ? "border-rose-500 focus:ring-rose-500" : ""}`}
                 aria-label={lang === "VN" ? "Mức giảm %" : "Discount %"}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">
                 %
               </span>
             </div>
+            {percentError ? <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400">{percentError}</p> : null}
             <button
               type="submit"
               disabled={isSaving}
@@ -1136,11 +1176,11 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
       return;
     }
     const unitPrice = Number(draft.unitPrice);
-    if (!Number.isFinite(unitPrice) || unitPrice <= 1000) {
+    if (!isWholeVndInRange(unitPrice, 0, MAX_RENTAL_PRICE_VND)) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Giá không hợp lệ" : "Invalid price",
-        text: lang === "VN" ? "Giá thuê phải lớn hơn 1.000 VND." : "Unit price must be greater than 1,000 VND.",
+        text: lang === "VN" ? "Giá thuê phải là số nguyên từ 0 đến 1.000.000.000 VND." : "Unit price must be a whole number from 0 to 1,000,000,000 VND.",
       });
       return;
     }
@@ -1192,6 +1232,9 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
   const renderPolicyRow = (row) => {
     const draft = drafts[row.charterBoatRentalPricePolicyId] || {};
     const busy = savingKey === row.charterBoatRentalPricePolicyId;
+    const unitPriceError = String(draft.unitPrice ?? "").trim() && !isWholeVndInRange(draft.unitPrice, 0, MAX_RENTAL_PRICE_VND)
+      ? (lang === "VN" ? "Nhập số nguyên từ 0 đến 1.000.000.000 VND." : "Enter a whole number from 0 to 1,000,000,000 VND.")
+      : "";
     const unitLabel = row.rentalUnit === RENTAL_PRICE_UNITS.DAY
       ? (lang === "VN" ? "Ngày" : "Day")
       : (lang === "VN" ? "Giờ" : "Hour");
@@ -1203,10 +1246,12 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
           <MoneyInput
             value={draft.unitPrice ?? ""}
             onChange={(next) => patchDraft(row.charterBoatRentalPricePolicyId, { unitPrice: next })}
+            max={MAX_RENTAL_PRICE_VND}
             wrapperClassName="w-full max-w-[180px]"
-            className={inputStyle}
+            className={`${inputStyle} ${unitPriceError ? "border-rose-500 focus:ring-rose-500" : ""}`}
             suffix=""
           />
+          {unitPriceError ? <p className="mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">{unitPriceError}</p> : null}
         </td>
         <td className="w-18 px-4 py-3">
           <span className="inline-flex h-10.5 w-14 items-center justify-center text-[11px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">

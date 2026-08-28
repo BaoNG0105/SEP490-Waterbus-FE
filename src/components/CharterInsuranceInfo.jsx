@@ -122,8 +122,7 @@ export function CharterInsuranceInfo({
   };
 
   return (
-    <div className={`rounded-3xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900 ${className}`}>
-      <div className="flex items-center justify-between gap-3">
+    <div className={`rounded-3xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-700 dark:bg-slate-900 ${className}`}>      <div className="flex items-center justify-between gap-3">
         <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
           {isVn ? "Bảo hiểm hành khách" : "Passenger insurance"}
         </p>

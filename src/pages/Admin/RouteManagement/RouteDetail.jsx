@@ -14,6 +14,7 @@ import { WaterwayMap } from "../../../components/WaterwayMap";
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
 import { getRouteKindLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
+import { required } from "../../../utils/requiredStar";
 
 export function RouteDetail() {
     const { lang } = useApp();
@@ -249,7 +250,7 @@ export function RouteDetail() {
                         </div>
                     </div>
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Tên tuyến đường (*)" : "Route Name (*)"}</label>
+                        <label className={labelStyle}>{<>{lang === "VN" ? "Tên tuyến đường" : "Route Name"}{required()}</>}</label>
                         <input
                             type="text" required value={routeForm.routeName}
                             onChange={(e) => handleRouteFormChange("routeName", e.target.value)}

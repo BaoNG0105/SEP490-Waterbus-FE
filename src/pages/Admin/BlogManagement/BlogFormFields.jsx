@@ -1,6 +1,7 @@
 import { BLOG_CATEGORY } from "../../../services/blogService";
 import { RichTextEditor } from "../../../components/RichTextEditor";
 import { BlogCoverField } from "../../../components/BlogCoverField";
+import { required } from "../../../utils/requiredStar";
 
 const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
 const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
@@ -40,7 +41,7 @@ export function BlogFormFields({
                     </h3>
 
                     <div>
-                        <label className={labelStyle}>{lang === "VN" ? "Tiêu đề (*)" : "Title (*)"}</label>
+                        <label className={labelStyle}>{<>{lang === "VN" ? "Tiêu đề" : "Title"}{required()}</>}</label>
                         <input
                             type="text"
                             required
@@ -116,7 +117,7 @@ export function BlogFormFields({
                     {lang === "VN" ? "Nội dung bài viết" : "Post Content"}
                 </h3>
                 <div onBlur={() => handleBlur("content")}>
-                    <label className={labelStyle}>{lang === "VN" ? "Nội dung bài viết (*)" : "Article content (*)"}</label>
+                    <label className={labelStyle}>{<>{lang === "VN" ? "Nội dung bài viết" : "Article content"}{required()}</>}</label>
                     <RichTextEditor
                         value={formData.content}
                         onChange={(html) => setField("content", html)}

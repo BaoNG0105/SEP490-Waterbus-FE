@@ -11,7 +11,9 @@ import {
   getTripCreateLeadTimeError,
   isSingleTripCreateCase,
   previewRoundTripScheduleBatch,
+  previewOneWayScheduleBatch,
   scheduleRoundTripSelection,
+  scheduleOneWaySelection,
   scheduleTripsBatch,
 } from "../../../services/tripService";
 import {
@@ -27,6 +29,7 @@ import { assignmentCoversDay } from "../../../utils/staffAssignmentCalendarUtils
 import { deckOptionImages } from "../../../utils/charterRequestForm";
 import { notify } from "../../../utils/swalToast";
 import { getTodayDateString, getMaxBookableDateString } from "../../../utils/dateOnly";
+import { required } from "../../../utils/requiredStar";
 //component
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
@@ -191,6 +194,10 @@ export function CreateTrip() {
   const [roundTripPreview, setRoundTripPreview] = useState(null);
   const [selectedPreviewKeys, setSelectedPreviewKeys] = useState(() => new Set());
   const [isPreviewing, setIsPreviewing] = useState(false);
+  // One-way / WaterSightseeing preview (bulk multi-date or interval)
+  const [oneWayPreview, setOneWayPreview] = useState(null);
+  const [selectedOneWayKeys, setSelectedOneWayKeys] = useState(() => new Set());
+  const [isPreviewingOneWay, setIsPreviewingOneWay] = useState(false);
 
   const [routes, setRoutes] = useState([]);
   const [boats, setBoats] = useState([]);
@@ -331,6 +338,11 @@ export function CreateTrip() {
     setSelectedPreviewKeys(new Set());
   };
 
+  const clearOneWayPreview = () => {
+    setOneWayPreview(null);
+    setSelectedOneWayKeys(new Set());
+  };
+
   const handleServiceKindChange = (serviceKind) => {
     if (serviceKind === form.serviceKind) return;
     setForm((prev) => ({
@@ -348,12 +360,14 @@ export function CreateTrip() {
       inboundStops: [],
     }));
     clearPreview();
+    clearOneWayPreview();
     setErrorMsg("");
   };
 
   const handleRouteChange = async (routeCode) => {
     updateForm({ routeCode, stops: [] });
     clearPreview();
+    clearOneWayPreview();
     const selected = routes.find((r) => String(r.routeCode) === String(routeCode));
     const routeId = selected?.routeId || selected?.id;
     if (!routeId) return;
@@ -429,6 +443,7 @@ export function CreateTrip() {
       )),
     }));
     if (isRoundTrip) clearPreview();
+    clearOneWayPreview();
   };
 
   const toggleDayOfWeek = (day) => {
@@ -450,6 +465,7 @@ export function CreateTrip() {
         : [...prev.departureTimes, time].sort(),
     }));
     setTouchedFields((prev) => ({ ...prev, departureTimes: true }));
+    clearOneWayPreview();
   };
 
   const removeFixedTime = (time) => {
@@ -458,6 +474,7 @@ export function CreateTrip() {
       departureTimes: prev.departureTimes.filter((item) => item !== time),
     }));
     setTouchedFields((prev) => ({ ...prev, departureTimes: true }));
+    clearOneWayPreview();
   };
 
   const ensureOnBoardCrew = async (boatCode, dayKey) => {
@@ -557,6 +574,115 @@ export function CreateTrip() {
     if (!roundTripPreview) return;
     setSelectedPreviewKeys(new Set(
       roundTripPreview.items.filter((item) => item.canCreate).map((item) => item.key),
+    ));
+  };
+
+  /**
+   * Bulk cho one-way Waterbus (multi-date/interval) hoặc WaterSightseeing
+   * luôn phải qua bước preview trước khi tạo — admin thấy danh sách khung giờ
+   * BE đề xuất + tick chọn khung hợp lệ (không trùng lịch tàu, không sát giờ…).
+   */
+  const handlePreviewOneWay = async () => {
+    setTouchedFields((prev) => ({
+      ...prev,
+      fromDate: true, toDate: true, startTime: true, endTime: true,
+      intervalMinutes: true, departureTimes: true,
+    }));
+    if (hasFieldErrors) return;
+    try {
+      setIsPreviewingOneWay(true);
+      setErrorMsg("");
+
+      if (!form.boatCode || !form.routeCode || !form.fromDate || !form.toDate) {
+        setErrorMsg(
+          lang === "VN"
+            ? "Chọn đủ tàu, tuyến và khoảng ngày."
+            : "Choose boat, route and date range.",
+        );
+        return;
+      }
+      if (form.fromDate > form.toDate) {
+        setErrorMsg(lang === "VN" ? "Từ ngày phải ≤ đến ngày." : "From date must be ≤ to date.");
+        return;
+      }
+
+      if (form.mode === "interval") {
+        if (!form.startTime || !form.endTime || !form.intervalMinutes) {
+          setErrorMsg(
+            lang === "VN"
+              ? "Nhập đủ giờ bắt đầu, kết thúc và khoảng phút."
+              : "Enter start time, end time and interval.",
+          );
+          return;
+        }
+        const interval = Number(form.intervalMinutes);
+        if (!Number.isFinite(interval) || interval <= 0) {
+          setErrorMsg(
+            lang === "VN" ? "Khoảng phút phải > 0." : "Interval must be > 0.",
+          );
+          return;
+        }
+      } else if (!form.departureTimes.length) {
+        setErrorMsg(
+          lang === "VN" ? "Thêm ít nhất một giờ khởi hành cố định." : "Add at least one fixed departure time.",
+        );
+        return;
+      }
+
+      // Gọi BE lấy gợi ý — luôn dùng khung giờ [startTime, endTime] cho BE đề xuất.
+      // Với fixed-times thì start/end lấy min/max của departureTimes.
+      const startTime = form.startTime || form.departureTimes[0] || "07:00";
+      const endTime = form.endTime || form.departureTimes[form.departureTimes.length - 1] || "23:00";
+      const previewForm = { ...form, startTime, endTime };
+      const preview = await previewOneWayScheduleBatch(previewForm);
+
+      // Với fixed-times: chỉ giữ các khung giờ admin đã liệt kê.
+      const filtered = form.mode === "fixed"
+        ? {
+            ...preview,
+            items: preview.items.filter((it) => {
+              const depHms = String(it?.departureHms || "").slice(0, 5);
+              return form.departureTimes.includes(depHms);
+            }),
+            suggested: preview.items.filter((it) => {
+              const depHms = String(it?.departureHms || "").slice(0, 5);
+              return form.departureTimes.includes(depHms);
+            }).length,
+          }
+        : preview;
+
+      setOneWayPreview(filtered);
+      setSelectedOneWayKeys(new Set(
+        filtered.items.filter((item) => item.canCreate).map((item) => item.key),
+      ));
+    } catch (error) {
+      console.error("Lỗi preview one-way:", error);
+      clearOneWayPreview();
+      setErrorMsg(
+        getApiErrorMessage(
+          error,
+          lang === "VN" ? "Không xem trước được lịch." : "Unable to preview schedule.",
+        ),
+      );
+    } finally {
+      setIsPreviewingOneWay(false);
+    }
+  };
+
+  const toggleOneWayItem = (key, canCreate) => {
+    if (!canCreate) return;
+    setSelectedOneWayKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectAllCreatableOneWay = () => {
+    if (!oneWayPreview) return;
+    setSelectedOneWayKeys(new Set(
+      oneWayPreview.items.filter((item) => item.canCreate).map((item) => item.key),
     ));
   };
 
@@ -673,6 +799,51 @@ export function CreateTrip() {
         }
       }
 
+      // One-way bulk (multi-date / WaterSightseeing) phải qua preview trước.
+      // Vẫn gọi scheduleOneWaySelection để gọi BE từng khung đã tick — đảm bảo
+      // BE kiểm tra lần cuối (crew / turnaround / lịch tàu thật) trước khi tạo.
+      if (oneWayRequiresPreview) {
+        if (!oneWayPreview?.items?.length) {
+          setErrorMsg(
+            lang === "VN"
+              ? "Bấm “Xem gợi ý” trước khi tạo chuyến."
+              : "Preview suggestions before creating trips.",
+          );
+          return;
+        }
+        const selectedItems = oneWayPreview.items.filter(
+          (item) => item.canCreate && selectedOneWayKeys.has(item.key),
+        );
+        if (!selectedItems.length) {
+          setErrorMsg(
+            lang === "VN"
+              ? "Chọn ít nhất một khung giờ có thể tạo."
+              : "Select at least one creatable slot.",
+          );
+          return;
+        }
+        const result = await scheduleOneWaySelection({ form, selectedItems });
+        if (result.created >= 1) {
+          notify({
+            icon: "success",
+            title: lang === "VN"
+              ? `Đã tạo ${result.created} chuyến thành công`
+              : `Successfully created ${result.created} trips`,
+            confirmButtonColor: "#124757",
+          }).then(() => navigate(`/admin/trips-management?date=${encodeURIComponent(form.fromDate)}`));
+          return;
+        }
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
+          text: lang === "VN"
+            ? "Các khung giờ đã chọn không tạo được. Đổi lựa chọn rồi thử lại."
+            : "Selected slots could not be created. Change selection and retry.",
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
+
       const result = await scheduleTripsBatch(buildScheduleTripsPayload(form));
 
       if (result.created >= 1) {
@@ -770,6 +941,26 @@ export function CreateTrip() {
     ).length,
     [roundTripPreview, selectedPreviewKeys],
   );
+
+  // One-way (Waterbus một chiều bulk + WaterSightseeing): tổng quan preview.
+  const creatableOneWayCount = useMemo(
+    () => (oneWayPreview?.items || []).filter((item) => item.canCreate).length,
+    [oneWayPreview],
+  );
+  const selectedOneWayCount = useMemo(
+    () => (oneWayPreview?.items || []).filter(
+      (item) => item.canCreate && selectedOneWayKeys.has(item.key),
+    ).length,
+    [oneWayPreview, selectedOneWayKeys],
+  );
+
+  // Điều kiện bắt buộc qua preview cho one-way:
+  // - WaterSightseeing (luôn nhiều ngày hoặc nhiều giờ cố định)
+  // - Waterbus một chiều nhưng multi-date (fromDate ≠ toDate)
+  // - Waterbus một chiều interval
+  const oneWayRequiresPreview = isWaterSightseeingKind
+    || (!isRoundTrip && (form.fromDate !== form.toDate || form.mode === "interval"));
+  const oneWayPreviewReady = !oneWayRequiresPreview || (oneWayPreview && selectedOneWayCount > 0);
 
   const formatClock = (hms) => {
     const raw = String(hms || "").trim();
@@ -876,7 +1067,7 @@ export function CreateTrip() {
           {isRoundTrip ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 overflow-visible">
               <div className="relative z-30">
-                <label className={labelStyle}>{lang === "VN" ? "Tuyến đi (*)" : "Outbound route (*)"}</label>
+                <label className={labelStyle}>{<>{lang === "VN" ? "Tuyến đi" : "Outbound route"}{required()}</>}</label>
                 <FormSelect
                   value={form.outboundRouteCode}
                   onChange={handleOutboundRouteChange}
@@ -890,7 +1081,7 @@ export function CreateTrip() {
                 />
               </div>
               <div className="relative z-20">
-                <label className={labelStyle}>{lang === "VN" ? "Tuyến về (*)" : "Inbound route (*)"}</label>
+                <label className={labelStyle}>{<>{lang === "VN" ? "Tuyến về" : "Inbound route"}{required()}</>}</label>
                 <FormSelect
                   value={form.inboundRouteCode}
                   onChange={handleInboundRouteChange}
@@ -904,7 +1095,7 @@ export function CreateTrip() {
                 />
               </div>
               <div className="relative z-10 sm:col-span-2">
-                <label className={labelStyle}>{lang === "VN" ? "Tàu (*)" : "Boat (*)"}</label>
+                <label className={labelStyle}>{<>{lang === "VN" ? "Tàu" : "Boat"}{required()}</>}</label>
                 <FormSelect
                   value={form.boatCode}
                   onChange={(v) => { updateForm({ boatCode: v }); clearPreview(); }}
@@ -921,7 +1112,7 @@ export function CreateTrip() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 overflow-visible">
               <div className="relative z-30">
-                <label className={labelStyle}>{lang === "VN" ? "Tuyến đường (*)" : "Route (*)"}</label>
+                <label className={labelStyle}>{<>{lang === "VN" ? "Tuyến đường" : "Route"}{required()}</>}</label>
                 <FormSelect
                   value={form.routeCode}
                   onChange={handleRouteChange}
@@ -935,10 +1126,14 @@ export function CreateTrip() {
                 />
               </div>
               <div className="relative z-20">
-                <label className={labelStyle}>{lang === "VN" ? "Tàu (*)" : "Boat (*)"}</label>
+                <label className={labelStyle}>{<>{lang === "VN" ? "Tàu" : "Boat"}{required()}</>}</label>
                 <FormSelect
                   value={form.boatCode}
-                  onChange={(v) => updateForm({ boatCode: v })}
+                  onChange={(v) => {
+                    updateForm({ boatCode: v });
+                    clearPreview();
+                    clearOneWayPreview();
+                  }}
                   options={boatOptions}
                   disabled={isLoadingOptions}
                   searchable
@@ -953,7 +1148,7 @@ export function CreateTrip() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Từ ngày (*)" : "From date (*)"}</label>
+              <label className={labelStyle}>{<>{lang === "VN" ? "Từ ngày" : "From date"}{required()}</>}</label>
               <AppDateInput
                 required
                 min={todayDateString}
@@ -967,13 +1162,14 @@ export function CreateTrip() {
                   });
                   handleFieldBlur("fromDate");
                   if (isRoundTrip) clearPreview();
+                  clearOneWayPreview();
                 }}
                 className={visibleFieldErrors.fromDate ? errorInputStyle : inputStyle}
               />
               {visibleFieldErrors.fromDate && <p className={errorTextStyle}>{visibleFieldErrors.fromDate}</p>}
             </div>
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Đến ngày (*)" : "To date (*)"}</label>
+              <label className={labelStyle}>{<>{lang === "VN" ? "Đến ngày" : "To date"}{required()}</>}</label>
               <AppDateInput
                 required
                 min={form.fromDate || todayDateString}
@@ -983,6 +1179,7 @@ export function CreateTrip() {
                   updateForm({ toDate: e.target.value });
                   handleFieldBlur("toDate");
                   if (isRoundTrip) clearPreview();
+                  clearOneWayPreview();
                 }}
                 className={visibleFieldErrors.toDate ? errorInputStyle : inputStyle}
               />
@@ -1153,7 +1350,10 @@ export function CreateTrip() {
                         min={1}
                         required
                         value={form.intervalMinutes}
-                        onChange={(e) => updateForm({ intervalMinutes: e.target.value })}
+                        onChange={(e) => {
+                          updateForm({ intervalMinutes: e.target.value });
+                          clearOneWayPreview();
+                        }}
                         onBlur={() => handleFieldBlur("intervalMinutes")}
                         className={visibleFieldErrors.intervalMinutes ? errorInputStyle : inputStyle}
                       />
@@ -1270,6 +1470,125 @@ export function CreateTrip() {
             </div>
           )}
         </div>
+
+        {/* One-way / WaterSightseeing bulk preview — bắt buộc qua bước này khi tạo nhiều chuyến */}
+        {!isRoundTrip && oneWayRequiresPreview && (
+          <>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={handlePreviewOneWay}
+                disabled={isPreviewingOneWay || isSubmitting || isLoadingOptions || isLoadingStops || hasFieldErrors}
+                className="flex-1 bg-white text-[#124757] border border-[#124757]/30 dark:bg-slate-900 dark:text-yellow-400 dark:border-yellow-400/40 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-sm hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                {isPreviewingOneWay && (
+                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                )}
+                {lang === "VN" ? "Xem gợi ý lịch" : "Preview schedule"}
+              </button>
+            </div>
+
+            {oneWayPreview && (
+              <div className="bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
+                      {isWaterSightseeingKind
+                        ? (lang === "VN" ? "Gợi ý Sightseeing" : "Sightseeing preview")
+                        : (lang === "VN" ? "Gợi ý lịch một chiều" : "One-way preview")}
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {lang === "VN"
+                        ? `${oneWayPreview.suggested} khung · chọn được ${creatableOneWayCount} · đang chọn ${selectedOneWayCount}`
+                        : `${oneWayPreview.suggested} slots · creatable ${creatableOneWayCount} · selected ${selectedOneWayCount}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={selectAllCreatableOneWay}
+                    className="text-[11px] font-bold text-[#124757] hover:underline dark:text-yellow-400"
+                  >
+                    {lang === "VN" ? "Chọn tất cả hợp lệ" : "Select all creatable"}
+                  </button>
+                </div>
+
+                {oneWayPreview.items.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs font-bold text-slate-400 dark:border-slate-600">
+                    {lang === "VN"
+                      ? "BE không đề xuất khung giờ nào trong khoảng đã chọn."
+                      : "No slots suggested in the selected range."}
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-700">
+                    <table className="min-w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400 dark:bg-slate-900">
+                        <tr>
+                          <th className="px-3 py-2 font-bold"> </th>
+                          <th className="px-3 py-2 font-bold">{lang === "VN" ? "Ngày" : "Date"}</th>
+                          <th className="px-3 py-2 font-bold">{lang === "VN" ? "Tuyến" : "Route"}</th>
+                          <th className="px-3 py-2 font-bold">{lang === "VN" ? "Giờ" : "Time"}</th>
+                          <th className="px-3 py-2 font-bold">{lang === "VN" ? "Bến" : "Stations"}</th>
+                          <th className="px-3 py-2 font-bold">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {oneWayPreview.items.map((item) => {
+                          const checked = selectedOneWayKeys.has(item.key);
+                          return (
+                            <tr
+                              key={item.key}
+                              className={`border-t border-slate-100 dark:border-slate-700 ${item.canCreate ? "" : "bg-slate-50/80 opacity-80 dark:bg-slate-900/40"}`}
+                            >
+                              <td className="px-3 py-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={!item.canCreate}
+                                  onChange={() => toggleOneWayItem(item.key, item.canCreate)}
+                                  className="h-4 w-4 accent-[#124757]"
+                                />
+                              </td>
+                              <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                                {item.operatingDate || "—"}
+                              </td>
+                              <td className="px-3 py-2.5 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                {item.routeCode || "—"}
+                              </td>
+                              <td className="px-3 py-2.5 font-bold text-slate-800 dark:text-white whitespace-nowrap">
+                                {formatClock(item.departureHms)} → {formatClock(item.arrivalHms)}
+                              </td>
+                              <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">
+                                {item.fromStationName} → {item.toStationName}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                {item.canCreate ? (
+                                  <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                    {lang === "VN" ? "Tạo được" : "OK"}
+                                  </span>
+                                ) : (
+                                  <div className="max-w-65 space-y-1">
+                                    <span className="block text-[11px] font-bold text-amber-700 dark:text-amber-300" title={item.reason || ""}>
+                                      {item.reason || (lang === "VN" ? "Không tạo được" : "Cannot create")}
+                                    </span>
+                                    {item.suggestedNextDepartureLabel && (
+                                      <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                        {lang === "VN" ? "Sớm nhất" : "Earliest"}: {item.suggestedNextDepartureLabel}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         {isRoundTrip ? (
           <>
@@ -1577,6 +1896,7 @@ export function CreateTrip() {
             || isLoadingInboundStops
             || hasFieldErrors
             || (isRoundTrip && (!roundTripPreview || selectedCreatableCount < 1))
+            || (oneWayRequiresPreview && !oneWayPreviewReady)
           }
           className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
@@ -1589,7 +1909,9 @@ export function CreateTrip() {
               : `Create ${selectedCreatableCount || 0} selected trip(s)`)
             : isSingleCase
               ? (lang === "VN" ? "Tạo 1 chuyến" : "Create 1 trip")
-              : (lang === "VN" ? "Lên lịch chuyến" : "Schedule trips")}
+              : (lang === "VN"
+                ? `Tạo ${selectedOneWayCount || 0} chuyến đã chọn`
+                : `Create ${selectedOneWayCount || 0} selected trip(s)`)}
         </button>
       </form>
     </div>

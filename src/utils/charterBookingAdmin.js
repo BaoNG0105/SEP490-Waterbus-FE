@@ -708,6 +708,12 @@ export const resolveCharterBookingStatus = (item) => {
   if (lowered.some((value) => value === "refunded")) return "Cancelled";
   if (lowered.some((value) => value === "expired")) return "Expired";
   if (lowered.some((value) => value === "completed")) return "Completed";
+  if (lowered.some((value) => value === "confirmed")) return "Confirmed";
+  if (lowered.some((value) => value === "approved")) return "Approved";
+  if (lowered.some((value) => value === "quoted")) return "Quoted";
+  if (lowered.some((value) => ["pendingpayment", "pendingpayment"].includes(value))) return "PendingPayment";
+  if (lowered.some((value) => value === "pendingquote")) return "PendingQuote";
+  if (lowered.some((value) => ["pendingapproval", "pendingapproval"].includes(value))) return "PendingApproval";
 
   // BE đôi khi giữ Confirmed/Paid dù đã hoàn tiền → FE map sang Đã hủy.
   if (hasCompletedCharterRefund(item)) return "Cancelled";

@@ -80,8 +80,8 @@ export const Login = () => {
       (role) => allowedRoles.includes(role.code) || allowedRoles.includes(role.systemName)
     );
     if (isManagerOrAdmin) {
-      // Quyền cao -> vào thẳng trang quản lý đầu tiên họ có quyền xem
-      // (Dashboard "/admin" giờ chỉ dành riêng cho Admin, xem AdminSidebar.jsx).
+      // Quyền cao -> vào thẳng Dashboard (/admin/reports/revenue)
+      // quản lý đầu tiên họ có quyền xem (xem AdminSidebar.jsx).
       navigate(getDefaultAdminLandingPath(userData), { replace: true });
     } else {
       navigate("/", { replace: true }); // Khách hàng -> Về trang chủ công cộng

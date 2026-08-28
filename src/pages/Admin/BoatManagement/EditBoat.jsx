@@ -14,12 +14,18 @@ import { SeatMapIcon, seatToneFromCode, resolveSeatTypeCode } from "../../../com
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
 //utils
 import { notify } from "../../../utils/swalToast";
+import { required } from "../../../utils/requiredStar";
 import {
   BOAT_CODE_REGEX,
+  MIN_BOAT_CODE_LENGTH,
+  MAX_BOAT_CODE_LENGTH,
   REGISTRATION_NUMBER_REGEX,
   MIN_BOAT_SPEED_KMH,
   MAX_BOAT_SPEED_KMH,
+  MIN_YEAR_BUILT,
   getMinYearBuilt,
+  MIN_BOAT_NAME_LENGTH,
+  MAX_BOAT_NAME_LENGTH,
 } from "../../../utils/boatValidation";
 
 export function EditBoat() {
@@ -27,7 +33,7 @@ export function EditBoat() {
   const navigate = useNavigate();
   const { id } = useParams();
   const currentYear = new Date().getFullYear();
-  const minYearBuilt = getMinYearBuilt(currentYear);
+  const minYearBuilt = getMinYearBuilt();
 
   const [formData, setFormData] = useState(null);
   const [boatStatus, setBoatStatus] = useState("");
@@ -128,14 +134,23 @@ export function EditBoat() {
   const fieldErrors = formData ? {
     ...(formData.code.trim()
       ? (BOAT_CODE_REGEX.test(formData.code.trim())
+          && formData.code.trim().length >= MIN_BOAT_CODE_LENGTH
+          && formData.code.trim().length <= MAX_BOAT_CODE_LENGTH
         ? {}
-        : { code: lang === "VN" ? "Mã tàu chỉ được gồm chữ cái, số và dấu gạch dưới (_)" : "Code may only contain letters, numbers and underscores" })
+        : { code: lang === "VN"
+            ? `Mã tàu phải từ ${MIN_BOAT_CODE_LENGTH}–${MAX_BOAT_CODE_LENGTH} ký tự, chỉ gồm chữ cái, số và dấu gạch dưới (_). Ví dụ: WB_001.`
+            : `Code must be ${MIN_BOAT_CODE_LENGTH}–${MAX_BOAT_CODE_LENGTH} characters, only letters, numbers and underscores. Example: WB_001.` })
       : { code: lang === "VN" ? "Vui lòng nhập mã hiệu tàu" : "Boat code is required" }),
-    ...(formData.name.trim() ? {} : {
-      name: lang === "VN" ? "Vui lòng nhập tên phương tiện" : "Boat name is required",
-    }),
+    ...(formData.name.trim()
+      ? (formData.name.trim().length >= MIN_BOAT_NAME_LENGTH
+          && formData.name.trim().length <= MAX_BOAT_NAME_LENGTH
+        ? {}
+        : { name: lang === "VN"
+            ? `Tên phương tiện phải từ ${MIN_BOAT_NAME_LENGTH}–${MAX_BOAT_NAME_LENGTH} ký tự.`
+            : `Name must be ${MIN_BOAT_NAME_LENGTH}–${MAX_BOAT_NAME_LENGTH} characters.` })
+      : { name: lang === "VN" ? "Vui lòng nhập tên phương tiện" : "Boat name is required" }),
     ...((formData.registrationNumber || "").trim() && !REGISTRATION_NUMBER_REGEX.test((formData.registrationNumber || "").trim())
-      ? { registrationNumber: lang === "VN" ? "Mã số đăng ký chỉ được gồm chữ cái, số và dấu gạch ngang (-)" : "Registration number may only contain letters, numbers and hyphens" }
+      ? { registrationNumber: lang === "VN" ? "Mã số đăng ký chỉ gồm chữ cái, số và dấu gạch ngang (-)." : "Registration number may only contain letters, numbers and hyphens." }
       : {}),
     ...(String(formData.maxSpeedKmh).trim() === "" || Number.isNaN(Number(formData.maxSpeedKmh))
       ? { maxSpeedKmh: lang === "VN" ? "Vui lòng nhập vận tốc tối đa" : "Max speed is required" }
@@ -146,8 +161,8 @@ export function EditBoat() {
       ? { yearBuilt: lang === "VN" ? "Vui lòng nhập năm đóng tàu" : "Year built is required" }
       : Number(formData.yearBuilt) > currentYear
         ? { yearBuilt: lang === "VN" ? `Năm đóng tàu không được lớn hơn ${currentYear}` : `Year built cannot be later than ${currentYear}` }
-        : Number(formData.yearBuilt) < minYearBuilt
-          ? { yearBuilt: lang === "VN" ? `Năm đóng tàu không được sớm hơn ${minYearBuilt}` : `Year built cannot be earlier than ${minYearBuilt}` }
+        : Number(formData.yearBuilt) < MIN_YEAR_BUILT
+          ? { yearBuilt: lang === "VN" ? `Năm đóng tàu không được sớm hơn ${MIN_YEAR_BUILT}` : `Year built cannot be earlier than ${MIN_YEAR_BUILT}` }
           : {}),
   } : {};
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
@@ -447,7 +462,7 @@ export function EditBoat() {
           {/* Mã hiệu tàu và Tên được xếp chung 1 hàng, ĐỀU CÓ THỂ CHỈNH SỬA */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Mã hiệu tàu (*)" : "Boat Code (*)"}</label>
+              <label className={labelStyle}>{lang === "VN" ? "Mã hiệu tàu" : "Boat Code"}{required()}</label>
               <input
                 type="text"
                 required
@@ -459,7 +474,7 @@ export function EditBoat() {
               {visibleFieldErrors.code && <p className={errorTextStyle}>{visibleFieldErrors.code}</p>}
             </div>
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Tên phương tiện (*)" : "Boat Name (*)"}</label>
+              <label className={labelStyle}>{lang === "VN" ? "Tên phương tiện" : "Boat Name"}{required()}</label>
               <input
                 type="text"
                 required
@@ -473,7 +488,7 @@ export function EditBoat() {
           </div>
 
           <div className="relative z-10">
-            <label className={labelStyle}>{lang === "VN" ? "Loại dịch vụ (*)" : "Service type (*)"}</label>
+            <label className={labelStyle}>{lang === "VN" ? "Loại dịch vụ" : "Service type"}{required()}</label>
             <FormSelect
               value={formData.serviceType || "Passenger"}
               onChange={(v) => handleFieldChange("serviceType", v)}
@@ -496,7 +511,7 @@ export function EditBoat() {
               {visibleFieldErrors.registrationNumber && <p className={errorTextStyle}>{visibleFieldErrors.registrationNumber}</p>}
             </div>
             <div>
-              <label className={labelStyle}>{lang === "VN" ? "Năm đóng tàu (*)" : "Year Built (*)"}</label>
+              <label className={labelStyle}>{lang === "VN" ? "Năm đóng tàu" : "Year Built"}{required()}</label>
               <YearPickerInput
                 min={minYearBuilt}
                 max={currentYear}
@@ -551,7 +566,7 @@ export function EditBoat() {
 
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
             <div>
-              <label className={labelStyle}>{lang === "VN" ? `Vận tốc tối đa (Kmh, ${MIN_BOAT_SPEED_KMH}-${MAX_BOAT_SPEED_KMH}) (*)` : `Max Speed (Kmh, ${MIN_BOAT_SPEED_KMH}-${MAX_BOAT_SPEED_KMH}) (*)`}</label>
+              <label className={labelStyle}>{lang === "VN" ? `Vận tốc tối đa (Kmh, ${MIN_BOAT_SPEED_KMH}-${MAX_BOAT_SPEED_KMH})` : `Max Speed (Kmh, ${MIN_BOAT_SPEED_KMH}-${MAX_BOAT_SPEED_KMH})`}{required()}</label>
               <input
                 type="number"
                 min={MIN_BOAT_SPEED_KMH}
