@@ -4,6 +4,7 @@ import {
   fetchInsurancePackages,
   addInsurancePackage,
   modifyInsurancePackage,
+  uploadInsurancePackageImage,
   changeInsurancePackageStatus,
   checkWaterbusDefault,
   INSURANCE_BOOKING_TYPES,
@@ -554,21 +555,15 @@ export function InsuranceManagement() {
     // BE sẽ tự dồn các gói xuống để nhường chỗ.
     commonFields.displayOrder = Number(form.displayOrder) || 1;
 
-    if (form.providerLogoFile) {
-      const formData = new FormData();
-      Object.entries(commonFields).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && value !== "") formData.append(key, String(value));
-      });
-      formData.append("providerLogo", form.providerLogoFile);
-      if (editingId && form.providerLogoPreview) {
-        formData.append("existingLogoUrl", form.providerLogoPreview);
-      }
-      return formData;
-    }
     if (form.removeLogo) {
-      return { ...commonFields, providerLogoUrl: null };
+      const payload = { ...commonFields, providerLogoUrl: null };
+      return { requestPayload: payload, validationPayload: payload, logoFile: null };
     }
-    return commonFields;
+    return {
+      requestPayload: commonFields,
+      validationPayload: commonFields,
+      logoFile: form.providerLogoFile,
+    };
   };
 
   const handleSave = async () => {
@@ -586,16 +581,16 @@ export function InsuranceManagement() {
 
     try {
       setIsSaving(true);
-      const payload = buildPayload();
+      const { requestPayload, validationPayload, logoFile } = buildPayload();
       if (
-        (editingId ? false : !payload.code) ||
-        !payload.name ||
-        typeof payload.unitPremiumAmount !== "number" ||
-        typeof payload.coverageAmount !== "number" ||
-        !Number.isFinite(payload.unitPremiumAmount) ||
-        !Number.isFinite(payload.coverageAmount) ||
-        payload.unitPremiumAmount < MIN_PREMIUM ||
-        payload.coverageAmount < MIN_PREMIUM
+        (editingId ? false : !validationPayload.code) ||
+        !validationPayload.name ||
+        typeof validationPayload.unitPremiumAmount !== "number" ||
+        typeof validationPayload.coverageAmount !== "number" ||
+        !Number.isFinite(validationPayload.unitPremiumAmount) ||
+        !Number.isFinite(validationPayload.coverageAmount) ||
+        validationPayload.unitPremiumAmount < MIN_PREMIUM ||
+        validationPayload.coverageAmount < MIN_PREMIUM
       ) {
         setTouched(buildTouched(REQUIRED_FIELDS));
         notify({
@@ -614,16 +609,22 @@ export function InsuranceManagement() {
       // khi payload yêu cầu isWaterbusDefault=true + isActive=true.
       // - Create: payload đang áp dụng cho gói mới → excludeId = null.
       // - Edit: payload đang áp dụng cho gói đang sửa → excludeId = editingId (tránh chặn chính gói đó).
-      const ok = await ensureNoActiveDefault({ payload, excludeId: editingId });
+      const ok = await ensureNoActiveDefault({ payload: validationPayload, excludeId: editingId });
       if (!ok) {
         setIsSaving(false);
         return;
       }
 
-      if (editingId) {
-        await modifyInsurancePackage(editingId, payload);
-      } else {
-        await addInsurancePackage(payload);
+      const savedPackage = editingId
+        ? await modifyInsurancePackage(editingId, requestPayload)
+        : await addInsurancePackage(requestPayload);
+
+      if (logoFile) {
+        const packageId = savedPackage?.insurancePackageId ?? savedPackage?.id ?? editingId;
+        if (!packageId) {
+          throw new Error("Không nhận được mã gói bảo hiểm để tải logo.");
+        }
+        await uploadInsurancePackageImage(packageId, logoFile);
       }
       setIsModalOpen(false);
       setEditingId(null);

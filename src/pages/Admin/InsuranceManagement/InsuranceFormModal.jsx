@@ -11,6 +11,7 @@ import {
   inputStyle,
   formatVndInput,
 } from "../../../utils/insurancePackageForm";
+import { required } from "../../../utils/requiredStar";
 
 /**
  * Wrapper dùng chung cho các field trong form tạo/sửa gói bảo hiểm:
@@ -79,7 +80,7 @@ export function InsuranceFormModal({
         <div className="p-6 space-y-5">
           {/* Row 1: Mã gói + Tên gói */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <InsuranceFormField label={lang === "VN" ? "Mã gói" : "Code"} hint={renderHint("code")}>
+            <InsuranceFormField label={<>{lang === "VN" ? "Mã gói" : "Code"}{required()}</>} hint={renderHint("code")}>
               <input
                 value={form.code}
                 onChange={(e) => updateField("code", e.target.value.toUpperCase())}
@@ -93,7 +94,7 @@ export function InsuranceFormModal({
                 title={editingId ? (lang === "VN" ? "Mã gói không thể thay đổi sau khi tạo." : "Code is read-only after creation.") : undefined}
               />
             </InsuranceFormField>
-            <InsuranceFormField label={lang === "VN" ? "Tên gói" : "Name"} hint={renderHint("name")} className="sm:col-span-2">
+            <InsuranceFormField label={<>{lang === "VN" ? "Tên gói" : "Name"}{required()}</>} hint={renderHint("name")} className="sm:col-span-2">
               <input
                 value={form.name}
                 onChange={(e) => updateField("name", e.target.value)}
@@ -107,23 +108,21 @@ export function InsuranceFormModal({
 
           {/* Row 2: Phí + Mức bồi thường */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InsuranceFormField label={lang === "VN" ? "Phí mỗi khách (VND)" : "Fee per passenger (VND)"} hint={renderHint("unitPremiumAmount")}>
+            <InsuranceFormField label={<>{lang === "VN" ? "Phí mỗi khách (VND)" : "Fee per passenger (VND)"}{required()}</>} hint={renderHint("unitPremiumAmount")}>
               <input
                 inputMode="numeric"
                 value={form.unitPremiumAmount}
                 onChange={(e) => updateField("unitPremiumAmount", formatVndInput(e.target.value))}
-                onInput={(e) => updateField("unitPremiumAmount", formatVndInput(e.target.value))}
                 onBlur={() => handleBlur("unitPremiumAmount")}
                 className={inputClass("unitPremiumAmount")}
                 placeholder={lang === "VN" ? `Tối thiểu ${MIN_PREMIUM.toLocaleString("vi-VN")}` : `Min ${MIN_PREMIUM.toLocaleString("vi-VN")}`}
               />
             </InsuranceFormField>
-            <InsuranceFormField label={lang === "VN" ? "Mức bồi thường (VND)" : "Coverage amount (VND)"} hint={renderHint("coverageAmount")}>
+            <InsuranceFormField label={<>{lang === "VN" ? "Mức bồi thường (VND)" : "Coverage amount (VND)"}{required()}</>} hint={renderHint("coverageAmount")}>
               <input
                 inputMode="numeric"
                 value={form.coverageAmount}
                 onChange={(e) => updateField("coverageAmount", formatVndInput(e.target.value))}
-                onInput={(e) => updateField("coverageAmount", formatVndInput(e.target.value))}
                 onBlur={() => handleBlur("coverageAmount")}
                 className={inputClass("coverageAmount")}
                 placeholder={lang === "VN" ? `Tối thiểu ${MIN_PREMIUM.toLocaleString("vi-VN")}` : `Min ${MIN_PREMIUM.toLocaleString("vi-VN")}`}
@@ -227,7 +226,7 @@ export function InsuranceFormModal({
               </div>
             </InsuranceFormField>
 
-            <InsuranceFormField label={lang === "VN" ? "Tên nhà cung cấp" : "Provider name"} hint={renderHint("providerName")}>
+            <InsuranceFormField label={<>{lang === "VN" ? "Tên nhà cung cấp" : "Provider name"}{required()}</>} hint={renderHint("providerName")}>
               <input
                 value={form.providerName}
                 onChange={(e) => updateField("providerName", e.target.value)}

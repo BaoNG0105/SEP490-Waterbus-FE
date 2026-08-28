@@ -54,7 +54,7 @@ const toNullablePositive = (value, enabled = true, min = 0) => {
     if (!enabled) return null;
     if (value === '' || value === null || value === undefined) return null;
     const num = Number(value);
-    if (!Number.isFinite(num) || num <= min) return null;
+    if (!Number.isFinite(num) || num <= 0 || num < min) return null;
     return num;
 };
 

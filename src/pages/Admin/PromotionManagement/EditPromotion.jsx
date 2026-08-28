@@ -74,7 +74,14 @@ export function EditPromotion() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (Object.keys(fieldErrors).length > 0) return;
+    if (Object.keys(fieldErrors).length > 0) {
+      const firstError = Object.values(fieldErrors).find((item) => item?.message);
+      setErrorMsg(
+        firstError?.message ||
+          (lang === "VN" ? "Vui lòng kiểm tra lại các trường được đánh dấu." : "Please review the highlighted fields.")
+      );
+      return;
+    }
     try {
       setIsSubmitting(true);
       setErrorMsg("");

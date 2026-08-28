@@ -14,6 +14,8 @@ import {
 import { required, RequiredStar } from "../../../utils/requiredStar";
 const inputStyle =
   "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
+const labelStyle =
+  "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
 
 /** Format datetime gọn cho gợi ý: "23/08 22:35" (VN) hoặc "Aug 23 10:35 PM" (EN). */
 const formatDateTimeHint = (date, lang) => {
@@ -34,15 +36,13 @@ const errMessage = (e) => {
   if (typeof e === "string") return e;
   return e.message || "";
 };
-const errHint = (e) => (e && typeof e === "object" ? e.hint || "" : "");
 const errSeverity = (e) => (e && typeof e === "object" ? e.severity || "error" : "error");
 
 /** Box thông báo validation: icon + message (đậm) + hint (gợi ý nhỏ hơn, mờ hơn). */
 const FieldError = ({ error, className = "" }) => {
   const msg = errMessage(error);
-  const hint = errHint(error);
   const severity = errSeverity(error);
-  if (!msg && !hint) return <div className={`min-h-[18px] mt-1 ${className}`} />;
+  if (!msg) return <div className={`min-h-[18px] mt-1 ${className}`} />;
 
   const colors =
     severity === "warn"
@@ -57,11 +57,6 @@ const FieldError = ({ error, className = "" }) => {
         <span className="shrink-0 leading-none mt-px">{icon}</span>
         <span className="break-words">{msg}</span>
       </p>
-      {hint && (
-        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 ml-4 font-medium break-words">
-          💡 {hint}
-        </p>
-      )}
     </div>
   );
 };
@@ -78,6 +73,7 @@ const OptionalNumberField = ({
   dataField,
   placeholder,
   unit,
+  inputProps = {},
 }) => {
   const onLabel = lang === "VN" ? "Bật giới hạn" : "Enable limit";
   const offLabel = lang === "VN" ? "Không giới hạn" : "Unlimited";
@@ -121,6 +117,7 @@ const OptionalNumberField = ({
               : `∞ ${offLabel.toLowerCase()}`
           }
           className={`${inputStyle} pr-12 ${!enabled ? "opacity-60 italic" : ""} ${error ? "border-red-400 dark:border-red-500" : ""}`}
+          {...inputProps}
         />
         {unit && (
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
@@ -216,7 +213,7 @@ export function PromotionFormFields({
     switch (field) {
       case "promotionCode": {
         const v = String(value || "").trim();
-        if (!v) return err("error", lang === "VN" ? "Mã khuyến mãi bắt buộc." : "Promotion code is required.", lang === "VN" ? "VD: WELCOME2024" : "e.g. WELCOME2024");
+        if (!v) return err("error", lang === "VN" ? "Mã khuyến mãi bắt buộc." : "Promotion code is required.");
         if (v.length > 50) return err("error", lang === "VN" ? `Mã đang ${v.length}/50 ký tự — vượt giới hạn.` : `Code is ${v.length}/50 — over the limit.`);
         if (!/^[A-Z0-9]+$/.test(v))
           return err(
@@ -239,12 +236,12 @@ export function PromotionFormFields({
       }
       case "discountValue": {
         if (value === "" || value === null || value === undefined)
-          return err("warn", lang === "VN" ? "Chưa nhập giá trị giảm." : "Discount value is empty.", lang === "VN" ? "Nhập số tiền (VND) hoặc phần trăm (%) tuỳ loại KM." : "Enter an amount (VND) or percent (%) based on the promotion type.");
+          return err("error", lang === "VN" ? "Chưa nhập giá trị giảm." : "Discount value is empty.", lang === "VN" ? "Nhập phần trăm từ 1–100 hoặc số tiền giảm theo VND." : "Enter a percentage from 1–100 or a fixed VND amount.");
         const num = Number(value);
         if (!Number.isFinite(num))
           return err("error", lang === "VN" ? "Giá trị giảm không hợp lệ." : "Discount value is invalid.", lang === "VN" ? "Chỉ nhập số, ví dụ: 50000 hoặc 15." : "Numbers only, e.g. 50000 or 15.");
         if (num <= 0)
-          return err("error", lang === "VN" ? "Giá trị giảm phải lớn hơn 0." : "Discount must be greater than 0.", lang === "VN" ? "Bạn đang nhập 0 hoặc số âm — KM miễn phí không cần nhập." : "You entered 0 or a negative number.");
+          return err("error", lang === "VN" ? "Giá trị giảm phải lớn hơn 0." : "Discount must be greater than 0.", lang === "VN" ? "Nhập giá trị dương cho khuyến mãi này." : "Enter a positive value for this promotion.");
         if (isPercent && num > 100)
           return err("error", lang === "VN" ? `Phần trăm giảm tối đa 100% — bạn đang nhập ${num}%.` : `Percent discount max is 100% — you entered ${num}%.`, lang === "VN" ? "Nếu muốn giảm nhiều hơn, đổi sang loại giảm theo VND." : "For larger discounts, switch to a fixed-amount (VND) promotion.");
         return null;
@@ -256,9 +253,9 @@ export function PromotionFormFields({
             return err("error", lang === "VN" ? "Giảm tối đa không hợp lệ." : "Max discount is invalid.");
           if (num < 1000)
             return err(
-              "warn",
-              lang === "VN" ? "Giảm tối đa quá nhỏ — nên để ≥ 1.000đ." : "Max discount is too small — use at least 1,000 VND.",
-              lang === "VN" ? "Giá trị quá nhỏ sẽ không có tác dụng trần." : "Too small to act as a cap."
+              "error",
+              lang === "VN" ? "Giảm tối đa phải từ 1.000đ." : "Max discount must be at least 1,000 VND.",
+              lang === "VN" ? "Tăng giá trị lên tối thiểu 1.000đ hoặc tắt giới hạn giảm tối đa." : "Enter at least 1,000 VND or disable the maximum discount cap."
             );
         }
         return null;
@@ -270,9 +267,9 @@ export function PromotionFormFields({
             return err("error", lang === "VN" ? "Đơn tối thiểu không hợp lệ." : "Minimum order is invalid.");
           if (num < 1000)
             return err(
-              "warn",
-              lang === "VN" ? "Đơn tối thiểu quá nhỏ — nên để ≥ 1.000đ." : "Minimum order is too small — use at least 1,000 VND.",
-              lang === "VN" ? "Ngưỡng quá thấp sẽ không lọc được đơn." : "Too low to be a meaningful threshold."
+              "error",
+              lang === "VN" ? "Đơn tối thiểu phải từ 1.000đ." : "Minimum order must be at least 1,000 VND.",
+              lang === "VN" ? "Tăng giá trị lên tối thiểu 1.000đ hoặc tắt điều kiện đơn tối thiểu." : "Enter at least 1,000 VND or disable the minimum-order condition."
             );
         }
         return null;
@@ -284,9 +281,9 @@ export function PromotionFormFields({
             return err("error", lang === "VN" ? "Lượt dùng tổng không hợp lệ." : "Total usage limit is invalid.");
           if (num < 1)
             return err(
-              "warn",
+              "error",
               lang === "VN" ? "Lượt dùng tổng phải ≥ 1." : "Total usage limit must be ≥ 1.",
-              lang === "VN" ? "Nhập 0 nghĩa là không giới hạn — bỏ tick nếu vậy." : "0 means unlimited — uncheck if intended."
+              lang === "VN" ? "Nhập ít nhất 1 lượt hoặc tắt giới hạn lượt dùng tổng." : "Enter at least 1 use or disable the total usage limit."
             );
         }
         return null;
@@ -298,9 +295,9 @@ export function PromotionFormFields({
             return err("error", lang === "VN" ? "Lượt dùng/user không hợp lệ." : "Per-account limit is invalid.");
           if (num < 1)
             return err(
-              "warn",
+              "error",
               lang === "VN" ? "Lượt dùng/user phải ≥ 1." : "Per-account limit must be ≥ 1.",
-              lang === "VN" ? "Thường nên đặt 1–3 cho KM công khai." : "1–3 is typical for public promos."
+              lang === "VN" ? "Nhập ít nhất 1 lượt hoặc tắt giới hạn theo tài khoản." : "Enter at least 1 use or disable the per-account limit."
             );
         }
         return null;
@@ -312,15 +309,15 @@ export function PromotionFormFields({
             return err("error", lang === "VN" ? "Ngân sách không hợp lệ." : "Budget is invalid.");
           if (num < 1000)
             return err(
-              "warn",
-              lang === "VN" ? "Ngân sách quá nhỏ — nên để ≥ 1.000đ." : "Budget is too small — use at least 1,000 VND.",
-              lang === "VN" ? "Ngân sách thấp hơn 1 lượt dùng sẽ không khả thi." : "Lower than a single redemption — not feasible."
+              "error",
+              lang === "VN" ? "Ngân sách phải từ 1.000đ." : "Budget must be at least 1,000 VND.",
+              lang === "VN" ? "Tăng ngân sách lên tối thiểu 1.000đ hoặc tắt giới hạn ngân sách." : "Enter at least 1,000 VND or disable the budget cap."
             );
         }
         return null;
       }
       case "validFrom": {
-        if (!value) return err("warn", lang === "VN" ? "Chưa chọn ngày bắt đầu." : "Start date is empty.", lang === "VN" ? "KM chưa có ngày bắt đầu sẽ không thể kích hoạt." : "Without a start date, this promo can't be activated.");
+        if (!value) return err("error", lang === "VN" ? "Chưa chọn ngày bắt đầu." : "Start date is empty.", lang === "VN" ? "Chọn thời điểm bắt đầu hiệu lực của khuyến mãi." : "Choose when this promotion starts.");
         const fromTs = new Date(value).getTime();
         if (Number.isFinite(fromTs) && fromTs < now.getTime()) {
           return err(
@@ -341,7 +338,7 @@ export function PromotionFormFields({
         return null;
       }
       case "validTo": {
-        if (!value) return err("warn", lang === "VN" ? "Chưa chọn ngày kết thúc." : "End date is empty.", lang === "VN" ? "KM không có ngày kết thúc sẽ chạy vô hạn." : "Without an end date, this promo will run indefinitely.");
+        if (!value) return err("error", lang === "VN" ? "Chưa chọn ngày kết thúc." : "End date is empty.", lang === "VN" ? "Chọn thời điểm kết thúc sau ngày bắt đầu." : "Choose an end time after the start date.");
         const toTs = new Date(value).getTime();
         if (Number.isFinite(toTs) && toTs < now.getTime()) {
           return err(
@@ -411,7 +408,20 @@ export function PromotionFormFields({
     });
     onChange(field, value);
   };
+  const toggleOptionalLimit = (toggleField, valueField, enabled) => {
+    setField(toggleField, enabled);
+    if (!enabled) setField(valueField, "");
+  };
   const isPercent = formData.promotionType === PROMOTION_TYPE.PERCENT;
+  const promotionRoutes = useMemo(
+    () =>
+      [...routes].sort(
+        (left, right) =>
+          Number(isRouteSelectableForPromotion(right)) -
+          Number(isRouteSelectableForPromotion(left))
+      ),
+    [routes]
+  );
 
   const dayNameFromIndex = (i) =>
     ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][i] ?? "";
@@ -518,7 +528,7 @@ export function PromotionFormFields({
               required
               maxLength={50}
               disabled={lockCode}
-              placeholder="WELCOME10"
+              placeholder=""
               value={formData.promotionCode}
               onChange={(e) =>
                 setField(
@@ -662,12 +672,13 @@ export function PromotionFormFields({
               labelVn="Giảm tối đa"
               labelEn="Max discount"
               enabled={formData.hasMaxDiscountAmount}
-              onToggle={(v) => setField("hasMaxDiscountAmount", v)}
+              onToggle={(v) => toggleOptionalLimit("hasMaxDiscountAmount", "maxDiscountAmount", v)}
               value={formData.maxDiscountAmount}
               onChange={(v) => setField("maxDiscountAmount", v)}
               error={errors.maxDiscountAmount}
               dataField="maxDiscountAmount"
               unit="VND"
+              inputProps={{ min: 1000, step: 1000 }}
             />
           ) : (
             <div className="flex flex-col h-full">
@@ -689,12 +700,13 @@ export function PromotionFormFields({
             labelVn="Đơn tối thiểu"
             labelEn="Minimum order"
             enabled={formData.hasMinOrderValue}
-            onToggle={(v) => setField("hasMinOrderValue", v)}
+            onToggle={(v) => toggleOptionalLimit("hasMinOrderValue", "minOrderValue", v)}
             value={formData.minOrderValue}
             onChange={(v) => setField("minOrderValue", v)}
             error={errors.minOrderValue}
             dataField="minOrderValue"
             unit="VND"
+            inputProps={{ min: 1000, step: 1000 }}
           />
         </div>
       </div>
@@ -794,12 +806,12 @@ export function PromotionFormFields({
         <div>
           <label className={labelStyle}>{lang === "VN" ? "Tuyến áp dụng" : "Routes"}</label>
           <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-100 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
-            {(routes || []).length === 0 ? (
+            {promotionRoutes.length === 0 ? (
               <p className="text-xs text-slate-400 p-3 italic">
                 {lang === "VN" ? "Không tải được danh sách tuyến." : "No routes loaded."}
               </p>
             ) : (
-              routes.map((route) => {
+              promotionRoutes.map((route) => {
                 const id = String(route.routeId || route.id || "");
                 const selectable = isRouteSelectableForPromotion(route);
                 const checked = formData.routeIds.includes(id);
@@ -875,22 +887,24 @@ export function PromotionFormFields({
             labelVn="Giới hạn lượt dùng tổng"
             labelEn="Total usage limit"
             enabled={formData.hasUsageLimit}
-            onToggle={(v) => setField("hasUsageLimit", v)}
+            onToggle={(v) => toggleOptionalLimit("hasUsageLimit", "usageLimit", v)}
             value={formData.usageLimit}
             onChange={(v) => setField("usageLimit", v)}
             error={errors.usageLimit}
             dataField="usageLimit"
+            inputProps={{ min: 1, step: 1 }}
           />
           <OptionalNumberField
             lang={lang}
             labelVn="Tối đa / tài khoản"
             labelEn="Max uses / account"
             enabled={formData.hasMaxUsesPerAccount}
-            onToggle={(v) => setField("hasMaxUsesPerAccount", v)}
+            onToggle={(v) => toggleOptionalLimit("hasMaxUsesPerAccount", "maxUsesPerAccount", v)}
             value={formData.maxUsesPerAccount}
             onChange={(v) => setField("maxUsesPerAccount", v)}
             error={errors.maxUsesPerAccount}
             dataField="maxUsesPerAccount"
+            inputProps={{ min: 1, step: 1 }}
           />
         </div>
 
@@ -899,11 +913,12 @@ export function PromotionFormFields({
           labelVn="Ngân sách tối đa (VND)"
           labelEn="Budget cap (VND)"
           enabled={formData.hasBudgetCap}
-          onToggle={(v) => setField("hasBudgetCap", v)}
+          onToggle={(v) => toggleOptionalLimit("hasBudgetCap", "budgetCap", v)}
           value={formData.budgetCap}
           onChange={(v) => setField("budgetCap", v)}
           error={errors.budgetCap}
           dataField="budgetCap"
+          inputProps={{ min: 1000, step: 1000 }}
         />
 
       </div>

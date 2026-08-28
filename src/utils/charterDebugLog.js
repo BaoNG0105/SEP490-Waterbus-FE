@@ -1,10 +1,10 @@
 /**
  * Charter Booking Debug Logger
- * Only logs in development mode or when VITE_CHARTER_DEBUG=true
+ * Only logs when VITE_CHARTER_DEBUG=true
  * Never logs sensitive data (tokens, passwords, OTP, payment secrets)
  */
 
-const SHOULD_LOG = import.meta.env.DEV || import.meta.env.VITE_CHARTER_DEBUG === "true";
+const SHOULD_LOG = import.meta.env.VITE_CHARTER_DEBUG === "true";
 
 const SENSITIVE_KEYS = new Set([
   "authorization",

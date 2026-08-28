@@ -1,8 +1,5 @@
 import { INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
 
-// Helpers, constants và validation dùng chung cho form tạo/sửa gói bảo hiểm
-// (trang Admin/InsuranceManagement: index.jsx, InsuranceFormModal.jsx).
-
 export const emptyForm = () => ({
   code: "",
   name: "",
@@ -24,7 +21,7 @@ export const emptyForm = () => ({
 
 export const VALIDATED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
 
-export const REQUIRED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount"];
+export const REQUIRED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName"];
 
 // Field cần realtime validate (error hiện ngay khi gõ).
 export const REALTIME_VALIDATED_FIELDS = new Set(["unitPremiumAmount", "coverageAmount"]);
@@ -35,9 +32,9 @@ export const MAX_PROVIDER_NAME = 150;
 export const MAX_URL = 2048;
 export const MAX_CONDITIONS = 20;
 export const MAX_CONDITION_TEXT = 500;
-export const MAX_PREMIUM = 100_000_000_000;
+export const MAX_PREMIUM = 100_000_000;
 export const MIN_PREMIUM = 1_000;
-export const MAX_COVERAGE = 10_000_000_000_00;
+export const MAX_COVERAGE = 10_000_000_000;
 export const MAX_LOGO_SIZE = 5 * 1024 * 1024;
 export const CODE_REGEX = /^[A-Za-z]\w*$/;
 export const URL_REGEX = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
@@ -136,11 +133,8 @@ export const validateField = (name, value, form = {}) => {
     }
     case "providerName": {
       const trimmed = stringValue.trim();
+      if (!trimmed) return { level: "error", message: "Vui lòng nhập tên nhà cung cấp bảo hiểm." };
       if (trimmed.length > MAX_PROVIDER_NAME) return { level: "error", message: `Tên nhà cung cấp không vượt quá ${MAX_PROVIDER_NAME} ký tự.` };
-      const hasLogo = !!form?.providerLogoFile || !!form?.providerLogoPreview;
-      if (hasLogo && !trimmed) {
-        return { level: "error", message: "Vui lòng nhập tên nhà cung cấp khi đã có logo." };
-      }
       return null;
     }
     case "providerLogoFile": {

@@ -2,6 +2,7 @@ import {
     getInsurancePackages as apiGetInsurancePackages,
     createInsurancePackage as apiCreateInsurancePackage,
     updateInsurancePackage as apiUpdateInsurancePackage,
+    uploadInsurancePackageImage as apiUploadInsurancePackageImage,
     updateInsurancePackageStatus as apiUpdateInsurancePackageStatus,
     deleteInsurancePackage as apiDeleteInsurancePackage,
     checkWaterbusDefault as apiCheckWaterbusDefault,
@@ -133,6 +134,15 @@ export const modifyInsurancePackage = async (id, payload) => {
         });
     } catch (error) {
         console.error(`Lỗi khi cập nhật gói bảo hiểm ${id}:`, error);
+        throw error;
+    }
+};
+
+export const uploadInsurancePackageImage = async (id, imageFile) => {
+    try {
+        return await apiUploadInsurancePackageImage(id, imageFile);
+    } catch (error) {
+        console.error(`Lỗi khi tải ảnh gói bảo hiểm ${id}:`, error);
         throw error;
     }
 };
