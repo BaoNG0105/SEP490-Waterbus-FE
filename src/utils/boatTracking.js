@@ -720,9 +720,18 @@ export const resolveBoatServiceType = (source, fallback = "Passenger") => {
     ?? source.ServiceType
     ?? source.boat?.serviceType
     ?? source.boat?.ServiceType;
-  if (raw) return String(raw);
   const code = String(source.boatCode || source.code || source.BoatCode || "").toUpperCase();
-  if (code.startsWith("SOS") || code.startsWith("RS_")) return "Rescue";
+  const name = String(source.boatName || source.name || source.BoatName || source.boat?.boatName || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  // Một số bản ghi cũ có serviceType=Passenger dù tên/mã đã xác định là tàu cứu hộ.
+  if (String(raw || "").toLowerCase().includes("rescue")
+    || code.startsWith("SOS")
+    || code.startsWith("RS_")
+    || name.includes("rescue")
+    || name.includes("cuu ho")) return "Rescue";
+  if (raw) return String(raw);
   return fallback;
 };
 

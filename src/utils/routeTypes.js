@@ -66,10 +66,10 @@ export const resolveTripKindKey = (tripOrCode) => {
   return "";
 };
 
-/** Nhãn ngắn: Bus | Sightseeing | Request (Charter). */
+/** Nhãn ngắn: Bus | Sightseeing | Request. */
 export const getTripKindShortLabel = (tripOrCode) => {
   const key = resolveTripKindKey(tripOrCode);
-  if (key === "Charter") return "Request (Charter)";
+  if (key === "Charter") return "Request";
   return key || "";
 };
 
@@ -94,7 +94,8 @@ export const getRouteKindLabel = (routeTypeOrRoute, lang = "VN") => {
 /** Badge ngắn trên UI (ưu tiên routeLabel BE). */
 export const getRouteShortLabel = (routeOrTypeOrLabel, lang = "VN") => {
   const key = resolveRouteLabelKey(routeOrTypeOrLabel);
-  if (["Bus", "GPS", "Sightseeing", "Charter"].includes(key)) return key;
+  if (key === "Charter") return "Request";
+  if (["Bus", "GPS", "Sightseeing"].includes(key)) return key;
   return getRouteKindLabel(routeOrTypeOrLabel, lang);
 };
 

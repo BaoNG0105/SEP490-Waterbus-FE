@@ -22,6 +22,7 @@ export function CreatePromotion() {
   const [errorTick, setErrorTick] = useState(0);
   const [formData, setFormData] = useState(() => emptyPromotionForm());
   const [fieldErrors, setFieldErrors] = useState({});
+  const hasBlockingErrors = Object.keys(fieldErrors).length > 0;
 
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -123,7 +124,7 @@ export function CreatePromotion() {
         </div>
       )}
 
-      <form onSubmit={handleFormSubmit} className="space-y-6">
+      <form noValidate onSubmit={handleFormSubmit} className="space-y-6">
         <PromotionFormFields
           lang={lang}
           formData={formData}
@@ -134,7 +135,7 @@ export function CreatePromotion() {
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || hasBlockingErrors}
           className="sticky bottom-4 z-20 w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {isSubmitting && (

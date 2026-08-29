@@ -12,6 +12,7 @@ import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepp
 import { PageLoading } from "../../../components/PageLoading";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats, fetchActiveBoatsByServiceType } from "../../../services/boatService";
+import { fetchAllTrips, toOperatingDateQuery } from "../../../services/tripService";
 import {
   fetchAdminCharterBookingDetail,
   fetchAssignedCharterBookingDetail,
@@ -106,6 +107,54 @@ import {
 } from "../../../utils/charterBookingAdmin";
 import { fetchCharterSourceRoutes, fetchRouteDetail } from "../../../services/routeService";
 
+const isCharterBookingAlreadyHasTripError = (error) => {
+  const data = error?.response?.data;
+  const fieldErrors = data?.errors && typeof data.errors === "object"
+    ? Object.values(data.errors).flat().join(" ")
+    : "";
+  const message = [data?.detail, data?.title, data?.message, fieldErrors, error?.message]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return /trip/.test(message) && /(đã\s*có|already\s+(exists?|has|created))/.test(message);
+};
+
+const EXISTING_CHARTER_TRIP_MARKER_PREFIX = "existingCharterTrip:";
+
+const hasKnownExistingCharterTrip = (bookingId) => {
+  if (!bookingId) return false;
+  try {
+    return sessionStorage.getItem(`${EXISTING_CHARTER_TRIP_MARKER_PREFIX}${bookingId}`) === "true";
+  } catch {
+    return false;
+  }
+};
+
+const rememberExistingCharterTrip = (bookingId) => {
+  if (!bookingId) return;
+  try {
+    sessionStorage.setItem(`${EXISTING_CHARTER_TRIP_MARKER_PREFIX}${bookingId}`, "true");
+  } catch {
+    // Không ảnh hưởng luồng tạo chuyến nếu trình duyệt chặn session storage.
+  }
+};
+
+const getTripIdsLinkedToBooking = (trips, bookingId) => {
+  const targetId = String(bookingId || "").trim();
+  if (!targetId || !Array.isArray(trips)) return [];
+
+  return trips.flatMap((trip) => {
+    const linkedBookingId = pick(trip, [
+      "charterBookingId", "CharterBookingId", "bookingId", "BookingId",
+      "requestBookingId", "RequestBookingId", "sourceBookingId", "SourceBookingId",
+      "charterBooking.id", "CharterBooking.Id", "booking.id", "Booking.Id",
+    ], "");
+    if (String(linkedBookingId || "").trim() !== targetId) return [];
+    const tripId = pick(trip, ["tripId", "TripId", "id", "Id", "tripCode", "TripCode"], "");
+    return tripId ? [String(tripId)] : [`existing-${targetId}`];
+  });
+};
+
 export function AdminCharterBookingDetail() {
   const { lang } = useApp();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
@@ -131,7 +180,9 @@ export function AdminCharterBookingDetail() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [quotePreviewError, setQuotePreviewError] = useState("");
   const [occupiedBoatIds, setOccupiedBoatIds] = useState([]);
-  const [localCreatedTripIds, setLocalCreatedTripIds] = useState([]);
+  const [localCreatedTripIds, setLocalCreatedTripIds] = useState(() => (
+    hasKnownExistingCharterTrip(id) ? [`existing-${id}`] : []
+  ));
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -176,6 +227,18 @@ export function AdminCharterBookingDetail() {
       ]);
       const normalized = normalizeBooking(detail);
       setBooking(normalized);
+      // API detail hiện có thể không trả tripId dù trip đã tồn tại. Kiểm tra danh
+      // sách chuyến theo ngày để ẩn nút Tạo chuyến ngay khi vừa mở trang.
+      const operatingDate = toOperatingDateQuery(normalized.departureDate);
+      if (operatingDate) {
+        const tripsOnDepartureDate = await fetchAllTrips({ operatingDate, tripType: "Charter" })
+          .catch(() => []);
+        const linkedIds = getTripIdsLinkedToBooking(tripsOnDepartureDate, normalized.id);
+        if (linkedIds.length > 0) {
+          rememberExistingCharterTrip(normalized.id);
+          setLocalCreatedTripIds((prev) => [...new Set([...prev, ...linkedIds])]);
+        }
+      }
       const embeddedDraw = normalizeRouteDrawRequest(
         normalized.routeDrawRequest || detail?.routeDrawRequest || detail?.latestRouteDrawRequest,
       );
@@ -484,20 +547,11 @@ export function AdminCharterBookingDetail() {
     return "closed";
   }, [booking]);
 
-  const canManageTripCreate = Boolean(booking)
-    && capabilities.canManageStatus
-    && booking.status === "Confirmed";
-
-  // Đã hủy + đã hoàn tiền (hoặc không cần hoàn) thì không còn gì để hủy nữa.
+  // Booking đã đóng thì không được hủy lần nữa. Các việc hoàn tiền (nếu có)
+  // được xử lý ở tab Thanh toán, không phải bằng thao tác hủy booking.
   const canCancelBooking = Boolean(booking)
     && capabilities.canManageStatus
-    && !(
-      ["Cancelled", "Refunded"].includes(String(booking?.status || ""))
-      && (
-        hasCompletedCharterRefund(booking)
-        || ["refunded", "partiallyrefunded"].includes(String(booking?.paymentStatus || "").toLowerCase().replace(/[_-\s]/g, ""))
-      )
-    );
+    && !["Cancelled", "Refunded", "Expired", "Completed"].includes(String(booking?.status || ""));
 
   const linkedTripIds = useMemo(() => {
     const fromBooking = booking ? getCharterBookingLinkedTripIds(booking) : [];
@@ -505,8 +559,8 @@ export function AdminCharterBookingDetail() {
   }, [booking, localCreatedTripIds]);
 
   useEffect(() => {
-    setLocalCreatedTripIds([]);
-  }, [booking?.id]);
+    setLocalCreatedTripIds(hasKnownExistingCharterTrip(id) ? [`existing-${id}`] : []);
+  }, [id]);
 
   // Detail sau tạo trip có thể đã có tripId từ BE → đồng bộ local.
   useEffect(() => {
@@ -515,6 +569,11 @@ export function AdminCharterBookingDetail() {
     if (fromBooking.length === 0) return;
     setLocalCreatedTripIds((prev) => [...new Set([...prev, ...fromBooking])]);
   }, [booking]);
+
+  const canManageTripCreate = Boolean(booking)
+    && capabilities.canManageStatus
+    && booking.status === "Confirmed"
+    && linkedTripIds.length === 0;
 
   const charterTripGate = useMemo(() => {
     if (!booking || !canManageTripCreate) {
@@ -568,6 +627,7 @@ export function AdminCharterBookingDetail() {
         ? createdIds
         : gate.boatIds.map((_, index) => `created-${booking.id}-${index + 1}`);
       setLocalCreatedTripIds((prev) => [...new Set([...prev, ...fallbackIds])]);
+      rememberExistingCharterTrip(booking.id);
       setBooking((prev) => (prev ? {
         ...prev,
         tripIds: [...new Set([...(prev.tripIds || []), ...fallbackIds])],
@@ -586,6 +646,22 @@ export function AdminCharterBookingDetail() {
       });
     } catch (error) {
       console.error("Tạo trip charter thất bại:", error);
+      if (isCharterBookingAlreadyHasTripError(error)) {
+        // Detail BE có thể chưa trả tripId dù endpoint đã xác nhận booking đã có trip.
+        // Lưu marker theo phiên để reload trang cũng không hiển thị thao tác tạo trùng.
+        rememberExistingCharterTrip(booking.id);
+        setLocalCreatedTripIds((prev) => [...new Set([...prev, `existing-${booking.id}`])]);
+        await loadDetail({ silent: true });
+        showToast({
+          icon: "info",
+          title: lang === "VN" ? "Booking đã có chuyến" : "Booking already has a trip",
+          text: lang === "VN"
+            ? "Không thể tạo lại chuyến cho booking này."
+            : "A new trip cannot be created for this booking.",
+          timer: 4000,
+        });
+        return;
+      }
       showToast({
         icon: "error",
         title: lang === "VN" ? "Không tạo được chuyến" : "Unable to create trip",
@@ -1122,7 +1198,7 @@ export function AdminCharterBookingDetail() {
     : [];
 
   return (
-    <div className="relative space-y-6 pb-10 font-body">
+    <div className="relative mx-auto max-w-7xl space-y-6 px-2 pb-10 font-body sm:px-4">
       {(isRefreshing || isSubmitting) ? (
         <PageLoading
           lang={lang}
@@ -1214,7 +1290,12 @@ export function AdminCharterBookingDetail() {
         <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
           {lang === "VN" ? "Tiến trình booking" : "Booking progress"}
         </p>
-        <CharterWorkflowStepper status={booking.status} lang={lang} />
+        <CharterWorkflowStepper
+          status={booking.status}
+          paymentStatus={booking.paymentStatus}
+          booking={booking}
+          lang={lang}
+        />
       </div>
 
       {bookingNeedsAdminRefundAttention(booking) && capabilities.canViewPayments && (

@@ -22,10 +22,10 @@ import {
   REGISTRATION_NUMBER_REGEX,
   MIN_BOAT_SPEED_KMH,
   MAX_BOAT_SPEED_KMH,
-  MIN_YEAR_BUILT,
   getMinYearBuilt,
   MIN_BOAT_NAME_LENGTH,
   MAX_BOAT_NAME_LENGTH,
+  BOAT_NAME_REGEX,
 } from "../../../utils/boatValidation";
 
 export function EditBoat() {
@@ -123,6 +123,7 @@ export function EditBoat() {
 
   const handleFieldChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
   };
 
   // Validate real-time từng field bắt buộc (*) — lỗi chỉ hiện cho field đã "touched" (rời khỏi
@@ -144,13 +145,14 @@ export function EditBoat() {
     ...(formData.name.trim()
       ? (formData.name.trim().length >= MIN_BOAT_NAME_LENGTH
           && formData.name.trim().length <= MAX_BOAT_NAME_LENGTH
+          && BOAT_NAME_REGEX.test(formData.name.trim())
         ? {}
         : { name: lang === "VN"
-            ? `Tên phương tiện phải từ ${MIN_BOAT_NAME_LENGTH}–${MAX_BOAT_NAME_LENGTH} ký tự.`
-            : `Name must be ${MIN_BOAT_NAME_LENGTH}–${MAX_BOAT_NAME_LENGTH} characters.` })
+            ? `Tên phương tiện chỉ gồm chữ, số và khoảng trắng; từ ${MIN_BOAT_NAME_LENGTH}–${MAX_BOAT_NAME_LENGTH} ký tự.`
+            : `Name may only contain letters, digits, and spaces; ${MIN_BOAT_NAME_LENGTH}–${MAX_BOAT_NAME_LENGTH} characters.` })
       : { name: lang === "VN" ? "Vui lòng nhập tên phương tiện" : "Boat name is required" }),
     ...((formData.registrationNumber || "").trim() && !REGISTRATION_NUMBER_REGEX.test((formData.registrationNumber || "").trim())
-      ? { registrationNumber: lang === "VN" ? "Mã số đăng ký chỉ gồm chữ cái, số và dấu gạch ngang (-)." : "Registration number may only contain letters, numbers and hyphens." }
+      ? { registrationNumber: lang === "VN" ? "Mã số đăng ký chỉ gồm chữ cái, số và dấu gạch ngang (-)." : "Registration number may only contain letters, digits, and hyphens (-)." }
       : {}),
     ...(String(formData.maxSpeedKmh).trim() === "" || Number.isNaN(Number(formData.maxSpeedKmh))
       ? { maxSpeedKmh: lang === "VN" ? "Vui lòng nhập vận tốc tối đa" : "Max speed is required" }
@@ -161,8 +163,8 @@ export function EditBoat() {
       ? { yearBuilt: lang === "VN" ? "Vui lòng nhập năm đóng tàu" : "Year built is required" }
       : Number(formData.yearBuilt) > currentYear
         ? { yearBuilt: lang === "VN" ? `Năm đóng tàu không được lớn hơn ${currentYear}` : `Year built cannot be later than ${currentYear}` }
-        : Number(formData.yearBuilt) < MIN_YEAR_BUILT
-          ? { yearBuilt: lang === "VN" ? `Năm đóng tàu không được sớm hơn ${MIN_YEAR_BUILT}` : `Year built cannot be earlier than ${MIN_YEAR_BUILT}` }
+        : Number(formData.yearBuilt) < minYearBuilt
+          ? { yearBuilt: lang === "VN" ? `Tàu chở khách không được quá 20 năm sử dụng (từ năm ${minYearBuilt}).` : `Passenger vessels must be no older than 20 years (from ${minYearBuilt}).` }
           : {}),
   } : {};
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
@@ -504,7 +506,7 @@ export function EditBoat() {
               <input
                 type="text"
                 value={formData.registrationNumber || ""}
-                onChange={(e) => handleFieldChange("registrationNumber", e.target.value)}
+                onChange={(e) => handleFieldChange("registrationNumber", e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))}
                 onBlur={() => handleFieldBlur("registrationNumber")}
                 className={visibleFieldErrors.registrationNumber ? errorInputStyle : inputStyle}
               />

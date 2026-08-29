@@ -231,18 +231,48 @@ export const getCharterBookingLinkedTripIds = (booking) => {
     if (id) ids.add(id);
   };
 
-  push(booking?.tripId);
-  push(pick(booking, ["sourceTripId", "charterTripId"], ""));
-  (Array.isArray(booking?.tripIds) ? booking.tripIds : []).forEach(push);
+  const sources = [booking, booking?.raw].filter(Boolean);
+  sources.forEach((source) => {
+    push(source?.tripId);
+    push(source?.TripId);
+    push(pick(source, [
+      "sourceTripId", "SourceTripId",
+      "charterTripId", "CharterTripId",
+      "linkedTripId", "LinkedTripId",
+      "trip.tripId", "trip.id", "Trip.TripId", "Trip.Id",
+      // Một số DTO detail chỉ trả tripCode. Đây vẫn là bằng chứng booking đã có chuyến.
+      "tripCode", "TripCode", "trip.tripCode", "Trip.TripCode",
+    ], ""));
+    (Array.isArray(source?.tripIds) ? source.tripIds : []).forEach(push);
+    (Array.isArray(source?.TripIds) ? source.TripIds : []).forEach(push);
+  });
 
   const tripCollections = [
     booking?.trips,
+    booking?.Trips,
     booking?.charterTrips,
+    booking?.CharterTrips,
     booking?.linkedTrips,
+    booking?.LinkedTrips,
+    booking?.trip ? [booking.trip] : [],
+    booking?.Trip ? [booking.Trip] : [],
+    booking?.raw?.trips,
+    booking?.raw?.Trips,
+    booking?.raw?.charterTrips,
+    booking?.raw?.CharterTrips,
+    booking?.raw?.linkedTrips,
+    booking?.raw?.LinkedTrips,
+    booking?.raw?.trip ? [booking.raw.trip] : [],
+    booking?.raw?.Trip ? [booking.raw.Trip] : [],
   ];
   tripCollections.forEach((list) => {
     (Array.isArray(list) ? list : []).forEach((trip) => {
-      push(pick(trip, ["tripId", "id", "TripId"], ""));
+      if (typeof trip === "string" || typeof trip === "number") {
+        push(trip);
+        return;
+      }
+      push(pick(trip, ["tripId", "TripId", "id", "Id"], ""));
+      push(pick(trip, ["tripCode", "TripCode", "code", "Code"], ""));
     });
   });
 
@@ -252,10 +282,24 @@ export const getCharterBookingLinkedTripIds = (booking) => {
     booking?.assignedBoats,
     booking?.boats,
     booking?.charterBoats,
+    booking?.CharterBoats,
+    booking?.raw?.selectedBoats,
+    booking?.raw?.SelectedBoats,
+    booking?.raw?.quoteBoats,
+    booking?.raw?.QuoteBoats,
+    booking?.raw?.assignedBoats,
+    booking?.raw?.AssignedBoats,
+    booking?.raw?.boats,
+    booking?.raw?.Boats,
+    booking?.raw?.charterBoats,
+    booking?.raw?.CharterBoats,
   ];
   boatCollections.forEach((list) => {
     (Array.isArray(list) ? list : []).forEach((boat) => {
-      push(pick(boat, ["tripId", "TripId", "trip.id"], ""));
+      push(pick(boat, [
+        "tripId", "TripId", "trip.id", "trip.TripId", "Trip.Id",
+        "tripCode", "TripCode", "trip.tripCode", "Trip.TripCode",
+      ], ""));
     });
   });
 
@@ -1671,6 +1715,16 @@ export const normalizeBooking = (item) => {
   const adultCount = Number(pick(item, ["adultCount"], 0));
   const childCount = Number(pick(item, ["childCount"], 0));
   const passengerCount = Number(pick(item, ["passengerCount"], adultCount + childCount));
+  // Booking bị hủy vẫn phải giữ lịch thuê để admin đối soát. Tùy endpoint,
+  // BE có thể trả giờ bằng departureTime/requestedDepartureTime thay vì startTime.
+  const departureDate = pick(item, [
+    "departureDate", "startDate", "scheduledDate", "rentalDate", "requestedDepartureDate",
+    "departureTime", "requestedDepartureTime",
+  ]);
+  const startTime = normalizeCharterScheduleTime(pick(item, [
+    "startTime", "departureTime", "requestedDepartureTime", "scheduledDepartureTime",
+    "rentalStartTime", "schedule.startTime", "charterSchedule.startTime",
+  ])) || "--";
   const fromName = pick(item, ["fromStationName", "fromStation.stationName", "fromStation.name"]);
   const toName = pick(item, ["toStationName", "toStation.stationName", "toStation.name"]);
   const routeEstimate = pick(item, ["routeEstimate"], null);
@@ -1736,8 +1790,8 @@ export const normalizeBooking = (item) => {
     fromStationName: fromName || "",
     toStationId: String(pick(item, ["toStationId", "toStation.id", "toStation.stationId"], "")),
     toStationName: toName || "",
-    departureDate: pick(item, ["departureDate", "startDate"]),
-    startTime: pick(item, ["startTime"], "--"),
+    departureDate,
+    startTime,
     itineraryStops: normalizeItineraryStops(item),
     routeEstimate,
     rentalUnit: pick(item, ["rentalUnit"], ""),

@@ -7,7 +7,9 @@ import { fetchAllBoats } from "../../../services/boatService";
 import {
   buildRoundTripPreviewPayload,
   buildScheduleTripsPayload,
+  fetchAllTrips,
   filterRoundTripPreviewByTimeWindow,
+  formatSkippedScheduleItemsText,
   getTripCreateLeadTimeError,
   isSingleTripCreateCase,
   previewRoundTripScheduleBatch,
@@ -127,6 +129,26 @@ const toPositiveMinutes = (value) => {
   return Number.isFinite(n) && n > 0 ? n : 0;
 };
 
+const clockMinutes = (value) => {
+  const raw = String(value || "").trim();
+  if (/^\d{2}:\d{2}$/.test(raw)) {
+    const [hour, minute] = raw.split(":").map(Number);
+    return hour * 60 + minute;
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  const clock = date.toLocaleTimeString("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  return clockMinutes(clock);
+};
+
+const formatPreviewDate = (value) => {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : (raw || "—");
+};
+
 const pickRouteTravelMinutes = (route) => (
   toPositiveMinutes(route?.estimatedDurationMin)
   || toPositiveMinutes(route?.estimatedDurationMinutes)
@@ -201,6 +223,8 @@ export function CreateTrip() {
 
   const [routes, setRoutes] = useState([]);
   const [boats, setBoats] = useState([]);
+  const [boatDayTrips, setBoatDayTrips] = useState([]);
+  const [isLoadingBoatSchedule, setIsLoadingBoatSchedule] = useState(false);
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [isLoadingStops, setIsLoadingStops] = useState(false);
   const [isLoadingInboundStops, setIsLoadingInboundStops] = useState(false);
@@ -241,6 +265,13 @@ export function CreateTrip() {
     setTouchedFields((prev) => ({ ...prev, [field]: true }));
   };
   const fieldErrors = {
+    ...(isRoundTrip
+      ? (!form.outboundRouteCode ? { outboundRouteCode: lang === "VN" ? "Vui lòng chọn tuyến đi" : "Please choose the outbound route" } : {})
+      : (!form.routeCode ? { routeCode: lang === "VN" ? "Vui lòng chọn tuyến đường" : "Please choose a route" } : {})),
+    ...(isRoundTrip && !form.inboundRouteCode
+      ? { inboundRouteCode: lang === "VN" ? "Vui lòng chọn tuyến về" : "Please choose the inbound route" }
+      : {}),
+    ...(!form.boatCode ? { boatCode: lang === "VN" ? "Vui lòng chọn tàu" : "Please choose a boat" } : {}),
     ...(!form.fromDate
       ? { fromDate: lang === "VN" ? "Vui lòng chọn từ ngày" : "Please choose the from date" }
       : form.fromDate < todayDateString
@@ -286,6 +317,10 @@ export function CreateTrip() {
   };
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
   const visibleFieldErrors = {
+    ...(touchedFields.outboundRouteCode ? { outboundRouteCode: fieldErrors.outboundRouteCode } : {}),
+    ...(touchedFields.inboundRouteCode ? { inboundRouteCode: fieldErrors.inboundRouteCode } : {}),
+    ...(touchedFields.routeCode ? { routeCode: fieldErrors.routeCode } : {}),
+    ...(touchedFields.boatCode ? { boatCode: fieldErrors.boatCode } : {}),
     ...(touchedFields.fromDate ? { fromDate: fieldErrors.fromDate } : {}),
     ...(touchedFields.toDate ? { toDate: fieldErrors.toDate } : {}),
     ...(touchedFields.startTime ? { startTime: fieldErrors.startTime } : {}),
@@ -308,6 +343,25 @@ export function CreateTrip() {
       return { ...prev, daysOfWeek: nextDays };
     });
   }, [availableWeekdays, showDaysOfWeek]);
+
+  useEffect(() => {
+    if (!form.boatCode || !form.fromDate || form.fromDate !== form.toDate) {
+      setBoatDayTrips([]);
+      return undefined;
+    }
+    let active = true;
+    setIsLoadingBoatSchedule(true);
+    fetchAllTrips({ operatingDate: form.fromDate })
+      .then((items) => {
+        if (!active) return;
+        setBoatDayTrips((Array.isArray(items) ? items : []).filter((trip) =>
+          String(trip.boatCode || trip.BoatCode || trip.boat?.boatCode || "") === String(form.boatCode),
+        ));
+      })
+      .catch(() => active && setBoatDayTrips([]))
+      .finally(() => active && setIsLoadingBoatSchedule(false));
+    return () => { active = false; };
+  }, [form.boatCode, form.fromDate, form.toDate]);
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -365,6 +419,7 @@ export function CreateTrip() {
   };
 
   const handleRouteChange = async (routeCode) => {
+    handleFieldBlur("routeCode");
     updateForm({ routeCode, stops: [] });
     clearPreview();
     clearOneWayPreview();
@@ -389,6 +444,7 @@ export function CreateTrip() {
   };
 
   const handleOutboundRouteChange = async (outboundRouteCode) => {
+    handleFieldBlur("outboundRouteCode");
     updateForm({ outboundRouteCode, outboundStops: [] });
     clearPreview();
     const selected = routes.find((r) => String(r.routeCode) === String(outboundRouteCode));
@@ -411,6 +467,7 @@ export function CreateTrip() {
   };
 
   const handleInboundRouteChange = async (inboundRouteCode) => {
+    handleFieldBlur("inboundRouteCode");
     updateForm({ inboundRouteCode, inboundStops: [] });
     clearPreview();
     const selected = routes.find((r) => String(r.routeCode) === String(inboundRouteCode));
@@ -458,6 +515,7 @@ export function CreateTrip() {
   const addFixedTime = () => {
     const time = String(form.draftTime || "").trim();
     if (!/^\d{2}:\d{2}$/.test(time)) return;
+    if (draftTimeCheck?.valid === false) return;
     setForm((prev) => ({
       ...prev,
       departureTimes: prev.departureTimes.includes(time)
@@ -585,7 +643,7 @@ export function CreateTrip() {
   const handlePreviewOneWay = async () => {
     setTouchedFields((prev) => ({
       ...prev,
-      fromDate: true, toDate: true, startTime: true, endTime: true,
+      routeCode: true, boatCode: true, fromDate: true, toDate: true, startTime: true, endTime: true,
       intervalMinutes: true, departureTimes: true,
     }));
     if (hasFieldErrors) return;
@@ -629,10 +687,18 @@ export function CreateTrip() {
         return;
       }
 
-      // Gọi BE lấy gợi ý — luôn dùng khung giờ [startTime, endTime] cho BE đề xuất.
-      // Với fixed-times thì start/end lấy min/max của departureTimes.
-      const startTime = form.startTime || form.departureTimes[0] || "07:00";
-      const endTime = form.endTime || form.departureTimes[form.departureTimes.length - 1] || "23:00";
+      // Giờ cố định phải gửi đúng khung từ danh sách đã chọn. Một giờ duy nhất
+      // cần thêm một phút để thoả contract BE: EndTime > StartTime.
+      const fixedStart = form.departureTimes[0] || "07:00";
+      const fixedEnd = form.departureTimes[form.departureTimes.length - 1] || fixedStart;
+      const [fixedHour, fixedMinute] = fixedEnd.split(":").map(Number);
+      const fixedEndPlusMinute = Number.isFinite(fixedHour) && Number.isFinite(fixedMinute)
+        ? `${String((fixedHour + Math.floor((fixedMinute + 1) / 60)) % 24).padStart(2, "0")}:${String((fixedMinute + 1) % 60).padStart(2, "0")}`
+        : "23:00";
+      const startTime = form.mode === "fixed" ? fixedStart : form.startTime;
+      const endTime = form.mode === "fixed"
+        ? (fixedStart === fixedEnd ? fixedEndPlusMinute : fixedEnd)
+        : form.endTime;
       const previewForm = { ...form, startTime, endTime };
       const preview = await previewOneWayScheduleBatch(previewForm);
 
@@ -690,6 +756,7 @@ export function CreateTrip() {
     e.preventDefault();
     // Bấm submit khi còn field lỗi (VD: nhấn Enter) → hiện hết lỗi lên thay vì âm thầm chặn.
     setTouchedFields({
+      outboundRouteCode: true, inboundRouteCode: true, routeCode: true, boatCode: true,
       fromDate: true, toDate: true, startTime: true, endTime: true,
       intervalMinutes: true, departureTimes: true,
     });
@@ -742,9 +809,10 @@ export function CreateTrip() {
         notify({
           icon: "warning",
           title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
-          text: lang === "VN"
-            ? "Các khung giờ đã chọn không tạo được. Đổi lựa chọn rồi thử lại."
-            : "Selected slots could not be created. Change selection and retry.",
+          text: formatSkippedScheduleItemsText(result.skippedItems, lang)
+            || (lang === "VN"
+              ? "Các khung giờ đã chọn không tạo được. Đổi lựa chọn rồi thử lại."
+              : "Selected slots could not be created. Change selection and retry."),
           confirmButtonColor: "#124757",
         });
       } catch (error) {
@@ -836,9 +904,10 @@ export function CreateTrip() {
         notify({
           icon: "warning",
           title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
-          text: lang === "VN"
-            ? "Các khung giờ đã chọn không tạo được. Đổi lựa chọn rồi thử lại."
-            : "Selected slots could not be created. Change selection and retry.",
+          text: formatSkippedScheduleItemsText(result.skippedItems, lang)
+            || (lang === "VN"
+              ? "Các khung giờ đã chọn không tạo được. Đổi lựa chọn rồi thử lại."
+              : "Selected slots could not be created. Change selection and retry."),
           confirmButtonColor: "#124757",
         });
         return;
@@ -860,9 +929,10 @@ export function CreateTrip() {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Không tạo được chuyến nào" : "No trips created",
-        text: lang === "VN"
-          ? "Đổi tàu / giờ / ngày rồi thử lại."
-          : "Change boat/time/dates and retry.",
+        text: formatSkippedScheduleItemsText(result.skippedItems, lang)
+          || (lang === "VN"
+            ? "Đổi tàu / giờ / ngày rồi thử lại."
+            : "Change boat/time/dates and retry."),
         confirmButtonColor: "#124757",
       });
     } catch (error) {
@@ -919,6 +989,21 @@ export function CreateTrip() {
   const suggestedDepartureIntervalMin = routeTravelMinutes > 0
     ? Math.ceil(routeTravelMinutes) + BOAT_TURNAROUND_BUFFER_MIN
     : null;
+  const draftTimeCheck = useMemo(() => {
+    const candidateStart = clockMinutes(form.draftTime);
+    if (candidateStart == null || !form.boatCode || !form.fromDate || form.fromDate !== form.toDate || isLoadingBoatSchedule) return null;
+    const candidateEnd = candidateStart + Math.max(1, totalPreviewMinutes || routeTravelMinutes || 1);
+    const conflict = boatDayTrips.find((trip) => {
+      const tripStart = clockMinutes(trip.departureTime || trip.scheduledDepartureAt || trip.startAt || trip.StartAt);
+      const tripEnd = clockMinutes(trip.arrivalTime || trip.scheduledArrivalAt || trip.endAt || trip.EndAt);
+      if (tripStart == null || tripEnd == null) return false;
+      return candidateStart < tripEnd + BOAT_TURNAROUND_BUFFER_MIN
+        && candidateEnd + BOAT_TURNAROUND_BUFFER_MIN > tripStart;
+    });
+    if (!conflict) return { valid: true };
+    const code = conflict.tripCode || conflict.code || conflict.tripId || "chuyến hiện có";
+    return { valid: false, message: lang === "VN" ? `Trùng lịch tàu với ${code}.` : `Conflicts with boat trip ${code}.` };
+  }, [boatDayTrips, form.boatCode, form.draftTime, form.fromDate, form.toDate, isLoadingBoatSchedule, lang, routeTravelMinutes, totalPreviewMinutes]);
   const boatsForServiceKind = useMemo(
     () => boats.filter((b) => {
       if (resolveBoatServiceType(b) !== "Passenger") return false;
@@ -954,18 +1039,30 @@ export function CreateTrip() {
     [oneWayPreview, selectedOneWayKeys],
   );
 
-  // Điều kiện bắt buộc qua preview cho one-way:
-  // - WaterSightseeing (luôn nhiều ngày hoặc nhiều giờ cố định)
-  // - Waterbus một chiều nhưng multi-date (fromDate ≠ toDate)
-  // - Waterbus một chiều interval
-  const oneWayRequiresPreview = isWaterSightseeingKind
-    || (!isRoundTrip && (form.fromDate !== form.toDate || form.mode === "interval"));
+  // One-way và Sightseeing dùng /trips/schedule/preview để chặn trùng bến/tàu trước khi tạo.
+  const oneWayRequiresPreview = true;
   const oneWayPreviewReady = !oneWayRequiresPreview || (oneWayPreview && selectedOneWayCount > 0);
 
   const formatClock = (hms) => {
     const raw = String(hms || "").trim();
     if (/^\d{2}:\d{2}/.test(raw)) return raw.slice(0, 5);
     return "—";
+  };
+
+  const formatPreviewConflict = (item) => {
+    const conflict = String(item?.conflictTripCode || "").trim();
+    const conflictStart = String(item?.conflictDepartureLabel || "").trim();
+    const conflictEnd = String(item?.conflictArrivalLabel || "").trim();
+    if (lang === "VN") {
+      if (conflict && conflictStart && conflictEnd) return `Trùng lịch ${conflict} từ ${conflictStart} đến ${conflictEnd}`;
+      if (conflict && conflictStart) return `Trùng lịch ${conflict} lúc ${conflictStart}`;
+      if (conflict) return `Trùng lịch ${conflict}`;
+      return "Chưa thể tạo chuyến";
+    }
+    if (conflict && conflictStart && conflictEnd) return `Conflicts with ${conflict} from ${conflictStart} to ${conflictEnd}`;
+    if (conflict && conflictStart) return `Conflicts with ${conflict} at ${conflictStart}`;
+    if (conflict) return `Conflicts with ${conflict}`;
+    return "Cannot create trip";
   };
 
   const directionLabel = (direction) => {
@@ -1056,7 +1153,7 @@ export function CreateTrip() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
         <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5 overflow-visible">
           <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
             {isRoundTrip
@@ -1077,7 +1174,7 @@ export function CreateTrip() {
                   required
                   placeholder={lang === "VN" ? "Chọn tuyến đi" : "Select outbound route"}
                   emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
-                  className={selectStyle}
+                  className={fieldErrors.outboundRouteCode ? errorInputStyle : selectStyle}
                 />
               </div>
               <div className="relative z-20">
@@ -1091,21 +1188,21 @@ export function CreateTrip() {
                   required
                   placeholder={lang === "VN" ? "Chọn tuyến về" : "Select inbound route"}
                   emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
-                  className={selectStyle}
+                  className={fieldErrors.inboundRouteCode ? errorInputStyle : selectStyle}
                 />
               </div>
               <div className="relative z-10 sm:col-span-2">
                 <label className={labelStyle}>{<>{lang === "VN" ? "Tàu" : "Boat"}{required()}</>}</label>
                 <FormSelect
                   value={form.boatCode}
-                  onChange={(v) => { updateForm({ boatCode: v }); clearPreview(); }}
+                  onChange={(v) => { updateForm({ boatCode: v }); handleFieldBlur("boatCode"); clearPreview(); }}
                   options={boatOptions}
                   disabled={isLoadingOptions}
                   searchable
                   required
                   placeholder={lang === "VN" ? "Chọn tàu" : "Select a boat"}
                   emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
-                  className={selectStyle}
+                  className={fieldErrors.boatCode ? errorInputStyle : selectStyle}
                 />
               </div>
             </div>
@@ -1122,7 +1219,7 @@ export function CreateTrip() {
                   required
                   placeholder={lang === "VN" ? "Chọn tuyến đường" : "Select a route"}
                   emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
-                  className={selectStyle}
+                  className={fieldErrors.routeCode ? errorInputStyle : selectStyle}
                 />
               </div>
               <div className="relative z-20">
@@ -1131,6 +1228,7 @@ export function CreateTrip() {
                   value={form.boatCode}
                   onChange={(v) => {
                     updateForm({ boatCode: v });
+                    handleFieldBlur("boatCode");
                     clearPreview();
                     clearOneWayPreview();
                   }}
@@ -1140,7 +1238,7 @@ export function CreateTrip() {
                   required
                   placeholder={lang === "VN" ? "Chọn tàu" : "Select a boat"}
                   emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
-                  className={selectStyle}
+                  className={fieldErrors.boatCode ? errorInputStyle : selectStyle}
                 />
               </div>
             </div>
@@ -1314,7 +1412,7 @@ export function CreateTrip() {
                 <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Từ giờ" : "From"}</label>
+                      <label className={labelStyle}>{<>{lang === "VN" ? "Từ giờ" : "From"}{required()}</>}</label>
                       <AppTimeInput
                         required
                         min={TRIP_TIME_MIN}
@@ -1329,7 +1427,7 @@ export function CreateTrip() {
                       {visibleFieldErrors.startTime && <p className={errorTextStyle}>{visibleFieldErrors.startTime}</p>}
                     </div>
                     <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Đến giờ" : "To"}</label>
+                      <label className={labelStyle}>{<>{lang === "VN" ? "Đến giờ" : "To"}{required()}</>}</label>
                       <AppTimeInput
                         required
                         min={TRIP_TIME_MIN}
@@ -1344,7 +1442,7 @@ export function CreateTrip() {
                       {visibleFieldErrors.endTime && <p className={errorTextStyle}>{visibleFieldErrors.endTime}</p>}
                     </div>
                     <div>
-                      <label className={labelStyle}>{lang === "VN" ? "Mỗi (phút)" : "Every (min)"}</label>
+                      <label className={labelStyle}>{<>{lang === "VN" ? "Thời gian cách nhau (phút)" : "Time between trips (min)"}{required()}</>}</label>
                       <input
                         type="number"
                         min={1}
@@ -1398,19 +1496,27 @@ export function CreateTrip() {
                         }
                       }}
                     >
-                      <label className={labelStyle}>{lang === "VN" ? "Giờ mới" : "New time"}</label>
+                      <label className={labelStyle}>{<>{lang === "VN" ? "Giờ khởi hành" : "Departure time"}{required()}</>}</label>
                       <AppTimeInput
                         min={TRIP_TIME_MIN}
                         max={TRIP_TIME_MAX}
                         value={form.draftTime}
                         onChange={(e) => updateForm({ draftTime: e.target.value })}
-                        className={timeInputStyle}
+                        className={draftTimeCheck?.valid === false ? timeErrorInputStyle : timeInputStyle}
                       />
+                      {isLoadingBoatSchedule ? (
+                        <p className="mt-1 text-[10px] font-bold text-slate-400">{lang === "VN" ? "Đang kiểm tra lịch tàu…" : "Checking boat schedule…"}</p>
+                      ) : draftTimeCheck?.valid === false ? (
+                        <p className="mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                          {draftTimeCheck.message}
+                        </p>
+                      ) : null}
                     </div>
                     <button
                       type="button"
                       onClick={addFixedTime}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#124757] px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-white transition hover:opacity-90 dark:bg-yellow-400 dark:text-[#124757]"
+                      disabled={!form.draftTime || isLoadingBoatSchedule || draftTimeCheck?.valid === false}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#124757] px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 dark:bg-yellow-400 dark:text-[#124757] dark:disabled:bg-slate-700 dark:disabled:text-slate-500"
                     >
                       <span className="material-symbols-outlined text-[16px]">add</span>
                       {lang === "VN" ? "Thêm" : "Add"}
@@ -1471,25 +1577,11 @@ export function CreateTrip() {
           )}
         </div>
 
-        {/* One-way / WaterSightseeing bulk preview — bắt buộc qua bước này khi tạo nhiều chuyến */}
+        {/* Review chỉ dùng cho chuyến khứ hồi vì endpoint preview yêu cầu tuyến về. */}
         {!isRoundTrip && oneWayRequiresPreview && (
           <>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                onClick={handlePreviewOneWay}
-                disabled={isPreviewingOneWay || isSubmitting || isLoadingOptions || isLoadingStops || hasFieldErrors}
-                className="flex-1 bg-white text-[#124757] border border-[#124757]/30 dark:bg-slate-900 dark:text-yellow-400 dark:border-yellow-400/40 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-sm hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-              >
-                {isPreviewingOneWay && (
-                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                )}
-                {lang === "VN" ? "Xem gợi ý lịch" : "Preview schedule"}
-              </button>
-            </div>
-
             {oneWayPreview && (
-              <div className="bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
+              <div className="order-11 bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider">
@@ -1549,7 +1641,7 @@ export function CreateTrip() {
                                 />
                               </td>
                               <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                                {item.operatingDate || "—"}
+                                {formatPreviewDate(item.operatingDate)}
                               </td>
                               <td className="px-3 py-2.5 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-200">
                                 {item.routeCode || "—"}
@@ -1566,16 +1658,9 @@ export function CreateTrip() {
                                     {lang === "VN" ? "Tạo được" : "OK"}
                                   </span>
                                 ) : (
-                                  <div className="max-w-65 space-y-1">
-                                    <span className="block text-[11px] font-bold text-amber-700 dark:text-amber-300" title={item.reason || ""}>
-                                      {item.reason || (lang === "VN" ? "Không tạo được" : "Cannot create")}
-                                    </span>
-                                    {item.suggestedNextDepartureLabel && (
-                                      <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                                        {lang === "VN" ? "Sớm nhất" : "Earliest"}: {item.suggestedNextDepartureLabel}
-                                      </span>
-                                    )}
-                                  </div>
+                                  <span className="block whitespace-nowrap text-[11px] font-bold text-amber-700 dark:text-amber-300" title={item.reason || ""}>
+                                    {formatPreviewConflict(item)}
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -1697,7 +1782,7 @@ export function CreateTrip() {
                 type="button"
                 onClick={handlePreviewRoundTrip}
                 disabled={isPreviewing || isSubmitting || isLoadingOptions || isLoadingStops || isLoadingInboundStops || hasFieldErrors}
-                className="flex-1 bg-white text-[#124757] border border-[#124757]/30 dark:bg-slate-900 dark:text-yellow-400 dark:border-yellow-400/40 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-sm hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                className="flex-1 bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-sm hover:scale-[1.01] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-500 transition-all flex items-center justify-center gap-2"
               >
                 {isPreviewing && (
                   <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -1759,7 +1844,7 @@ export function CreateTrip() {
                               />
                             </td>
                             <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                              {item.operatingDate || "—"}
+                              {formatPreviewDate(item.operatingDate)}
                             </td>
                             <td className="px-3 py-2.5 font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
                               {directionLabel(item.direction)}
@@ -1779,16 +1864,9 @@ export function CreateTrip() {
                                   {lang === "VN" ? "Tạo được" : "OK"}
                                 </span>
                               ) : (
-                                <div className="max-w-65 space-y-1">
-                                  <span className="block text-[11px] font-bold text-amber-700 dark:text-amber-300" title={item.reason || ""}>
-                                    {item.reason || (lang === "VN" ? "Không tạo được" : "Cannot create")}
-                                  </span>
-                                  {item.suggestedNextDepartureLabel && (
-                                    <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                                      {lang === "VN" ? "Sớm nhất" : "Earliest"}: {item.suggestedNextDepartureLabel}
-                                    </span>
-                                  )}
-                                </div>
+                                <span className="block whitespace-nowrap text-[11px] font-bold text-amber-700 dark:text-amber-300" title={item.reason || ""}>
+                                  {formatPreviewConflict(item)}
+                                </span>
                               )}
                             </td>
                           </tr>
@@ -1887,6 +1965,19 @@ export function CreateTrip() {
             )}
           </>
         )}
+        {!isRoundTrip && oneWayRequiresPreview && (
+          <button
+            type="button"
+            onClick={handlePreviewOneWay}
+            disabled={isPreviewingOneWay || isSubmitting || isLoadingOptions || isLoadingStops || hasFieldErrors}
+            className="order-10 w-full bg-white text-[#124757] dark:bg-slate-800 dark:text-yellow-400 border border-[#124757]/30 dark:border-yellow-400/40 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-sm hover:scale-[1.01] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 dark:disabled:border-slate-700 transition-all flex items-center justify-center gap-2"
+          >
+            {isPreviewingOneWay && (
+              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            )}
+            {lang === "VN" ? "Xem trước chuyến" : "Preview trips"}
+          </button>
+        )}
         <button
           type="submit"
           disabled={
@@ -1898,7 +1989,7 @@ export function CreateTrip() {
             || (isRoundTrip && (!roundTripPreview || selectedCreatableCount < 1))
             || (oneWayRequiresPreview && !oneWayPreviewReady)
           }
-          className="w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          className="order-12 w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-500 transition-all flex items-center justify-center gap-2"
         >
           {isSubmitting && (
             <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />

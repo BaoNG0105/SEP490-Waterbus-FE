@@ -29,6 +29,14 @@ export const isAllowedManagedEmail = (email, { requireValue = true } = {}) => {
 };
 
 export const isBlank = (value) => String(value ?? "").trim() === "";
+export const normalizeFullName = (value) => String(value || "").trim().replace(/\s+/g, " ");
+export const sanitizeFullName = (value) => String(value || "").replace(/[^\p{L}\s]/gu, "");
+export const isValidFullName = (value) => /^[\p{L}]+(?:\s+[\p{L}]+)*$/u.test(normalizeFullName(value));
+
+// Chỉ giữ chữ số; vẫn cho phép một dấu + ở đầu để nhập số dạng +84.
+export const sanitizePhoneNumber = (value) => String(value || "")
+  .replace(/[^\d+]/g, "")
+  .replace(/(?!^)\+/g, "");
 
 /**
  * Validate bộ 3 field bắt buộc dùng chung cho form Manager/Staff (Admin tạo/sửa tài khoản
@@ -40,6 +48,10 @@ export function validateFullNamePhoneEmail(formData, lang) {
 
   if (isBlank(formData.fullName)) {
     errors.fullName = lang === "VN" ? "Vui lòng nhập họ và tên." : "Full name is required.";
+  } else if (!isValidFullName(formData.fullName)) {
+    errors.fullName = lang === "VN"
+      ? "Họ và tên chỉ gồm chữ cái và khoảng trắng."
+      : "Full name may contain letters and spaces only.";
   }
 
   if (isBlank(formData.phoneNumber)) {

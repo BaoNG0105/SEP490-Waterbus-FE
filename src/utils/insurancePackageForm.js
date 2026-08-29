@@ -1,8 +1,5 @@
 import { INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
 
-// Helpers, constants và validation dùng chung cho form tạo/sửa gói bảo hiểm
-// (trang Admin/InsuranceManagement: index.jsx, InsuranceFormModal.jsx).
-
 export const emptyForm = () => ({
   code: "",
   name: "",
@@ -24,7 +21,7 @@ export const emptyForm = () => ({
 
 export const VALIDATED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName", "providerLogoFile", "termsUrl", "conditions"];
 
-export const REQUIRED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount"];
+export const REQUIRED_FIELDS = ["code", "name", "unitPremiumAmount", "coverageAmount", "providerName"];
 
 // Field cần realtime validate (error hiện ngay khi gõ).
 export const REALTIME_VALIDATED_FIELDS = new Set(["unitPremiumAmount", "coverageAmount"]);
@@ -35,12 +32,27 @@ export const MAX_PROVIDER_NAME = 150;
 export const MAX_URL = 2048;
 export const MAX_CONDITIONS = 20;
 export const MAX_CONDITION_TEXT = 500;
-export const MAX_PREMIUM = 100_000_000_000;
+export const MAX_PREMIUM = 100_000_000;
 export const MIN_PREMIUM = 1_000;
-export const MAX_COVERAGE = 10_000_000_000_00;
+export const MAX_COVERAGE = 10_000_000_000;
 export const MAX_LOGO_SIZE = 5 * 1024 * 1024;
 export const CODE_REGEX = /^[A-Za-z]\w*$/;
 export const URL_REGEX = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
+const INSURANCE_NAME_REGEX = /^[\p{L}\p{N}\s.()&'\-]+$/u;
+
+export const sanitizeInsuranceName = (value) => String(value || "")
+  .replace(/[^\p{L}\p{N}\s.()&'\-]/gu, "");
+
+export const normalizeInsuranceName = (value) => String(value || "")
+  .trim()
+  .replace(/\s+/g, " ");
+
+export const isValidInsuranceName = (value) => {
+  const normalized = normalizeInsuranceName(value);
+  return Boolean(normalized)
+    && INSURANCE_NAME_REGEX.test(normalized)
+    && /\p{L}/u.test(normalized);
+};
 
 export const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
 export const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-60 disabled:cursor-not-allowed";
@@ -114,6 +126,7 @@ export const validateField = (name, value, form = {}) => {
       const trimmed = stringValue.trim();
       if (!trimmed) return { level: "error", message: "Vui lòng nhập tên gói bảo hiểm." };
       if (trimmed.length > MAX_NAME) return { level: "error", message: `Tên gói không được vượt quá ${MAX_NAME} ký tự.` };
+      if (!isValidInsuranceName(trimmed)) return { level: "error", message: "Tên gói chỉ gồm chữ, số, khoảng trắng và dấu - . ( ) & '." };
       return null;
     }
     case "unitPremiumAmount": {
@@ -136,11 +149,9 @@ export const validateField = (name, value, form = {}) => {
     }
     case "providerName": {
       const trimmed = stringValue.trim();
+      if (!trimmed) return { level: "error", message: "Vui lòng nhập tên nhà cung cấp bảo hiểm." };
       if (trimmed.length > MAX_PROVIDER_NAME) return { level: "error", message: `Tên nhà cung cấp không vượt quá ${MAX_PROVIDER_NAME} ký tự.` };
-      const hasLogo = !!form?.providerLogoFile || !!form?.providerLogoPreview;
-      if (hasLogo && !trimmed) {
-        return { level: "error", message: "Vui lòng nhập tên nhà cung cấp khi đã có logo." };
-      }
+      if (!isValidInsuranceName(trimmed)) return { level: "error", message: "Tên nhà cung cấp chỉ gồm chữ, số, khoảng trắng và dấu - . ( ) & '." };
       return null;
     }
     case "providerLogoFile": {

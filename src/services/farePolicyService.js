@@ -18,6 +18,7 @@ const unwrapList = (data) => {
 const unwrapEntity = (raw) => {
   if (!raw || typeof raw !== 'object') return raw;
   if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) return raw.data;
+  if (raw.Data && typeof raw.Data === 'object' && !Array.isArray(raw.Data)) return raw.Data;
   if (raw.adjustment && typeof raw.adjustment === 'object') return raw.adjustment;
   if (raw.result && typeof raw.result === 'object' && !Array.isArray(raw.result)) return raw.result;
   return raw;
@@ -55,11 +56,11 @@ const pickIsActive = (item) => {
 export const normalizeFarePolicy = (raw) => {
   const src = unwrapEntity(raw);
   return {
-    farePolicyId: src?.farePolicyId || src?.id || null,
-    baseFare: Number(src?.baseFare) || 0,
-    pricePerKm: Number(src?.pricePerKm) || 0,
-    roundingStep: Number(src?.roundingStep) || 1000,
-    currency: src?.currency || 'VND',
+    farePolicyId: src?.farePolicyId || src?.FarePolicyId || src?.id || src?.Id || null,
+    baseFare: Number(src?.baseFare ?? src?.BaseFare) || 0,
+    pricePerKm: Number(src?.pricePerKm ?? src?.PricePerKm) || 0,
+    roundingStep: Number(src?.roundingStep ?? src?.RoundingStep) || 1000,
+    currency: src?.currency || src?.Currency || 'VND',
     raw: src,
   };
 };

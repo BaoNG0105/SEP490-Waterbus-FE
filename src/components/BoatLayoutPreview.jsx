@@ -315,7 +315,7 @@ export function BoatSeatLayoutPreviewModal({
       : "View boat photos, seat map, capacity and seat types.")
     : (layout
       ? (lang === "VN" ? "Sơ đồ ghế và thông tin tàu." : "Seat layout and boat info.")
-      : (lang === "VN" ? "Thông tin tàu thuê." : "Charter boat info."));
+      : (lang === "VN" ? "Thông tin tàu thuê." : "Request boat info."));
 
   return (
     <div

@@ -4,6 +4,7 @@ import { useApp } from "../../../context/AppContext";
 import { fetchStationDetail, modifyStation, changeStationStatus } from "../../../services/stationService";
 import { notify } from "../../../utils/swalToast";
 import { StationFormFields } from "./StationFormFields";
+import { isValidStationName, normalizeStationName } from "../../../utils/stationValidation";
 
 export function EditStation() {
     const { lang } = useApp();
@@ -94,14 +95,14 @@ export function EditStation() {
         getStationRecord();
     }, [id, lang, navigate]);
 
-    // Validate real-time — chỉ check rỗng (null/blank), giống Login. Mã nhà ga bị khóa (readOnly)
-    // khi sửa nên không cần validate. Lỗi chỉ hiện cho field đã "touched", nhưng nút Lưu bị khóa
-    // ngay khi còn field rỗng.
+    // Mã nhà ga bị khóa khi sửa; tên vẫn phải theo rule BE mới.
     const [touchedFields, setTouchedFields] = useState({});
     const fieldErrors = {
-        ...(formData.stationName.trim() ? {} : {
-            stationName: lang === "VN" ? "Vui lòng nhập tên nhà ga" : "Station name is required",
-        }),
+        ...(!formData.stationName.trim()
+            ? { stationName: lang === "VN" ? "Vui lòng nhập tên nhà ga" : "Station name is required" }
+            : !isValidStationName(formData.stationName)
+                ? { stationName: lang === "VN" ? "Tên chỉ gồm chữ, số và khoảng trắng" : "Name may contain letters, numbers and spaces only" }
+                : {}),
     };
     const hasFieldErrors = Object.keys(fieldErrors).length > 0;
     const visibleFieldErrors = {
@@ -205,7 +206,7 @@ export function EditStation() {
             const legacyUrls = imagePreviews.filter(p => p.startsWith("http"));
 
             const commonFields = {
-                stationName: formData.stationName.trim(),
+                stationName: normalizeStationName(formData.stationName),
                 address: formData.address.trim() || null,
                 description: formData.description.trim() || null,
                 latitude: Number(formData.latitude),

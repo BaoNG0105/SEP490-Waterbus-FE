@@ -75,6 +75,17 @@ const getStatusKey = (status) => String(status || "").toLowerCase().replace(/[\s
 const getStatusClasses = (status) => STATUS_STYLES[getStatusKey(status)]
   || "text-slate-500 dark:text-slate-400";
 
+/** Trạng thái hiển thị cho khách ưu tiên hiệu lực thực tế của vé. */
+const resolveDisplayBookingStatus = (booking) => {
+  const items = (booking?.items || []).filter((item) => !item.usesCompanionTicket);
+  const ticketKeys = items
+    .map((item) => getStatusKey(item.ticketStatus || item.itemStatus))
+    .filter(Boolean);
+  if (ticketKeys.length && ticketKeys.every((key) => key === "expired")) return "Expired";
+  if (ticketKeys.length && ticketKeys.every((key) => key === "cancelled")) return "Cancelled";
+  return booking?.status || booking?.bookingStatus || "--";
+};
+
 /** Vé còn hiện QR: Active hoặc đang trên tàu (CheckedIn). Used/CheckedOut/Cancelled/Expired = terminal. */
 const isQrEligibleTicketStatus = (status) => {
   const key = getStatusKey(status);
@@ -343,6 +354,7 @@ const normalizeBookingDetail = (data) => ({
   contactEmail: pick(data, ["contactEmail", "ContactEmail"], "") || "",
   insuranceSelected: resolveInsuranceSelected(data),
   insurancePackageId: getBookingInsurancePackageId(data),
+  insurances: Array.isArray(data?.insurances) ? data.insurances : [],
   insurance: normalizeInsuranceFromBooking(data),
   items: Array.isArray(data?.items) ? data.items.map(normalizeItem) : [],
   payments: Array.isArray(data?.payments) ? data.payments.map(normalizePayment) : [],
@@ -737,6 +749,7 @@ export function BookingDetailPage({ serviceType }) {
   const holdRemainingMs = hasActiveHold ? Math.max(0, holdExpiresAtMs - nowTick) : 0;
   const isHoldExpired = hasActiveHold && holdRemainingMs <= 0;
   const isBookingExpired = getStatusKey(booking?.status) === "expired" || isHoldExpired;
+  const displayBookingStatus = resolveDisplayBookingStatus(booking);
 
   const formatCountdown = (msRemaining) => {
     const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000));
@@ -883,7 +896,7 @@ export function BookingDetailPage({ serviceType }) {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <StatusBadge status={booking.status} lang={lang} size="lg" />
+              <StatusBadge status={displayBookingStatus} lang={lang} size="lg" />
             </div>
           </div>
         </section>
@@ -893,15 +906,22 @@ export function BookingDetailPage({ serviceType }) {
             {groupedTrips.map((group) => (
               <div key={group.tripCode} className="space-y-5">
                 <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-3.5 dark:border-slate-700 sm:px-6">
+                    <div className="min-w-0">
                       <span className="text-xs font-headline font-black text-[#124757] dark:text-yellow-400">
                         {group.isReturn
                           ? (lang === "VN" ? "Chiều về" : "Return")
                           : (lang === "VN" ? "Chiều đi" : "Departure")}
                       </span>
+                      <p className="mt-1 truncate font-headline text-sm font-black text-slate-800 dark:text-white">
+                        {group.fromStationName} → {group.toStationName}
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        {formatDateOnly(group.scheduledDeparture)} · {formatTime(group.scheduledDeparture)} → {formatTime(group.scheduledArrival)}
+                        {group.boatName ? ` · ${group.boatName}` : ""}
+                      </p>
                     </div>
-                    <span className="text-xs font-bold text-slate-400">
+                    <span className="shrink-0 text-xs font-bold text-slate-400">
                       {group.ticketCount} {lang === "VN" ? "vé" : "ticket(s)"}
                       {group.companionCount > 0
                         ? ` · ${group.companionCount} ${lang === "VN" ? "đi kèm" : "companion(s)"}`
@@ -909,7 +929,7 @@ export function BookingDetailPage({ serviceType }) {
                     </span>
                   </div>
 
-                  <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  <div className="max-h-[34rem] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-700">
                     {group.rows.flatMap((row) => {
                       const item = row.holder;
                       if (!item) {
@@ -920,17 +940,8 @@ export function BookingDetailPage({ serviceType }) {
                         ));
                       }
 
-                      const isLoopTour = item.fromStationName && item.fromStationName === item.toStationName;
-                      const sameDay = formatDateOnly(item.scheduledArrival) === formatDateOnly(item.scheduledDeparture);
-                      const routeTitle = isLoopTour
-                        ? (lang === "VN"
-                          ? `Tour tham quan sông Sài Gòn`
-                          : `Sightseeing tour on Saigon River`)
-                        : `${item.fromStationName} → ${item.toStationName}`;
-                      const timeLine = `${formatDateOnly(item.scheduledDeparture)} · ${formatTime(item.scheduledDeparture)} → ${sameDay ? "" : `${formatDateOnly(item.scheduledArrival)} `}${formatTime(item.scheduledArrival)}`;
-
                       return [(
-                        <article key={item.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:gap-5 sm:p-6">
+                        <article key={item.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:gap-4 sm:p-5">
                           {isTicketVisible(booking, item) && item.ticketQrToken ? (
                             <div className="flex shrink-0 items-start gap-3">
                               <QrCodeBlock
@@ -945,16 +956,16 @@ export function BookingDetailPage({ serviceType }) {
                             <div className="flex flex-wrap items-start justify-between gap-2">
                               <div>
                                 <h3 className="font-headline text-base font-black text-[#124757] dark:text-white">
-                                  {routeTitle}
+                                  {lang === "VN" ? `Vé ghế ${item.seatNumber || "—"}` : `Seat ${item.seatNumber || "—"}`}
                                 </h3>
                                 <p className="mt-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                                  {timeLine}
+                                  {item.passengerName}
                                 </p>
                               </div>
                               <StatusBadge status={item.ticketStatus || item.itemStatus} lang={lang} />
                             </div>
 
-                            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+                            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm md:grid-cols-4">
                               <div>
                                 <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Ghế" : "Seat"}</dt>
                                 <dd className="font-bold text-[#124757] dark:text-yellow-400">{item.seatNumber || "—"}</dd>
@@ -969,7 +980,7 @@ export function BookingDetailPage({ serviceType }) {
                                 <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Giá vé" : "Ticket fare"}</dt>
                                 <dd className="font-bold text-slate-700 dark:text-slate-200">{currencyFormatter.format(item.unitPrice)}</dd>
                               </div>
-                              <div className="col-span-2 sm:col-span-3">
+                              <div>
                                 <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Tàu" : "Boat"}</dt>
                                 <dd className="font-bold text-slate-700 dark:text-slate-200">
                                   {item.boatName || (
@@ -979,7 +990,7 @@ export function BookingDetailPage({ serviceType }) {
                                   )}
                                 </dd>
                               </div>
-                              <div className="col-span-2 sm:col-span-3">
+                              <div className="col-span-2">
                                 <dt className="text-[11px] font-bold text-slate-400">{lang === "VN" ? "Hành khách" : "Passenger"}</dt>
                                 <dd className="font-bold text-slate-700 dark:text-slate-200">
                                   {item.passengerName}

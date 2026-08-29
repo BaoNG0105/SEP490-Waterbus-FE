@@ -1215,7 +1215,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
               )}
               {maxPointsToUse <= 0 && (
                 <p className="mt-1 text-[10px] text-slate-400">
-                  {lang === "VN" ? "Không đủ điểm hoặc đơn hàng quá nhỏ (tối đa 50% giá trị đơn)" : "Not enough points or order too small (max 50% of order total)"}
+                  {lang === "VN" ? "Không đủ điểm hoặc đơn hàng chưa có số tiền thanh toán" : "Not enough points or there is no payable amount"}
                 </p>
               )}
             </>

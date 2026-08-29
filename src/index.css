@@ -752,7 +752,7 @@ html.dark {
   font-size: 11px;
 }
 
-/* Admin SweetAlert toast — góc phải, bo 2 góc trái */
+/* Admin SweetAlert toast — góc phải, nhận diện trạng thái rõ ràng */
 .admin-swal-toast {
   width: min(420px, calc(100vw - 1.25rem)) !important;
   padding: 0.95rem 1rem 1.05rem !important;
@@ -771,6 +771,37 @@ html.dark {
     -8px 12px 32px rgba(15, 23, 42, 0.12),
     0 0 0 1px rgba(255, 255, 255, 0.7) inset !important;
   font-family: "Space Grotesk", sans-serif !important;
+}
+
+/* Toast chỉ có tiêu đề: không chừa hàng trống cho phần mô tả. */
+.admin-swal-toast--single {
+  grid-template-rows: minmax(2rem, auto) !important;
+  min-height: 4.5rem !important;
+}
+
+.admin-swal-toast--single .admin-swal-toast-icon {
+  grid-row: 1 !important;
+}
+
+.admin-swal-toast--single .admin-swal-toast-title {
+  grid-row: 1 !important;
+}
+
+.admin-swal-toast--success {
+  border-left: 4px solid #059669 !important;
+}
+
+.admin-swal-toast--error {
+  border-left: 4px solid #e11d48 !important;
+}
+
+.admin-swal-toast--warning {
+  border-left: 4px solid #d97706 !important;
+}
+
+.admin-swal-toast--info,
+.admin-swal-toast--question {
+  border-left: 4px solid #0284c7 !important;
 }
 
 .dark .admin-swal-toast {
@@ -952,6 +983,12 @@ html.dark {
   grid-column: 1 / -1 !important;
   background: #124757 !important;
 }
+
+.admin-swal-toast--success .admin-swal-toast-timer { background: #059669 !important; }
+.admin-swal-toast--error .admin-swal-toast-timer { background: #e11d48 !important; }
+.admin-swal-toast--warning .admin-swal-toast-timer { background: #d97706 !important; }
+.admin-swal-toast--info .admin-swal-toast-timer,
+.admin-swal-toast--question .admin-swal-toast-timer { background: #0284c7 !important; }
 
 /* Charter / admin SweetAlert confirm — brand UI */
 .admin-swal-popup {

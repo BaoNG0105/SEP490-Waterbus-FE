@@ -10,7 +10,9 @@ import {
   labelStyle,
   inputStyle,
   formatVndInput,
+  sanitizeInsuranceName,
 } from "../../../utils/insurancePackageForm";
+import { required } from "../../../utils/requiredStar";
 
 /**
  * Wrapper dùng chung cho các field trong form tạo/sửa gói bảo hiểm:
@@ -79,7 +81,7 @@ export function InsuranceFormModal({
         <div className="p-6 space-y-5">
           {/* Row 1: Mã gói + Tên gói */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <InsuranceFormField label={lang === "VN" ? "Mã gói" : "Code"} hint={renderHint("code")}>
+            <InsuranceFormField label={<>{lang === "VN" ? "Mã gói" : "Code"}{required()}</>} hint={renderHint("code")}>
               <input
                 value={form.code}
                 onChange={(e) => updateField("code", e.target.value.toUpperCase())}
@@ -93,10 +95,10 @@ export function InsuranceFormModal({
                 title={editingId ? (lang === "VN" ? "Mã gói không thể thay đổi sau khi tạo." : "Code is read-only after creation.") : undefined}
               />
             </InsuranceFormField>
-            <InsuranceFormField label={lang === "VN" ? "Tên gói" : "Name"} hint={renderHint("name")} className="sm:col-span-2">
+            <InsuranceFormField label={<>{lang === "VN" ? "Tên gói" : "Name"}{required()}</>} hint={renderHint("name")} className="sm:col-span-2">
               <input
                 value={form.name}
-                onChange={(e) => updateField("name", e.target.value)}
+                onChange={(e) => updateField("name", sanitizeInsuranceName(e.target.value))}
                 onBlur={() => handleBlur("name")}
                 className={inputClass("name")}
                 placeholder={lang === "VN" ? "Tên bảo hiểm" : "Insurance name"}
@@ -107,23 +109,21 @@ export function InsuranceFormModal({
 
           {/* Row 2: Phí + Mức bồi thường */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InsuranceFormField label={lang === "VN" ? "Phí mỗi khách (VND)" : "Fee per passenger (VND)"} hint={renderHint("unitPremiumAmount")}>
+            <InsuranceFormField label={<>{lang === "VN" ? "Phí mỗi khách (VND)" : "Fee per passenger (VND)"}{required()}</>} hint={renderHint("unitPremiumAmount")}>
               <input
                 inputMode="numeric"
                 value={form.unitPremiumAmount}
                 onChange={(e) => updateField("unitPremiumAmount", formatVndInput(e.target.value))}
-                onInput={(e) => updateField("unitPremiumAmount", formatVndInput(e.target.value))}
                 onBlur={() => handleBlur("unitPremiumAmount")}
                 className={inputClass("unitPremiumAmount")}
                 placeholder={lang === "VN" ? `Tối thiểu ${MIN_PREMIUM.toLocaleString("vi-VN")}` : `Min ${MIN_PREMIUM.toLocaleString("vi-VN")}`}
               />
             </InsuranceFormField>
-            <InsuranceFormField label={lang === "VN" ? "Mức bồi thường (VND)" : "Coverage amount (VND)"} hint={renderHint("coverageAmount")}>
+            <InsuranceFormField label={<>{lang === "VN" ? "Mức bồi thường (VND)" : "Coverage amount (VND)"}{required()}</>} hint={renderHint("coverageAmount")}>
               <input
                 inputMode="numeric"
                 value={form.coverageAmount}
                 onChange={(e) => updateField("coverageAmount", formatVndInput(e.target.value))}
-                onInput={(e) => updateField("coverageAmount", formatVndInput(e.target.value))}
                 onBlur={() => handleBlur("coverageAmount")}
                 className={inputClass("coverageAmount")}
                 placeholder={lang === "VN" ? `Tối thiểu ${MIN_PREMIUM.toLocaleString("vi-VN")}` : `Min ${MIN_PREMIUM.toLocaleString("vi-VN")}`}
@@ -162,31 +162,24 @@ export function InsuranceFormModal({
             <InsuranceFormField
               label={lang === "VN" ? "Nguồn cung cấp" : "Provider source"}
               hint={waterbusDefaultConflict?.hasActiveWaterbusDefault && (
-                <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 p-3 space-y-1.5">
+                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <div className="flex items-start gap-2">
                     <span className="material-symbols-outlined text-amber-500 text-base shrink-0">warning</span>
                     <div className="min-w-0">
                       <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 leading-snug">
                         {lang === "VN"
-                          ? `Hiện đang có ${waterbusDefaultConflict.duplicates?.length || 1} gói Waterbus mặc định đang hoạt động. Cần vô hiệu hóa các gói trùng trước khi lưu gói này làm mặc định.`
-                          : `${waterbusDefaultConflict.duplicates?.length || 1} Waterbus default package(s) are currently active. Inactive duplicates before saving this as a default.`}
+                          ? `Trùng ${waterbusDefaultConflict.duplicates?.length || 1} gói mặc định đang bật. Vui lòng tắt gói bên dưới trước khi lưu.`
+                          : `${waterbusDefaultConflict.duplicates?.length || 1} active default package(s) conflict. Disable the package below before saving.`}
                       </p>
                       {waterbusDefaultConflict.duplicates && waterbusDefaultConflict.duplicates.length > 0 && (
-                        <ul className="mt-1.5 space-y-0.5">
+                        <ul className="mt-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">
                           {waterbusDefaultConflict.duplicates.map((pkg) => (
-                            <li key={pkg.id ?? pkg.insurancePackageId} className="text-[10px] text-amber-700 dark:text-amber-300 font-bold flex items-center gap-1.5">
-                              <span className="font-mono">{pkg.code}</span>
-                              <span>—</span>
-                              <span>{pkg.name}</span>
+                            <li key={pkg.id ?? pkg.insurancePackageId} className="truncate">
+                              <span className="font-mono">{pkg.code}</span>{pkg.name ? ` - ${pkg.name}` : ""}
                             </li>
                           ))}
                         </ul>
                       )}
-                      <p className="mt-1.5 text-[10px] font-bold text-red-600 dark:text-red-400">
-                        {lang === "VN"
-                          ? "Không thể lưu ! hãy vô hiệu từng gói trùng trước."
-                          : "Cannot save ! inactive each duplicate first."}
-                      </p>
                       <button
                         type="button"
                         onClick={() => {
@@ -195,9 +188,9 @@ export function InsuranceFormModal({
                             setTimeout(() => openEditModal(waterbusDefaultConflict.existingPackage), 100);
                           }
                         }}
-                        className="mt-1.5 text-[10px] font-black text-[#124757] dark:text-yellow-400 hover:underline uppercase tracking-wide"
+                        className="mt-1 text-[10px] font-black text-[#124757] uppercase tracking-wide hover:underline dark:text-yellow-400"
                       >
-                        {lang === "VN" ? "Sửa gói trùng đầu tiên" : "Edit first duplicate"}
+                        {lang === "VN" ? "Mở gói cần tắt" : "Open package"}
                       </button>
                     </div>
                   </div>
@@ -227,10 +220,10 @@ export function InsuranceFormModal({
               </div>
             </InsuranceFormField>
 
-            <InsuranceFormField label={lang === "VN" ? "Tên nhà cung cấp" : "Provider name"} hint={renderHint("providerName")}>
+            <InsuranceFormField label={<>{lang === "VN" ? "Tên nhà cung cấp" : "Provider name"}{required()}</>} hint={renderHint("providerName")}>
               <input
                 value={form.providerName}
-                onChange={(e) => updateField("providerName", e.target.value)}
+                onChange={(e) => updateField("providerName", sanitizeInsuranceName(e.target.value))}
                 onBlur={() => handleBlur("providerName")}
                 className={inputClass("providerName")}
                 maxLength={MAX_PROVIDER_NAME}

@@ -734,8 +734,8 @@ const TicketActionButtons = ({
       {hint
         || (waitingBerth
           ? (lang === "VN"
-            ? "Chưa thể check-in — tàu chưa cập bến lên hoặc ngoài khung dừng."
-            : "Check-in unavailable — boat not at boarding stop or outside stay window.")
+            ? "Chưa đến thời gian check-in hoặc tàu chưa cập bến lên."
+            : "Check-in is not open yet or the boat has not arrived at the boarding stop.")
           : (lang === "VN" ? "Không có thao tác khả dụng." : "No actions available."))}
     </p>
   );
@@ -1501,7 +1501,7 @@ export function StaffTicketScanPage() {
             <div>
               <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
                 {isCharterManifest
-                  ? (lang === "VN" ? "QR tổng charter" : "Charter group QR")
+                  ? (lang === "VN" ? "QR tổng Request" : "Request group QR")
                   : (lang === "VN" ? "QR tổng booking" : "Booking group QR")}
               </p>
               <p className="mt-1 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">

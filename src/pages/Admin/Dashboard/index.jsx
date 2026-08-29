@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { getBookingsReport, getRevenueReport, getRevenueToday, getBookingsByStatus, getTopRoutes } from "../../../api/reportApi";
+import { getBookingsReport, getRevenueReport, getRevenueToday, getRevenueTodayHourly, getBookingsByStatus, getTopRoutes } from "../../../api/reportApi";
 import { fetchAllStations } from "../../../services/stationService";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { FormSelect } from "../../../components/FormSelect";
@@ -236,6 +236,7 @@ export const Dashboard = () => {
 
   // ===== Data: today snapshot + booking-status breakdown + top routes =====
   const [revenueToday, setRevenueToday] = useState(null);
+  const [revenueTodayHourly, setRevenueTodayHourly] = useState([]);
   const [revenueTodayLoading, setRevenueTodayLoading] = useState(true);
   const [revenueTodayError, setRevenueTodayError] = useState("");
 
@@ -353,8 +354,25 @@ export const Dashboard = () => {
     try {
       setRevenueTodayLoading(true);
       setRevenueTodayError("");
-      const res = await getRevenueToday();
+      const [res, hourlyResult] = await Promise.all([
+        getRevenueToday(),
+        // BE trả { hours: [{ hour, netRevenue, bookingCount }] }; vẫn giữ dashboard hoạt động nếu endpoint chưa sẵn sàng.
+        getRevenueTodayHourly().catch(() => null),
+      ]);
       setRevenueToday(res);
+      const hourlyRows = Array.isArray(hourlyResult)
+        ? hourlyResult
+        : (hourlyResult?.hours || hourlyResult?.items || []);
+      const hourly = Array.from({ length: 24 }, () => ({ netRevenue: 0, bookingCount: 0 }));
+      hourlyRows.forEach((row) => {
+        const hour = Number(row?.hour ?? row?.hourOfDay);
+        if (!Number.isInteger(hour) || hour < 0 || hour > 23) return;
+        hourly[hour] = {
+          netRevenue: Math.max(0, Number(row?.netRevenue ?? row?.revenue ?? row?.amount) || 0),
+          bookingCount: Math.max(0, Number(row?.bookingCount ?? row?.bookings ?? row?.count) || 0),
+        };
+      });
+      setRevenueTodayHourly(hourlyRows.length > 0 ? hourly : []);
     } catch (error) {
       console.error("Lỗi tải doanh thu hôm nay:", error);
       const status = error?.response?.status;
@@ -364,6 +382,7 @@ export const Dashboard = () => {
           : (lang === "VN" ? "Không thể tải doanh thu hôm nay." : "Failed to load today's revenue.")
       );
       setRevenueToday(null);
+      setRevenueTodayHourly([]);
     } finally {
       setRevenueTodayLoading(false);
     }
@@ -527,6 +546,21 @@ export const Dashboard = () => {
     return fromDaily.slice(-7);
   }, [revenueToday, revenueCurrent, dailyRevenuePoints]);
 
+  // Thẻ "hôm nay" phải dùng endpoint theo giờ. Chỉ fallback về 7 ngày khi BE chưa trả dữ liệu giờ.
+  const hourlyRevenuePoints = useMemo(() => {
+    if (revenueTodayHourly.some((item) => item.netRevenue > 0)) {
+      return revenueTodayHourly.map((item) => item.netRevenue);
+    }
+    return weeklyPoints;
+  }, [revenueTodayHourly, weeklyPoints]);
+
+  const hourlyBookingPoints = useMemo(() => {
+    if (revenueTodayHourly.some((item) => item.bookingCount > 0)) {
+      return revenueTodayHourly.map((item) => item.bookingCount);
+    }
+    return weeklyBookingPoints;
+  }, [revenueTodayHourly, weeklyBookingPoints]);
+
   // Booking/ticket trends - fallback to revenue if daily doesn't have these fields
   const dailyBookingPoints = useMemo(() => {
     const daily = revenueCurrent?.daily || [];
@@ -623,7 +657,7 @@ export const Dashboard = () => {
         icon: "today",
         iconBg: "bg-emerald-500 text-white",
         sparkColor: "#10b981",
-        sparkPoints: weeklyPoints,
+        sparkPoints: hourlyRevenuePoints,
         loading: revenueTodayLoading,
       },
       {
@@ -664,7 +698,7 @@ export const Dashboard = () => {
         icon: "event_available",
         iconBg: "bg-violet-500 text-white",
         sparkColor: "#8b5cf6",
-        sparkPoints: weeklyBookingPoints,
+        sparkPoints: hourlyBookingPoints,
         loading: revenueTodayLoading,
       },
       {
@@ -682,7 +716,7 @@ export const Dashboard = () => {
     revenueCurrent, revenuePrevious, revenueToday,
     lang, isDarkMode,
     dailyRevenuePoints, dailyBookingPoints, dailyTicketPoints, dailyRefundPoints,
-    weeklyPoints, weeklyBookingPoints, weeklyTicketPoints,
+    weeklyPoints, weeklyBookingPoints, weeklyTicketPoints, hourlyRevenuePoints, hourlyBookingPoints,
     totalBookings, totalTickets, totalBookingsPrev, totalTicketsPrev,
     revenueTodayLoading,
   ]);

@@ -11,6 +11,29 @@ const PLOT_RIGHT = VB_W - PAD_R;
 const PLOT_BOTTOM = VB_H - PAD_B;
 const PLOT_H = PLOT_BOTTOM - PAD_T;
 
+// Làm mềm các đoạn nối nhưng vẫn đi qua đúng mọi mốc doanh thu.
+const createSmoothPath = (coords) => {
+  if (coords.length === 0) return "";
+  if (coords.length === 1) return `M${coords[0].x.toFixed(1)},${coords[0].y.toFixed(1)}`;
+
+  const tension = 0.16;
+  let path = `M${coords[0].x.toFixed(1)},${coords[0].y.toFixed(1)}`;
+
+  for (let i = 0; i < coords.length - 1; i += 1) {
+    const previous = coords[i - 1] || coords[i];
+    const current = coords[i];
+    const next = coords[i + 1];
+    const afterNext = coords[i + 2] || next;
+    const control1X = current.x + (next.x - previous.x) * tension;
+    const control1Y = current.y + (next.y - previous.y) * tension;
+    const control2X = next.x - (afterNext.x - current.x) * tension;
+    const control2Y = next.y - (afterNext.y - current.y) * tension;
+    path += ` C${control1X.toFixed(1)},${control1Y.toFixed(1)} ${control2X.toFixed(1)},${control2Y.toFixed(1)} ${next.x.toFixed(1)},${next.y.toFixed(1)}`;
+  }
+
+  return path;
+};
+
 export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }) {
   const [hover, setHover] = useState(null);
 
@@ -49,11 +72,10 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
     [current, n, xStep, yRange]
   );
 
+  const linePath = createSmoothPath(coords);
   const areaPath = coords.length > 0
-    ? `${coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ")} L${coords[coords.length - 1].x.toFixed(1)},${PLOT_BOTTOM} L${coords[0].x.toFixed(1)},${PLOT_BOTTOM} Z`
+    ? `${linePath} L${coords[coords.length - 1].x.toFixed(1)},${PLOT_BOTTOM} L${coords[0].x.toFixed(1)},${PLOT_BOTTOM} Z`
     : "";
-
-  const linePath = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
 
   const yAxisLabels = useMemo(() => {
     if (niceScale.top === 0) return [];

@@ -5,7 +5,8 @@ import L from "leaflet";
 import { SmartTileLayer, TILE_PROVIDERS } from "./SmartTileLayer";
 import { useApp } from "../context/AppContext";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../utils/charterBookingAdmin";
-import { isBoatUnderMaintenance, resolveBoatLiveStatus } from "../utils/boatTracking";
+import { isBoatUnderMaintenance, MOVING_SPEED_KMH, resolveBoatLiveStatus } from "../utils/boatTracking";
+import { resolveEtaMinutesToNext } from "../utils/boatSituation";
 
 const DEFAULT_STATION_IMAGE =
     "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&q=80";
@@ -279,7 +280,11 @@ const BOAT_KIND_COLORS = {
 const resolveBoatMarkerKind = (boat = {}) => {
   const service = String(boat.serviceType || boat.ServiceType || "").toLowerCase();
   const code = String(boat.boatCode || boat.code || "").toUpperCase();
-  if (service === "rescue" || code.startsWith("SOS") || code.startsWith("RS_")) return "rescue";
+  const name = String(boat.boatName || boat.name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (service.includes("rescue") || code.startsWith("SOS") || code.startsWith("RS_") || name.includes("rescue") || name.includes("cuu ho")) return "rescue";
 
   const decksRaw = boat.numberOfDecks ?? boat.NumberOfDecks ?? boat.deckCount;
   const decks = Number(decksRaw);
@@ -336,6 +341,9 @@ const getBoatLeafletIcon = ({
   dimmed = false,
   maintenance = false,
   incident = false,
+  moving = false,
+  docked = false,
+  longStopped = false,
   heading = null,
   kind = "deck1",
   style = "hull",
@@ -354,15 +362,19 @@ const getBoatLeafletIcon = ({
           : "online";
   const rot = Number.isFinite(Number(heading)) ? Math.round(Number(heading) / 5) * 5 : 0;
   const safeLabel = escapeHtml(String(label || "").slice(0, 4));
-  const key = `${markerStyle}|${markerKind}|${state}|${rot}|${safeLabel}`;
+  const key = `${markerStyle}|${markerKind}|${state}|${moving ? "moving" : longStopped ? "long-stopped" : docked ? "docked" : "stopped"}|${rot}|${safeLabel}`;
   if (boatLeafletIcons.has(key)) return boatLeafletIcons.get(key);
 
   if (markerStyle === "gps") {
-    let fill = "#F97316";
-    if (incident) fill = "#DC2626";
+    let fill = "#334155";
+    // Loại tàu được ưu tiên hơn trạng thái: tàu cứu hộ luôn giữ màu cam.
+    if (markerKind === "rescue") fill = "#EA580C";
+    else if (incident) fill = "#DC2626";
     else if (selected) fill = "#FFD100";
     else if (maintenance || dimmed) fill = "#94A3B8";
-    else if (markerKind === "rescue") fill = "#EA580C";
+    else if (moving) fill = "#2563EB";
+    else if (docked) fill = "#0F766E";
+    else if (longStopped) fill = "#334155";
 
     const stroke = selected ? "#0E4050" : "#FFFFFF";
     const size = selected || incident ? 36 : 32;
@@ -395,7 +407,11 @@ const getBoatLeafletIcon = ({
   const size = selected || incident ? 50 : 44;
   let fill = palette.fill;
   let deck = palette.deck;
-  if (incident) {
+  // Tàu cứu hộ luôn dùng palette riêng; pulse/viền trạng thái vẫn hiển thị khi cần.
+  if (markerKind === "rescue") {
+    fill = BOAT_KIND_COLORS.rescue.fill;
+    deck = BOAT_KIND_COLORS.rescue.deck;
+  } else if (incident) {
     fill = "#DC2626";
     deck = "#FEE2E2";
   } else if (selected) {
@@ -404,6 +420,18 @@ const getBoatLeafletIcon = ({
   } else if (maintenance) {
     fill = "#64748B";
     deck = "#CBD5E1";
+  } else if (moving) {
+    fill = "#2563EB";
+    deck = "#BFDBFE";
+  } else if (longStopped) {
+    fill = "#334155";
+    deck = "#94A3B8";
+  } else if (docked) {
+    fill = "#0F766E";
+    deck = "#99F6E4";
+  } else {
+    fill = "#334155";
+    deck = "#94A3B8";
   }
 
   const ring = "#FFFFFF";
@@ -900,14 +928,39 @@ export const WaterwayMap = ({
           const hasSeats = seatCount != null;
           // Đã checkin = có onboardPassenger > 0 (BE confirm)
           const hasCheckedIn = onboardPassenger != null && onboardPassenger > 0;
-          // Hiện số khách: có seatCount → "onboard/seatCount", không có → chỉ hiện số khách onboard
+          // Luôn hiển thị số khách thực tế/sức chứa để 0 khách cũng rõ là 0/79.
           const occupancyValue = hasSeats
-            ? (hasCheckedIn
-              ? `${onboardPassenger}/${seatCount}`
-              : String(seatCount))
+            ? `${onboardPassenger ?? 0}/${seatCount}`
             : (onboardPassenger != null ? String(onboardPassenger) : null);
           const liveStatus = resolveBoatLiveStatus(boat);
           const isIncident = liveStatus.key === "incident";
+          const movementKey = String(boat.movementStatus || boat.tripMovementStatus || boat.movement || "")
+            .toLowerCase()
+            .replace(/[_\s-]/g, "");
+          const speedKmh = Number(boat.speed);
+          const remainingKm = Number(boat.remainingDistanceKmToNextStation);
+          const remainingMinutes = Number(boat.remainingMinutesToNextStation);
+          const hasEnRouteProgress = Boolean(boat.tripId || boat.tripCode)
+            && ((Number.isFinite(remainingKm) && remainingKm > 0.15)
+              || (Number.isFinite(remainingMinutes) && remainingMinutes > 1));
+          const isMoving = movementKey === "moving"
+            || movementKey === "arriving"
+            || boat.isMoving === true
+            || (Number.isFinite(speedKmh) && speedKmh >= MOVING_SPEED_KMH)
+            || hasEnRouteProgress;
+          const hasActiveTrip = Boolean(boat.tripId || boat.tripCode) && boat.tripFinished !== true;
+          const isDockedOnTrip = hasActiveTrip && !isMoving && (
+            movementKey === "atstation"
+            || movementKey === "boarding"
+            || Boolean(boat.dwellCountdown)
+          );
+          const dwellStartedAt = Date.parse(String(boat.dwellCountdown?.startedAt || ""));
+          const isLongStopped = isDockedOnTrip
+            && Number.isFinite(dwellStartedAt)
+            && Date.now() - dwellStartedAt > 30 * 60 * 1000;
+          const nextStationLabel = String(boat.nextStationName || boat.nextStationCode || "").trim();
+          const currentStationLabel = String(boat.currentStationName || boat.currentStationCode || "").trim();
+          const etaToNextStation = resolveEtaMinutesToNext(boat);
           const markerKind = resolveBoatMarkerKind(boat);
           const kindLabel = markerKind === "rescue"
             ? "Cứu hộ"
@@ -916,9 +969,11 @@ export const WaterwayMap = ({
               : "1 tầng";
           const kindColor = markerKind === "rescue"
             ? "#EA580C"
-            : markerKind === "deck2"
-              ? "#1D4ED8"
-              : "#124757";
+            : isMoving
+              ? "#2563EB"
+              : isDockedOnTrip
+                ? (isLongStopped ? "#334155" : "#0F766E")
+              : "#475569";
 
           const boatCard = (
             <div className={`wb-boat-card ${underMaintenance ? "wb-boat-card--maintenance" : ""}`}>
@@ -942,14 +997,14 @@ export const WaterwayMap = ({
                 {boat.boatName ? (
                   <p className="wb-boat-card__name">{boat.boatName}</p>
                 ) : null}
-                <p className="wb-boat-card__kind" style={{ color: isIncident ? "#DC2626" : kindColor }}>
+                <p className="wb-boat-card__kind" style={{ color: isIncident && markerKind !== "rescue" ? "#DC2626" : kindColor }}>
                   <span
                     style={{
                       display: "inline-block",
                       width: 7,
                       height: 7,
                       borderRadius: 999,
-                      background: isIncident ? "#DC2626" : kindColor,
+                      background: isIncident && markerKind !== "rescue" ? "#DC2626" : kindColor,
                       marginRight: 5,
                       verticalAlign: "middle",
                     }}
@@ -957,7 +1012,7 @@ export const WaterwayMap = ({
                   {kindLabel}
                 </p>
                 {/* Số khách luôn hiện khi có capacity — không bị flash “đã rời bến” che. */}
-                {(occupancyValue && markerKind !== "rescue") ? (
+                {occupancyValue && markerKind !== "rescue" ? (
                   <p className="wb-boat-card__seats">
                     <strong>{occupancyValue}</strong>
                     {boat.passengerBreakdown?.stopName ? (
@@ -982,7 +1037,7 @@ export const WaterwayMap = ({
                           : "#D97706",
                     }}
                   >
-                    {boat.flashNotice}
+                    {`${boat.flashNotice}${boat.flashNoticeAt ? ` lúc ${formatStickyRecordedAt(boat.flashNoticeAt)}` : ""}`}
                   </p>
                 ) : boat.rescuingBoatCode ? (
                   <p className="wb-boat-card__note" style={{ color: "#EA580C" }}>
@@ -1001,6 +1056,16 @@ export const WaterwayMap = ({
                     Vị trí cuối
                     {boat.recordedAt ? ` (${formatStickyRecordedAt(boat.recordedAt)})` : ""}
                   </p>
+                ) : isMoving && nextStationLabel && Number.isFinite(etaToNextStation) ? (
+                  <p className="wb-boat-card__note" style={{ color: "#2563EB" }}>
+                    {`Đến ${nextStationLabel} khoảng ${etaToNextStation <= 0 ? "dưới 1" : Math.round(etaToNextStation)} phút`}
+                  </p>
+                ) : isDockedOnTrip ? (
+                  <p className="wb-boat-card__note" style={{ color: isLongStopped ? "#475569" : "#0F766E" }}>
+                    {currentStationLabel
+                      ? `${isLongStopped ? "Dừng quá 30 phút tại" : "Đang dừng tại"} ${currentStationLabel}`
+                      : (isLongStopped ? "Dừng tại bến quá 30 phút" : "Đang dừng tại bến")}
+                  </p>
                 ) : null}
               </div>
             </div>
@@ -1015,6 +1080,9 @@ export const WaterwayMap = ({
                 dimmed,
                 maintenance: underMaintenance && !isIncident,
                 incident: isIncident,
+                moving: isMoving,
+                docked: isDockedOnTrip,
+                longStopped: isLongStopped,
                 heading: boat.heading,
                 kind: markerKind,
                 style: boatMarkerStyle,

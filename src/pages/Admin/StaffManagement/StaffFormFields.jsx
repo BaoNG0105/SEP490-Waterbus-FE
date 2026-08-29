@@ -2,11 +2,12 @@ import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { NationalitySelect } from "../../../components/NationalitySelect";
 import { getTodayDateString } from "../../../utils/dateOnly";
+import { sanitizeFullName, sanitizePhoneNumber } from "../../../utils/formValidation";
 
 import { required } from "../../../utils/requiredStar";
 const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
 const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
-const errorInputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all";
+const errorInputStyle = "w-full !bg-rose-50/50 dark:!bg-rose-500/10 border !border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:!ring-rose-500 shadow-inner transition-all";
 const selectStyle = `${inputStyle} cursor-pointer`;
 const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
 
@@ -34,6 +35,7 @@ export function StaffFormFields({
   showStationAssign = false,
   stationAssignLabel,
   stationAssignSlot,
+  stationError = "",
   namePlaceholder = "",
   phonePlaceholder = "",
   emailPlaceholder = "",
@@ -48,13 +50,13 @@ export function StaffFormFields({
   ];
 
   return (
-    <div className={`grid grid-cols-1 gap-6 items-start ${showStationAssign ? "lg:grid-cols-2" : ""}`}>
-      <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-        <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
+    <div>
+      <div className="space-y-4 rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-6">
+        <h3 className="mb-1 border-b border-slate-100 pb-3 font-headline text-sm font-black uppercase tracking-wider text-[#124757] dark:border-slate-700 dark:text-yellow-400">
           {lang === "VN" ? "Thông tin cá nhân" : "Personal Information"}
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={labelStyle}>{<>{lang === "VN" ? "Họ và Tên" : "Full Name"}{required()}</>}</label>
             <input
@@ -62,7 +64,10 @@ export function StaffFormFields({
               required
               placeholder={namePlaceholder}
               value={formData.fullName}
-              onChange={(e) => setField("fullName", e.target.value)}
+              onChange={(e) => {
+                setField("fullName", sanitizeFullName(e.target.value));
+                handleBlur("fullName");
+              }}
               onBlur={() => handleBlur("fullName")}
               className={errors.fullName ? errorInputStyle : inputStyle}
             />
@@ -74,15 +79,19 @@ export function StaffFormFields({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={labelStyle}>{<>{lang === "VN" ? "Số điện thoại" : "Phone Number"}{required()}</>}</label>
             <input
               type="tel"
               required
+              inputMode="numeric"
               placeholder={phonePlaceholder}
               value={formData.phoneNumber}
-              onChange={(e) => setField("phoneNumber", e.target.value)}
+              onChange={(e) => {
+                setField("phoneNumber", sanitizePhoneNumber(e.target.value));
+                handleBlur("phoneNumber");
+              }}
               onBlur={() => handleBlur("phoneNumber")}
               className={errors.phoneNumber ? errorInputStyle : inputStyle}
             />
@@ -95,7 +104,10 @@ export function StaffFormFields({
               required
               placeholder={emailPlaceholder}
               value={formData.email}
-              onChange={(e) => setField("email", e.target.value)}
+              onChange={(e) => {
+                setField("email", e.target.value);
+                handleBlur("email");
+              }}
               onBlur={() => handleBlur("email")}
               className={errors.email ? errorInputStyle : inputStyle}
             />
@@ -103,7 +115,7 @@ export function StaffFormFields({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={labelStyle}>{lang === "VN" ? "Giới tính" : "Gender"}</label>
             <FormSelect
@@ -122,20 +134,15 @@ export function StaffFormFields({
             />
           </div>
         </div>
-      </div>
 
-      {showStationAssign && (
-        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
-          <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
-            {lang === "VN" ? "Bến làm việc" : "Working Station"}
-          </h3>
-
-          <div>
-            <label className={labelStyle}>{stationAssignLabel}</label>
+        {showStationAssign && (
+          <div className="border-t border-slate-100 pt-4 dark:border-slate-700">
+            <label className={labelStyle}>{stationAssignLabel}{required()}</label>
             {stationAssignSlot}
+            {stationError && <p className={errorTextStyle}>{stationError}</p>}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -383,7 +383,9 @@ const readStationCoords = (source) => {
 };
 
 const TRACKING_POLL_MS = 15000;
-const ACTIVE_TRACK_STATUSES = new Set(["Boarding", "InProgress", "Delayed"]);
+// GPS chỉ được theo dõi khi chuyến thực sự đã vận hành. Scheduled/Boarding/Delayed
+// có thể chưa rời bến, nên không hiển thị marker hay gọi polling GPS.
+const ACTIVE_TRACK_STATUSES = new Set(["InProgress"]);
 
 const haversineKm = (lat1, lng1, lat2, lng2) => {
   const toRad = (d) => (d * Math.PI) / 180;
@@ -1136,6 +1138,7 @@ export function TripDetail() {
   const operatingDateLabel = resolveOperatingDate(trip, lang);
   const lastStopIndex = stops.length - 1;
   const shouldPollTracking = ACTIVE_TRACK_STATUSES.has(statusKey);
+  const canTrackGps = statusKey === "InProgress";
   const tripGpsFinished = statusKey === "Completed" || statusKey === "Cancelled";
 
   useEffect(() => {
@@ -1225,7 +1228,7 @@ export function TripDetail() {
       boat.id || trip?.boatId || trip?.boat?.boatId || "",
     ).trim();
     if (!boatId) return undefined;
-    if (statusKey === "Completed" || statusKey === "Cancelled") return undefined;
+    if (statusKey !== "InProgress") return undefined;
 
     let cancelled = false;
     trackingHub.joinBoat(boatId).catch(() => {});
@@ -1819,6 +1822,7 @@ export function TripDetail() {
         </div>
       ) : (
         <>
+          {canTrackGps || tripGpsFinished ? (
           <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-700/60 sm:px-5">
               <h3 className="font-headline text-xs font-black uppercase tracking-[0.14em] text-[#124757] dark:text-yellow-400">
@@ -1830,28 +1834,28 @@ export function TripDetail() {
                     {formatTime(trackingAt instanceof Date ? trackingAt.toISOString() : trackingAt)}
                   </span>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const params = new URLSearchParams();
-                    const boatId = boat.id || trip?.boatId || "";
-                    const boatCode = boat.code || trip?.boatCode || "";
-                    const routeId = routeMeta.routeId || trip?.routeId || trip?.route?.routeId || "";
-                    const routeCode = routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "";
-                    if (boatId) params.set("boatId", String(boatId));
-                    if (boatCode) params.set("boatCode", String(boatCode));
-                    if (routeId) params.set("routeId", String(routeId));
-                    if (routeCode) params.set("routeCode", String(routeCode));
-                    if (trip?.tripId || id) params.set("tripId", String(trip?.tripId || id));
-                    if (trip?.tripCode) params.set("tripCode", String(trip.tripCode));
-                    params.set("focus", "1");
-                    navigate(`/admin/live-tracking?${params.toString()}`);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/15 bg-[#124757]/5 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition hover:bg-[#124757]/10 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
-                >
-                  {lang === "VN" ? "Bản đồ trực tiếp" : "Live map"}
-                </button>
-                {statusKey !== "Completed" && statusKey !== "Cancelled" ? (
+                {canTrackGps ? (<>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      const boatId = boat.id || trip?.boatId || "";
+                      const boatCode = boat.code || trip?.boatCode || "";
+                      const routeId = routeMeta.routeId || trip?.routeId || trip?.route?.routeId || "";
+                      const routeCode = routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "";
+                      if (boatId) params.set("boatId", String(boatId));
+                      if (boatCode) params.set("boatCode", String(boatCode));
+                      if (routeId) params.set("routeId", String(routeId));
+                      if (routeCode) params.set("routeCode", String(routeCode));
+                      if (trip?.tripId || id) params.set("tripId", String(trip?.tripId || id));
+                      if (trip?.tripCode) params.set("tripCode", String(trip.tripCode));
+                      params.set("focus", "1");
+                      navigate(`/admin/live-tracking?${params.toString()}`);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#124757]/15 bg-[#124757]/5 px-3 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] transition hover:bg-[#124757]/10 dark:border-yellow-400/20 dark:bg-yellow-400/10 dark:text-yellow-400"
+                  >
+                    {lang === "VN" ? "Bản đồ trực tiếp" : "Live map"}
+                  </button>
                   <button
                     type="button"
                     disabled={isTrackingBusy}
@@ -1863,37 +1867,39 @@ export function TripDetail() {
                       refresh
                     </span>
                   </button>
-                ) : null}
+                </>) : null}
               </div>
             </div>
 
-            <TripRealRouteMap
-              routeLine={routeLine}
-              stations={routeStations}
-              progress={routeProgress}
-              liveLocation={liveLocation}
-              showBoat={!tripGpsFinished}
-              boat={{
-                boatId: boat.id || trip?.boatId || boat.code || trip?.boatCode,
-                code: boat.code || trip?.boatCode,
-                name: boat.name || trip?.boatName,
-                numberOfDecks: boat.numberOfDecks,
-                serviceType: boat.serviceType,
-                seatSetupType: boat.seatSetupType,
-                imageUrl: boat.imageUrl,
-                seatCount: capacity,
-                passengerCount,
-              }}
-              routeCode={routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || ""}
-              routeLabel={formatCustomerRouteTitle(
-                routeMeta.routeName || trip?.routeName || trip?.route?.routeName || "",
-                routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "",
-                lang,
-              ) || `${fromName} → ${toName}`}
-              isMoving={isBoatMoving || (Boolean(liveLocation) && (statusKey === "InProgress" || statusKey === "Delayed"))}
-              hasOpenIncident={hasOpenIncident}
-              lang={lang}
-            />
+            {canTrackGps || tripGpsFinished ? (
+              <TripRealRouteMap
+                routeLine={routeLine}
+                stations={routeStations}
+                progress={routeProgress}
+                liveLocation={liveLocation}
+                showBoat={canTrackGps}
+                boat={{
+                  boatId: boat.id || trip?.boatId || boat.code || trip?.boatCode,
+                  code: boat.code || trip?.boatCode,
+                  name: boat.name || trip?.boatName,
+                  numberOfDecks: boat.numberOfDecks,
+                  serviceType: boat.serviceType,
+                  seatSetupType: boat.seatSetupType,
+                  imageUrl: boat.imageUrl,
+                  seatCount: capacity,
+                  passengerCount,
+                }}
+                routeCode={routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || ""}
+                routeLabel={formatCustomerRouteTitle(
+                  routeMeta.routeName || trip?.routeName || trip?.route?.routeName || "",
+                  routeMeta.routeCode || trip?.routeCode || trip?.route?.routeCode || "",
+                  lang,
+                ) || `${fromName} → ${toName}`}
+                isMoving={isBoatMoving || (Boolean(liveLocation) && statusKey === "InProgress")}
+                hasOpenIncident={hasOpenIncident}
+                lang={lang}
+              />
+            ) : null}
 
             {hasOpenIncident ? (
               <p className="border-t border-rose-100 bg-rose-50 px-4 py-2.5 text-[11px] font-bold text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200 sm:px-5">
@@ -1909,6 +1915,7 @@ export function TripDetail() {
               </p>
             ) : null}
           </section>
+          ) : null}
 
           <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
             <div className="grid grid-cols-1 md:grid-cols-5">

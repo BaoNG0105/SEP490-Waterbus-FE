@@ -1,6 +1,7 @@
 import { WaterwayMap } from "../../../components/WaterwayMap";
 import { AppTimeInput } from "../../../components/AppTimeInput";
 import { required } from "../../../utils/requiredStar";
+import { sanitizeStationCode, sanitizeStationName } from "../../../utils/stationValidation";
 
 const labelStyle = "mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500";
 const inputStyle = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-800 outline-none shadow-inner transition-all focus:ring-2 focus:ring-[#124757] dark:border-slate-700/60 dark:bg-slate-900 dark:text-white dark:focus:ring-yellow-400";
@@ -64,7 +65,7 @@ export function StationFormFields({
                             readOnly={!isCreate}
                             disabled={!isCreate}
                             value={formData.stationCode}
-                            onChange={(e) => setField("stationCode", e.target.value.toUpperCase())}
+                            onChange={(e) => setField("stationCode", sanitizeStationCode(e.target.value))}
                             onBlur={() => handleBlur("stationCode")}
                             placeholder={lang === "VN" ? "VD: BD, TT" : "e.g. BD, TT"}
                             className={`${errors.stationCode ? errorInputStyle : inputStyle} uppercase tracking-wider ${!isCreate ? "cursor-not-allowed opacity-70 bg-slate-100 dark:bg-slate-800" : ""}`}
@@ -79,7 +80,7 @@ export function StationFormFields({
                             type="text"
                             required
                             value={formData.stationName}
-                            onChange={(e) => setField("stationName", e.target.value)}
+                            onChange={(e) => setField("stationName", sanitizeStationName(e.target.value))}
                             onBlur={() => handleBlur("stationName")}
                             className={errors.stationName ? errorInputStyle : inputStyle}
                         />

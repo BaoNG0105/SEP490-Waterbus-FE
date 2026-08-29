@@ -20,6 +20,7 @@ import {
 } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify } from "../../../utils/swalToast";
+import { required } from "../../../utils/requiredStar";
 
 const MAIN_TABS = [
   { id: "tickets", vn: "Giá mua vé", en: "Ticket prices" },
@@ -68,6 +69,30 @@ const groupThousands = (value) => {
   return digits ? Number(digits).toLocaleString("vi-VN") : "";
 };
 
+/** Tên ngày lễ: chữ, số và các dấu phân cách thường gặp như "Quốc khánh (2/9)". */
+const sanitizeHolidayName = (value) => String(value ?? "")
+  .replace(/[^\p{L}\p{N}\s/().,\-]/gu, "")
+  .replace(/\s{2,}/g, " ");
+
+const isValidHolidayName = (value) => {
+  const name = String(value ?? "").trim();
+  if (!name || name.length > 100 || !/\p{L}/u.test(name) || sanitizeHolidayName(name) !== name) return false;
+  if (!/^[\p{L}\p{N}]/u.test(name) || !/[\p{L}\p{N})]$/u.test(name)) return false;
+  if (/[.,/\-]{2,}|\({2,}|\){2,}/.test(name)) return false;
+  if ((name.match(/\//g) || []).length > 1) return false;
+  if ((name.match(/\(/g) || []).length !== (name.match(/\)/g) || []).length) return false;
+  return true;
+};
+
+const getHolidayNameError = (value, lang) => {
+  const name = String(value ?? "").trim();
+  if (!name) return lang === "VN" ? "Tên ngày lễ là bắt buộc." : "Holiday name is required.";
+  if (isValidHolidayName(name)) return "";
+  return lang === "VN"
+    ? "Tên chỉ gồm chữ, số và các dấu - / ( ) . ,; không lặp ký tự đặc biệt."
+    : "Use letters, numbers, and - / ( ) . , only; do not repeat punctuation.";
+};
+
 /** Ô nhập tiền: gõ số trần, hiển thị có dấu chấm, trả về chuỗi chỉ gồm chữ số. */
 function MoneyInput({ value, onChange, max, className = "", wrapperClassName = "w-full", suffix = "VND", ...rest }) {
   return (
@@ -88,6 +113,29 @@ function MoneyInput({ value, onChange, max, className = "", wrapperClassName = "
           {suffix}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+const normalizePercentInput = (value) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  return String(Math.min(100, Number(digits)));
+};
+
+/** Input phần trăm nguyên 0–100, không cho dấu âm, dấu chấm hay spin buttons. */
+function PercentInput({ value, onChange, className = "", ...rest }) {
+  return (
+    <div className="relative">
+      <input
+        {...rest}
+        type="text"
+        inputMode="decimal"
+        value={value}
+        onChange={(event) => onChange(normalizePercentInput(event.target.value))}
+        className={`${className} pr-8 text-right tabular-nums`}
+      />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">%</span>
     </div>
   );
 }
@@ -358,12 +406,15 @@ function DistanceFareTab({ lang }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const baseFareError = String(form.baseFare ?? "").trim() && !isWholeVndInRange(form.baseFare, 0, MAX_TICKET_PRICE_VND)
+  const [touched, setTouched] = useState({ baseFare: false, pricePerKm: false });
+  const baseFareErrorRaw = String(form.baseFare ?? "").trim() && !isWholeVndInRange(form.baseFare, 0, MAX_TICKET_PRICE_VND)
     ? (lang === "VN" ? "Nhập số nguyên từ 0 đến 100.000.000 VND." : "Enter a whole number from 0 to 100,000,000 VND.")
     : "";
-  const pricePerKmError = String(form.pricePerKm ?? "").trim() && !isWholeVndInRange(form.pricePerKm, 1, MAX_DISTANCE_FARE_PER_KM_VND)
+  const pricePerKmErrorRaw = String(form.pricePerKm ?? "").trim() && !isWholeVndInRange(form.pricePerKm, 1, MAX_DISTANCE_FARE_PER_KM_VND)
     ? (lang === "VN" ? "Nhập số nguyên từ 1 đến 1.000.000 VND/km." : "Enter a whole number from 1 to 1,000,000 VND/km.")
     : "";
+  const baseFareError = touched.baseFare ? baseFareErrorRaw : "";
+  const pricePerKmError = touched.pricePerKm ? pricePerKmErrorRaw : "";
 
   const load = async () => {
     try {
@@ -375,6 +426,7 @@ function DistanceFareTab({ lang }) {
         pricePerKm: policy.pricePerKm,
         roundingStep: policy.roundingStep || 1000,
       });
+      setTouched({ baseFare: false, pricePerKm: false });
     } catch (error) {
       setErrorMsg(
         getApiErrorMessage(
@@ -394,6 +446,7 @@ function DistanceFareTab({ lang }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    setTouched({ baseFare: true, pricePerKm: true });
 
     if (!String(form.baseFare ?? "").trim() || !String(form.pricePerKm ?? "").trim()) {
       notify({
@@ -465,47 +518,76 @@ function DistanceFareTab({ lang }) {
           <div className="py-8 text-center text-xs text-slate-400">{lang === "VN" ? "Đang tải…" : "Loading…"}</div>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-3">
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Giá cơ bản" : "Base fare"}</label>
                 <MoneyInput
                   required
                   value={form.baseFare}
-                  onChange={(next) => setForm((prev) => ({ ...prev, baseFare: next }))}
+                  onChange={(next) => {
+                    setTouched((prev) => ({ ...prev, baseFare: true }));
+                    setForm((prev) => ({ ...prev, baseFare: next }));
+                  }}
+                  onBlur={() => setTouched((prev) => ({ ...prev, baseFare: true }))}
                   max={MAX_TICKET_PRICE_VND}
                   className={`${inputStyle} ${baseFareError ? "border-rose-500 focus:ring-rose-500" : ""}`}
                 />
-                {baseFareError ? <p className="mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">{baseFareError}</p> : null}
+                <p className="mt-1 min-h-4 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                  {baseFareError}
+                </p>
               </div>
               <div>
                 <label className={labelStyle}>{lang === "VN" ? "Giá / km" : "Price per km"}</label>
                 <MoneyInput
                   required
                   value={form.pricePerKm}
-                  onChange={(next) => setForm((prev) => ({ ...prev, pricePerKm: next }))}
+                  onChange={(next) => {
+                    setTouched((prev) => ({ ...prev, pricePerKm: true }));
+                    setForm((prev) => ({ ...prev, pricePerKm: next }));
+                  }}
+                  onBlur={() => setTouched((prev) => ({ ...prev, pricePerKm: true }))}
                   max={MAX_DISTANCE_FARE_PER_KM_VND}
                   className={`${inputStyle} ${pricePerKmError ? "border-rose-500 focus:ring-rose-500" : ""}`}
                   suffix="VND/km"
                 />
-                {pricePerKmError ? <p className="mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">{pricePerKmError}</p> : null}
+                <p className="mt-1 min-h-4 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                  {pricePerKmError}
+                </p>
               </div>
-              <div className="flex items-end">
+              <div>
+                <span className={labelStyle} aria-hidden>&nbsp;</span>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="w-full rounded-xl bg-[#124757] px-4 py-2.5 text-[11px] font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
+                  className="h-10 w-full rounded-xl bg-[#124757] px-4 text-[11px] font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
                 >
                   {isSaving
                     ? (lang === "VN" ? "Đang lưu…" : "Saving…")
                     : (lang === "VN" ? "Lưu" : "Save")}
                 </button>
+                <span className="mt-1 block min-h-4" aria-hidden />
               </div>
             </div>
-            <p className="text-[11px] leading-relaxed text-slate-400">
-              {lang === "VN"
-                ? `Giá = làm tròn lên (giá cơ bản + giá/km × km) theo bước ${Number(form.roundingStep) || 1000} VND. Vé Regular ưu đãi (trẻ em / NCT / NKT / em bé): miễn phí · 0 VND — không cấu hình %.`
-                : `Price = round up (base fare + price/km × km) to step ${Number(form.roundingStep) || 1000} VND. Regular concession tickets (child / senior / disabled / infant): free · 0 VND — no % settings.`}
-            </p>
+            <div className="flex gap-2.5 rounded-2xl border border-[#124757]/20 bg-[#f4fafb] px-4 py-3 text-[11px] leading-relaxed text-slate-500 dark:border-yellow-400/20 dark:bg-yellow-400/5 dark:text-slate-400">
+              <span className="material-symbols-outlined mt-0.5 shrink-0 text-base text-[#124757] dark:text-yellow-400" aria-hidden>info</span>
+              <div className="min-w-0">
+                <p className="font-headline text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {lang === "VN" ? "Lưu ý" : "Note"}
+                </p>
+                <p>
+                  <span className="font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Cách tính giá: " : "Price calculation: "}</span>
+                  {lang === "VN"
+                    ? "Giá cơ bản + (giá mỗi km × số km di chuyển). Nếu kết quả có số lẻ, hệ thống làm tròn lên đến đồng kế tiếp."
+                    : `Base fare + (price/km × distance), rounded up to ${Number(form.roundingStep) || 1000} VND.`}
+                </p>
+                <p>
+                  <span className="font-bold text-slate-700 dark:text-slate-200">{lang === "VN" ? "Vé ưu đãi: " : "Concession tickets: "}</span>
+                  {lang === "VN"
+                    ? "Trẻ em, người cao tuổi, người khuyết tật và em bé được miễn phí (0 VND)."
+                    : "Children, seniors, disabled passengers and infants travel free (0 VND)."}
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </form>
@@ -533,6 +615,22 @@ function SurchargeTab({ lang }) {
   const [savingWeekend, setSavingWeekend] = useState(false);
   const [savingHoliday, setSavingHoliday] = useState(false);
   const [togglingId, setTogglingId] = useState("");
+  const [holidayDateTouched, setHolidayDateTouched] = useState(false);
+  const [holidayNameTouched, setHolidayNameTouched] = useState(false);
+  const [holidayPercentTouched, setHolidayPercentTouched] = useState(false);
+  const holidayDateError = holidayDateTouched && !holiday.date
+    ? (lang === "VN" ? "Ngày lễ là bắt buộc." : "Holiday date is required.")
+    : "";
+  const holidayNameValid = isValidHolidayName(holiday.name);
+  const holidayNameError = holidayNameTouched ? getHolidayNameError(holiday.name, lang) : "";
+  const holidayPercentValue = Number(holiday.surchargePercent);
+  const holidayPercentValid = Number.isInteger(holidayPercentValue)
+    && holidayPercentValue > 0
+    && holidayPercentValue <= 100;
+  const holidayPercentError = holidayPercentTouched && !holidayPercentValid
+    ? (lang === "VN" ? "Nhập số nguyên từ 1% đến 100%." : "Enter a whole number from 1% to 100%.")
+    : "";
+  const holidayFormValid = Boolean(holiday.date) && holidayNameValid && holidayPercentValid;
 
   const labelScope = (scope) => {
     const key = String(scope || "").toLowerCase();
@@ -553,7 +651,7 @@ function SurchargeTab({ lang }) {
       const weekendRow = list.find((row) => isWeekendRow(row));
       if (weekendRow) {
         setWeekend({
-          surchargePercent: weekendRow.surchargePercent,
+          surchargePercent: Math.min(100, Math.max(0, Math.round(Number(weekendRow.surchargePercent) || 0))),
           isActive: weekendRow.isActive !== false,
         });
       }
@@ -592,11 +690,11 @@ function SurchargeTab({ lang }) {
       return;
     }
     const weekendPercent = Number(weekend.surchargePercent);
-    if (!Number.isFinite(weekendPercent) || weekendPercent <= 0) {
+    if (!Number.isInteger(weekendPercent) || weekendPercent <= 0 || weekendPercent > 100) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Mức phụ thu không hợp lệ" : "Invalid surcharge",
-        text: lang === "VN" ? "Mức phụ thu phải lớn hơn 0%." : "Surcharge must be greater than 0%.",
+        text: lang === "VN" ? "Mức phụ thu phải là số nguyên lớn hơn 0% và không quá 100%." : "Surcharge must be a whole number above 0% and no more than 100%.",
       });
       return;
     }
@@ -644,10 +742,13 @@ function SurchargeTab({ lang }) {
       return;
     }
     const holidayName = String(holiday.name || "").trim();
-    if (!holidayName) {
+    if (!isValidHolidayName(holidayName)) {
       notify({
         icon: "warning",
-        title: lang === "VN" ? "Thiếu tên ngày lễ" : "Missing holiday name",
+        title: lang === "VN" ? "Tên ngày lễ không hợp lệ" : "Invalid holiday name",
+        text: lang === "VN"
+          ? "Tên chỉ gồm chữ, số, khoảng trắng và các dấu - / ( ) . ,"
+          : "Name may contain letters, numbers, spaces, and - / ( ) . , only.",
       });
       return;
     }
@@ -660,11 +761,11 @@ function SurchargeTab({ lang }) {
       return;
     }
     const holidayPercent = Number(holiday.surchargePercent);
-    if (!Number.isFinite(holidayPercent) || holidayPercent <= 0) {
+    if (!Number.isInteger(holidayPercent) || holidayPercent <= 0 || holidayPercent > 100) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Mức phụ thu không hợp lệ" : "Invalid surcharge",
-        text: lang === "VN" ? "Mức phụ thu phải lớn hơn 0%." : "Surcharge must be greater than 0%.",
+        text: lang === "VN" ? "Mức phụ thu phải là số nguyên lớn hơn 0% và không quá 100%." : "Surcharge must be a whole number above 0% and no more than 100%.",
       });
       return;
     }
@@ -693,6 +794,9 @@ function SurchargeTab({ lang }) {
         surchargePercent: 50,
         isActive: true,
       });
+      setHolidayDateTouched(false);
+      setHolidayNameTouched(false);
+      setHolidayPercentTouched(false);
       await load();
       setAdjustments((prev) => prev.map((row) => {
         if (row.date !== payload.date || String(row.scope).toLowerCase() !== "holiday") return row;
@@ -791,39 +895,34 @@ function SurchargeTab({ lang }) {
 
       <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
         <div className="space-y-5 p-5 sm:p-6">
-          <form onSubmit={handleSaveWeekend} className="space-y-3">
-            <div>
+          <form onSubmit={handleSaveWeekend} className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_20rem_auto] sm:items-start">
+            <div className="min-w-0 flex-1">
               <p className="font-headline text-[11px] font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
-                {lang === "VN" ? "Cuối tuần" : "Weekend"}
+                {lang === "VN" ? "Phụ thu cuối tuần" : "Weekend surcharge"}
               </p>
               <p className="mt-0.5 text-[11px] text-slate-400">
-                {lang === "VN" ? "Áp dụng Thứ 7 & Chủ nhật." : "Applies Saturday & Sunday."}
+                {lang === "VN" ? "Tự động áp dụng vào Thứ 7 và Chủ Nhật." : "Automatically applies on Saturday and Sunday."}
               </p>
             </div>
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="w-30">
-                <label className={labelStyle}>{lang === "VN" ? "Mức phụ thu" : "Surcharge"}</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={weekend.surchargePercent}
-                    onChange={(e) => setWeekend((prev) => ({ ...prev, surchargePercent: e.target.value }))}
-                    className={`${inputStyle} pr-8 text-right tabular-nums`}
-                  />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">
-                    %
-                  </span>
-                </div>
-              </div>
+            <div className="w-full">
+              <label className={labelStyle}>{<>{lang === "VN" ? "Mức phụ thu" : "Surcharge"}{required()}</>}</label>
+              <PercentInput
+                value={weekend.surchargePercent}
+                onChange={(surchargePercent) => setWeekend((prev) => ({ ...prev, surchargePercent }))}
+                className={inputStyle}
+                aria-label={lang === "VN" ? "Mức phụ thu cuối tuần" : "Weekend surcharge"}
+              />
+            </div>
+            <div>
+              <span className={labelStyle} aria-hidden>&nbsp;</span>
               <button
                 type="submit"
                 disabled={savingWeekend}
-                className="box-border h-10 rounded-xl bg-[#124757] px-4 text-[11px] font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
+                className="box-border h-10 w-full rounded-xl bg-[#124757] px-4 text-[11px] font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
               >
                 {savingWeekend ? "…" : (lang === "VN" ? "Lưu" : "Save")}
               </button>
+              <span className="mt-1 block min-h-4" aria-hidden />
             </div>
           </form>
 
@@ -832,50 +931,60 @@ function SurchargeTab({ lang }) {
               <p className="font-headline text-[11px] font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
                 {lang === "VN" ? "Ngày lễ" : "Holiday"}
               </p>
-              <div className="flex flex-wrap items-end gap-3">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(14rem,1fr)_10rem_auto] lg:items-start">
                 <div className="min-w-37.5 flex-1">
-                  <label className={labelStyle}>{lang === "VN" ? "Ngày" : "Date"}</label>
+                  <label className={labelStyle}>{<>{lang === "VN" ? "Ngày" : "Date"}{required()}</>}</label>
                   <AppDateInput
                     required
                     value={holiday.date}
-                    onChange={(e) => setHoliday((prev) => ({ ...prev, date: e.target.value }))}
-                    className={inputStyle}
+                    onChange={(e) => {
+                      setHolidayDateTouched(true);
+                      setHoliday((prev) => ({ ...prev, date: e.target.value }));
+                    }}
+                    className={`${inputStyle} ${holidayDateError ? "!border-rose-500 !bg-rose-50/50 focus:!ring-rose-500 dark:!bg-rose-500/10" : ""}`}
                   />
+                  <p className="mt-1 min-h-4 text-[10px] font-bold text-rose-600 dark:text-rose-400">{holidayDateError}</p>
                 </div>
                 <div className="min-w-35 flex-1">
-                  <label className={labelStyle}>{lang === "VN" ? "Tên" : "Name"}</label>
+                  <label className={labelStyle}>{<>{lang === "VN" ? "Tên" : "Name"}{required()}</>}</label>
                   <input
                     type="text"
                     required
                     value={holiday.name}
-                    onChange={(e) => setHoliday((prev) => ({ ...prev, name: e.target.value }))}
+                    onChange={(e) => {
+                      setHolidayNameTouched(true);
+                      setHoliday((prev) => ({ ...prev, name: sanitizeHolidayName(e.target.value) }));
+                    }}
+                    onBlur={() => setHolidayNameTouched(true)}
                     placeholder={lang === "VN" ? "Quốc khánh" : "National Day"}
-                    className={inputStyle}
+                    className={`${inputStyle} ${holidayNameError ? "!border-rose-500 !bg-rose-50/50 focus:!ring-rose-500 dark:!bg-rose-500/10" : ""}`}
                   />
+                  <p className="mt-1 min-h-4 text-[10px] font-bold text-rose-600 dark:text-rose-400">{holidayNameError}</p>
                 </div>
                 <div className="w-30">
-                  <label className={labelStyle}>{lang === "VN" ? "Mức phụ thu" : "Surcharge"}</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={holiday.surchargePercent}
-                      onChange={(e) => setHoliday((prev) => ({ ...prev, surchargePercent: e.target.value }))}
-                      className={`${inputStyle} pr-8 text-right tabular-nums`}
-                    />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">
-                      %
-                    </span>
-                  </div>
+                  <label className={labelStyle}>{<>{lang === "VN" ? "Mức phụ thu" : "Surcharge"}{required()}</>}</label>
+                  <PercentInput
+                    value={holiday.surchargePercent}
+                    onChange={(surchargePercent) => {
+                      setHolidayPercentTouched(true);
+                      setHoliday((prev) => ({ ...prev, surchargePercent }));
+                    }}
+                    className={`${inputStyle} ${holidayPercentError ? "!border-rose-500 !bg-rose-50/50 focus:!ring-rose-500 dark:!bg-rose-500/10" : ""}`}
+                    aria-label={lang === "VN" ? "Mức phụ thu ngày lễ" : "Holiday surcharge"}
+                  />
+                  <p className="mt-1 min-h-4 text-[10px] font-bold text-rose-600 dark:text-rose-400">{holidayPercentError}</p>
                 </div>
-                <button
-                  type="submit"
-                  disabled={savingHoliday}
-                  className="box-border h-10 shrink-0 rounded-xl bg-[#124757] px-4 text-[11px] font-black uppercase tracking-wider text-white disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
-                >
-                  {savingHoliday ? "…" : (lang === "VN" ? "Thêm" : "Add")}
-                </button>
+                <div>
+                  <span className={labelStyle} aria-hidden>&nbsp;</span>
+                  <button
+                    type="submit"
+                    disabled={savingHoliday || !holidayFormValid}
+                    className="box-border h-10 w-full shrink-0 rounded-xl bg-[#124757] px-4 text-[11px] font-black uppercase tracking-wider text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
+                  >
+                    {savingHoliday ? "…" : (lang === "VN" ? "Thêm" : "Add")}
+                  </button>
+                  <span className="mt-1 block min-h-4" aria-hidden />
+                </div>
               </div>
             </form>
           </div>
@@ -914,7 +1023,11 @@ function SurchargeTab({ lang }) {
                       <td className="px-5 py-3 font-bold text-slate-700 dark:text-slate-200 sm:px-6">
                         {labelScope(row.scope)}
                       </td>
-                      <td className="px-4 py-3 tabular-nums text-slate-500">{row.date || "—"}</td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {String(row.scope).toLowerCase() === "weekend"
+                          ? (lang === "VN" ? "Thứ 7 và Chủ Nhật" : "Saturday and Sunday")
+                          : (row.date || "—")}
+                      </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                         {row.name || (String(row.scope).toLowerCase() === "weekend"
                           ? (lang === "VN" ? "Cuối tuần" : "Weekend")
@@ -1258,12 +1371,12 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
             {draft.currency || "VND"}
           </span>
         </td>
-        <td className="w-22 px-4 py-3 text-right">
+        <td className="w-28 px-4 py-3 text-center">
           <button
             type="button"
             disabled={busy}
             onClick={() => handleSave(row)}
-            className="rounded-xl bg-[#124757] px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-white hover:brightness-110 disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
+            className="h-10 w-17 rounded-xl bg-[#124757] text-[10px] font-headline font-black uppercase tracking-wider text-white hover:brightness-110 disabled:opacity-50 dark:bg-yellow-400 dark:text-[#124757]"
           >
             {busy ? "…" : (lang === "VN" ? "Lưu" : "Save")}
           </button>
@@ -1311,14 +1424,14 @@ function RentalPricePoliciesTab({ lang, numberOfDecks }) {
                       <col className="w-[28%]" />
                       <col className="w-[42%]" />
                       <col className="w-18" />
-                      <col className="w-22" />
+                      <col className="w-28" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 dark:border-slate-700 dark:bg-slate-900/40">
                         <th className="px-5 py-3">{lang === "VN" ? "Đơn vị thuê" : "Rental unit"}</th>
                         <th className="px-4 py-3">{lang === "VN" ? "Giá thuê" : "Unit price"}</th>
                         <th className="px-4 py-3">{lang === "VN" ? "Tiền tệ" : "Currency"}</th>
-                        <th className="px-4 py-3 text-right">{lang === "VN" ? "Lưu" : "Save"}</th>
+                        <th className="px-4 py-3 text-center">{lang === "VN" ? "Lưu" : "Save"}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">

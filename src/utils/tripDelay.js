@@ -67,7 +67,7 @@ const parseTripDateTime = (raw) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-/** Số phút delay: ưu tiên BE; nếu đang delay mà chưa có phút thì đếm từ delayStartedAt. */
+/** Số phút delay do BE tính và trả về; FE không tự cộng/cascade delay. */
 export const pickDelayMinutes = (tripOrInfo) => {
   const info = pickDelayInfo(tripOrInfo) || tripOrInfo;
   const n = Number(
@@ -79,16 +79,6 @@ export const pickDelayMinutes = (tripOrInfo) => {
     ?? tripOrInfo?.elapsedMinutes,
   );
   if (Number.isFinite(n) && n > 0) return n;
-
-  if (isDelayActive(tripOrInfo)) {
-    const started = parseTripDateTime(
-      info?.delayStartedAt ?? info?.DelayStartedAt ?? tripOrInfo?.delayStartedAt,
-    );
-    if (started) {
-      const mins = Math.floor((Date.now() - started.getTime()) / 60000);
-      return mins > 0 ? mins : 0;
-    }
-  }
   return 0;
 };
 
@@ -140,22 +130,39 @@ export const hasTripLeftAStop = (trip) => {
     stop?.actualDeparture
     || stop?.actualDepartureAt
     || stop?.ActualDepartureAt
+    || stop?.actualDepartureTime
+    || stop?.ActualDepartureTime
   ));
+};
+
+/** Tàu đang dừng tại một bến: đã đến nhưng chưa có giờ rời bến. */
+export const isTripStoppedAtStation = (trip) => {
+  const stops = Array.isArray(trip?.stops) ? trip.stops : [];
+  return stops.some((stop) => {
+    const arrived = Boolean(stop?.actualArrival || stop?.actualArrivalAt || stop?.ActualArrivalAt || stop?.actualArrivalTime || stop?.ActualArrivalTime);
+    const departed = Boolean(stop?.actualDeparture || stop?.actualDepartureAt || stop?.ActualDepartureAt || stop?.actualDepartureTime || stop?.ActualDepartureTime);
+    return arrived && !departed;
+  });
 };
 
 /** @deprecated dùng hasTripLeftAStop */
 export const hasTripActuallyStarted = (trip) => hasTripLeftAStop(trip);
 
 /**
- * Chặn Delay khi chưa tới giờ xuất phát theo lịch.
- * Chỉ mở khi: đã tới giờ planned OR tàu đã rời bến.
+ * Delay chỉ bắt đầu khi tàu chưa rời bến hoặc đang dừng tại bến.
+ * Không cho bắt đầu khi tàu đang di chuyển giữa hai bến.
  */
 export const getTripDelayTooEarlyMessage = (trip, lang = "VN") => {
   if (!trip) {
     return lang === "VN" ? "Không có thông tin chuyến." : "Trip information is missing.";
   }
-  // Đã rời bến → cho delay (dù đồng hồ lệch).
-  if (hasTripLeftAStop(trip)) return "";
+  // Sau khi đã rời bến, chỉ mở Delay khi đã vào một bến và chưa rời bến đó.
+  if (hasTripLeftAStop(trip)) {
+    if (isTripStoppedAtStation(trip)) return "";
+    return lang === "VN"
+      ? "Tàu đang di chuyển giữa các bến. Chỉ có thể Delay khi tàu đang dừng tại bến."
+      : "The boat is moving between stations. Delay is available only while stopped at a station.";
+  }
 
   const departure = resolveTripPlannedDepartureDate(trip);
   if (!departure) {
@@ -179,7 +186,7 @@ export const getTripDelayTooEarlyMessage = (trip, lang = "VN") => {
     : `Trip has not reached departure time. Cannot delay before departure.`;
 };
 
-/** Có thể bấm Delay: chưa xong/hủy, không đang delay, và đã tới giờ xuất phát. */
+/** Có thể bấm Delay: chưa rời bến hoặc đang dừng tại bến, không đang delay. */
 export const canStartTripDelay = (trip) => {
   if (!trip) return false;
   const status = normalizeStatusKey(trip.tripStatus || trip.status);

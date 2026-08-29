@@ -273,19 +273,31 @@ export function BoatDocumentsPanel({
 
       {showMaintenanceBanner && (
         <div
-          className={`p-4 rounded-xl text-xs font-bold border shadow-sm ${
+          className={`flex items-start gap-3 p-4 rounded-xl border shadow-sm ${
             documentsReadyForActivation
               ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-100 dark:border-emerald-500/20"
               : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-100 dark:border-amber-500/20"
           }`}
         >
-          {documentsReadyForActivation
-            ? (lang === "VN"
-                ? "Hồ sơ đã cập nhật sau bảo trì. Có thể chuyển tàu sang Hoạt động."
-                : "Documents refreshed after maintenance. You can switch the boat to Active.")
-            : (lang === "VN"
-                ? "Tàu cần cập nhật đăng kiểm sau bảo trì trước khi Active. Các hồ sơ khác vẫn giữ nguyên nếu đã nộp."
-                : "Update Inspection after maintenance before Active. Other uploaded documents stay as-is.")}
+          <span className="material-symbols-outlined mt-0.5 text-lg" aria-hidden="true">
+            {documentsReadyForActivation ? "check_circle" : "info"}
+          </span>
+          <div>
+            <p className="text-[11px] font-headline font-black uppercase tracking-wider">
+              {documentsReadyForActivation
+                ? (lang === "VN" ? "Đã hoàn tất" : "Complete")
+                : (lang === "VN" ? "Lưu ý" : "Note")}
+            </p>
+            <p className="mt-1 text-xs font-bold leading-5">
+              {documentsReadyForActivation
+                ? (lang === "VN"
+                    ? "Hồ sơ đã cập nhật sau bảo trì. Có thể chuyển tàu sang Hoạt động."
+                    : "Documents refreshed after maintenance. You can switch the boat to Active.")
+                : (lang === "VN"
+                    ? "Tàu cần cập nhật đăng kiểm sau bảo trì trước khi Active. Các hồ sơ khác vẫn giữ nguyên nếu đã nộp."
+                    : "Update Inspection after maintenance before Active. Other uploaded documents stay as-is.")}
+            </p>
+          </div>
         </div>
       )}
 

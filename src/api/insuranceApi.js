@@ -12,6 +12,12 @@ export const createInsurancePackage = (data) =>
 export const updateInsurancePackage = (id, data) =>
     api.put(`/insurance-packages/${id}`, data).then((response) => response.data);
 
+export const uploadInsurancePackageImage = (id, imageFile) => {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    return api.put(`/insurance-packages/${id}/image`, formData).then((response) => response.data);
+};
+
 // Bật/tắt gói bảo hiểm
 export const updateInsurancePackageStatus = (id, data) =>
     api.patch(`/insurance-packages/${id}/status`, data).then((response) => response.data);

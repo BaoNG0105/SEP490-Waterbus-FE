@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../../context/AppContext";
 
 import { FormSelect } from "../../../components/FormSelect";
-import { fetchAdminReviews, changeReviewStatus } from "../../../services/reviewService";
+import { fetchAdminReviews, changeReviewStatus, removeAdminReview } from "../../../services/reviewService";
 import { StarRatingDisplay } from "../../../components/TripReview";
 import { notify } from "../../../utils/swalToast";
 
@@ -144,6 +144,48 @@ export function ReviewManagement() {
         icon: "error",
         title: lang === "VN" ? "Thất bại" : "Failed",
         text: error.response?.data?.message || (lang === "VN" ? "Không thể đổi trạng thái đánh giá." : "Could not update review status."),
+        confirmButtonColor: "#124757",
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDeleteReview = async (review) => {
+    const result = await notify({
+      icon: "warning",
+      title: lang === "VN" ? "Xóa đánh giá này?" : "Delete this review?",
+      text: lang === "VN"
+        ? "Đánh giá sẽ bị xóa vĩnh viễn và không thể khôi phục."
+        : "This review will be permanently deleted and cannot be restored.",
+      showCancelButton: true,
+      confirmButtonText: lang === "VN" ? "Xóa đánh giá" : "Delete review",
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
+      confirmButtonColor: "#e11d48",
+      cancelButtonColor: "#124757",
+      reverseButtons: true,
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      setProcessingId(review.id);
+      await removeAdminReview(review.id);
+      setReviews((prev) => prev.filter((item) => item.id !== review.id));
+      notify({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: lang === "VN" ? "Đã xóa đánh giá" : "Review deleted",
+        showConfirmButton: false,
+        timer: 1600,
+      });
+    } catch (error) {
+      notify({
+        icon: "error",
+        title: lang === "VN" ? "Xóa thất bại" : "Delete failed",
+        text: error.response?.status === 404
+          ? (lang === "VN" ? "Không tìm thấy đánh giá này." : "Review was not found.")
+          : (error.response?.data?.message || (lang === "VN" ? "Không thể xóa đánh giá." : "Could not delete review.")),
         confirmButtonColor: "#124757",
       });
     } finally {
@@ -332,6 +374,19 @@ export function ReviewManagement() {
                             )}
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteReview(review)}
+                          disabled={processingId === review.id}
+                          className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-rose-500 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-rose-500/30 dark:hover:bg-rose-500/20 dark:hover:text-rose-400"
+                          title={lang === "VN" ? "Xóa đánh giá" : "Delete review"}
+                        >
+                          {processingId === review.id ? (
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          ) : (
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                          )}
+                        </button>
                       </div>
                     </td>
                   </tr>

@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Info, LifeBuoy, X } from "lucide-react";
 import { useApp } from "../../../context/AppContext";
+import { FormSelect } from "../../../components/FormSelect";
 import { useSelector } from "react-redux";
 import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
 import { RequiredStar } from "../../../utils/requiredStar";
 import { fetchActiveBoatsByServiceType, fetchAllBoats } from "../../../services/boatService";
 import { fetchAllTrips, filterAttachableTripsForBoat, pickActiveTripForBoat, toDdMmYyyy } from "../../../services/tripService";
-import { fetchManagerUsers } from "../../../services/userService";
 import {
-  assignManagerToIncident,
   closeIncident,
-  delayAffectsFollowingTrips,
-  DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES,
   dispatchReplacementBoat,
+  fetchAvailableReplacementBoats,
+  fetchIncidentDispatchPlan,
   fetchResolvedIncidents,
   getApiErrorMessage,
   getDispatchReplacementErrorMessage,
@@ -99,9 +99,8 @@ export function IncidentManagement({
   const isAdmin = isAdminUser(user);
   const isManager = isManagerUser(user);
   const isStaff = isStaffUser(user);
-  // BE RBAC: Admin/Manager/Staff báo sự cố; chỉ Admin gán QL; Admin/Manager điều tàu + đóng.
+  // Admin/Manager/Staff báo sự cố; Admin/Manager điều tàu cứu hộ và đóng sự cố.
   const canReport = (isAdmin || isManager || isStaff) && !hideReport;
-  const canAssignManager = isAdmin;
   const canDispatchRescue = isAdmin || isManager;
   const canResolveIncident = isAdmin || isManager;
   const {
@@ -115,7 +114,6 @@ export function IncidentManagement({
   const [rescueBoats, setRescueBoats] = useState([]);
   const [passengerBoats, setPassengerBoats] = useState([]);
   const [trips, setTrips] = useState([]);
-  const [managers, setManagers] = useState([]);
   const [query, setQuery] = useState("");
   const [listTab, setListTab] = useState("open"); // open | history
   const [historyIncidents, setHistoryIncidents] = useState([]);
@@ -132,10 +130,11 @@ export function IncidentManagement({
     description: "",
   });
   const [rescueForm, setRescueForm] = useState(EMPTY_RESCUE_FORM);
-  const [managerForm, setManagerForm] = useState({
-    incidentId: "",
-    managerUserId: "",
-  });
+  const [dispatchPlan, setDispatchPlan] = useState(null);
+  const [dispatchPlanLoading, setDispatchPlanLoading] = useState(false);
+  const [dispatchPlanError, setDispatchPlanError] = useState("");
+  const [availableReplacementBoats, setAvailableReplacementBoats] = useState([]);
+  const [replacementBoatLoadError, setReplacementBoatLoadError] = useState("");
   const [resolveForm, setResolveForm] = useState({
     incidentId: "",
     boatCode: "",
@@ -167,14 +166,6 @@ export function IncidentManagement({
       .then((data) => setTrips(unwrapList(data)))
       .catch((error) => console.error("Failed to load trips for incidents:", error));
   }, []);
-
-  useEffect(() => {
-    if (!canAssignManager) return undefined;
-    fetchManagerUsers()
-      .then((data) => setManagers(Array.isArray(data) ? data : []))
-      .catch((error) => console.error("Failed to load managers:", error));
-    return undefined;
-  }, [canAssignManager]);
 
   const loadHistory = async ({ silent = false } = {}) => {
     if (!silent) setHistoryLoading(true);
@@ -230,13 +221,8 @@ export function IncidentManagement({
       return id && !blocked.has(id);
     });
 
-    const fromApi = filterBlocked(passengerBoats);
-    if (fromApi.length) return fromApi;
-    return filterBlocked(boats.filter((boat) => {
-      const status = String(boat.status || "Active").toLowerCase();
-      return status === "active" && boatServiceType(boat).toLowerCase() !== "rescue";
-    }));
-  }, [passengerBoats, boats, rescueForm.incidentBoatId, rescueForm.rescueBoatId]);
+    return filterBlocked(availableReplacementBoats);
+  }, [availableReplacementBoats, rescueForm.incidentBoatId, rescueForm.rescueBoatId]);
 
   const needsReplacementBoat = incidentNeedsReplacementBoat({
     replacementMissionType: rescueForm.replacementMissionType,
@@ -257,7 +243,18 @@ export function IncidentManagement({
     onboardPassengerCount: rescueForm.onboardPassengerCount,
     futurePassengerCount: rescueForm.futurePassengerCount,
   }, lang);
-  const delaySpreads = delayAffectsFollowingTrips(rescueForm.delayMinutes);
+  const hasNextTrips = Boolean(dispatchPlan?.hasNextTrips ?? dispatchPlan?.HasNextTrips);
+  const nextTrips = unwrapList(dispatchPlan?.nextTrips ?? dispatchPlan?.NextTrips);
+  const requiresPassengerReplacement = Boolean(
+    dispatchPlan?.requiresPassengerReplacement ?? dispatchPlan?.RequiresPassengerReplacement,
+  );
+  const requiresReplacementOrDelay = Boolean(
+    dispatchPlan?.requiresReplacementOrDelay ?? dispatchPlan?.RequiresReplacementOrDelay,
+  );
+  const replacementListEmpty = hasNextTrips && !dispatchPlanLoading && !replacementBoatLoadError && replacementCandidateBoats.length === 0;
+  const delayMinutes = Number(rescueForm.delayMinutes);
+  const hasValidDelay = Number.isFinite(delayMinutes) && delayMinutes > 0;
+  const mustEnterDelay = hasNextTrips && !rescueForm.replacementBoatId && !requiresPassengerReplacement;
 
   const selectedBoat = useMemo(
     () => boats.find((boat) => String(boat.boatId || boat.id) === String(reportForm.boatId)) || null,
@@ -414,29 +411,6 @@ export function IncidentManagement({
     }
   };
 
-  const handleAssignManager = async (event) => {
-    event.preventDefault();
-    if (!managerForm.incidentId || !managerForm.managerUserId) return;
-    setBusyId(managerForm.incidentId);
-    try {
-      await assignManagerToIncident(managerForm.incidentId, managerForm.managerUserId);
-      showToast({
-        icon: "success",
-        title: lang === "VN" ? "Đã gán Manager" : "Manager assigned",
-      });
-      setManagerForm({ incidentId: "", managerUserId: "" });
-      await refresh();
-    } catch (error) {
-      notify({
-        icon: "error",
-        title: lang === "VN" ? "Gán Manager thất bại" : "Assign manager failed",
-        text: getApiErrorMessage(error),
-      });
-    } finally {
-      setBusyId("");
-    }
-  };
-
   const handleRescue = async (event) => {
     event.preventDefault();
     if (!rescueForm.incidentId) return;
@@ -450,13 +424,24 @@ export function IncidentManagement({
       return;
     }
 
-    if (needsReplacementBoat && !rescueForm.replacementBoatId) {
+    if (requiresPassengerReplacement && !rescueForm.replacementBoatId) {
       notify({
         icon: "warning",
         title: lang === "VN" ? "Chọn tàu thay thế" : "Select replacement boat",
         text: lang === "VN"
-          ? "Sự cố có chuyến (tripId) — bắt buộc chọn tàu Passenger thay thế."
-          : "Incident has a trip — replacement passenger boat is required.",
+          ? "Các khách bị ảnh hưởng bắt buộc phải được bố trí tàu thay thế."
+          : "Affected passengers require a replacement boat.",
+      });
+      return;
+    }
+
+    if (mustEnterDelay && !hasValidDelay) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Nhập thời gian trễ" : "Enter delay",
+        text: lang === "VN"
+          ? "Không chọn tàu thay thế thì cần nhập thời gian trễ lớn hơn 0 phút cho các chuyến kế tiếp."
+          : "Enter a delay greater than 0 minutes when no replacement boat is selected.",
       });
       return;
     }
@@ -492,31 +477,13 @@ export function IncidentManagement({
 
     setBusyId(rescueForm.incidentId);
     try {
-      const delayRaw = Number(rescueForm.delayMinutes);
-      const lookupBoatCode = (boatId) => {
-        if (!boatId) return null;
-        const boat = (boats || []).find(
-          (item) => String(item?.boatId ?? item?.id) === String(boatId),
-        );
-        return boat?.boatCode ?? boat?.code ?? null;
-      };
-      const includeReplacement = needsReplacementBoat || Boolean(rescueForm.replacementBoatId);
-      const hasRescue = Boolean(rescueForm.rescueBoatId);
-      const rescueBoatCode = lookupBoatCode(rescueForm.rescueBoatId);
-      const replacementBoatCode = includeReplacement
-        ? lookupBoatCode(rescueForm.replacementBoatId)
-        : null;
       await dispatchReplacementBoat(rescueForm.incidentId, {
-        rescueBoatId: hasRescue ? rescueForm.rescueBoatId : null,
-        rescueBoatCode: hasRescue ? rescueBoatCode : null,
-        replacementBoatId: includeReplacement ? (rescueForm.replacementBoatId || null) : null,
-        replacementBoatCode: includeReplacement ? replacementBoatCode : null,
-        delayMinutes: includeReplacement
-          ? (Number.isFinite(delayRaw) ? Math.trunc(delayRaw) : 30)
-          : 0,
-        note: rescueForm.note.trim() || (needsReplacementBoat
-          ? (lang === "VN" ? "Điều tàu thay thế" : "Dispatch replacement boat")
-          : (lang === "VN" ? "Điều tàu cứu hộ kéo tàu lỗi về" : "Dispatch rescue to tow broken boat")),
+        rescueBoatId: rescueForm.rescueBoatId,
+        replacementBoatId: rescueForm.replacementBoatId || null,
+        delayMinutes: hasNextTrips && !rescueForm.replacementBoatId ? Math.trunc(delayMinutes) : 0,
+        note: rescueForm.note.trim() || (lang === "VN"
+          ? "Điều tàu cứu hộ và xử lý các chuyến kế tiếp"
+          : "Dispatch rescue and handle following trips"),
       });
 
       showToast({
@@ -524,6 +491,8 @@ export function IncidentManagement({
         title: lang === "VN" ? "Đã điều tàu cứu hộ" : "Rescue boat assigned",
       });
       setRescueForm(EMPTY_RESCUE_FORM);
+      setDispatchPlan(null);
+      setAvailableReplacementBoats([]);
       // Refetch theo spec BE: incident + schedule (+ boats); Live Tracking tự poll GPS.
       const day = toDdMmYyyy(new Date());
       const opsDay = toOperationsScheduleDate();
@@ -595,7 +564,7 @@ export function IncidentManagement({
   };
 
   return (
-    <div className="space-y-6 font-body animate-fade-in pb-10 px-2 sm:px-0">
+    <div className="mx-auto max-w-6xl space-y-6 px-2 pb-10 font-body animate-fade-in sm:px-0">
       <div className="flex flex-col items-start justify-between gap-4 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:flex-row sm:items-center">
         <div>
           <h2 className="font-headline text-xl font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400 md:text-2xl">
@@ -782,7 +751,7 @@ export function IncidentManagement({
                   replacementEstimatedResumeAt: item.replacementEstimatedResumeAt || null,
                   rescueBoatId: "",
                   replacementBoatId: "",
-                  delayMinutes: suggestedDelay,
+                  delayMinutes: 0,
                   note: lang === "VN"
                     ? (needsReplace
                       ? `Điều tàu cứu hộ và tàu thay thế cho ${item.boatCode || ""}`
@@ -791,14 +760,52 @@ export function IncidentManagement({
                       ? `Dispatch rescue and replacement for ${item.boatCode || ""}`
                       : `Dispatch rescue for ${item.boatCode || ""}`),
                 });
+                setDispatchPlan(null);
+                setDispatchPlanError("");
+                setAvailableReplacementBoats([]);
+                setReplacementBoatLoadError("");
+                setDispatchPlanLoading(true);
                 fetchActiveBoatsByServiceType("Rescue")
                   .then((data) => setRescueBoats(Array.isArray(data) ? data : []))
                   .catch(() => { });
-                if (needsReplace || incidentShowsReplacementBoatField(enriched)) {
-                  fetchActiveBoatsByServiceType("Passenger")
-                    .then((data) => setPassengerBoats(Array.isArray(data) ? data : []))
-                    .catch(() => { });
-                }
+                fetchIncidentDispatchPlan(item.incidentId)
+                  .then(async (plan) => {
+                    setDispatchPlan(plan || null);
+                    setRescueForm((prev) => {
+                      if (String(prev.incidentId) !== String(item.incidentId)) return prev;
+                      return {
+                        ...prev,
+                        activeTicketCount: Number(plan?.activeTicketCount ?? plan?.ActiveTicketCount ?? prev.activeTicketCount) || 0,
+                        onboardPassengerCount: Number(plan?.onboardPassengerCount ?? plan?.OnboardPassengerCount ?? prev.onboardPassengerCount) || 0,
+                        futurePassengerCount: Number(plan?.futurePassengerCount ?? plan?.FuturePassengerCount ?? prev.futurePassengerCount) || 0,
+                      };
+                    });
+
+                    const planHasNextTrips = Boolean(plan?.hasNextTrips ?? plan?.HasNextTrips);
+                    const planRequiresReplacement = Boolean(
+                      plan?.requiresPassengerReplacement ?? plan?.RequiresPassengerReplacement,
+                    );
+                    // Không có khách và không có chuyến kế tiếp: chỉ cần tàu cứu hộ,
+                    // không gọi API tàu Passenger không cần thiết.
+                    if (!planHasNextTrips && !planRequiresReplacement) return;
+
+                    try {
+                      const replacementBoats = await fetchAvailableReplacementBoats(item.incidentId);
+                      setAvailableReplacementBoats(replacementBoats);
+                    } catch (error) {
+                      console.error("Failed to load available replacement boats:", error);
+                      setReplacementBoatLoadError(lang === "VN"
+                        ? "Chưa tải được danh sách tàu thay thế phù hợp từ hệ thống."
+                        : "Unable to load eligible replacement boats.");
+                    }
+                  })
+                  .catch((error) => {
+                    console.error("Failed to load incident dispatch plan:", error);
+                    setDispatchPlanError(lang === "VN"
+                      ? "Chưa tải được kế hoạch điều tàu từ hệ thống. Vui lòng thử lại sau."
+                      : "Unable to load the dispatch plan. Please try again later.");
+                  })
+                  .finally(() => setDispatchPlanLoading(false));
               };
 
               return (
@@ -830,9 +837,6 @@ export function IncidentManagement({
                           {getSeverityLabel(item.severity, lang)}
                         </span>
                       </div>
-                      <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
-                        {item.description || "—"}
-                      </p>
                     </div>
 
                     <div className="shrink-0 text-right">
@@ -848,19 +852,6 @@ export function IncidentManagement({
 
                     {listTab === "open" ? (
                       <div className="flex flex-wrap justify-end gap-1.5">
-                        {canAssignManager ? (
-                          <button
-                            type="button"
-                            disabled={busyId === item.incidentId}
-                            onClick={() => setManagerForm({
-                              incidentId: item.incidentId,
-                              managerUserId: item.managerUserId || "",
-                            })}
-                            className="rounded-xl bg-violet-50 px-2.5 py-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-violet-700 ring-1 ring-violet-200 transition hover:bg-violet-100 disabled:opacity-50 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/30"
-                          >
-                            {lang === "VN" ? "Gán QL" : "Manager"}
-                          </button>
-                        ) : null}
                         {canDispatchRescue ? (
                           <button
                             type="button"
@@ -933,24 +924,8 @@ export function IncidentManagement({
                             </p>
                           ) : null}
                         </div>
-                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Manager
-                          </p>
-                          <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                            {item.managerName || (item.managerUserId ? String(item.managerUserId).slice(0, 8) : "—")}
-                          </p>
-                        </div>
                         {listTab === "open" ? (
                           <>
-                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                {lang === "VN" ? "Người báo" : "Reporter"}
-                              </p>
-                              <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                                {item.reportedByUserName || (item.reportedByUserId ? String(item.reportedByUserId).slice(0, 8) : "—")}
-                              </p>
-                            </div>
                             <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
                               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                                 {lang === "VN" ? "Khách ảnh hưởng" : "Passengers"}
@@ -972,14 +947,6 @@ export function IncidentManagement({
                               </p>
                               <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
                                 {item.resolutionNote || "—"}
-                              </p>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                {lang === "VN" ? "Người đóng" : "Resolved by"}
-                              </p>
-                              <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                                {item.resolvedByUserName || (item.resolvedByUserId ? String(item.resolvedByUserId).slice(0, 8) : "—")}
                               </p>
                             </div>
                           </>
@@ -1125,60 +1092,28 @@ export function IncidentManagement({
         </div>
       ) : null}
 
-      {managerForm.incidentId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-          <form
-            onSubmit={handleAssignManager}
-            className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-800"
-          >
-            <h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-              {lang === "VN" ? "Gán Manager xử lý" : "Assign manager"}
-            </h2>
-            <label className="block space-y-1.5">
-              <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">Manager</span>
-              <select
-                required
-                value={managerForm.managerUserId}
-                onChange={(e) => setManagerForm((prev) => ({ ...prev, managerUserId: e.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
-              >
-                <option value="">{lang === "VN" ? "Chọn Manager" : "Select manager"}</option>
-                {managers.map((manager) => (
-                  <option key={manager.id} value={manager.id}>
-                    {manager.fullName || manager.email || manager.id}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setManagerForm({ incidentId: "", managerUserId: "" })}
-                className="rounded-2xl px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-slate-500 hover:bg-slate-100"
-              >
-                {lang === "VN" ? "Hủy" : "Cancel"}
-              </button>
-              <button
-                type="submit"
-                className="rounded-2xl bg-violet-600 px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-white hover:brightness-110"
-              >
-                {lang === "VN" ? "Gán" : "Assign"}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
-
       {rescueForm.incidentId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
           <form
             onSubmit={handleRescue}
-            className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-800"
+            className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-800"
           >
-            <h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-              {lang === "VN" ? "Điều tàu cứu hộ" : "Assign rescue boat"}
-            </h2>
-            <p className="text-[11px] font-medium text-slate-500">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
+                  <LifeBuoy size={19} aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Xử lý sự cố" : "Incident response"}</p>
+                  <h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Điều tàu cứu hộ" : "Assign rescue boat"}</h2>
+                </div>
+              </div>
+              <button type="button" onClick={() => setRescueForm(EMPTY_RESCUE_FORM)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900" title={lang === "VN" ? "Đóng" : "Close"}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="space-y-5 p-6">
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
               {rescueForm.incidentBoatCode || "—"}
               {" · "}
               {lang === "VN" ? "Vé active" : "Active tickets"}: {rescueForm.activeTicketCount}
@@ -1187,35 +1122,45 @@ export function IncidentManagement({
               {" · "}
               {lang === "VN" ? "Chặng sau" : "Future"}: {rescueForm.futurePassengerCount}
             </p>
-            <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-200 dark:ring-slate-700">
-              <span className="block text-[10px] font-headline font-black uppercase tracking-wider text-slate-400 mb-1">
-                {normalizeReplacementMissionType(rescueForm.replacementMissionType)}
-              </span>
-              {missionCopy}
-            </p>
-            {normalizeReplacementMissionType(rescueForm.replacementMissionType) === "PassengerRecoveryRequired" ? (
-              <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/30">
-                {lang === "VN"
-                  ? "BE thiếu dữ liệu chặng khách — kiểm tra thủ công trước khi chọn tàu thay thế."
-                  : "BE lacks passenger segment data — verify manually before choosing a replacement boat."}
+            {dispatchPlanLoading ? (
+              <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs font-semibold text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
+                {lang === "VN" ? "Đang kiểm tra kế hoạch điều tàu và tàu thay thế phù hợp..." : "Checking dispatch plan and eligible replacement boats..."}
               </p>
             ) : null}
-            {!rescueForm.tripId ? (
-              <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-300 dark:ring-slate-700">
-                {lang === "VN"
-                  ? "Chưa gắn chuyến · Chỉ là sự cố tàu — điều tàu cứu hộ kéo về, không cần tàu thay thế."
-                  : "No trip · Boat-only incident — dispatch rescue to tow; no replacement needed."}
+            {dispatchPlanError ? (
+              <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">{dispatchPlanError}</p>
+            ) : null}
+            {!dispatchPlanLoading && !dispatchPlanError && !hasNextTrips ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
+                {lang === "VN" ? "Không có chuyến kế tiếp bị ảnh hưởng. Chỉ cần điều tàu cứu hộ." : "There are no affected following trips. Only dispatch the rescue boat."}
               </p>
+            ) : null}
+            {hasNextTrips ? (
+              <section className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 px-3 py-2 dark:bg-slate-900/50">
+                  <p className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:text-slate-200">
+                    {lang === "VN" ? `Chuyến kế tiếp bị ảnh hưởng (${nextTrips.length})` : `Affected following trips (${nextTrips.length})`}
+                  </p>
+                  <span className="text-[11px] font-semibold text-slate-500">{lang === "VN" ? "Delay chỉ áp dụng cho danh sách này" : "Delay applies only to these trips"}</span>
+                </div>
+                <div className="max-h-40 overflow-auto divide-y divide-slate-100 dark:divide-slate-700">
+                  {nextTrips.map((trip) => (
+                    <div key={trip.tripId || trip.TripId || trip.tripCode || trip.TripCode} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2 text-xs">
+                      <span className="font-bold text-slate-700 dark:text-slate-200">{trip.tripCode || trip.TripCode || "—"}</span>
+                      <span className="text-slate-500">{trip.operatingDate || trip.OperatingDate || ""} · {trip.effectiveDepartureTime || trip.EffectiveDepartureTime || trip.departureTime || trip.DepartureTime || "—"} - {trip.effectiveArrivalTime || trip.EffectiveArrivalTime || trip.arrivalTime || trip.ArrivalTime || "—"}</span>
+                      <span className="text-slate-500">{lang === "VN" ? "Khách/vé" : "Passengers/tickets"}: {trip.activeTicketCount ?? trip.ActiveTicketCount ?? 0}/{trip.capacitySnapshot ?? trip.CapacitySnapshot ?? "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
             ) : null}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
                 {lang === "VN" ? "Tàu cứu hộ (kéo)" : "Rescue boat"}<RequiredStar />
               </span>
-              <select
-                required
+              <FormSelect
                 value={rescueForm.rescueBoatId}
-                onChange={(e) => {
-                  const nextRescueId = e.target.value;
+                onChange={(nextRescueId) => {
                   setRescueForm((prev) => ({
                     ...prev,
                     rescueBoatId: nextRescueId,
@@ -1224,15 +1169,16 @@ export function IncidentManagement({
                       : prev.replacementBoatId,
                   }));
                 }}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
-              >
-                <option value="">{lang === "VN" ? "Chọn tàu Rescue" : "Select Rescue boat"}</option>
-                {rescueCandidateBoats.map((boat) => (
-                  <option key={boat.boatId || boat.id} value={boat.boatId || boat.id}>
-                    {boat.boatCode || boat.code} · {boat.boatName || boat.name || ""}
-                  </option>
-                ))}
-              </select>
+                placeholder={lang === "VN" ? "Chọn tàu Rescue" : "Select Rescue boat"}
+                searchable
+                searchPlaceholder={lang === "VN" ? "Tìm tàu cứu hộ..." : "Search rescue boat..."}
+                emptyLabel={lang === "VN" ? "Không tìm thấy tàu phù hợp" : "No matching boats"}
+                options={rescueCandidateBoats.map((boat) => ({
+                  value: boat.boatId || boat.id,
+                  label: `${boat.boatCode || boat.code} · ${boat.boatName || boat.name || ""}`,
+                }))}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+              />
               {rescueCandidateBoats.length === 0 ? (
                 <p className="text-[11px] font-medium text-amber-600">
                   {lang === "VN"
@@ -1241,72 +1187,66 @@ export function IncidentManagement({
                 </p>
               ) : null}
             </label>
-            {showReplacementField ? (
+            {hasNextTrips ? (
               <label className="block space-y-1.5">
                 <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                  {needsReplacementBoat
+                  {requiresPassengerReplacement
                     ? <>{lang === "VN" ? "Tàu thay thế (chở khách)" : "Replacement passenger boat"}<RequiredStar /></>
                     : (lang === "VN" ? "Tàu thay thế (tuỳ chọn)" : "Replacement boat (optional)")}
                 </span>
-                <select
-                  required={needsReplacementBoat}
+                <FormSelect
                   value={rescueForm.replacementBoatId}
-                  onChange={(e) => setRescueForm((prev) => ({ ...prev, replacementBoatId: e.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
-                >
-                  <option value="">{lang === "VN" ? "Chọn tàu Passenger" : "Select Passenger boat"}</option>
-                  {replacementCandidateBoats.map((boat) => (
-                    <option key={boat.boatId || boat.id} value={boat.boatId || boat.id}>
-                      {boat.boatCode || boat.code} · {boat.boatName || boat.name || ""}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(replacementBoatId) => setRescueForm((prev) => ({ ...prev, replacementBoatId }))}
+                  placeholder={lang === "VN" ? "Chọn tàu Passenger" : "Select Passenger boat"}
+                  searchable
+                  searchPlaceholder={lang === "VN" ? "Tìm tàu thay thế..." : "Search replacement boat..."}
+                  emptyLabel={lang === "VN" ? "Không tìm thấy tàu phù hợp" : "No matching boats"}
+                  options={replacementCandidateBoats.map((boat) => ({
+                    value: boat.boatId || boat.id,
+                    label: `${boat.boatCode || boat.code} · ${boat.boatName || boat.name || ""}`,
+                  }))}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
+                />
+            {replacementListEmpty ? (
+                  <p className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                    {requiresPassengerReplacement
+                      ? (lang === "VN" ? "Không có tàu thay thế đủ điều kiện. Chưa thể điều tàu vì còn khách cần chuyển." : "No eligible replacement boat is available. Dispatch cannot continue while passengers need transfer.")
+                      : (lang === "VN" ? "Không có tàu thay thế phù hợp. Bắt buộc nhập thời gian trễ lớn hơn 0 phút." : "No eligible replacement boat is available. Enter a delay greater than 0 minutes.")}
+                  </p>
+                ) : null}
+                {replacementBoatLoadError ? (
+                  <p className="text-[11px] font-medium text-rose-700 dark:text-rose-300">{replacementBoatLoadError}</p>
+                ) : null}
               </label>
-            ) : (
-              <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:ring-slate-700">
-                {lang === "VN"
-                  ? "Mission None — chỉ điều tàu cứu hộ (replacementBoatId = null)."
-                  : "Mission None — rescue only (replacementBoatId = null)."}
-              </p>
-            )}
-            <label className="block space-y-1.5">
+            ) : null}
+            {hasNextTrips ? (<label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                {lang === "VN" ? "Delay (phút) — Manager nhập" : "Delay (min) — Manager input"}
+                {lang === "VN" ? "Thời gian trễ (phút)" : "Delay (min)"}{mustEnterDelay ? <RequiredStar /> : null}
               </span>
               <input
                 type="number"
                 min={0}
-                disabled={!showReplacementField}
+                inputMode="numeric"
                 value={rescueForm.delayMinutes}
                 onChange={(e) => setRescueForm((prev) => ({ ...prev, delayMinutes: e.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900"
               />
-              {showReplacementField ? (
-                <p className="text-[11px] font-medium text-slate-400">
-                  {delaySpreads
-                    ? (lang === "VN"
-                      ? `≥ ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} phút: ảnh hưởng chuyến hiện tại + các chuyến sau cùng tàu/tuyến trong ngày (xem operations/schedule).`
-                      : `≥ ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} min: affects current + later same-boat/route trips today (see operations/schedule).`)
-                    : (lang === "VN"
-                      ? `< ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} phút: chỉ ảnh hưởng chuyến hiện tại.`
-                      : `< ${DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES} min: only the current trip is affected.`)}
-                </p>
-              ) : null}
-            </label>
+              <p className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "Chỉ áp dụng cho các chuyến kế tiếp ở trên, không áp dụng cho chuyến đang gặp sự cố." : "Applies only to the following trips above, not the trip currently in incident."}</p>
+            </label>) : null}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">Note</span>
               <textarea
                 rows={2}
                 value={rescueForm.note}
                 onChange={(e) => setRescueForm((prev) => ({ ...prev, note: e.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-600 dark:bg-slate-900"
               />
             </label>
-            <div className="flex justify-end gap-2">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => setRescueForm(EMPTY_RESCUE_FORM)}
-                className="rounded-2xl px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-slate-500 hover:bg-slate-100"
+                className="rounded-lg px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
               >
                 {lang === "VN" ? "Hủy" : "Cancel"}
               </button>
@@ -1314,31 +1254,47 @@ export function IncidentManagement({
                 type="submit"
                 disabled={
                   !rescueForm.rescueBoatId
-                  || (needsReplacementBoat && !rescueForm.replacementBoatId)
+                  || dispatchPlanLoading
+                  || Boolean(dispatchPlanError)
+                  || (requiresPassengerReplacement && !rescueForm.replacementBoatId)
+                  || (mustEnterDelay && !hasValidDelay)
                 }
-                className="rounded-2xl bg-sky-600 px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-white hover:brightness-110 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-white hover:bg-sky-700 disabled:opacity-50"
               >
+                <LifeBuoy size={15} aria-hidden="true" />
                 {lang === "VN" ? "Điều tàu" : "Dispatch"}
               </button>
+            </div>
             </div>
           </form>
         </div>
       ) : null}
 
       {resolveForm.incidentId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
           <form
             onSubmit={handleResolve}
-            className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-800"
+            className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-slate-800"
           >
-            <h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-              {lang === "VN" ? "Đóng sự cố" : "Resolve incident"}
-            </h2>
-            <p className="rounded-2xl bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/50 dark:text-slate-400 dark:ring-slate-700">
-              {lang === "VN"
-                ? "Dùng khi GPS chưa báo hoàn tất kéo cứu. Luồng chuẩn: GPS kéo về bến xong thì sự cố tự đóng và tàu chuyển sang bảo trì."
-                : "Use if GPS has not reported tow completion. Main flow: after GPS finishes towing to dock, the incident closes and the boat moves to maintenance."}
-            </p>
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"><CheckCircle2 size={19} aria-hidden="true" /></div>
+                <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === "VN" ? "Hoàn tất xử lý" : "Resolution"}</p><h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">{lang === "VN" ? "Đóng sự cố" : "Resolve incident"}</h2></div>
+              </div>
+              <button type="button" onClick={() => setResolveForm((prev) => ({ ...prev, incidentId: "", boatCode: "" }))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900" title={lang === "VN" ? "Đóng" : "Close"}><X size={18} aria-hidden="true" /></button>
+            </div>
+            <div className="space-y-5 p-6">
+            <div className="flex gap-3 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-3 text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100">
+              <Info className="mt-0.5 shrink-0 text-sky-600 dark:text-sky-300" size={17} aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-headline font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">{lang === "VN" ? "Lưu ý" : "Note"}</p>
+                <p className="mt-1 text-xs font-medium leading-5 text-sky-800 dark:text-sky-100">
+                  {lang === "VN"
+                    ? "Chỉ dùng để đóng thủ công khi GPS chưa cập nhật việc kéo tàu về bến. Khi GPS xác nhận hoàn tất kéo cứu, hệ thống sẽ tự đóng sự cố và chuyển tàu sang bảo trì."
+                    : "Use if GPS has not reported tow completion. Main flow: after GPS finishes towing to dock, the incident closes and the boat moves to maintenance."}
+                </p>
+              </div>
+            </div>
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
                 {lang === "VN" ? "Ghi chú xử lý" : "Resolution note"}<RequiredStar />
@@ -1348,52 +1304,56 @@ export function IncidentManagement({
                 rows={3}
                 value={resolveForm.resolutionNote}
                 onChange={(e) => setResolveForm((prev) => ({ ...prev, resolutionNote: e.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-slate-600 dark:bg-slate-900"
               />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1.5">
-                <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">Boat status</span>
-                <select
+                <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Trạng thái tàu" : "Boat status"}</span>
+                <FormSelect
                   value={resolveForm.boatStatus}
-                  onChange={(e) => setResolveForm((prev) => ({ ...prev, boatStatus: e.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
-                >
-                  <option value="UnderMaintenance">UnderMaintenance</option>
-                  <option value="Incident">Incident</option>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                  <option value="Retired">Retired</option>
-                </select>
+                  onChange={(boatStatus) => setResolveForm((prev) => ({ ...prev, boatStatus }))}
+                  options={[
+                    { value: "UnderMaintenance", label: lang === "VN" ? "Đang bảo trì" : "Under maintenance" },
+                    { value: "Incident", label: lang === "VN" ? "Đang có sự cố" : "Incident" },
+                    { value: "Active", label: lang === "VN" ? "Đang hoạt động" : "Active" },
+                    { value: "Inactive", label: lang === "VN" ? "Tạm ngừng" : "Inactive" },
+                    { value: "Retired", label: lang === "VN" ? "Ngừng khai thác" : "Retired" },
+                  ]}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-slate-600 dark:bg-slate-900"
+                />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">Trip status</span>
-                <select
+                <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Trạng thái chuyến" : "Trip status"}</span>
+                <FormSelect
                   value={resolveForm.tripStatus}
-                  onChange={(e) => setResolveForm((prev) => ({ ...prev, tripStatus: e.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
-                >
-                  <option value="">{lang === "VN" ? "Để trống (mặc định hệ thống)" : "Leave empty (system default)"}</option>
-                  <option value="Cancelled">Cancelled</option>
-                  <option value="Delayed">Delayed</option>
-                  <option value="Completed">Completed</option>
-                </select>
+                  onChange={(tripStatus) => setResolveForm((prev) => ({ ...prev, tripStatus }))}
+                  options={[
+                    { value: "", label: lang === "VN" ? "Để trống (mặc định hệ thống)" : "Leave empty (system default)" },
+                    { value: "Cancelled", label: lang === "VN" ? "Đã hủy" : "Cancelled" },
+                    { value: "Delayed", label: lang === "VN" ? "Trễ chuyến" : "Delayed" },
+                    { value: "Completed", label: lang === "VN" ? "Hoàn thành" : "Completed" },
+                  ]}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-slate-600 dark:bg-slate-900"
+                />
               </label>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => setResolveForm((prev) => ({ ...prev, incidentId: "", boatCode: "" }))}
-                className="rounded-2xl px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-slate-500 hover:bg-slate-100"
+                className="rounded-lg px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
               >
                 {lang === "VN" ? "Hủy" : "Cancel"}
               </button>
               <button
                 type="submit"
-                className="rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-white hover:brightness-110"
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-headline font-black uppercase tracking-wider text-white hover:bg-emerald-700"
               >
+                <CheckCircle2 size={15} aria-hidden="true" />
                 {lang === "VN" ? "Xác nhận đóng" : "Confirm resolve"}
               </button>
+            </div>
             </div>
           </form>
         </div>

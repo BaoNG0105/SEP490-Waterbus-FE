@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { ChevronLeft, ChevronRight, CirclePlus, Eye, Pause, Pencil, Play, Search } from "lucide-react";
 import { useApp } from "../../../context/AppContext";
 
 import {
@@ -222,7 +223,7 @@ export function PromotionManagement() {
     }
 
     return (
-        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
+        <div className="space-y-5 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
 
             {/* KHỐI TIÊU ĐỀ HEADER & NÚT THÊM MỚI */}
             <div className="flex flex-col sm:flex-row bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-start sm:items-center justify-between gap-4">
@@ -230,16 +231,16 @@ export function PromotionManagement() {
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
                         {lang === "VN" ? "Quản lý Khuyến mãi" : "Promotion Management"}
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         {lang === "VN" ? "Danh sách mã khuyến mãi, hạn mức sử dụng và trạng thái áp dụng." : "Manage promotion codes, usage limits and active status."}
                     </p>
                 </div>
                 {canManage && (
                     <button
                         onClick={() => navigate("/admin/promotions/create")}
-                        className="px-5 py-3 bg-yellow-400 text-slate-900 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 shrink-0"
+                        className="flex shrink-0 items-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 font-headline text-xs font-black uppercase tracking-widest text-slate-900 shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
                     >
-                        <span className="material-symbols-outlined text-sm font-bold">add_circle</span>
+                        <CirclePlus size={18} strokeWidth={2.5} />
                         {lang === "VN" ? "Thêm khuyến mãi mới" : "New Promotion"}
                     </button>
                 )}
@@ -253,42 +254,42 @@ export function PromotionManagement() {
 
             {/* KHỐI CARD THỐNG KÊ */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tổng số" : "Total"}</span>
-                        <h3 className="text-xl font-black font-headline text-[#124757] dark:text-white mt-0.5">{stats.total}</h3>
+                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">{lang === "VN" ? "Tổng số" : "Total"}</span>
+                        <h3 className="text-2xl font-black font-headline text-[#124757] dark:text-white mt-1">{stats.total}</h3>
                     </div>
                 </div>
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đang hoạt động" : "Active"}</span>
-                        <h3 className="text-xl font-black font-headline text-emerald-600 dark:text-emerald-400 mt-0.5">{stats.active}</h3>
+                        <h3 className="text-2xl font-black font-headline text-emerald-600 dark:text-emerald-400 mt-1">{stats.active}</h3>
                     </div>
                 </div>
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tạm dừng" : "Paused"}</span>
-                        <h3 className="text-xl font-black font-headline text-rose-500 mt-0.5">{stats.paused}</h3>
+                        <h3 className="text-2xl font-black font-headline text-rose-500 mt-1">{stats.paused}</h3>
                     </div>
                 </div>
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex items-center gap-4 group">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đã hết hạn" : "Expired"}</span>
-                        <h3 className="text-xl font-black font-headline text-amber-600 dark:text-amber-400 mt-0.5">{stats.expired}</h3>
+                        <h3 className="text-2xl font-black font-headline text-amber-600 dark:text-amber-400 mt-1">{stats.expired}</h3>
                     </div>
                 </div>
             </div>
 
             {/* THANH TÌM KIẾM VÀ BỘ LỌC */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-center">
+            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-stretch xl:items-center">
                 <div className="w-full xl:flex-1 relative flex items-center">
-                    <span className="material-symbols-outlined absolute left-4 text-slate-400 text-lg pointer-events-none">search</span>
+                    <Search size={18} className="absolute left-3.5 text-slate-400 pointer-events-none" />
                     <input
                         type="text"
                         placeholder={lang === "VN" ? "Tìm kiếm theo mã hoặc tên khuyến mãi..." : "Search by promotion code or name..."}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-11 pr-4 py-3.5 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-10 pr-4 py-3.5 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
                     />
                 </div>
 
@@ -303,7 +304,7 @@ export function PromotionManagement() {
                                 { value: PROMOTION_TYPE.PERCENT, label: lang === "VN" ? "Giảm theo %" : "Percent" },
                                 { value: PROMOTION_TYPE.FIXED, label: lang === "VN" ? "Giảm số tiền" : "Fixed" },
                             ]}
-                            className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                            className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 dark:text-white"
                         />
                     </div>
 
@@ -319,7 +320,7 @@ export function PromotionManagement() {
                                 { value: PROMOTION_STATUS.ACTIVE, label: getStatusLabel(PROMOTION_STATUS.ACTIVE, lang) },
                                 { value: PROMOTION_STATUS.PAUSED, label: getStatusLabel(PROMOTION_STATUS.PAUSED, lang) },
                             ]}
-                            className="min-w-45 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+                            className="min-w-45 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 dark:text-white"
                         />
                     </div>
                 </div>
@@ -351,7 +352,7 @@ export function PromotionManagement() {
                                 currentPromotions.map((promo) => {
                                     const lifecycle = getPromotionLifecycle(promo);
                                     return (
-                                        <tr key={promo.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors group">
+                                        <tr key={promo.id} className="hover:bg-[#124757]/[0.035] dark:hover:bg-yellow-400/[0.04] transition-colors group">
                                             {/* Cột 1: Thông tin khuyến mãi */}
                                             <td className="py-4 px-6">
                                                 <div className="space-y-1">
@@ -445,57 +446,57 @@ export function PromotionManagement() {
                                             {/* Cột 6: Hành động */}
                                             <td className="py-4 px-6 text-center">
                                                 {canManage ? (
-                                                    <div className="flex items-center justify-center gap-2">
+                                                    <div className="flex items-center justify-center gap-1.5">
                                                         <button
                                                             onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
-                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#124757] hover:bg-slate-50 dark:hover:bg-slate-900 dark:hover:text-yellow-400 transition-all shadow-sm"
+                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-[#124757] hover:bg-slate-50 dark:hover:bg-slate-900 dark:hover:text-yellow-400 transition-all"
                                                             title={lang === "VN" ? "Xem chi tiết" : "View"}
                                                         >
-                                                            <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                                            <Eye size={17} aria-hidden="true" />
                                                         </button>
                                                         <button
                                                             onClick={() => navigate(`/admin/promotions/edit/${promo.id}`, { state: { promotion: promo } })}
-                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all shadow-sm"
+                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all"
                                                             title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
                                                         >
-                                                            <span className="material-symbols-outlined text-[18px]">edit</span>
+                                                            <Pencil size={17} aria-hidden="true" />
                                                         </button>
                                                         {promo.status === PROMOTION_STATUS.ACTIVE ? (
                                                             <button
                                                                 onClick={() => handlePause(promo)}
                                                                 disabled={processingId === promo.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sky-500 hover:bg-sky-500 hover:text-white flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sky-600 hover:bg-sky-600 hover:text-white flex items-center justify-center transition-all disabled:opacity-50"
                                                                 title={lang === "VN" ? "Tạm dừng" : "Pause"}
                                                             >
                                                                 {processingId === promo.id ? (
                                                                     <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                                                                 ) : (
-                                                                    <span className="material-symbols-outlined text-[18px]">pause</span>
+                                                                    <Pause size={17} fill="currentColor" aria-hidden="true" />
                                                                 )}
                                                             </button>
                                                         ) : (
                                                             <button
                                                                 onClick={() => handleActivate(promo)}
                                                                 disabled={processingId === promo.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-500 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-all shadow-sm disabled:opacity-50"
+                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-all disabled:opacity-50"
                                                                 title={lang === "VN" ? "Kích hoạt" : "Activate"}
                                                             >
                                                                 {processingId === promo.id ? (
                                                                     <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                                                                 ) : (
-                                                                    <span className="material-symbols-outlined text-[18px]">toggle_on</span>
+                                                                    <Play size={17} fill="currentColor" aria-hidden="true" />
                                                                 )}
                                                             </button>
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center justify-center gap-2">
+                                                    <div className="flex items-center justify-center gap-1.5">
                                                         <button
                                                             onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
-                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-[#124757] transition-all shadow-sm"
+                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-[#124757] transition-all"
                                                             title={lang === "VN" ? "Xem chi tiết" : "View"}
                                                         >
-                                                            <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                                            <Eye size={17} aria-hidden="true" />
                                                         </button>
                                                     </div>
                                                 )}
@@ -512,7 +513,7 @@ export function PromotionManagement() {
             {/* KHỐI PHÂN TRANG */}
             {totalPages > 0 && (
                 <div className="flex bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between flex-col sm:flex-row gap-4">
-                    <span className="text-xs font-bold text-slate-400">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                         {lang === "VN"
                             ? `Hiển thị ${startIndex}-${endIndex} trong số ${filteredPromotions.length} kết quả`
                             : `Showing ${startIndex}-${endIndex} of ${filteredPromotions.length} entries`}
@@ -527,7 +528,7 @@ export function PromotionManagement() {
                                     : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
                                 }`}
                         >
-                            <span className="material-symbols-outlined text-base">chevron_left</span>
+                            <ChevronLeft size={16} aria-hidden="true" />
                         </button>
 
                         {getPaginationGroup().map((item, index) => {
@@ -562,7 +563,7 @@ export function PromotionManagement() {
                                     : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
                                 }`}
                         >
-                            <span className="material-symbols-outlined text-base">chevron_right</span>
+                            <ChevronRight size={16} aria-hidden="true" />
                         </button>
                     </div>
                 </div>

@@ -3,6 +3,8 @@ import {
   createIncident as apiCreateIncident,
   assignIncidentManager as apiAssignManager,
   assignReplacementBoat as apiAssignReplacementBoat,
+  getIncidentDispatchPlan as apiGetIncidentDispatchPlan,
+  getAvailableReplacementBoats as apiGetAvailableReplacementBoats,
   resolveIncident as apiResolveIncident,
 } from "../api/incidentApi";
 
@@ -18,6 +20,7 @@ const unwrapList = (data) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.boats)) return data.boats;
   if (Array.isArray(data?.incidents)) return data.incidents;
   return [];
 };
@@ -134,6 +137,14 @@ export const assignManagerToIncident = async (incidentId, managerUserId) =>
 
 export const dispatchReplacementBoat = async (incidentId, payload) =>
   apiAssignReplacementBoat(incidentId, payload);
+
+export const fetchIncidentDispatchPlan = async (incidentId) =>
+  apiGetIncidentDispatchPlan(incidentId);
+
+export const fetchAvailableReplacementBoats = async (incidentId) => {
+  const data = await apiGetAvailableReplacementBoats(incidentId);
+  return unwrapList(data);
+};
 
 export const closeIncident = async (incidentId, payload) =>
   apiResolveIncident(incidentId, payload);
@@ -280,6 +291,14 @@ export const getApiErrorMessage = (error) => {
 export const getDispatchReplacementErrorMessage = (error, lang = "VN") => {
   const data = error?.response?.data;
   const errors = data?.errors && typeof data.errors === "object" ? data.errors : null;
+  const delayMessages = errors
+    ? Object.entries(errors)
+      .filter(([key]) => /delayminutes/i.test(String(key).replace(/[_\s.-]/g, "")))
+      .flatMap(([, value]) => Array.isArray(value) ? value : [value])
+      .filter(Boolean)
+    : [];
+  if (delayMessages.length) return delayMessages.join("\n");
+
   const replacementKeys = errors
     ? Object.keys(errors).filter((key) => /replacementboatid/i.test(String(key).replace(/[_\s.-]/g, "")))
     : [];
@@ -303,4 +322,3 @@ export const getDispatchReplacementErrorMessage = (error, lang = "VN") => {
 
   return getApiErrorMessage(error) || error?.message || "";
 };
-

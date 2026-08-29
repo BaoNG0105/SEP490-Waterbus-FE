@@ -85,7 +85,10 @@ export function CharterWorkflowStepper({ status, paymentStatus, lang = "VN", com
             // PendingQuote: step đầu luôn active, không "done" — chưa được báo giá thì chưa hoàn thành.
             const isQuoteStep = String(status || "").toLowerCase() === "pendingquote"
               && index === currentIndex;
-            const done = !isQuoteStep && (index < currentIndex || (index === currentIndex && isFullyPaid));
+            // Đã xác nhận là một mốc nghiệp vụ hoàn tất, không phụ thuộc vào việc
+            // suy luận trạng thái thanh toán từ dữ liệu booking.
+            const isConfirmedStep = step.id === "Confirmed" && String(status || "") === "Confirmed";
+            const done = !isQuoteStep && (index < currentIndex || (index === currentIndex && (isFullyPaid || isConfirmedStep)));
             const active = index === currentIndex && !done;
             const upcoming = index > currentIndex;
             return (
