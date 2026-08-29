@@ -40,6 +40,34 @@ export const PROMOTION_DAYS = [
     'Saturday',
 ];
 
+// Các giới hạn này khớp với schema BE: numeric(12,2), numeric(14,2) và int32.
+// Tiền tệ VND được nhập theo đơn vị đồng nên FE chỉ nhận số nguyên.
+export const PROMOTION_LIMITS = {
+    CODE_MAX_LENGTH: 50,
+    NAME_MAX_LENGTH: 150,
+    DESCRIPTION_MAX_LENGTH: 1000,
+    PERCENT_MAX: 100,
+    MIN_MONEY_AMOUNT: 1000,
+    MAX_DISCOUNT_AMOUNT: 100_000_000_000,
+    MAX_BUDGET_AMOUNT: 100_000_000_000,
+    MAX_USAGE_COUNT: 1_000_000,
+    MAX_USES_PER_ACCOUNT: 1_000,
+    MAX_IMAGE_SIZE_BYTES: 5 * 1024 * 1024,
+};
+
+const hasOnlyDigits = (value) => /^\d+$/.test(String(value ?? '').trim());
+
+const isVndAmount = (value) =>
+    hasOnlyDigits(value) && Number.isSafeInteger(Number(value));
+
+const isPositiveUsageCount = (value) =>
+    hasOnlyDigits(value) && Number.isSafeInteger(Number(value));
+
+const hasMeaningfulText = (value) => /[\p{L}\p{N}]/u.test(String(value ?? ''));
+
+const isPromotionName = (value) =>
+    /^[\p{L}\p{N} ]+$/u.test(String(value ?? '').trim());
+
 const extractRows = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.items)) return data.items;
@@ -53,8 +81,9 @@ const extractRows = (data) => {
 const toNullablePositive = (value, enabled = true, min = 0) => {
     if (!enabled) return null;
     if (value === '' || value === null || value === undefined) return null;
+    if (!hasOnlyDigits(value)) return null;
     const num = Number(value);
-    if (!Number.isFinite(num) || num <= 0 || num < min) return null;
+    if (!Number.isSafeInteger(num) || num <= 0 || num < min) return null;
     return num;
 };
 
@@ -209,7 +238,7 @@ export const buildPromotionPayload = (form, { includeCode = true } = {}) => {
     const isPercent = form.promotionType === PROMOTION_TYPE.PERCENT;
 
     const payload = {
-        promotionName: String(form.promotionName || '').trim(),
+        promotionName: String(form.promotionName || '').trim().replace(/\s+/g, ' '),
         discountType: isPercent ? PROMOTION_TYPE.PERCENT : PROMOTION_TYPE.FIXED,
         discountValue: Number(form.discountValue) || 0,
         maxDiscountAmount: isPercent
@@ -225,7 +254,7 @@ export const buildPromotionPayload = (form, { includeCode = true } = {}) => {
         scope: buildPromotionScope(form),
         visibility: form.visibility || PROMOTION_VISIBILITY.PUBLIC,
         status: form.status || PROMOTION_STATUS.DRAFT,
-        description: String(form.description || '').trim() || null,
+        description: String(form.description || '').trim().replace(/\s+/g, ' ') || null,
     };
 
     if (includeCode) {
@@ -239,7 +268,7 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
     const code = String(form.promotionCode || '').trim();
     if (isCreate) {
         if (!code) return lang === 'VN' ? 'Mã khuyến mãi bắt buộc.' : 'Promotion code is required.';
-        if (code.length > 50) return lang === 'VN' ? 'Mã tối đa 50 ký tự.' : 'Code max 50 characters.';
+        if (code.length > PROMOTION_LIMITS.CODE_MAX_LENGTH) return lang === 'VN' ? 'Mã tối đa 50 ký tự.' : 'Code max 50 characters.';
         if (!/^[A-Z0-9]+$/.test(code))
             return lang === 'VN'
                 ? 'Mã chỉ chứa chữ in hoa và số (A–Z, 0–9).'
@@ -248,54 +277,67 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
 
     const name = String(form.promotionName || '').trim();
     if (!name) return lang === 'VN' ? 'Tên khuyến mãi bắt buộc.' : 'Promotion name is required.';
-    if (name.length > 150) return lang === 'VN' ? 'Tên tối đa 150 ký tự.' : 'Name max 150 characters.';
+    if (!hasMeaningfulText(name)) return lang === 'VN' ? 'Tên khuyến mãi phải có ít nhất một chữ hoặc số.' : 'Promotion name must contain at least one letter or number.';
+    if (!isPromotionName(name)) return lang === 'VN' ? 'Tên khuyến mãi chỉ được chứa chữ, số và khoảng trắng.' : 'Promotion name may only contain letters, digits, and spaces.';
+    if (name.length > PROMOTION_LIMITS.NAME_MAX_LENGTH) return lang === 'VN' ? 'Tên tối đa 150 ký tự.' : 'Name max 150 characters.';
 
     const desc = String(form.description || '');
-    if (desc.length > 1000) {
+    if (desc.length > PROMOTION_LIMITS.DESCRIPTION_MAX_LENGTH) {
         return lang === 'VN' ? 'Mô tả tối đa 1000 ký tự.' : 'Description max 1000 characters.';
     }
 
     const discount = Number(form.discountValue);
-    if (!Number.isFinite(discount) || discount <= 0) {
+    const fixedIsValid = isVndAmount(form.discountValue);
+    const percentIsValid = Number.isFinite(discount) && discount > 0 && /^\d+(?:\.\d{1,2})?$/.test(String(form.discountValue).trim());
+    if (!(form.promotionType === PROMOTION_TYPE.PERCENT ? percentIsValid : fixedIsValid) || discount <= 0) {
         return lang === 'VN' ? 'Giá trị giảm phải > 0.' : 'Discount value must be > 0.';
     }
-    if (form.promotionType === PROMOTION_TYPE.PERCENT && discount > 100) {
+    if (form.promotionType === PROMOTION_TYPE.PERCENT && discount > PROMOTION_LIMITS.PERCENT_MAX) {
         return lang === 'VN' ? 'Phần trăm giảm không được > 100.' : 'Percent discount cannot exceed 100.';
     }
-
-    // ── Money thresholds (≥ 1.000đ) ──
-    if (form.promotionType === PROMOTION_TYPE.PERCENT
-        && form.hasMaxDiscountAmount
-        && form.maxDiscountAmount !== '' && form.maxDiscountAmount != null) {
-        const m = Number(form.maxDiscountAmount);
-        if (!Number.isFinite(m) || m < 1000)
-            return lang === 'VN' ? 'Giảm tối đa phải ≥ 1.000đ.' : 'maxDiscountAmount must be ≥ 1,000.';
-    }
-    if (form.hasMinOrderValue
-        && form.minOrderValue !== '' && form.minOrderValue != null) {
-        const m = Number(form.minOrderValue);
-        if (!Number.isFinite(m) || m < 1000)
-            return lang === 'VN' ? 'Đơn tối thiểu phải ≥ 1.000đ.' : 'minOrderValue must be ≥ 1,000.';
-    }
-    if (form.hasBudgetCap
-        && form.budgetCap !== '' && form.budgetCap != null) {
-        const m = Number(form.budgetCap);
-        if (!Number.isFinite(m) || m < 1000)
-            return lang === 'VN' ? 'Ngân sách phải ≥ 1.000đ.' : 'budgetCap must be ≥ 1,000.';
+    if (form.promotionType === PROMOTION_TYPE.FIXED && discount > PROMOTION_LIMITS.MAX_DISCOUNT_AMOUNT) {
+        return lang === 'VN'
+            ? 'Số tiền giảm vượt quá giới hạn cho phép.'
+            : 'Discount amount exceeds the allowed limit.';
     }
 
-    // ── Usage thresholds (≥ 1) ──
-    if (form.hasUsageLimit
-        && form.usageLimit !== '' && form.usageLimit != null) {
-        const n = Number(form.usageLimit);
-        if (!Number.isFinite(n) || n < 1)
-            return lang === 'VN' ? 'Lượt dùng tổng phải ≥ 1.' : 'usageLimit must be ≥ 1.';
-    }
-    if (form.hasMaxUsesPerAccount
-        && form.maxUsesPerAccount !== '' && form.maxUsesPerAccount != null) {
-        const n = Number(form.maxUsesPerAccount);
-        if (!Number.isFinite(n) || n < 1)
-            return lang === 'VN' ? 'Lượt dùng/user phải ≥ 1.' : 'maxUsesPerAccount must be ≥ 1.';
+    const validateMoneyLimit = (enabled, value, label, max) => {
+        if (!enabled) return null;
+        if (value === '' || value === null || value === undefined) return `${label} bắt buộc khi đã bật giới hạn.`;
+        const amount = Number(value);
+        if (!isVndAmount(value) || amount < PROMOTION_LIMITS.MIN_MONEY_AMOUNT || amount > max)
+            return `${label} phải là số nguyên từ ${PROMOTION_LIMITS.MIN_MONEY_AMOUNT.toLocaleString('vi-VN')}đ đến ${max.toLocaleString('vi-VN')}đ.`;
+        return null;
+    };
+    const maxDiscountError = form.promotionType === PROMOTION_TYPE.PERCENT
+        ? validateMoneyLimit(form.hasMaxDiscountAmount, form.maxDiscountAmount, 'Giảm tối đa', PROMOTION_LIMITS.MAX_DISCOUNT_AMOUNT)
+        : null;
+    if (maxDiscountError) return lang === 'VN' ? maxDiscountError : 'Maximum discount amount is invalid.';
+    const minOrderError = validateMoneyLimit(form.hasMinOrderValue, form.minOrderValue, 'Đơn tối thiểu', PROMOTION_LIMITS.MAX_DISCOUNT_AMOUNT);
+    if (minOrderError) return lang === 'VN' ? minOrderError : 'Minimum order amount is invalid.';
+    const budgetError = validateMoneyLimit(form.hasBudgetCap, form.budgetCap, 'Ngân sách', PROMOTION_LIMITS.MAX_BUDGET_AMOUNT);
+    if (budgetError) return lang === 'VN' ? budgetError : 'Budget cap is invalid.';
+
+    const validateUsageLimit = (enabled, value, label, max) => {
+        if (!enabled) return null;
+        if (value === '' || value === null || value === undefined) return `${label} bắt buộc khi đã bật giới hạn.`;
+        const count = Number(value);
+        if (!isPositiveUsageCount(value) || count < 1 || count > max)
+            return `${label} phải là số nguyên từ 1 đến ${max.toLocaleString('vi-VN')}.`;
+        return null;
+    };
+    const usageError = validateUsageLimit(form.hasUsageLimit, form.usageLimit, 'Giới hạn lượt dùng tổng', PROMOTION_LIMITS.MAX_USAGE_COUNT);
+    if (usageError) return lang === 'VN' ? usageError : 'Total usage limit is invalid.';
+    const accountUsageError = validateUsageLimit(form.hasMaxUsesPerAccount, form.maxUsesPerAccount, 'Giới hạn lượt dùng mỗi tài khoản', PROMOTION_LIMITS.MAX_USES_PER_ACCOUNT);
+    if (accountUsageError) return lang === 'VN' ? accountUsageError : 'Per-account usage limit is invalid.';
+    if (
+        form.hasUsageLimit &&
+        form.hasMaxUsesPerAccount &&
+        Number(form.maxUsesPerAccount) > Number(form.usageLimit)
+    ) {
+        return lang === 'VN'
+            ? 'Tối đa mỗi tài khoản không được vượt quá giới hạn lượt dùng tổng.'
+            : 'Per-account usage limit cannot exceed the total usage limit.';
     }
 
     // ── Date range ──
@@ -304,11 +346,16 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
     }
     const fromTs = new Date(form.validFrom).getTime();
     const toTs = new Date(form.validTo).getTime();
-    if (Number.isFinite(fromTs) && Number.isFinite(toTs) && toTs <= fromTs) {
+    if (!Number.isFinite(fromTs) || !Number.isFinite(toTs)) {
+        return lang === 'VN' ? 'Thời gian hiệu lực không hợp lệ.' : 'Invalid validity time.';
+    }
+    if (isCreate && (fromTs < Date.now() || toTs < Date.now())) {
+        return lang === 'VN' ? 'Thời gian hiệu lực không được ở quá khứ.' : 'Validity time cannot be in the past.';
+    }
+    if (toTs <= fromTs) {
         return lang === 'VN' ? 'Ngày kết thúc phải sau ngày bắt đầu.' : 'validTo must be after validFrom.';
     }
 
-    // ── Status enum defence-in-depth ──
     const ALLOWED_STATUS = new Set([
         PROMOTION_STATUS.DRAFT,
         PROMOTION_STATUS.ACTIVE,
@@ -318,22 +365,30 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
     if (form.status != null && !ALLOWED_STATUS.has(form.status)) {
         return lang === 'VN' ? 'Trạng thái không hợp lệ.' : 'Invalid status value.';
     }
+
+    const ALLOWED_VISIBILITY = new Set(Object.values(PROMOTION_VISIBILITY));
+    if (form.visibility != null && !ALLOWED_VISIBILITY.has(form.visibility)) {
+        return lang === 'VN' ? 'Chế độ hiển thị không hợp lệ.' : 'Invalid visibility value.';
+    }
     if (isCreate && form.status === PROMOTION_STATUS.ARCHIVED) {
         return lang === 'VN'
             ? 'Không tạo mới với trạng thái Archived.'
             : 'Cannot create with Archived status.';
     }
 
-    // ── Departure time range ──
     const from = toHhMm(form.departureFrom);
     const to = toHhMm(form.departureTo);
+    if ((from && !to) || (!from && to)) {
+        return lang === 'VN'
+            ? 'Phải nhập đủ giờ khởi hành từ và đến.'
+            : 'Both departure start and end times are required.';
+    }
     if (from && to && from > to) {
         return lang === 'VN'
             ? 'Giờ khởi hành từ phải ≤ giờ đến.'
             : 'departureFrom must be ≤ departureTo.';
     }
 
-    // ── Image MIME ──
     if (form.imageFile) {
         const type = String(form.imageFile.type || '').toLowerCase();
         const ok = ['image/jpeg', 'image/png', 'image/webp'].includes(type);
@@ -341,6 +396,11 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
             return lang === 'VN'
                 ? 'Ảnh chỉ chấp nhận JPEG, PNG, WebP.'
                 : 'Image must be JPEG, PNG, or WebP.';
+        }
+        if (form.imageFile.size > PROMOTION_LIMITS.MAX_IMAGE_SIZE_BYTES) {
+            return lang === 'VN'
+                ? 'Ảnh khuyến mãi tối đa 5 MB.'
+                : 'Promotion image must not exceed 5 MB.';
         }
     }
 

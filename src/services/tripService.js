@@ -3,6 +3,7 @@ import {
     createTrip as apiCreateTrip,
     generateTrips as apiGenerateTrips,
     scheduleTrips as apiScheduleTrips,
+    previewTripsSchedule as apiPreviewTripsSchedule,
     previewRoundTripSchedule as apiPreviewRoundTripSchedule,
     updateTripBoat as apiUpdateTripBoat,
     searchTrips as apiSearchTrips,
@@ -833,8 +834,8 @@ export const generateTripsBatch = async (payload) => {
     }
 };
 
-/** BE CreateTrip: departureTime phải cách hiện tại ≥ 20 phút (swagger), theo giờ VN +07. */
-export const MIN_TRIP_CREATE_LEAD_MINUTES = 20;
+/** BE CreateTrip: departureTime phải cách hiện tại ≥ 10 phút, theo giờ VN +07. */
+export const MIN_TRIP_CREATE_LEAD_MINUTES = 10;
 
 export const getTripCreateLeadTimeError = (operatingDate, departureTimeHHmm, lang = 'VN') => {
     if (!operatingDate || !departureTimeHHmm) {
@@ -1362,9 +1363,47 @@ export const buildOneWayPreviewPayload = (form) => {
  */
 export const previewOneWayScheduleBatch = async (form) => {
     try {
-        return normalizeRoundTripPreviewResult(
-            await apiPreviewRoundTripSchedule(buildOneWayPreviewPayload(form)),
-        );
+        const raw = await apiPreviewTripsSchedule(buildScheduleTripsPayload(form));
+        const src = raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? raw.data : raw;
+        const items = Array.isArray(src?.items) ? src.items : [];
+        const mapped = items.map((item, index) => {
+            const operatingDate = pickPreviewOperatingDate(item);
+            const departureTime = item?.requestedDepartureTime || item?.departureTime || null;
+            const departureHms = isoToHms(departureTime);
+            const routeCode = String(item?.routeCode || form?.routeCode || '').trim();
+            const departureMs = Date.parse(String(departureTime || ''));
+            return {
+                key: [operatingDate, routeCode, departureTime || index].join('|'),
+                operatingDate,
+                direction: 'outbound',
+                routeCode,
+                routeName: routeCode || '—',
+                departureTime,
+                arrivalTime: item?.requestedArrivalTime || item?.arrivalTime || null,
+                departureHms,
+                arrivalHms: isoToHms(item?.requestedArrivalTime || item?.arrivalTime),
+                departureMs: Number.isNaN(departureMs) ? null : departureMs,
+                canCreate: item?.canCreate !== false,
+                reason: item?.reason || null,
+                suggestedNextDepartureTime: item?.earliestAllowedDepartureTime || null,
+                suggestedNextDepartureLabel: formatTripClock(item?.earliestAllowedDepartureTime),
+                conflictTripCode: item?.conflictTripCode || null,
+                conflictDepartureTime: item?.conflictDepartureTime || null,
+                conflictDepartureLabel: formatTripClock(item?.conflictDepartureTime),
+                conflictArrivalTime: item?.conflictArrivalTime || null,
+                conflictArrivalLabel: formatTripClock(item?.conflictArrivalTime),
+                raw: item,
+            };
+        });
+        return {
+            suggested: Number(src?.wouldCreate) || mapped.filter((item) => item.canCreate).length,
+            skippedBoatBusy: Number(src?.skippedBoatBusy) || 0,
+            skippedStationBusy: Number(src?.skippedStationBusy) || 0,
+            skippedPast: Number(src?.skippedPast) || 0,
+            skippedMissingOnBoardStaff: Number(src?.skippedMissingOnBoardStaff) || 0,
+            items: mapped,
+            raw: src,
+        };
     } catch (error) {
         console.error('Lỗi khi preview one-way schedule:', error);
         throw error;

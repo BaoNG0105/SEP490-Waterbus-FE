@@ -195,7 +195,7 @@ export function CharterBookingManagement() {
   const tableColSpan = 5;
 
   return (
-    <div className="space-y-8 font-body pb-10">
+    <div className="mx-auto max-w-7xl space-y-8 px-2 pb-10 font-body sm:px-4">
       <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
         <div className="space-y-1">
           <h2 className="text-2xl md:text-3xl font-headline font-black text-[#124757] dark:text-yellow-400">

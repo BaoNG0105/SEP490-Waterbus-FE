@@ -21,3 +21,6 @@ export const getAdminReviews = (params = {}) =>
 // API (Admin/Manager): Duyệt (Published) / ẩn (Hidden) 1 đánh giá. Idempotent — gửi lại status hiện tại thì giữ nguyên.
 export const updateReviewStatus = (id, status) =>
     api.patch(`/reviews/${id}/status`, { status }).then(response => response.data);
+
+// API (Admin/Manager): Xóa vĩnh viễn một đánh giá. Thành công trả 204 No Content.
+export const deleteAdminReview = (id) => api.delete(`/reviews/admin/${id}`);

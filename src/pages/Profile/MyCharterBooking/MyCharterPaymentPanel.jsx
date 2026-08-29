@@ -504,7 +504,7 @@ export function MyCharterPaymentPanel({
                     </p>
                   )}
 
-                  {/* Dùng điểm (1 điểm = 1 VND, tối đa 50% số tiền).
+                  {/* Dùng điểm (1 điểm = 1 VND, tối đa bằng số tiền thanh toán).
                       Workaround: ẩn hoàn toàn khi booking đã có payment pending/paid vì BE
                       đang reject dùng điểm trong trường hợp đó. Khi BE fix, chỉ cần đổi điều
                       kiện render về `pointBalanceLoaded && pointBalance > 0 && selectedPaymentAmount > 0`. */}
@@ -531,8 +531,8 @@ export function MyCharterPaymentPanel({
                           </div>
                           <p className="mt-0.5 text-[11px] font-bold text-slate-600 dark:text-slate-300">
                             {lang === "VN"
-                              ? `1 điểm = 1 VND, tối đa 50% số tiền. Áp dụng tối đa ${maxPointsToUse.toLocaleString("vi-VN")} điểm.`
-                              : `1 point = 1 VND, capped at 50% of the amount. Up to ${maxPointsToUse.toLocaleString("vi-VN")} pts.`}
+                              ? `1 điểm = 1 VND, dùng tối đa bằng số tiền thanh toán. Áp dụng tối đa ${maxPointsToUse.toLocaleString("vi-VN")} điểm.`
+                              : `1 point = 1 VND, up to the payable amount. Up to ${maxPointsToUse.toLocaleString("vi-VN")} pts.`}
                           </p>
                         </div>
                       </label>

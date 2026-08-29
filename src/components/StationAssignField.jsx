@@ -12,6 +12,7 @@ export function StationAssignField({
   onChange,
   disabled = false,
   label,
+  hasError = false,
 }) {
   const { lang } = useApp();
   const [stations, setStations] = useState([]);
@@ -102,10 +103,16 @@ export function StationAssignField({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={lang === "VN" ? "Tìm bến theo tên / mã..." : "Search station name / code..."}
-        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400"
+        className={`w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 ${hasError
+          ? "!border-rose-500 !bg-rose-50/50 dark:!bg-rose-500/10 focus:!ring-rose-500"
+          : "border-slate-200 dark:border-slate-700/60 focus:ring-[#124757] dark:focus:ring-yellow-400"
+          }`}
       />
 
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/60 max-h-52 overflow-y-auto">
+      <div className={`rounded-xl border bg-slate-50/80 dark:bg-slate-900/60 max-h-52 overflow-y-auto ${hasError
+        ? "!border-rose-500 dark:!border-rose-500"
+        : "border-slate-200 dark:border-slate-700"
+        }`}>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <div className="w-6 h-6 border-2 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />

@@ -4,6 +4,7 @@ import {
     createBookingReview as apiCreateBookingReview,
     getAdminReviews as apiGetAdminReviews,
     updateReviewStatus as apiUpdateReviewStatus,
+    deleteAdminReview as apiDeleteAdminReview,
 } from '../api/reviewApi';
 
 const pick = (source, keys, fallback = '') => {
@@ -82,6 +83,16 @@ export const changeReviewStatus = async (id, status) => {
         return await apiUpdateReviewStatus(id, status);
     } catch (error) {
         console.error(`Lỗi khi đổi trạng thái đánh giá ${id}:`, error);
+        throw error;
+    }
+};
+
+// Service (Admin/Manager): Xóa đánh giá.
+export const removeAdminReview = async (id) => {
+    try {
+        await apiDeleteAdminReview(id);
+    } catch (error) {
+        console.error(`Lỗi khi xóa đánh giá ${id}:`, error);
         throw error;
     }
 };

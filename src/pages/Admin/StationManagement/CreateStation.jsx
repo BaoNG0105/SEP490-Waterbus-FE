@@ -5,6 +5,7 @@ import { addNewStation } from "../../../services/stationService";
 import { notify } from "../../../utils/swalToast";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { StationFormFields } from "./StationFormFields";
+import { isValidStationCode, isValidStationName, normalizeStationName } from "../../../utils/stationValidation";
 
 const MAX_IMAGES = 6;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -32,16 +33,19 @@ export function CreateStation() {
     isWaterbusStation: true,
   });
 
-  // Validate real-time — chỉ check rỗng (null/blank), giống Login. Lỗi chỉ hiện cho field đã
-  // "touched" (rời khỏi ít nhất 1 lần), nhưng nút Tạo bị khóa ngay khi còn field rỗng.
+  // Lỗi chỉ hiện cho field đã rời khỏi, nhưng nút Tạo bị khóa ngay khi dữ liệu chưa hợp lệ.
   const [touchedFields, setTouchedFields] = useState({});
   const fieldErrors = {
-    ...(formData.stationCode.trim() ? {} : {
-      stationCode: lang === "VN" ? "Vui lòng nhập mã nhà ga" : "Station code is required",
-    }),
-    ...(formData.stationName.trim() ? {} : {
-      stationName: lang === "VN" ? "Vui lòng nhập tên nhà ga" : "Station name is required",
-    }),
+    ...(!formData.stationCode.trim()
+      ? { stationCode: lang === "VN" ? "Vui lòng nhập mã nhà ga" : "Station code is required" }
+      : !isValidStationCode(formData.stationCode)
+        ? { stationCode: lang === "VN" ? "Chỉ dùng chữ, số và dấu -; dấu - không ở đầu, cuối hoặc liền nhau" : "Use letters, numbers and single hyphens only" }
+        : {}),
+    ...(!formData.stationName.trim()
+      ? { stationName: lang === "VN" ? "Vui lòng nhập tên nhà ga" : "Station name is required" }
+      : !isValidStationName(formData.stationName)
+        ? { stationName: lang === "VN" ? "Tên chỉ gồm chữ, số và khoảng trắng" : "Name may contain letters, numbers and spaces only" }
+        : {}),
   };
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
   const visibleFieldErrors = {
@@ -125,7 +129,7 @@ export function CreateStation() {
     if (hasFieldErrors) return;
 
     const code = formData.stationCode.trim().toUpperCase();
-    const name = formData.stationName.trim();
+    const name = normalizeStationName(formData.stationName);
 
     try {
       setIsSubmitting(true);

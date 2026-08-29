@@ -61,7 +61,8 @@ export function CreateManager() {
     const visibleFieldErrors = useMemo(() => {
         const visible = {};
         Object.keys(fieldErrors).forEach((field) => {
-            if (touchedFields[field]) visible[field] = fieldErrors[field];
+            // Bến phụ trách là điều kiện bắt buộc chính của Manager, nên báo rõ ngay từ đầu.
+            if (field === "stationIds" || touchedFields[field]) visible[field] = fieldErrors[field];
         });
         return visible;
     }, [fieldErrors, touchedFields]);

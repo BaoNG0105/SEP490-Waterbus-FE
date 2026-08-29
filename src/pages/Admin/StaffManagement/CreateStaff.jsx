@@ -268,12 +268,16 @@ export function CreateStaff() {
             (isManagerOnly && (managerStations.length === 0 || formData.stationIds.length === 0)) ||
             (isAdmin && formData.stationIds.length === 0)
         ));
+    const stationSelectionError = targetStaffType === "Ground" && formData.stationIds.length === 0
+        ? (lang === "VN" ? "Vui lòng chọn bến làm việc." : "Please select a working station.")
+        : "";
+    const stationErrorSelectStyle = `${selectStyle} !border-rose-500 !bg-rose-50/50 focus:!ring-rose-500 dark:!bg-rose-500/10`;
 
     if (!canAccess) return null;
 
     return (
-        <div className="space-y-6 font-body pb-10 px-2 sm:px-4 max-w-5xl mx-auto">
-            <div className="flex bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center gap-4">
+        <div className="mx-auto max-w-4xl space-y-5 px-2 pb-10 font-body sm:px-4">
+            <div className="flex items-center gap-3 rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:px-6">
                 <button
                     type="button"
                     onClick={() => navigate("/admin/staffs-management")}
@@ -296,7 +300,7 @@ export function CreateStaff() {
                 </div>
             )}
 
-            <form onSubmit={handleFormSubmit} className="space-y-6">
+            <form onSubmit={handleFormSubmit} className="space-y-5">
                 <StaffFormFields
                     lang={lang}
                     formData={formData}
@@ -308,6 +312,7 @@ export function CreateStaff() {
                     emailPlaceholder="name@gmail.com"
                     showStationAssign={showStationAssign}
                     stationAssignLabel={lang === "VN" ? "Bến làm việc" : "Working station"}
+                    stationError={stationSelectionError}
                     stationAssignSlot={
                         isAdmin ? (
                             <FormSelect
@@ -324,10 +329,10 @@ export function CreateStaff() {
                                 }
                                 searchPlaceholder={lang === "VN" ? "Tìm tên bến..." : "Search station name..."}
                                 emptyLabel={lang === "VN" ? "Không có bến" : "No stations"}
-                                className={selectStyle}
+                                className={stationSelectionError ? stationErrorSelectStyle : selectStyle}
                             />
                         ) : managerStations.length > 1 ? (
-                            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/60 divide-y divide-slate-100 dark:divide-slate-700/60">
+                            <div className={`rounded-xl border bg-slate-50/80 divide-y divide-slate-100 dark:bg-slate-900/60 dark:divide-slate-700/60 ${stationSelectionError ? "!border-rose-500" : "border-slate-200 dark:border-slate-700"}`}>
                                 {managerStations.map((s) => {
                                     const id = String(s.stationId);
                                     const checked = formData.stationIds.map(String).includes(id);

@@ -3,9 +3,9 @@ import {
     backfillCompletedBookingPoints as apiBackfillCompletedBookingPoints,
 } from '../api/pointApi';
 
-/** 1 điểm = 1 VND; tối đa dùng điểm = 50% giá trị đơn và 50% số dư hiện có. */
-export const POINTS_MAX_ORDER_RATIO = 0.5;
-export const POINTS_MAX_BALANCE_RATIO = 0.5;
+/** 1 điểm = 1 VND; dùng tối đa bằng số tiền phải thanh toán và số dư hiện có. */
+export const POINTS_MAX_ORDER_RATIO = 1;
+export const POINTS_MAX_BALANCE_RATIO = 1;
 
 export const getMaxPointsToUse = (pointBalance, orderAmount) => {
     const balance = Math.max(0, Math.floor(Number(pointBalance) || 0));

@@ -563,7 +563,7 @@ const insurancePassengerCount =
   const orderAfterDiscount = Math.max(0, orderBeforeDiscount - discountAmount);
   const estimatedOrderAmount = orderAfterDiscount;
 
-  // BE: maxPointsToUse = min(pointBalance, floor(orderAmount * 0.5)); 1 điểm = 1 VND
+  // BE: maxPointsToUse = min(pointBalance, orderAmount); 1 điểm = 1 VND
   const maxPointsToUse = getMaxPointsToUse(pointBalance, estimatedOrderAmount);
   // User chỉ có 2 lựa chọn: KHÔNG dùng (0) hoặc dùng TỐI ĐA (maxPointsToUse).
   const pointsToUse = useAllPoints ? maxPointsToUse : 0;
@@ -1636,8 +1636,8 @@ const insurancePassengerCount =
           {maxPointsToUse <= 0 && (
             <p className="mt-1 text-[10px] text-slate-400">
               {lang === "VN"
-                ? "Không đủ điểm hoặc đơn hàng quá nhỏ (tối đa 50% giá trị đơn và 50% số dư)"
-                : "Not enough points or order too small (max 50% of order total and balance)"}
+                ? "Không đủ điểm hoặc đơn hàng chưa có số tiền thanh toán"
+                : "Not enough points or there is no payable amount"}
             </p>
           )}
         </div>

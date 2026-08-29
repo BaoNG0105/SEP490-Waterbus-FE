@@ -341,7 +341,7 @@ export function BoatManagement() {
     };
 
     return (
-        <div className="space-y-8 select-none font-body">
+        <div className="mx-auto max-w-7xl space-y-8 px-2 font-body select-none sm:px-4">
 
             {/* --- KHỐI TIÊU ĐỀ CHÍNH & PHỤ --- */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">

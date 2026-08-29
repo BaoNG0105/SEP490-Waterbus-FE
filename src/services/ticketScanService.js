@@ -397,7 +397,6 @@ export const normalizeScannedTicket = (item) => {
   const status = pick(ticket, ['ticketStatus', 'status', 'attendanceStatus'], '')
     || pick(item, ['ticketStatus', 'TicketStatus', 'status'], '');
   const statusNorm = String(status || '').toLowerCase().replace(/[\s_-]/g, '');
-  // Fallback khi BE chưa gửi canCheck*: Active → check-in; CheckedIn → check-out.
   // Used / Cancelled / Expired / CheckedOut = terminal — không check-in.
   const isTerminalStatus = statusNorm === 'used'
     || statusNorm === 'cancelled'
@@ -406,8 +405,6 @@ export const normalizeScannedTicket = (item) => {
     || statusNorm === 'checkedout'
     || statusNorm === 'complete'
     || statusNorm === 'completed';
-  const canCheckInFallback = !isTerminalStatus && (statusNorm === 'active' || statusNorm === '');
-  const canCheckOutFallback = statusNorm === 'checkedin';
 
   const fromStationName = pick(item, [
     'fromStationName', 'fromStation', 'boardingStationName',
@@ -559,14 +556,14 @@ export const normalizeScannedTicket = (item) => {
     eligibilityCodes,
     concessionCodes: eligibilityCodes.filter((code) => CONCESSION_VERIFY_SET.has(code)),
     status,
-    // Terminal statuses luôn khóa check-in/out dù BE còn gửi flag cũ.
-    // Có flag từ BE → tin BE (window tripStops); không thì fallback theo status.
+    // Window check-in/out do BE tính theo giờ thực tế, kể cả khi chuyến bị delay.
+    // Không tự suy diễn từ trạng thái vé khi response chưa có cờ này.
     canCheckIn: isTerminalStatus || statusNorm === 'checkedin'
       ? false
-      : (hasCanCheckInFlag ? toBool(canCheckInRaw, false) : canCheckInFallback),
+      : (hasCanCheckInFlag ? toBool(canCheckInRaw, false) : false),
     canCheckOut: isTerminalStatus
       ? false
-      : (hasCanCheckOutFlag ? toBool(canCheckOutRaw, false) : canCheckOutFallback),
+      : (hasCanCheckOutFlag ? toBool(canCheckOutRaw, false) : false),
     blockedReason,
     tripCode: pick(item, ['tripCode', 'trip.code'], '') || pick(ticket, ['tripCode'], ''),
     legLabel: pick(item, ['leg', 'direction', 'tripDirection', 'legType'], '')

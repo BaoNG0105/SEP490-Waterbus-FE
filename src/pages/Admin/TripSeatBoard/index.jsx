@@ -334,7 +334,7 @@ export function TripSeatBoardPage() {
   }, [trip]);
 
   return (
-    <div className="space-y-5 pb-10 font-body">
+    <div className="mx-auto w-full max-w-[72rem] space-y-5 pb-10 font-body">
       <div className="overflow-hidden rounded-4xl border border-slate-100 bg-white shadow-sm dark:border-slate-700/50 dark:bg-slate-800">
         <div className="border-b border-slate-100 bg-gradient-to-br from-[#F4FAFB] via-white to-white px-5 py-5 dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-800 sm:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -420,7 +420,7 @@ export function TripSeatBoardPage() {
           {errorMsg}
         </div>
       ) : tab === "seats" ? (
-        <div className="rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-6">
+        <div className="mx-auto w-full max-w-[72rem] rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-6">
           {paxError ? (
             <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
               {lang === "VN"

@@ -7,7 +7,7 @@ import { required } from "../../../utils/requiredStar";
 
 const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
 const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
-const errorInputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all";
+const errorInputStyle = "w-full !bg-rose-50/50 dark:!bg-rose-500/10 !border !border-rose-500 dark:!border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:!ring-rose-500 shadow-inner transition-all";
 const selectStyle = `${inputStyle} cursor-pointer`;
 const errorTextStyle = "mt-1 text-[10px] font-bold text-rose-600 dark:text-rose-400";
 
@@ -41,8 +41,8 @@ export function ManagerFormFields({
   ];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-      <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+      <div className="h-full bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
           {lang === "VN" ? "Thông tin cá nhân" : "Personal Information"}
         </h3>
@@ -117,7 +117,7 @@ export function ManagerFormFields({
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
+      <div className="h-full bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-5">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-3 mb-2">
           {<>{lang === "VN" ? "Khu vực phụ trách" : "Assigned Stations"}{required()}</>}
         </h3>
@@ -128,6 +128,7 @@ export function ManagerFormFields({
             setField("stationIds", ids);
             handleBlur("stationIds");
           }}
+          hasError={Boolean(errors.stationIds)}
         />
         {errors.stationIds && <p className={errorTextStyle}>{errors.stationIds}</p>}
       </div>

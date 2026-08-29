@@ -214,6 +214,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
       noticeVn,
       noticeEn,
       stationName: station,
+      occurredAt: lastTripStop.occurredAt || new Date().toISOString(),
       shownAt: Date.now(),
     };
 
@@ -942,6 +943,13 @@ export function LiveTracking({ viewTabs = null } = {}) {
           })(),
           displayLatitude: hasLiveCoords ? latitude : Number(boat.latitude),
           displayLongitude: hasLiveCoords ? longitude : Number(boat.longitude),
+          // Mốc GPS để ETA giảm đều giữa hai lần SignalR/polling cập nhật.
+          etaMeasuredAt: boat.receivedAt
+            || boat.recordedAt
+            || boat.updatedAt
+            || schedule?.receivedAt
+            || schedule?.updatedAt
+            || null,
           tripFinished,
           tripStatusKey: tripStatusKey || null,
           movementStatus: (() => {
@@ -970,6 +978,16 @@ export function LiveTracking({ viewTabs = null } = {}) {
             }
             if (stopped && Number.isFinite(km) && km <= 0.08) {
               return "AtStation";
+            }
+            // Tracking/GPS là nguồn thật: schedule có thể còn Boarding sau khi tàu đã rời bến.
+            // Không để trạng thái lịch cũ ghi đè tàu đang chạy.
+            const trackingEnRoute = trackKey === "moving"
+              || trackKey === "arriving"
+              || trackKey === "delayed"
+              || String(boat.status || "").toLowerCase() === "moving"
+              || speed >= MOVING_SPEED_KMH;
+            if (trackingEnRoute) {
+              return track || "Moving";
             }
             if (schedKey === "boarding" || schedKey === "scheduled" || trackKey === "boarding") {
               return sched || track || "Boarding";
@@ -1052,6 +1070,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
                   ? "arrived"
                   : "arriving")
               : null,
+          flashNoticeAt: flash?.occurredAt || null,
           remainingDistanceKmToNextStation: (() => {
             const fromTrack = Number(boat.remainingDistanceKmToNextStation);
             const fromSched = Number(schedule?.remainingDistanceKmToNextStation);
@@ -1093,6 +1112,8 @@ export function LiveTracking({ viewTabs = null } = {}) {
               seedMin = (Number.isFinite(fromSched) && fromSched > 0) ? fromSched : 0;
             } else if (Number.isFinite(fromSched) && fromSched >= 0) seedMin = fromSched;
 
+            // ETA BE đã tính là mốc chuẩn; phần hiển thị sẽ đếm lùi từ mốc này.
+            if (Number.isFinite(seedMin) && seedMin > 0) return seedMin;
             return resolveEtaMinutesToNext({
               speed,
               remainingDistanceKmToNextStation: km,
@@ -1122,7 +1143,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
             || schedule?.endAt
             || boat.adjustedEndAt
             || null,
-          serviceType: schedule?.serviceType || boat.serviceType || null,
+          serviceType,
           sellsBySegment: schedule?.sellsBySegment ?? boat.sellsBySegment ?? null,
           capacitySnapshot: schedule?.capacitySnapshot
             ?? boat.capacitySnapshot
@@ -1142,6 +1163,16 @@ export function LiveTracking({ viewTabs = null } = {}) {
       })
       .filter(isBoatEligibleForLiveMap),
     [boats, boatCatalogByKey, openBoatIds, opsByBoatKey, rescueMissionByKey, flashByBoatKey, todayTrips, tripPaxByTripId, stations, lang, tick, searchParams],
+  );
+
+  // Chỉ báo sự cố cho tàu đang chạy chuyến; tàu bảo trì hoặc đã hết chuyến không thuộc luồng này.
+  const reportableBoats = useMemo(
+    () => enrichedBoats.filter((boat) => (
+      Boolean(boat.tripId)
+      && boat.tripFinished !== true
+      && !isBoatUnderMaintenance(boat)
+    )),
+    [enrichedBoats],
   );
 
   // GPS + snap AtStation về tọa độ bến khi thiếu packet dock.
@@ -1285,12 +1316,20 @@ export function LiveTracking({ viewTabs = null } = {}) {
 
   const filteredBoats = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return enrichedBoats;
-    return enrichedBoats.filter((boat) =>
-      String(boat.boatCode || "").toLowerCase().includes(q)
-      || String(boat.boatId || "").toLowerCase().includes(q),
-    );
-  }, [enrichedBoats, query]);
+    const matches = enrichedBoats.filter((boat) => !q
+      || String(boat.boatCode || "").toLowerCase().includes(q)
+      || String(boat.boatId || "").toLowerCase().includes(q));
+
+    // Tàu đang di chuyển là đối tượng cần theo dõi trước; giữ nguyên thứ tự hiện có cho phần còn lại.
+    return matches
+      .map((boat, index) => ({
+        boat,
+        index,
+        priority: getBoatStatusTag(boat, stations, lang).key === "moving" ? 0 : 1,
+      }))
+      .sort((a, b) => a.priority - b.priority || a.index - b.index)
+      .map(({ boat }) => boat);
+  }, [enrichedBoats, query, stations, lang]);
 
   /** Tàu không có GPS live và cũng không có vị trí cuối trong cache 12h → chưa xác định vị trí. */
   const boatsWithoutPosition = useMemo(() => {
@@ -1405,11 +1444,19 @@ export function LiveTracking({ viewTabs = null } = {}) {
   };
 
   const openReportForBoat = (boat) => {
-    const fromSchedule = pickActiveTripForBoat(todayTrips, boat);
+    if (!reportableBoats.length) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Không có tàu đủ điều kiện báo sự cố" : "No boat is eligible for incident reporting",
+      });
+      return;
+    }
+    const selectedReportBoat = reportableBoats.find((item) => String(item.boatId) === String(boat?.boatId)) || null;
+    const fromSchedule = pickActiveTripForBoat(todayTrips, selectedReportBoat);
     setReportForm({
-      boatId: boat?.boatId || "",
-      tripId: boat?.tripId || fromSchedule?.tripId || "",
-      tripCode: boat?.tripCode || fromSchedule?.tripCode || "",
+      boatId: selectedReportBoat?.boatId || "",
+      tripId: selectedReportBoat?.tripId || fromSchedule?.tripId || "",
+      tripCode: selectedReportBoat?.tripCode || fromSchedule?.tripCode || "",
       incidentType: "MechanicalFailure",
       severity: "High",
       description: "",
@@ -1426,11 +1473,27 @@ export function LiveTracking({ viewTabs = null } = {}) {
       });
       return;
     }
+    const reportBoat = reportableBoats.find((item) => String(item.boatId) === String(reportForm.boatId));
+    if (!reportBoat) {
+      notify({
+        icon: "warning",
+        title: lang === "VN"
+          ? "Chỉ có thể báo sự cố cho tàu đang có chuyến chạy"
+          : "Incidents can only be reported for boats with an active trip",
+      });
+      return;
+    }
+    const description = reportForm.description.trim();
+    if (!description) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Nhập mô tả sự cố" : "Enter incident details",
+      });
+      return;
+    }
     setReportBusy(true);
     try {
-      const boat = enrichedBoats.find((item) => String(item.boatId) === String(reportForm.boatId));
-      const description = reportForm.description.trim()
-        || (lang === "VN" ? "Test báo sự cố (Manager)" : "Manager test incident");
+      const boat = reportBoat;
       const fromTrips = pickActiveTripForBoat(todayTrips, boat || { boatId: reportForm.boatId });
       const tripId = reportForm.tripId || boat?.tripId || fromTrips?.tripId || null;
       const tripCode = reportForm.tripCode || boat?.tripCode || fromTrips?.tripCode || "";
@@ -1698,13 +1761,6 @@ export function LiveTracking({ viewTabs = null } = {}) {
                     : decks >= 2
                       ? (lang === "VN" ? "2 tầng" : "2 decks")
                       : (lang === "VN" ? "1 tầng" : "1 deck");
-                  const kindColor = isIncident
-                    ? "#DC2626"
-                    : isRescue
-                      ? "#EA580C"
-                      : decks >= 2
-                        ? "#1D4ED8"
-                        : "#124757";
                   const missionLine = boat.rescuingBoatCode
                     ? (lang === "VN" ? `Đang cứu ${boat.rescuingBoatCode}` : `Rescuing ${boat.rescuingBoatCode}`)
                     : boat.rescuedByBoatCode
@@ -1742,6 +1798,19 @@ export function LiveTracking({ viewTabs = null } = {}) {
                         detail: delayLine || tag.detail,
                       }
                       : tag);
+                  const isMoving = statusTag.key === "moving";
+                  const kindColor = isIncident
+                    ? "#DC2626"
+                    : isRescue
+                      ? "#EA580C"
+                      : isMoving
+                        ? "#0EA5E9"
+                        : "#475569";
+                  const fleetTagClass = isMoving
+                    ? "text-sky-600 dark:text-sky-300"
+                    : ["incident", "rescue", "delayed"].includes(statusTag.tone)
+                      ? boardTagClass(statusTag.tone)
+                      : "text-slate-500 dark:text-slate-400";
 
                   return (
                     <li key={boat.boatId}>
@@ -1757,6 +1826,8 @@ export function LiveTracking({ viewTabs = null } = {}) {
                               ? "bg-amber-500/10"
                               : active
                                 ? "bg-[#124757]/10 dark:bg-yellow-400/10"
+                                : isMoving
+                                  ? "bg-sky-500/10 ring-1 ring-sky-500/20 dark:bg-sky-400/10 dark:ring-sky-400/25"
                                 : "hover:bg-white/40 dark:hover:bg-slate-800/50"
                         }`}
                       >
@@ -1773,14 +1844,16 @@ export function LiveTracking({ viewTabs = null } = {}) {
                                 ? "text-rose-700 dark:text-rose-300"
                                 : boat.rescuingBoatCode
                                   ? "text-amber-800 dark:text-amber-300"
+                                  : isMoving
+                                    ? "text-sky-700 dark:text-sky-300"
                                   : underMaintenance
                                     ? "text-slate-500 dark:text-slate-400"
-                                    : "text-slate-800 dark:text-slate-100"
+                                    : "text-slate-600 dark:text-slate-300"
                             }`}>
                               {boat.boatCode}
                             </span>
                             <span
-                              className={`wb-board-tag shrink-0 text-[10px] ${boardTagClass(statusTag.tone)}`}
+                              className={`wb-board-tag shrink-0 text-[10px] ${fleetTagClass}`}
                               title={statusTag.detail || statusTag.label}
                             >
                               {statusTag.label}
@@ -1921,6 +1994,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
           <form
             onSubmit={handleQuickReport}
+            noValidate
             className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-800"
           >
             <h2 className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
@@ -1930,11 +2004,9 @@ export function LiveTracking({ viewTabs = null } = {}) {
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
                 {lang === "VN" ? "Tàu" : "Boat"}
               </span>
-              <select
-                required
+              <FormSelect
                 value={reportForm.boatId}
-                onChange={(e) => {
-                  const boatId = e.target.value;
+                onChange={(boatId) => {
                   const boat = enrichedBoats.find((item) => String(item.boatId) === String(boatId));
                   const fromTrips = pickActiveTripForBoat(todayTrips, boat || { boatId });
                   setReportForm((prev) => ({
@@ -1944,17 +2016,20 @@ export function LiveTracking({ viewTabs = null } = {}) {
                     tripCode: boat?.tripCode || fromTrips?.tripCode || "",
                   }));
                 }}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
-              >
-                <option value="">{lang === "VN" ? "Chọn tàu" : "Select boat"}</option>
-                {enrichedBoats.map((boat) => (
-                  <option key={boat.boatId} value={boat.boatId}>
-                    {boat.boatCode}
-                    {boat.tripCode ? ` · ${boat.tripCode}` : ""}
-                    {boat.hasOpenIncident || boat.activeIncident ? " · INCIDENT" : ""}
-                  </option>
-                ))}
-              </select>
+                options={reportableBoats.map((boat) => ({
+                  value: boat.boatId,
+                  label: [
+                    boat.boatCode,
+                    boat.tripCode,
+                    boat.hasOpenIncident || boat.activeIncident ? "INCIDENT" : "",
+                  ].filter(Boolean).join(" · "),
+                }))}
+                placeholder={lang === "VN" ? "Chọn tàu" : "Select boat"}
+                searchable={reportableBoats.length > 6}
+                searchPlaceholder={lang === "VN" ? "Tìm mã tàu hoặc chuyến..." : "Search boat or trip..."}
+                emptyLabel={lang === "VN" ? "Không có tàu phù hợp." : "No matching boats."}
+                className="min-h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold outline-none dark:border-slate-600 dark:bg-slate-900"
+              />
               <p className="text-[11px] font-medium text-slate-500">
                 {reportForm.tripCode || reportForm.tripId
                   ? (lang === "VN"

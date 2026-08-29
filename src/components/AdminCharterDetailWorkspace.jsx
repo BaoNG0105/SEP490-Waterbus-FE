@@ -66,6 +66,8 @@ function translateBoatStatus(status, lang) {
   return BOAT_STATUS_LABELS_VN[key] || status;
 }
 
+const formatRequestTerminology = (value) => String(value || "").replace(/\bcharter\b/gi, "Request");
+
 function resolveItineraryStructureLegs(booking) {
   if (Array.isArray(booking?.routeLegs) && booking.routeLegs.length > 0) {
     return booking.routeLegs;
@@ -1622,7 +1624,7 @@ export function AdminBookingActionsTab({
 
   if (phase === "operate") {
     const hasLinkedTrips = Array.isArray(linkedTripIds) && linkedTripIds.length > 0;
-    const showCreateTrip = Boolean(canManageTripCreate);
+    const showCreateTrip = Boolean(canManageTripCreate) && !hasLinkedTrips;
     return (
       <section className="space-y-6">
         <div className={`rounded-4xl border p-6 ${hasLinkedTrips
@@ -1647,7 +1649,7 @@ export function AdminBookingActionsTab({
                   : "text-emerald-700/80 dark:text-emerald-200"
                   }`}
                 >
-                  {formatPassengerSummary(booking, lang)} · {booking.route}
+                  {formatPassengerSummary(booking, lang)} · {formatRequestTerminology(booking.route)}
                 </p>
                 {hasLinkedTrips && (
                   <p className="mt-2 text-xs font-bold text-sky-700 dark:text-sky-200">
@@ -1681,7 +1683,7 @@ export function AdminBookingActionsTab({
             </div>
           </div>
 
-          {showCreateTrip && !hasLinkedTrips && createTripBlockers.length > 0 && (
+          {showCreateTrip && createTripBlockers.length > 0 && (
             <ul className="mt-4 space-y-1 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
               {createTripBlockers.map((reason) => (
                 <li key={reason}>• {reason}</li>

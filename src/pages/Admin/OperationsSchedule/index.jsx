@@ -288,7 +288,7 @@ export function OperationsSchedulePage() {
   };
 
   return (
-    <div className="space-y-5 pb-10 font-body">
+    <div className="mx-auto max-w-7xl space-y-5 pb-10 font-body">
       <div className="rounded-4xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:p-6">
         <p className="text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
           {lang === "VN" ? "Vận hành nội bộ" : "Internal operations"}

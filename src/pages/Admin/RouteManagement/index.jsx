@@ -12,6 +12,8 @@ const getRouteTime = (route) => {
     return Number.isNaN(time) ? 0 : time;
 };
 
+const formatRequestTerminology = (value) => String(value || "").replace(/\bcharter\b/gi, "Request");
+
 export function RouteManagement() {
     const { lang } = useApp();
     const navigate = useNavigate();
@@ -27,7 +29,7 @@ export function RouteManagement() {
     const [statusFilter, setStatusFilter] = useState("All");
 
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 6;
+    const ITEMS_PER_PAGE = 10;
 
     useEffect(() => {
         const getRoutesData = async () => {
@@ -323,10 +325,10 @@ export function RouteManagement() {
                                             <div className="flex items-center gap-4">
                                                 <div className="space-y-1">
                                                     <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">
-                                                        {route.routeName}
+                                                        {formatRequestTerminology(route.routeName)}
                                                     </h4>
                                                     <span className="text-[10px] text-slate-400 dark:text-slate-500 block max-w-sm truncate">
-                                                        {route.description || (lang === "VN" ? "Chưa có mô tả" : "No description")}
+                                                        {formatRequestTerminology(route.description) || (lang === "VN" ? "Chưa có mô tả" : "No description")}
                                                     </span>
                                                 </div>
                                             </div>

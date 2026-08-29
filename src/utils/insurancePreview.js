@@ -145,6 +145,7 @@ export const resolveInsuranceSelected = (booking) => {
   if (typeof booking?.insurance?.selected === "boolean") return booking.insurance.selected;
   if (typeof booking?.insurance?.isSelected === "boolean") return booking.insurance.isSelected;
   if (getBookingInsurancePackageId(booking)) return true;
+  if (Array.isArray(booking?.insurances) && booking.insurances.length > 0) return true;
   if (booking?.insurance && typeof booking.insurance === "object") {
     const totalAmount = Number(
       booking.insurance.totalAmount ?? booking.insurance.amount ?? booking.insurance.premiumAmount,
@@ -210,6 +211,36 @@ const normalizeInsuranceLeg = (leg) => {
 export const normalizeInsuranceFromBooking = (booking) => {
   const insurance = booking?.insurance;
   const selected = resolveInsuranceSelected(booking);
+
+  // Booking detail mới trả toàn bộ snapshot: mặc định + gói khách chọn thêm.
+  const snapshots = Array.isArray(booking?.insurances) ? booking.insurances : [];
+  if (snapshots.length > 0) {
+    const legs = snapshots.map(normalizeInsuranceLeg).filter(Boolean);
+    const defaultLeg = legs.find((leg, index) => Boolean(snapshots[index]?.isWaterbusDefault)) || null;
+    const optionalLeg = legs.find((leg, index) => !Boolean(snapshots[index]?.isWaterbusDefault)) || null;
+    const defaultAmount = Number(defaultLeg?.totalAmount) || 0;
+    const optionalAmount = Number(optionalLeg?.totalAmount) || 0;
+    const primary = defaultLeg || optionalLeg;
+    return {
+      mode: defaultLeg && optionalLeg ? "default+optional" : (defaultLeg ? "default" : "optional"),
+      default: defaultLeg,
+      optional: optionalLeg,
+      defaultInsuranceAmount: defaultAmount,
+      optionalInsuranceAmount: optionalAmount,
+      totalInsuranceAmount: legs.reduce((sum, leg) => sum + (Number(leg.totalAmount) || 0), 0),
+      quantity: (defaultLeg?.quantity || 0) + (optionalLeg?.quantity || 0),
+      unitPremiumAmount: primary?.unitPremiumAmount || 0,
+      coverageAmount: primary?.coverageAmount || 0,
+      totalAmount: legs.reduce((sum, leg) => sum + (Number(leg.totalAmount) || 0), 0),
+      packageId: primary?.packageId || null,
+      packageCode: primary?.packageCode || "",
+      packageName: primary?.packageName || "",
+      providerName: primary?.providerName || "",
+      providerLogoUrl: primary?.providerLogoUrl || "",
+      terms: primary?.terms || "",
+      selected: true,
+    };
+  }
 
   if (!insurance || typeof insurance !== "object") {
     if (selected === true) {

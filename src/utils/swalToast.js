@@ -61,22 +61,30 @@ export const showToast = ({
   text = "",
   html,
   timer = 3200,
-} = {}) => Swal.fire({
-  toast: true,
-  position: "top-end",
-  icon,
-  title,
-  text: text || undefined,
-  html: html || undefined,
-  showConfirmButton: false,
-  timer,
-  timerProgressBar: true,
-  buttonsStyling: false,
-  showClass: {
-    popup: "swal2-show admin-swal-toast-enter",
-  },
-  customClass: toastCustomClass,
-});
+} = {}) => {
+  const hasDetail = Boolean(text || html);
+  const tone = ["success", "error", "warning", "info", "question"].includes(icon) ? icon : "info";
+
+  return Swal.fire({
+    toast: true,
+    position: "top-end",
+    icon,
+    title,
+    text: text || undefined,
+    html: html || undefined,
+    showConfirmButton: false,
+    timer,
+    timerProgressBar: true,
+    buttonsStyling: false,
+    showClass: {
+      popup: "swal2-show admin-swal-toast-enter",
+    },
+    customClass: {
+      ...toastCustomClass,
+      popup: `admin-swal-toast admin-swal-toast--${tone}${hasDetail ? "" : " admin-swal-toast--single"}`,
+    },
+  });
+};
 
 /**
  * Thông báo góc phải — alias của showToast (tương thích code cũ gọi alert giữa màn).

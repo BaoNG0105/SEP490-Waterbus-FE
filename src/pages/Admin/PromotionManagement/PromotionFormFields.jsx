@@ -4,6 +4,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import {
   PROMOTION_BOOKING_TYPES,
   PROMOTION_DAYS,
+  PROMOTION_LIMITS,
   PROMOTION_STATUS,
   PROMOTION_TYPE,
   PROMOTION_VISIBILITY,
@@ -14,8 +15,20 @@ import {
 import { required, RequiredStar } from "../../../utils/requiredStar";
 const inputStyle =
   "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
+const errorInputStyle = "!border-red-500 !bg-red-50/50 focus:!ring-red-300 dark:!bg-red-500/10";
 const labelStyle =
   "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
+const hasOnlyDigits = (value) => /^\d+$/.test(String(value ?? "").trim());
+const isVndAmount = (value) => hasOnlyDigits(value) && Number.isSafeInteger(Number(value));
+const digitsOnly = (value) => String(value ?? "").replace(/\D/g, "");
+const decimalNumber = (value) => {
+  const [whole, ...fraction] = String(value ?? "").replace(/[^\d.]/g, "").split(".");
+  return fraction.length ? `${whole}.${fraction.join("")}` : whole;
+};
+const formatVndAmount = (value) =>
+  value === "" || value === null || value === undefined
+    ? ""
+    : Number(value).toLocaleString("vi-VN");
 
 /** Format datetime gọn cho gợi ý: "23/08 22:35" (VN) hoặc "Aug 23 10:35 PM" (EN). */
 const formatDateTimeHint = (date, lang) => {
@@ -73,15 +86,34 @@ const OptionalNumberField = ({
   dataField,
   placeholder,
   unit,
+  integerOnly = true,
   inputProps = {},
 }) => {
   const onLabel = lang === "VN" ? "Bật giới hạn" : "Enable limit";
   const offLabel = lang === "VN" ? "Không giới hạn" : "Unlimited";
+  const isFormattedVnd = integerOnly && unit === "VND";
+  const { maxLength, ...otherInputProps } = inputProps;
+  const handleChange = (event) => {
+    const nextValue = integerOnly ? digitsOnly(event.target.value) : decimalNumber(event.target.value);
+    const maximum = otherInputProps.max;
+
+    if (
+      maximum !== undefined &&
+      nextValue !== "" &&
+      Number.isFinite(Number(nextValue)) &&
+      Number(nextValue) > maximum
+    ) {
+      return;
+    }
+
+    onChange(nextValue);
+  };
   return (
     <div className="flex flex-col h-full" data-field={dataField}>
       <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[32px]">
         <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider leading-tight min-w-0 flex-1">
           {lang === "VN" ? labelVn : labelEn}
+          {enabled && <RequiredStar />}
         </label>
         <button
           type="button"
@@ -104,11 +136,12 @@ const OptionalNumberField = ({
       </div>
       <div className="relative">
         <input
-          type="number"
+          type={integerOnly ? "text" : "number"}
+          inputMode={integerOnly ? "numeric" : "decimal"}
           min={0}
           disabled={!enabled}
-          value={enabled ? value : ""}
-          onChange={(e) => onChange(e.target.value)}
+          value={enabled ? (isFormattedVnd ? formatVndAmount(value) : value) : ""}
+          onChange={handleChange}
           placeholder={
             enabled
               ? lang === "VN"
@@ -116,8 +149,9 @@ const OptionalNumberField = ({
                 : "Enter..."
               : `∞ ${offLabel.toLowerCase()}`
           }
-          className={`${inputStyle} pr-12 ${!enabled ? "opacity-60 italic" : ""} ${error ? "border-red-400 dark:border-red-500" : ""}`}
-          {...inputProps}
+          className={`${inputStyle} pr-12 ${!enabled ? "opacity-60 italic" : ""} ${error ? errorInputStyle : ""}`}
+          maxLength={isFormattedVnd ? undefined : maxLength}
+          {...otherInputProps}
         />
         {unit && (
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
@@ -141,24 +175,42 @@ const RequiredNumberField = ({
   dataField,
   inputProps = {},
   unit,
-}) => (
+  integerOnly = false,
+}) => {
+  const isFormattedVnd = integerOnly && unit === "VND";
+  const { maxLength, ...otherInputProps } = inputProps;
+  const handleChange = (event) => {
+    const nextValue = integerOnly ? digitsOnly(event.target.value) : decimalNumber(event.target.value);
+    const maximum = otherInputProps.max;
+
+    if (
+      maximum !== undefined &&
+      nextValue !== "" &&
+      Number.isFinite(Number(nextValue)) &&
+      Number(nextValue) > maximum
+    ) {
+      return;
+    }
+
+    onChange(nextValue);
+  };
+  return (
   <div className="flex flex-col h-full" data-field={dataField}>
     <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[32px]">
       <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider leading-tight min-w-0 flex-1">
         {lang === "VN" ? labelVn : labelEn}
       </label>
-      <span className="text-[9px] font-black uppercase tracking-wider text-rose-400 shrink-0">
-        *
-      </span>
     </div>
     <div className="relative">
       <input
-        type="number"
+        type="text"
+        inputMode={integerOnly ? "numeric" : "decimal"}
         required
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`${inputStyle} pr-12 ${error ? "border-red-400 dark:border-red-500" : ""}`}
-        {...inputProps}
+        value={isFormattedVnd ? formatVndAmount(value) : value}
+        onChange={handleChange}
+        className={`${inputStyle} pr-12 ${error ? errorInputStyle : ""}`}
+        maxLength={isFormattedVnd ? undefined : maxLength}
+        {...otherInputProps}
       />
       {unit && (
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
@@ -168,7 +220,8 @@ const RequiredNumberField = ({
     </div>
     <FieldError error={error} />
   </div>
-);
+  );
+};
 
 const toggleInList = (list, value) =>
   list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
@@ -206,9 +259,79 @@ export function PromotionFormFields({
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }, [now]);
 
-  const validateField = (field, value) => {
-    const err = (severity, message, hint) =>
-      hint ? { severity, message, hint } : { severity, message };
+  const validateField = (field, value, currentForm = formData) => {
+    const err = (severity, message) => ({ severity, message });
+
+    const invalidMoney = (enabled, amount, label, maximum) => {
+      if (!enabled) return null;
+      if (amount === "" || amount === null || amount === undefined) return `${label} bắt buộc khi đã bật giới hạn.`;
+      const numeric = Number(amount);
+      if (!isVndAmount(amount))
+        return lang === "VN"
+          ? `${label} phải là số nguyên VND.`
+          : `${label} must be a whole VND amount.`;
+      if (numeric < PROMOTION_LIMITS.MIN_MONEY_AMOUNT)
+        return lang === "VN"
+          ? `${label} phải từ ${PROMOTION_LIMITS.MIN_MONEY_AMOUNT.toLocaleString("vi-VN")}đ.`
+          : `${label} must be at least ${PROMOTION_LIMITS.MIN_MONEY_AMOUNT.toLocaleString("en-US")} VND.`;
+      if (numeric > maximum)
+        return lang === "VN"
+          ? `${label} không được vượt quá ${maximum.toLocaleString("vi-VN")}đ.`
+          : `${label} must not exceed ${maximum.toLocaleString("en-US")} VND.`;
+      return null;
+    };
+    const invalidUsage = (enabled, count, label, maximum) => {
+      if (!enabled) return null;
+      if (count === "" || count === null || count === undefined) return `${label} bắt buộc khi đã bật giới hạn.`;
+      const numeric = Number(count);
+      if (!isVndAmount(count) || numeric < 1 || numeric > maximum) return `${label} phải là số nguyên từ 1 đến ${maximum.toLocaleString("vi-VN")}.`;
+      return null;
+    };
+    if (field === "promotionName") {
+      const name = String(value ?? "").trim();
+      if (name && !/[\p{L}\p{N}]/u.test(name)) return err("error", lang === "VN" ? "Tên khuyến mãi phải có ít nhất một chữ hoặc số." : "Promotion name must contain at least one letter or number.");
+      if (name && !/^[\p{L}\p{N} ]+$/u.test(name)) return err("error", lang === "VN" ? "Tên khuyến mãi chỉ được chứa chữ, số và khoảng trắng." : "Promotion name may only contain letters, digits, and spaces.");
+    }
+    if (field === "discountValue" && !isPercent && value !== "" && value != null && !isVndAmount(value)) return err("error", lang === "VN" ? "Số tiền giảm phải là số nguyên VND." : "Discount amount must be a whole VND value.");
+    if (field === "maxDiscountAmount") {
+      const message = invalidMoney(currentForm.hasMaxDiscountAmount, value, "Giảm tối đa", PROMOTION_LIMITS.MAX_DISCOUNT_AMOUNT);
+      if (message) return err("error", message);
+    }
+    if (field === "minOrderValue") {
+      const message = invalidMoney(currentForm.hasMinOrderValue, value, "Đơn tối thiểu", PROMOTION_LIMITS.MAX_DISCOUNT_AMOUNT);
+      if (message) return err("error", message);
+    }
+    if (field === "budgetCap") {
+      const message = invalidMoney(currentForm.hasBudgetCap, value, "Ngân sách", PROMOTION_LIMITS.MAX_BUDGET_AMOUNT);
+      if (message) return err("error", message);
+    }
+    if (field === "usageLimit") {
+      const message = invalidUsage(currentForm.hasUsageLimit, value, "Giới hạn lượt dùng tổng", PROMOTION_LIMITS.MAX_USAGE_COUNT);
+      if (message) return err("error", message);
+    }
+    if (field === "maxUsesPerAccount") {
+      const message = invalidUsage(currentForm.hasMaxUsesPerAccount, value, "Giới hạn mỗi tài khoản", PROMOTION_LIMITS.MAX_USES_PER_ACCOUNT);
+      if (message) return err("error", message);
+    }
+    if (field === "usageLimit" || field === "maxUsesPerAccount") {
+      const totalUsage = Number(field === "usageLimit" ? value : currentForm.usageLimit);
+      const perAccountUsage = Number(field === "maxUsesPerAccount" ? value : currentForm.maxUsesPerAccount);
+      if (
+        currentForm.hasUsageLimit &&
+        currentForm.hasMaxUsesPerAccount &&
+        Number.isFinite(totalUsage) &&
+        Number.isFinite(perAccountUsage) &&
+        perAccountUsage > totalUsage
+      ) {
+        return err(
+          "error",
+          field === "maxUsesPerAccount"
+            ? "Tối đa mỗi tài khoản không được vượt quá giới hạn lượt dùng tổng."
+            : "Giới hạn lượt dùng tổng không được nhỏ hơn tối đa mỗi tài khoản."
+        );
+      }
+    }
+    if (field === "imageFile" && value?.size > PROMOTION_LIMITS.MAX_IMAGE_SIZE_BYTES) return err("error", lang === "VN" ? "Ảnh khuyến mãi tối đa 5 MB." : "Promotion image must not exceed 5 MB.");
 
     switch (field) {
       case "promotionCode": {
@@ -219,7 +342,7 @@ export function PromotionFormFields({
           return err(
             "error",
             lang === "VN" ? "Mã chỉ được chữ IN HOA và số." : "Code must be uppercase letters and digits only.",
-            lang === "VN" ? "Không dấu, không khoảng trắng. VD: SUMMER50" : "No spaces or symbols. e.g. SUMMER50"
+            lang === "VN" ? "Không dấu và không khoảng trắng." : "Do not use spaces or symbols."
           );
         return null;
       }
@@ -239,7 +362,7 @@ export function PromotionFormFields({
           return err("error", lang === "VN" ? "Chưa nhập giá trị giảm." : "Discount value is empty.", lang === "VN" ? "Nhập phần trăm từ 1–100 hoặc số tiền giảm theo VND." : "Enter a percentage from 1–100 or a fixed VND amount.");
         const num = Number(value);
         if (!Number.isFinite(num))
-          return err("error", lang === "VN" ? "Giá trị giảm không hợp lệ." : "Discount value is invalid.", lang === "VN" ? "Chỉ nhập số, ví dụ: 50000 hoặc 15." : "Numbers only, e.g. 50000 or 15.");
+          return err("error", lang === "VN" ? "Giá trị giảm không hợp lệ." : "Discount value is invalid.", lang === "VN" ? "Chỉ nhập số." : "Numbers only.");
         if (num <= 0)
           return err("error", lang === "VN" ? "Giá trị giảm phải lớn hơn 0." : "Discount must be greater than 0.", lang === "VN" ? "Nhập giá trị dương cho khuyến mãi này." : "Enter a positive value for this promotion.");
         if (isPercent && num > 100)
@@ -247,7 +370,7 @@ export function PromotionFormFields({
         return null;
       }
       case "maxDiscountAmount": {
-        if (formData.hasMaxDiscountAmount && value !== "" && value !== null) {
+        if (currentForm.hasMaxDiscountAmount && value !== "" && value !== null) {
           const num = Number(value);
           if (!Number.isFinite(num))
             return err("error", lang === "VN" ? "Giảm tối đa không hợp lệ." : "Max discount is invalid.");
@@ -261,7 +384,7 @@ export function PromotionFormFields({
         return null;
       }
       case "minOrderValue": {
-        if (formData.hasMinOrderValue && value !== "" && value !== null) {
+        if (currentForm.hasMinOrderValue && value !== "" && value !== null) {
           const num = Number(value);
           if (!Number.isFinite(num))
             return err("error", lang === "VN" ? "Đơn tối thiểu không hợp lệ." : "Minimum order is invalid.");
@@ -275,7 +398,7 @@ export function PromotionFormFields({
         return null;
       }
       case "usageLimit": {
-        if (formData.hasUsageLimit && value !== "" && value !== null) {
+        if (currentForm.hasUsageLimit && value !== "" && value !== null) {
           const num = Number(value);
           if (!Number.isFinite(num))
             return err("error", lang === "VN" ? "Lượt dùng tổng không hợp lệ." : "Total usage limit is invalid.");
@@ -289,7 +412,7 @@ export function PromotionFormFields({
         return null;
       }
       case "maxUsesPerAccount": {
-        if (formData.hasMaxUsesPerAccount && value !== "" && value !== null) {
+        if (currentForm.hasMaxUsesPerAccount && value !== "" && value !== null) {
           const num = Number(value);
           if (!Number.isFinite(num))
             return err("error", lang === "VN" ? "Lượt dùng/user không hợp lệ." : "Per-account limit is invalid.");
@@ -303,7 +426,7 @@ export function PromotionFormFields({
         return null;
       }
       case "budgetCap": {
-        if (formData.hasBudgetCap && value !== "" && value !== null) {
+        if (currentForm.hasBudgetCap && value !== "" && value !== null) {
           const num = Number(value);
           if (!Number.isFinite(num))
             return err("error", lang === "VN" ? "Ngân sách không hợp lệ." : "Budget is invalid.");
@@ -319,7 +442,7 @@ export function PromotionFormFields({
       case "validFrom": {
         if (!value) return err("error", lang === "VN" ? "Chưa chọn ngày bắt đầu." : "Start date is empty.", lang === "VN" ? "Chọn thời điểm bắt đầu hiệu lực của khuyến mãi." : "Choose when this promotion starts.");
         const fromTs = new Date(value).getTime();
-        if (Number.isFinite(fromTs) && fromTs < now.getTime()) {
+        if (isCreate && Number.isFinite(fromTs) && fromTs < now.getTime()) {
           return err(
             "error",
             lang === "VN" ? "Ngày bắt đầu nằm trong quá khứ." : "Start date is in the past.",
@@ -340,7 +463,7 @@ export function PromotionFormFields({
       case "validTo": {
         if (!value) return err("error", lang === "VN" ? "Chưa chọn ngày kết thúc." : "End date is empty.", lang === "VN" ? "Chọn thời điểm kết thúc sau ngày bắt đầu." : "Choose an end time after the start date.");
         const toTs = new Date(value).getTime();
-        if (Number.isFinite(toTs) && toTs < now.getTime()) {
+        if (isCreate && Number.isFinite(toTs) && toTs < now.getTime()) {
           return err(
             "error",
             lang === "VN" ? "Ngày kết thúc nằm trong quá khứ." : "End date is in the past.",
@@ -397,8 +520,8 @@ export function PromotionFormFields({
     return null;
   };
 
-  const setField = (field, value) => {
-    const err = validateField(field, value);
+  const setField = (field, value, currentForm = formData) => {
+    const err = validateField(field, value, currentForm);
     setErrors((prev) => {
       const next = { ...prev };
       if (err) next[field] = err;
@@ -409,24 +532,31 @@ export function PromotionFormFields({
     onChange(field, value);
   };
   const toggleOptionalLimit = (toggleField, valueField, enabled) => {
-    setField(toggleField, enabled);
-    if (!enabled) setField(valueField, "");
+    const nextForm = {
+      ...formData,
+      [toggleField]: enabled,
+      [valueField]: enabled ? formData[valueField] : "",
+    };
+    setField(toggleField, enabled, nextForm);
+    setField(valueField, nextForm[valueField], nextForm);
   };
   const isPercent = formData.promotionType === PROMOTION_TYPE.PERCENT;
   const promotionRoutes = useMemo(
     () =>
-      [...routes].sort(
+      routes
+        .filter(isRouteSelectableForPromotion)
+        .sort(
         (left, right) =>
           Number(isRouteSelectableForPromotion(right)) -
           Number(isRouteSelectableForPromotion(left))
-      ),
+        ),
     [routes]
   );
 
   const dayNameFromIndex = (i) =>
     ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][i] ?? "";
 
-  const availableDays = (() => {
+  const availableDays = useMemo(() => {
     if (!formData.validFrom || !formData.validTo) return null;
     const from = new Date(formData.validFrom);
     const to = new Date(formData.validTo);
@@ -438,7 +568,16 @@ export function PromotionFormFields({
       cur.setDate(cur.getDate() + 1);
     }
     return days;
-  })();
+  }, [formData.validFrom, formData.validTo]);
+
+  // Khi đổi khoảng hiệu lực, bỏ ngay các thứ không còn nằm trong khoảng đó.
+  useEffect(() => {
+    if (!availableDays || !Array.isArray(formData.daysOfWeek)) return;
+    const validSelection = formData.daysOfWeek.filter((day) => availableDays.has(day));
+    if (validSelection.length !== formData.daysOfWeek.length) {
+      onChange("daysOfWeek", validSelection);
+    }
+  }, [availableDays, formData.daysOfWeek, onChange]);
 
   const dayLabel = (day) => {
     const map = {
@@ -538,7 +677,7 @@ export function PromotionFormFields({
               }
               onFocus={() => setFocusedField("promotionCode")}
               onBlur={() => setFocusedField(null)}
-              className={`${inputStyle} uppercase tracking-wider ${lockCode ? "cursor-not-allowed opacity-60" : ""} ${errors.promotionCode ? "border-red-400 dark:border-red-500" : ""}`}
+              className={`${inputStyle} uppercase tracking-wider ${lockCode ? "cursor-not-allowed opacity-60" : ""} ${errors.promotionCode ? errorInputStyle : ""}`}
             />
             {(formData.promotionCode || focusedField === "promotionCode") && (
               <p className="text-[10px] text-slate-400 mt-1">
@@ -556,8 +695,13 @@ export function PromotionFormFields({
               required
               maxLength={150}
               value={formData.promotionName}
-              onChange={(e) => setField("promotionName", e.target.value)}
-              className={`${inputStyle} ${errors.promotionName ? "border-red-400 dark:border-red-500" : ""}`}
+              onChange={(e) =>
+                setField(
+                  "promotionName",
+                  e.target.value.replace(/[^\p{L}\p{N} ]/gu, "")
+                )
+              }
+              className={`${inputStyle} ${errors.promotionName ? errorInputStyle : ""}`}
             />
             <FieldError error={errors.promotionName} />
           </div>
@@ -570,7 +714,7 @@ export function PromotionFormFields({
             maxLength={1000}
             value={formData.description}
             onChange={(e) => setField("description", e.target.value)}
-            className={`${inputStyle} resize-none font-medium ${errors.description ? "border-red-400 dark:border-red-500" : ""}`}
+            className={`${inputStyle} resize-none font-medium ${errors.description ? errorInputStyle : ""}`}
           />
           <div className="flex items-start justify-between gap-2 mt-1">
             <FieldError error={errors.description} className="flex-1 mt-0" />
@@ -664,7 +808,10 @@ export function PromotionFormFields({
               min: 0.01,
               step: "any",
               max: isPercent ? 100 : undefined,
+              maxLength: isPercent ? 6 : 10,
             }}
+            integerOnly={!isPercent}
+            unit={isPercent ? undefined : "VND"}
           />
           {isPercent ? (
             <OptionalNumberField
@@ -678,7 +825,7 @@ export function PromotionFormFields({
               error={errors.maxDiscountAmount}
               dataField="maxDiscountAmount"
               unit="VND"
-              inputProps={{ min: 1000, step: 1000 }}
+              inputProps={{ min: 1000, max: PROMOTION_LIMITS.MAX_DISCOUNT_AMOUNT, maxLength: 10 }}
             />
           ) : (
             <div className="flex flex-col h-full">
@@ -706,7 +853,7 @@ export function PromotionFormFields({
             error={errors.minOrderValue}
             dataField="minOrderValue"
             unit="VND"
-            inputProps={{ min: 1000, step: 1000 }}
+            inputProps={{ min: 1000, max: PROMOTION_LIMITS.MAX_DISCOUNT_AMOUNT, maxLength: 10 }}
           />
         </div>
       </div>
@@ -752,7 +899,7 @@ export function PromotionFormFields({
           <div className="flex flex-wrap gap-1.5">
             {PROMOTION_DAYS.map((day) => {
               const on = formData.daysOfWeek.includes(day);
-              const available = availableDays ? availableDays.has(day) : true;
+              const available = availableDays?.has(day) ?? false;
               return (
                 <button
                   key={day}
@@ -787,7 +934,7 @@ export function PromotionFormFields({
               type="time"
               value={formData.departureFrom}
               onChange={(e) => setField("departureFrom", e.target.value)}
-              className={`${inputStyle} ${errors.departureFrom ? "border-red-400 dark:border-red-500" : ""}`}
+              className={`${inputStyle} ${errors.departureFrom ? errorInputStyle : ""}`}
             />
             <FieldError error={errors.departureFrom} />
           </div>
@@ -797,7 +944,7 @@ export function PromotionFormFields({
               type="time"
               value={formData.departureTo}
               onChange={(e) => setField("departureTo", e.target.value)}
-              className={`${inputStyle} ${errors.departureTo ? "border-red-400 dark:border-red-500" : ""}`}
+              className={`${inputStyle} ${errors.departureTo ? errorInputStyle : ""}`}
             />
             <FieldError error={errors.departureTo} />
           </div>
@@ -808,30 +955,22 @@ export function PromotionFormFields({
           <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-100 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
             {promotionRoutes.length === 0 ? (
               <p className="text-xs text-slate-400 p-3 italic">
-                {lang === "VN" ? "Không tải được danh sách tuyến." : "No routes loaded."}
+                {lang === "VN" ? "Không có tuyến phù hợp để áp dụng khuyến mãi." : "No eligible routes available."}
               </p>
             ) : (
               promotionRoutes.map((route) => {
                 const id = String(route.routeId || route.id || "");
-                const selectable = isRouteSelectableForPromotion(route);
                 const checked = formData.routeIds.includes(id);
                 return (
                   <label
                     key={id}
-                    className={`flex items-start gap-3 px-3 py-2 ${
-                      selectable
-                        ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/40"
-                        : "opacity-45 cursor-not-allowed bg-slate-50/60 dark:bg-slate-900/20"
-                    }`}
+                    className="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/40"
                   >
                     <input
                       type="checkbox"
                       checked={checked}
-                      disabled={!selectable}
-                      onChange={() =>
-                        selectable && setField("routeIds", toggleInList(formData.routeIds, id))
-                      }
-                      className="mt-1 accent-[#124757] dark:accent-yellow-400 disabled:cursor-not-allowed"
+                      onChange={() => setField("routeIds", toggleInList(formData.routeIds, id))}
+                      className="mt-1 accent-[#124757] dark:accent-yellow-400"
                     />
                     <span className="min-w-0">
                       <span className="block text-xs font-bold text-slate-700 dark:text-slate-200">
@@ -860,10 +999,10 @@ export function PromotionFormFields({
             <input
               type="datetime-local"
               required
-              min={minDateTime}
+              min={isCreate ? minDateTime : undefined}
               value={formData.validFrom}
               onChange={(e) => setField("validFrom", e.target.value)}
-              className={`${inputStyle} ${errors.validFrom ? "border-red-400 dark:border-red-500" : ""}`}
+              className={`${inputStyle} ${errors.validFrom ? errorInputStyle : ""}`}
             />
             <FieldError error={errors.validFrom} />
           </div>
@@ -872,10 +1011,10 @@ export function PromotionFormFields({
             <input
               type="datetime-local"
               required
-              min={minDateTime}
+              min={isCreate ? minDateTime : undefined}
               value={formData.validTo}
               onChange={(e) => setField("validTo", e.target.value)}
-              className={`${inputStyle} ${errors.validTo ? "border-red-400 dark:border-red-500" : ""}`}
+              className={`${inputStyle} ${errors.validTo ? errorInputStyle : ""}`}
             />
             <FieldError error={errors.validTo} />
           </div>
@@ -892,7 +1031,7 @@ export function PromotionFormFields({
             onChange={(v) => setField("usageLimit", v)}
             error={errors.usageLimit}
             dataField="usageLimit"
-            inputProps={{ min: 1, step: 1 }}
+            inputProps={{ min: 1, max: PROMOTION_LIMITS.MAX_USAGE_COUNT, maxLength: 7 }}
           />
           <OptionalNumberField
             lang={lang}
@@ -904,7 +1043,7 @@ export function PromotionFormFields({
             onChange={(v) => setField("maxUsesPerAccount", v)}
             error={errors.maxUsesPerAccount}
             dataField="maxUsesPerAccount"
-            inputProps={{ min: 1, step: 1 }}
+            inputProps={{ min: 1, max: PROMOTION_LIMITS.MAX_USES_PER_ACCOUNT, maxLength: 4 }}
           />
         </div>
 
@@ -918,7 +1057,8 @@ export function PromotionFormFields({
           onChange={(v) => setField("budgetCap", v)}
           error={errors.budgetCap}
           dataField="budgetCap"
-          inputProps={{ min: 1000, step: 1000 }}
+          unit="VND"
+          inputProps={{ min: 1000, max: PROMOTION_LIMITS.MAX_BUDGET_AMOUNT, maxLength: 12 }}
         />
 
       </div>

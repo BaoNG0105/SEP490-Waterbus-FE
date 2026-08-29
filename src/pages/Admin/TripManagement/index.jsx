@@ -234,7 +234,7 @@ export function TripManagement() {
     const [serviceKindFilter, setServiceKindFilter] = useState("All");
 
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 6;
+    const ITEMS_PER_PAGE = 10;
 
     useEffect(() => {
         const next = pickDateFromSearch(searchParams);

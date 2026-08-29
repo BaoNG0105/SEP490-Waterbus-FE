@@ -17,6 +17,10 @@ export const generateTrips = (data) =>
 export const scheduleTrips = (data) =>
     api.post('/trips/schedule', data).then(response => response.data);
 
+/** POST /api/trips/schedule/preview — kiểm tra lịch trước khi tạo, không ghi dữ liệu. */
+export const previewTripsSchedule = (data) =>
+    api.post('/trips/schedule/preview', data).then(response => response.data);
+
 /**
  * POST /api/trips/schedule/round-trip-preview — gợi ý lịch khứ hồi 1 tàu (không tạo DB).
  * Body: boatCode, outboundRouteCode, inboundRouteCode, fromDate, toDate, startTime, endTime,

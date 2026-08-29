@@ -343,6 +343,7 @@ const normalizeBookingDetail = (data) => ({
   contactEmail: pick(data, ["contactEmail", "ContactEmail"], "") || "",
   insuranceSelected: resolveInsuranceSelected(data),
   insurancePackageId: getBookingInsurancePackageId(data),
+  insurances: Array.isArray(data?.insurances) ? data.insurances : [],
   insurance: normalizeInsuranceFromBooking(data),
   items: Array.isArray(data?.items) ? data.items.map(normalizeItem) : [],
   payments: Array.isArray(data?.payments) ? data.payments.map(normalizePayment) : [],

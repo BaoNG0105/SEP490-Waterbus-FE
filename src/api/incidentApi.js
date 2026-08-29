@@ -16,6 +16,14 @@ export const assignIncidentManager = (incidentId, payload) =>
 export const assignReplacementBoat = (incidentId, payload) =>
   api.patch(`/incidents/${incidentId}/assign-replacement-boat`, payload).then((response) => response.data);
 
+/** GET /api/incidents/{id}/dispatch-plan */
+export const getIncidentDispatchPlan = (incidentId) =>
+  api.get(`/incidents/${incidentId}/dispatch-plan`).then((response) => response.data);
+
+/** GET /api/incidents/{id}/available-replacement-boats */
+export const getAvailableReplacementBoats = (incidentId) =>
+  api.get(`/incidents/${incidentId}/available-replacement-boats`).then((response) => response.data);
+
 /** PATCH /api/incidents/{id}/resolve */
 export const resolveIncident = (incidentId, payload) =>
   api.patch(`/incidents/${incidentId}/resolve`, payload).then((response) => response.data);
