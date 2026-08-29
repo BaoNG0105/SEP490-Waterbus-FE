@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useId } from "react";
 
 const W = 120;
 const H = 40;
@@ -41,7 +41,7 @@ export function Sparkline({ points = [], color = "#124757", labels = [], variant
   const [hoveredIdx, setHoveredIdx] = useState(null);
 
   const hasData = points.length > 0 && points.some((p) => p > 0);
-  const safePoints = hasData ? points : [0, 0];
+  const safePoints = useMemo(() => (hasData ? points : [0, 0]), [hasData, points]);
 
   // Y scale: always include 0, add 5% headroom at top
   const max = Math.max(...safePoints, 1);
@@ -74,8 +74,9 @@ export function Sparkline({ points = [], color = "#124757", labels = [], variant
     return buildArea(coords);
   }, [coords, variant]);
 
-  // Gradient ID — unique per instance via index
-  const gradId = `sg-${Math.random().toString(36).slice(2, 7)}`;
+  // Gradient ID — unique per instance, stable across re-renders
+  const reactId = useId();
+  const gradId = `sg-${reactId.replace(/[^a-zA-Z0-9]/g, "")}`;
 
   const handleMouseMove = useCallback((e) => {
     const svgEl = e.currentTarget;

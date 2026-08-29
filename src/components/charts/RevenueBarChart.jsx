@@ -150,7 +150,7 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[300px]">
+      <div className="flex items-center justify-center h-full min-h-75">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />
       </div>
     );
@@ -158,8 +158,7 @@ export function RevenueBarChart({ points = [], paymentLines = [], lang, isDarkMo
 
   if (n === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[300px] gap-2 text-slate-400">
-        <span className="material-symbols-outlined text-4xl">bar_chart</span>
+      <div className="flex flex-col items-center justify-center h-full min-h-75 gap-2 text-slate-400">
         <p className="text-xs font-bold">{lang === "VN" ? "Chưa có dữ liệu." : "No data yet."}</p>
       </div>
     );

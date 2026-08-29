@@ -38,7 +38,6 @@ import { WatersightseeingBooking } from "./pages/WatersightseeingBooking";
 import { CharterBooking } from "./pages/CharterBooking";
 import { PaymentResult } from "./pages/PaymentResult";
 //Admin
-import { Dashboard } from "./pages/Admin/Dashboard";
 import { BookingSummary } from "./pages/Admin/BookingSummary";
 import { RevenueReport } from "./pages/Admin/RevenueReport";
 import { BoatManagement, CreateBoat, EditBoat, SeatLayoutEditor, BoatCrewSchedule } from "./pages/Admin/BoatManagement";
@@ -358,15 +357,8 @@ function App() {
 
         {/*============= Admin Page ============= */}
         <Route element={<AdminProtectedRoute />}>
-          {/* Admin Dashboard Page */}
-          <Route
-            path="/admin"
-            element={
-              <AdminLayout title="Dashboard">
-                <Dashboard />
-              </AdminLayout>
-            }
-          />
+          {/* Admin root -> Dashboard thực tế là trang Revenue Report */}
+          <Route path="/admin" element={<Navigate to="/admin/reports/revenue" replace />} />
 
           {/* ******* Booking Summary Page ******* */}
           <Route

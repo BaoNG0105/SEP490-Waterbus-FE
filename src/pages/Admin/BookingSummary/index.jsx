@@ -274,138 +274,138 @@ export const BookingSummary = () => {
 
       <div className="inline-flex items-center gap-1 rounded-2xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-1 shadow-sm">
         <button type="button" onClick={() => setActiveTab("bookings")} className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-headline font-black uppercase tracking-wide transition-colors ${activeTab === "bookings" ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900" : "text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"}`}>
-          <span className="material-symbols-outlined text-[15px]">receipt_long</span>{lang === "VN" ? "Booking" : "Bookings"}
+          {lang === "VN" ? "Booking" : "Bookings"}
         </button>
         <button type="button" onClick={() => setActiveTab("stations")} className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[11px] font-headline font-black uppercase tracking-wide transition-colors ${activeTab === "stations" ? "bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900" : "text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"}`}>
-          <span className="material-symbols-outlined text-[15px]">directions_boat</span>{lang === "VN" ? "Theo bến" : "By station"}
+          {lang === "VN" ? "Theo bến" : "By station"}
         </button>
       </div>
 
       {activeTab === "bookings" && <>
-      {/* BẢNG DANH SÁCH BOOKING */}
-      <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-275">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
-                <th className="py-4 px-6">{lang === "VN" ? "Booking" : "Booking"}</th>
-                <th className="py-4 px-4">{lang === "VN" ? "Khách hàng" : "Customer"}</th>
-                <th className="py-4 px-4">{lang === "VN" ? "Dịch vụ" : "Service"}</th>
-                <th className="py-4 px-4">{lang === "VN" ? "Khởi hành" : "Departure"}</th>
-                <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
-                <th className="py-4 px-4 text-right">{lang === "VN" ? "Tổng tiền" : "Total"}</th>
-                <th className="py-4 px-4 text-right">{lang === "VN" ? "Đã thu / Còn lại" : "Paid / Remaining"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-14">
-                    <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin mx-auto"></div>
-                  </td>
+        {/* BẢNG DANH SÁCH BOOKING */}
+        <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse min-w-275">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
+                  <th className="py-4 px-6">{lang === "VN" ? "Booking" : "Booking"}</th>
+                  <th className="py-4 px-4">{lang === "VN" ? "Khách hàng" : "Customer"}</th>
+                  <th className="py-4 px-4">{lang === "VN" ? "Dịch vụ" : "Service"}</th>
+                  <th className="py-4 px-4">{lang === "VN" ? "Khởi hành" : "Departure"}</th>
+                  <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                  <th className="py-4 px-4 text-right">{lang === "VN" ? "Tổng tiền" : "Total"}</th>
+                  <th className="py-4 px-4 text-right">{lang === "VN" ? "Đã thu / Còn lại" : "Paid / Remaining"}</th>
                 </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
-                    {lang === "VN" ? "Không có booking nào." : "No bookings found."}
-                  </td>
-                </tr>
-              ) : (
-                items.map((item) => (
-                  <tr key={item.bookingId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="space-y-0.5">
-                        <h4 className="font-bold text-slate-800 dark:text-white text-xs tracking-tight">{item.bookingCode}</h4>
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 block">{formatDateTime(item.bookedAt)}</span>
-                        {item.soldByStaffName && (
-                          <span className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold block">
-                            {lang === "VN" ? "Quầy: " : "Counter: "}{item.soldByStaffName}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="space-y-0.5">
-                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{item.contactName || "--"}</p>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500">{item.contactPhone || "--"}</p>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-45">{item.contactEmail || "--"}</p>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{getServiceTypeLabel(item.serviceType, lang)}</p>
-                    </td>
-                    <td className="py-4 px-4">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{formatDateTime(item.departureAt)}</span>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`text-[10px] font-headline font-black uppercase tracking-wide ${getBookingStatusClass(item.bookingStatus)}`}>
-                          {getBookingStatusLabel(item.bookingStatus, lang)}
-                        </span>
-                        <span className={`text-[10px] font-headline font-black uppercase tracking-wide ${getPaymentStatusClass(item.paymentStatus)}`}>
-                          {getPaymentStatusLabel(item.paymentStatus, lang)}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <span className="text-xs font-black text-slate-800 dark:text-white">{formatCurrency(item.totalAmount)}</span>
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(item.paidAmount)}</p>
-                      <p className="text-[10px] font-bold text-rose-500 dark:text-rose-400">{formatCurrency(item.remainingAmount)}</p>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-14">
+                      <div className="w-8 h-8 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin mx-auto"></div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : items.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                      {lang === "VN" ? "Không có booking nào." : "No bookings found."}
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((item) => (
+                    <tr key={item.bookingId} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors">
+                      <td className="py-4 px-6">
+                        <div className="space-y-0.5">
+                          <h4 className="font-bold text-slate-800 dark:text-white text-xs tracking-tight">{item.bookingCode}</h4>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 block">{formatDateTime(item.bookedAt)}</span>
+                          {item.soldByStaffName && (
+                            <span className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold block">
+                              {lang === "VN" ? "Quầy: " : "Counter: "}{item.soldByStaffName}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{item.contactName || "--"}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500">{item.contactPhone || "--"}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-45">{item.contactEmail || "--"}</p>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{getServiceTypeLabel(item.serviceType, lang)}</p>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{formatDateTime(item.departureAt)}</span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={`text-[10px] font-headline font-black uppercase tracking-wide ${getBookingStatusClass(item.bookingStatus)}`}>
+                            {getBookingStatusLabel(item.bookingStatus, lang)}
+                          </span>
+                          <span className={`text-[10px] font-headline font-black uppercase tracking-wide ${getPaymentStatusClass(item.paymentStatus)}`}>
+                            {getPaymentStatusLabel(item.paymentStatus, lang)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-right">
+                        <span className="text-xs font-black text-slate-800 dark:text-white">{formatCurrency(item.totalAmount)}</span>
+                      </td>
+                      <td className="py-4 px-4 text-right">
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(item.paidAmount)}</p>
+                        <p className="text-[10px] font-bold text-rose-500 dark:text-rose-400">{formatCurrency(item.remainingAmount)}</p>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      {/* PHÂN TRANG */}
-      <div className="flex bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between flex-col sm:flex-row gap-4">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-slate-400">
-            {lang === "VN"
-              ? `Hiển thị ${startIndex}-${endIndex} trong số ${totalCount} kết quả`
-              : `Showing ${startIndex}-${endIndex} of ${totalCount} entries`}
-          </span>
-          <FormSelect
-            value={pageSize}
-            onChange={(v) => { setPageSize(Number(v)); setPage(1); }}
-            fullWidth={false}
-            options={PAGE_SIZE_OPTIONS.map((n) => ({ value: n, label: `${n}/${lang === "VN" ? "trang" : "page"}` }))}
-            className="min-w-35 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer dark:text-white"
-          />
+        {/* PHÂN TRANG */}
+        <div className="flex bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between flex-col sm:flex-row gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold text-slate-400">
+              {lang === "VN"
+                ? `Hiển thị ${startIndex}-${endIndex} trong số ${totalCount} kết quả`
+                : `Showing ${startIndex}-${endIndex} of ${totalCount} entries`}
+            </span>
+            <FormSelect
+              value={pageSize}
+              onChange={(v) => { setPageSize(Number(v)); setPage(1); }}
+              fullWidth={false}
+              options={PAGE_SIZE_OPTIONS.map((n) => ({ value: n, label: `${n}/${lang === "VN" ? "trang" : "page"}` }))}
+              className="min-w-35 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer dark:text-white"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              disabled={page === 1}
+              className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${page === 1
+                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                }`}
+            >
+              <span className="material-symbols-outlined text-base">chevron_left</span>
+            </button>
+            <span className="text-xs font-black font-headline text-[#124757] dark:text-yellow-400 px-2">
+              {page} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={page >= totalPages}
+              className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${page >= totalPages
+                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                }`}
+            >
+              <span className="material-symbols-outlined text-base">chevron_right</span>
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-            disabled={page === 1}
-            className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${page === 1
-              ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
-              : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
-              }`}
-          >
-            <span className="material-symbols-outlined text-base">chevron_left</span>
-          </button>
-          <span className="text-xs font-black font-headline text-[#124757] dark:text-yellow-400 px-2">
-            {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
-            disabled={page >= totalPages}
-            className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${page >= totalPages
-              ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
-              : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
-              }`}
-          >
-            <span className="material-symbols-outlined text-base">chevron_right</span>
-          </button>
-        </div>
-      </div>
       </>}
 
       {activeTab === "stations" && (

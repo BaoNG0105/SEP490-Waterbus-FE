@@ -7,8 +7,6 @@ import {
   getRevenueReport,
   getRevenueToday,
   getRevenueTodayHourly,
-  getBookingsByStatus,
-  getTopRoutes,
   getTopCustomersReport,
   getWaterbusStationRevenue,
 } from "../../../api/reportApi";
@@ -31,13 +29,15 @@ import {
   formatDateTime,
 } from "../../../utils/bookingReport";
 import {
-  formatCompactCurrency,
   getServiceTypeColor,
   getPaymentMethodColor,
   normalizeSegments,
 } from "../../../utils/revenueReport";
 
 // ==================== HELPERS ====================
+
+const SERVICE_TYPE_MASTER_KEYS = ["Waterbus", "Charter", "Sightseeing"];
+const PAYMENT_METHOD_MASTER_KEYS = ["Cash", "PayOS", "Free"];
 
 const stripAllSentinels = (params) => {
   const out = {};
@@ -48,18 +48,6 @@ const stripAllSentinels = (params) => {
   });
   return out;
 };
-
-const bookingStatusBarColors = {
-  PendingPayment: "bg-amber-400 dark:bg-amber-500",
-  Confirmed: "bg-sky-500 dark:bg-sky-400",
-  Completed: "bg-emerald-500 dark:bg-emerald-400",
-  Cancelled: "bg-rose-400 dark:bg-rose-500",
-  Expired: "bg-slate-400 dark:bg-slate-500",
-  Refunded: "bg-violet-400 dark:bg-violet-500",
-  PartiallyRefunded: "bg-violet-400 dark:bg-violet-500",
-};
-const barColorForStatus = (status) =>
-  bookingStatusBarColors[status] || "bg-[#124757] dark:bg-yellow-400";
 
 const numFmt = new Intl.NumberFormat("vi-VN");
 const formatNumber = (v) => numFmt.format(Math.round(Number(v || 0)));
@@ -162,7 +150,7 @@ export const RevenueReport = () => {
   // ===== Data: Top customers (group from bookings) =====
   const [topCustomers, setTopCustomers] = useState([]);
   const [topCustomersLoading, setTopCustomersLoading] = useState(true);
-  const [topCustomersError, setTopCustomersError] = useState("");
+  const [, setTopCustomersError] = useState("");
 
   // ===== Data: Waterbus stations =====
   const [waterbus, setWaterbus] = useState(null);
@@ -191,7 +179,7 @@ export const RevenueReport = () => {
     } finally {
       setRevenueLoading(false);
     }
-  }, [canAccess, filters]);
+  }, [canAccess, filters, lang]);
 
   const loadRevenueToday = useCallback(async () => {
     if (!canAccess) return;
@@ -258,44 +246,6 @@ export const RevenueReport = () => {
     }
   }, [canAccess, today]);
 
-  const loadBookingsByStatus = useCallback(async () => {
-    if (!canAccess) return;
-    try {
-      setBookingsByStatusLoading(true);
-      const params = stripAllSentinels({
-        serviceType: filters.serviceType,
-        paymentMethod: filters.paymentMethod,
-      });
-      const res = await getBookingsByStatus(params);
-      setBookingsByStatus(res);
-    } catch {
-      setBookingsByStatus(null);
-    } finally {
-      setBookingsByStatusLoading(false);
-    }
-  }, [canAccess, filters.serviceType, filters.paymentMethod]);
-
-  const loadTopRoutes = useCallback(async () => {
-    if (!canAccess) return;
-    try {
-      setTopRoutesLoading(true);
-      const params = stripAllSentinels({
-        fromDate: filters.fromDate,
-        toDate: filters.toDate,
-        serviceType: filters.serviceType,
-        fromStationId: filters.fromStationId,
-        toStationId: filters.toStationId,
-        limit: 10,
-      });
-      const res = await getTopRoutes(params);
-      setTopRoutes(res?.items || []);
-    } catch {
-      setTopRoutes([]);
-    } finally {
-      setTopRoutesLoading(false);
-    }
-  }, [canAccess, filters.fromDate, filters.toDate, filters.serviceType, filters.fromStationId, filters.toStationId]);
-
   const loadRecentBookings = useCallback(async () => {
     if (!canAccess) return;
     try {
@@ -338,7 +288,6 @@ export const RevenueReport = () => {
       setTopCustomers(top);
       setTopCustomersError("");
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn("[TopCustomers] err:", e?.response?.status, e?.message);
       setTopCustomers([]);
       setTopCustomersError(e?.response?.status === 404 ? "no_endpoint" : "error");
@@ -367,8 +316,6 @@ export const RevenueReport = () => {
 
   useEffect(() => { loadRevenue(); }, [loadRevenue]);
   useEffect(() => { loadRevenueToday(); }, [loadRevenueToday]);
-  useEffect(() => { loadBookingsByStatus(); }, [loadBookingsByStatus]);
-  useEffect(() => { loadTopRoutes(); }, [loadTopRoutes]);
   useEffect(() => { loadRecentBookings(); }, [loadRecentBookings]);
   useEffect(() => { loadTopCustomers(); }, [loadTopCustomers]);
   useEffect(() => { loadWaterbus(); }, [loadWaterbus]);
@@ -386,9 +333,6 @@ export const RevenueReport = () => {
     () => deriveCount(revenueCurrent?.bookingCount, revenueCurrent?.byServiceType, "bookingCount"),
     [revenueCurrent]
   );
-
-  const SERVICE_TYPE_MASTER_KEYS = ["Waterbus", "Charter", "Sightseeing"];
-  const PAYMENT_METHOD_MASTER_KEYS = ["Cash", "PayOS", "Free"];
 
   const serviceTypeSegments = useMemo(
     () => normalizeSegments({
@@ -432,20 +376,6 @@ export const RevenueReport = () => {
     ? new Date(revenueToday.date).toLocaleDateString(lang === "VN" ? "vi-VN" : "en-US", { weekday: "short", day: "2-digit", month: "2-digit" })
     : (lang === "VN" ? "Hôm nay" : "Today");
 
-  const recentDaily = useMemo(() => (revenueCurrent?.daily || []).slice(-7), [revenueCurrent]);
-  const recentRevenuePoints = useMemo(
-    () => recentDaily.map((item) => Number(item?.netRevenue ?? item?.grossRevenue) || 0),
-    [recentDaily],
-  );
-  const recentBookingPoints = useMemo(
-    () => recentDaily.map((item) => Number(item?.bookingCount) || 0),
-    [recentDaily],
-  );
-  const recentRefundPoints = useMemo(
-    () => recentDaily.map((item) => Number(item?.refundAmount) || 0),
-    [recentDaily],
-  );
-
   const dailyRevenuePoints = useMemo(
     () => (revenueCurrent?.daily || []).map((p) => p.netRevenue || 0),
     [revenueCurrent]
@@ -478,12 +408,6 @@ export const RevenueReport = () => {
     }));
   }, [waterbus]);
 
-  const wbSorted = useMemo(() => {
-    return [...wbStations].sort((a, b) => (b.departureGross || 0) - (a.departureGross || 0));
-  }, [wbStations]);
-
-  const wbTop = useMemo(() => wbSorted.slice(0, 8), [wbSorted]);
-
   const wbTotalGross = Number(waterbus?.totalGross || 0);
   const wbTotalRefund = Number(waterbus?.totalRefund || 0);
   const wbTotalNet = Number(waterbus?.totalNet || 0);
@@ -506,10 +430,6 @@ export const RevenueReport = () => {
         key: "today",
         title: lang === "VN" ? `Doanh thu ${todayDateLabel}` : `Revenue ${todayDateLabel}`,
         value: formatCurrency(todayRevenue),
-        icon: "today",
-        iconBg: "bg-emerald-500 text-white",
-        sparkColor: "#10b981",
-        footer: lang === "VN" ? "Theo giờ hôm nay" : "Hourly today",
         sparkPoints: todayHourly.map((item) => item.revenue),
         loading: revenueTodayLoading,
       },
@@ -517,11 +437,6 @@ export const RevenueReport = () => {
         key: "today_bookings",
         title: lang === "VN" ? `Booking ${todayDateLabel}` : `Bookings ${todayDateLabel}`,
         value: todayBookings,
-        icon: "event_available",
-        iconBg: "bg-violet-500 text-white",
-        sparkColor: "#8b5cf6",
-        footer: lang === "VN" ? "Theo giờ hôm nay" : "Hourly today",
-        // Thẻ "hôm nay" chỉ phản ánh đúng số liệu hôm nay, không trộn xu hướng 7 ngày.
         sparkPoints: todayHourly.map((item) => item.bookings),
         loading: revenueTodayLoading,
       },
@@ -529,9 +444,6 @@ export const RevenueReport = () => {
         key: "net",
         title: lang === "VN" ? "Tổng doanh thu" : "Total Revenue",
         value: formatCurrency(revenueCurrent?.netRevenue),
-        icon: "payments",
-        iconBg: "bg-[#FFD100] text-slate-900",
-        sparkColor: isDarkMode ? "#facc15" : "#124757",
         footer: lang === "VN" ? "Xu hướng 7 ngày" : "7-day trend",
         sparkPoints: dailyRevenuePoints,
       },
@@ -539,9 +451,6 @@ export const RevenueReport = () => {
         key: "bookings",
         title: lang === "VN" ? "Số booking" : "Bookings",
         value: totalBookings,
-        icon: "confirmation_number",
-        iconBg: "bg-sky-500 text-white",
-        sparkColor: "#0ea5e9",
         footer: lang === "VN" ? "Xu hướng 7 ngày" : "7-day trend",
         sparkPoints: dailyBookingPoints,
       },
@@ -549,17 +458,14 @@ export const RevenueReport = () => {
         key: "refund",
         title: lang === "VN" ? "Đã hoàn tiền" : "Refunded",
         value: formatCurrency(revenueCurrent?.refundAmount),
-        icon: "undo",
-        iconBg: "bg-rose-500 text-white",
-        sparkColor: "#f43f5e",
         footer: lang === "VN" ? "Xu hướng 7 ngày" : "7-day trend",
         sparkPoints: dailyRefundPoints,
       },
     ];
   }, [
-    revenueCurrent, revenueToday, lang, isDarkMode,
+    revenueCurrent, lang,
     dailyRevenuePoints, dailyBookingPoints, dailyRefundPoints,
-    totalBookings, recentRevenuePoints, recentBookingPoints, recentRefundPoints,
+    totalBookings,
     revenueTodayLoading, todayDateLabel, todayRevenue, todayBookings, todayHourly,
   ]);
 
@@ -592,17 +498,10 @@ export const RevenueReport = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {revenueCurrent?.from && revenueCurrent?.to && (
-            <span className="hidden md:inline-flex items-center gap-1.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-300 border border-slate-100 dark:border-slate-600 dark:border-opacity-50">
-              <span className="material-symbols-outlined text-[12px]">calendar_month</span>
-              {new Date(revenueCurrent.from).toLocaleDateString("vi-VN")} — {new Date(revenueCurrent.to).toLocaleDateString("vi-VN")}
-            </span>
-          )}
           <Link
             to="/admin/booking-summary"
             className="inline-flex items-center gap-1.5 rounded-xl bg-[#FFD100] dark:bg-yellow-400 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-900 hover:opacity-90 transition-opacity"
           >
-            <span className="material-symbols-outlined text-[14px]">list_alt</span>
             {lang === "VN" ? "Chi tiết Booking" : "Booking Details"}
           </Link>
         </div>
@@ -686,21 +585,14 @@ export const RevenueReport = () => {
             className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col"
             style={{ minHeight: "116px" }}
           >
-            <div className="pointer-events-none absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-[0.08]" style={{ backgroundColor: card.sparkColor }} />
-            <div className="relative flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">{card.title}</p>
-                <h4 className="mt-0.5 text-base font-black font-headline text-[#124757] dark:text-white truncate">
-                  {card.loading ? "--" : card.value}
-                </h4>
-              </div>
-              <div className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${card.iconBg}`}>
-                <span className="material-symbols-outlined text-[18px]">{card.icon}</span>
-              </div>
+            <div className="relative min-w-0">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">{card.title}</p>
+              <h4 className="mt-0.5 text-base font-black font-headline text-[#124757] dark:text-white truncate">
+                {card.loading ? "--" : card.value}
+              </h4>
             </div>
             <div className="relative mt-auto pt-3">
               <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-wide">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: card.sparkColor }} />
                 {card.footer}
               </div>
               <div className="mt-1 h-8">
@@ -716,11 +608,11 @@ export const RevenueReport = () => {
         ))}
       </div>
 
-      {/* ===== D. TREND CHART + TOP CUSTOMERS ===== */}
+      {/* ===== D. TREND CHART + DONUT CHARTS ===== */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
         {/* D1: Revenue trend (2/3) */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col min-h-[270px]">
-          <div className="flex items-center justify-between mb-2 gap-3 flex-shrink-0">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col min-h-67.5">
+          <div className="flex items-center justify-between mb-2 gap-3 shrink-0">
             <div className="min-w-0">
               <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider">
                 {lang === "VN" ? "Xu hướng doanh thu" : "Revenue Trend"}
@@ -730,7 +622,7 @@ export const RevenueReport = () => {
               </p>
             </div>
           </div>
-          <div className="flex-1 min-h-[100px] mt-auto">
+          <div className="flex-1 min-h-25 mt-auto">
             <RevenueVsPrevChart
               current={revenueCurrent?.daily || []}
               lang={lang}
@@ -740,8 +632,41 @@ export const RevenueReport = () => {
           </div>
         </div>
 
-        {/* D2: Top customers (1/3) */}
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col h-full">
+        {/* D2: Donut charts (1/3, stacked) */}
+        <div className="flex flex-col gap-2.5">
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+            <h4 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
+              {lang === "VN" ? "Theo dịch vụ" : "By service"}
+            </h4>
+            <div className="h-[calc(100%-22px)] min-h-37.5">
+              <RevenueDonutChart
+                data={serviceTypeSegments}
+                lang={lang}
+                isDarkMode={isDarkMode}
+                isLoading={revenueLoading}
+              />
+            </div>
+          </div>
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+            <h4 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
+              {lang === "VN" ? "Theo thanh toán" : "By payment"}
+            </h4>
+            <div className="h-[calc(100%-22px)] min-h-37.5">
+              <RevenueDonutChart
+                data={paymentMethodSegments}
+                lang={lang}
+                isDarkMode={isDarkMode}
+                isLoading={revenueLoading}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== E. TOP CUSTOMERS + TOP STATIONS ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+        {/* E1: Top customers (2/3) */}
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col h-full">
           <div className="mb-3">
             <h3 className="text-[11px] font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider">
               {lang === "VN" ? "Top 5 khách hàng" : "Top 5 customers"}
@@ -762,7 +687,6 @@ export const RevenueReport = () => {
             </div>
           ) : topCustomers.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 py-4">
-              <span className="material-symbols-outlined text-2xl">person_off</span>
               <p className="mt-1 text-[11px] font-bold">
                 {lang === "VN" ? "Chưa có dữ liệu." : "No customer data."}
               </p>
@@ -790,7 +714,7 @@ export const RevenueReport = () => {
                     return (
                       <div
                         key={c.key}
-                        className="relative px-4 py-3 rounded-2xl border border-slate-200/70 dark:border-slate-700 bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 hover:shadow-md transition-all"
+                        className="relative px-4 py-3 rounded-2xl border border-slate-200/70 dark:border-slate-700 bg-linear-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 hover:shadow-md transition-all"
                       >
                         <div className="flex items-center justify-between text-sm gap-3">
                           <span className="font-bold text-slate-800 dark:text-slate-100 truncate flex-1 min-w-0 flex items-center gap-2">
@@ -809,7 +733,7 @@ export const RevenueReport = () => {
                         </div>
                         <div className="mt-2 h-2.5 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden shadow-inner">
                           <div
-                            className={`h-full bg-gradient-to-r ${palette.bar} rounded-full transition-all duration-700 shadow-sm`}
+                            className={`h-full bg-linear-to-r ${palette.bar} rounded-full transition-all duration-700 shadow-sm`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -832,38 +756,8 @@ export const RevenueReport = () => {
             })()
           )}
         </div>
-      </div>
 
-      {/* ===== E. DONUT + TOP STATIONS ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
-          <h4 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
-            {lang === "VN" ? "Theo dịch vụ" : "By service"}
-          </h4>
-          <div className="h-[calc(100%-22px)] min-h-[150px]">
-            <RevenueDonutChart
-              data={serviceTypeSegments}
-              lang={lang}
-              isDarkMode={isDarkMode}
-              isLoading={revenueLoading}
-            />
-          </div>
-        </div>
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
-          <h4 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
-            {lang === "VN" ? "Theo thanh toán" : "By payment"}
-          </h4>
-          <div className="h-[calc(100%-22px)] min-h-[150px]">
-            <RevenueDonutChart
-              data={paymentMethodSegments}
-              lang={lang}
-              isDarkMode={isDarkMode}
-              isLoading={revenueLoading}
-            />
-          </div>
-        </div>
-
-        {/* E3: Top stations (bar chart, compact) */}
+        {/* E2: Top stations (bar chart, compact) */}
         <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col">
           <h3 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-2">
             {lang === "VN" ? "Top bến" : "Top stations"}
@@ -882,7 +776,6 @@ export const RevenueReport = () => {
             if (validStations.length === 0) {
               return (
                 <div className="flex-1 flex flex-col items-center justify-center text-slate-400 py-4">
-                  <span className="material-symbols-outlined text-2xl">location_off</span>
                   <p className="mt-1 text-[11px] font-bold">
                     {lang === "VN" ? "Chưa có dữ liệu." : "No station data."}
                   </p>
@@ -925,7 +818,8 @@ export const RevenueReport = () => {
         </div>
       </div>
 
-      {/* ===== H. DETAIL PANEL (tabs: Waterbus + Recent bookings) ===== */}
+      {/* ===== H. DETAIL PANEL (tabs: Waterbus + Recent bookings) — tạm ẩn, giữ lại code để bật lại sau ===== */}
+      {/* eslint-disable-next-line no-constant-binary-expression */}
       {false && <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between flex-wrap gap-2">
           <div className="inline-flex items-center rounded-2xl bg-slate-50 dark:bg-slate-900/60 p-1 border border-slate-100 dark:border-slate-700">
@@ -1083,10 +977,10 @@ export const RevenueReport = () => {
                           {booking.bookingCode || "--"}
                         </td>
                         <td className="py-2 px-2">
-                          <div className="font-bold text-slate-700 dark:text-slate-200 truncate max-w-[180px]">
+                          <div className="font-bold text-slate-700 dark:text-slate-200 truncate max-w-45">
                             {booking.contactName || "--"}
                           </div>
-                          <div className="text-[9px] text-slate-400 truncate max-w-[180px]">
+                          <div className="text-[9px] text-slate-400 truncate max-w-45">
                             {formatDateTime(booking.bookedAt)}
                           </div>
                         </td>

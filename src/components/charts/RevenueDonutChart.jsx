@@ -19,7 +19,7 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
   const arcs = useMemo(() => {
     if (total === 0) return [];
     let cumAngle = -Math.PI / 2; // start at top
-    return data.map((d, i) => {
+    return data.map((d) => {
       const slice = ((d.value || 0) / total) * 2 * Math.PI;
       const value = d.value || 0;
       const midAngle = cumAngle + slice / 2;
@@ -70,7 +70,7 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[120px]">
+      <div className="flex items-center justify-center h-full min-h-30">
         <div className="w-7 h-7 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />
       </div>
     );
@@ -78,8 +78,7 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
 
   if (data.length === 0 || total === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[120px] gap-2 text-slate-400 dark:text-slate-500">
-        <span className="material-symbols-outlined text-3xl">pie_chart</span>
+      <div className="flex flex-col items-center justify-center h-full min-h-30 gap-2 text-slate-400 dark:text-slate-500">
         <p className="text-xs font-bold">
           {lang === "VN" ? "Chưa có dữ liệu." : "No data yet."}
         </p>

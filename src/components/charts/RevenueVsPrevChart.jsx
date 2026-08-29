@@ -94,7 +94,7 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[160px]">
+      <div className="flex items-center justify-center min-h-40">
         <div className="w-7 h-7 border-4 border-slate-200 border-t-[#124757] dark:border-t-yellow-400 rounded-full animate-spin" />
       </div>
     );
@@ -102,8 +102,7 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
 
   if (n === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[160px] gap-2 text-slate-400">
-        <span className="material-symbols-outlined text-3xl">show_chart</span>
+      <div className="flex flex-col items-center justify-center min-h-40 gap-2 text-slate-400">
         <p className="text-xs font-bold">{lang === "VN" ? "Chưa có dữ liệu." : "No data yet."}</p>
       </div>
     );
@@ -119,6 +118,10 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
 
   return (
       <div className="relative w-full h-full flex flex-col">
+        <div className="mb-2 text-[11px] font-bold text-slate-500 dark:text-slate-300">
+          {lang === "VN" ? "Tổng cộng" : "Total"}:{" "}
+          <span className="text-xl font-black text-[#124757] dark:text-yellow-400">{formatCompactCurrency(totalNet, lang)}</span>
+        </div>
         <div className="flex-1 min-h-0">
         <svg viewBox={`0 0 ${VB_W} ${VB_H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" className="block">
           <defs>
@@ -210,11 +213,6 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
           })()}
         </svg>
         </div>
-
-      <div className="mt-2 text-[11px] font-bold text-slate-500 dark:text-slate-300">
-        {lang === "VN" ? "Tổng cộng" : "Total"}:{" "}
-        <span className="text-[#124757] dark:text-yellow-400">{formatCompactCurrency(totalNet, lang)}</span>
-      </div>
     </div>
   );
 }
