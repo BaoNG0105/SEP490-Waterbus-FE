@@ -115,17 +115,28 @@ export const formatMinPriceLabel = (minPrice, lang = "VN") => {
 /** Label phụ thu từ search / seat-map / trip (null → không hiện). */
 export const formatFareAdjustmentLabel = (adj, lang = "VN") => {
   if (adj == null || adj === "") return "";
-  if (typeof adj === "string") return adj.trim();
+  const localizeName = (value) => {
+    const raw = String(value || "").trim();
+    if (lang !== "VN") return raw;
+    const key = raw.toLowerCase().replace(/[_\s-]/g, "");
+    if (key === "weekend" || key === "weekendsurcharge") return "Phụ thu cuối tuần";
+    if (key === "holiday" || key === "holidaysurcharge") return "Phụ thu ngày lễ";
+    return raw
+      .replace(/^weekend\b/i, "Phụ thu cuối tuần")
+      .replace(/^holiday\b/i, "Phụ thu ngày lễ");
+  };
+  if (typeof adj === "string") return localizeName(adj);
   const name = String(
     adj.name || adj.label || adj.scope || adj.type || adj.adjustmentType || "",
   ).trim();
   const pct = adj.surchargePercent ?? adj.percent ?? adj.percentage;
   const pctN = Number(pct);
-  if (name && Number.isFinite(pctN)) return `${name} +${pctN}%`;
+  const label = localizeName(name);
+  if (label && Number.isFinite(pctN)) return `${label} +${pctN}%`;
   if (Number.isFinite(pctN)) {
     return lang === "VN" ? `Phụ thu +${pctN}%` : `Surcharge +${pctN}%`;
   }
-  return name;
+  return label;
 };
 
 /** Quãng đường chặng từ seat-map (null/undefined → thiếu km). */

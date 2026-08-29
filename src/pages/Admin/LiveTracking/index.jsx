@@ -944,10 +944,13 @@ export function LiveTracking({ viewTabs = null } = {}) {
           displayLatitude: hasLiveCoords ? latitude : Number(boat.latitude),
           displayLongitude: hasLiveCoords ? longitude : Number(boat.longitude),
           // Mốc GPS để ETA giảm đều giữa hai lần SignalR/polling cập nhật.
-          etaMeasuredAt: boat.receivedAt
+          etaMeasuredAt: schedule?.latestGpsReceivedAt
+            || boat.receivedAt
+            || schedule?.latestGpsRecordedAt
             || boat.recordedAt
+            || schedule?.latestGpsAt
+            || schedule?.recordedAt
             || boat.updatedAt
-            || schedule?.receivedAt
             || schedule?.updatedAt
             || null,
           tripFinished,

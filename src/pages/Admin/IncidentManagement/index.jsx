@@ -564,7 +564,7 @@ export function IncidentManagement({
   };
 
   return (
-    <div className="space-y-6 font-body animate-fade-in pb-10 px-2 sm:px-0">
+    <div className="mx-auto max-w-6xl space-y-6 px-2 pb-10 font-body animate-fade-in sm:px-0">
       <div className="flex flex-col items-start justify-between gap-4 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-700/50 dark:bg-slate-800 sm:flex-row sm:items-center">
         <div>
           <h2 className="font-headline text-xl font-black uppercase tracking-wide text-[#124757] dark:text-yellow-400 md:text-2xl">

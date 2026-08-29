@@ -343,7 +343,19 @@ export const normalizeOperationsScheduleEntry = (raw) => {
       "lastStopEvent", "LastStopEvent", "stopEvent", "StopEvent",
       "tripStopEvent", "TripStopEvent", "latestStopEvent",
     ], "")).trim() || null,
-    recordedAt: pick(raw, ["recordedAt", "RecordedAt", "updatedAt", "gpsRecordedAt"], null) || null,
+    // Mốc GPS cho ETA realtime. Giữ latestGpsAt để tương thích payload cũ.
+    latestGpsRecordedAt: pick(raw, [
+      "latestGpsRecordedAt", "LatestGpsRecordedAt", "gpsRecordedAt", "GpsRecordedAt",
+    ], null) || null,
+    latestGpsReceivedAt: pick(raw, [
+      "latestGpsReceivedAt", "LatestGpsReceivedAt", "gpsReceivedAt", "GpsReceivedAt",
+    ], null) || null,
+    latestGpsAt: pick(raw, ["latestGpsAt", "LatestGpsAt"], null) || null,
+    recordedAt: pick(raw, [
+      "latestGpsRecordedAt", "LatestGpsRecordedAt",
+      "latestGpsAt", "LatestGpsAt",
+      "recordedAt", "RecordedAt", "updatedAt", "gpsRecordedAt",
+    ], null) || null,
     raw,
   };
 };

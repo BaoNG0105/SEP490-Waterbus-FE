@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { fetchMyBookings } from "../../../services/bookingService";
+import { fetchMyBookingDetail, fetchMyBookings } from "../../../services/bookingService";
 import { fetchReviewableTrips, normalizeReviewableTrip, submitBookingReview } from "../../../services/reviewService";
 import { BOOKING_SERVICE_CONFIG, getBookingServiceConfig } from "../../../utils/bookingServiceType";
 import { notify } from "../../../utils/swalToast";
@@ -17,15 +17,34 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
-const normalizeBooking = (item) => ({
-  id: String(pick(item, ["bookingId", "id"], "")),
-  bookingCode: pick(item, ["bookingCode", "code"], "--"),
-  bookedAt: pick(item, ["bookedAt", "createdAt"], ""),
-  status: pick(item, ["bookingStatus", "status"], "--"),
-  totalAmount: Number(pick(item, ["totalAmount"], 0)),
-  itemCount: Number(pick(item, ["itemCount"], 0)),
-  serviceType: pick(item, ["serviceType"], ""),
-});
+const statusKey = (value) => String(value || "").toLowerCase().replace(/[\s_-]/g, "");
+
+const resolveListDisplayStatus = (item, fallbackStatus) => {
+  const items = item?.items || item?.bookingItems || item?.tickets || [];
+  const ticketStatuses = Array.isArray(items)
+    ? items.map((row) => statusKey(row?.ticketStatus || row?.itemStatus || row?.status)).filter(Boolean)
+    : [];
+  if (ticketStatuses.length && ticketStatuses.every((status) => status === "expired")) return "Expired";
+  if (ticketStatuses.length && ticketStatuses.every((status) => status === "cancelled")) return "Cancelled";
+
+  const total = Number(pick(item, ["itemCount", "ticketCount", "totalTicketCount"], 0));
+  const expired = Number(pick(item, ["expiredTicketCount", "expiredItemCount"], 0));
+  if (total > 0 && expired >= total) return "Expired";
+  return fallbackStatus;
+};
+
+const normalizeBooking = (item) => {
+  const status = pick(item, ["bookingStatus", "status"], "--");
+  return {
+    id: String(pick(item, ["bookingId", "id"], "")),
+    bookingCode: pick(item, ["bookingCode", "code"], "--"),
+    bookedAt: pick(item, ["bookedAt", "createdAt"], ""),
+    status: resolveListDisplayStatus(item, status),
+    totalAmount: Number(pick(item, ["totalAmount"], 0)),
+    itemCount: Number(pick(item, ["itemCount"], 0)),
+    serviceType: pick(item, ["serviceType"], ""),
+  };
+};
 
 const STATUS_STYLES = {
   pendingpayment: "text-amber-700 dark:text-amber-300",
@@ -140,6 +159,23 @@ export function BookingListPage() {
       const data = await fetchMyBookings();
       const normalized = Array.isArray(data) ? data.map(normalizeBooking) : [];
       setAllBookings(normalized);
+
+      // API danh sách hiện chỉ trả bookingStatus. Với booking Confirmed, lấy chi tiết
+      // để tránh hiển thị "Đã xác nhận" khi tất cả vé bên trong đã hết hạn.
+      const confirmed = normalized.filter((booking) => statusKey(booking.status) === "confirmed" && booking.id);
+      if (!confirmed.length) return;
+      const statusById = new Map(await Promise.all(confirmed.map(async (booking) => {
+        try {
+          const detail = await fetchMyBookingDetail(booking.id);
+          return [booking.id, resolveListDisplayStatus(detail, booking.status)];
+        } catch {
+          return [booking.id, booking.status];
+        }
+      })));
+      setAllBookings((current) => current.map((booking) => ({
+        ...booking,
+        status: statusById.get(booking.id) || booking.status,
+      })));
     } catch (error) {
       console.error("Lỗi tải lịch sử đặt vé:", error);
       setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Không thể tải lịch sử đặt vé." : "Unable to load your booking history."));

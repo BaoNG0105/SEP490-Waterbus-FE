@@ -1645,7 +1645,14 @@ const insurancePassengerCount =
         {/* Tổng tiền */}
         <div className="space-y-2.5 rounded-2xl border border-slate-100 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
           <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
-            <span>{lang === "VN" ? "Giá vé" : "Ticket fare"}</span>
+            <span>
+              <span className="block">{lang === "VN" ? "Giá vé" : "Ticket fare"}</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-slate-400">
+                {lang === "VN"
+                  ? "Đã bao gồm bảo hiểm mặc định của Waterbus"
+                  : "Includes Waterbus standard insurance"}
+              </span>
+            </span>
             <span className="font-bold text-slate-700 dark:text-slate-200">{subtotal.toLocaleString()}đ</span>
           </div>
           <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
