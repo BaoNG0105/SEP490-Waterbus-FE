@@ -25,7 +25,7 @@ import { PROMOTION_BOOKING_TYPES, checkPromotionCode, normalizePromotionValidate
 //utils
 import { calculateTicketInsurancePreview } from "../../../utils/insurancePreview";
 import { getApiErrorMessage } from "../../../utils/apiError";
-import { isBlank, isValidEmailFormat, isValidPhoneFormat } from "../../../utils/formValidation";
+import { isBlank, isValidEmailFormat, isValidPhoneFormat, isValidFullName, sanitizeFullName } from "../../../utils/formValidation";
 import { notify, showToast } from "../../../utils/swalToast";
 import {
   formatFareAdjustmentLabel,
@@ -380,9 +380,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
 
   const fieldErrors = {
     contact: {
-      ...(isBlank(contact.name) ? {
-        name: lang === "VN" ? "Vui lòng nhập họ và tên." : "Full name is required.",
-      } : {}),
+      ...(isBlank(contact.name)
+        ? { name: lang === "VN" ? "Vui lòng nhập họ và tên." : "Full name is required." }
+        : !isValidFullName(contact.name)
+          ? { name: lang === "VN" ? "Họ và tên chỉ gồm chữ cái và khoảng trắng." : "Full name may contain letters and spaces only." }
+          : {}),
       ...(isBlank(contact.phone)
         ? { phone: lang === "VN" ? "Vui lòng nhập số điện thoại." : "Phone number is required." }
         : !isValidPhoneFormat(contact.phone)
@@ -398,6 +400,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
       const errors = {};
       if (isBlank(p.name)) {
         errors.name = lang === "VN" ? "Vui lòng nhập họ tên." : "Full name is required.";
+      } else if (!isValidFullName(p.name)) {
+        errors.name = lang === "VN" ? "Họ và tên chỉ gồm chữ cái và khoảng trắng." : "Full name may contain letters and spaces only.";
       }
       if (isBlank(p.birthYear)) {
         errors.birthYear = lang === "VN" ? "Vui lòng nhập năm sinh." : "Birth year is required.";
@@ -434,6 +438,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
       const errors = {};
       if (isBlank(p.infant.name)) {
         errors.name = lang === "VN" ? "Vui lòng nhập họ tên em bé." : "Infant name is required.";
+      } else if (!isValidFullName(p.infant.name)) {
+        errors.name = lang === "VN" ? "Họ và tên chỉ gồm chữ cái và khoảng trắng." : "Full name may contain letters and spaces only.";
       }
       if (isBlank(p.infant.birthYear)) {
         errors.birthYear = lang === "VN" ? "Vui lòng nhập năm sinh em bé." : "Infant birth year is required.";
@@ -1016,7 +1022,7 @@ const insurancePassengerCount =
               <label className="text-xs font-bold text-slate-500">{lang === "VN" ? "Họ và tên" : "Full Name"}<RequiredStar /></label>
               <input
                 type="text" placeholder="Nguyễn Văn A" value={contact.name}
-                onChange={(e) => setContact({ ...contact, name: e.target.value })}
+                onChange={(e) => setContact({ ...contact, name: sanitizeFullName(e.target.value) })}
                 onBlur={() => markContactTouched("name")}
                 className={withErrorBorder("bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-[#124757] dark:focus:border-[#FFD100] rounded-xl px-4 py-3 text-sm w-full outline-none transition-colors", touched.contact.name && fieldErrors.contact.name)}
                 required
@@ -1118,7 +1124,7 @@ const insurancePassengerCount =
                     <input
                       type="text"
                       value={passenger.name}
-                      onChange={(e) => handlePassengerChange(index, "name", e.target.value)}
+                      onChange={(e) => handlePassengerChange(index, "name", sanitizeFullName(e.target.value))}
                       onBlur={() => markPassengerTouched(index, "name")}
                       placeholder={lang === "VN" ? "Nguyễn Văn A..." : "Enter full name..."}
                       className={withErrorBorder("w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]", touched.passengers[index]?.name && fieldErrors.passengers[index]?.name)}
@@ -1239,7 +1245,7 @@ const insurancePassengerCount =
                             <input
                               type="text"
                               value={passenger.infant.name}
-                              onChange={(e) => handleInfantChange(index, "name", e.target.value)}
+                              onChange={(e) => handleInfantChange(index, "name", sanitizeFullName(e.target.value))}
                               onBlur={() => markInfantTouched(index, "name")}
                               placeholder={lang === "VN" ? "Nhập tên em bé..." : "Enter infant's name..."}
                               className={withErrorBorder("w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#124757] dark:focus:border-[#FFD100]", touched.infants[index]?.name && fieldErrors.infants[index]?.name)}

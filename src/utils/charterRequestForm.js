@@ -54,7 +54,7 @@ export const getMinDepartureDate = () => {
 export const createEmptyStop = () => ({
   stationId: "",
   stopOrder: 1,
-  stayDurationMinutes: 0,
+  stayDurationMinutes: 5,
   note: "",
 });
 

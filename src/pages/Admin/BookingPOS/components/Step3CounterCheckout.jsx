@@ -3,7 +3,7 @@ import { useApp } from "../../../../context/AppContext";
 import { FormSelect } from "../../../../components/FormSelect";
 import { YearPickerInput } from "../../../../components/YearPickerInput";
 import { RequiredStar } from "../../../../utils/requiredStar";
-import { isBlank, isValidEmailFormat, isValidPhoneFormat } from "../../../../utils/formValidation";
+import { isBlank, isValidEmailFormat, isValidPhoneFormat, isValidFullName, sanitizeFullName } from "../../../../utils/formValidation";
 import {
   fetchTicketTypes,
   DEFAULT_TICKET_TYPES,
@@ -319,7 +319,9 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
     contact: {
       ...(isBlank(contact.name)
         ? { name: lang === "VN" ? "Vui lòng nhập họ tên khách." : "Please enter the customer's full name." }
-        : {}),
+        : !isValidFullName(contact.name)
+          ? { name: lang === "VN" ? "Họ và tên chỉ gồm chữ cái và khoảng trắng." : "Full name may contain letters and spaces only." }
+          : {}),
       ...(isBlank(contact.phone)
         ? { phone: lang === "VN" ? "Vui lòng nhập số điện thoại." : "Please enter a phone number." }
         : !isValidPhoneFormat(contact.phone)
@@ -335,6 +337,8 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
       const errors = {};
       if (isBlank(p.name)) {
         errors.name = lang === "VN" ? "Vui lòng nhập họ tên." : "Please enter a full name.";
+      } else if (!isValidFullName(p.name)) {
+        errors.name = lang === "VN" ? "Họ và tên chỉ gồm chữ cái và khoảng trắng." : "Full name may contain letters and spaces only.";
       }
       if (isBlank(p.birthYear)) {
         errors.birthYear = lang === "VN" ? "Vui lòng nhập năm sinh." : "Please enter a birth year.";
@@ -367,6 +371,8 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
       const errors = {};
       if (isBlank(p.infant.name)) {
         errors.name = lang === "VN" ? "Vui lòng nhập họ tên em bé." : "Please enter the infant's name.";
+      } else if (!isValidFullName(p.infant.name)) {
+        errors.name = lang === "VN" ? "Họ và tên chỉ gồm chữ cái và khoảng trắng." : "Full name may contain letters and spaces only.";
       }
       if (isBlank(p.infant.birthYear)) {
         errors.birthYear = lang === "VN" ? "Vui lòng nhập năm sinh." : "Please enter a birth year.";
@@ -819,7 +825,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                 type="text"
                 placeholder="Nguyễn Văn A"
                 value={contact.name}
-                onChange={(e) => setContact({ ...contact, name: e.target.value })}
+                onChange={(e) => setContact({ ...contact, name: sanitizeFullName(e.target.value) })}
                 onBlur={() => markContactTouched("name")}
                 className={withErrorBorder(
                   "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition-colors focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:focus:border-[#FFD100]",
@@ -926,7 +932,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                     <input
                       type="text"
                       value={passenger.name}
-                      onChange={(e) => handlePassengerChange(index, "name", e.target.value)}
+                      onChange={(e) => handlePassengerChange(index, "name", sanitizeFullName(e.target.value))}
                       onBlur={() => markPassengerTouched(index, "name")}
                       placeholder={lang === "VN" ? "Nguyễn Văn A..." : "Enter full name..."}
                       className={withErrorBorder(
@@ -1052,7 +1058,7 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
                           <input
                             type="text"
                             value={passenger.infant.name}
-                            onChange={(e) => handleInfantChange(index, "name", e.target.value)}
+                            onChange={(e) => handleInfantChange(index, "name", sanitizeFullName(e.target.value))}
                             onBlur={() => markInfantTouched(index, "name")}
                             placeholder={lang === "VN" ? "Nhập tên em bé..." : "Enter infant's name..."}
                             className={withErrorBorder(

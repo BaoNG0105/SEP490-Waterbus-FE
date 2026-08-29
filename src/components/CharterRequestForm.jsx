@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { fetchAllStations } from "../services/stationService";
-import { fetchActiveInsurancePackages, findInsurancePackageById, getInsurancePackageId, isSameInsurancePackageId, buildInsuranceConditionsHtml, INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
+import { fetchActiveInsurancePackages, getInsurancePackageId, isSameInsurancePackageId, buildInsuranceConditionsHtml, INSURANCE_BOOKING_TYPES } from "../services/insuranceService";
 import { fetchCurrentUserProfile } from "../services/authService";
 import { updateUserProfile } from "../redux/authSlice";
 import {
@@ -24,8 +24,9 @@ import {
   PASSENGER_TYPE_CHILD,
   sortActivePackagesForCharter,
 } from "../utils/charterRequestForm";
-import { getCharterInsuranceNote, getInsurancePendingMessage } from "../utils/insurancePreview";
+import { sanitizeFullName } from "../utils/formValidation";
 import { AppDateInput } from "./AppDateInput";
+import { YearPickerInput } from "./YearPickerInput";
 import { notify } from "../utils/swalToast";
 
 const getStationId = (station) => String(station.stationId || station.id);
@@ -219,6 +220,7 @@ export function CharterRequestForm({
   const [touchedPassengers, setTouchedPassengers] = useState({});
   const [showPassengerErrors, setShowPassengerErrors] = useState(false);
   const [insuranceCollapsed, setInsuranceCollapsed] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const formDataRef = useRef(formData);
   useEffect(() => { formDataRef.current = formData; }, [formData]);
   const submitInFlightRef = useRef(false);
@@ -496,11 +498,11 @@ export function CharterRequestForm({
       || !Number.isInteger(Number(stop.stopOrder))
       || Number(stop.stopOrder) < 0
       || !Number.isInteger(Number(stop.stayDurationMinutes))
-      || Number(stop.stayDurationMinutes) < 0
+      || Number(stop.stayDurationMinutes) < 5
       || String(stop.note || "").length > 1000
     ));
     if (formData.itineraryStops.length > 50 || invalidStop) {
-      return lang === "VN" ? "Tối đa 50 bến dừng; mỗi điểm cần có bến dừng, thứ tự và thời gian dừng không âm." : "Maximum 50 stops; each stop needs a station, non-negative order, and non-negative stay minutes.";
+      return lang === "VN" ? "Tối đa 50 bến dừng; mỗi điểm cần có bến dừng, thứ tự hợp lệ và thời gian dừng tối thiểu 5 phút." : "Maximum 50 stops; each stop needs a station, a valid order, and a stay of at least 5 minutes.";
     }
     if (formData.requestedBoats.length < 1 || formData.requestedBoats.length > 20 || formData.requestedBoats.some((boat) => !deckOptions.includes(Number(boat.numberOfDecks)))) {
       return lang === "VN" ? "Cần ít nhất 1 tàu, tối đa 20 tàu, mỗi tàu chọn 1 tầng hoặc 2 tầng." : "Please request 1-20 boats, each with 1 or 2 decks.";
@@ -734,6 +736,18 @@ export function CharterRequestForm({
       return;
     }
 
+    if (!agreedToTerms) {
+      notify({
+        icon: "warning",
+        title: lang === "VN" ? "Cần xác nhận điều khoản" : "Terms confirmation required",
+        text: lang === "VN"
+          ? "Vui lòng đọc và đồng ý với Điều khoản dịch vụ và Chính sách hoàn/hủy vé trước khi gửi yêu cầu."
+          : "Please read and agree to the Terms of Service and Refund & Cancellation Policy before submitting.",
+        confirmButtonColor: "#124757",
+      });
+      return;
+    }
+
     const adultCount = Number(formData.adultCount);
     const childCount = Number(formData.childCount);
     const totalPassengerCount = adultCount + childCount;
@@ -842,7 +856,7 @@ export function CharterRequestForm({
       || !Number.isInteger(Number(stop.stopOrder))
       || Number(stop.stopOrder) < 0
       || !Number.isInteger(Number(stop.stayDurationMinutes))
-      || Number(stop.stayDurationMinutes) < 0
+      || Number(stop.stayDurationMinutes) < 5
       || String(stop.note || "").length > 1000
     ));
 
@@ -850,7 +864,7 @@ export function CharterRequestForm({
       notify({
         icon: "warning",
         title: lang === "VN" ? "Bến dừng chưa hợp lệ" : "Invalid stop stations",
-        text: lang === "VN" ? "Tối đa 50 bến dừng; mỗi điểm cần có bến dừng, thứ tự và thời gian dừng không âm." : "Maximum 50 stops; each stop needs a station, non-negative order, and non-negative stay minutes.",
+        text: lang === "VN" ? "Tối đa 50 bến dừng; mỗi điểm cần có bến dừng, thứ tự hợp lệ và thời gian dừng tối thiểu 5 phút." : "Maximum 50 stops; each stop needs a station, a valid order, and a stay of at least 5 minutes.",
         confirmButtonColor: "#124757",
       });
       return;
@@ -1041,7 +1055,7 @@ export function CharterRequestForm({
             <div className="grid md:grid-cols-12 gap-x-5 gap-y-5">
               <div className="flex flex-col gap-2.5 md:col-span-4">
                 <label className={contactLabelClass}>{lang === "VN" ? "Họ tên người đặt" : "Contact Name"}{requiredMark}</label>
-                <input id={`${idPrefix}-customerName`} value={formData.customerName} onChange={(e) => handleFieldChange("customerName", e.target.value)} disabled={useAccountInfo} required maxLength={120} className={getContactInputClass("customerName")} placeholder={lang === "VN" ? "Nhập họ tên" : "Full name"} aria-invalid={Boolean(fieldErrors.customerName)} aria-describedby={fieldErrors.customerName ? `${idPrefix}-customerName-error` : undefined} />
+                <input id={`${idPrefix}-customerName`} value={formData.customerName} onChange={(e) => handleFieldChange("customerName", sanitizeFullName(e.target.value))} disabled={useAccountInfo} required maxLength={120} className={getContactInputClass("customerName")} placeholder={lang === "VN" ? "Nhập họ tên" : "Full name"} aria-invalid={Boolean(fieldErrors.customerName)} aria-describedby={fieldErrors.customerName ? `${idPrefix}-customerName-error` : undefined} />
                 {fieldErrors.customerName && <p id={`${idPrefix}-customerName-error`} className={contactErrorTextClass}>{fieldErrors.customerName}</p>}
               </div>
               <div className="flex flex-col gap-2.5 md:col-span-4">
@@ -1262,8 +1276,8 @@ export function CharterRequestForm({
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thời gian dừng" : "Stay Minutes"}</label>
-                        <input type="number" min="0" value={stop.stayDurationMinutes} onChange={(e) => handleStopChange(index, "stayDurationMinutes", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
+                        <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Thời gian dừng (Phút)" : "Stay Minutes"}</label>
+                        <input type="number" min="5" value={stop.stayDurationMinutes} onChange={(e) => handleStopChange(index, "stayDurationMinutes", e.target.value)} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100]" />
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">{lang === "VN" ? "Ghi chú" : "Note"}</label>
@@ -1400,22 +1414,7 @@ export function CharterRequestForm({
             {/* Bảo hiểm hành khách */}
             {(() => {
               const formatVnd = (value) => (Number(value) || 0).toLocaleString("vi-VN") + "đ";
-              const selectedPackage = selectedInsurancePackageId != null
-                ? findInsurancePackageById(insurancePackages, selectedInsurancePackageId)
-                : null;
               const unitPremiumLabel = lang === "VN" ? "khách" : "pax";
-              const pendingMessage = getInsurancePendingMessage(INSURANCE_BOOKING_TYPES.PASSENGER, lang);
-              const insuranceNote = getCharterInsuranceNote(lang);
-              const passengerQty = Math.max(
-                0,
-                (Number(formData.adultCount) || 0) + (Number(formData.childCount) || 0),
-              );
-              const selectedUnitPremium = Number(selectedPackage?.unitPremiumAmount) || 0;
-              const totalPreviewAmount = selectedPackage ? selectedUnitPremium * passengerQty : 0;
-
-              const displayPackage = selectedPackage || insurancePackages[0] || null;
-              const providerName = displayPackage?.providerName || "";
-              const providerLogoUrl = displayPackage?.providerLogoUrl || "";
 
               const handleSelectPackage = (pkg) => {
                 const packageId = getInsurancePackageId(pkg);
@@ -1593,7 +1592,7 @@ export function CharterRequestForm({
                     const chipMismatch = "bg-rose-500 text-white border-rose-500 shadow-sm";
                     return (
                         <div className="flex items-center gap-2.5 px-1 py-1.5">
-                          <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full flex-shrink-0 border-2 shadow-md ${
+                          <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full shrink-0 border-2 shadow-md ${
                             allMatch
                               ? "bg-emerald-500 text-white border-emerald-400"
                               : "bg-rose-500 text-white border-rose-400"
@@ -1695,15 +1694,13 @@ export function CharterRequestForm({
                             <div className="flex items-center justify-between min-h-4">
                               <label className={`${contactLabelClass} whitespace-nowrap`}>{lang === "VN" ? "Năm sinh" : "Birth year"}{requiredMark}</label>
                             </div>
-                            <input
-                              type="number"
-                              inputMode="numeric"
+                            <YearPickerInput
                               required
                               min={1900}
                               max={currentYear}
                               value={passenger.birthYear || ""}
                               onChange={(e) => {
-                                const raw = e.target.value.replace(/\D/g, "").slice(0, 4);
+                                const raw = e.target.value;
                                 const yearNum = raw ? Number(raw) : Number.NaN;
                                 const inferredType = Number.isInteger(yearNum) && yearNum >= 1900 && yearNum <= currentYear
                                   ? (currentYear - yearNum >= 12 ? PASSENGER_TYPE_ADULT : PASSENGER_TYPE_CHILD)
@@ -1713,10 +1710,9 @@ export function CharterRequestForm({
                                   list[index] = { ...(list[index] || createEmptyPassenger()), birthYear: raw, type: inferredType };
                                   return { ...prev, passengers: list };
                                 });
+                                markTouched("year");
                               }}
-                              onBlur={() => markTouched("year")}
-                              maxLength={4}
-                              className={`${contactInputClass} ${yearError ? "border-rose-400 focus:ring-rose-400" : ""}`}
+                              className={`w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white outline-none focus-within:ring-2 focus-within:ring-[#FFD100] transition-all ${yearError ? "border-rose-400 focus-within:ring-rose-400" : ""}`}
                               placeholder="1990"
                               aria-invalid={Boolean(yearError)}
                             />
@@ -1749,6 +1745,28 @@ export function CharterRequestForm({
               </div>
               <textarea value={formData.specialRequests} onChange={(e) => handleFieldChange("specialRequests", e.target.value)} maxLength={1000} rows={5} className="min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-[#FFD100] focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white" placeholder={lang === "VN" ? "Ví dụ: cần khu VIP, đón khách lớn tuổi, chuẩn bị nước uống, cần hỗ trợ khi lên tàu..." : "e.g. VIP area, elderly guests, drinks prepared, boarding support needed..."} />
             </div>
+
+            {/* Checkbox điều khoản — bắt buộc trước khi gửi yêu cầu */}
+            <label
+              className={`flex cursor-pointer items-start gap-2.5 rounded-2xl border p-3.5 transition-colors ${
+                agreedToTerms
+                  ? "border-[#FFD100] bg-[#FFD100]/10"
+                  : "border-white/15 bg-white/5 dark:border-slate-700 dark:bg-slate-900"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                disabled={isSubmitting}
+                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-[#124757] accent-[#FFD100] focus:ring-[#FFD100] disabled:opacity-50 dark:border-slate-600"
+              />
+              <span className={`flex-1 text-[11px] leading-5 ${t.sectionSubtitle}`}>
+                {lang === "VN"
+                  ? <>Tôi đã đọc, hiểu rõ và đồng ý với <a href="/terms-and-policy" target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="font-bold text-[#FFD100] hover:underline">Điều khoản dịch vụ</a> và <a href="/terms-and-policy" target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="font-bold text-[#FFD100] hover:underline">Chính sách hoàn/hủy vé</a> của Waterbus.</>
+                  : <>I have read, understood and agree to Waterbus's <a href="/terms-and-policy" target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="font-bold text-[#FFD100] hover:underline">Terms of Service</a> and <a href="/terms-and-policy" target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="font-bold text-[#FFD100] hover:underline">Refund & Cancellation Policy</a>.</>}
+              </span>
+            </label>
           </section>
         )}
 
@@ -1766,13 +1784,13 @@ export function CharterRequestForm({
             <span aria-hidden />
           )}
           {isSingleViewEdit ? (
-            <button type="submit" disabled={isSubmitting} className={`w-full sm:w-auto min-w-56 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-60 mt-5 ${t.primaryButton}`}>
+            <button type="submit" disabled={isSubmitting || !agreedToTerms} className={`w-full sm:w-auto min-w-56 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-60 mt-5 ${t.primaryButton}`}>
               {isSubmitting
                 ? (lang === "VN" ? "Đang lưu..." : "Saving...")
                 : (lang === "VN" ? "Lưu thay đổi" : "Save Changes")}
             </button>
           ) : isLastStep ? (
-            <button type="submit" disabled={isSubmitting} className={`w-full sm:w-auto min-w-56 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-60 mt-5 ${t.primaryButton}`}>
+            <button type="submit" disabled={isSubmitting || !agreedToTerms} className={`w-full sm:w-auto min-w-56 font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-60 mt-5 ${t.primaryButton}`}>
               {isSubmitting
                 ? (mode === "edit" ? (lang === "VN" ? "Đang lưu..." : "Saving...") : (lang === "VN" ? "Đang gửi..." : "Submitting..."))
                 : (mode === "edit" ? (lang === "VN" ? "Lưu thay đổi" : "Save Changes") : (lang === "VN" ? "Gửi yêu cầu" : "Submit"))}
