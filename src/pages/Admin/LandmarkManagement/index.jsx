@@ -273,7 +273,6 @@ export function LandmarkManagement() {
                             {currentLandmarks.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
-                                        <span className="material-symbols-outlined text-4xl block mb-2">location_off</span>
                                         {lang === "VN" ? "Không có landmark nào phù hợp bộ lọc." : "No landmarks found matching filters."}
                                     </td>
                                 </tr>
@@ -287,9 +286,6 @@ export function LandmarkManagement() {
                                                         <h4 className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug">
                                                             {landmark.landmarkName}
                                                         </h4>
-                                                        <span className="text-[9px] font-black text-slate-400 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded uppercase tracking-widest shrink-0">
-                                                            #{landmark.displayOrder}
-                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -309,8 +305,8 @@ export function LandmarkManagement() {
                                         </td>
                                         <td className="py-4 px-4 text-center">
                                             <span className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${landmark.isActive
-                                                    ? "text-emerald-600 dark:text-emerald-400"
-                                                    : "text-rose-500 dark:text-rose-400"
+                                                ? "text-emerald-600 dark:text-emerald-400"
+                                                : "text-rose-500 dark:text-rose-400"
                                                 }`}>
                                                 {landmark.isActive
                                                     ? (lang === "VN" ? "Hoạt động" : "Active")
@@ -361,8 +357,8 @@ export function LandmarkManagement() {
                             onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                             disabled={currentPage === 1}
                             className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === 1
-                                    ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
-                                    : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
                                 }`}
                         >
                             <span className="material-symbols-outlined text-base">chevron_left</span>
@@ -382,8 +378,8 @@ export function LandmarkManagement() {
                                     type="button"
                                     onClick={() => setCurrentPage(item)}
                                     className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-black font-headline text-xs transition-all ${currentPage === item
-                                            ? "bg-[#124757] text-white shadow-md border-transparent dark:bg-yellow-400 dark:text-slate-900"
-                                            : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 hover:bg-slate-50"
+                                        ? "bg-[#124757] text-white shadow-md border-transparent dark:bg-yellow-400 dark:text-slate-900"
+                                        : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 hover:bg-slate-50"
                                         }`}
                                 >
                                     {item}
@@ -396,8 +392,8 @@ export function LandmarkManagement() {
                             onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                             disabled={currentPage === totalPages}
                             className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center font-bold transition-all ${currentPage === totalPages
-                                    ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
-                                    : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+                                ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed dark:bg-slate-800/50 dark:border-slate-700/50"
+                                : "bg-white text-slate-500 border border-slate-200 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
                                 }`}
                         >
                             <span className="material-symbols-outlined text-base">chevron_right</span>

@@ -19,7 +19,8 @@ export function CreateLandmark() {
         latitude: 10.7876,
         longitude: 106.706,
         description: "",
-        displayOrder: 1,
+        // Không còn field nhập tay trên UI — luôn mặc định 0 dưới code.
+        displayOrder: 0,
         triggerRadiusMeters: 300,
         isActive: true,
     });
@@ -48,7 +49,7 @@ export function CreateLandmark() {
     const handleFormSubmit = async (e) => {
         e.preventDefault();
         // Bấm submit (VD: nhấn Enter) khi còn lỗi → hiện hết lỗi lên thay vì âm thầm chặn.
-        setTouchedFields({ landmarkName: true, description: true, displayOrder: true, triggerRadiusMeters: true });
+        setTouchedFields({ landmarkName: true, description: true, triggerRadiusMeters: true });
         if (hasFieldErrors) return;
 
         const name = formData.landmarkName.trim();

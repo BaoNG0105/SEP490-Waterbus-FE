@@ -66,33 +66,18 @@ export function LandmarkFormFields({ lang, formData, onChange, errors = {}, onFi
                     {errors.description && <p className={errorTextStyle}>{errors.description}</p>}
                 </div>
 
-                <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
-                    <div>
-                        <label className={labelStyle}>{<>{lang === "VN" ? "Thứ tự hiển thị" : "Display Order"}{required()}</>}</label>
-                        <input
-                            type="number"
-                            required
-                            min={1}
-                            value={formData.displayOrder}
-                            onChange={(e) => setField("displayOrder", e.target.value)}
-                            onBlur={() => handleBlur("displayOrder")}
-                            className={errors.displayOrder ? errorInputStyle : inputStyle}
-                        />
-                        {errors.displayOrder && <p className={errorTextStyle}>{errors.displayOrder}</p>}
-                    </div>
-                    <div>
-                        <label className={labelStyle}>{<>{lang === "VN" ? "Bán kính kích hoạt (m)" : "Trigger Radius (m)"}{required()}</>}</label>
-                        <input
-                            type="number"
-                            required
-                            min={1}
-                            value={formData.triggerRadiusMeters}
-                            onChange={(e) => setField("triggerRadiusMeters", e.target.value)}
-                            onBlur={() => handleBlur("triggerRadiusMeters")}
-                            className={errors.triggerRadiusMeters ? errorInputStyle : inputStyle}
-                        />
-                        {errors.triggerRadiusMeters && <p className={errorTextStyle}>{errors.triggerRadiusMeters}</p>}
-                    </div>
+                <div>
+                    <label className={labelStyle}>{<>{lang === "VN" ? "Bán kính kích hoạt (m)" : "Trigger Radius (m)"}{required()}</>}</label>
+                    <input
+                        type="number"
+                        required
+                        min={1}
+                        value={formData.triggerRadiusMeters}
+                        onChange={(e) => setField("triggerRadiusMeters", e.target.value)}
+                        onBlur={() => handleBlur("triggerRadiusMeters")}
+                        className={errors.triggerRadiusMeters ? errorInputStyle : inputStyle}
+                    />
+                    {errors.triggerRadiusMeters && <p className={errorTextStyle}>{errors.triggerRadiusMeters}</p>}
                 </div>
             </div>
 
