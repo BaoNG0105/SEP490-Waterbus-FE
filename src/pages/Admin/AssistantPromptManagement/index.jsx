@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { FormSelect } from "../../../components/FormSelect";
 import { useApp } from "../../../context/AppContext";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
@@ -11,10 +10,8 @@ import {
   formatDateTime,
   getMissingPlaceholders,
   labelPreviewStatus,
-  labelPromptSource,
   parseVersionId,
   PREVIEW_STATUS,
-  PROMPT_SOURCE,
   resetAssistantPromptToDefault,
   restoreAssistantPromptVersion,
   runAssistantPromptPreview,
@@ -51,7 +48,8 @@ export function AssistantPromptManagement() {
 
   const [previewQuestion, setPreviewQuestion] = useState("");
   const [previewLanguage, setPreviewLanguage] = useState(lang === "ENG" ? "ENG" : "VN");
-  const [previewWithTools, setPreviewWithTools] = useState(false);
+  // Luôn bật gọi tool khi preview — không còn cho admin tắt qua UI.
+  const previewWithTools = true;
   const [previewResult, setPreviewResult] = useState(null);
   const [previewError, setPreviewError] = useState("");
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -279,8 +277,8 @@ export function AssistantPromptManagement() {
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {lang === "VN"
-              ? "Chỉnh phần hướng dẫn trợ lý dùng để trả lời khách — có hiệu lực ngay, không cần deploy."
-              : "Edit the instructions the assistant uses to answer customers — takes effect immediately, no deploy needed."}
+              ? "Chỉnh phần hướng dẫn trợ lý dùng để trả lời khách."
+              : "Edit the instructions the assistant uses to answer customers."}
           </p>
         </div>
         <button
@@ -319,73 +317,8 @@ export function AssistantPromptManagement() {
         </div>
       )}
 
-      {promptState && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
-              {lang === "VN" ? "Nguồn hiện tại" : "Current source"}
-            </span>
-            <h3 className={`text-sm font-black font-headline mt-1 ${promptState.source === PROMPT_SOURCE.FILE ? "text-[#124757] dark:text-white" : "text-slate-500 dark:text-slate-400"}`}>
-              {labelPromptSource(promptState.source, lang)}
-            </h3>
-          </div>
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
-              {lang === "VN" ? "Cập nhật lần cuối" : "Last updated"}
-            </span>
-            <h3 className="text-sm font-black font-headline mt-1 text-[#124757] dark:text-white">
-              {formatDateTime(promptState.updatedAt, lang) || (lang === "VN" ? "Chưa từng sửa" : "Never edited")}
-            </h3>
-          </div>
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm min-w-0">
-            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
-              {lang === "VN" ? "Nơi lưu file" : "Storage location"}
-            </span>
-            <h3 className="text-xs font-bold font-mono mt-1 text-slate-600 dark:text-slate-300 truncate" title={promptState.storageLocation}>
-              {promptState.storageLocation || "—"}
-            </h3>
-          </div>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_400px] gap-5">
         <div className="space-y-5 min-w-0">
-          {promptState && (
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
-              <h3 className="text-xs font-headline font-black text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                {lang === "VN" ? "Placeholder bắt buộc" : "Required placeholders"}
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {promptState.placeholders.map((p) => {
-                  const missing = missingPlaceholders.some((m) => m.token === p.token);
-                  return (
-                    <div
-                      key={p.token}
-                      title={p.description}
-                      className={`flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-xl text-[11px] font-bold border ${
-                        missing
-                          ? "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
-                          : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[15px]">{missing ? "error" : "check_circle"}</span>
-                      <span className="font-mono">{p.token}</span>
-                      {missing && (
-                        <button
-                          type="button"
-                          onClick={() => handleInsertPlaceholder(p.token)}
-                          className="ml-1 underline decoration-dotted hover:text-rose-800 dark:hover:text-rose-300"
-                        >
-                          {lang === "VN" ? "chèn" : "insert"}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm p-5 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-xs font-headline font-black text-slate-500 dark:text-slate-400 uppercase tracking-wide">
@@ -396,6 +329,41 @@ export function AssistantPromptManagement() {
                 {minLength > 0 ? ` (${lang === "VN" ? "tối thiểu" : "min"} ${minLength.toLocaleString()})` : ""}
               </span>
             </div>
+
+            {promptState && (
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-headline font-black text-slate-400 dark:text-slate-500 uppercase tracking-wide">
+                  {lang === "VN" ? "Placeholder bắt buộc" : "Required placeholders"}
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {promptState.placeholders.map((p) => {
+                    const missing = missingPlaceholders.some((m) => m.token === p.token);
+                    return (
+                      <div
+                        key={p.token}
+                        title={p.description}
+                        className={`flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-[11px] font-bold ${missing
+                            ? "text-rose-600 dark:text-rose-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                          }`}
+                      >
+                        <span className="material-symbols-outlined text-[15px]">{missing ? "error" : "check_circle"}</span>
+                        <span className="font-mono">{p.token}</span>
+                        {missing && (
+                          <button
+                            type="button"
+                            onClick={() => handleInsertPlaceholder(p.token)}
+                            className="ml-1 underline decoration-dotted hover:text-rose-800 dark:hover:text-rose-300"
+                          >
+                            {lang === "VN" ? "chèn" : "insert"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <textarea
               value={content}
@@ -428,12 +396,10 @@ export function AssistantPromptManagement() {
                 disabled={!isDirty || isSaving}
                 className="px-5 py-3 bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black text-xs uppercase tracking-widest rounded-xl shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-50 disabled:hover:scale-100"
               >
-                {isSaving ? (
+                {isSaving && (
                   <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <span className="material-symbols-outlined text-sm font-bold">save</span>
                 )}
-                {lang === "VN" ? "Lưu & áp dụng" : "Save & apply"}
+                {lang === "VN" ? "Lưu và áp dụng" : "Save and apply"}
               </button>
             </div>
           </div>
@@ -446,7 +412,7 @@ export function AssistantPromptManagement() {
                 className="w-full flex items-center justify-between gap-2"
               >
                 <h3 className="text-xs font-headline font-black text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                  {lang === "VN" ? "Khối luật cứng (chỉ đọc, không sửa được)" : "Locked rules (read-only, cannot be edited)"}
+                  {lang === "VN" ? "Khối luật cứng (chỉ xem)" : "Locked rules (read-only)"}
                 </h3>
                 <span className={`material-symbols-outlined text-slate-400 transition-transform ${showLockedRules ? "rotate-180" : ""}`}>
                   expand_more
@@ -454,11 +420,6 @@ export function AssistantPromptManagement() {
               </button>
               {showLockedRules && (
                 <>
-                  <p className="text-[11px] text-slate-400">
-                    {lang === "VN"
-                      ? "Server luôn nối khối này vào CUỐI prompt trước khi gửi cho model — phần nội dung bạn soạn ở trên không thể ghi đè lên đây."
-                      : "The server always appends this block to the END of the prompt before calling the model — the content you edit above cannot override it."}
-                  </p>
                   <pre className="whitespace-pre-wrap text-[11px] leading-relaxed font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-2xl p-4 max-h-80 overflow-y-auto custom-scrollbar">
                     {promptState.lockedRules}
                   </pre>
@@ -529,15 +490,25 @@ export function AssistantPromptManagement() {
           )}
 
           <form onSubmit={handlePreview} className="bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-4">
-            <div>
+            <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
                 {lang === "VN" ? "Chạy thử prompt" : "Test this prompt"}
               </h3>
-              <p className="text-[11px] text-slate-400 mt-1">
-                {lang === "VN"
-                  ? "Chạy 1 lượt LLM với nội dung ĐANG SOẠN ở trên (chưa cần lưu). Không lưu hội thoại, không đổi prompt đang chạy."
-                  : "Runs one LLM turn using the content you're currently editing above (no need to save first). Nothing is stored and the live prompt is untouched."}
-              </p>
+              <div className="inline-flex items-center gap-0.5 rounded-xl bg-slate-100 dark:bg-slate-900 p-1 shrink-0">
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setPreviewLanguage(opt.value)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-headline font-black uppercase tracking-wide transition-all ${previewLanguage === opt.value
+                        ? "bg-white dark:bg-slate-700 text-[#124757] dark:text-yellow-400 shadow-sm"
+                        : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                      }`}
+                  >
+                    {opt.value}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <textarea
@@ -547,31 +518,6 @@ export function AssistantPromptManagement() {
               className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner resize-y"
               placeholder={lang === "VN" ? "Ví dụ: chào bạn, mai còn chuyến nào không?" : "e.g. Hi, any trips left tomorrow?"}
             />
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <FormSelect
-                value={previewLanguage}
-                onChange={setPreviewLanguage}
-                options={LANGUAGE_OPTIONS}
-                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
-              />
-              <label className="flex-1 flex items-center gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={previewWithTools}
-                  onChange={(e) => setPreviewWithTools(e.target.checked)}
-                  className="accent-[#124757] dark:accent-yellow-400"
-                />
-                {lang === "VN" ? "Cho gọi tool (tốn quota hơn)" : "Allow tool calls (costs more quota)"}
-              </label>
-            </div>
-            {previewWithTools && (
-              <p className="text-[10px] text-amber-500 font-bold -mt-2">
-                {lang === "VN"
-                  ? "Chạy như thật, tốn 2-4 lần gọi LLM mỗi lượt — dùng nhiều sẽ ăn vào hạn mức chat thật của khách."
-                  : "Runs like production, costs 2-4 LLM calls per turn — heavy use eats into real customer chat quota."}
-              </p>
-            )}
 
             {previewError && (
               <p className="text-xs font-bold text-rose-500 whitespace-pre-line">{previewError}</p>
@@ -587,9 +533,6 @@ export function AssistantPromptManagement() {
               )}
               {lang === "VN" ? "Chạy kiểm thử" : "Run test"}
             </button>
-            <p className="text-[10px] text-slate-400 text-center">
-              {lang === "VN" ? "Giới hạn 5 lượt / 300 giây cho tài khoản admin hiện tại." : "Limited to 5 runs / 300s for the current admin account."}
-            </p>
           </form>
 
           {previewResult && (
