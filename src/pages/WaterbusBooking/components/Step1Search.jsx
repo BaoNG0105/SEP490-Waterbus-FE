@@ -18,6 +18,48 @@ const isActiveWaterbusStation = (station) => {
 const selectClassName =
   "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-4 px-3.5 text-sm font-medium dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] disabled:opacity-50";
 
+// Điểm đến gần đây — lưu tạm các tuyến đã tìm kiếm gần nhất vào localStorage (riêng máy/trình
+// duyệt của khách), để lần sau quay lại trang search có thể chọn nhanh lại đúng tuyến đó.
+const RECENT_ROUTES_STORAGE_KEY = "waterbus_recent_search_routes";
+const MAX_RECENT_ROUTES = 5;
+
+const isValidRouteEntry = (entry) => Boolean(entry?.fromWharf && entry?.toWharf);
+const isSameRoute = (a, b) => String(a.fromWharf) === String(b.fromWharf) && String(a.toWharf) === String(b.toWharf);
+
+const loadRecentRoutes = () => {
+  try {
+    const raw = localStorage.getItem(RECENT_ROUTES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isValidRouteEntry) : [];
+  } catch {
+    return [];
+  }
+};
+
+const persistRecentRoutes = (routes) => {
+  try {
+    localStorage.setItem(RECENT_ROUTES_STORAGE_KEY, JSON.stringify(routes));
+  } catch {
+    // localStorage có thể không dùng được (private mode, hết quota...) — bỏ qua, không critical.
+  }
+};
+
+// Thêm 1 tuyến mới vào đầu danh sách — nếu đã có (trùng cả bến đi lẫn bến đến) thì bỏ bản cũ,
+// đẩy bản mới nhất lên đầu; giới hạn số lượng lưu để không phình localStorage.
+const addRecentRoute = (route) => {
+  const current = loadRecentRoutes().filter((r) => !isSameRoute(r, route));
+  const next = [route, ...current].slice(0, MAX_RECENT_ROUTES);
+  persistRecentRoutes(next);
+  return next;
+};
+
+const removeRecentRoute = (route) => {
+  const next = loadRecentRoutes().filter((r) => !isSameRoute(r, route));
+  persistRecentRoutes(next);
+  return next;
+};
+
 export default function Step1Search({ bookingData, updateData, onNext }) {
   const { lang } = useApp();
   const { isRoundTrip, fromWharf, toWharf, departureDate, returnDate } = bookingData;
@@ -26,6 +68,8 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
   const [isLoadingStations, setIsLoadingStations] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [recentRoutes, setRecentRoutes] = useState(() => loadRecentRoutes());
+  const [recentRoutesCollapsed, setRecentRoutesCollapsed] = useState(false);
 
   const fromOptions = useMemo(
     () => stations.map((station) => ({
@@ -39,6 +83,24 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
     () => fromOptions.filter((opt) => String(opt.value) !== String(fromWharf)),
     [fromOptions, fromWharf],
   );
+
+  // Chỉ hiện các tuyến mà cả 2 bến đã lưu vẫn còn tồn tại/active trong danh sách hiện tại
+  // (tránh gợi ý bến đã bị xoá/ngưng hoạt động).
+  const visibleRecentRoutes = useMemo(() => {
+    if (isLoadingStations) return [];
+    return recentRoutes.filter((route) =>
+      stations.some((s) => getStationId(s) === String(route.fromWharf))
+      && stations.some((s) => getStationId(s) === String(route.toWharf))
+    );
+  }, [recentRoutes, stations, isLoadingStations]);
+
+  const applyRecentRoute = (route) => {
+    updateData({ fromWharf: route.fromWharf, toWharf: route.toWharf });
+  };
+
+  const handleRemoveRecentRoute = (route) => {
+    setRecentRoutes(removeRecentRoute(route));
+  };
 
   useEffect(() => {
     const loadStations = async () => {
@@ -94,6 +156,13 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
       const fromStation = stations.find((s) => getStationId(s) === String(fromWharf));
       const toStation = stations.find((s) => getStationId(s) === String(toWharf));
 
+      setRecentRoutes(addRecentRoute({
+        fromWharf: String(fromWharf),
+        toWharf: String(toWharf),
+        fromWharfName: fromStation ? getStationName(fromStation) : "",
+        toWharfName: toStation ? getStationName(toStation) : "",
+      }));
+
       updateData({
         departureTripOptions,
         returnTripOptions,
@@ -148,6 +217,51 @@ export default function Step1Search({ bookingData, updateData, onNext }) {
           {lang === "VN" ? "Khứ hồi" : "Round-Trip"}
         </button>
       </div>
+
+      {/* Điểm đến gần đây — lịch sử tuyến đã tìm, lưu trong localStorage của trình duyệt */}
+      {visibleRecentRoutes.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-fade-in">
+          <button
+            type="button"
+            onClick={() => setRecentRoutesCollapsed((prev) => !prev)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <span className="text-xs font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-300">
+              {lang === "VN" ? `Điểm đến gần đây (${visibleRecentRoutes.length})` : `Recent destinations (${visibleRecentRoutes.length})`}
+            </span>
+            <span className={`material-symbols-outlined text-lg text-slate-400 transition-transform ${recentRoutesCollapsed ? "" : "rotate-180"}`}>
+              expand_more
+            </span>
+          </button>
+          {!recentRoutesCollapsed && (
+            <div className="flex flex-wrap gap-2 p-3">
+              {visibleRecentRoutes.map((route) => (
+                <div
+                  key={`${route.fromWharf}-${route.toWharf}`}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white pl-3.5 pr-2 py-2 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <button
+                    type="button"
+                    onClick={() => applyRecentRoute(route)}
+                    className="transition-colors hover:text-[#124757] dark:hover:text-yellow-400"
+                  >
+                    {route.fromWharfName || "--"} - {route.toWharfName || "--"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveRecentRoute(route)}
+                    title={lang === "VN" ? "Xoá" : "Remove"}
+                    aria-label={lang === "VN" ? "Xoá" : "Remove"}
+                    className="text-slate-300 transition-colors hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Điểm đi / Điểm đến */}
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 sm:items-end sm:gap-4">

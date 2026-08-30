@@ -48,6 +48,10 @@ const authSlice = createSlice({
       localStorage.removeItem('waterbus.chat.conversationId');
       localStorage.removeItem('waterbus.chat.bookingDraft');
       localStorage.removeItem('waterbus.chat.clientSessionId');
+
+      // Dọn luôn lịch sử "Điểm đến gần đây" ở trang tìm chuyến Waterbus — tránh lộ tuyến đã
+      // tìm của người vừa đăng xuất cho người dùng tiếp theo trên cùng máy.
+      localStorage.removeItem('waterbus_recent_search_routes');
     },
 
     updateUserProfile: (state, action) => {
