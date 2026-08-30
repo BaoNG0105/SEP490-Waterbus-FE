@@ -32,6 +32,55 @@ const getStatusLabel = (status, lang) => {
 
 const formatCurrency = (value) => `${(Number(value) || 0).toLocaleString("vi-VN")}đ`;
 
+const vndFormatter = new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+});
+
+const formatBudgetCurrency = (value) => {
+    if (value === null || value === undefined || value === "") return "--";
+    return Number.isFinite(Number(value)) ? vndFormatter.format(Number(value)) : "--";
+};
+
+const getBudgetMeta = (promo, lang) => {
+    if (promo.budgetCap == null) {
+        return {
+            unlimited: true,
+            label: lang === "VN" ? "Không giới hạn" : "Unlimited",
+        };
+    }
+
+    const budgetCap = Number(promo.budgetCap);
+    const budgetSpent = promo.budgetSpent == null ? null : Number(promo.budgetSpent);
+    const remainingBudget = promo.remainingBudget == null ? null : Number(promo.remainingBudget);
+    const effectiveState = String(promo.effectiveState || "").trim().toLowerCase();
+    const percent = Number.isFinite(budgetSpent) && Number.isFinite(budgetCap) && budgetCap > 0
+        ? Math.min(100, Math.max(0, (budgetSpent / budgetCap) * 100))
+        : 0;
+    const exhausted = remainingBudget === 0 || effectiveState === "exhausted";
+    const nearlyExhausted = !exhausted
+        && Number.isFinite(remainingBudget)
+        && Number.isFinite(budgetCap)
+        && budgetCap > 0
+        && remainingBudget / budgetCap <= 0.1;
+
+    return {
+        unlimited: false,
+        budgetCap,
+        budgetSpent,
+        remainingBudget,
+        percent,
+        exhausted,
+        nearlyExhausted,
+        label: exhausted
+            ? (lang === "VN" ? "Đã hết ngân sách" : "Budget exhausted")
+            : nearlyExhausted
+                ? (lang === "VN" ? "Sắp hết ngân sách" : "Budget nearly exhausted")
+                : "",
+    };
+};
+
 const formatDiscount = (promo) =>
     promo.promotionType === PROMOTION_TYPE.PERCENT
         ? `${promo.discountValue}%`
@@ -337,6 +386,7 @@ export function PromotionManagement() {
                                 <th className="py-4 px-4">{lang === "VN" ? "Giảm giá" : "Discount"}</th>
                                 <th className="py-4 px-4">{lang === "VN" ? "Hiệu lực" : "Validity"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Lượt dùng" : "Usage"}</th>
+                                <th className="min-w-52 py-4 px-4">{lang === "VN" ? "Ngân sách" : "Budget"}</th>
                                 <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                                 <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
                             </tr>
@@ -344,13 +394,14 @@ export function PromotionManagement() {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
                             {currentPromotions.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={8} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
                                         {lang === "VN" ? "Không có khuyến mãi nào." : "No records found."}
                                     </td>
                                 </tr>
                             ) : (
                                 currentPromotions.map((promo) => {
                                     const lifecycle = getPromotionLifecycle(promo);
+                                    const budget = getBudgetMeta(promo, lang);
                                     return (
                                         <tr key={promo.id} className="hover:bg-[#124757]/[0.035] dark:hover:bg-yellow-400/[0.04] transition-colors group">
                                             {/* Cột 1: Thông tin khuyến mãi */}
@@ -428,7 +479,53 @@ export function PromotionManagement() {
                                                 </p>
                                             </td>
 
-                                            {/* Cột 5: Trạng thái */}
+                                            {/* Cột 6: Ngân sách */}
+                                            <td className="min-w-52 py-4 px-4">
+                                                {budget.unlimited ? (
+                                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-300">
+                                                        {budget.label}
+                                                    </p>
+                                                ) : (
+                                                    <div className="space-y-1.5">
+                                                        <p className="text-xs font-black text-slate-700 dark:text-slate-100">
+                                                            {formatBudgetCurrency(budget.remainingBudget)} {lang === "VN" ? "còn lại" : "remaining"}
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-400">
+                                                            {lang === "VN" ? "Đã dùng" : "Spent"} {formatBudgetCurrency(budget.budgetSpent)} / {formatBudgetCurrency(budget.budgetCap)}
+                                                        </p>
+                                                        <div
+                                                            className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700"
+                                                            role="progressbar"
+                                                            aria-label={lang === "VN" ? "Tỷ lệ ngân sách đã dùng" : "Budget used"}
+                                                            aria-valuemin={0}
+                                                            aria-valuemax={100}
+                                                            aria-valuenow={Math.round(budget.percent)}
+                                                        >
+                                                            <div
+                                                                className={`h-full rounded-full transition-[width] ${
+                                                                    budget.exhausted
+                                                                        ? "bg-rose-500"
+                                                                        : budget.nearlyExhausted
+                                                                            ? "bg-amber-500"
+                                                                            : "bg-[#124757] dark:bg-yellow-400"
+                                                                }`}
+                                                                style={{ width: `${budget.percent}%` }}
+                                                            />
+                                                        </div>
+                                                        {budget.label && (
+                                                            <p className={`text-[10px] font-black ${
+                                                                budget.exhausted
+                                                                    ? "text-rose-600 dark:text-rose-400"
+                                                                    : "text-amber-600 dark:text-amber-400"
+                                                            }`}>
+                                                                {budget.label}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </td>
+
+                                            {/* Cột 7: Trạng thái */}
                                             <td className="py-4 px-4 text-center">
                                                 <span className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${
                                                     promo.status === PROMOTION_STATUS.ACTIVE
@@ -443,7 +540,7 @@ export function PromotionManagement() {
                                                 </span>
                                             </td>
 
-                                            {/* Cột 6: Hành động */}
+                                            {/* Cột 8: Hành động */}
                                             <td className="py-4 px-6 text-center">
                                                 {canManage ? (
                                                     <div className="flex items-center justify-center gap-1.5">

@@ -22,6 +22,7 @@ export function EditPromotion() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [errorTick, setErrorTick] = useState(0);
   const [formData, setFormData] = useState(() => emptyPromotionForm());
   const [fieldErrors, setFieldErrors] = useState({});
   const hasBlockingErrors = Object.keys(fieldErrors).length > 0;
@@ -75,24 +76,19 @@ export function EditPromotion() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (Object.keys(fieldErrors).length > 0) {
+    const formError = validatePromotionForm(formData, lang, { isCreate: false });
+    if (Object.keys(fieldErrors).length > 0 || formError) {
       const firstError = Object.values(fieldErrors).find((item) => item?.message);
       setErrorMsg(
-        firstError?.message ||
+        firstError?.message || formError ||
           (lang === "VN" ? "Vui lòng kiểm tra lại các trường được đánh dấu." : "Please review the highlighted fields.")
       );
+      setErrorTick((tick) => tick + 1);
       return;
     }
     try {
       setIsSubmitting(true);
       setErrorMsg("");
-
-      const formError = validatePromotionForm(formData, lang, { isCreate: false });
-      if (formError) {
-        setErrorMsg(formError);
-        setIsSubmitting(false);
-        return;
-      }
 
       const payload = buildPromotionPayload(formData, { includeCode: true });
       await modifyPromotion(id, payload);
@@ -161,6 +157,7 @@ export function EditPromotion() {
           formData={formData}
           onChange={handleFieldChange}
           onErrorsChange={setFieldErrors}
+          submitValidationTick={errorTick}
           lockCode
           lockType
           isCreate={false}

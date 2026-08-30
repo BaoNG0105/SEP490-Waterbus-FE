@@ -45,7 +45,7 @@ export function CreatePromotion() {
     const formError = validatePromotionForm(formData, lang, { isCreate: true });
     if (inlineErrorCount > 0 || formError) {
       // Inline error đã hiển thị dưới từng ô. Kích hoạt scroll-to-first-error.
-      setServerError("");
+      setServerError(formError || "");
       setErrorTick((t) => t + 1);
       return;
     }
@@ -130,6 +130,7 @@ export function CreatePromotion() {
           formData={formData}
           onChange={handleFieldChange}
           onErrorsChange={setFieldErrors}
+          submitValidationTick={errorTick}
           isCreate
         />
 
