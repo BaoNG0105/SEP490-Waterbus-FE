@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchAllRoutes } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
 import {
@@ -25,23 +25,30 @@ const decimalNumber = (value) => {
   const [whole, ...fraction] = String(value ?? "").replace(/[^\d.]/g, "").split(".");
   return fraction.length ? `${whole}.${fraction.join("")}` : whole;
 };
+const sanitizePromotionName = (value) =>
+  String(value ?? "")
+    .normalize("NFC")
+    .replace(/[^\p{L}\p{N} ]/gu, "");
+const PROMOTION_VALIDATION_FIELDS = [
+  "promotionCode",
+  "promotionName",
+  "description",
+  "discountValue",
+  "maxDiscountAmount",
+  "minOrderValue",
+  "usageLimit",
+  "maxUsesPerAccount",
+  "budgetCap",
+  "validFrom",
+  "validTo",
+  "departureFrom",
+  "departureTo",
+  "imageFile",
+];
 const formatVndAmount = (value) =>
   value === "" || value === null || value === undefined
     ? ""
     : Number(value).toLocaleString("vi-VN");
-
-/** Format datetime gọn cho gợi ý: "23/08 22:35" (VN) hoặc "Aug 23 10:35 PM" (EN). */
-const formatDateTimeHint = (date, lang) => {
-  const pad = (n) => String(n).padStart(2, "0");
-  if (lang === "VN") {
-    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  }
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  let h = date.getHours();
-  const ampm = h >= 12 ? "PM" : "AM";
-  h = h % 12 || 12;
-  return `${months[date.getMonth()]} ${date.getDate()} ${h}:${pad(date.getMinutes())} ${ampm}`;
-};
 
 /** Trích message string từ error object/string (backward compatible). */
 const errMessage = (e) => {
@@ -84,7 +91,6 @@ const OptionalNumberField = ({
   onChange,
   error,
   dataField,
-  placeholder,
   unit,
   integerOnly = true,
   inputProps = {},
@@ -234,6 +240,7 @@ export function PromotionFormFields({
   lockType = false,
   isCreate = true,
   onErrorsChange,
+  submitValidationTick = 0,
 }) {
   const [routes, setRoutes] = useState([]);
   const [errors, setErrors] = useState({});
@@ -241,6 +248,7 @@ export function PromotionFormFields({
   const [now, setNow] = useState(() => new Date());
   // Field đang focus — dùng để ẩn/hiện hint phụ, gọn gàng hơn khi chưa gõ.
   const [focusedField, setFocusedField] = useState(null);
+  const isPromotionNameComposing = useRef(false);
 
   useEffect(() => {
     fetchAllRoutes()
@@ -367,6 +375,8 @@ export function PromotionFormFields({
           return err("error", lang === "VN" ? "Giá trị giảm phải lớn hơn 0." : "Discount must be greater than 0.", lang === "VN" ? "Nhập giá trị dương cho khuyến mãi này." : "Enter a positive value for this promotion.");
         if (isPercent && num > 100)
           return err("error", lang === "VN" ? `Phần trăm giảm tối đa 100% — bạn đang nhập ${num}%.` : `Percent discount max is 100% — you entered ${num}%.`, lang === "VN" ? "Nếu muốn giảm nhiều hơn, đổi sang loại giảm theo VND." : "For larger discounts, switch to a fixed-amount (VND) promotion.");
+        if (!isPercent && num > PROMOTION_LIMITS.MAX_DISCOUNT_AMOUNT)
+          return err("error", lang === "VN" ? "Số tiền giảm vượt quá giới hạn cho phép." : "Discount amount exceeds the allowed limit.");
         return null;
       }
       case "maxDiscountAmount": {
@@ -442,6 +452,8 @@ export function PromotionFormFields({
       case "validFrom": {
         if (!value) return err("error", lang === "VN" ? "Chưa chọn ngày bắt đầu." : "Start date is empty.", lang === "VN" ? "Chọn thời điểm bắt đầu hiệu lực của khuyến mãi." : "Choose when this promotion starts.");
         const fromTs = new Date(value).getTime();
+        if (!Number.isFinite(fromTs))
+          return err("error", lang === "VN" ? "Ngày bắt đầu không hợp lệ." : "Start date is invalid.");
         if (isCreate && Number.isFinite(fromTs) && fromTs < now.getTime()) {
           return err(
             "error",
@@ -449,8 +461,8 @@ export function PromotionFormFields({
             lang === "VN" ? "Chọn ngày trong tương lai." : "Pick a future date."
           );
         }
-        if (formData.validTo) {
-          const toTs = new Date(formData.validTo).getTime();
+        if (currentForm.validTo) {
+          const toTs = new Date(currentForm.validTo).getTime();
           if (Number.isFinite(fromTs) && Number.isFinite(toTs) && toTs <= fromTs)
             return err(
               "error",
@@ -463,6 +475,8 @@ export function PromotionFormFields({
       case "validTo": {
         if (!value) return err("error", lang === "VN" ? "Chưa chọn ngày kết thúc." : "End date is empty.", lang === "VN" ? "Chọn thời điểm kết thúc sau ngày bắt đầu." : "Choose an end time after the start date.");
         const toTs = new Date(value).getTime();
+        if (!Number.isFinite(toTs))
+          return err("error", lang === "VN" ? "Ngày kết thúc không hợp lệ." : "End date is invalid.");
         if (isCreate && Number.isFinite(toTs) && toTs < now.getTime()) {
           return err(
             "error",
@@ -470,8 +484,8 @@ export function PromotionFormFields({
             lang === "VN" ? "Chọn ngày trong tương lai." : "Pick a future date."
           );
         }
-        if (formData.validFrom) {
-          const fromTs = new Date(formData.validFrom).getTime();
+        if (currentForm.validFrom) {
+          const fromTs = new Date(currentForm.validFrom).getTime();
           if (Number.isFinite(fromTs) && Number.isFinite(toTs) && toTs <= fromTs)
             return err(
               "error",
@@ -482,23 +496,27 @@ export function PromotionFormFields({
         return null;
       }
       case "departureFrom": {
-        if (value && formData.departureTo) {
-          if (value > formData.departureTo)
+        if (!value && currentForm.departureTo)
+          return err("error", lang === "VN" ? "Chưa nhập giờ khởi hành từ." : "Departure start time is required.");
+        if (value && currentForm.departureTo) {
+          if (value > currentForm.departureTo)
             return err(
               "error",
               lang === "VN" ? "Giờ bắt đầu phải ≤ giờ kết thúc." : "Start time must be ≤ end time.",
-              lang === "VN" ? `Bạn đang đặt giờ bắt đầu (${value}) sau giờ kết thúc (${formData.departureTo}).` : `Start (${value}) is after end (${formData.departureTo}).`
+              lang === "VN" ? `Bạn đang đặt giờ bắt đầu (${value}) sau giờ kết thúc (${currentForm.departureTo}).` : `Start (${value}) is after end (${currentForm.departureTo}).`
             );
         }
         return null;
       }
       case "departureTo": {
-        if (formData.departureFrom && value) {
-          if (value < formData.departureFrom)
+        if (!value && currentForm.departureFrom)
+          return err("error", lang === "VN" ? "Chưa nhập giờ khởi hành đến." : "Departure end time is required.");
+        if (currentForm.departureFrom && value) {
+          if (value < currentForm.departureFrom)
             return err(
               "error",
               lang === "VN" ? "Giờ kết thúc phải ≥ giờ bắt đầu." : "End time must be ≥ start time.",
-              lang === "VN" ? `Bạn đang đặt giờ kết thúc (${value}) trước giờ bắt đầu (${formData.departureFrom}).` : `End (${value}) is before start (${formData.departureFrom}).`
+              lang === "VN" ? `Bạn đang đặt giờ kết thúc (${value}) trước giờ bắt đầu (${currentForm.departureFrom}).` : `End (${value}) is before start (${currentForm.departureFrom}).`
             );
         }
         return null;
@@ -519,6 +537,20 @@ export function PromotionFormFields({
     }
     return null;
   };
+
+  useEffect(() => {
+    if (submitValidationTick === 0) return;
+
+    const nextErrors = {};
+    PROMOTION_VALIDATION_FIELDS.forEach((field) => {
+      const fieldError = validateField(field, formData[field], formData);
+      if (fieldError) nextErrors[field] = fieldError;
+    });
+    setErrors(nextErrors);
+    onErrorsChange?.(nextErrors);
+    // Revalidate after the first submit attempt so cross-field errors stay synchronized.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData, isCreate, lang, now, onErrorsChange, submitValidationTick]);
 
   const setField = (field, value, currentForm = formData) => {
     const err = validateField(field, value, currentForm);
@@ -695,12 +727,21 @@ export function PromotionFormFields({
               required
               maxLength={150}
               value={formData.promotionName}
-              onChange={(e) =>
-                setField(
-                  "promotionName",
-                  e.target.value.replace(/[^\p{L}\p{N} ]/gu, "")
-                )
-              }
+              onCompositionStart={() => {
+                isPromotionNameComposing.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                isPromotionNameComposing.current = false;
+                setField("promotionName", sanitizePromotionName(e.currentTarget.value));
+              }}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (isPromotionNameComposing.current || e.nativeEvent.isComposing) {
+                  onChange("promotionName", value);
+                  return;
+                }
+                setField("promotionName", sanitizePromotionName(value));
+              }}
               className={`${inputStyle} ${errors.promotionName ? errorInputStyle : ""}`}
             />
             <FieldError error={errors.promotionName} />

@@ -99,6 +99,22 @@ const getPaymentPurpose = (payment) =>
 const isPaidPayment = (payment) =>
   ["paid", "depositpaid"].includes(String(payment?.paymentStatus || "").toLowerCase());
 
+const hasPaymentWithLockedPoints = (booking) => {
+  if (!booking) return false;
+  const hasLockedPayment = Boolean(
+    Array.isArray(booking.payments)
+    && booking.payments.some((payment) => {
+      const status = String(payment?.paymentStatus || "").toLowerCase();
+      return status === "pending" || isPaidPayment(payment);
+    })
+  );
+  if (hasLockedPayment) return true;
+
+  const bookingPaymentStatus = String(booking.paymentStatus || "").toLowerCase();
+  return ["pending", "paid", "depositpaid"].includes(bookingPaymentStatus)
+    || Number(booking.paidAmount || 0) > 0;
+};
+
 /**
  * Trả về timestamp (ms) khi admin duyệt thêm hành khách gần nhất, hoặc null nếu không có.
  *
@@ -149,14 +165,6 @@ const isPastPassengerAddGrace = (booking, nowMs = Date.now()) => {
 const getPassengerAddDeadline = (booking) => {
   const anchor = getLatestPassengerAddedAt(booking);
   return anchor ? anchor + PASSENGER_ADD_GRACE_MS : null;
-};
-const formatCountdown = (ms) => {
-  if (ms <= 0) return "00:00:00";
-  const totalSec = Math.floor(ms / 1000);
-  const h = String(Math.floor(totalSec / 3600)).padStart(2, "0");
-  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
-  const s = String(totalSec % 60).padStart(2, "0");
-  return `${h}:${m}:${s}`;
 };
 
 // CustomerPassengerManifest has been merged into MyCharterTicketsPanel — see that file.
@@ -634,6 +642,7 @@ export function CharterDetail() {
   const [useAllPoints, setUseAllPoints] = useState(false);
   const [pointBalance, setPointBalance] = useState(0);
   const [pointBalanceLoaded, setPointBalanceLoaded] = useState(false);
+  const paymentPointsAreLocked = hasPaymentWithLockedPoints(booking);
   const [promoPreview, setPromoPreview] = useState(null);
   const [promoChecking, setPromoChecking] = useState(false);
   const promoValidateSeqRef = useRef(0);
@@ -712,7 +721,7 @@ export function CharterDetail() {
       if (normalized?.id && Array.isArray(normalized?.payments) && normalized.payments.length > 0) {
         try {
           sessionStorage.setItem(`charterPayments:${normalized.id}`, JSON.stringify(normalized.payments));
-        } catch (_) { /* quota full — ignore */ }
+        } catch { /* quota full - ignore */ }
       }
       const passengerSource = normalized.passengers.length > 0 ? normalized.passengers : normalized.tickets;
       const initialPassengers = passengerSource.length > 0
@@ -816,6 +825,10 @@ export function CharterDetail() {
       });
     return () => { cancelled = true; };
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (paymentPointsAreLocked) setUseAllPoints(false);
+  }, [paymentPointsAreLocked]);
 
   useEffect(() => {
     setAcknowledgedTabBadges(readAcknowledgedCustomerTabBadges(id));
@@ -1147,7 +1160,7 @@ export function CharterDetail() {
       autoSyncPaymentRef.current = "";
       window.clearInterval(interval);
     };
-  }, [booking?.id, booking?.latestPaymentExpiresAt, booking?.latestPaymentOrderCode, booking?.paymentStatus, booking?.totalAmount, booking?.paidAmount, loadDetail]);
+  }, [booking, loadDetail]);
 
   const applyCreatedPayOsPayment = useCallback((payment, {
     fallbackAmount = 0,
@@ -1234,15 +1247,13 @@ export function CharterDetail() {
     try {
       if (!silent) setIsSubmitting(true);
       setPaymentOption("Remaining");
+      // Top-up không được thay đổi lựa chọn điểm đã khóa ở payment đầu tiên.
       const payment = await createBookingPayment({
         bookingId: booking.id,
         paymentOption: "Remaining",
         promotionCode: promoClearedByUserRef.current
           ? null
           : (String(paymentPromotionCode || "").trim() || null),
-        // Áp dụng điểm cho cả top-up BH (vẫn cap 50% số tiền).
-        useAllPoints: pointsToUse > 0,
-        pointsToUse: pointsToUse > 0 ? pointsToUse : 0,
       });
       const applied = applyCreatedPayOsPayment(payment, {
         fallbackAmount: balanceDue,
@@ -1304,19 +1315,7 @@ export function CharterDetail() {
 
     createInsuranceTopUpPayOs(balanceDue, { openCheckout: true, silent: false });
     return undefined;
-  }, [
-    booking?.id,
-    booking?.totalAmount,
-    booking?.paidAmount,
-    booking?.remainingAmount,
-    booking?.requiresAdditionalPayment,
-    booking?.additionalInsuranceAmount,
-    booking?.status,
-    booking?.insuranceSelected,
-    booking?.payments,
-    paymentCheckoutUrl,
-    createInsuranceTopUpPayOs,
-  ]);
+  }, [booking, paymentCheckoutUrl, createInsuranceTopUpPayOs]);
 
   const handleCreatePayment = async () => {
     if (!booking?.id) return;
@@ -1370,9 +1369,14 @@ export function CharterDetail() {
         promotionCode: promoClearedByUserRef.current
           ? null
           : (String(paymentPromotionCode || "").trim() || null),
-        // Áp dụng điểm: cap 50% tổng tiền lần thanh toán này (BE sẽ validate lại).
-        useAllPoints: pointsToUse > 0,
-        pointsToUse: pointsToUse > 0 ? pointsToUse : 0,
+        // Điểm chỉ được chọn khi tạo payment đầu tiên. Payment sau giữ nguyên
+        // cấu hình điểm đã khóa trên booking bằng cách không gửi lại hai field này.
+        ...(!paymentPointsAreLocked
+          ? {
+              useAllPoints: pointsToUse > 0,
+              pointsToUse: pointsToUse > 0 ? pointsToUse : 0,
+            }
+          : {}),
       };
       charterLog("create-payment-start", {
         bookingId: booking.id,
@@ -1789,10 +1793,11 @@ export function CharterDetail() {
       return;
     }
 
+    const beforeBalance = getCharterBalanceDue(booking);
+    const beforeInsuranceTotal = Number(booking.insurance?.totalAmount || 0) || 0;
+
     try {
       setIsSubmitting(true);
-      const beforeBalance = getCharterBalanceDue(booking);
-      const beforeInsuranceTotal = Number(booking.insurance?.totalAmount || 0) || 0;
       const response = await updateMyCharterBookingPassengers(booking.id, { passengers: passengerPayload.passengers });
       const paymentMeta = extractCharterAdditionalPaymentMeta(response);
       const embeddedPayment = extractPayOsPaymentFields(response);
@@ -2163,16 +2168,8 @@ export function CharterDetail() {
   const isPaymentLinkExpired = hasPaymentDeadline && paymentRemainingMs <= 0;
   const isBookingHoldExpired = isQuotePaymentExpired;
   const hasPendingPayOs = Boolean(pendingPaymentId || effectiveCheckoutUrl);
-  // BE đang block việc dùng điểm khi booking đã có payment pending/paid (xem validation
-  // `Booking.Payments.Any(p => Status in {Pending, Paid})` trong service BE). Workaround
-  // phía FE: ẩn checkbox "Dùng điểm" cho tới khi BE cho phép. Khi BE fix xong, xoá block này.
-  const hasBlockingPaymentForPoints = Boolean(
-    Array.isArray(booking.payments)
-    && booking.payments.some((payment) => {
-      const status = String(payment?.paymentStatus || "").toLowerCase();
-      return status === "pending" || isPaidPayment(payment);
-    })
-  );
+  // Sau payment đầu tiên, lựa chọn điểm đã khóa ở cấp booking.
+  const hasBlockingPaymentForPoints = paymentPointsAreLocked;
   const canCreatePayment = (
     ["PendingPayment", "Confirmed"].includes(booking.status)
     || (balanceDue > 0 && ["Approved", "Confirmed", "PendingPayment"].includes(booking.status))
@@ -2862,7 +2859,6 @@ export function CharterDetail() {
                   canCreatePayment={canCreatePayment}
                   isInPassengerAddGrace={isInPassengerAddGrace}
                   passengerAddRemainingMs={passengerAddRemainingMs}
-                  passengerAddDeadline={passengerAddDeadline}
                   selectablePaymentChoices={selectablePaymentChoices}
                   paymentSelectValue={paymentSelectValue}
                   setPaymentOption={setPaymentOption}

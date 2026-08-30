@@ -75,6 +75,12 @@ const extractRows = (data) => {
     return [];
 };
 
+const toNullableNumber = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+};
+
 // Trả về số khi hợp lệ, null nếu không hợp lệ / không nhập.
 // `min` mặc định > 0 (cho usageLimit, maxUsesPerAccount). Truyền `1000` cho
 // các field tiền tệ để đảm bảo giá trị ≥ ngưỡng tối thiểu của backend.
@@ -141,6 +147,9 @@ export const normalizePromotion = (item) => {
             item.budgetCap === null || item.budgetCap === undefined
                 ? null
                 : Number(item.budgetCap),
+        budgetSpent: toNullableNumber(item.budgetSpent),
+        remainingBudget: toNullableNumber(item.remainingBudget),
+        effectiveState: item.effectiveState || '',
         firstBookingOnly: !!item.firstBookingOnly,
         scope: normalizeScope(item.scope),
         visibility: item.visibility || PROMOTION_VISIBILITY.PUBLIC,
@@ -245,8 +254,8 @@ export const buildPromotionPayload = (form, { includeCode = true } = {}) => {
             ? toNullablePositive(form.maxDiscountAmount, !!form.hasMaxDiscountAmount, 1000)
             : null,
         minOrderValue: toNullablePositive(form.minOrderValue, !!form.hasMinOrderValue, 1000),
-        startDate: toIsoWithOffset(form.validFrom),
-        endDate: toIsoWithOffset(form.validTo),
+        validFrom: toIsoWithOffset(form.validFrom),
+        validTo: toIsoWithOffset(form.validTo),
         maxUsageCount: toNullablePositive(form.usageLimit, !!form.hasUsageLimit),
         maxUsagePerAccount: toNullablePositive(form.maxUsesPerAccount, !!form.hasMaxUsesPerAccount),
         budgetCap: toNullablePositive(form.budgetCap, !!form.hasBudgetCap, 1000),

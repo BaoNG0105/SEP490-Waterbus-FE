@@ -213,7 +213,6 @@ export function MyCharterPaymentPanel({
   canCreatePayment,
   isInPassengerAddGrace,
   passengerAddRemainingMs,
-  passengerAddDeadline,
   selectablePaymentChoices,
   paymentSelectValue,
   setPaymentOption,
@@ -504,10 +503,7 @@ export function MyCharterPaymentPanel({
                     </p>
                   )}
 
-                  {/* Dùng điểm (1 điểm = 1 VND, tối đa bằng số tiền thanh toán).
-                      Workaround: ẩn hoàn toàn khi booking đã có payment pending/paid vì BE
-                      đang reject dùng điểm trong trường hợp đó. Khi BE fix, chỉ cần đổi điều
-                      kiện render về `pointBalanceLoaded && pointBalance > 0 && selectedPaymentAmount > 0`. */}
+                  {/* Điểm chỉ được chọn khi tạo payment đầu tiên của booking. */}
                   {!hasBlockingPaymentForPoints && pointBalanceLoaded && pointBalance > 0 && selectedPaymentAmount > 0 && (
                     <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/40 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/10">
                       <label className="flex items-start gap-3 cursor-pointer">
