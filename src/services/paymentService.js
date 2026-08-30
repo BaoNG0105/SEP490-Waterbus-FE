@@ -17,6 +17,18 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
+const parseBoolean = (value, fallback) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  if (value === 1) return true;
+  if (value === 0) return false;
+  return fallback;
+};
+
 export const createBookingPayment = (paymentPayload) =>
   apiCreatePayment(paymentPayload);
 
@@ -73,9 +85,20 @@ export const fetchRefundOtpOptions = async (paymentId) => {
     || "phone",
   );
 
+  const refundAmount = Number(pick(root, ["refundAmount", "amount", "payableAmount"], 0)) || 0;
+
   return {
     paymentId: pick(root, ["paymentId", "id"], "") || "",
-    refundAmount: Number(pick(root, ["refundAmount", "amount", "payableAmount"], 0)) || 0,
+    refundAmount,
+    requiresOtp: parseBoolean(
+      pick(root, ["requiresOtp", "RequiresOtp"], null),
+      refundAmount > 0,
+    ),
+    canSubmitRefund: parseBoolean(
+      pick(root, ["canSubmitRefund", "CanSubmitRefund"], null),
+      true,
+    ),
+    message: pick(root, ["message", "reason", "detail"], "") || "",
     defaultChannel: defaultChannel === "email" ? "email" : "phone",
     channels,
     raw: root,

@@ -1,15 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatCompactCurrency } from "../../utils/revenueReport";
 
-const VB_W = 980;
-const VB_H = 360;
-const PAD_L = 52;
-const PAD_R = 28;
+const DEFAULT_VIEWBOX_WIDTH = 980;
+const VIEWBOX_HEIGHT = 360;
+const PAD_L = 46;
+const PAD_R = 14;
 const PAD_T = 24;
 const PAD_B = 44;
-const PLOT_RIGHT = VB_W - PAD_R;
-const PLOT_BOTTOM = VB_H - PAD_B;
-const PLOT_H = PLOT_BOTTOM - PAD_T;
+
+const formatExactCurrency = (value) =>
+  `${(Number(value) || 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} VND`;
 
 // Làm mềm các đoạn nối nhưng vẫn đi qua đúng mọi mốc doanh thu.
 const createSmoothPath = (coords) => {
@@ -36,6 +36,28 @@ const createSmoothPath = (coords) => {
 
 export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }) {
   const [hover, setHover] = useState(null);
+  const [viewBoxWidth, setViewBoxWidth] = useState(DEFAULT_VIEWBOX_WIDTH);
+  const chartFrameRef = useRef(null);
+  const canMeasureChart = !isLoading && current.length > 0;
+  const plotRight = viewBoxWidth - PAD_R;
+  const plotBottom = VIEWBOX_HEIGHT - PAD_B;
+  const plotHeight = plotBottom - PAD_T;
+
+  useEffect(() => {
+    if (!canMeasureChart) return undefined;
+    const element = chartFrameRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return undefined;
+
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width <= 0 || height <= 0) return;
+      const nextWidth = Math.max(640, Math.round(VIEWBOX_HEIGHT * (width / height)));
+      setViewBoxWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
+    });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [canMeasureChart]);
 
   const niceScale = useMemo(() => {
     const max = Math.max(0, ...current.map((p) => Number(p.netRevenue || 0)));
@@ -60,21 +82,21 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
   const yMin = 0;
   const yRange = yMax - yMin || 1;
   const n = current.length;
-  const xStep = n > 1 ? (PLOT_RIGHT - PAD_L) / (n - 1) : 0;
+  const xStep = n > 1 ? (plotRight - PAD_L) / (n - 1) : 0;
 
   const coords = useMemo(
     () =>
       current.map((p, i) => ({
-        x: n > 1 ? PAD_L + i * xStep : (PAD_L + PLOT_RIGHT) / 2,
-        y: PLOT_BOTTOM - ((Number(p.netRevenue || 0) - yMin) / yRange) * PLOT_H,
+        x: n > 1 ? PAD_L + i * xStep : (PAD_L + plotRight) / 2,
+        y: plotBottom - ((Number(p.netRevenue || 0) - yMin) / yRange) * plotHeight,
         ...p,
       })),
-    [current, n, xStep, yRange]
+    [current, n, plotBottom, plotHeight, plotRight, xStep, yRange]
   );
 
   const linePath = createSmoothPath(coords);
   const areaPath = coords.length > 0
-    ? `${linePath} L${coords[coords.length - 1].x.toFixed(1)},${PLOT_BOTTOM} L${coords[0].x.toFixed(1)},${PLOT_BOTTOM} Z`
+    ? `${linePath} L${coords[coords.length - 1].x.toFixed(1)},${plotBottom} L${coords[0].x.toFixed(1)},${plotBottom} Z`
     : "";
 
   const yAxisLabels = useMemo(() => {
@@ -82,10 +104,10 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
     const steps = Math.round(niceScale.top / niceScale.step);
     return Array.from({ length: steps + 1 }, (_, i) => ({
       val: i * niceScale.step,
-      y: PLOT_BOTTOM - ((i * niceScale.step - yMin) / yRange) * PLOT_H,
+      y: plotBottom - ((i * niceScale.step - yMin) / yRange) * plotHeight,
       label: formatCompactCurrency(i * niceScale.step, lang),
     }));
-  }, [niceScale, yMin, yRange, lang]);
+  }, [lang, niceScale, plotBottom, plotHeight, yMin, yRange]);
 
   const totalNet = useMemo(
     () => current.reduce((s, p) => s + Number(p.netRevenue || 0), 0),
@@ -120,10 +142,10 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
       <div className="relative w-full h-full flex flex-col">
         <div className="mb-2 text-[11px] font-bold text-slate-500 dark:text-slate-300">
           {lang === "VN" ? "Tổng cộng" : "Total"}:{" "}
-          <span className="text-xl font-black text-[#124757] dark:text-yellow-400">{formatCompactCurrency(totalNet, lang)}</span>
+          <span className="text-xl font-black text-[#124757] dark:text-yellow-400">{formatExactCurrency(totalNet)}</span>
         </div>
-        <div className="flex-1 min-h-0">
-        <svg viewBox={`0 0 ${VB_W} ${VB_H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" className="block">
+        <div ref={chartFrameRef} className="flex-1 min-h-0">
+        <svg viewBox={`0 0 ${viewBoxWidth} ${VIEWBOX_HEIGHT}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" className="block">
           <defs>
             <linearGradient id="vsPrevGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={gradTop} />
@@ -134,7 +156,7 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
           {/* Y grid + labels */}
           {yAxisLabels.map((lbl, i) => (
             <g key={`y-${i}`}>
-              <line x1={PAD_L} x2={PLOT_RIGHT} y1={lbl.y} y2={lbl.y} stroke={gridColor} strokeWidth={1.4} strokeDasharray="4 4" opacity={0.6} />
+              <line x1={PAD_L} x2={plotRight} y1={lbl.y} y2={lbl.y} stroke={gridColor} strokeWidth={1.4} strokeDasharray="4 4" opacity={0.6} />
               <text x={PAD_L - 10} y={lbl.y + 5} fontSize={14} fontWeight={700} fill={labelColor} textAnchor="end">
                 {lbl.label}
               </text>
@@ -157,7 +179,7 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
                 <text
                   key={`xl-${idx}`}
                   x={coords[idx].x + dx}
-                  y={PLOT_BOTTOM + 26}
+                  y={plotBottom + 26}
                   fontSize={13}
                   fontWeight={700}
                   fill={labelColor}
@@ -181,7 +203,7 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
               x={c.x - (xStep / 2 || 12)}
               y={PAD_T}
               width={xStep || 20}
-              height={PLOT_H}
+              height={plotHeight}
               fill="transparent"
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover(null)}
@@ -191,22 +213,23 @@ export function RevenueVsPrevChart({ current = [], lang, isDarkMode, isLoading }
           {/* Tooltip */}
           {hovered && (() => {
             const curV = Number(hovered.netRevenue || 0);
-            const tipW = 112;
+            const tooltipValue = formatExactCurrency(curV);
+            const tipW = Math.max(112, tooltipValue.length * 7.5 + 20);
             const tipH = 42;
             let tipX = hovered.x - tipW / 2;
             let tipY = hovered.y - tipH - 10;
             if (tipY < PAD_T) tipY = hovered.y + 10;
             if (tipX < 4) tipX = 4;
-            if (tipX + tipW > PLOT_RIGHT) tipX = PLOT_RIGHT - tipW;
+            if (tipX + tipW > plotRight) tipX = plotRight - tipW;
             return (
               <g pointerEvents="none">
-                <line x1={hovered.x} x2={hovered.x} y1={PAD_T} y2={PLOT_BOTTOM} stroke={strokeColor} strokeWidth={1.2} strokeDasharray="4 4" opacity={0.5} />
+                <line x1={hovered.x} x2={hovered.x} y1={PAD_T} y2={plotBottom} stroke={strokeColor} strokeWidth={1.2} strokeDasharray="4 4" opacity={0.5} />
                 <rect x={tipX} y={tipY} width={tipW} height={tipH} rx={8} fill={isDarkMode ? "#0f172a" : "#124757"} opacity={0.97} />
                 <text x={tipX + 10} y={tipY + 15} fontSize={9} fontWeight={700} fill={isDarkMode ? "#94a3b8" : "#d7e7ec"}>
                   {hovered.date}
                 </text>
                 <text x={tipX + 10} y={tipY + 31} fontSize={13} fontWeight={900} fill="#ffffff">
-                  {formatCompactCurrency(curV, lang)}
+                  {tooltipValue}
                 </text>
               </g>
             );

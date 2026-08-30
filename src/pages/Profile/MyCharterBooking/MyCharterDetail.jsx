@@ -171,8 +171,24 @@ const getPassengerAddDeadline = (booking) => {
 
 const getPaymentId = (payment) => getRefundPaymentId(payment);
 
+const getPaymentAvailableRefundAmount = (payment) => {
+  const value = Number(payment?.availableRefundAmount ?? payment?.AvailableRefundAmount ?? 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+};
+
 const getRefundablePayment = (booking) => {
   const payments = Array.isArray(booking?.payments) ? booking.payments : [];
+  const refundablePayments = Array.isArray(booking?.refundablePayments) ? booking.refundablePayments : [];
+  const refundSummary = refundablePayments.find((item) => (
+    getPaymentId(item) && getPaymentAvailableRefundAmount(item) > 0
+  )) || refundablePayments.find((item) => getPaymentId(item));
+
+  if (refundSummary) {
+    const refundPaymentId = getPaymentId(refundSummary);
+    const matchingPayment = payments.find((item) => getPaymentId(item) === refundPaymentId);
+    return matchingPayment || refundSummary;
+  }
+
   const paidPayment = payments.find((payment) => isPaidPayment(payment) && getPaymentId(payment));
   if (paidPayment) return paidPayment;
 
@@ -248,7 +264,7 @@ const normalizeBooking = (item) => {
   const pendingPayment = payments.find((payment) => String(payment.paymentStatus).toLowerCase() === "pending");
   const paidPayments = payments.filter(isPaidPayment);
   const paidPaymentWithId = paidPayments.find((payment) => getPaymentId(payment));
-  const paymentStatus = pick(item, ["paymentStatus"], "--");
+  const paymentStatus = pick(item, ["bookingPaymentStatus", "paymentStatus"], "--");
   const rawDepositAmount = Number(pick(item, [
     "depositAmount",
     "requiredDepositAmount",
@@ -291,10 +307,13 @@ const normalizeBooking = (item) => {
     childCount,
     passengerCount,
     status: resolveCharterBookingStatus(item),
+    bookingPaymentStatus: pick(item, ["bookingPaymentStatus", "BookingPaymentStatus"], ""),
     paymentStatus: (() => {
       const resolved = resolveCharterPaymentStatus(item);
       return resolved !== "--" ? resolved : paymentStatus;
     })(),
+    refundStatus: pick(item, ["refundStatus", "RefundStatus", "latestRefundStatus", "paymentRefundStatus"], ""),
+    isRefundable: pick(item, ["isRefundable", "IsRefundable"], null),
     holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
     bookingHoldExpiresAt: pick(item, ["bookingHoldExpiresAt"], pick(pendingPayment, ["bookingHoldExpiresAt"], "")),
     quotedAt: pick(item, ["quotedAt", "quoteSubmittedAt", "quoteAt", "quotedDate"], ""),
@@ -346,6 +365,7 @@ const normalizeBooking = (item) => {
     passengers: pick(item, ["passengers"], []),
     tickets: pick(item, ["tickets"], []),
     payments,
+    refundablePayments: Array.isArray(item?.refundablePayments) ? item.refundablePayments : [],
     paidAmount,
     paidDepositAmount,
     hasDepositPaid,
@@ -902,6 +922,21 @@ export function CharterDetail() {
     return total;
   }, [booking]);
 
+  const rejectPromotionCode = useCallback((message) => {
+    promoValidateSeqRef.current += 1;
+    lastAppliedPromoRef.current = { code: "", subtotal: 0 };
+    promoClearedByUserRef.current = true;
+    setPaymentPromotionCode("");
+    setPromoPreview(null);
+    setPromoChecking(false);
+    showToast({
+      icon: "warning",
+      title: lang === "VN" ? "Không áp dụng được mã" : "Promotion not applicable",
+      text: message,
+      timer: 4500,
+    });
+  }, [lang]);
+
   const handleApplyPromotionCode = useCallback(async (codeOverride) => {
     const code = String(codeOverride ?? paymentPromotionCode).trim();
     if (!code) {
@@ -910,10 +945,9 @@ export function CharterDetail() {
     }
     const subtotal = getPromoSubtotalAmount();
     if (subtotal <= 0) {
-      setPromoPreview({
-        ok: false,
-        error: lang === "VN" ? "Chưa có số tiền để áp dụng mã." : "No amount available for this promo.",
-      });
+      rejectPromotionCode(
+        lang === "VN" ? "Chưa có số tiền để áp dụng mã." : "No amount available for this promo.",
+      );
       return;
     }
 
@@ -932,11 +966,9 @@ export function CharterDetail() {
       if (seq !== promoValidateSeqRef.current) return;
       const normalized = normalizePromotionValidateResult(payload, subtotal);
       if (!normalized.ok) {
-        lastAppliedPromoRef.current = { code: "", subtotal: 0 };
-        setPromoPreview({
-          ok: false,
-          error: normalized.message || (lang === "VN" ? "Mã không hợp lệ" : "Invalid promo code"),
-        });
+        rejectPromotionCode(
+          normalized.message || (lang === "VN" ? "Mã không hợp lệ" : "Invalid promo code"),
+        );
         return;
       }
       const nextCode = normalized.code || code;
@@ -953,18 +985,16 @@ export function CharterDetail() {
       });
     } catch (error) {
       if (seq !== promoValidateSeqRef.current) return;
-      lastAppliedPromoRef.current = { code: "", subtotal: 0 };
-      setPromoPreview({
-        ok: false,
-        error: getApiErrorMessage(
+      rejectPromotionCode(
+        getApiErrorMessage(
           error,
           lang === "VN" ? "Không kiểm tra được mã khuyến mãi." : "Could not validate promo code.",
         ),
-      });
+      );
     } finally {
       if (seq === promoValidateSeqRef.current) setPromoChecking(false);
     }
-  }, [getPromoSubtotalAmount, lang, paymentPromotionCode]);
+  }, [getPromoSubtotalAmount, lang, paymentPromotionCode, rejectPromotionCode]);
 
   const handleClearPromotionCode = useCallback(() => {
     promoValidateSeqRef.current += 1;

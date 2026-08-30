@@ -32,6 +32,11 @@ const getPaymentAmount = (payment) =>
 const getPaymentPurpose = (payment) =>
   String(pick(payment, ["paymentPurpose", "purpose", "type"], "")).toLowerCase();
 
+const isPaidPayment = (payment) =>
+  ["paid", "depositpaid"].includes(
+    String(pick(payment, ["paymentStatus", "status"], "")).toLowerCase(),
+  );
+
 const normalizeBooking = (item) => {
   const adultCount = Number(pick(item, ["adultCount"], 0));
   const childCount = Number(pick(item, ["childCount"], 0));
@@ -47,15 +52,16 @@ const normalizeBooking = (item) => {
       try {
         const cached = sessionStorage.getItem(`charterPayments:${itemId}`);
         if (cached) return JSON.parse(cached);
-      } catch (_) { /* ignore parse errors */ }
+      } catch { /* ignore parse errors */ }
     }
     return [];
   })();
-  const paidPaymentAmount = payments.reduce((total, payment) => total + getPaymentAmount(payment), 0);
-  const paidDepositAmount = payments
+  const paidPayments = payments.filter(isPaidPayment);
+  const paidPaymentAmount = paidPayments.reduce((total, payment) => total + getPaymentAmount(payment), 0);
+  const paidDepositAmount = paidPayments
     .filter((payment) => getPaymentPurpose(payment) === "deposit")
     .reduce((total, payment) => total + getPaymentAmount(payment), 0);
-  const paymentStatus = pick(item, ["paymentStatus"], "--");
+  const paymentStatus = resolveCharterPaymentStatus(item);
   const hasDepositPaid = paidDepositAmount > 0 || String(paymentStatus).toLowerCase() === "depositpaid";
   const rawDepositAmount = Number(pick(item, ["depositAmount", "requiredDepositAmount"], 0)) || 0;
   const finalDepositAmount = paidDepositAmount || (hasDepositPaid ? rawDepositAmount : 0);
@@ -98,7 +104,10 @@ const normalizeBooking = (item) => {
     childCount,
     passengerCount,
     status: resolveCharterBookingStatus(item),
+    bookingPaymentStatus: pick(item, ["bookingPaymentStatus", "BookingPaymentStatus"], ""),
     paymentStatus,
+    refundStatus: pick(item, ["refundStatus", "RefundStatus", "latestRefundStatus", "paymentRefundStatus"], ""),
+    isRefundable: pick(item, ["isRefundable", "IsRefundable"], null),
     estimatedPrice,
     paidAmount,
     paidDepositAmount: totalPaidDeposit,
@@ -198,7 +207,7 @@ export function CharterList() {
     loadBookings();
   }, [loadBookings]);
 
-  const getStatusInfo = (status, paymentStatus) => getCharterBookingStatusInfo(status, paymentStatus, lang);
+  const getStatusInfo = (status, paymentStatus, booking) => getCharterBookingStatusInfo(status, paymentStatus, lang, booking);
 
   const filteredBookings = useMemo(() => bookings.filter((booking) => {
     const searchValue = searchTerm.toLowerCase();
@@ -344,7 +353,7 @@ export function CharterList() {
             </div>
           ) : (
             pagedBookings.map((booking) => {
-              const statusInfo = getStatusInfo(booking.status, booking.paymentStatus);
+              const statusInfo = getStatusInfo(booking.status, booking.paymentStatus, booking);
               const actionInfo = getCustomerActionInfo(booking, lang);
               const focusPayment = ["pay", "manage"].includes(actionInfo.tone) && actionInfo.urgent;
               const isClosed = isTerminalBookingStatus(booking.status);

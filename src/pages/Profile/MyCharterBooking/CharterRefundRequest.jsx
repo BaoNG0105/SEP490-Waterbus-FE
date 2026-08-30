@@ -9,7 +9,7 @@ import {
   requestRefundBookingOtp,
 } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
-import { getRefundPaymentId, getAvailableRefundAmount, isPaymentUuid, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
+import { getRefundPaymentId, getAvailableRefundAmount, hasCompletedCharterRefund, isPaymentUuid, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -19,11 +19,97 @@ const pick = (source, keys, fallback = "") => {
   return fallback;
 };
 
+const pickDisplayText = (source, keys) => {
+  for (const key of keys) {
+    const value = key.split(".").reduce((obj, part) => obj?.[part], source);
+    if (typeof value !== "string" && typeof value !== "number") continue;
+    const text = String(value).trim();
+    if (text && text !== "--" && text !== "—") return text;
+  }
+  return "";
+};
+
 const formatDate = (value) => {
   if (!value) return "--";
+  const raw = String(value).trim();
+  const isoDate = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoDate) {
+    return `${isoDate[3].padStart(2, "0")}-${isoDate[2].padStart(2, "0")}-${isoDate[1]}`;
+  }
+
+  const dayFirstDate = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (dayFirstDate) {
+    return `${dayFirstDate[1].padStart(2, "0")}-${dayFirstDate[2].padStart(2, "0")}-${dayFirstDate[3]}`;
+  }
+
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  return date.toLocaleDateString("vi-VN");
+  if (Number.isNaN(date.getTime())) return raw;
+  return [
+    String(date.getDate()).padStart(2, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    date.getFullYear(),
+  ].join("-");
+};
+
+const normalizeTime = (value) => {
+  const match = String(value || "").match(/(?:\d+\.)?(\d{1,2}):(\d{2})/);
+  return match ? `${String(Number(match[1])).padStart(2, "0")}:${match[2]}` : "";
+};
+
+const getBookingRouteLabel = (item) => {
+  const sources = [item, item?.raw].filter((source) => source && typeof source === "object");
+  const routeEstimate = sources
+    .map((source) => pick(source, ["routeEstimate"], null))
+    .find((estimate) => estimate && typeof estimate === "object");
+  const estimateLegs = Array.isArray(routeEstimate?.legs) ? routeEstimate.legs : [];
+  const firstLeg = estimateLegs[0] || null;
+  const lastLeg = estimateLegs[estimateLegs.length - 1] || null;
+  const itineraryStops = sources
+    .map((source) => source.itineraryStops)
+    .find((stops) => Array.isArray(stops) && stops.length > 0) || [];
+  const firstStop = itineraryStops[0] || null;
+  const lastStop = itineraryStops[itineraryStops.length - 1] || null;
+
+  const routeKeys = [
+    "matchedRouteName",
+    "routeName",
+    "selectedRouteName",
+    "finalizedRouteName",
+    "matchedRoute.routeName",
+    "route.routeName",
+    "route.name",
+    "selectedRoute.routeName",
+    "selectedRoute.name",
+    "finalizedRoute.routeName",
+    "routeEstimate.matchedRouteName",
+    "routeEstimate.routeName",
+    "itineraryName",
+    "route",
+  ];
+  const routeLabel = sources.map((source) => pickDisplayText(source, routeKeys)).find(Boolean)
+    || pickDisplayText(firstLeg, ["matchedRouteName", "routeName", "matchedRoute.routeName"]);
+  if (routeLabel) return routeLabel;
+
+  const fromName = sources
+    .map((source) => pickDisplayText(source, ["fromStationName", "fromStation.stationName", "fromStation.name"]))
+    .find(Boolean)
+    || pickDisplayText(firstLeg, ["fromStationName", "fromStation.stationName", "fromStation.name"])
+    || pickDisplayText(firstStop, ["stationName", "station.stationName", "station.name"]);
+  const toName = sources
+    .map((source) => pickDisplayText(source, ["toStationName", "toStation.stationName", "toStation.name"]))
+    .find(Boolean)
+    || pickDisplayText(lastLeg, ["toStationName", "toStation.stationName", "toStation.name"])
+    || pickDisplayText(lastStop, ["stationName", "station.stationName", "station.name"]);
+  if (fromName || toName) return `${fromName || "--"} - ${toName || "--"}`;
+
+  return sources
+    .map((source) => pickDisplayText(source, [
+      "matchedRouteCode",
+      "routeCode",
+      "selectedRouteCode",
+      "selectedRoute.routeCode",
+    ]))
+    .find(Boolean) || "--";
 };
 
 const getPaymentAmount = (payment) =>
@@ -31,11 +117,27 @@ const getPaymentAmount = (payment) =>
 
 const getPaymentId = (payment) => getRefundPaymentId(payment);
 
+const getPaymentAvailableRefundAmount = (payment) => {
+  const value = Number(payment?.availableRefundAmount ?? payment?.AvailableRefundAmount ?? 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+};
+
 const isPaidPayment = (payment) =>
   ["paid", "depositpaid"].includes(String(payment?.paymentStatus || "").toLowerCase());
 
 const getRefundablePayment = (booking) => {
   const payments = Array.isArray(booking?.payments) ? booking.payments : [];
+  const refundablePayments = Array.isArray(booking?.refundablePayments) ? booking.refundablePayments : [];
+  const refundSummary = refundablePayments.find((item) => (
+    getPaymentId(item) && getPaymentAvailableRefundAmount(item) > 0
+  )) || refundablePayments.find((item) => getPaymentId(item));
+
+  if (refundSummary) {
+    const refundPaymentId = getPaymentId(refundSummary);
+    const matchingPayment = payments.find((item) => getPaymentId(item) === refundPaymentId);
+    return matchingPayment || refundSummary;
+  }
+
   const paidPayment = payments.find((payment) => isPaidPayment(payment) && getPaymentId(payment));
   if (paidPayment) return paidPayment;
 
@@ -56,17 +158,43 @@ const normalizeBooking = (item) => {
   const payments = Array.isArray(item?.payments) ? item.payments : [];
   const paidPayments = payments.filter(isPaidPayment);
   const paidAmountFromPayments = paidPayments.reduce((total, payment) => total + getPaymentAmount(payment), 0);
+  const departureDate = pick(item, [
+    "departureDate",
+    "DepartureDate",
+    "startDate",
+    "StartDate",
+    "scheduledDate",
+    "rentalDate",
+    "requestedDepartureDate",
+    "scheduledDepartureAt",
+    "departureTime",
+    "requestedDepartureTime",
+  ], "");
+  const startTime = normalizeTime(pick(item, [
+    "startTime",
+    "StartTime",
+    "departureTime",
+    "DepartureTime",
+    "requestedDepartureTime",
+    "scheduledDepartureTime",
+    "rentalStartTime",
+    "schedule.startTime",
+    "charterSchedule.startTime",
+  ], "")) || normalizeTime(departureDate) || "--";
 
   return {
     id: pick(item, ["id", "charterBookingId", "bookingId"]),
     bookingCode: pick(item, ["bookingCode", "code"], "--"),
     boatName: pick(item, ["boatName", "boat.name"], "--"),
-    route: pick(item, ["routeName", "route", "itineraryName"], "--"),
-    departureDate: pick(item, ["departureDate", "startDate"], ""),
-    startTime: pick(item, ["startTime"], "--"),
+    route: getBookingRouteLabel(item),
+    departureDate,
+    startTime,
     contactName: pick(item, ["contactName"], ""),
     status: resolveCharterBookingStatus(item),
+    bookingPaymentStatus: pick(item, ["bookingPaymentStatus", "BookingPaymentStatus"], ""),
     paymentStatus: resolveCharterPaymentStatus(item),
+    refundStatus: pick(item, ["refundStatus", "RefundStatus", "latestRefundStatus", "paymentRefundStatus"], ""),
+    isRefundable: pick(item, ["isRefundable", "IsRefundable"], null),
     paidAmount: paidAmountFromPayments || Number(pick(item, ["paidAmount", "paidPaymentAmount", "depositAmount"], 0)) || 0,
     payments,
     refundablePayments: Array.isArray(item?.refundablePayments) ? item.refundablePayments : [],
@@ -107,6 +235,17 @@ const channelLabel = (channel, lang) => {
   return channel || "—";
 };
 
+const EMPTY_OTP_CHALLENGE_ID = "00000000-0000-0000-0000-000000000000";
+
+const buildZeroRefundPayload = (reason) => ({
+  reason: String(reason || "").trim() || "Hoàn tiền booking bị hủy theo chính sách 0%",
+  bankBin: "",
+  accountNumber: "",
+  accountName: "",
+  otpChallengeId: EMPTY_OTP_CHALLENGE_ID,
+  otpCode: "",
+});
+
 export function CharterRefund() {
   const { id } = useParams();
   const location = useLocation();
@@ -116,7 +255,7 @@ export function CharterRefund() {
   const [booking, setBooking] = useState(() => location.state?.booking ? normalizeBooking(location.state.booking) : null);
   const [payment, setPayment] = useState(location.state?.payment || null);
   const [paymentId, setPaymentId] = useState(location.state?.paymentId || "");
-  const [isLoading, setIsLoading] = useState(!location.state?.booking);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -127,6 +266,8 @@ export function CharterRefund() {
   const [otpCode, setOtpCode] = useState("");
   const [otpMeta, setOtpMeta] = useState(null);
   const [otpOptions, setOtpOptions] = useState(null);
+  const [isLoadingOtpOptions, setIsLoadingOtpOptions] = useState(false);
+  const [otpOptionsError, setOtpOptionsError] = useState("");
   const [otpChannel, setOtpChannel] = useState("phone");
   const [pendingRefundPayload, setPendingRefundPayload] = useState(null);
   const [form, setForm] = useState({
@@ -137,6 +278,10 @@ export function CharterRefund() {
       ? String(location.state.booking.contactName).toUpperCase()
       : "",
   });
+  const refundAlreadyCompleted = Boolean(
+    booking
+    && (hasCompletedCharterRefund(booking) || hasCompletedCharterRefund(booking.raw)),
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -168,17 +313,20 @@ export function CharterRefund() {
       }
     };
 
-    if (!booking) loadBooking();
+    loadBooking();
     return () => {
       isMounted = false;
     };
-  }, [booking, id, lang]);
+  }, [id, lang]);
 
   useEffect(() => {
     let alive = true;
     const loadOptions = async () => {
-      if (!paymentId) return;
+      const bookingStatus = String(booking?.status || "").toLowerCase();
+      if (isLoading || refundAlreadyCompleted || !paymentId || !["cancelled", "refunded"].includes(bookingStatus)) return;
       try {
+        setIsLoadingOtpOptions(true);
+        setOtpOptionsError("");
         const options = await fetchRefundOtpOptions(paymentId);
         if (!alive) return;
         setOtpOptions(options);
@@ -187,16 +335,24 @@ export function CharterRefund() {
           || options.channels[0]?.channel
           || "phone";
         setOtpChannel(preferred === "email" ? "email" : "phone");
-      } catch {
+      } catch (error) {
         if (!alive) return;
         setOtpOptions(null);
+        setOtpOptionsError(getApiErrorMessage(
+          error,
+          lang === "VN"
+            ? "Không thể kiểm tra điều kiện hoàn tiền. Vui lòng thử lại."
+            : "Unable to check refund eligibility. Please try again.",
+        ));
+      } finally {
+        if (alive) setIsLoadingOtpOptions(false);
       }
     };
     loadOptions();
     return () => {
       alive = false;
     };
-  }, [paymentId]);
+  }, [booking?.status, isLoading, lang, paymentId, refundAlreadyCompleted]);
 
   const hasPaidPayment = booking
     && (["paid", "depositpaid"].includes(String(booking.paymentStatus).toLowerCase()) || Number(booking.paidAmount || 0) > 0 || isPaidPayment(payment));
@@ -206,9 +362,36 @@ export function CharterRefund() {
   const refundAmountFromPolicy = booking?.refundablePayments?.length > 0
     ? getAvailableRefundAmount(booking.refundablePayments)
     : 0;
-  const refundAmountDisplay = Number(otpOptions?.refundAmount || refundAmountFromPolicy || 0);
-  /** Policy 0% (hủy ≥ 7 ngày) — BE skip bank/OTP, chỉ cần customer xác nhận. */
-  const isZeroRefundPolicy = refundAmountDisplay <= 0;
+  const refundAmountDisplay = Number(otpOptions
+    ? otpOptions.refundAmount
+    : refundAmountFromPolicy) || 0;
+  /** Khi otp-options đã tải, requiresOtp từ BE là nguồn quyết định cuối cùng. */
+  const isZeroRefundPolicy = otpOptions
+    ? otpOptions.refundAmount <= 0 && otpOptions.requiresOtp === false
+    : refundAmountFromPolicy <= 0;
+  const refundCannotBeSubmitted = otpOptions?.canSubmitRefund === false;
+  const refundUnavailableMessage = refundCannotBeSubmitted
+    ? (otpOptions.message || (lang === "VN"
+      ? "Yêu cầu hoàn tiền hiện không thể gửi. Vui lòng liên hệ admin."
+      : "This refund request cannot be submitted. Please contact an administrator."))
+    : "";
+
+  const applyRefundOptions = (options) => {
+    setOtpOptions(options);
+    setOtpOptionsError("");
+    const preferred = options.channels.find((item) => item.isDefault)?.channel
+      || options.defaultChannel
+      || options.channels[0]?.channel
+      || "phone";
+    setOtpChannel(preferred === "email" ? "email" : "phone");
+    return options;
+  };
+
+  const fetchCurrentRefundOptions = async () => {
+    if (!paymentId) throw new Error("MISSING_PAYMENT");
+    const options = await fetchRefundOtpOptions(paymentId);
+    return applyRefundOptions(options);
+  };
 
   const handleFieldChange = (field) => (event) => {
     let value = event.target.value;
@@ -247,7 +430,7 @@ export function CharterRefund() {
     }
 
     const bookingStatus = String(booking.status || "").toLowerCase();
-    const shouldCancelBooking = !cancelAlreadySubmitted && !["cancelled", "refunded"].includes(bookingStatus) && refundAmountFromPolicy > 0;
+    const shouldCancelBooking = !cancelAlreadySubmitted && !["cancelled", "refunded"].includes(bookingStatus);
     let didCancelBooking = false;
 
     try {
@@ -259,10 +442,21 @@ export function CharterRefund() {
         setCancelAlreadySubmitted(true);
       }
 
-      await refundBookingPayment(paymentId, {
-        reason: form.reason.trim() || "Hoàn tiền booking bị hủy theo chính sách 0%",
-        confirmZeroRefund: true,
-      });
+      const options = await fetchCurrentRefundOptions();
+      if (!options.canSubmitRefund) {
+        setSubmitError(options.message || (lang === "VN"
+          ? "Yêu cầu hoàn tiền hiện không thể gửi. Vui lòng liên hệ admin."
+          : "This refund request cannot be submitted. Please contact an administrator."));
+        return;
+      }
+      if (options.refundAmount > 0 || options.requiresOtp) {
+        setSubmitError(lang === "VN"
+          ? "Khoản hoàn này cần thông tin ngân hàng và OTP. Vui lòng nhập thông tin để tiếp tục."
+          : "This refund requires bank details and OTP. Please enter the required information to continue.");
+        return;
+      }
+
+      await refundBookingPayment(paymentId, buildZeroRefundPayload(form.reason));
       setSuccessMessage(
         lang === "VN"
           ? "Đã xác nhận. Booking đã đóng sổ theo chính sách hoàn 0% — không cần chuyển khoản."
@@ -311,6 +505,29 @@ export function CharterRefund() {
         await cancelMyCharterBooking(booking.id, {});
         didCancelBooking = true;
         setCancelAlreadySubmitted(true);
+      }
+
+      const options = await fetchCurrentRefundOptions();
+      if (!options.canSubmitRefund) {
+        setSubmitError(options.message || (lang === "VN"
+          ? "Yêu cầu hoàn tiền hiện không thể gửi. Vui lòng liên hệ admin."
+          : "This refund request cannot be submitted. Please contact an administrator."));
+        return;
+      }
+      if (!options.requiresOtp) {
+        if (options.refundAmount > 0) {
+          setSubmitError(lang === "VN"
+            ? "Thông tin hoàn tiền từ máy chủ không nhất quán. Vui lòng liên hệ admin."
+            : "The server returned inconsistent refund information. Please contact an administrator.");
+          return;
+        }
+        await refundBookingPayment(paymentId, buildZeroRefundPayload(payload.reason));
+        setSuccessMessage(
+          lang === "VN"
+            ? "Đã xác nhận. Booking đã đóng sổ theo chính sách hoàn 0% — không cần chuyển khoản."
+            : "Confirmed. Booking closed under the 0% refund policy — no bank transfer needed.",
+        );
+        return;
       }
 
       setPendingRefundPayload(payload);
@@ -431,6 +648,34 @@ export function CharterRefund() {
     );
   }
 
+  if (refundAlreadyCompleted) {
+    return (
+      <div className="min-h-screen bg-slate-50 px-4 py-30 font-body dark:bg-slate-900">
+        <main className="mx-auto max-w-4xl">
+          <section className="rounded-3xl border border-emerald-100 bg-white p-8 text-center dark:border-emerald-500/20 dark:bg-slate-800">
+            <span className="material-symbols-outlined text-4xl text-emerald-500">task_alt</span>
+            <h1 className="mt-3 font-headline text-2xl font-black text-[#124757] dark:text-yellow-400">
+              {lang === "VN" ? "Hoàn tiền đã hoàn tất" : "Refund already completed"}
+            </h1>
+            <p className="mt-2 text-sm font-bold text-slate-500 dark:text-slate-300">
+              {lang === "VN"
+                ? "Giao dịch này đã được xử lý xong. Bạn không cần và không thể nhập lại thông tin hoàn tiền."
+                : "This transaction has already been processed. Refund information cannot be submitted again."}
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <button onClick={() => navigate(`/profile/my-charter-booking/${booking.id}`)} className="rounded-xl bg-[#124757] px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white dark:bg-yellow-400 dark:text-slate-900">
+                {lang === "VN" ? "Xem chi tiết" : "View request"}
+              </button>
+              <button onClick={() => navigate("/profile/my-charter-booking")} className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                {lang === "VN" ? "Danh sách booking" : "Booking list"}
+              </button>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   if (!hasPaidPayment) {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-30 font-body dark:bg-slate-900">
@@ -524,7 +769,7 @@ export function CharterRefund() {
                   {[
                     { label: lang === "VN" ? "Tàu" : "Boat", value: booking.boatName },
                     { label: lang === "VN" ? "Lộ trình" : "Route", value: booking.route },
-                    { label: lang === "VN" ? "Khởi hành" : "Departure", value: `${formatDate(booking.departureDate)} ${String(booking.startTime).slice(0, 5)}` },
+                    { label: lang === "VN" ? "Khởi hành" : "Departure", value: `${formatDate(booking.departureDate)} ${booking.startTime || "--"}` },
                   ].map((item) => (
                     <div key={item.label} className="flex items-start justify-between gap-3 border-b border-slate-200/70 pb-2 last:border-0 last:pb-0 dark:border-slate-700">
                       <span className="text-xs font-bold text-slate-400">{item.label}</span>
@@ -542,7 +787,11 @@ export function CharterRefund() {
               </div>
             </aside>
 
-            {isZeroRefundPolicy ? (
+            {isLoadingOtpOptions ? (
+              <div className="flex min-h-64 items-center justify-center">
+                <div className="h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-[#124757] dark:border-slate-700 dark:border-t-yellow-400" />
+              </div>
+            ) : isZeroRefundPolicy ? (
               <div className="space-y-5">
                 <div className="rounded-2xl border border-teal-200 bg-teal-50/60 p-5 dark:border-teal-500/20 dark:bg-teal-500/10">
                   <div className="flex items-start gap-3">
@@ -587,9 +836,9 @@ export function CharterRefund() {
                   />
                 </div>
 
-                {submitError && (
+                {(otpOptionsError || refundUnavailableMessage || submitError) && (
                   <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
-                    {submitError}
+                    {submitError || refundUnavailableMessage || otpOptionsError}
                   </div>
                 )}
 
@@ -605,7 +854,7 @@ export function CharterRefund() {
                   <button
                     type="button"
                     onClick={handleConfirmZeroRefund}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || refundCannotBeSubmitted}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white hover:bg-teal-700 disabled:opacity-60"
                   >
                     <span className="material-symbols-outlined text-base">{isSubmitting ? "progress_activity" : "check_circle"}</span>
@@ -703,9 +952,9 @@ export function CharterRefund() {
                   />
                 </div>
 
-                {submitError && (
+                {(otpOptionsError || refundUnavailableMessage || submitError) && (
                   <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
-                    {submitError}
+                    {submitError || refundUnavailableMessage || otpOptionsError}
                   </div>
                 )}
 
@@ -713,7 +962,7 @@ export function CharterRefund() {
                   <button type="button" onClick={() => navigate(`/profile/my-charter-booking/${booking.id}`)} disabled={isSubmitting} className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                     {lang === "VN" ? "Hủy thao tác" : "Cancel"}
                   </button>
-                  <button type="submit" disabled={isSubmitting || isSendingOtp} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60">
+                  <button type="submit" disabled={isSubmitting || isSendingOtp || refundCannotBeSubmitted} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-xs font-headline font-black uppercase tracking-widest text-white disabled:opacity-60">
                     {isSubmitting || isSendingOtp
                       ? (lang === "VN" ? "Đang gửi OTP…" : "Sending OTP…")
                       : (["cancelled", "refunded"].includes(String(booking.status || "").toLowerCase())

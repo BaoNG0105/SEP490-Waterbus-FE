@@ -713,8 +713,15 @@ export const isRefundDone = (payment) => {
 
 export const hasCompletedCharterRefund = (item) => {
   if (!item || typeof item !== "object") return false;
-  const topPayment = String(pick(item, ["paymentStatus", "PaymentStatus"], "") || "").toLowerCase().replace(/[_-\s]/g, "");
-  if (["refunded", "partiallyrefunded"].includes(topPayment)) return true;
+  const topPaymentStatuses = [
+    item.bookingPaymentStatus,
+    item.BookingPaymentStatus,
+    item.paymentStatus,
+    item.PaymentStatus,
+  ]
+    .map((value) => String(value || "").toLowerCase().replace(/[_-\s]/g, ""))
+    .filter(Boolean);
+  if (topPaymentStatuses.some((status) => ["refunded", "partiallyrefunded"].includes(status))) return true;
 
   const topRefund = String(pick(item, [
     "refundStatus",
@@ -767,7 +774,12 @@ export const resolveCharterBookingStatus = (item) => {
 
 /** Ưu tiên trạng thái hoàn tiền từ payments[] nếu top-level còn Paid. */
 export const resolveCharterPaymentStatus = (item) => {
-  const top = String(pick(item, ["paymentStatus", "PaymentStatus"], "") || "").trim();
+  const top = String(pick(item, [
+    "bookingPaymentStatus",
+    "BookingPaymentStatus",
+    "paymentStatus",
+    "PaymentStatus",
+  ], "") || "").trim();
   const payments = collectCharterPayments(item);
   const paymentStatuses = payments
     .map((payment) => String(pick(payment, ["paymentStatus", "PaymentStatus"], "") || "").trim().toLowerCase())

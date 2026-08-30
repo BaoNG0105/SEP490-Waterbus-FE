@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchAllRoutes } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
 import {
@@ -25,10 +25,6 @@ const decimalNumber = (value) => {
   const [whole, ...fraction] = String(value ?? "").replace(/[^\d.]/g, "").split(".");
   return fraction.length ? `${whole}.${fraction.join("")}` : whole;
 };
-const sanitizePromotionName = (value) =>
-  String(value ?? "")
-    .normalize("NFC")
-    .replace(/[^\p{L}\p{N} ]/gu, "");
 const PROMOTION_VALIDATION_FIELDS = [
   "promotionCode",
   "promotionName",
@@ -248,8 +244,6 @@ export function PromotionFormFields({
   const [now, setNow] = useState(() => new Date());
   // Field đang focus — dùng để ẩn/hiện hint phụ, gọn gàng hơn khi chưa gõ.
   const [focusedField, setFocusedField] = useState(null);
-  const isPromotionNameComposing = useRef(false);
-
   useEffect(() => {
     fetchAllRoutes()
       .then((data) => setRoutes(data || []))
@@ -296,9 +290,10 @@ export function PromotionFormFields({
       return null;
     };
     if (field === "promotionName") {
-      const name = String(value ?? "").trim();
+      const name = String(value ?? "").normalize("NFC").trim();
       if (name && !/[\p{L}\p{N}]/u.test(name)) return err("error", lang === "VN" ? "Tên khuyến mãi phải có ít nhất một chữ hoặc số." : "Promotion name must contain at least one letter or number.");
-      if (name && !/^[\p{L}\p{N} ]+$/u.test(name)) return err("error", lang === "VN" ? "Tên khuyến mãi chỉ được chứa chữ, số và khoảng trắng." : "Promotion name may only contain letters, digits, and spaces.");
+      if (name && !/^[\p{L}\p{N} \u002F\u002D]+$/u.test(name)) return err("error", lang === "VN" ? "Tên khuyến mãi chỉ được chứa chữ, số, khoảng trắng, dấu - và /." : "Promotion name may only contain letters, digits, spaces, hyphens, and slashes.");
+      if (name && /[ \u002F\u002D]{2,}/u.test(name)) return err("error", lang === "VN" ? "Khoảng trắng, dấu - và / không được đứng liên tiếp." : "Spaces, hyphens, and slashes cannot appear consecutively.");
     }
     if (field === "discountValue" && !isPercent && value !== "" && value != null && !isVndAmount(value)) return err("error", lang === "VN" ? "Số tiền giảm phải là số nguyên VND." : "Discount amount must be a whole VND value.");
     if (field === "maxDiscountAmount") {
@@ -727,21 +722,12 @@ export function PromotionFormFields({
               required
               maxLength={150}
               value={formData.promotionName}
-              onCompositionStart={() => {
-                isPromotionNameComposing.current = true;
-              }}
-              onCompositionEnd={(e) => {
-                isPromotionNameComposing.current = false;
-                setField("promotionName", sanitizePromotionName(e.currentTarget.value));
-              }}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (isPromotionNameComposing.current || e.nativeEvent.isComposing) {
-                  onChange("promotionName", value);
-                  return;
-                }
-                setField("promotionName", sanitizePromotionName(value));
-              }}
+              lang={lang === "VN" ? "vi" : "en"}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              onChange={(e) => setField("promotionName", e.target.value)}
               className={`${inputStyle} ${errors.promotionName ? errorInputStyle : ""}`}
             />
             <FieldError error={errors.promotionName} />

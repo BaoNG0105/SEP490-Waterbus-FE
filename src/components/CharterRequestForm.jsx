@@ -420,13 +420,23 @@ export function CharterRequestForm({
         ? "Vui lòng quay lại bước Lộ trình để nhập số lượng hành khách."
         : "Please go back to the Route step and enter the number of passengers.";
     }
-    const typeMismatch = getPassengerTypeMismatchError(passengers, formData.adultCount, formData.childCount, lang);
-    if (typeMismatch) return typeMismatch;
     const missingNameIndex = passengers.findIndex((p) => !String(p?.fullName || "").trim());
     if (missingNameIndex !== -1) {
       return lang === "VN"
         ? `Vui lòng nhập họ tên cho hành khách thứ ${missingNameIndex + 1}.`
         : `Please enter the name for passenger #${missingNameIndex + 1}.`;
+    }
+    const passengerNamePattern = /^[\p{L}\s]+$/u;
+    const invalidNameIndex = passengers.findIndex((p) => {
+      const name = String(p?.fullName || "").trim();
+      return !passengerNamePattern.test(name)
+        || /\s{2,}/.test(name)
+        || name.split(/\s+/).filter(Boolean).length < 2;
+    });
+    if (invalidNameIndex !== -1) {
+      return lang === "VN"
+        ? `Họ tên hành khách thứ ${invalidNameIndex + 1} phải có ít nhất 2 từ và chỉ gồm chữ cái.`
+        : `Passenger #${invalidNameIndex + 1}'s full name must contain at least 2 words and letters only.`;
     }
     const currentYear = new Date().getFullYear();
     const missingYearIndex = passengers.findIndex((p) => !String(p?.birthYear ?? "").trim());
@@ -446,6 +456,8 @@ export function CharterRequestForm({
         ? `Năm sinh không hợp lệ cho hành khách thứ ${invalidYearIndex + 1}.`
         : `Invalid birth year for passenger #${invalidYearIndex + 1}.`;
     }
+    const typeMismatch = getPassengerTypeMismatchError(passengers, formData.adultCount, formData.childCount, lang);
+    if (typeMismatch) return typeMismatch;
     return null;
   };
 
@@ -1567,6 +1579,24 @@ export function CharterRequestForm({
               const passengers = Array.isArray(formData.passengers) ? formData.passengers : [];
               const passengerNamePattern = /^[\p{L}\s]+$/u;
               const currentYear = new Date().getFullYear();
+              const hasValidPassengerBirthYear = (passenger) => {
+                const birthYear = Number(String(passenger?.birthYear ?? "").trim());
+                return Number.isInteger(birthYear)
+                  && birthYear >= 1900
+                  && birthYear <= currentYear;
+              };
+              const classifiedPassengers = passengers.filter(hasValidPassengerBirthYear);
+              const completedPassengers = passengers.filter((passenger) => {
+                const name = String(passenger?.fullName || "").trim();
+                const hasValidName = passengerNamePattern.test(name)
+                  && !/\s{2,}/.test(name)
+                  && name.split(/\s+/).filter(Boolean).length >= 2;
+                return hasValidName && hasValidPassengerBirthYear(passenger);
+              });
+              const hasAnyPassengerInput = passengers.some((passenger) => (
+                String(passenger?.fullName || "").trim()
+                || String(passenger?.birthYear ?? "").trim()
+              ));
               if (passengers.length === 0) {
                 return (
                   <div className="rounded-xl border border-dashed border-white/20 dark:border-slate-700 bg-white/5 dark:bg-slate-900 p-6 text-center text-xs text-white/70 dark:text-slate-400">
@@ -1582,31 +1612,40 @@ export function CharterRequestForm({
                     const declaredAdults = Number(formData.adultCount) || 0;
                     const declaredChildren = Number(formData.childCount) || 0;
                     if (declaredAdults === 0 && declaredChildren === 0) return null;
-                    const actualAdults = passengers.filter((p) => p?.type !== PASSENGER_TYPE_CHILD && p?.type !== "Child").length;
-                    const actualChildren = passengers.filter((p) => p?.type === PASSENGER_TYPE_CHILD || p?.type === "Child").length;
+                    const actualAdults = classifiedPassengers.filter((p) => p?.type !== PASSENGER_TYPE_CHILD && p?.type !== "Child").length;
+                    const actualChildren = classifiedPassengers.filter((p) => p?.type === PASSENGER_TYPE_CHILD || p?.type === "Child").length;
                     const adultMatch = actualAdults === declaredAdults;
                     const childMatch = actualChildren === declaredChildren;
                     const allMatch = adultMatch && childMatch;
+                    const showMismatch = showPassengerErrors && !allMatch;
                     const chipBase = "inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1 text-xs font-headline font-black uppercase tracking-wider transition-colors";
                     const chipMatch = "bg-emerald-500 text-white border-emerald-500 shadow-sm";
                     const chipMismatch = "bg-rose-500 text-white border-rose-500 shadow-sm";
+                    const chipNeutral = "bg-white/10 text-white/70 border-white/20";
+                    const getChipTone = (matches) => {
+                      if (allMatch || (showMismatch && matches)) return chipMatch;
+                      if (showMismatch) return chipMismatch;
+                      return chipNeutral;
+                    };
                     return (
                         <div className="flex items-center gap-2.5 px-1 py-1.5">
                           <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full shrink-0 border-2 shadow-md ${
                             allMatch
                               ? "bg-emerald-500 text-white border-emerald-400"
-                              : "bg-rose-500 text-white border-rose-400"
+                              : showMismatch
+                                ? "bg-rose-500 text-white border-rose-400"
+                                : "bg-white/10 text-white/70 border-white/20"
                           }`}>
                             <span className="material-symbols-outlined text-lg leading-none">
-                              {allMatch ? "check_circle" : "priority_high"}
+                              {allMatch ? "check_circle" : showMismatch ? "priority_high" : "edit_note"}
                             </span>
                           </span>
                           <span className="text-xs font-headline font-black uppercase tracking-wider text-[#FFD100] whitespace-nowrap">
                             {lang === "VN" ? "Hiện tại / Yêu cầu" : "Current / Required"}
                           </span>
-                          <span className={`${chipBase} ${adultMatch ? chipMatch : chipMismatch}`}>
+                          <span className={`${chipBase} ${getChipTone(adultMatch)}`}>
                             <span className="material-symbols-outlined text-sm leading-none">
-                              {adultMatch ? "check_circle" : "person_off"}
+                              {adultMatch && (allMatch || showMismatch) ? "check_circle" : showMismatch ? "person_off" : "person"}
                             </span>
                             <span className="opacity-90">{lang === "VN" ? "Người lớn" : "Adults"}</span>
                             <span className="inline-flex items-baseline gap-0.5">
@@ -1615,9 +1654,9 @@ export function CharterRequestForm({
                               <span className="opacity-90">{declaredAdults}</span>
                             </span>
                           </span>
-                          <span className={`${chipBase} ${childMatch ? chipMatch : chipMismatch}`}>
+                          <span className={`${chipBase} ${getChipTone(childMatch)}`}>
                             <span className="material-symbols-outlined text-sm leading-none">
-                              {childMatch ? "check_circle" : "person_off"}
+                              {childMatch && (allMatch || showMismatch) ? "check_circle" : showMismatch ? "person_off" : "child_care"}
                             </span>
                             <span className="opacity-90">{lang === "VN" ? "Trẻ em" : "Children"}</span>
                             <span className="inline-flex items-baseline gap-0.5">
@@ -1626,16 +1665,27 @@ export function CharterRequestForm({
                               <span className="opacity-90">{declaredChildren}</span>
                             </span>
                           </span>
-                          {!allMatch && (
+                          {showMismatch && (
                             <span className="text-[11px] whitespace-nowrap font-extrabold uppercase tracking-wide text-rose-300 ml-auto">
                               {lang === "VN" ? "Chưa khớp yêu cầu!" : "Mismatch!"}
+                            </span>
+                          )}
+                          {!allMatch && !showMismatch && (
+                            <span className="ml-auto whitespace-nowrap text-[11px] font-extrabold uppercase tracking-wide text-white/50">
+                              {hasAnyPassengerInput
+                                ? (lang === "VN" ? "Chưa hoàn tất" : "Incomplete")
+                                : (lang === "VN" ? "Chưa nhập" : "Not entered")}
                             </span>
                           )}
                         </div>
                       );
                     })()}
                   <div className={`flex items-center text-[10px] font-headline font-black uppercase tracking-wider ${t.sectionSubtitle}`}>
-                    <span>{lang === "VN" ? `Tổng cộng ${passengers.length} hành khách` : `${passengers.length} passengers in total`}</span>
+                    <span>
+                      {lang === "VN"
+                        ? `Đã nhập ${completedPassengers.length}/${passengers.length} hành khách`
+                        : `${completedPassengers.length}/${passengers.length} passengers completed`}
+                    </span>
                   </div>
                   <div className="space-y-2.5 max-h-[70vh] overflow-y-auto pr-1">
                     {passengers.map((passenger, index) => {
@@ -1656,9 +1706,10 @@ export function CharterRequestForm({
                         : (!Number.isInteger(yearNum) || yearNum < 1900 || yearNum > currentYear
                           ? (lang === "VN" ? "Năm sinh không hợp lệ (1900–2026)." : "Invalid birth year (1900–2026).")
                           : null);
-                      const isTouched = touchedPassengers[index] || showPassengerErrors;
-                      const nameError = isTouched ? rawNameError : null;
-                      const yearError = isTouched ? rawYearError : null;
+                      const nameTouched = touchedPassengers[`${index}-name`] || showPassengerErrors;
+                      const yearTouched = touchedPassengers[`${index}-year`] || showPassengerErrors;
+                      const nameError = nameTouched ? rawNameError : null;
+                      const yearError = yearTouched ? rawYearError : null;
                       const markTouched = (field) => setTouchedPassengers((prev) => ({ ...prev, [`${index}-${field}`]: true }));
                       const cardClass = "grid grid-cols-12 gap-3 items-start rounded-xl bg-white/5 dark:bg-slate-900 border border-white/10 dark:border-slate-700 p-3 transition-colors";
                       return (
@@ -1675,7 +1726,7 @@ export function CharterRequestForm({
                             <input
                               value={passenger.fullName || ""}
                               onChange={(e) => {
-                                const value = e.target.value;
+                                const value = sanitizeFullName(e.target.value);
                                 setFormData((prev) => {
                                   const list = Array.isArray(prev.passengers) ? [...prev.passengers] : [];
                                   list[index] = { ...(list[index] || createEmptyPassenger()), fullName: value };
@@ -1796,15 +1847,8 @@ export function CharterRequestForm({
                 : (mode === "edit" ? (lang === "VN" ? "Lưu thay đổi" : "Save Changes") : (lang === "VN" ? "Gửi yêu cầu" : "Submit"))}
             </button>
           ) : (
-            <button type="submit" disabled={!canContinueToNext} className={`inline-flex items-center gap-2 w-full sm:w-auto min-w-56 justify-center font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-40 disabled:cursor-not-allowed mt-5 ${
-              currentStep === 3 && (() => {
-                const list = Array.isArray(formData.passengers) ? formData.passengers : [];
-                const a = list.filter((p) => p?.type !== PASSENGER_TYPE_CHILD && p?.type !== "Child").length;
-                const c = list.filter((p) => p?.type === PASSENGER_TYPE_CHILD || p?.type === "Child").length;
-                const da = Number(formData.adultCount) || 0;
-                const dc = Number(formData.childCount) || 0;
-                return da + dc > 0 && (a !== da || c !== dc);
-              })()
+            <button type="submit" disabled={currentStep !== 3 && !canContinueToNext} className={`inline-flex items-center gap-2 w-full sm:w-auto min-w-56 justify-center font-headline font-black uppercase tracking-widest text-xs rounded-2xl px-8 py-4 transition-all disabled:opacity-40 disabled:cursor-not-allowed mt-5 ${
+              currentStep === 3 && showPassengerErrors && !canContinueToNext
                 ? "bg-rose-500 text-white hover:bg-rose-600 ring-2 ring-rose-300 dark:bg-rose-600 dark:hover:bg-rose-500"
                 : t.primaryButton
             }`}>

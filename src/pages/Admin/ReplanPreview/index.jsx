@@ -19,9 +19,6 @@ const REPLAN_ACTIONS = [
   { value: 'Cancel', labelVN: 'Hủy chuyến', labelEN: 'Cancel' },
 ];
 
-/* ─── Sub-components ────────────────────────────────────────────────────────── */
-
-/** Badge hiển thị impact level */
 function ImpactBadge({ level }) {
   return (
     <span
@@ -32,7 +29,6 @@ function ImpactBadge({ level }) {
   );
 }
 
-/** Một row candidate tàu thay thế */
 function CandidateRow({ candidate, selected, onSelect }) {
   const { lang } = useApp();
   const isReplace = candidate.type === 'ReplaceBoat';

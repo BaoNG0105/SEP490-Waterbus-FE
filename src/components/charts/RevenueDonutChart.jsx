@@ -93,10 +93,10 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
           {title}
         </h4>
       )}
-      <div className="flex items-center gap-3 flex-1">
+      <div className="flex min-h-0 flex-1 items-center gap-2">
         {/* Donut SVG */}
-        <div className="relative shrink-0" style={{ width: "60%" }}>
-          <svg width="100%" height="auto" viewBox={`0 0 ${SIZE} ${SIZE}`} preserveAspectRatio="xMidYMid meet" className="overflow-visible">
+        <div className="relative h-full min-h-0 w-[52%] shrink-0">
+          <svg width="100%" height="100%" viewBox={`0 0 ${SIZE} ${SIZE}`} preserveAspectRatio="xMidYMid meet" className="overflow-visible">
             {arcs.map((arc, i) => (
               <path
                 key={data[i]?.key || i}
@@ -126,22 +126,22 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
         </div>
 
         {/* Legend */}
-        <div className="flex-1 space-y-2 min-w-0">
+        <div className="min-w-0 flex-1 space-y-1.5">
           {data.map((d, i) => (
             <div
               key={d.key || i}
-              className="flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-1.5 cursor-pointer"
               onMouseEnter={() => setHoverIdx(i)}
               onMouseLeave={() => setHoverIdx(null)}
             >
               <span
-                className={`w-3.5 h-3.5 rounded-full shrink-0 ${d.value === 0 ? "opacity-30" : ""}`}
+                className={`h-3 w-3 rounded-full shrink-0 ${d.value === 0 ? "opacity-30" : ""}`}
                 style={{ backgroundColor: d.color }}
               />
-              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate flex-1">
+              <span className="flex-1 truncate text-[10px] font-bold text-slate-600 dark:text-slate-300">
                 {d.label}
               </span>
-              <span className="text-xs font-black text-slate-800 dark:text-white shrink-0">
+              <span className="shrink-0 text-[10px] font-black text-slate-800 dark:text-white">
                 {total > 0 ? `${((d.value || 0) / total * 100).toFixed(0)}%` : "0%"}
               </span>
             </div>
