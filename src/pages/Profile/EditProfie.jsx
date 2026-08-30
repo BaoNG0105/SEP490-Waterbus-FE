@@ -13,7 +13,7 @@ import { notify, showValidationMessage } from "../../utils/swalToast";
 import { AppDateInput } from "../../components/AppDateInput";
 import { UserAvatar } from "../../components/UserAvatar";
 import { getTodayDateString } from "../../utils/dateOnly";
-import { isBlank, isValidEmailFormat, isValidPhoneFormat } from "../../utils/formValidation";
+import { isBlank, isValidEmailFormat, isValidPhoneFormat, isValidFullName, sanitizeFullName } from "../../utils/formValidation";
 import Swal from "sweetalert2";
 
 import countries from "i18n-iso-countries";
@@ -107,7 +107,8 @@ export const EditProfile = () => {
 
     const handleProfileDataChange = (e) => {
         const { name, value } = e.target;
-        setProfileData((prev) => ({ ...prev, [name]: value }));
+        // Họ tên: lọc bỏ số/ký tự đặc biệt ngay lúc gõ.
+        setProfileData((prev) => ({ ...prev, [name]: name === "fullName" ? sanitizeFullName(value) : value }));
     };
 
     // Validate real-time — lỗi chỉ hiện cho field đã "touched" (rời khỏi ít nhất 1 lần), nhưng
@@ -121,6 +122,8 @@ export const EditProfile = () => {
         const errors = {};
         if (isBlank(profileData.fullName)) {
             errors.fullName = lang === "VN" ? "Vui lòng nhập họ và tên." : "Full name is required.";
+        } else if (!isValidFullName(profileData.fullName)) {
+            errors.fullName = lang === "VN" ? "Họ và tên chỉ gồm chữ cái và khoảng trắng." : "Full name may contain letters and spaces only.";
         }
         if (!isBlank(profileData.email) && !isValidEmailFormat(profileData.email)) {
             errors.email = lang === "VN" ? "Email không đúng định dạng." : "Invalid email format.";

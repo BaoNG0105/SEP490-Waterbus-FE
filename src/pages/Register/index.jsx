@@ -11,7 +11,7 @@ import { required } from "../../utils/requiredStar";
 
 import { getApiErrorMessage } from "../../utils/apiError";
 import { getTodayDateString } from "../../utils/dateOnly";
-import { isBlank, isValidEmailFormat, isValidPhoneFormat } from "../../utils/formValidation";
+import { isBlank, isValidEmailFormat, isValidPhoneFormat, isValidFullName, sanitizeFullName } from "../../utils/formValidation";
 import { notify } from "../../utils/swalToast";
 
 /** UI dùng SMS/EMAIL; BE chỉ nhận phone/email. */
@@ -106,6 +106,8 @@ export const Register = () => {
     const errors = {};
     if (isBlank(formData.fullName)) {
       errors.fullName = lang === "VN" ? "Vui lòng nhập họ và tên." : "Full name is required.";
+    } else if (!isValidFullName(formData.fullName)) {
+      errors.fullName = lang === "VN" ? "Họ và tên chỉ gồm chữ cái và khoảng trắng." : "Full name may contain letters and spaces only.";
     }
 
     const hasPhone = !isBlank(formData.phone);
@@ -182,9 +184,11 @@ export const Register = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    // Họ tên: lọc bỏ số/ký tự đặc biệt ngay lúc gõ.
+    const nextValue = type === "checkbox" ? checked : name === "fullName" ? sanitizeFullName(value) : value;
     setFormData({
       ...formData,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: nextValue,
     });
   };
 

@@ -5,6 +5,7 @@ import { getApiErrorMessage } from "../utils/apiError";
 import { sendContactMessage } from "../services/contactService";
 import { COMPANY_EMAIL } from "../data/homeData";
 import { RequiredStar } from "../utils/requiredStar";
+import { isBlank, isValidFullName, isValidEmailFormat, sanitizeFullName } from "../utils/formValidation";
 
 const INITIAL_FORM_STATE = {
   fullName: "",
@@ -13,18 +14,45 @@ const INITIAL_FORM_STATE = {
   message: "",
 };
 
+const fieldErrorText = "text-[11px] font-bold text-rose-300";
+
 export const ContactForm = () => {
   const { lang, isDarkMode } = useApp();
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [touched, setTouched] = useState({ fullName: false, email: false, message: false });
 
   const handleChange = (field) => (e) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
   };
 
+  const markTouched = (field) => setTouched((prev) => ({ ...prev, [field]: true }));
+
+  const fieldErrors = {
+    fullName: isBlank(formData.fullName)
+      ? (lang === "VN" ? "Vui lòng nhập họ và tên." : "Full name is required.")
+      : !isValidFullName(formData.fullName)
+        ? (lang === "VN" ? "Họ và tên chỉ gồm chữ cái và khoảng trắng." : "Full name may contain letters and spaces only.")
+        : "",
+    email: isBlank(formData.email)
+      ? (lang === "VN" ? "Vui lòng nhập email." : "Email is required.")
+      : !isValidEmailFormat(formData.email)
+        ? (lang === "VN" ? "Email không đúng định dạng." : "Invalid email format.")
+        : "",
+    message: isBlank(formData.message)
+      ? (lang === "VN" ? "Vui lòng nhập nội dung lời nhắn." : "Message is required.")
+      : "",
+  };
+  const hasFieldErrors = Object.values(fieldErrors).some(Boolean);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
+
+    if (hasFieldErrors) {
+      setTouched({ fullName: true, email: true, message: true });
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -88,10 +116,13 @@ export const ContactForm = () => {
               autoComplete="name"
               disabled={isSubmitting}
               value={formData.fullName}
-              onChange={handleChange("fullName")}
+              onChange={(e) => setFormData((prev) => ({ ...prev, fullName: sanitizeFullName(e.target.value) }))}
+              onBlur={() => markTouched("fullName")}
               placeholder={lang === "VN" ? "Nhập họ tên của bạn" : "Enter your full name"}
+              aria-invalid={Boolean(touched.fullName && fieldErrors.fullName)}
               className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner disabled:opacity-60"
             />
+            {touched.fullName && fieldErrors.fullName && <p className={fieldErrorText}>{fieldErrors.fullName}</p>}
           </div>
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-white/70 dark:text-slate-400">
@@ -105,9 +136,12 @@ export const ContactForm = () => {
               disabled={isSubmitting}
               value={formData.email}
               onChange={handleChange("email")}
+              onBlur={() => markTouched("email")}
               placeholder={lang === "VN" ? "Địa chỉ email của bạn" : "Your email address"}
+              aria-invalid={Boolean(touched.email && fieldErrors.email)}
               className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner disabled:opacity-60"
             />
+            {touched.email && fieldErrors.email && <p className={fieldErrorText}>{fieldErrors.email}</p>}
           </div>
         </div>
 
@@ -137,16 +171,19 @@ export const ContactForm = () => {
             disabled={isSubmitting}
             value={formData.message}
             onChange={handleChange("message")}
+            onBlur={() => markTouched("message")}
             placeholder={lang === "VN" ? "Viết nội dung tin nhắn của bạn tại đây..." : "Type your message details here..."}
+            aria-invalid={Boolean(touched.message && fieldErrors.message)}
             className="w-full bg-white dark:bg-slate-900 border border-transparent dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-medium text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-yellow-400 transition-all shadow-inner resize-none disabled:opacity-60"
           />
+          {touched.message && fieldErrors.message && <p className={fieldErrorText}>{fieldErrors.message}</p>}
         </div>
 
         <div className="pt-2">
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="w-full sm:w-auto bg-yellow-400 text-slate-900 px-10 py-4 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-md hover:bg-yellow-300 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100"
+            disabled={isSubmitting || hasFieldErrors}
+            className="w-full sm:w-auto bg-yellow-400 text-slate-900 px-10 py-4 rounded-full font-headline font-bold text-sm uppercase tracking-wider shadow-md hover:bg-yellow-300 hover:scale-[1.02] hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>
