@@ -29,7 +29,9 @@ export function EditLandmark() {
         latitude: 10.7876,
         longitude: 106.706,
         description: "",
-        displayOrder: 1,
+        // Không còn field nhập tay trên UI — luôn mặc định 0 dưới code (giữ nguyên giá trị cũ
+        // khi load record có sẵn, xem applyLandmarkRecord bên dưới).
+        displayOrder: 0,
         triggerRadiusMeters: 300,
         isActive: true,
     });
@@ -106,7 +108,7 @@ export function EditLandmark() {
     const handleFormSubmit = async (e) => {
         e.preventDefault();
         // Bấm submit (VD: nhấn Enter) khi còn lỗi → hiện hết lỗi lên thay vì âm thầm chặn.
-        setTouchedFields({ landmarkName: true, description: true, displayOrder: true, triggerRadiusMeters: true });
+        setTouchedFields({ landmarkName: true, description: true, triggerRadiusMeters: true });
         if (hasFieldErrors) return;
 
         const name = formData.landmarkName.trim();
@@ -136,9 +138,6 @@ export function EditLandmark() {
             notify({
                 icon: "success",
                 title: lang === "VN" ? "Cập nhật thành công!" : "Successfully saved!",
-                text: lang === "VN"
-                    ? "Nếu vừa đổi mô tả, nhớ bake lại audio — server không tự re-bake."
-                    : "If you changed the description, remember to re-bake the audio — the server won't do it automatically.",
                 confirmButtonColor: "#124757",
             }).then(() => navigate("/admin/landmarks-management"));
         } catch (error) {
