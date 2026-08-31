@@ -6,6 +6,7 @@ import { useApp } from "../../../context/AppContext";
 import { WaterwayMap } from "../../../components/WaterwayMap";
 import { FormSelect } from "../../../components/FormSelect";
 import { useLiveBoatTracking } from "../../../hooks/useLiveBoatTracking";
+import { syncTrackingServerClock } from "../../../services/trackingService";
 import { useLiveIncidents } from "../../../hooks/useLiveIncidents";
 import { useOperationsSchedule } from "../../../hooks/useOperationsSchedule";
 import { fetchAllStations } from "../../../services/stationService";
@@ -41,12 +42,13 @@ import {
   formatActiveDelayLine,
   isDelayActive,
 } from "../../../utils/tripDelay";
+import { getServerNow, getServerNowMs, getVietnamDateYmd } from "../../../utils/serverClock";
 
-const formatRelative = (value, lang) => {
+const formatRelative = (value, lang, nowMs = getServerNowMs()) => {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  const seconds = Math.max(0, Math.floor((nowMs - date.getTime()) / 1000));
   if (seconds < 20) return lang === "VN" ? "Vừa xong" : "Just now";
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
@@ -141,7 +143,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
   const [todayTrips, setTodayTrips] = useState([]);
   const [tripPaxByTripId, setTripPaxByTripId] = useState(() => new Map());
   const [routeOverlays, setRouteOverlays] = useState([]);
-  const [tick, setTick] = useState(() => Date.now());
+  const [tick, setTick] = useState(() => getServerNowMs());
   const [showReport, setShowReport] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportForm, setReportForm] = useState({
@@ -155,11 +157,12 @@ export function LiveTracking({ viewTabs = null } = {}) {
   const arrivedAtRef = useRef(new Map());
   const lastTripStopToastKeyRef = useRef("");
   const flashTimersRef = useRef(new Map());
+  const deepLinkStateRef = useRef({ key: "", autoApplied: false, manual: false });
   const [flashByBoatKey, setFlashByBoatKey] = useState(() => new Map());
   const chip = modeChip(connectionMode, lang);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setTick(Date.now()), 1000);
+    const timer = window.setInterval(() => setTick(getServerNowMs()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -214,8 +217,8 @@ export function LiveTracking({ viewTabs = null } = {}) {
       noticeVn,
       noticeEn,
       stationName: station,
-      occurredAt: lastTripStop.occurredAt || new Date().toISOString(),
-      shownAt: Date.now(),
+      occurredAt: lastTripStop.occurredAt || getServerNow().toISOString(),
+      shownAt: getServerNowMs(),
     };
 
     setFlashByBoatKey((prev) => {
@@ -247,6 +250,9 @@ export function LiveTracking({ viewTabs = null } = {}) {
         title: lang === "VN" ? `${boat} · ${noticeVn}`.trim() : `${boat} · ${noticeEn}`.trim(),
       });
       setSituationCollapsed(false);
+      if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
+        setFleetCollapsed(true);
+      }
     }
 
     return () => {
@@ -258,6 +264,21 @@ export function LiveTracking({ viewTabs = null } = {}) {
     flashTimersRef.current.forEach((t) => window.clearTimeout(t));
     flashTimersRef.current.clear();
   }, []);
+
+  useEffect(() => {
+    const preventMobilePanelOverlap = () => {
+      if (
+        window.matchMedia("(max-width: 639px)").matches
+        && !fleetCollapsed
+        && !situationCollapsed
+      ) {
+        setSituationCollapsed(true);
+      }
+    };
+    preventMobilePanelOverlap();
+    window.addEventListener("resize", preventMobilePanelOverlap);
+    return () => window.removeEventListener("resize", preventMobilePanelOverlap);
+  }, [fleetCollapsed, situationCollapsed]);
 
   useEffect(() => {
     let active = true;
@@ -303,21 +324,19 @@ export function LiveTracking({ viewTabs = null } = {}) {
         console.error("Failed to load boat catalog for live tracking:", error);
       });
 
-    const todayYmd = (() => {
-      const now = new Date();
-      const pad2 = (n) => String(n).padStart(2, "0");
-      return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-    })();
-    const loadTodayTrips = () => {
-      fetchAllTrips({ operatingDate: toOperatingDateQuery(todayYmd) })
-        .then((data) => {
-          if (!active) return;
-          const list = Array.isArray(data) ? data : (data?.items || data?.data || []);
-          setTodayTrips(list);
-        })
-        .catch((error) => {
-          console.error("Failed to load trips for live tracking:", error);
-        });
+    const loadTodayTrips = async () => {
+      // Đồng bộ trước lần tải đầu; nếu endpoint time lỗi vẫn fallback về giờ máy.
+      await syncTrackingServerClock().catch(() => {});
+      if (!active) return;
+      try {
+        const todayYmd = getVietnamDateYmd();
+        const data = await fetchAllTrips({ operatingDate: toOperatingDateQuery(todayYmd) });
+        if (!active) return;
+        const list = Array.isArray(data) ? data : (data?.items || data?.data || []);
+        setTodayTrips(list);
+      } catch (error) {
+        console.error("Failed to load trips for live tracking:", error);
+      }
     };
     loadTodayTrips();
     const tripsTimer = window.setInterval(loadTodayTrips, 30000);
@@ -1319,9 +1338,12 @@ export function LiveTracking({ viewTabs = null } = {}) {
 
   const filteredBoats = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const matches = enrichedBoats.filter((boat) => !q
-      || String(boat.boatCode || "").toLowerCase().includes(q)
-      || String(boat.boatId || "").toLowerCase().includes(q));
+    const matches = enrichedBoats.filter((boat) => (
+      boat.positionSource !== "none"
+      && (!q
+        || String(boat.boatCode || "").toLowerCase().includes(q)
+        || String(boat.boatId || "").toLowerCase().includes(q))
+    ));
 
     // Tàu đang di chuyển là đối tượng cần theo dõi trước; giữ nguyên thứ tự hiện có cho phần còn lại.
     return matches
@@ -1336,8 +1358,14 @@ export function LiveTracking({ viewTabs = null } = {}) {
 
   /** Tàu không có GPS live và cũng không có vị trí cuối trong cache 12h → chưa xác định vị trí. */
   const boatsWithoutPosition = useMemo(() => {
-    return enrichedBoats.filter((boat) => boat.positionSource === "none");
-  }, [enrichedBoats]);
+    const q = query.trim().toLowerCase();
+    return enrichedBoats.filter((boat) => (
+      boat.positionSource === "none"
+      && (!q
+        || String(boat.boatCode || "").toLowerCase().includes(q)
+        || String(boat.boatId || "").toLowerCase().includes(q))
+    ));
+  }, [enrichedBoats, query]);
 
   const situations = useMemo(
     () => buildBoatSituations(enrichedBoats, stations, arrivedAtRef.current),
@@ -1363,35 +1391,90 @@ export function LiveTracking({ viewTabs = null } = {}) {
     const tripCodeParam = String(searchParams.get("tripCode") || "").trim().toUpperCase();
     const routeIdParam = String(searchParams.get("routeId") || "").trim();
     const routeCodeParam = String(searchParams.get("routeCode") || "").trim();
+    const deepLinkKey = [
+      focus ? "1" : "0",
+      boatIdParam,
+      boatCodeParam.toUpperCase(),
+      tripIdParam,
+      tripCodeParam,
+      routeIdParam,
+      routeCodeParam,
+    ].join("|");
 
-    if (!focus) return;
+    if (!focus) {
+      deepLinkStateRef.current = { key: "", autoApplied: false, manual: false };
+      setFocusSolo(false);
+      setFocusRouteId("");
+      setFocusRouteCode("");
+      return;
+    }
+
+    if (deepLinkStateRef.current.key !== deepLinkKey) {
+      deepLinkStateRef.current = { key: deepLinkKey, autoApplied: false, manual: false };
+      setFocusRouteId(routeIdParam);
+      setFocusRouteCode(routeCodeParam);
+    }
 
     setFocusSolo(true);
-    if (routeIdParam) setFocusRouteId(routeIdParam);
-    if (routeCodeParam) setFocusRouteCode(routeCodeParam);
 
-    if (!enrichedBoats.length) return;
+    // Live snapshots replace `enrichedBoats`; do not re-apply the same URL target
+    // after an operator has manually selected another boat.
+    if (
+      !enrichedBoats.length
+      || deepLinkStateRef.current.manual
+      || deepLinkStateRef.current.autoApplied
+    ) return;
 
-    const matched = enrichedBoats.find((boat) => {
-      if (tripIdParam && String(boat.tripId || "") === tripIdParam) return true;
-      if (tripCodeParam && String(boat.tripCode || "").trim().toUpperCase() === tripCodeParam) return true;
-      if (boatIdParam && String(boat.boatId) === boatIdParam) return true;
-      if (boatCodeParam && String(boat.boatCode || "").trim().toUpperCase() === boatCodeParam.toUpperCase()) {
-        return true;
-      }
-      return false;
-    });
-    if (matched?.boatId) {
+    // URL có tàu cụ thể thì luôn ưu tiên tàu đó; trip có thể đồng thời chứa tàu thay thế/cứu hộ.
+    let matched = null;
+    if (boatIdParam) {
+      matched = enrichedBoats.find((boat) => String(boat.boatId) === boatIdParam) || null;
+    }
+    if (!matched && boatCodeParam) {
+      matched = enrichedBoats.find((boat) => (
+        String(boat.boatCode || "").trim().toUpperCase() === boatCodeParam.toUpperCase()
+      )) || null;
+    }
+    const hasExplicitBoat = Boolean(boatIdParam || boatCodeParam);
+    if (!matched && !hasExplicitBoat && tripIdParam) {
+      matched = enrichedBoats.find((boat) => String(boat.tripId || "") === tripIdParam) || null;
+    }
+    if (!matched && !hasExplicitBoat && tripCodeParam) {
+      matched = enrichedBoats.find((boat) => (
+        String(boat.tripCode || "").trim().toUpperCase() === tripCodeParam
+      )) || null;
+    }
+    if (matched && String(matched.boatId ?? "").trim()) {
+      deepLinkStateRef.current.autoApplied = true;
       setSelectedBoatId(String(matched.boatId));
       setFleetCollapsed(false);
+      if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
+        setSituationCollapsed(true);
+      }
     }
   }, [searchParams, enrichedBoats]);
 
   useEffect(() => {
     if (!selectedBoatId) return;
-    const stillVisible = enrichedBoats.some((boat) => boat.boatId === selectedBoatId);
-    if (!stillVisible) setSelectedBoatId("");
-  }, [enrichedBoats, selectedBoatId]);
+    const stillVisible = enrichedBoats.some((boat) => String(boat.boatId) === String(selectedBoatId));
+    if (!stillVisible) {
+      if (deepLinkStateRef.current.manual) {
+        deepLinkStateRef.current = {
+          ...deepLinkStateRef.current,
+          manual: false,
+          autoApplied: false,
+        };
+        setFocusRouteId(String(searchParams.get("routeId") || "").trim());
+        setFocusRouteCode(String(searchParams.get("routeCode") || "").trim());
+      } else if (deepLinkStateRef.current.autoApplied) {
+        deepLinkStateRef.current = {
+          ...deepLinkStateRef.current,
+          autoApplied: false,
+        };
+      }
+      setSelectedBoatId("");
+    }
+  }, [enrichedBoats, selectedBoatId, searchParams]);
 
   // BE: mở live tracking / focus tàu → JoinBoat (không join khi chuyến đã xong).
   const selectedLiveKey = useMemo(() => {
@@ -1411,18 +1494,29 @@ export function LiveTracking({ viewTabs = null } = {}) {
   }, [selectedLiveKey]);
 
   const selectedBoat = useMemo(
-    () => enrichedBoats.find((boat) => boat.boatId === selectedBoatId) || null,
+    () => enrichedBoats.find((boat) => String(boat.boatId) === String(selectedBoatId)) || null,
     [enrichedBoats, selectedBoatId],
   );
+  const selectedBoatLatitude = selectedBoat?.latitude;
+  const selectedBoatLongitude = selectedBoat?.longitude;
+  const selectedBoatAvailable = Boolean(selectedBoat);
+
+  useEffect(() => {
+    if (!focusSolo || !deepLinkStateRef.current.manual || !selectedBoat) return;
+    const routeId = String(selectedBoat.routeId || "").trim();
+    const routeCode = String(selectedBoat.routeCode || "").trim();
+    setFocusRouteId((current) => (current === routeId ? current : routeId));
+    setFocusRouteCode((current) => (current === routeCode ? current : routeCode));
+  }, [focusSolo, selectedBoat]);
 
   // Solo focus: bám tọa độ tàu đang chọn — kể cả bảo trì / offline (last known GPS).
   useEffect(() => {
-    if (!selectedBoatId || !selectedBoat) {
+    if (!selectedBoatId || !selectedBoatAvailable) {
       setFocusView(null);
       return;
     }
-    const lat = Number(selectedBoat.latitude);
-    const lng = Number(selectedBoat.longitude);
+    const lat = Number(selectedBoatLatitude);
+    const lng = Number(selectedBoatLongitude);
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
       setFocusView({ latitude: lat, longitude: lng });
       return;
@@ -1430,14 +1524,25 @@ export function LiveTracking({ viewTabs = null } = {}) {
     setFocusView(null);
   }, [
     selectedBoatId,
-    selectedBoat?.latitude,
-    selectedBoat?.longitude,
+    selectedBoatAvailable,
+    selectedBoatLatitude,
+    selectedBoatLongitude,
   ]);
 
-  const selectBoatAndFocus = (boatId) => {
-    const id = String(boatId || "");
-    setSelectedBoatId((prev) => (prev === id ? "" : id));
+  const selectBoatAndFocus = (boatId, { toggle = true } = {}) => {
+    const id = String(boatId ?? "").trim();
+    if (!id) return;
     const boat = enrichedBoats.find((b) => String(b.boatId) === id);
+    const isDeepLinkFocus = String(searchParams.get("focus") || "") === "1";
+    const switchesDeepLinkBoat = isDeepLinkFocus && String(selectedBoatId) !== id;
+    if (switchesDeepLinkBoat) {
+      deepLinkStateRef.current.manual = true;
+      setFocusRouteId(String(boat?.routeId || "").trim());
+      setFocusRouteCode(String(boat?.routeCode || "").trim());
+    }
+    setSelectedBoatId((prev) => (
+      toggle && !isDeepLinkFocus && String(prev) === id ? "" : id
+    ));
     if (!boat) return;
     const lat = Number(boat.latitude);
     const lng = Number(boat.longitude);
@@ -1507,7 +1612,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
         incidentType: reportForm.incidentType,
         severity: reportForm.severity,
         description,
-        occurredAt: new Date().toISOString(),
+        occurredAt: getServerNow().toISOString(),
       });
 
       showToast({
@@ -1546,6 +1651,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
         coordinates={focusedRouteCoordinates}
         routeOverlays={focusSolo && focusedRouteCoordinates.length >= 2 ? [] : mapRouteOverlays}
         selectedBoatId={selectedBoatId}
+        onBoatSelect={(boat) => selectBoatAndFocus(boat?.boatId, { toggle: false })}
         focusView={focusView}
         preferFocus={Boolean(focusView && selectedBoatId)}
         fitBoatMarkers
@@ -1556,7 +1662,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-20 bg-linear-to-b from-[#0E4050]/40 to-transparent" />
 
-      <div className="absolute left-3 right-3 top-3 z-30 flex items-start justify-between gap-2 md:left-4 md:right-4 md:top-4">
+      <div className="pointer-events-none absolute left-3 right-3 top-3 z-30 flex items-start justify-between gap-2 md:left-4 md:right-4 md:top-4">
         <div className="pointer-events-auto inline-flex max-w-[min(100%,18rem)] flex-wrap items-center gap-1.5 rounded-2xl bg-black/30 px-2.5 py-1.5 backdrop-blur-md">
           <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-white/90">
             <span className="h-2 w-2 rounded-full bg-[#124757] ring-1 ring-white/40" />
@@ -1653,14 +1759,19 @@ export function LiveTracking({ viewTabs = null } = {}) {
       {fleetCollapsed ? (
         <button
           type="button"
-          onClick={() => setFleetCollapsed(false)}
-          className="absolute bottom-3 left-3 z-30 inline-flex items-center gap-2 rounded-2xl bg-white/55 px-3.5 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.14)] ring-1 ring-white/50 backdrop-blur-xl transition hover:bg-white/70 dark:bg-slate-900/55 dark:ring-slate-700/60 md:bottom-4 md:left-4"
+          onClick={() => {
+            setFleetCollapsed(false);
+            if (window.matchMedia("(max-width: 639px)").matches) setSituationCollapsed(true);
+          }}
+          className={`absolute bottom-3 left-3 z-30 max-w-[calc(50%_-_1rem)] items-center gap-2 rounded-2xl bg-white/55 px-3.5 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.14)] ring-1 ring-white/50 backdrop-blur-xl transition hover:bg-white/70 dark:bg-slate-900/55 dark:ring-slate-700/60 md:bottom-4 md:left-4 ${
+            !situationCollapsed ? "hidden sm:inline-flex" : "inline-flex"
+          }`}
           title={lang === "VN" ? "Mở đội tàu" : "Open fleet"}
         >
           <span className="material-symbols-outlined text-[18px] text-[#124757] dark:text-yellow-400" aria-hidden>
             keyboard_arrow_up
           </span>
-          <span className="font-headline text-[11px] font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+          <span className="min-w-0 truncate font-headline text-[11px] font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
             {lang === "VN" ? `Đội tàu · ${enrichedBoats.length}` : `Fleet · ${enrichedBoats.length}`}
           </span>
           {boatsWithoutPosition.length > 0 ? (
@@ -1726,7 +1837,13 @@ export function LiveTracking({ viewTabs = null } = {}) {
                       <button
                         type="button"
                         onClick={() => selectBoatAndFocus(boat.boatId)}
-                        className="flex w-full items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-left text-[11px] transition hover:bg-white/40 dark:hover:bg-slate-800/50"
+                        aria-pressed={String(selectedBoatId) === String(boat.boatId)}
+                        title={lang === "VN" ? "Tàu chưa gửi tọa độ GPS" : "The boat has not sent GPS coordinates"}
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-left text-[11px] transition hover:bg-white/40 dark:hover:bg-slate-800/50 ${
+                          String(selectedBoatId) === String(boat.boatId)
+                            ? "bg-white/55 ring-2 ring-[#124757]/45 dark:bg-slate-800/70 dark:ring-yellow-400/60"
+                            : ""
+                        }`}
                       >
                         <span className="flex items-center gap-1.5 font-headline font-black tracking-wide text-slate-600 dark:text-slate-300">
                           <span className="material-symbols-outlined text-[14px] text-slate-400" aria-hidden>location_off</span>
@@ -1745,14 +1862,14 @@ export function LiveTracking({ viewTabs = null } = {}) {
               <div className="flex justify-center py-6">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-[#124757] dark:border-t-yellow-400" />
               </div>
-            ) : filteredBoats.length === 0 ? (
+            ) : filteredBoats.length === 0 && boatsWithoutPosition.length === 0 ? (
               <p className="px-2 py-5 text-center text-[11px] font-medium text-slate-400">
                 {lang === "VN" ? "Chưa có tín hiệu GPS." : "No GPS signal yet."}
               </p>
             ) : (
               <ul>
                 {filteredBoats.map((boat) => {
-                  const active = selectedBoatId === boat.boatId;
+                  const active = String(selectedBoatId) === String(boat.boatId);
                   const isIncident = boat.hasOpenIncident === true;
                   const underMaintenance = isBoatUnderMaintenance(boat) && !isIncident;
                   const tag = getBoatStatusTag(boat, stations, lang);
@@ -1832,7 +1949,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
                                 : isMoving
                                   ? "bg-sky-500/10 ring-1 ring-sky-500/20 dark:bg-sky-400/10 dark:ring-sky-400/25"
                                 : "hover:bg-white/40 dark:hover:bg-slate-800/50"
-                        }`}
+                        } ${active ? "ring-2 ring-[#124757]/45 dark:ring-yellow-400/60" : ""}`}
                       >
                         <span
                           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
@@ -1867,7 +1984,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
                               || missionLine
                               || delayLine
                               || statusTag.detail
-                              || `${kindLabel} · ${formatRelative(boat.recordedAt, lang)}`}
+                              || `${kindLabel} · ${formatRelative(boat.recordedAt, lang, tick)}`}
                           </span>
                         </span>
                       </button>
@@ -1883,14 +2000,19 @@ export function LiveTracking({ viewTabs = null } = {}) {
       {situationCollapsed ? (
         <button
           type="button"
-          onClick={() => setSituationCollapsed(false)}
-          className="absolute bottom-3 right-3 z-30 inline-flex items-center gap-2 rounded-2xl bg-white/55 px-3.5 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.14)] ring-1 ring-white/50 backdrop-blur-xl transition hover:bg-white/70 dark:bg-slate-900/55 dark:ring-slate-700/60 md:bottom-4 md:right-4"
+          onClick={() => {
+            setSituationCollapsed(false);
+            if (window.matchMedia("(max-width: 639px)").matches) setFleetCollapsed(true);
+          }}
+          className={`absolute bottom-3 right-3 z-30 max-w-[calc(50%_-_1rem)] items-center gap-2 rounded-2xl bg-white/55 px-3.5 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.14)] ring-1 ring-white/50 backdrop-blur-xl transition hover:bg-white/70 dark:bg-slate-900/55 dark:ring-slate-700/60 md:bottom-4 md:right-4 ${
+            !fleetCollapsed ? "hidden sm:inline-flex" : "inline-flex"
+          }`}
           title={lang === "VN" ? "Mở tình hình" : "Open situation"}
         >
           <span className="material-symbols-outlined text-[18px] text-[#124757] dark:text-yellow-400" aria-hidden>
             keyboard_arrow_up
           </span>
-          <span className="font-headline text-[11px] font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+          <span className="min-w-0 truncate font-headline text-[11px] font-black uppercase tracking-wider text-[#124757] dark:text-yellow-400">
             {lang === "VN" ? `Tình hình · ${situations.length}` : `Status · ${situations.length}`}
           </span>
           {incidentCount > 0 ? (
@@ -1937,6 +2059,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
             ) : (
               <ul>
                 {situations.map((row) => {
+                  const active = String(selectedBoatId) === String(row.boatId);
                   const tagTone = row.phase === "incident"
                     ? "incident"
                     : row.phase === "docked" || row.phase === "arriving" || row.phase === "starting"
@@ -1969,7 +2092,7 @@ export function LiveTracking({ viewTabs = null } = {}) {
                         onClick={() => selectBoatAndFocus(row.boatId)}
                         className={`flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition hover:bg-white/40 dark:hover:bg-slate-800/50 ${
                           row.phase === "incident" ? "bg-rose-500/10" : ""
-                        }`}
+                        } ${active ? "ring-2 ring-[#124757]/45 dark:ring-yellow-400/60" : ""}`}
                       >
                         <span className="min-w-0 flex-1">
                           <span className="flex items-baseline justify-between gap-2">

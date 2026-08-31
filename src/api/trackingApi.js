@@ -1,5 +1,16 @@
 import api from "./axios";
 
+/** GET /api/tracking/time - mốc UTC dùng để hiệu chỉnh đồng hồ FE. */
+export const getTrackingServerTime = async () => {
+  const requestStartedAt = Date.now();
+  const response = await api.get("/tracking/time", { skipAuth: true });
+  return {
+    serverTime: response.data?.serverTime ?? response.data?.ServerTime ?? null,
+    requestStartedAt,
+    responseReceivedAt: Date.now(),
+  };
+};
+
 /** GET /api/tracking/boats/latest — vị trí mới nhất của mọi tàu */
 export const getLatestBoatLocations = () =>
   api.get("/tracking/boats/latest").then((response) => response.data);

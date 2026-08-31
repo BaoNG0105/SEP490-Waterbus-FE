@@ -7,9 +7,12 @@ import { useApp } from "../context/AppContext";
 import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../utils/charterBookingAdmin";
 import { isBoatUnderMaintenance, MOVING_SPEED_KMH, resolveBoatLiveStatus } from "../utils/boatTracking";
 import { resolveEtaMinutesToNext } from "../utils/boatSituation";
+import { formatVietnamTime, getServerNowMs } from "../utils/serverClock";
 
 const DEFAULT_STATION_IMAGE =
     "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=400&q=80";
+const LONG_STOP_THRESHOLD_MS = 30 * 60 * 1000;
+const MAP_CLOCK_INTERVAL_MS = 30 * 1000;
 
 const getStationImageUrl = (station) => {
   const primary = String(station?.imageUrl || "").trim();
@@ -27,14 +30,10 @@ const isValidLatLng = (lat, lng) => (
   && Math.abs(Number(lng)) <= 180
 );
 
-/** Format thời điểm GPS cuối → "HH:mm" theo local time cho tooltip vị trí cuối. */
+/** Format thời điểm GPS cuối theo giờ vận hành Việt Nam. */
 const formatStickyRecordedAt = (raw) => {
   if (!raw) return "";
-  const dt = new Date(raw);
-  if (Number.isNaN(dt.getTime())) return "";
-  const hh = String(dt.getHours()).padStart(2, "0");
-  const mm = String(dt.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
+  return formatVietnamTime(raw);
 };
 
 const safeMapAction = (map, action) => {
@@ -250,6 +249,78 @@ const MapClickHandler = ({ onLocationSelect }) => {
   return null;
 };
 
+const BOAT_SPIDERFY_VIEWPORT_PADDING_PX = 36;
+
+const BoatOverlapController = ({
+  expandedGroupKey,
+  expandedPositions,
+  onCollapse,
+  onZoomChange,
+}) => {
+  const map = useMap();
+  const lastPanKey = useRef("");
+
+  useMapEvents({
+    click: () => {
+      if (expandedGroupKey && typeof onCollapse === "function") onCollapse();
+    },
+    dragstart: () => {
+      if (expandedGroupKey && typeof onCollapse === "function") onCollapse();
+    },
+    zoomend: () => {
+      if (typeof onZoomChange === "function") onZoomChange(map.getZoom());
+    },
+  });
+
+  useEffect(() => {
+    if (typeof onZoomChange === "function") onZoomChange(map.getZoom());
+  }, [map, onZoomChange]);
+
+  useEffect(() => {
+    if (!expandedGroupKey || expandedPositions.length < 2) {
+      lastPanKey.current = "";
+      return;
+    }
+
+    const size = map.getSize();
+    const points = expandedPositions.map((position) => map.latLngToContainerPoint(position));
+    const minX = Math.min(...points.map((point) => point.x));
+    const maxX = Math.max(...points.map((point) => point.x));
+    const minY = Math.min(...points.map((point) => point.y));
+    const maxY = Math.max(...points.map((point) => point.y));
+    const padding = Math.min(
+      BOAT_SPIDERFY_VIEWPORT_PADDING_PX,
+      Math.max(16, Math.floor(Math.min(size.x, size.y) / 4)),
+    );
+
+    let panX = 0;
+    let panY = 0;
+    if (minX < padding) panX = minX - padding;
+    else if (maxX > size.x - padding) panX = maxX - (size.x - padding);
+    if (minY < padding) panY = minY - padding;
+    else if (maxY > size.y - padding) panY = maxY - (size.y - padding);
+
+    const panKey = [
+      expandedGroupKey,
+      map.getZoom(),
+      Math.round(minX),
+      Math.round(maxX),
+      Math.round(minY),
+      Math.round(maxY),
+      Math.round(panX),
+      Math.round(panY),
+    ].join("|");
+    if (lastPanKey.current === panKey) return;
+    lastPanKey.current = panKey;
+
+    if (Math.abs(panX) >= 1 || Math.abs(panY) >= 1) {
+      map.panBy([panX, panY], { animate: true, duration: 0.25 });
+    }
+  }, [map, expandedGroupKey, expandedPositions]);
+
+  return null;
+};
+
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
@@ -362,7 +433,10 @@ const getBoatLeafletIcon = ({
           : "online";
   const rot = Number.isFinite(Number(heading)) ? Math.round(Number(heading) / 5) * 5 : 0;
   const safeLabel = escapeHtml(String(label || "").slice(0, 4));
-  const key = `${markerStyle}|${markerKind}|${state}|${moving ? "moving" : longStopped ? "long-stopped" : docked ? "docked" : "stopped"}|${rot}|${safeLabel}`;
+  // Keep every flag that affects the generated markup in the cache key. A selected
+  // offline/maintenance marker must not reuse the icon from its online counterpart.
+  const motionState = moving ? "moving" : longStopped ? "long-stopped" : docked ? "docked" : "stopped";
+  const key = `${markerStyle}|${markerKind}|${state}|${selected ? "selected" : "normal"}|${dimmed ? "dimmed" : "bright"}|${maintenance ? "maintenance" : "normal"}|${incident ? "incident" : "normal"}|${motionState}|${rot}|${safeLabel}`;
   if (boatLeafletIcons.has(key)) return boatLeafletIcons.get(key);
 
   if (markerStyle === "gps") {
@@ -434,10 +508,11 @@ const getBoatLeafletIcon = ({
     deck = "#94A3B8";
   }
 
-  const ring = "#FFFFFF";
+  // Giữ màu sự cố/cứu hộ, nhưng viền vàng phải cho thấy marker vừa được chọn.
+  const ring = selected ? "#FFD100" : "#FFFFFF";
   const online = !dimmed && !maintenance;
   const html = `
-    <div class="wb-boat is-${markerKind} ${dimmed ? "is-offline" : ""} ${maintenance ? "is-maintenance" : ""} ${incident ? "is-incident" : ""}" style="width:${size}px;height:${size}px;">
+    <div class="wb-boat is-${markerKind} ${dimmed ? "is-offline" : ""} ${maintenance ? "is-maintenance" : ""} ${incident ? "is-incident" : ""} ${selected ? "is-selected" : ""}" style="width:${size}px;height:${size}px;">
       ${incident ? `<span class="wb-boat__pulse wb-boat__pulse--incident"></span>` : ""}
       ${online && !incident ? `<span class="wb-boat__pulse" style="border-color:${fill};"></span>` : ""}
       <span class="wb-boat__rot" style="transform:rotate(${rot}deg);">
@@ -575,6 +650,8 @@ export const WaterwayMap = ({
   /** Hiện tên landmark cố định trên map (không cần bấm vào mới thấy). */
   showLandmarkLabels = true,
   selectedBoatId = "",
+  /** Callback when an operator clicks a boat marker. Receives the full boat row. */
+  onBoatSelect,
   focusView = null,
   onLocationSelect,
   onMapInteract,
@@ -603,6 +680,9 @@ export const WaterwayMap = ({
   const navigate = useNavigate();
   const { lang } = useApp();
   const [mapActivated, setMapActivated] = useState(!interactionGate);
+  const [expandedBoatGroupKey, setExpandedBoatGroupKey] = useState("");
+  const [mapZoom, setMapZoom] = useState(preferFocus && focusView ? 16 : 13);
+  const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const polylinePositions = (coordinates || [])
     .filter((point) => isValidLatLng(point?.latitude, point?.longitude))
     .map((point) => [point.latitude, point.longitude]);
@@ -624,6 +704,64 @@ export const WaterwayMap = ({
   const visibleBoats = (boatMarkers || []).filter((boat) =>
     isValidLatLng(boat?.latitude, boat?.longitude),
   );
+  const hasTimedDwell = visibleBoats.some((boat) => Boolean(boat?.dwellCountdown?.startedAt));
+  useEffect(() => {
+    if (!hasTimedDwell) return undefined;
+    const updateCurrentTime = () => setCurrentTimeMs(getServerNowMs());
+    const initialTimer = window.setTimeout(updateCurrentTime, 0);
+    const timer = window.setInterval(updateCurrentTime, MAP_CLOCK_INTERVAL_MS);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+    };
+  }, [hasTimedDwell]);
+  const boatOverlapGroups = new Map();
+  if (typeof onBoatSelect === "function") {
+    visibleBoats.forEach((boat) => {
+      // Dock-snap có thể đưa nhiều tàu về đúng một tọa độ bến.
+      const key = `${Number(boat.latitude).toFixed(5)}|${Number(boat.longitude).toFixed(5)}`;
+      const group = boatOverlapGroups.get(key) || [];
+      group.push(boat);
+      boatOverlapGroups.set(key, group);
+    });
+    boatOverlapGroups.forEach((group) => {
+      group.sort((a, b) => String(a.boatCode || a.boatId).localeCompare(String(b.boatCode || b.boatId)));
+    });
+  }
+  const boatOverlapById = new Map();
+  boatOverlapGroups.forEach((group, key) => {
+    if (group.length < 2) return;
+    group.forEach((boat, index) => {
+      boatOverlapById.set(String(boat.boatId), { key, group, index });
+    });
+  });
+  const activeExpandedBoatGroupKey = boatOverlapGroups.get(expandedBoatGroupKey)?.length > 1
+    ? expandedBoatGroupKey
+    : "";
+  useEffect(() => {
+    if (!expandedBoatGroupKey || activeExpandedBoatGroupKey) return undefined;
+    const timer = window.setTimeout(() => setExpandedBoatGroupKey(""), 0);
+    return () => window.clearTimeout(timer);
+  }, [expandedBoatGroupKey, activeExpandedBoatGroupKey]);
+  const displayBoatPosition = (boat) => {
+    const overlap = boatOverlapById.get(String(boat.boatId));
+    const original = [Number(boat.latitude), Number(boat.longitude)];
+    if (!overlap || overlap.key !== activeExpandedBoatGroupKey) return original;
+
+    // Tách theo pixel để hit-target luôn cách nhau ổn định ở mọi mức zoom.
+    const radiusPx = Math.min(70, 58 + Math.max(0, overlap.group.length - 3) * 4);
+    const angle = (-Math.PI / 2) + (2 * Math.PI * overlap.index) / overlap.group.length;
+    const originPoint = L.CRS.EPSG3857.latLngToPoint(L.latLng(original), mapZoom);
+    const spreadPoint = originPoint.add(L.point(
+      Math.cos(angle) * radiusPx,
+      Math.sin(angle) * radiusPx,
+    ));
+    const spreadLatLng = L.CRS.EPSG3857.pointToLatLng(spreadPoint, mapZoom);
+    return [spreadLatLng.lat, spreadLatLng.lng];
+  };
+  const activeExpandedBoatPositions = activeExpandedBoatGroupKey
+    ? (boatOverlapGroups.get(activeExpandedBoatGroupKey) || []).map(displayBoatPosition)
+    : [];
   const visibleLandmarks = (landmarkMarkers || []).filter((landmark) =>
     isValidLatLng(landmark?.latitude, landmark?.longitude),
   );
@@ -898,6 +1036,8 @@ export const WaterwayMap = ({
 
         {visibleBoats.map((boat) => {
           const selected = String(selectedBoatId) === String(boat.boatId);
+          const overlap = boatOverlapById.get(String(boat.boatId));
+          const markerPosition = displayBoatPosition(boat);
           const underMaintenance = isBoatUnderMaintenance(boat);
           const isSticky = boat.positionSource === "sticky";
           const dimmed = boat.isOnline === false || isSticky;
@@ -957,7 +1097,7 @@ export const WaterwayMap = ({
           const dwellStartedAt = Date.parse(String(boat.dwellCountdown?.startedAt || ""));
           const isLongStopped = isDockedOnTrip
             && Number.isFinite(dwellStartedAt)
-            && Date.now() - dwellStartedAt > 30 * 60 * 1000;
+            && currentTimeMs - dwellStartedAt > LONG_STOP_THRESHOLD_MS;
           const nextStationLabel = String(boat.nextStationName || boat.nextStationCode || "").trim();
           const currentStationLabel = String(boat.currentStationName || boat.currentStationCode || "").trim();
           const etaToNextStation = resolveEtaMinutesToNext(boat);
@@ -1074,7 +1214,7 @@ export const WaterwayMap = ({
           return (
             <Marker
               key={`boat-${String(boat.boatCode || boat.boatId).toUpperCase()}`}
-              position={[boat.latitude, boat.longitude]}
+              position={markerPosition}
               icon={getBoatLeafletIcon({
                 selected,
                 dimmed,
@@ -1093,6 +1233,10 @@ export const WaterwayMap = ({
                 click: (event) => {
                   // Chỉ 1 card (tooltip) — không mở Popup chồng lên.
                   L.DomEvent.stopPropagation(event);
+                  if (overlap && overlap.key !== activeExpandedBoatGroupKey) {
+                    setExpandedBoatGroupKey(overlap.key);
+                  }
+                  if (typeof onBoatSelect === "function") onBoatSelect(boat);
                   event.target.openTooltip();
                 },
               }}
@@ -1104,6 +1248,20 @@ export const WaterwayMap = ({
           );
         })}
 
+        {activeExpandedBoatGroupKey
+          ? (boatOverlapGroups.get(activeExpandedBoatGroupKey) || []).map((boat) => (
+              <Polyline
+                key={`boat-overlap-line-${String(boat.boatId)}`}
+                positions={[
+                  [Number(boat.latitude), Number(boat.longitude)],
+                  displayBoatPosition(boat),
+                ]}
+                interactive={false}
+                pathOptions={{ color: "#64748B", weight: 1.5, opacity: 0.65, dashArray: "3 4" }}
+              />
+            ))
+          : null}
+
         <MapController
           positions={polylinePositions}
           centerPoint={stationPoint && isValidLatLng(stationPoint.latitude, stationPoint.longitude) ? centerPoint : null}
@@ -1112,6 +1270,12 @@ export const WaterwayMap = ({
           fitKey={fitMarkerKey}
           onMapInteract={onMapInteract}
           preferFocus={preferFocus}
+        />
+        <BoatOverlapController
+          expandedGroupKey={activeExpandedBoatGroupKey}
+          expandedPositions={activeExpandedBoatPositions}
+          onCollapse={() => setExpandedBoatGroupKey("")}
+          onZoomChange={setMapZoom}
         />
         <MapClickHandler onLocationSelect={onLocationSelect} />
       </MapContainer>
