@@ -451,13 +451,13 @@ export function Schedule() {
                     to="/waterbus-booking"
                     className="rounded-full bg-[#FFD100] px-5 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-900"
                   >
-                    {lang === "VN" ? "Đặt vé Bus" : "Book Bus"}
+                    {lang === "VN" ? "Đặt vé WaterBus" : "Book WaterBus"}
                   </Link>
                   <Link
                     to="/watersightseeing-booking"
                     className="rounded-full border border-slate-200 px-5 py-2.5 text-[10px] font-headline font-black uppercase tracking-wider text-[#124757] dark:border-white/15 dark:text-yellow-300"
                   >
-                    {lang === "VN" ? "Đặt Sightseeing" : "Book Sightseeing"}
+                    {lang === "VN" ? "Đặt vé WaterSightseeing" : "Book WaterSightseeing"}
                   </Link>
                 </div>
               ) : null}

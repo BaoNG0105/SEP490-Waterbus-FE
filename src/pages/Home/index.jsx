@@ -14,6 +14,7 @@ import { ContactForm } from "../../components/ContactForm";
 import { ImageWithFallback } from "../../components/ImageWithFallback";
 import { ScrollBoat } from "../../components/ScrollBoat";
 import { RevealOnScroll } from "../../components/RevealOnScroll";
+import { PromoModal } from "../../components/PromoModal";
 
 import {
   appImages,
@@ -22,6 +23,7 @@ import {
   COMPANY_EMAIL,
   COMPANY_HOTLINE,
   heroVideo,
+  serviceCards as serviceCardsData,
 } from "../../data/homeData";
 
 
@@ -59,38 +61,17 @@ export const Home = () => {
   }, [stationPoints]);
 
   // Dữ liệu 3 thẻ điều hướng dịch vụ đặt vé (dùng chung cho lưới desktop & slider ngang mobile)
-  const serviceCards = useMemo(() => ([
-    {
-      to: "/waterbus-booking",
-      img: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus.webp",
-      alt: lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking",
-      badge: lang === "VN" ? "Tuyến cố định" : "Scheduled Route",
-      title: lang === "VN" ? "Đặt vé Waterbus" : "Waterbus Booking",
-      desc: lang === "VN"
-        ? "Di chuyển nhanh chóng theo lịch trình cố định giữa các bến tàu."
-        : "Travel quickly along fixed schedules between wharves.",
-    },
-    {
-      to: "/watersightseeing-booking",
-      img: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-sightseeing.webp",
-      alt: lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking",
-      badge: lang === "VN" ? "Trải nghiệm ngắm cảnh" : "Scenic Experience",
-      title: lang === "VN" ? "Đặt vé WaterSightseeing" : "WaterSightseeing Booking",
-      desc: lang === "VN"
-        ? "Tận hưởng hành trình ngắm cảnh thành phố dọc theo dòng sông."
-        : "Enjoy a leisurely sightseeing journey along the river.",
-    },
-    {
-      to: "/charter-booking",
-      img: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/charter.jpg",
-      alt: lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking",
-      badge: lang === "VN" ? "Riêng tư & Linh hoạt" : "Private & Flexible",
-      title: lang === "VN" ? "Dịch vụ thuê tàu" : "Request Booking",
-      desc: lang === "VN"
-        ? "Thiết kế hành trình riêng theo yêu cầu cho nhóm hoặc sự kiện."
-        : "Design a private journey tailored for groups or events.",
-    },
-  ]), [lang]);
+  // — nội dung gốc nằm ở data/homeData.js, chỉ localize theo lang ở đây.
+  const serviceCards = useMemo(() => (
+    serviceCardsData.map((card) => ({
+      to: card.to,
+      img: card.img,
+      alt: lang === "VN" ? card.altVn : card.altEn,
+      badge: lang === "VN" ? card.badgeVn : card.badgeEn,
+      title: lang === "VN" ? card.titleVn : card.titleEn,
+      desc: lang === "VN" ? card.descVn : card.descEn,
+    }))
+  ), [lang]);
 
   // State quản lý danh sách Blog
   const [blogs, setBlogs] = useState([]);
@@ -563,9 +544,6 @@ export const Home = () => {
           <div className="relative z-10 lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* Khối 1: Giờ Cao Điểm */}
             <div className="sm:col-span-2 bg-linear-to-br from-[#124757] to-[#1a657c] dark:from-yellow-400 dark:to-yellow-600 p-8 md:p-10 rounded-[2.5rem] shadow-xl text-white dark:text-slate-900 flex flex-col justify-between relative overflow-hidden group hover:scale-[1.02] transition-transform duration-500 cursor-default">
-              <div className="absolute top-0 right-0 -mr-4 -mt-4 opacity-20 transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-12">
-                <span className="material-symbols-outlined text-[180px]">directions_boat</span>
-              </div>
               <div className="relative z-10 flex flex-col h-full justify-between gap-6">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-bold uppercase tracking-widest opacity-90">
@@ -748,7 +726,6 @@ export const Home = () => {
                       </span>
                       <span>•</span>
                       <span className="flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm">calendar_today</span>
                         {new Date(blogs[heroSlide].publishedAt).toLocaleDateString(lang === "VN" ? "vi-VN" : "en-US")}
                       </span>
                     </div>
@@ -1086,68 +1063,12 @@ export const Home = () => {
       </section>
 
       {/* ===== MODAL QUẢNG CÁO ===== */}
-      {
-        showPromoModal && (
-          <div className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300">
-            <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-4xl overflow-hidden shadow-2xl animate-[fadeIn_0.4s_ease-out]">
-              <button
-                className="absolute top-4 right-4 z-50 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 text-white hover:bg-black/40 backdrop-blur-md transition-colors"
-                onClick={() => setShowPromoModal(false)}
-              >
-                <span className="material-symbols-outlined text-sm">close</span>
-              </button>
-              <div className="relative w-full aspect-4/5 bg-slate-100 dark:bg-slate-800">
-                {promoPosterSlides.map((promo, index) => (
-                  <ImageWithFallback
-                    key={promo.promotionCode}
-                    src={promo.imageUrl}
-                    alt={promo.promotionName}
-                    className={`absolute inset-0 w-full h-full transition-opacity duration-700 ${index === promoSlide ? "opacity-100 z-10" : "opacity-0 z-0"
-                      }`}
-                    imgClassName="w-full h-full object-cover"
-                  />
-                ))}
-                <div className="absolute inset-0 bg-linear-to-t from-slate-900/90 via-slate-900/20 to-transparent z-20"></div>
-              </div>
-              <div className="absolute bottom-0 left-0 right-0 p-8 flex flex-col items-center text-center z-30">
-                <span className="inline-block px-3 py-1 bg-primary dark:bg-yellow-400 text-white dark:text-slate-900 text-[10px] font-bold rounded-full mb-3 uppercase tracking-widest">
-                  {lang === "VN" ? "Ưu đãi giới hạn" : "Limited Offer"}
-                </span>
-                <h3 className="text-2xl font-headline font-bold text-white mb-6 shadow-sm line-clamp-2">
-                  {promoPosterSlides[promoSlide]?.promotionName ||
-                    (lang === "VN"
-                      ? "Nhận Deal hấp dẫn cùng WaterBus"
-                      : "Get attractive deals with WaterBus")}
-                </h3>
-                <Link
-                  to={
-                    promoPosterSlides[promoSlide]
-                      ? `/promotions/${promoPosterSlides[promoSlide].promotionCode}`
-                      : "/promotions"
-                  }
-                  className="w-full bg-primary-container dark:bg-yellow-400 text-on-primary-fixed dark:text-slate-900 py-4 rounded-xl font-headline font-bold hover:scale-105 transition-transform flex items-center justify-center gap-2 shadow-lg"
-                >
-                  {lang === "VN"
-                    ? "Xem chi tiết ưu đãi"
-                    : "View Promotion Details"}
-                  <span className="material-symbols-outlined text-lg">
-                    arrow_forward
-                  </span>
-                </Link>
-              </div>
-              <div className="absolute top-5 left-1/2 -translate-x-1/2 flex gap-1.5 z-30 bg-black/20 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                {promoPosterSlides.map((promo, index) => (
-                  <div
-                    key={promo.promotionCode}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${index === promoSlide ? "w-4 bg-white" : "w-1.5 bg-white/50"
-                      }`}
-                  ></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )
-      }
+      <PromoModal
+        open={showPromoModal}
+        slides={promoPosterSlides}
+        activeIndex={promoSlide}
+        onClose={() => setShowPromoModal(false)}
+      />
     </main >
   );
 };

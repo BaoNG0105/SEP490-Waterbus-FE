@@ -13,7 +13,6 @@ export function CharterInsuranceInfo({
   lang = "VN",
   currencyFormatter,
   className = "",
-  bookingType = "PassengerInsurance",
 }) {
   const selected = resolveInsuranceSelected(booking);
   const insurance = normalizeInsuranceFromBooking(booking);
@@ -134,17 +133,6 @@ export function CharterInsuranceInfo({
             }`}>
             {statusLabel}
           </span>
-          {insurance?.terms ? (
-            <button
-              type="button"
-              onClick={() => openTerms(insurance)}
-              title={isVn ? "Điều kiện bảo hiểm" : "Insurance terms"}
-              aria-label={isVn ? "Điều kiện bảo hiểm" : "Insurance terms"}
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-600 transition-colors hover:border-[#124757]/40 hover:text-[#124757] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-yellow-400/40 dark:hover:text-yellow-400"
-            >
-              <span className="material-symbols-outlined text-[14px]">info</span>
-            </button>
-          ) : null}
         </div>
       </div>
 

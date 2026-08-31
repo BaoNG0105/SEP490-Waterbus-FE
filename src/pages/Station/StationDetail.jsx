@@ -81,7 +81,7 @@ export function StationDetail() {
                         {/* GIỜ HOẠT ĐỘNG */}
                         {(station?.openingTime || station?.closingTime) && (
                             <p className="text-sm text-slate-500 flex items-start gap-2">
-                                <span className="material-symbols-outlined text-base mt-0.5 text-emerald-500">schedule</span>
+                                <span className="material-symbols-outlined text-base mt-0.5">schedule</span>
                                 <span className="flex-1 leading-relaxed">
                                     {lang === "VN" ? "Giờ mở cửa: " : "Operating Hours: "}
                                     <span className="font-bold text-[#124757] dark:text-yellow-400">

@@ -7,9 +7,12 @@ import { useApp } from "../../../context/AppContext";
 import { fetchMyBookingDetail } from "../../../services/bookingService";
 import { fetchTripDetail } from "../../../services/tripService";
 import { fetchReviewableTrips, normalizeReviewableTrip, submitBookingReview } from "../../../services/reviewService";
+import { INSURANCE_BOOKING_TYPES } from "../../../services/insuranceService";
+import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
 //component
 import { PayOSLogo, payosButtonClassName } from "../../../components/PayOSLogo";
 import { CharterInsuranceInfo } from "../../../components/CharterInsuranceInfo";
+import { StarRatingDisplay, TripReviewModal } from "../../../components/TripReview";
 //util
 import { MY_BOOKINGS_PATH, getBookingServiceConfig } from "../../../utils/bookingServiceType";
 import {
@@ -17,10 +20,7 @@ import {
   normalizeInsuranceFromBooking,
   resolveInsuranceSelected,
 } from "../../../utils/insurancePreview";
-import { INSURANCE_BOOKING_TYPES } from "../../../services/insuranceService";
-import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
 import { notify } from "../../../utils/swalToast";
-import { StarRatingDisplay, TripReviewModal } from "../../../components/TripReview";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -485,7 +485,7 @@ const TripReviewSlot = ({ reviewable, lang, onOpenReview }) => {
         <button
           type="button"
           onClick={() => onOpenReview(reviewable)}
-          className="flex items-center gap-2 rounded-xl border border-[#124757]/20 bg-[#124757]/5 px-3.5 py-2 text-xs font-headline font-black uppercase tracking-wide text-[#124757] transition hover:bg-[#124757]/10 dark:border-yellow-400/20 dark:bg-yellow-400/5 dark:text-yellow-400"
+          className="flex items-center gap-2 rounded-xl bg-yellow-400 px-3.5 py-2 text-xs font-headline font-black uppercase tracking-wide text-slate-900 transition hover:brightness-105"
         >
           {lang === "VN" ? "Đánh giá chuyến này" : "Review this trip"}
         </button>
@@ -929,7 +929,7 @@ export function BookingDetailPage({ serviceType }) {
                     </span>
                   </div>
 
-                  <div className="max-h-[34rem] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-700">
+                  <div className="max-h-136 divide-y divide-slate-100 overflow-y-auto dark:divide-slate-700">
                     {group.rows.flatMap((row) => {
                       const item = row.holder;
                       if (!item) {

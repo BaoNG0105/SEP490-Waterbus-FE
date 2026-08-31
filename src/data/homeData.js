@@ -49,6 +49,46 @@ export const guidelines = [
     },
 ];
 
+// DỮ LIỆU 3 THẺ ĐIỀU HƯỚNG DỊCH VỤ ĐẶT VÉ (lưới desktop & slider ngang mobile)
+export const serviceCards = [
+    {
+        to: "/waterbus-booking",
+        img: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-bus.webp",
+        altVn: "Đặt vé Waterbus",
+        altEn: "Waterbus Booking",
+        badgeVn: "Tuyến cố định",
+        badgeEn: "Scheduled Route",
+        titleVn: "Đặt vé Waterbus",
+        titleEn: "Waterbus Booking",
+        descVn: "Di chuyển nhanh chóng theo lịch trình cố định giữa các bến tàu.",
+        descEn: "Travel quickly along fixed schedules between wharves.",
+    },
+    {
+        to: "/watersightseeing-booking",
+        img: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/water-sightseeing.webp",
+        altVn: "Đặt vé WaterSightseeing",
+        altEn: "WaterSightseeing Booking",
+        badgeVn: "Trải nghiệm ngắm cảnh",
+        badgeEn: "Scenic Experience",
+        titleVn: "Đặt vé WaterSightseeing",
+        titleEn: "WaterSightseeing Booking",
+        descVn: "Tận hưởng hành trình ngắm cảnh thành phố dọc theo dòng sông.",
+        descEn: "Enjoy a leisurely sightseeing journey along the river.",
+    },
+    {
+        to: "/charter-booking",
+        img: "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/charter.jpg",
+        altVn: "Dịch vụ thuê tàu",
+        altEn: "Request Booking",
+        badgeVn: "Riêng tư & Linh hoạt",
+        badgeEn: "Private & Flexible",
+        titleVn: "Dịch vụ thuê tàu",
+        titleEn: "Request Booking",
+        descVn: "Thiết kế hành trình riêng theo yêu cầu cho nhóm hoặc sự kiện.",
+        descEn: "Design a private journey tailored for groups or events.",
+    },
+];
+
 // ẢNH SLIDE QUẢNG CÁO APP
 export const appImages = [
     "https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/app-1.png",
