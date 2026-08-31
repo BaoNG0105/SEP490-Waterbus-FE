@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { AIChatbotPanel } from "../components/AIChatbotPanel";
 
@@ -12,6 +13,9 @@ const GREETING_START_DELAY_MS = 2000;
 export const FloatingActions = () => {
   // Nhúng Context để hỗ trợ đa ngôn ngữ cho các Tooltip (tiêu đề khi trỏ chuột vào)
   const { lang } = useApp();
+  const { pathname } = useLocation();
+  // Nút AI Chatbot chỉ hiện ở trang chủ ("/") — sang trang khác thì ẩn hẳn, kể cả khung chat đang mở.
+  const isHomePage = pathname === "/";
   const [isChatOpen, setIsChatOpen] = useState(false);
   // Đã chào trong phiên này chưa — quyết định có chạy hiệu ứng pop-in / bong bóng hay không
   const [hasSeenGreeting] = useState(() => sessionStorage.getItem(GREETING_SESSION_KEY) === "true");
@@ -42,6 +46,10 @@ export const FloatingActions = () => {
 
   // Ẩn bong bóng chào mừng ngay nếu người dùng mở chat trước khi hết 5 giây
   const isGreetingVisible = showGreeting && !isChatOpen;
+
+  // Rời trang chủ (kể cả điều hướng SPA không reload) → ẩn hẳn nút + khung chat; AIChatbotPanel
+  // unmount theo nên không cần tự reset isChatOpen riêng.
+  if (!isHomePage) return null;
 
   return (
     <div className="fixed right-6 bottom-6 z-100 flex flex-col items-end gap-4 pointer-events-none">
