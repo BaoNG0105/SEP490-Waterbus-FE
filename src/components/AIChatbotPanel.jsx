@@ -154,10 +154,12 @@ const isBookingDataReadyForCheckout = (data) => {
 };
 
 // Ghế trợ lý AI chọn tạm (bookingDraft.selectedSeatsDeparture/Return) chỉ đủ seatNumber để BE kiểm
-// tra còn trống — KHÔNG có basePrice/seatTypeCode như ghế lấy từ sơ đồ ghế thật (Bước 2 tự gọi
-// fetchTripSeatMap trước khi cho chọn). Bước 3 (Step3Checkout) chỉ tin seat.basePrice có sẵn, không
-// tự gọi lại seat map — nếu đẩy thẳng ghế trợ lý sang Bước 3 mà không bù giá, tổng tiền hiển thị sẽ
-// ra 0. Gọi lại seat map thật rồi bù basePrice/seatTypeCode theo đúng seatNumber trước khi giữ ghế.
+// tra còn trống — KHÔNG có basePrice/effectivePrice/seatTypeCode như ghế lấy từ sơ đồ ghế thật (Bước
+// 2 tự gọi fetchTripSeatMap trước khi cho chọn). Bước 3 (Step3Checkout) ưu tiên đọc seat.effectivePrice
+// (đã gồm sẵn phí bảo hiểm mặc định bắt buộc), fallback basePrice nếu thiếu — nếu đẩy thẳng ghế trợ lý
+// sang Bước 3 mà không bù đủ 2 field này, tổng tiền hiển thị sẽ thiếu phí bảo hiểm mặc định (hoặc ra
+// 0). Gọi lại seat map thật rồi bù basePrice/effectivePrice/seatTypeCode theo đúng seatNumber trước
+// khi giữ ghế.
 const enrichSeatsWithFare = async (trip, seats, fromStationCode, toStationCode) => {
   if (!trip?.tripId || !seats?.length) return seats;
   try {
@@ -165,7 +167,9 @@ const enrichSeatsWithFare = async (trip, seats, fromStationCode, toStationCode) 
     const bySeatNumber = new Map((seatMap?.seats || []).map((s) => [s.seatNumber, s]));
     return seats.map((seat) => {
       const real = bySeatNumber.get(seat.seatNumber);
-      return real ? { ...seat, basePrice: real.basePrice, seatTypeCode: real.seatTypeCode ?? seat.seatTypeCode } : seat;
+      return real
+        ? { ...seat, basePrice: real.basePrice, effectivePrice: real.effectivePrice, seatTypeCode: real.seatTypeCode ?? seat.seatTypeCode }
+        : seat;
     });
   } catch {
     return seats; // fetch lỗi thì giữ nguyên — Step3 vẫn chạy được, chỉ tạm hiển thị giá 0
