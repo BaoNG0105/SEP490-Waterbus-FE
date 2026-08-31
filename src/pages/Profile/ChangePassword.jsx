@@ -5,6 +5,7 @@ import { required } from "../../utils/requiredStar";
 import { useDispatch } from "react-redux";
 import { logout } from "../../redux/authSlice";
 import { notify } from "../../utils/swalToast";
+import { changePasswordService } from "../../services/authService";
 
 const PASSWORD_INPUT_CLASS =
   "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-4 pr-10 py-3.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner";
