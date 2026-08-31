@@ -13,27 +13,44 @@ export function TicketQrCameraScanner({
   onClose,
   className = "",
 }) {
+  if (!active) return null;
+
+  return (
+    <ActiveTicketQrCameraScanner
+      key={`${lang}-${pauseOnScan}`}
+      lang={lang}
+      pauseOnScan={pauseOnScan}
+      onScan={onScan}
+      onClose={onClose}
+      className={className}
+    />
+  );
+}
+
+function ActiveTicketQrCameraScanner({
+  lang,
+  pauseOnScan,
+  onScan,
+  onClose,
+  className,
+}) {
   const reactId = useId().replace(/:/g, "");
   const regionId = `ticket-qr-cam-${reactId}`;
   const scannerRef = useRef(null);
   const handledRef = useRef("");
   const onScanRef = useRef(onScan);
   const [camError, setCamError] = useState("");
-  const [isStarting, setIsStarting] = useState(false);
+  const [isStarting, setIsStarting] = useState(true);
 
   useEffect(() => {
     onScanRef.current = onScan;
   }, [onScan]);
 
   useEffect(() => {
-    if (!active) return undefined;
-
     let cancelled = false;
     const scanner = new Html5Qrcode(regionId, { verbose: false });
     scannerRef.current = scanner;
     handledRef.current = "";
-    setCamError("");
-    setIsStarting(true);
 
     const stopSafely = async () => {
       try {
@@ -112,9 +129,7 @@ export function TicketQrCameraScanner({
         if (scannerRef.current === scanner) scannerRef.current = null;
       });
     };
-  }, [active, regionId, lang, pauseOnScan]);
-
-  if (!active) return null;
+  }, [regionId, lang, pauseOnScan]);
 
   return (
     <div className={`overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 dark:border-slate-600 ${className}`}>

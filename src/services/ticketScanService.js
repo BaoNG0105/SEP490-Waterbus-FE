@@ -72,6 +72,29 @@ export const createClientOperationId = () => {
   return `op-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 };
 
+/** Metadata audit được chốt một lần cho mỗi thao tác của người dùng. */
+export const createTicketScanMetadata = ({
+  source = 'Qr',
+  tripStopId,
+  clientOperationId,
+  deviceTime,
+  note,
+} = {}) => {
+  const resolvedDeviceTime = deviceTime instanceof Date
+    ? getDeviceTimeIso(deviceTime)
+    : String(deviceTime || '').trim() || getDeviceTimeIso();
+  const metadata = {
+    source: source || 'Qr',
+    clientOperationId: String(clientOperationId || '').trim() || createClientOperationId(),
+    deviceTime: resolvedDeviceTime,
+  };
+  const normalizedTripStopId = String(tripStopId || '').trim();
+  if (normalizedTripStopId) metadata.tripStopId = normalizedTripStopId;
+  const normalizedNote = String(note || '').trim();
+  if (normalizedNote) metadata.note = normalizedNote;
+  return metadata;
+};
+
 /** QR tổng booking (BK) / charter (CB) — không được gửi vào /tickets/check-in|out. */
 export const isGroupQrToken = (value) => {
   const upper = String(value || '').trim().toUpperCase();
@@ -173,9 +196,7 @@ export const buildEligibilityConfirmNote = (codes) => {
  */
 export const buildConcessionRejectBody = (rawInput, {
   reason,
-  source = 'Qr',
-  note,
-  clientOperationId,
+  ...metadataOptions
 } = {}) => {
   const trimmed = String(rawInput || '').trim();
   const reasonText = String(reason || '').trim();
@@ -183,11 +204,8 @@ export const buildConcessionRejectBody = (rawInput, {
   const body = {
     codeOrToken: trimmed,
     reason: reasonText,
-    source: source || 'Qr',
-    clientOperationId: clientOperationId || createClientOperationId(),
+    ...createTicketScanMetadata(metadataOptions),
   };
-  const trimmedNote = note == null ? '' : String(note).trim();
-  if (trimmedNote) body.note = trimmedNote;
   return body;
 };
 
@@ -253,16 +271,13 @@ export const rejectTicketConcession = async (codeOrToken, options = {}) => {
  * Body POST /tickets/check-in | check-out.
  * Không đưa codeOrToken vào URL path.
  */
-export const buildTicketScanActionBody = (rawInput, { source = 'Qr', note } = {}) => {
+export const buildTicketScanActionBody = (rawInput, options = {}) => {
   const trimmed = String(rawInput || '').trim();
   if (!trimmed) return null;
-  const body = {
+  return {
     codeOrToken: trimmed,
-    source: source || 'Qr',
+    ...createTicketScanMetadata(options),
   };
-  const trimmedNote = note == null ? '' : String(note).trim();
-  if (trimmedNote) body.note = trimmedNote;
-  return body;
 };
 
 /** @deprecated dùng buildTicketScanActionBody */
@@ -277,15 +292,14 @@ export const buildTicketScanQueryParams = ({ source = 'Qr', note = undefined } =
 
 /**
  * Body POST /tickets/scan — đúng contract BE:
- * { "codeOrToken": "...", "source": "Qr" }
- * Không gửi clientOperationId/deviceTime (dễ làm BE 500 nếu DTO không nhận).
+ * { codeOrToken, source, clientOperationId, deviceTime, tripStopId?, note? }
  */
-export const buildTicketScanBody = (rawInput, { source = 'Qr' } = {}) => {
+export const buildTicketScanBody = (rawInput, options = {}) => {
   const trimmed = String(rawInput || '').trim();
   if (!trimmed) return null;
   return {
     codeOrToken: trimmed,
-    source: source || 'Qr',
+    ...createTicketScanMetadata(options),
   };
 };
 

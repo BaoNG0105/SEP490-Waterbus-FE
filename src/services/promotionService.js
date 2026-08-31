@@ -9,8 +9,8 @@ import {
 } from '../api/promotionApi';
 
 export const PROMOTION_TYPE = {
-    PERCENT: 'Percentage',
-    FIXED: 'Amount',
+    PERCENT: 'Percent',
+    FIXED: 'Fixed',
 };
 
 export const PROMOTION_STATUS = {
@@ -82,6 +82,17 @@ const toNullableNumber = (value) => {
     return Number.isFinite(number) ? number : null;
 };
 
+const normalizePromotionType = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'percent' || normalized === 'percentage') {
+        return PROMOTION_TYPE.PERCENT;
+    }
+    if (normalized === 'fixed' || normalized === 'amount') {
+        return PROMOTION_TYPE.FIXED;
+    }
+    return PROMOTION_TYPE.PERCENT;
+};
+
 // Trả về số khi hợp lệ, null nếu không hợp lệ / không nhập.
 // `min` mặc định > 0 (cho usageLimit, maxUsesPerAccount). Truyền `1000` cho
 // các field tiền tệ để đảm bảo giá trị ≥ ngưỡng tối thiểu của backend.
@@ -105,7 +116,6 @@ const normalizeScope = (scope) => {
         };
     }
     const rawTypes = scope.applicableBookingTypes ?? scope.bookingTypes ?? [];
-    // Map BE enum values → FE internal: SEAT→SeatBooking, CHARTER→CharterBooking
     const bookingTypes = Array.isArray(rawTypes) ? rawTypes.map((t) => {
         if (t === 'SEAT' || t === 'SeatBooking') return 'SeatBooking';
         if (t === 'CHARTER' || t === 'CharterBooking') return 'CharterBooking';
@@ -127,7 +137,7 @@ export const normalizePromotion = (item) => {
         id: String(item.id ?? item.promotionId ?? ''),
         promotionCode: item.promotionCode || '',
         promotionName: item.promotionName || '',
-        promotionType: item.discountType || item.promotionType || PROMOTION_TYPE.PERCENT,
+        promotionType: normalizePromotionType(item.promotionType ?? item.discountType),
         discountValue: Number(item.discountValue) || 0,
         maxDiscountAmount:
             item.maxDiscountAmount === null || item.maxDiscountAmount === undefined
@@ -153,6 +163,7 @@ export const normalizePromotion = (item) => {
         effectiveState: item.effectiveState || '',
         firstBookingOnly: !!item.firstBookingOnly,
         scope: normalizeScope(item.scope),
+        scopeProvided: item.scope !== null && item.scope !== undefined,
         visibility: item.visibility || PROMOTION_VISIBILITY.PUBLIC,
         status: item.status || PROMOTION_STATUS.DRAFT,
         description: item.description || '',
@@ -162,12 +173,31 @@ export const normalizePromotion = (item) => {
 
 export const toIsoWithOffset = (datetimeLocalValue) => {
     if (!datetimeLocalValue) return null;
-    return `${datetimeLocalValue}:00+07:00`;
+    const value = String(datetimeLocalValue).trim();
+    if (!value) return null;
+    const withSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)
+        ? `${value}:00`
+        : value;
+    return /(?:Z|[+-]\d{2}:\d{2})$/i.test(withSeconds)
+        ? withSeconds
+        : `${withSeconds}+07:00`;
 };
 
 export const toDatetimeLocal = (isoValue) => {
     if (!isoValue) return '';
-    return String(isoValue).slice(0, 16);
+    const value = String(isoValue).trim();
+    if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) {
+        return value.slice(0, 16);
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+
+    // datetime-local không mang timezone. Dịch instant sang UTC+7 trước khi
+    // lấy các thành phần để round-trip lại đúng cùng một thời điểm.
+    return new Date(date.getTime() + 7 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 16);
 };
 
 export const fromTimeSpan = (value) => {
@@ -216,7 +246,7 @@ const emptyToNullList = (list) => {
 export const buildPromotionScope = (form) => {
     const rawTypes = emptyToNullList(form.bookingTypes);
     // Map FE internal values → BE enum: SeatBooking→SEAT, CharterBooking→CHARTER
-    const applicableBookingTypes = rawTypes?.map((t) => {
+    const bookingTypes = rawTypes?.map((t) => {
         if (t === PROMOTION_BOOKING_TYPES.SEAT || t === 'SEAT') return 'SEAT';
         if (t === PROMOTION_BOOKING_TYPES.CHARTER || t === 'CHARTER') return 'CHARTER';
         return t;
@@ -227,7 +257,7 @@ export const buildPromotionScope = (form) => {
     const departureTo = toHhMm(form.departureTo);
 
     const hasAny =
-        applicableBookingTypes ||
+        bookingTypes ||
         routeIds ||
         daysOfWeek ||
         departureFrom ||
@@ -236,7 +266,7 @@ export const buildPromotionScope = (form) => {
     if (!hasAny) return null;
 
     return {
-        applicableBookingTypes,
+        bookingTypes,
         routeIds,
         daysOfWeek,
         departureFrom,
@@ -249,7 +279,7 @@ export const buildPromotionPayload = (form, { includeCode = true } = {}) => {
 
     const payload = {
         promotionName: String(form.promotionName || '').normalize('NFC').trim().replace(/\s+/g, ' '),
-        discountType: isPercent ? PROMOTION_TYPE.PERCENT : PROMOTION_TYPE.FIXED,
+        promotionType: isPercent ? PROMOTION_TYPE.PERCENT : PROMOTION_TYPE.FIXED,
         discountValue: Number(form.discountValue) || 0,
         maxDiscountAmount: isPercent
             ? toNullablePositive(form.maxDiscountAmount, !!form.hasMaxDiscountAmount, 1000)
@@ -257,8 +287,8 @@ export const buildPromotionPayload = (form, { includeCode = true } = {}) => {
         minOrderValue: toNullablePositive(form.minOrderValue, !!form.hasMinOrderValue, 1000),
         validFrom: toIsoWithOffset(form.validFrom),
         validTo: toIsoWithOffset(form.validTo),
-        maxUsageCount: toNullablePositive(form.usageLimit, !!form.hasUsageLimit),
-        maxUsagePerAccount: toNullablePositive(form.maxUsesPerAccount, !!form.hasMaxUsesPerAccount),
+        usageLimit: toNullablePositive(form.usageLimit, !!form.hasUsageLimit),
+        maxUsesPerAccount: toNullablePositive(form.maxUsesPerAccount, !!form.hasMaxUsesPerAccount),
         budgetCap: toNullablePositive(form.budgetCap, !!form.hasBudgetCap, 1000),
         firstBookingOnly: !!form.firstBookingOnly,
         scope: buildPromotionScope(form),
@@ -506,6 +536,9 @@ export const fetchPublicPromotions = async () => {
 /** Scope trống / null = áp mọi loại booking. */
 export const isPromotionForBookingType = (promo, bookingType) => {
     if (!promo || !bookingType) return false;
+    // Public DTO hiện không trả scope. Không loại voucher khi thiếu dữ liệu;
+    // backend vẫn xác thực loại booking lúc áp mã.
+    if (promo.scopeProvided === false) return true;
     const types = promo?.scope?.applicableBookingTypes ?? promo?.scope?.bookingTypes;
     if (!Array.isArray(types) || types.length === 0) return true;
     return types.map(String).includes(String(bookingType));
