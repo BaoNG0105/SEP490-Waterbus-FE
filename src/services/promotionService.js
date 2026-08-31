@@ -66,7 +66,8 @@ const isPositiveUsageCount = (value) =>
 const hasMeaningfulText = (value) => /[\p{L}\p{N}]/u.test(String(value ?? ''));
 
 const isPromotionName = (value) =>
-    /^[\p{L}\p{N} ]+$/u.test(String(value ?? '').trim());
+    /^[\p{L}\p{N} \u002F\u002D]+$/u.test(String(value ?? '').trim())
+    && !/[ \u002F\u002D]{2,}/u.test(String(value ?? '').trim());
 
 const extractRows = (data) => {
     if (Array.isArray(data)) return data;
@@ -247,7 +248,7 @@ export const buildPromotionPayload = (form, { includeCode = true } = {}) => {
     const isPercent = form.promotionType === PROMOTION_TYPE.PERCENT;
 
     const payload = {
-        promotionName: String(form.promotionName || '').trim().replace(/\s+/g, ' '),
+        promotionName: String(form.promotionName || '').normalize('NFC').trim().replace(/\s+/g, ' '),
         discountType: isPercent ? PROMOTION_TYPE.PERCENT : PROMOTION_TYPE.FIXED,
         discountValue: Number(form.discountValue) || 0,
         maxDiscountAmount: isPercent
@@ -284,10 +285,10 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
                 : 'Code may only contain uppercase letters and digits (A–Z, 0–9).';
     }
 
-    const name = String(form.promotionName || '').trim();
+    const name = String(form.promotionName || '').normalize('NFC').trim();
     if (!name) return lang === 'VN' ? 'Tên khuyến mãi bắt buộc.' : 'Promotion name is required.';
     if (!hasMeaningfulText(name)) return lang === 'VN' ? 'Tên khuyến mãi phải có ít nhất một chữ hoặc số.' : 'Promotion name must contain at least one letter or number.';
-    if (!isPromotionName(name)) return lang === 'VN' ? 'Tên khuyến mãi chỉ được chứa chữ, số và khoảng trắng.' : 'Promotion name may only contain letters, digits, and spaces.';
+    if (!isPromotionName(name)) return lang === 'VN' ? 'Tên chỉ được chứa chữ, số, khoảng trắng, dấu - hoặc / và các ký tự phân cách không được đứng liên tiếp.' : 'Name may only contain letters, digits, spaces, hyphens, or slashes, and separators cannot appear consecutively.';
     if (name.length > PROMOTION_LIMITS.NAME_MAX_LENGTH) return lang === 'VN' ? 'Tên tối đa 150 ký tự.' : 'Name max 150 characters.';
 
     const desc = String(form.description || '');

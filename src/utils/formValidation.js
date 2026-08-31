@@ -29,8 +29,10 @@ export const isAllowedManagedEmail = (email, { requireValue = true } = {}) => {
 };
 
 export const isBlank = (value) => String(value ?? "").trim() === "";
-export const normalizeFullName = (value) => String(value || "").trim().replace(/\s+/g, " ");
-export const sanitizeFullName = (value) => String(value || "").replace(/[^\p{L}\s]/gu, "");
+export const normalizeFullName = (value) => String(value || "").normalize("NFC").trim().replace(/\s+/g, " ");
+export const sanitizeFullName = (value) => String(value || "")
+  .replace(/[^\p{L}\p{M}\s]/gu, "")
+  .replace(/(^|\s)(\p{L})/gu, (_, prefix, letter) => `${prefix}${letter.toLocaleUpperCase("vi-VN")}`);
 export const isValidFullName = (value) => /^[\p{L}]+(?:\s+[\p{L}]+)*$/u.test(normalizeFullName(value));
 
 // Chỉ giữ chữ số; vẫn cho phép một dấu + ở đầu để nhập số dạng +84.

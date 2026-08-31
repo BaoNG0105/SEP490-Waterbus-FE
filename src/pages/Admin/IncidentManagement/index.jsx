@@ -480,7 +480,9 @@ export function IncidentManagement({
       await dispatchReplacementBoat(rescueForm.incidentId, {
         rescueBoatId: rescueForm.rescueBoatId,
         replacementBoatId: rescueForm.replacementBoatId || null,
-        delayMinutes: hasNextTrips && !rescueForm.replacementBoatId ? Math.trunc(delayMinutes) : 0,
+        delayMinutes: Number.isFinite(delayMinutes) && delayMinutes > 0
+          ? Math.trunc(delayMinutes)
+          : 0,
         note: rescueForm.note.trim() || (lang === "VN"
           ? "Điều tàu cứu hộ và xử lý các chuyến kế tiếp"
           : "Dispatch rescue and handle following trips"),
@@ -733,8 +735,11 @@ export function IncidentManagement({
                 };
                 const mission = normalizeReplacementMissionType(item.replacementMissionType);
                 const needsReplace = incidentNeedsReplacementBoat(enriched);
-                const suggestedDelay = Number.isFinite(Number(item.replacementDelayMinutes))
-                  ? Number(item.replacementDelayMinutes)
+                const configuredDelay = item.replacementDelayMinutes == null
+                  ? null
+                  : Number(item.replacementDelayMinutes);
+                const suggestedDelay = Number.isFinite(configuredDelay)
+                  ? configuredDelay
                   : (needsReplace ? 30 : 0);
                 setRescueForm({
                   incidentId: item.incidentId,
@@ -751,7 +756,7 @@ export function IncidentManagement({
                   replacementEstimatedResumeAt: item.replacementEstimatedResumeAt || null,
                   rescueBoatId: "",
                   replacementBoatId: "",
-                  delayMinutes: 0,
+                  delayMinutes: suggestedDelay,
                   note: lang === "VN"
                     ? (needsReplace
                       ? `Điều tàu cứu hộ và tàu thay thế cho ${item.boatCode || ""}`
@@ -1141,7 +1146,7 @@ export function IncidentManagement({
                   <p className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-600 dark:text-slate-200">
                     {lang === "VN" ? `Chuyến kế tiếp bị ảnh hưởng (${nextTrips.length})` : `Affected following trips (${nextTrips.length})`}
                   </p>
-                  <span className="text-[11px] font-semibold text-slate-500">{lang === "VN" ? "Delay chỉ áp dụng cho danh sách này" : "Delay applies only to these trips"}</span>
+                  <span className="text-[11px] font-semibold text-slate-500">{lang === "VN" ? "Delay được tự tính theo giờ tàu rảnh" : "Delay follows actual boat availability"}</span>
                 </div>
                 <div className="max-h-40 overflow-auto divide-y divide-slate-100 dark:divide-slate-700">
                   {nextTrips.map((trip) => (
@@ -1219,9 +1224,9 @@ export function IncidentManagement({
                 ) : null}
               </label>
             ) : null}
-            {hasNextTrips ? (<label className="block space-y-1.5">
+            {hasNextTrips || requiresPassengerReplacement ? (<label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">
-                {lang === "VN" ? "Thời gian trễ (phút)" : "Delay (min)"}{mustEnterDelay ? <RequiredStar /> : null}
+                {lang === "VN" ? "Thời gian chờ dự kiến (phút)" : "Estimated wait (min)"}{mustEnterDelay ? <RequiredStar /> : null}
               </span>
               <input
                 type="number"
@@ -1231,7 +1236,7 @@ export function IncidentManagement({
                 onChange={(e) => setRescueForm((prev) => ({ ...prev, delayMinutes: e.target.value }))}
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500/30 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900"
               />
-              <p className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "Chỉ áp dụng cho các chuyến kế tiếp ở trên, không áp dụng cho chuyến đang gặp sự cố." : "Applies only to the following trips above, not the trip currently in incident."}</p>
+              <p className="text-[11px] font-medium text-slate-400">{lang === "VN" ? "Áp dụng từ bến chưa đi qua của chuyến sự cố và tự tính lại các chuyến kế tiếp với 5 phút quay đầu." : "Applies from the next pending stop and automatically cascades to following trips with a 5-minute turnaround."}</p>
             </label>) : null}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-headline font-black uppercase tracking-wider text-slate-400">Note</span>

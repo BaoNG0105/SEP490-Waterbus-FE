@@ -56,6 +56,41 @@ const isPaidLike = (paymentStatus) =>
     String(paymentStatus || "").toLowerCase(),
   );
 
+const normalizeRefundState = (value) =>
+  String(value || "").toLowerCase().replace(/[_-\s]/g, "");
+
+const getTopLevelRefundStates = (booking, keys) =>
+  [booking, booking?.raw]
+    .filter(Boolean)
+    .flatMap((source) => keys.map((key) => normalizeRefundState(source?.[key])))
+    .filter(Boolean);
+
+const bookingHasSettledRefund = (booking) => {
+  const paymentStates = getTopLevelRefundStates(booking, [
+    "bookingPaymentStatus",
+    "BookingPaymentStatus",
+    "paymentStatus",
+    "PaymentStatus",
+  ]);
+  if (paymentStates.some((state) => ["refunded", "partiallyrefunded"].includes(state))) return true;
+
+  const refundStates = getTopLevelRefundStates(booking, [
+    "refundStatus",
+    "RefundStatus",
+    "latestRefundStatus",
+    "paymentRefundStatus",
+  ]);
+  return refundStates.some((state) => ["success", "succeeded", "completed", "refunded"].includes(state));
+};
+
+const bookingHasRefundInFlight = (booking) =>
+  getTopLevelRefundStates(booking, [
+    "refundStatus",
+    "RefundStatus",
+    "latestRefundStatus",
+    "paymentRefundStatus",
+  ]).some((state) => ["pending", "processing", "requested", "created"].includes(state));
+
 const isRefundFailedPayment = (payment) => {
   const refundStatus = String(payment?.refundStatus || payment?.refund?.status || "").toLowerCase();
   return ["failed", "error", "rejected"].includes(refundStatus);
@@ -104,6 +139,7 @@ export const bookingWaitsCustomerRefundInfo = (booking) => {
   const status = String(booking?.status || "").toLowerCase();
   if (status !== "cancelled") return false;
   if (bookingNeedsAdminRefundAttention(booking)) return false;
+  if (bookingHasSettledRefund(booking) || bookingHasRefundInFlight(booking)) return false;
 
   const paymentStatus = String(booking?.paymentStatus || "").toLowerCase();
   const payments = Array.isArray(booking?.payments) ? booking.payments : [];

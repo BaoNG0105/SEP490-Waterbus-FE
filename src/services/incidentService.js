@@ -249,14 +249,6 @@ export const getReplacementMissionCopy = (incident, lang = "VN") => {
   }
 };
 
-/** delayMinutes >= 15 → ảnh hưởng thêm các chuyến sau cùng tàu/tuyến trong ngày. */
-export const DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES = 15;
-
-export const delayAffectsFollowingTrips = (delayMinutes) => {
-  const n = Number(delayMinutes);
-  return Number.isFinite(n) && n >= DELAY_AFFECTS_FOLLOWING_TRIPS_MINUTES;
-};
-
 export const isIncidentOpen = (incident) => {
   const status = String(incident?.resolutionStatus || "").toLowerCase();
   return !status || status === "open";

@@ -3,6 +3,7 @@ import { AppDateInput } from "../../../components/AppDateInput";
 import { NationalitySelect } from "../../../components/NationalitySelect";
 import { StationAssignField } from "../../../components/StationAssignField";
 import { getTodayDateString } from "../../../utils/dateOnly";
+import { sanitizeFullName } from "../../../utils/formValidation";
 import { required } from "../../../utils/requiredStar";
 
 const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
@@ -55,7 +56,7 @@ export function ManagerFormFields({
               required
               placeholder={namePlaceholder}
               value={formData.fullName}
-              onChange={(e) => setField("fullName", e.target.value)}
+              onChange={(e) => setField("fullName", sanitizeFullName(e.target.value))}
               onBlur={() => handleBlur("fullName")}
               className={errors.fullName ? errorInputStyle : inputStyle}
             />

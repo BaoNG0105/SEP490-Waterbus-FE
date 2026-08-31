@@ -1,9 +1,41 @@
 import {
+  getTrackingServerTime as apiGetTrackingServerTime,
   getLatestBoatLocations as apiGetLatestBoatLocations,
   getLatestBoatLocation as apiGetLatestBoatLocation,
   getLatestTripLocation as apiGetLatestTripLocation,
 } from "../api/trackingApi";
 import { normalizeBoatLocation, normalizeBoatLocationList } from "../utils/boatTracking";
+import { isServerClockSynchronized, syncServerTime } from "../utils/serverClock";
+
+const SERVER_CLOCK_SYNC_INTERVAL_MS = 60 * 1000;
+let serverClockSyncPromise = null;
+let lastServerClockSyncAt = 0;
+
+/** Một request dùng chung nếu nhiều phần của Live Tracking cùng khởi tạo. */
+export const syncTrackingServerClock = ({ force = false } = {}) => {
+  const now = Date.now();
+  if (
+    !force
+    && isServerClockSynchronized()
+    && now - lastServerClockSyncAt < SERVER_CLOCK_SYNC_INTERVAL_MS
+  ) {
+    return Promise.resolve(true);
+  }
+  if (serverClockSyncPromise) return serverClockSyncPromise;
+
+  serverClockSyncPromise = apiGetTrackingServerTime()
+    .then(({ serverTime, requestStartedAt, responseReceivedAt }) => {
+      const synced = syncServerTime(serverTime, requestStartedAt, responseReceivedAt);
+      if (!synced) throw new Error("Backend returned an invalid serverTime.");
+      lastServerClockSyncAt = Date.now();
+      return true;
+    })
+    .finally(() => {
+      serverClockSyncPromise = null;
+    });
+
+  return serverClockSyncPromise;
+};
 
 export const fetchLatestBoatLocations = async () => {
   const data = await apiGetLatestBoatLocations();

@@ -13,7 +13,6 @@ import {
 import { fetchAllStations } from "../../../services/stationService";
 import { hasRole } from "../../../utils/roleHelpers";
 import { FormSelect } from "../../../components/FormSelect";
-import { Sparkline } from "../../../components/charts/Sparkline";
 import { RevenueDonutChart } from "../../../components/charts/RevenueDonutChart";
 import { RevenueVsPrevChart } from "../../../components/charts/RevenueVsPrevChart";
 import {
@@ -376,19 +375,6 @@ export const RevenueReport = () => {
     ? new Date(revenueToday.date).toLocaleDateString(lang === "VN" ? "vi-VN" : "en-US", { weekday: "short", day: "2-digit", month: "2-digit" })
     : (lang === "VN" ? "Hôm nay" : "Today");
 
-  const dailyRevenuePoints = useMemo(
-    () => (revenueCurrent?.daily || []).map((p) => p.netRevenue || 0),
-    [revenueCurrent]
-  );
-  const dailyBookingPoints = useMemo(
-    () => (revenueCurrent?.daily || []).map((p) => p.bookingCount || 0),
-    [revenueCurrent]
-  );
-  const dailyRefundPoints = useMemo(
-    () => (revenueCurrent?.daily || []).map((p) => p.refundAmount || 0),
-    [revenueCurrent]
-  );
-
   // Waterbus stations derived
   const wbStations = useMemo(() => {
     if (!Array.isArray(waterbus?.stations)) return [];
@@ -430,43 +416,34 @@ export const RevenueReport = () => {
         key: "today",
         title: lang === "VN" ? `Doanh thu ${todayDateLabel}` : `Revenue ${todayDateLabel}`,
         value: formatCurrency(todayRevenue),
-        sparkPoints: todayHourly.map((item) => item.revenue),
         loading: revenueTodayLoading,
       },
       {
         key: "today_bookings",
         title: lang === "VN" ? `Booking ${todayDateLabel}` : `Bookings ${todayDateLabel}`,
         value: todayBookings,
-        sparkPoints: todayHourly.map((item) => item.bookings),
         loading: revenueTodayLoading,
       },
       {
         key: "net",
         title: lang === "VN" ? "Tổng doanh thu" : "Total Revenue",
         value: formatCurrency(revenueCurrent?.netRevenue),
-        footer: lang === "VN" ? "Xu hướng 7 ngày" : "7-day trend",
-        sparkPoints: dailyRevenuePoints,
       },
       {
         key: "bookings",
         title: lang === "VN" ? "Số booking" : "Bookings",
         value: totalBookings,
-        footer: lang === "VN" ? "Xu hướng 7 ngày" : "7-day trend",
-        sparkPoints: dailyBookingPoints,
       },
       {
         key: "refund",
         title: lang === "VN" ? "Đã hoàn tiền" : "Refunded",
         value: formatCurrency(revenueCurrent?.refundAmount),
-        footer: lang === "VN" ? "Xu hướng 7 ngày" : "7-day trend",
-        sparkPoints: dailyRefundPoints,
       },
     ];
   }, [
     revenueCurrent, lang,
-    dailyRevenuePoints, dailyBookingPoints, dailyRefundPoints,
     totalBookings,
-    revenueTodayLoading, todayDateLabel, todayRevenue, todayBookings, todayHourly,
+    revenueTodayLoading, todayDateLabel, todayRevenue, todayBookings,
   ]);
 
   // ===== RENDER =====
@@ -483,15 +460,15 @@ export const RevenueReport = () => {
   }
 
   return (
-    <div className="space-y-2.5 font-body pb-3 px-2 md:px-5 lg:px-6 pt-0 animate-fade-in">
+    <div className="space-y-2 font-body pb-2 px-2 md:px-5 lg:px-6 pt-0 animate-fade-in">
 
       {/* ===== A. HEADER ===== */}
-      <div className="bg-white dark:bg-slate-800 px-4 py-3 rounded-3xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="text-lg md:text-xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide truncate">
+          <h2 className="text-lg font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide truncate">
             {lang === "VN" ? "Dashboard" : "Dashboard"}
           </h2>
-          <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+          <p className="text-[10px] text-slate-400 truncate">
             {lang === "VN"
               ? "Tổng quan doanh thu, booking và hoạt động theo kỳ."
               : "Revenue overview, bookings and activity by period."}
@@ -500,7 +477,7 @@ export const RevenueReport = () => {
         <div className="flex items-center gap-2 shrink-0">
           <Link
             to="/admin/booking-summary"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#FFD100] dark:bg-yellow-400 px-3 py-2 text-[10px] font-headline font-black uppercase tracking-wider text-slate-900 hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#FFD100] dark:bg-yellow-400 px-3 py-1.5 text-[9px] font-headline font-black uppercase tracking-wider text-slate-900 hover:opacity-90 transition-opacity"
           >
             {lang === "VN" ? "Chi tiết Booking" : "Booking Details"}
           </Link>
@@ -508,15 +485,15 @@ export const RevenueReport = () => {
       </div>
 
       {/* ===== B. FILTER ROW ===== */}
-      <div className="bg-white dark:bg-slate-800 px-4 py-3 rounded-3xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-2.5">
+      <div className="bg-white dark:bg-slate-800 px-3 py-2 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
           <div>
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">{lang === "VN" ? "Từ ngày" : "From"}</span>
             <input
               type="date"
               value={filters.fromDate}
               onChange={(e) => updateFilter("fromDate", e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
@@ -525,7 +502,7 @@ export const RevenueReport = () => {
               type="date"
               value={filters.toDate}
               onChange={(e) => updateFilter("toDate", e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-[10px] font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
@@ -534,7 +511,7 @@ export const RevenueReport = () => {
               value={filters.serviceType}
               onChange={(v) => updateFilter("serviceType", v)}
               options={serviceTypeOptions.map((o) => ({ value: o.value, label: lang === "VN" ? o.labelVn : o.labelEn }))}
-              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-[10px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
@@ -543,7 +520,7 @@ export const RevenueReport = () => {
               value={filters.paymentMethod}
               onChange={(v) => updateFilter("paymentMethod", v)}
               options={paymentMethodOptions.map((o) => ({ value: o.value, label: lang === "VN" ? o.labelVn : o.labelEn }))}
-              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-[10px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
@@ -554,7 +531,7 @@ export const RevenueReport = () => {
               searchable
               searchPlaceholder={lang === "VN" ? "Tìm..." : "Search..."}
               options={stationOptions}
-              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-[10px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
           <div>
@@ -565,7 +542,7 @@ export const RevenueReport = () => {
               searchable
               searchPlaceholder={lang === "VN" ? "Tìm..." : "Search..."}
               options={stationOptions}
-              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-[11px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-[10px] font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#FFD100] dark:text-white"
             />
           </div>
         </div>
@@ -578,40 +555,26 @@ export const RevenueReport = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
         {kpiCards.map((card) => (
           <div
             key={card.key}
-            className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col"
-            style={{ minHeight: "116px" }}
+            className="flex min-h-18 flex-col justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white p-3 shadow-sm transition-shadow hover:shadow-md dark:border-slate-600 dark:border-opacity-50 dark:bg-slate-800"
           >
-            <div className="relative min-w-0">
+            <div className="min-w-0">
               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider truncate">{card.title}</p>
-              <h4 className="mt-0.5 text-base font-black font-headline text-[#124757] dark:text-white truncate">
+              <h4 className="mt-0.5 text-sm font-black font-headline text-[#124757] dark:text-white truncate">
                 {card.loading ? "--" : card.value}
               </h4>
-            </div>
-            <div className="relative mt-auto pt-3">
-              <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-wide">
-                {card.footer}
-              </div>
-              <div className="mt-1 h-8">
-                <Sparkline
-                  points={card.sparkPoints}
-                  color={card.sparkColor}
-                  variant="soft"
-                  interactive={false}
-                />
-              </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* ===== D. TREND CHART + DONUT CHARTS ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+      {/* ===== D. REVENUE OVERVIEW ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
         {/* D1: Revenue trend (2/3) */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col min-h-67.5">
+        <div className="order-1 lg:col-span-2 lg:col-start-1 lg:row-start-1 lg:h-97.5 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col min-h-67.5">
           <div className="flex items-center justify-between mb-2 gap-3 shrink-0">
             <div className="min-w-0">
               <h3 className="text-sm font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider">
@@ -632,9 +595,9 @@ export const RevenueReport = () => {
           </div>
         </div>
 
-        {/* D2: Donut charts (1/3, stacked) */}
-        <div className="flex flex-col gap-2.5">
-          <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+        {/* D2: Revenue breakdowns */}
+        <div className="contents">
+          <div className="order-3 lg:col-start-1 lg:row-start-2 lg:h-58 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm overflow-hidden">
             <h4 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
               {lang === "VN" ? "Theo dịch vụ" : "By service"}
             </h4>
@@ -647,7 +610,7 @@ export const RevenueReport = () => {
               />
             </div>
           </div>
-          <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm">
+          <div className="order-4 lg:col-start-2 lg:row-start-2 lg:h-58 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm overflow-hidden">
             <h4 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
               {lang === "VN" ? "Theo thanh toán" : "By payment"}
             </h4>
@@ -661,13 +624,10 @@ export const RevenueReport = () => {
             </div>
           </div>
         </div>
-      </div>
 
-      {/* ===== E. TOP CUSTOMERS + TOP STATIONS ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
-        {/* E1: Top customers (2/3) */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col h-full">
-          <div className="mb-3">
+        {/* D3: Top customers (1/3) */}
+        <div className="order-2 lg:col-start-3 lg:row-start-1 lg:h-97.5 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col h-full overflow-hidden">
+          <div className="mb-2">
             <h3 className="text-[11px] font-headline font-black uppercase text-[#124757] dark:text-yellow-400 tracking-wider">
               {lang === "VN" ? "Top 5 khách hàng" : "Top 5 customers"}
             </h3>
@@ -698,7 +658,7 @@ export const RevenueReport = () => {
                 .slice(0, 5);
               const maxRevenue = Math.max(...sorted.map((c) => c.netRevenue || 0), 1);
               return (
-                <div className="flex-1 space-y-3 overflow-auto pr-0.5">
+                <div className="flex-1 space-y-1.5 overflow-auto pr-0.5">
                   {sorted.map((c, idx) => {
                     const pct = ((c.netRevenue || 0) / maxRevenue) * 100;
                     const medals = ["🥇", "🥈", "🥉"];
@@ -714,12 +674,12 @@ export const RevenueReport = () => {
                     return (
                       <div
                         key={c.key}
-                        className="relative px-4 py-3 rounded-2xl border border-slate-200/70 dark:border-slate-700 bg-linear-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 hover:shadow-md transition-all"
+                        className="relative px-3 py-2 rounded-xl border border-slate-200/70 dark:border-slate-700 bg-linear-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 hover:shadow-md transition-all"
                       >
-                        <div className="flex items-center justify-between text-sm gap-3">
+                        <div className="flex items-center justify-between text-xs gap-2">
                           <span className="font-bold text-slate-800 dark:text-slate-100 truncate flex-1 min-w-0 flex items-center gap-2">
                             {idx < 3 ? (
-                              <span className="text-base leading-none">{medals[idx]}</span>
+                              <span className="text-sm leading-none">{medals[idx]}</span>
                             ) : (
                               <span className={`text-[10px] inline-flex items-center justify-center w-5 h-5 rounded-full font-black ${palette.chip}`}>
                                 {idx + 1}
@@ -731,21 +691,19 @@ export const RevenueReport = () => {
                             {formatCurrency(c.netRevenue)}
                           </span>
                         </div>
-                        <div className="mt-2 h-2.5 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden shadow-inner">
+                        <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-900 overflow-hidden shadow-inner">
                           <div
                             className={`h-full bg-linear-to-r ${palette.bar} rounded-full transition-all duration-700 shadow-sm`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
-                        <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 gap-3">
+                        <div className="mt-1 flex items-center justify-between text-[9px] text-slate-500 dark:text-slate-400 gap-2">
                           <span className="truncate font-medium">
                             {c.phone || c.email || "--"}
                           </span>
                           <span className="shrink-0 tabular-nums font-semibold">
                             <span className="text-slate-700 dark:text-slate-300">{c.bookingCount}</span>
-                            <span className="mx-0.5 text-slate-400">·</span>
-                            <span className={`${palette.text}`}>{c.ticketCount}</span>
-                            <span className="ml-1 text-slate-400">{lang === "VN" ? "đơn/vé" : "bk/tix"}</span>
+                            <span className="ml-1 text-slate-400">{lang === "VN" ? "đơn" : "bookings"}</span>
                           </span>
                         </div>
                       </div>
@@ -757,8 +715,8 @@ export const RevenueReport = () => {
           )}
         </div>
 
-        {/* E2: Top stations (bar chart, compact) */}
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col">
+        {/* D4: Top stations */}
+        <div className="order-5 lg:col-start-3 lg:row-start-2 lg:h-58 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm flex flex-col overflow-hidden">
           <h3 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-2">
             {lang === "VN" ? "Top bến" : "Top stations"}
           </h3>
@@ -784,7 +742,7 @@ export const RevenueReport = () => {
             }
             const maxRev = Math.max(...validStations.map((s) => s.totalNet || 0), 1);
             return (
-              <div className="flex-1 space-y-2 overflow-auto pr-0.5">
+              <div className="flex-1 space-y-1.5 overflow-auto pr-0.5">
                 {validStations.map((station, index) => {
                   const pct = ((station.totalNet || 0) / maxRev) * 100;
                   return (
@@ -798,7 +756,7 @@ export const RevenueReport = () => {
                           {formatCurrency(station.totalNet)}
                         </span>
                       </div>
-                      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700/60 overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-700/60 overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-700"
                           style={{

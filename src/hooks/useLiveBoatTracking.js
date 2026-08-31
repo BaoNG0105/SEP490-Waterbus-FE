@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchLatestBoatLocation, fetchLatestBoatLocations } from "../services/trackingService";
+import {
+  fetchLatestBoatLocation,
+  fetchLatestBoatLocations,
+  syncTrackingServerClock,
+} from "../services/trackingService";
 import { trackingHub } from "../services/trackingHubClient";
 import { upsertBoatLocationMap, loadStickyBoatLocationMap } from "../utils/boatTracking";
 
@@ -13,6 +17,7 @@ const POLL_WHEN_HUB_LIVE_MS = 5000;
 const POLL_WHEN_HUB_DOWN_MS = 3000;
 /** List /boats/latest hay thiếu ETA — bổ sung GET /boats/{code}/latest cho tàu đang chạy. */
 const ETA_ENRICH_MS = 8000;
+const SERVER_CLOCK_REFRESH_MS = 60 * 1000;
 
 /**
  * Live boat positions: SignalR chính + REST poll chậm hơn + dừng khi tab ẩn.
@@ -25,6 +30,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
 
   const pollTimerRef = useRef(null);
   const etaTimerRef = useRef(null);
+  const serverClockTimerRef = useRef(null);
   const activeRef = useRef(false);
   const hubLiveRef = useRef(false);
   const inFlightRef = useRef(false);
@@ -164,6 +170,15 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
     activeRef.current = true;
     let cancelled = false;
 
+    const refreshServerClock = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      syncTrackingServerClock({ force: true }).catch((error) => {
+        console.warn("Failed to synchronize backend clock:", error);
+      });
+    };
+    refreshServerClock();
+    serverClockTimerRef.current = window.setInterval(refreshServerClock, SERVER_CLOCK_REFRESH_MS);
+
     const unsubscribeLocation = trackingHub.subscribeBoatLocation((payload) => {
       if (!activeRef.current) return;
       applyOneLocation(payload);
@@ -248,6 +263,10 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
       unsubscribeLocation();
       unsubscribeStatus();
       stopPolling();
+      if (serverClockTimerRef.current) {
+        window.clearInterval(serverClockTimerRef.current);
+        serverClockTimerRef.current = null;
+      }
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
       trackingHub.release();

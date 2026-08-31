@@ -870,11 +870,14 @@ export function AdminBookingPassengersTab({ booking, lang }) {
         </div>
       </div>
 
-      <div className={`flex items-center gap-4 rounded-xl bg-slate-50 ${padX} py-2 font-headline text-[10px] font-black uppercase tracking-widest text-slate-500 dark:bg-slate-900/60 dark:text-slate-400`}>
-        <span className="flex h-6 w-9 shrink-0 items-center justify-center">#</span>
-        <span className="min-w-0 flex-1">{lang === "VN" ? "Họ tên" : "Full name"}</span>
-        <span className="w-20 shrink-0 text-center sm:w-24">{lang === "VN" ? "Năm sinh" : "Birth year"}</span>
-        <span className="w-[88px] shrink-0 text-center">{lang === "VN" ? "Loại" : "Type"}</span>
+      <div
+        className={`items-center gap-4 rounded-xl bg-slate-50 ${padX} py-2 font-headline text-[10px] font-black uppercase tracking-widest text-slate-500 dark:bg-slate-900/60 dark:text-slate-400`}
+        style={{ display: "grid", gridTemplateColumns: "36px minmax(0, 1fr) 96px 88px" }}
+      >
+        <span className="flex h-6 items-center justify-center">#</span>
+        <span className="min-w-0">{lang === "VN" ? "Họ tên" : "Full name"}</span>
+        <span className="text-right" style={{ gridColumn: 3 }}>{lang === "VN" ? "Năm sinh" : "Birth year"}</span>
+        <span className="text-center">{lang === "VN" ? "Loại" : "Type"}</span>
       </div>
 
       <ol className="mt-1.5 grid gap-1">
@@ -884,7 +887,8 @@ export function AdminBookingPassengersTab({ booking, lang }) {
           return (
             <li
               key={`${name}-${idx}`}
-              className={`flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 ${padX} ${padY} transition hover:border-slate-200 hover:bg-white dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-slate-600 dark:hover:bg-slate-900`}
+              className={`items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 ${padX} ${padY} transition hover:border-slate-200 hover:bg-white dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-slate-600 dark:hover:bg-slate-900`}
+              style={{ display: "grid", gridTemplateColumns: "36px minmax(0, 1fr) 96px 88px" }}
             >
               <span className="flex h-8 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[11px] font-bold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                 {idx + 1}
@@ -892,11 +896,14 @@ export function AdminBookingPassengersTab({ booking, lang }) {
               <div className={`min-w-0 flex-1 truncate ${sizeText} font-bold text-slate-800 dark:text-white`}>
                 {name}
               </div>
-              <div className={`w-20 shrink-0 text-center ${sizeText} font-bold text-slate-800 dark:text-white sm:w-24`}>
+              <div
+                className={`text-right ${sizeText} font-bold text-slate-800 dark:text-white`}
+                style={{ gridColumn: 3 }}
+              >
                 {birthYear || "—"}
               </div>
               <span
-                className={`shrink-0 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-headline font-black uppercase tracking-wide ${typeTone(row)}`}
+                className={`inline-flex w-full items-center justify-center rounded-full border px-2.5 py-0.5 text-center text-[10px] font-headline font-black uppercase tracking-wide ${typeTone(row)}`}
               >
                 {typeLabel(row)}
               </span>

@@ -8,6 +8,7 @@ import {
   normalizePassengerApprovalStatus,
 } from "../../../utils/charterPassengerAdd";
 import { pick } from "../../../utils/charterBookingAdmin";
+import { sanitizeFullName } from "../../../utils/formValidation";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const MIN_BIRTH_YEAR = 1900;
@@ -256,7 +257,7 @@ export function MyCharterTicketsPanel({
               const nameLocked = isLocked;
               return (
                 <div key={row.id || `passenger-${index}`} className="space-y-2">
-                  <div className="grid gap-2 items-center grid-cols-[42px_1fr] md:grid-cols-[42px_1fr_170px]">
+                  <div className="grid gap-2 items-center grid-cols-[42px_1fr_110px] md:grid-cols-[42px_1fr_140px]">
                     <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400" title={row.ticketCode || undefined}>
                       {row.id && !isPlaceholder ? (
                         <input
@@ -275,7 +276,7 @@ export function MyCharterTicketsPanel({
                       ) : (
                         <input
                           value={displayName}
-                          onChange={(e) => handlePassengerChange(index, "fullName", e.target.value)}
+                          onChange={(e) => handlePassengerChange(index, "fullName", sanitizeFullName(e.target.value))}
                           readOnly={nameLocked}
                           placeholder={lang === "VN" ? "Họ tên" : "Full name"}
                           className="w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] read-only:cursor-default read-only:opacity-90"
@@ -283,7 +284,7 @@ export function MyCharterTicketsPanel({
                       )}
                     </div>
                     {isPlaceholder ? (
-                      <div className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 text-xs italic font-bold text-slate-400 dark:text-slate-500">
+                      <div className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-700 text-xs italic font-bold text-slate-400 dark:text-slate-500 text-center">
                         —
                       </div>
                     ) : (
@@ -295,7 +296,7 @@ export function MyCharterTicketsPanel({
                         onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
                         readOnly={isLocked}
                         placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
-                        className="px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] read-only:cursor-default read-only:opacity-90"
+                        className="w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] read-only:cursor-default read-only:opacity-90"
                       />
                     )}
                   </div>
@@ -367,10 +368,10 @@ export function MyCharterTicketsPanel({
           ) : (
             <div className="mt-5 space-y-3">
               {addRows.map((row, index) => (
-                <div key={`add-${index}`} className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
+                <div key={`add-${index}`} className="grid gap-2 items-center grid-cols-[1fr_110px_auto] md:grid-cols-[1fr_140px_auto]">
                   <input
                     value={row.fullName}
-                    onChange={(e) => updateAddRow(index, "fullName", e.target.value)}
+                    onChange={(e) => updateAddRow(index, "fullName", sanitizeFullName(e.target.value))}
                     placeholder={lang === "VN" ? "Họ tên" : "Full name"}
                     className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                   />
@@ -381,7 +382,7 @@ export function MyCharterTicketsPanel({
                     value={row.birthYear}
                     onChange={(e) => updateAddRow(index, "birthYear", e.target.value)}
                     placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold outline-none focus:ring-2 focus:ring-[#FFD100] dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                   />
                   <button
                     type="button"

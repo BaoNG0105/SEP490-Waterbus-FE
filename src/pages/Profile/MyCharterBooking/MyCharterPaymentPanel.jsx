@@ -178,7 +178,7 @@ function CharterPaymentLedger({ payments = [], lang = "VN", currencyFormatter, i
                 </div>
               </div>
               <p className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400 sm:text-right">
-                {amount > 0 ? currencyFormatter.format(amount) : "--"}
+                {currencyFormatter.format(amount)}
               </p>
             </div>
           );
@@ -248,6 +248,8 @@ export function MyCharterPaymentPanel({
   estimatedPayable,
   hasBlockingPaymentForPoints,
 }) {
+  const canChoosePromotion = !hasBlockingPaymentForPoints;
+
   return (
     <>
       <div ref={paymentSectionRef} className="mt-5 scroll-mt-28">
@@ -429,7 +431,7 @@ export function MyCharterPaymentPanel({
                 </div>
               ) : canCreatePayment ? (
                 <div className="space-y-5">
-                  {selectablePaymentChoices.length > 1 && !booking.requiresAdditionalPayment ? (
+                  {selectablePaymentChoices.length > 1 && canChoosePromotion ? (
                     <div>
                       <p className="mb-3 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
                         {lang === "VN" ? "Hình thức thanh toán" : "Payment option"}
@@ -495,7 +497,7 @@ export function MyCharterPaymentPanel({
                     </div>
                   )}
 
-                  {(booking.requiresAdditionalPayment || Number(booking.additionalInsuranceAmount) > 0) && (
+                  {Number(booking.additionalInsuranceAmount) > 0 && (
                     <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
                       {lang === "VN"
                         ? `Phí bảo hiểm phát sinh${Number(booking.additionalInsuranceAmount) > 0 ? ` ${currencyFormatter.format(Number(booking.additionalInsuranceAmount))}` : ""} do thêm hành khách. Thanh toán phần còn lại để nhận boarding pass.`
@@ -585,8 +587,8 @@ export function MyCharterPaymentPanel({
                   )}
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                    {/* Voucher: ẩn khi top-up BH vì khoản phát sinh không cho áp voucher. */}
-                    {!booking.requiresAdditionalPayment && (
+                    {/* BE chỉ cho chọn/đổi voucher trước payment Pending/Paid đầu tiên. */}
+                    {canChoosePromotion && (
                       <SelectablePublicVouchers
                         lang={lang}
                         bookingType={PROMOTION_BOOKING_TYPES.CHARTER}
@@ -603,12 +605,12 @@ export function MyCharterPaymentPanel({
                           : "Pick a voucher or type a code and press Enter to apply."}
                       />
                     )}
-                    {!booking.requiresAdditionalPayment && promoChecking ? (
+                    {canChoosePromotion && promoChecking ? (
                       <p className="mt-2 text-xs font-bold text-slate-400">
                         {lang === "VN" ? "Đang kiểm tra mã…" : "Validating code…"}
                       </p>
                     ) : null}
-                    {!booking.requiresAdditionalPayment && promoPreview?.ok ? (
+                    {canChoosePromotion && promoPreview?.ok ? (
                       <p className="mt-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
                         {lang === "VN"
                           ? `Đã giảm ${currencyFormatter.format(promoPreview.discountAmount || 0)}`
@@ -616,7 +618,7 @@ export function MyCharterPaymentPanel({
                         {promoPreview.message ? ` · ${promoPreview.message}` : ""}
                       </p>
                     ) : null}
-                    {!booking.requiresAdditionalPayment && promoPreview?.error ? (
+                    {canChoosePromotion && promoPreview?.error ? (
                       <p className="mt-2 text-xs font-bold text-rose-600 dark:text-rose-300">{promoPreview.error}</p>
                     ) : null}
                     <button
