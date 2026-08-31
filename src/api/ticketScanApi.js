@@ -10,7 +10,7 @@ import api from './axios';
  *    POST /bookings/manifest/qr/{qrToken}/check-in-all (?tripCode= nếu khứ hồi)
  *    POST /bookings/manifest/qr/{qrToken}/check-out-all (?tripCode= nếu khứ hồi — chiều đang trả khách)
  * 4) QR tổng charter: POST /charter-bookings/manifest/qr/{qrToken}/attendance
- *    body { action: CheckIn|CheckOut, mode: All|Selected, ticketIds }
+ *    body { action: CheckIn|CheckOut, mode: All|Selected, ticketIds, ...scanMetadata }
  */
 
 export const scanTicket = (payload) =>
@@ -45,12 +45,28 @@ export const getBookingManifestByCode = (bookingCode) =>
  * POST /bookings/manifest/qr/{bookingQrToken}/check-in-all?tripCode=
  * (booking thường / khứ hồi — không dùng cho charter QR tổng)
  */
-export const checkInAllBookingManifestByQr = (bookingQrToken, { tripCode } = {}) =>
+export const checkInAllBookingManifestByQr = (bookingQrToken, {
+  tripCode,
+  source,
+  tripStopId,
+  clientOperationId,
+  deviceTime,
+  note,
+} = {}) =>
   api
     .post(
       `/bookings/manifest/qr/${encodeURIComponent(String(bookingQrToken || '').trim())}/check-in-all`,
       null,
-      { params: tripCode ? { tripCode } : undefined },
+      {
+        params: {
+          tripCode: tripCode || undefined,
+          source: source || undefined,
+          tripStopId: tripStopId || undefined,
+          clientOperationId: clientOperationId || undefined,
+          deviceTime: deviceTime || undefined,
+          note: note || undefined,
+        },
+      },
     )
     .then((response) => response.data);
 
@@ -58,11 +74,27 @@ export const checkInAllBookingManifestByQr = (bookingQrToken, { tripCode } = {})
  * POST /bookings/manifest/qr/{bookingQrToken}/check-out-all?tripCode=
  * Chỉ checkout vé đang CheckedIn; khứ hồi truyền tripCode chiều đang trả khách.
  */
-export const checkOutAllBookingManifestByQr = (bookingQrToken, { tripCode } = {}) =>
+export const checkOutAllBookingManifestByQr = (bookingQrToken, {
+  tripCode,
+  source,
+  tripStopId,
+  clientOperationId,
+  deviceTime,
+  note,
+} = {}) =>
   api
     .post(
       `/bookings/manifest/qr/${encodeURIComponent(String(bookingQrToken || '').trim())}/check-out-all`,
       null,
-      { params: tripCode ? { tripCode } : undefined },
+      {
+        params: {
+          tripCode: tripCode || undefined,
+          source: source || undefined,
+          tripStopId: tripStopId || undefined,
+          clientOperationId: clientOperationId || undefined,
+          deviceTime: deviceTime || undefined,
+          note: note || undefined,
+        },
+      },
     )
     .then((response) => response.data);

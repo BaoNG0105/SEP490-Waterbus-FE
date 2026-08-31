@@ -98,9 +98,15 @@ const STAFF_MENU_PATHS = new Set([
   "/admin/booking-pos",
 ]);
 
+const ONBOARD_STAFF_MENU_PATHS = new Set([
+  "/admin/staff/ticket-scan",
+  "/admin/staff/scan-history",
+]);
+
 const isNavItemVisible = (user, item, staffOnly) => {
   // Bán vé (POS): staff mặt đất (Ground) mới được dùng, staff trên tàu (OnBoard) thì không.
   if (item.path === "/admin/booking-pos" && staffOnly && isOnBoardStaffUser(user)) return false;
+  if (staffOnly && ONBOARD_STAFF_MENU_PATHS.has(item.path) && !isOnBoardStaffUser(user)) return false;
   if (staffOnly) return STAFF_MENU_PATHS.has(item.path);
   return !item.roles || hasRole(user, ...item.roles);
 };

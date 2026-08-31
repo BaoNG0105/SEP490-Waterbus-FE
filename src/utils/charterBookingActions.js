@@ -18,7 +18,6 @@ export const getWorkflowStepIndex = (status) => {
   return index >= 0 ? index : 0;
 };
 
-/** Đánh dấu tab đã xem trên trang chi tiết booking của khách — riêng biệt với bên admin. */
 const CUSTOMER_CHARTER_TAB_BADGES_KEY = "customerCharterAcknowledgedTabBadges";
 
 export const readAcknowledgedCustomerTabBadges = (bookingId) => {

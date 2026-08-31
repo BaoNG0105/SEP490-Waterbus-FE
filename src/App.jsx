@@ -8,6 +8,7 @@ import { ScrollToTop } from "./components/ScrollToTop";
 import { AdminProtectedRoute } from "./components/AdminProtectedRoute";
 import { CustomerOnlyRoute } from "./components/CustomerOnlyRoute";
 import { GroundStaffOnlyRoute } from "./components/GroundStaffOnlyRoute";
+import { OnBoardStaffOnlyRoute } from "./components/OnBoardStaffOnlyRoute";
 
 //Client
 import { Home } from "./pages/Home";
@@ -772,15 +773,6 @@ function App() {
           />
 
           <Route
-            path="/admin/staff/ticket-scan"
-            element={
-              <AdminLayout title="Ticket Scan">
-                <StaffTicketScanPage />
-              </AdminLayout>
-            }
-          />
-
-          <Route
             path="/admin/staff/my-trips"
             element={
               <AdminLayout title="My Trips">
@@ -789,14 +781,25 @@ function App() {
             }
           />
 
-          <Route
-            path="/admin/staff/scan-history"
-            element={
-              <AdminLayout title="Scan History">
-                <StaffScanHistoryPage />
-              </AdminLayout>
-            }
-          />
+          <Route element={<OnBoardStaffOnlyRoute />}>
+            <Route
+              path="/admin/staff/ticket-scan"
+              element={
+                <AdminLayout title="Ticket Scan">
+                  <StaffTicketScanPage />
+                </AdminLayout>
+              }
+            />
+
+            <Route
+              path="/admin/staff/scan-history"
+              element={
+                <AdminLayout title="Scan History">
+                  <StaffScanHistoryPage />
+                </AdminLayout>
+              }
+            />
+          </Route>
 
           {/* ******* Booking POS: quầy bán vé Waterbus/Sightseeing tại chỗ *******
               Chỉ Admin/Manager/Staff mặt đất (Ground) được dùng — Staff trên tàu (OnBoard) bị chặn. */}
