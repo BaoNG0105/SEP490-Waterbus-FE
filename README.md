@@ -1,6 +1,6 @@
 # WaterBus – Frontend
 
-Ứng dụng web frontend cho hệ thống **WaterBus** – nền tảng đặt vé tàu buýt đường thủy (waterbus), tour tham quan bằng đường thủy (watersightseeing) và thuê tàu theo chuyến (charter booking), kèm theo hệ thống quản trị/vận hành nội bộ cho quản lý, nhân viên mặt đất (ground staff) và nhân viên trên tàu (on-board staff).
+Ứng dụng Web cho hệ thống **WaterBus** – nền tảng đặt vé tàu buýt đường thủy (Waterbus), tour tham quan bằng đường thủy (WaterSightseeing) và thuê tàu theo chuyến yêu cầu của Khách hàng (Request booking), kèm theo hệ thống quản trị/vận hành nội bộ cho quản lý, nhân viên bến (Station Staff) và nhân viên trên tàu (on-board staff).
 
 Đây là đồ án tốt nghiệp (Capstone) – SEP490, FPT University.
 
