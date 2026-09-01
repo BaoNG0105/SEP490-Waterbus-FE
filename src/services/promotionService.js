@@ -27,7 +27,7 @@ export const PROMOTION_VISIBILITY = {
 
 export const PROMOTION_BOOKING_TYPES = {
     SEAT: 'SeatBooking',
-    CHARTER: 'CharterBooking',
+    CHARTER: 'Charter',
 };
 
 export const PROMOTION_DAYS = [
@@ -93,6 +93,18 @@ const normalizePromotionType = (value) => {
     return PROMOTION_TYPE.PERCENT;
 };
 
+const normalizePromotionBookingType = (value) => {
+    const raw = String(value || '').trim();
+    const normalized = raw.toLowerCase().replace(/[_\s-]/g, '');
+    if (normalized === 'seat' || normalized === 'seatbooking') {
+        return PROMOTION_BOOKING_TYPES.SEAT;
+    }
+    if (normalized === 'charter' || normalized === 'charterbooking') {
+        return PROMOTION_BOOKING_TYPES.CHARTER;
+    }
+    return raw;
+};
+
 // Trả về số khi hợp lệ, null nếu không hợp lệ / không nhập.
 // `min` mặc định > 0 (cho usageLimit, maxUsesPerAccount). Truyền `1000` cho
 // các field tiền tệ để đảm bảo giá trị ≥ ngưỡng tối thiểu của backend.
@@ -116,11 +128,9 @@ const normalizeScope = (scope) => {
         };
     }
     const rawTypes = scope.applicableBookingTypes ?? scope.bookingTypes ?? [];
-    const bookingTypes = Array.isArray(rawTypes) ? rawTypes.map((t) => {
-        if (t === 'SEAT' || t === 'SeatBooking') return 'SeatBooking';
-        if (t === 'CHARTER' || t === 'CharterBooking') return 'CharterBooking';
-        return t;
-    }) : [];
+    const bookingTypes = Array.isArray(rawTypes)
+        ? rawTypes.map(normalizePromotionBookingType).filter(Boolean)
+        : [];
     return {
         bookingTypes,
         routeIds: Array.isArray(scope.routeIds) ? scope.routeIds.map(String) : [],
@@ -245,12 +255,8 @@ const emptyToNullList = (list) => {
 
 export const buildPromotionScope = (form) => {
     const rawTypes = emptyToNullList(form.bookingTypes);
-    // Map FE internal values → BE enum: SeatBooking→SEAT, CharterBooking→CHARTER
-    const bookingTypes = rawTypes?.map((t) => {
-        if (t === PROMOTION_BOOKING_TYPES.SEAT || t === 'SEAT') return 'SEAT';
-        if (t === PROMOTION_BOOKING_TYPES.CHARTER || t === 'CHARTER') return 'CHARTER';
-        return t;
-    });
+    // BE enum values are case-sensitive: SeatBooking | Charter.
+    const bookingTypes = rawTypes?.map(normalizePromotionBookingType).filter(Boolean);
     const routeIds = emptyToNullList(form.routeIds);
     const daysOfWeek = emptyToNullList(form.daysOfWeek);
     const departureFrom = toHhMm(form.departureFrom);
@@ -541,7 +547,8 @@ export const isPromotionForBookingType = (promo, bookingType) => {
     if (promo.scopeProvided === false) return true;
     const types = promo?.scope?.applicableBookingTypes ?? promo?.scope?.bookingTypes;
     if (!Array.isArray(types) || types.length === 0) return true;
-    return types.map(String).includes(String(bookingType));
+    const expectedType = normalizePromotionBookingType(bookingType);
+    return types.map(normalizePromotionBookingType).includes(expectedType);
 };
 
 export const formatPromotionDiscountLabel = (promo, lang = 'VN') => {

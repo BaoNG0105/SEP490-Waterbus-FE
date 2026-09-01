@@ -136,6 +136,11 @@ export const RevenueReport = () => {
   const [revenueLoading, setRevenueLoading] = useState(true);
   const [revenueError, setRevenueError] = useState("");
 
+  // Số booking theo phương thức được lấy từ /reports/bookings. Báo cáo doanh thu
+  // chỉ tổng hợp payment có tiền nên không thể tự biểu diễn booking miễn phí (0 VND).
+  const [paymentMethodCounts, setPaymentMethodCounts] = useState(null);
+  const [paymentMethodCountsLoading, setPaymentMethodCountsLoading] = useState(true);
+
   // ===== Data: Revenue today =====
   const [revenueToday, setRevenueToday] = useState(null);
   const [revenueTodayLoading, setRevenueTodayLoading] = useState(true);
@@ -179,6 +184,48 @@ export const RevenueReport = () => {
       setRevenueLoading(false);
     }
   }, [canAccess, filters, lang]);
+
+  const loadPaymentMethodCounts = useCallback(async () => {
+    if (!canAccess) return;
+    try {
+      setPaymentMethodCountsLoading(true);
+      const selectedMethods = filters.paymentMethod === "All"
+        ? PAYMENT_METHOD_MASTER_KEYS
+        : PAYMENT_METHOD_MASTER_KEYS.filter((key) => key === filters.paymentMethod);
+      const baseParams = stripAllSentinels({
+        createdFrom: filters.fromDate,
+        createdTo: filters.toDate,
+        serviceType: filters.serviceType,
+        fromStationId: filters.fromStationId,
+        toStationId: filters.toStationId,
+      });
+      const results = await Promise.all(
+        selectedMethods.map(async (paymentMethod) => {
+          try {
+            const report = await getBookingsReport({
+              ...baseParams,
+              paymentMethod,
+              page: 1,
+              pageSize: 1,
+            });
+            const count = Number(
+              report?.totalCount
+              ?? report?.total
+              ?? report?.count
+              ?? report?.items?.length
+              ?? 0
+            );
+            return [paymentMethod, Number.isFinite(count) ? Math.max(0, count) : 0];
+          } catch {
+            return [paymentMethod, null];
+          }
+        })
+      );
+      setPaymentMethodCounts(Object.fromEntries(results));
+    } finally {
+      setPaymentMethodCountsLoading(false);
+    }
+  }, [canAccess, filters]);
 
   const loadRevenueToday = useCallback(async () => {
     if (!canAccess) return;
@@ -314,6 +361,7 @@ export const RevenueReport = () => {
   }, [canAccess, filters.fromDate, filters.toDate, filters.serviceType]);
 
   useEffect(() => { loadRevenue(); }, [loadRevenue]);
+  useEffect(() => { loadPaymentMethodCounts(); }, [loadPaymentMethodCounts]);
   useEffect(() => { loadRevenueToday(); }, [loadRevenueToday]);
   useEffect(() => { loadRecentBookings(); }, [loadRecentBookings]);
   useEffect(() => { loadTopCustomers(); }, [loadTopCustomers]);
@@ -345,17 +393,29 @@ export const RevenueReport = () => {
     [revenueCurrent, lang, isDarkMode]
   );
 
-  const paymentMethodSegments = useMemo(
-    () => normalizeSegments({
-      items: revenueCurrent?.byPaymentMethod || [],
+  const paymentMethodSegments = useMemo(() => {
+    const reportItems = Array.isArray(revenueCurrent?.byPaymentMethod)
+      ? revenueCurrent.byPaymentMethod
+      : [];
+    const revenueSegments = normalizeSegments({
+      items: reportItems,
       masterKeys: PAYMENT_METHOD_MASTER_KEYS,
       getLabel: getPaymentMethodLabel,
       getColor: getPaymentMethodColor,
       lang,
       isDarkMode,
-    }),
-    [revenueCurrent, lang, isDarkMode]
-  );
+    });
+
+    return revenueSegments.map((segment) => {
+      const reportItem = reportItems.find((item) => item?.key === segment.key);
+      const fallbackCount = Number(reportItem?.bookingCount ?? reportItem?.count ?? 0) || 0;
+      const loadedCount = paymentMethodCounts?.[segment.key];
+      return {
+        ...segment,
+        value: loadedCount == null ? fallbackCount : loadedCount,
+      };
+    });
+  }, [revenueCurrent, paymentMethodCounts, lang, isDarkMode]);
 
   // Revenue today
   const reportToday = useMemo(() => (
@@ -611,15 +671,16 @@ export const RevenueReport = () => {
             </div>
           </div>
           <div className="order-4 lg:col-start-2 lg:row-start-2 lg:h-58 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-600 dark:border-opacity-50 shadow-sm overflow-hidden">
-            <h4 className="text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider mb-1">
-              {lang === "VN" ? "Theo thanh toán" : "By payment"}
+            <h4 className="mb-1 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
+              {lang === "VN" ? "Theo phương thức thanh toán" : "By payment method"}
             </h4>
             <div className="h-[calc(100%-22px)] min-h-37.5">
               <RevenueDonutChart
                 data={paymentMethodSegments}
                 lang={lang}
                 isDarkMode={isDarkMode}
-                isLoading={revenueLoading}
+                isLoading={revenueLoading || paymentMethodCountsLoading}
+                metric="count"
               />
             </div>
           </div>

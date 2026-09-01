@@ -356,57 +356,12 @@ const resolveOpsNav = (boat, stations = []) => {
   };
 };
 
-/**
- * ETA từ API tracking/schedule.
- * - Ưu tiên khớp panel GPS: có km + tốc độ → ước phút từ km/speed.
- * - Phút API chỉ dùng khi hợp lý; 0p / <1p trong khi còn xa hoặc đang chạy → ước từ tốc độ.
- * - F5/reload: cùng công thức — không phụ thuộc sticky state trước đó.
- */
-export const resolveEtaMinutesToNext = (boat, metersHint = null, now = Date.now()) => {
-  const speed = Number(boat?.speed);
-  const kmField = Number(boat?.remainingDistanceKmToNextStation);
-  // metersHint chỉ dùng khi đã là khoảng cách BE (km*1000), không phải nearest haversine.
-  const kmFromHint = Number.isFinite(metersHint) && metersHint >= 0
-    && Number.isFinite(kmField) && kmField >= 0
-    ? metersHint / 1000
-    : null;
-  const km = Number.isFinite(kmField) && kmField >= 0
-    ? kmField
-    : null;
-
-  let fromSpeed = null;
-  const kmForEta = km ?? kmFromHint;
-  if (Number.isFinite(kmForEta) && kmForEta > 0 && Number.isFinite(speed) && speed >= MOVING_KMH) {
-    // 1.1km / 31kmh ≈ 2.13 → 2 (khớp ~2p trên panel GPS)
-    fromSpeed = Math.max(0, Math.round((kmForEta / speed) * 60));
-    // Còn ≥150m mà round ra 0 → tối thiểu 1p (tránh <1p khi đang chạy)
-    if (fromSpeed <= 0 && kmForEta * 1000 > DOCK_METERS) fromSpeed = 1;
-  }
-
-  // Đếm ngược giữa các packet GPS: cùng một ETA phải được dùng cho tag và mô tả.
-  // Chỉ trừ khi tàu có dữ liệu đang chạy, không dùng cho thời gian chờ xuất bến.
-  const measuredAt = Date.parse(String(
-    boat?.etaMeasuredAt || boat?.receivedAt || boat?.recordedAt || boat?.updatedAt || "",
-  ));
-  const isEnRoute = (Number.isFinite(speed) && speed >= MOVING_KMH)
-    || ["moving", "arriving", "delayed"].includes(normalizeMovementKey(boat?.movementStatus))
-    || String(boat?.status || "").toLowerCase() === "moving";
-  const elapsedMinutes = isEnRoute && Number.isFinite(measuredAt) && now > measuredAt
-    ? Math.floor((now - measuredAt) / 60000)
-    : 0;
-  const countdown = (minutes) => Number.isFinite(minutes)
-    ? Math.max(0, Math.round(minutes) - elapsedMinutes)
-    : null;
-
-  const direct = Number(boat?.remainingMinutesToNextStation);
-  if (Number.isFinite(direct) && direct > 0) {
-    const rounded = Math.max(0, Math.round(direct));
-    // BE đã tính thời gian tới bến; FE chỉ đếm lùi, không tự thay bằng km/tốc độ.
-    return countdown(rounded);
-  }
-  // API trả 0p khi còn xa là dữ liệu chưa hợp lệ; chỉ lúc đó mới fallback GPS.
-  if (Number.isFinite(direct) && direct === 0 && fromSpeed == null) return 0;
-  return countdown(fromSpeed);
+/** ETA lấy nguyên từ API/SignalR; FE không tự suy ra từ tốc độ hoặc khoảng cách. */
+export const resolveEtaMinutesToNext = (boat) => {
+  const raw = boat?.remainingMinutesToNextStation;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const minutes = Number(raw);
+  return Number.isFinite(minutes) && minutes >= 0 ? minutes : null;
 };
 
 const formatEtaTag = (eta, isVn) => {
@@ -432,7 +387,7 @@ export const isDockingSoonNow = (boat, { eta = null, meters = null } = {}) => {
   const m = Number.isFinite(Number(meters))
     ? Number(meters)
     : (Number.isFinite(km) && km >= 0 ? km * 1000 : NaN);
-  const etaN = Number.isFinite(Number(eta))
+  const etaN = eta !== null && eta !== undefined && eta !== "" && Number.isFinite(Number(eta))
     ? Number(eta)
     : resolveEtaMinutesToNext(boat, Number.isFinite(m) ? m : null);
   const moving = Number.isFinite(speed) && speed >= MOVING_KMH;

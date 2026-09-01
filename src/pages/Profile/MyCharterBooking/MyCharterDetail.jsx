@@ -687,8 +687,9 @@ export function CharterDetail() {
   const paymentSectionRef = useRef(null);
   const syncedPaymentRef = useRef("");
   const autoSyncPaymentRef = useRef("");
+  const autoSyncInFlightRef = useRef(false);
+  const focusedPaymentBookingRef = useRef("");
   const refreshedDeadlineRef = useRef("");
-  const prevBalanceDueRef = useRef(null);
   const insuranceTopUpInFlightRef = useRef(false);
   const [boatImageOverrides, setBoatImageOverrides] = useState({});
   const fetchedBoatImageIdsRef = useRef(new Set());
@@ -754,6 +755,7 @@ export function CharterDetail() {
               id: pick(passenger, ["ticketId", "id"], pick(matchingTicket, ["ticketId", "id"])),
               ticketCode: pick(passenger, ["ticketCode", "code"], pick(matchingTicket, ["ticketCode", "code"], "")),
               qrToken: pick(passenger, ["qrToken"], pick(matchingTicket, ["qrToken"], "")),
+              seatCode: pick(passenger, ["seatCode", "seatNumber", "seat"], pick(matchingTicket, ["seatCode", "seatNumber", "seat"], "")),
               fullName: savedName,
               birthYear: yearFromPassenger || "",
               passengerType: index < normalized.adultCount ? "Adult" : "Child",
@@ -814,7 +816,7 @@ export function CharterDetail() {
   });
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "auto" });
     if (loadedIdRef.current === id) return;
     loadedIdRef.current = id;
     loadDetail();
@@ -855,13 +857,19 @@ export function CharterDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (!location.state?.focusPayment || isLoading || !booking) return;
+    if (
+      !location.state?.focusPayment
+      || isLoading
+      || !booking?.id
+      || focusedPaymentBookingRef.current === String(booking.id)
+    ) return;
+    focusedPaymentBookingRef.current = String(booking.id);
     setActiveTab("payment");
     const timer = window.setTimeout(() => {
       paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [booking, isLoading, location.state?.focusPayment]);
+  }, [booking?.id, isLoading, location.state?.focusPayment]);
 
   useEffect(() => {
     if (!booking?.qrToken) {
@@ -1014,20 +1022,6 @@ export function CharterDetail() {
   }, []);
 
   useEffect(() => {
-    const code = String(paymentPromotionCode || "").trim();
-    if (!code || code.length < 3) {
-      if (!code) setPromoPreview(null);
-      return undefined;
-    }
-    const timer = window.setTimeout(() => {
-      handleApplyPromotionCode(code);
-    }, 600);
-    return () => window.clearTimeout(timer);
-    // Only re-validate when the typed code (or booking) changes — not when preview state updates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paymentPromotionCode, booking?.id]);
-
-  useEffect(() => {
     const interval = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, []);
@@ -1164,23 +1158,29 @@ export function CharterDetail() {
     navigate(location.pathname, { replace: true });
   }, [handleSyncPaymentByOrderCode, id, location.pathname, location.search, navigate]);
 
+  const autoSyncBalanceDue = getCharterBalanceDue(booking);
+
   useEffect(() => {
+    if (activeTab !== "payment") return undefined;
     const orderCode = booking?.latestPaymentOrderCode || (booking?.id ? sessionStorage.getItem(`charterPaymentOrderCode:${booking.id}`) : "");
-    const balanceDue = getCharterBalanceDue(booking);
-    const isBookingPaid = String(booking?.paymentStatus).toLowerCase() === "paid" && balanceDue <= 0;
+    const isBookingPaid = String(booking?.paymentStatus).toLowerCase() === "paid" && autoSyncBalanceDue <= 0;
     const latestPaymentExpired = isDeadlineExpired(booking?.latestPaymentExpiresAt);
 
     if (!orderCode || isBookingPaid || latestPaymentExpired) return undefined;
 
     autoSyncPaymentRef.current = orderCode;
     const syncSilently = async () => {
+      if (autoSyncInFlightRef.current || autoSyncPaymentRef.current !== orderCode) return;
+      autoSyncInFlightRef.current = true;
       try {
         await syncBookingPaymentByOrderCode(orderCode);
         if (autoSyncPaymentRef.current === orderCode) {
-          await loadDetail();
+          await loadDetail({ silent: true });
         }
       } catch {
         // Keep polling quietly; payment may still be pending at PayOS.
+      } finally {
+        autoSyncInFlightRef.current = false;
       }
     };
 
@@ -1188,9 +1188,18 @@ export function CharterDetail() {
     const interval = window.setInterval(syncSilently, 6000);
     return () => {
       autoSyncPaymentRef.current = "";
+      autoSyncInFlightRef.current = false;
       window.clearInterval(interval);
     };
-  }, [booking, loadDetail]);
+  }, [
+    activeTab,
+    booking?.id,
+    booking?.latestPaymentOrderCode,
+    booking?.latestPaymentExpiresAt,
+    booking?.paymentStatus,
+    autoSyncBalanceDue,
+    loadDetail,
+  ]);
 
   const applyCreatedPayOsPayment = useCallback((payment, {
     fallbackAmount = 0,
@@ -1320,33 +1329,6 @@ export function CharterDetail() {
     }
   }, [applyCreatedPayOsPayment, booking?.id, currencyFormatter, lang, paymentPromotionCode]);
 
-  // Sau khi admin duyệt thêm HK (SignalR refresh): BH tăng → tự tạo PayOS Remaining.
-  useEffect(() => {
-    if (!booking?.id) {
-      prevBalanceDueRef.current = null;
-      return undefined;
-    }
-    const balanceDue = getCharterBalanceDue(booking);
-    const prev = prevBalanceDueRef.current;
-    prevBalanceDueRef.current = balanceDue;
-
-    if (prev === null) return undefined;
-    if (!(balanceDue > 0) || balanceDue <= prev) return undefined;
-    if (booking.insuranceSelected === false && !booking.requiresAdditionalPayment) return undefined;
-    if (!["Confirmed", "Completed", "PendingPayment"].includes(booking.status)) return undefined;
-
-    const hasPending = Array.isArray(booking.payments)
-      && booking.payments.some((payment) => {
-        const isPending = String(payment.paymentStatus).toLowerCase() === "pending";
-        const expiresAt = pick(payment, ["expiresAt"], "");
-        return isPending && (!expiresAt || !isDeadlineExpired(expiresAt));
-      });
-    if (hasPending || paymentCheckoutUrl) return undefined;
-
-    createInsuranceTopUpPayOs(balanceDue, { openCheckout: true, silent: false });
-    return undefined;
-  }, [booking, paymentCheckoutUrl, createInsuranceTopUpPayOs]);
-
   const handleCreatePayment = async () => {
     if (!booking?.id) return;
     const activePendingPayment = Array.isArray(booking.payments)
@@ -1416,6 +1398,12 @@ export function CharterDetail() {
         hasPromotionCode: Boolean(paymentPayload.promotionCode),
       });
       const payment = await createBookingPayment(paymentPayload);
+      const completedWithoutPayOs = (
+        String(pick(payment, ["paymentStatus", "status"], "")).toLowerCase() === "paid"
+        && String(pick(payment, ["bookingPaymentStatus"], "Paid")).toLowerCase() === "paid"
+        && Number(pick(payment, ["bookingRemainingAmount", "remainingAmount"], 0)) <= 0
+        && !pick(payment, ["checkoutUrl", "paymentUrl"], "")
+      );
       charterLog("create-payment-success", {
         bookingId: booking.id,
         paymentId: payment?.paymentId,
@@ -1425,6 +1413,25 @@ export function CharterDetail() {
         paymentStatus: payment?.status,
         hasCheckoutUrl: Boolean(payment?.checkoutUrl),
       });
+
+      if (completedWithoutPayOs) {
+        setPaymentCheckoutUrl("");
+        setPaymentExpiresAt("");
+        setPaymentQrCode("");
+        setPaymentAmount(0);
+        setPaymentWatcher((current) => ({ ...current, isActive: false }));
+        await loadDetail({ silent: true });
+        setActiveTab("tickets");
+        showAlertDialog({
+          icon: "success",
+          title: lang === "VN" ? "Đã thanh toán bằng điểm" : "Paid with points",
+          text: lang === "VN"
+            ? "Booking đã được xác nhận. Không cần mở PayOS."
+            : "The booking is confirmed. No PayOS checkout is required.",
+        });
+        return;
+      }
+
       const applied = applyCreatedPayOsPayment(payment, {
         fallbackAmount: selectedPaymentAmount,
         openCheckout: true,
@@ -1708,22 +1715,20 @@ export function CharterDetail() {
       const afterBalance = Math.max(
         getCharterBalanceDue(refreshed || booking),
         paymentMeta.remainingAmount,
-        embeddedPayment?.amount || 0,
+        0,
       );
-      const needsTopUp = paymentMeta.requiresAdditionalPayment
-        || paymentMeta.additionalInsuranceAmount > 0
+      const needsTopUp = paymentMeta.requiresAdditionalPayment === true
         || afterBalance > beforeBalance;
 
-      if (embeddedPayment?.checkoutUrl) {
-        rememberCharterPayOsSession(booking.id, embeddedPayment);
-        applyCreatedPayOsPayment(embeddedPayment, {
-          fallbackAmount: afterBalance || embeddedPayment.amount,
-          openCheckout: true,
-        });
-        return;
-      }
-
       if (needsTopUp && afterBalance > 0) {
+        if (embeddedPayment?.checkoutUrl) {
+          rememberCharterPayOsSession(booking.id, embeddedPayment);
+          applyCreatedPayOsPayment(embeddedPayment, {
+            fallbackAmount: afterBalance,
+            openCheckout: true,
+          });
+          return;
+        }
         await createInsuranceTopUpPayOs(afterBalance, { openCheckout: true });
         return;
       }
@@ -1824,8 +1829,6 @@ export function CharterDetail() {
     }
 
     const beforeBalance = getCharterBalanceDue(booking);
-    const beforeInsuranceTotal = Number(booking.insurance?.totalAmount || 0) || 0;
-
     try {
       setIsSubmitting(true);
       const response = await updateMyCharterBookingPassengers(booking.id, { passengers: passengerPayload.passengers });
@@ -1835,25 +1838,21 @@ export function CharterDetail() {
       const afterBalance = Math.max(
         getCharterBalanceDue(refreshed || booking),
         paymentMeta.remainingAmount,
-        embeddedPayment?.amount || 0,
+        0,
       );
-      const afterInsuranceTotal = Number((refreshed || booking)?.insurance?.totalAmount || 0) || 0;
-      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal
-        || paymentMeta.additionalInsuranceAmount > 0
-        || paymentMeta.requiresAdditionalPayment;
-      const balanceDue = afterBalance;
+      const needsTopUp = paymentMeta.requiresAdditionalPayment === true
+        || afterBalance > beforeBalance;
 
-      if (embeddedPayment?.checkoutUrl) {
-        rememberCharterPayOsSession(booking.id, embeddedPayment);
-        applyCreatedPayOsPayment(embeddedPayment, {
-          fallbackAmount: balanceDue || embeddedPayment.amount,
-          openCheckout: true,
-        });
-        return;
-      }
-
-      if ((insuranceGrew || afterBalance > beforeBalance || paymentMeta.requiresAdditionalPayment) && balanceDue > 0) {
-        await createInsuranceTopUpPayOs(balanceDue, { openCheckout: true });
+      if (needsTopUp && afterBalance > 0) {
+        if (embeddedPayment?.checkoutUrl) {
+          rememberCharterPayOsSession(booking.id, embeddedPayment);
+          applyCreatedPayOsPayment(embeddedPayment, {
+            fallbackAmount: afterBalance,
+            openCheckout: true,
+          });
+          return;
+        }
+        await createInsuranceTopUpPayOs(afterBalance, { openCheckout: true });
         return;
       }
 
@@ -1883,23 +1882,20 @@ export function CharterDetail() {
           const afterBalanceRetry = Math.max(
             getCharterBalanceDue(refreshedRetry || booking),
             paymentMetaRetry.remainingAmount,
-            embeddedPaymentRetry?.amount || 0,
+            0,
           );
-          const afterInsuranceTotalRetry = Number((refreshedRetry || booking)?.insurance?.totalAmount || 0) || 0;
-          const insuranceGrewRetry = afterInsuranceTotalRetry > beforeInsuranceTotal
-            || paymentMetaRetry.additionalInsuranceAmount > 0
-            || paymentMetaRetry.requiresAdditionalPayment;
+          const needsTopUpRetry = paymentMetaRetry.requiresAdditionalPayment === true
+            || afterBalanceRetry > beforeBalance;
 
-          if (embeddedPaymentRetry?.checkoutUrl) {
-            rememberCharterPayOsSession(booking.id, embeddedPaymentRetry);
-            applyCreatedPayOsPayment(embeddedPaymentRetry, {
-              fallbackAmount: afterBalanceRetry || embeddedPaymentRetry.amount,
-              openCheckout: true,
-            });
-            return;
-          }
-
-          if ((insuranceGrewRetry || afterBalanceRetry > beforeBalance || paymentMetaRetry.requiresAdditionalPayment) && afterBalanceRetry > 0) {
+          if (needsTopUpRetry && afterBalanceRetry > 0) {
+            if (embeddedPaymentRetry?.checkoutUrl) {
+              rememberCharterPayOsSession(booking.id, embeddedPaymentRetry);
+              applyCreatedPayOsPayment(embeddedPaymentRetry, {
+                fallbackAmount: afterBalanceRetry,
+                openCheckout: true,
+              });
+              return;
+            }
             await createInsuranceTopUpPayOs(afterBalanceRetry, { openCheckout: true });
             return;
           }
@@ -1968,7 +1964,6 @@ export function CharterDetail() {
     try {
       setIsSubmitting(true);
       const beforeBalance = getCharterBalanceDue(booking);
-      const beforeInsuranceTotal = Number(booking.insurance?.totalAmount || 0) || 0;
       const response = await addMyCharterBookingPassengers(booking.id, { passengers });
       const paymentMeta = extractCharterAdditionalPaymentMeta(response);
       const embeddedPayment = extractPayOsPaymentFields(response);
@@ -1976,25 +1971,21 @@ export function CharterDetail() {
       const afterBalance = Math.max(
         getCharterBalanceDue(refreshed || booking),
         paymentMeta.remainingAmount,
-        embeddedPayment?.amount || 0,
+        0,
       );
-      const afterInsuranceTotal = Number((refreshed || booking)?.insurance?.totalAmount || 0) || 0;
-      const insuranceGrew = afterInsuranceTotal > beforeInsuranceTotal
-        || paymentMeta.additionalInsuranceAmount > 0
-        || paymentMeta.requiresAdditionalPayment;
-      const balanceDue = afterBalance;
+      const needsTopUp = paymentMeta.requiresAdditionalPayment === true
+        || afterBalance > beforeBalance;
 
-      if (embeddedPayment?.checkoutUrl) {
-        rememberCharterPayOsSession(booking.id, embeddedPayment);
-        applyCreatedPayOsPayment(response, {
-          fallbackAmount: balanceDue || embeddedPayment.amount,
-          openCheckout: true,
-        });
-        return true;
-      }
-
-      if ((insuranceGrew || afterBalance > beforeBalance || paymentMeta.requiresAdditionalPayment) && balanceDue > 0) {
-        await createInsuranceTopUpPayOs(balanceDue, { openCheckout: true });
+      if (needsTopUp && afterBalance > 0) {
+        if (embeddedPayment?.checkoutUrl) {
+          rememberCharterPayOsSession(booking.id, embeddedPayment);
+          applyCreatedPayOsPayment(response, {
+            fallbackAmount: afterBalance,
+            openCheckout: true,
+          });
+          return true;
+        }
+        await createInsuranceTopUpPayOs(afterBalance, { openCheckout: true });
         return true;
       }
 
@@ -2236,8 +2227,7 @@ export function CharterDetail() {
     ? Math.max(0, Number(booking.remainingAmount) || 0)
     : computedRemaining;
   const needsBalancePayment = Boolean(booking.requiresAdditionalPayment && booking.hasDepositPaid)
-    || (remainingAmount > 0 && effectivePaidAmount > 0 && booking.hasDepositPaid)
-    || (Number(booking.additionalInsuranceAmount) > 0 && booking.hasDepositPaid);
+    || (remainingAmount > 0 && effectivePaidAmount > 0 && booking.hasDepositPaid);
   const normalizedPaymentOption = (needsBalancePayment || booking.hasDepositPaid)
     ? "Remaining"
     : paymentOption === "Remaining"

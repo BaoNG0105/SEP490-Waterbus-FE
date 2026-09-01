@@ -16,6 +16,7 @@ export const getBookingsSelect = (params = {}) =>
 // Bỏ ngày thì mặc định lấy từ đầu tháng hiện tại đến hôm nay theo giờ Việt Nam.
 // params: fromDate, toDate, serviceType, paymentMethod, soldByStaffId, fromStationId, toStationId.
 // Response: grossRevenue/refundAmount/netRevenue + byPaymentMethod/byServiceType/byStation/daily.
+// Booking miễn phí không có payment có tiền; dùng /reports/bookings?paymentMethod=Free để đếm.
 export const getRevenueReport = (params = {}) =>
     api.get('/reports/revenue', { params }).then(response => response.data);
 

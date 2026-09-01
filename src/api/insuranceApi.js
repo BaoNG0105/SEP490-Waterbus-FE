@@ -15,6 +15,7 @@ export const updateInsurancePackage = (id, data) =>
 export const uploadInsurancePackageImage = (id, imageFile) => {
     const formData = new FormData();
     formData.append('image', imageFile);
+    // Không đặt Content-Type thủ công: browser/Axios phải tự thêm boundary cho multipart.
     return api.put(`/insurance-packages/${id}/image`, formData).then((response) => response.data);
 };
 

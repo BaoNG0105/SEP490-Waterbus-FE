@@ -1008,9 +1008,9 @@ export function BookingDetailPage({ serviceType }) {
                                   {item.passengerPhone || "—"}
                                 </dd>
                               </div>
-                              <div>
+                              <div className="col-span-2 min-w-0 md:col-span-4">
                                 <dt className="text-[11px] font-bold text-slate-400">Email</dt>
-                                <dd className="font-bold text-slate-700 dark:text-slate-200 break-all">
+                                <dd className="break-words font-bold text-slate-700 dark:text-slate-200">
                                   {item.passengerEmail || "—"}
                                 </dd>
                               </div>
@@ -1162,7 +1162,7 @@ export function BookingDetailPage({ serviceType }) {
                     </p>
                     <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                       Email:{" "}
-                      <span className="font-bold text-slate-700 dark:text-slate-200 break-all">
+                      <span className="break-words font-bold text-slate-700 dark:text-slate-200">
                         {booking.contactEmail || "—"}
                       </span>
                     </p>

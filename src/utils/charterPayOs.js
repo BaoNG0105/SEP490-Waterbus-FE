@@ -13,7 +13,8 @@ const pick = (source, keys, fallback = "") => {
 
 /**
  * Số tiền còn thiếu.
- * Ưu tiên field BE: remainingAmount / additionalInsuranceAmount / requiresAdditionalPayment.
+ * Ưu tiên field BE remainingAmount khi field này có mặt, kể cả khi bằng 0.
+ * additionalInsuranceAmount chỉ là fallback cho response cũ không có remainingAmount.
  * Fallback: totalAmount − paidAmount.
  */
 export const getCharterBalanceDue = (booking) => {
@@ -22,13 +23,13 @@ export const getCharterBalanceDue = (booking) => {
   const additional = Number(booking.additionalInsuranceAmount);
   const hasAdditional = Number.isFinite(additional) && additional > 0;
 
-  if (booking.remainingAmount !== undefined && booking.remainingAmount !== null && booking.remainingAmount !== "") {
+  if (
+    booking.remainingAmount !== undefined
+    && booking.remainingAmount !== null
+    && booking.remainingAmount !== ""
+  ) {
     const remaining = Number(booking.remainingAmount);
-    if (Number.isFinite(remaining) && remaining > 0) {
-      // Nếu booking đang top-up BH (additionalInsuranceAmount > 0) mà remainingAmount = 0
-      // (BE chưa refresh), ưu tiên additional để không làm nút Pay biến mất.
-      return hasAdditional ? Math.max(remaining, additional) : Math.max(remaining, 0);
-    }
+    return Number.isFinite(remaining) ? Math.max(remaining, 0) : 0;
   }
 
   // Fallback cuối: nếu BE đánh dấu requiresAdditionalPayment nhưng remainingAmount chưa update,
@@ -80,7 +81,7 @@ export const extractCharterAdditionalPaymentMeta = (payload) => {
 
   return {
     requiresAdditionalPayment,
-    remainingAmount: Math.max(remainingAmount, additionalInsuranceAmount, 0),
+    remainingAmount: Math.max(remainingAmount, 0),
     additionalInsuranceAmount,
     paymentStatus,
     totalAmount,

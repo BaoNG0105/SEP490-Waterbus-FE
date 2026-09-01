@@ -8,6 +8,8 @@ import {
   uploadInsurancePackageImage,
   changeInsurancePackageStatus,
   checkWaterbusDefault,
+  getInsurancePackageId,
+  getInsuranceProviderLogoUrl,
   INSURANCE_BOOKING_TYPES,
 } from "../../../services/insuranceService";
 import { notify } from "../../../utils/swalToast";
@@ -21,7 +23,6 @@ import {
   MAX_LOGO_SIZE,
   MAX_CONDITIONS,
   MAX_CONDITION_TEXT,
-  labelStyle,
   inputStyle,
   buildTouched,
   buildTouchedFromValidation,
@@ -62,6 +63,21 @@ const isPackageActive = (pkg) => {
   if (typeof pkg?.status === "string") return pkg.status === "Active";
   return pkg?.isActive !== false;
 };
+
+function InsuranceLogo({ src, alt, className, fallback }) {
+  const [hasError, setHasError] = useState(false);
+  if (!src || hasError) return fallback;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      draggable={false}
+      className={`select-none ${className}`}
+      onDragStart={(event) => event.preventDefault()}
+      onError={() => setHasError(true)}
+    />
+  );
+}
 
 export function InsuranceManagement() {
   const { lang } = useApp();
@@ -143,16 +159,6 @@ export function InsuranceManagement() {
     return waterbusDuplicates.filter(
       (pkg) => String(pkg.id ?? pkg.insurancePackageId) !== String(excludeId || ""),
     );
-  };
-
-  // Trả về các gói khác (không phải chính gói đang edit) có cùng code đã trim+lowercase.
-  const findOtherWithSameCode = (code, excludeId) => {
-    const normalized = String(code || "").trim().toLowerCase();
-    if (!normalized) return [];
-    return packages.filter((pkg) => {
-      if (String(pkg.id ?? pkg.insurancePackageId) === String(excludeId || "")) return false;
-      return String(pkg.code || "").trim().toLowerCase() === normalized;
-    });
   };
 
   /**
@@ -286,7 +292,7 @@ export function InsuranceManagement() {
 
   const openEditModal = (pkg) => {
     setEditingId(pkg.id);
-    const existingLogo = pkg.providerLogoUrl || "";
+    const existingLogo = getInsuranceProviderLogoUrl(pkg);
     const isWaterbus = pkg.isWaterbusDefault === true
       || pkg.providerSource === "Waterbus"
       || pkg.providerSource === "waterbus";
@@ -544,7 +550,10 @@ export function InsuranceManagement() {
       providerSource: sourceKey,
       isWaterbusDefault: sourceKey === "Waterbus",
       providerName: normalizeInsuranceName(form.providerName) || null,
-      providerLogoUrl: form.providerLogoUrl.trim() || null,
+      // Giữ nguyên URL hiện tại khi chỉ sửa thông tin gói; upload mới sẽ thay imageUrl
+      // bằng URL Cloudinary sau khi request update thành công.
+      providerLogoUrl: form.providerLogoUrl?.trim() || null,
+      imageUrl: form.providerLogoUrl?.trim() || null,
       conditions: form.conditions.map((c) => c.trim()).filter(Boolean),
       termsUrl: form.termsUrl.trim() || null,
       status: form.status,
@@ -559,7 +568,7 @@ export function InsuranceManagement() {
     commonFields.displayOrder = Number(form.displayOrder) || 1;
 
     if (form.removeLogo) {
-      const payload = { ...commonFields, providerLogoUrl: null };
+      const payload = { ...commonFields, providerLogoUrl: null, imageUrl: null };
       return { requestPayload: payload, validationPayload: payload, logoFile: null };
     }
     return {
@@ -623,7 +632,7 @@ export function InsuranceManagement() {
         : await addInsurancePackage(requestPayload);
 
       if (logoFile) {
-        const packageId = savedPackage?.insurancePackageId ?? savedPackage?.id ?? editingId;
+        const packageId = getInsurancePackageId(savedPackage) ?? editingId;
         if (!packageId) {
           throw new Error("Không nhận được mã gói bảo hiểm để tải logo.");
         }
@@ -862,11 +871,13 @@ export function InsuranceManagement() {
                       ? "bg-white dark:bg-white border border-slate-200 dark:border-slate-600 p-1.5"
                       : "bg-[#124757]/10 dark:bg-yellow-400/10"
                       }`}>
-                      {pkg.providerLogoUrl ? (
-                        <img src={pkg.providerLogoUrl} alt={pkg.providerName || pkg.name} className="w-full h-full object-contain" />
-                      ) : (
-                        <span className="material-symbols-outlined text-xl text-[#124757] dark:text-yellow-400">shield</span>
-                      )}
+                      <InsuranceLogo
+                        key={pkg.providerLogoUrl || "empty"}
+                        src={pkg.providerLogoUrl}
+                        alt={pkg.providerName || pkg.name}
+                        className="w-full h-full object-contain"
+                        fallback={<span className="material-symbols-outlined text-xl text-[#124757] dark:text-yellow-400">shield</span>}
+                      />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -990,48 +1001,45 @@ export function InsuranceManagement() {
       )}
 
       {viewingPackage && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-100 flex items-center justify-center overflow-y-auto p-4">
           <button
             type="button"
-            aria-label="Close overlay"
+            aria-label={lang === "VN" ? "Đóng" : "Close"}
             className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]"
             onClick={closeViewModal}
           />
-          <div className="relative my-auto w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:border-slate-700 dark:bg-slate-800">
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-4 rounded-t-3xl border-b border-slate-200 px-6 py-4 bg-white dark:bg-slate-800 dark:border-slate-700">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  {lang === "VN" ? "Quản lý bảo hiểm" : "Insurance management"}
-                </p>
-                <h3 className="mt-0.5 font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
-                  {lang === "VN" ? "Chi tiết gói" : "Package details"}
-                </h3>
-              </div>
+          <div className="relative my-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-4xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:border-slate-700 dark:bg-slate-800">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-4 rounded-t-4xl border-b border-slate-200 bg-white px-5 py-3.5 dark:border-slate-700 dark:bg-slate-800">
+              <h3 className="font-headline text-base font-black text-[#124757] dark:text-yellow-400">
+                {lang === "VN" ? "Chi tiết gói bảo hiểm" : "Insurance package details"}
+              </h3>
               <button
                 type="button"
                 onClick={closeViewModal}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:hover:bg-slate-900 dark:hover:text-slate-200"
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:hover:bg-slate-900 dark:hover:text-slate-200"
                 title={lang === "VN" ? "Đóng" : "Close"}
               >
-                <X size={20} aria-hidden="true" />
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
-            <div className="p-6 space-y-5">
-              {/* Header: logo + name + badges */}
-              <div className="flex items-center gap-4 pb-5 border-b border-slate-100 dark:border-slate-700">
-                <div className={`w-20 h-20 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden ${viewingPackage.providerLogoUrl
+            <div className="space-y-4 p-5">
+              <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 dark:border-slate-700 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                <div className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${viewingPackage.providerLogoUrl
                   ? "bg-white dark:bg-white border border-slate-200 dark:border-slate-600 p-1.5"
                   : "bg-[#124757]/10 dark:bg-yellow-400/10"
                   }`}>
-                  {viewingPackage.providerLogoUrl ? (
-                    <img src={viewingPackage.providerLogoUrl} alt={viewingPackage.providerName || viewingPackage.name} className="w-full h-full object-contain" />
-                  ) : (
-                    <ShieldCheck size={30} className="text-[#124757] dark:text-yellow-400" aria-hidden="true" />
-                  )}
+                  <InsuranceLogo
+                    key={viewingPackage.providerLogoUrl || "empty"}
+                    src={viewingPackage.providerLogoUrl}
+                    alt={viewingPackage.providerName || viewingPackage.name}
+                    className="w-full h-full object-contain"
+                    fallback={<ShieldCheck size={26} className="text-[#124757] dark:text-yellow-400" aria-hidden="true" />}
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className={`shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${(viewingPackage.status || "").toLowerCase() === "active"
                       ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
                       : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700"
@@ -1042,10 +1050,7 @@ export function InsuranceManagement() {
                         ? (lang === "VN" ? "Hoạt động" : "Active")
                         : (lang === "VN" ? "Không hoạt động" : "Inactive")}
                     </span>
-                  </div>
-                  <h4 className="mt-2 font-headline font-black text-xl text-slate-800 dark:text-white leading-tight">{viewingPackage.name}</h4>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <span className={`shrink-0 text-[10px] font-bold ${
+                    <span className={`text-[10px] font-bold ${
                       viewingPackage.isWaterbusDefault === true
                         ? "text-sky-600 dark:text-sky-300"
                         : "text-violet-600 dark:text-violet-300"
@@ -1054,99 +1059,83 @@ export function InsuranceManagement() {
                         ? (lang === "VN" ? "Hệ thống" : "System")
                         : (lang === "VN" ? "Bảo hiểm ngoài" : "3rd party")}
                     </span>
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-900/60 px-2 py-1 rounded-lg">
-                      <span className="material-symbols-outlined text-[12px] text-slate-400">tag</span>
-                      {viewingPackage.code}
+                  </div>
+                  <h4 className="mt-1.5 font-headline text-lg font-black leading-tight text-slate-800 dark:text-white">{viewingPackage.name}</h4>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    <span className="font-mono font-bold">#{viewingPackage.code}</span>
+                    <span className="inline-flex min-w-0 items-center gap-1.5">
+                      <Building2 size={13} className="shrink-0" aria-hidden="true" />
+                      <span className="truncate">{viewingPackage.providerName || "—"}</span>
                     </span>
                   </div>
                 </div>
+                </div>
+                {viewingPackage.termsUrl ? (
+                  <a
+                    href={viewingPackage.termsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 font-headline text-[10px] font-black uppercase text-[#124757] transition-colors hover:border-[#124757] dark:border-slate-700 dark:text-yellow-400 dark:hover:border-yellow-400"
+                    title={viewingPackage.termsUrl}
+                  >
+                    <ExternalLink size={14} aria-hidden="true" />
+                    {lang === "VN" ? "Điều khoản" : "Terms"}
+                  </a>
+                ) : null}
               </div>
 
-              {/* Stats: Phí / Mức bồi thường */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-[#124757] dark:bg-yellow-400 p-4 text-white dark:text-slate-900">
+                <div className="rounded-2xl bg-[#124757] p-3.5 text-white dark:bg-yellow-400 dark:text-slate-900">
                   <div className="flex items-center gap-1.5 text-[10px] font-headline font-black uppercase tracking-wider opacity-80">
                     <Landmark size={15} aria-hidden="true" />
                     {lang === "VN" ? "Phí / khách" : "Fee / passenger"}
                   </div>
-                  <p className="mt-1.5 text-xl font-headline font-black tabular-nums tracking-tight">
+                  <p className="mt-1 font-headline text-lg font-black tabular-nums">
                     {formatVnd(viewingPackage.unitPremiumAmount)}
                   </p>
                 </div>
-                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-900/60">
                   <div className="flex items-center gap-1.5 text-[10px] font-headline font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <ShieldCheck size={15} aria-hidden="true" />
                     {lang === "VN" ? "Mức bồi thường" : "Coverage"}
                   </div>
-                  <p className="mt-1.5 text-xl font-headline font-black tabular-nums tracking-tight text-slate-800 dark:text-slate-100">
+                  <p className="mt-1 font-headline text-lg font-black tabular-nums text-slate-800 dark:text-slate-100">
                     {formatVnd(viewingPackage.coverageAmount)}
                   </p>
                 </div>
               </div>
 
-              {/* Provider */}
-              <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-3 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center shrink-0">
-                  <Building2 size={18} className="text-[#124757] dark:text-yellow-400" aria-hidden="true" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    {lang === "VN" ? "Nhà cung cấp" : "Provider"}
-                  </p>
-                  <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{viewingPackage.providerName || "—"}</p>
-                </div>
-              </div>
-
-              {/* Terms URL */}
-              {viewingPackage.termsUrl ? (
-                <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <ExternalLink size={14} className="text-slate-400" aria-hidden="true" />
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      {lang === "VN" ? "Điều khoản" : "Terms"}
-                    </p>
-                  </div>
-                  <a
-                    href={viewingPackage.termsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-bold text-[#124757] dark:text-yellow-400 hover:underline break-all inline-flex items-center gap-1"
-                  >
-                    <span className="truncate">{viewingPackage.termsUrl}</span>
-                    <ExternalLink size={13} className="shrink-0" aria-hidden="true" />
-                  </a>
-                </div>
-              ) : null}
-              </div>
-
-              {/* Conditions */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-900/30 px-4 py-4">
-                <div className="flex items-center gap-2 mb-3">
+              <section className="border-t border-slate-100 pt-4 dark:border-slate-700">
+                <div className="mb-2.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
                   <CheckCircle2 size={15} className="text-[#124757] dark:text-yellow-400" aria-hidden="true" />
                   <p className="text-[10px] font-headline font-black uppercase tracking-wider text-slate-400">
                     {lang === "VN" ? "Điều kiện áp dụng" : "Conditions"}
                   </p>
+                  </div>
+                  {Array.isArray(viewingPackage.conditions) && viewingPackage.conditions.length > 0 ? (
+                    <span className="text-[10px] font-bold text-slate-400">{viewingPackage.conditions.length}</span>
+                  ) : null}
                 </div>
                 {Array.isArray(viewingPackage.conditions) && viewingPackage.conditions.length > 0 ? (
-                  <ul className="space-y-2">
+                  <ul className="grid gap-2 sm:grid-cols-2">
                     {viewingPackage.conditions
                       .map((c) => (typeof c === "string" ? c : c?.text))
                       .filter(Boolean)
                       .map((text, i) => (
                         <li
                           key={i}
-                          className="flex items-start gap-2 rounded-xl border-l-2 border-[#124757] dark:border-yellow-400 bg-slate-50 dark:bg-slate-900/60 px-3 py-2.5"
+                          className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-900/60"
                         >
-                          <CheckCircle2 size={16} className="leading-none text-[#124757] dark:text-yellow-400 shrink-0 self-start mt-0.5" aria-hidden="true" />
-                          <span className="text-xs font-medium text-slate-700 dark:text-slate-200 flex-1 leading-relaxed">{text}</span>
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#124757]/10 font-headline text-[9px] font-black text-[#124757] dark:bg-yellow-400/10 dark:text-yellow-400">{i + 1}</span>
+                          <span className="flex-1 text-[11px] font-medium leading-relaxed text-slate-700 dark:text-slate-200">{text}</span>
                         </li>
                       ))}
                   </ul>
                 ) : (
                   <p className="text-xs text-slate-400 italic">—</p>
                 )}
-              </div>
+              </section>
             </div>
           </div>
         </div>

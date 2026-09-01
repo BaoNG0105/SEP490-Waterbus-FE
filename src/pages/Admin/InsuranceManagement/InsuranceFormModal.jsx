@@ -235,7 +235,12 @@ export function InsuranceFormModal({
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <div className="h-28 w-28 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 overflow-hidden flex items-center justify-center transition-all hover:border-slate-300 dark:hover:border-slate-600">
                   {form.providerLogoPreview ? (
-                    <img src={form.providerLogoPreview} alt="logo" className="h-full w-full object-contain p-2" />
+                    <img
+                      src={form.providerLogoPreview}
+                      alt="logo"
+                      className="h-full w-full object-contain p-2"
+                      onError={() => updateField("providerLogoPreview", "")}
+                    />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-slate-300 dark:text-slate-600">
                       <span className="material-symbols-outlined text-3xl">add_photo_alternate</span>

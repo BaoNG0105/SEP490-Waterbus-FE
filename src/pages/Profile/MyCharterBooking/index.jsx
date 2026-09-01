@@ -72,22 +72,15 @@ const normalizeBooking = (item) => {
   const paidAmount = paidPaymentAmount || topLevelPaidAmount || (hasDepositPaid ? finalDepositAmount : 0);
   const totalPaidDeposit = paidDepositAmount || topLevelPaidDeposit || (hasDepositPaid ? finalDepositAmount : 0);
 
-  // remainingAmount: ưu tiên field BE trả về (cả balanceDue & remainingAmount).
-  // pick() trả "" cho key không tồn tại → phân biệt được "BE không trả" vs "BE trả 0".
-  // Tính lại fallback chỉ khi BE thật sự không trả field nào, và có đủ data
-  // (estimatedPrice + paidAmount từ payments[] hoặc topLevel fields).
+  // BE là nguồn chính cho số dư. Không có field này thì giữ null để UI không
+  // suy luận nhầm booking mới cọc là đã trả đủ.
   const rawRemaining = pick(item, ["balanceDue", "remainingAmount"], "");
   const remainingAmount = (() => {
     if (rawRemaining !== "" && rawRemaining !== null && rawRemaining !== undefined) {
       const value = Number(rawRemaining);
       if (Number.isFinite(value)) return Math.max(0, value);
     }
-    // Fallback: ước tính lại từ tổng tiền - đã trả (chỉ tin payments[], bỏ qua
-    // topLevel để tránh 0 giả khi list API không trả payments chi tiết).
-    if (estimatedPrice > 0 && paidPaymentAmount > 0) {
-      return Math.max(0, estimatedPrice - paidPaymentAmount);
-    }
-    return 0;
+    return null;
   })();
   const balanceDue = remainingAmount;
 
@@ -114,6 +107,8 @@ const normalizeBooking = (item) => {
     hasDepositPaid,
     balanceDue,
     remainingAmount,
+    requiresAdditionalPayment: item?.requiresAdditionalPayment === true
+      || item?.RequiresAdditionalPayment === true,
     holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
   };
 };

@@ -54,6 +54,35 @@ const normalizeStatus = (pkg) => {
     return 'Active';
 };
 
+export const getInsuranceProviderLogoUrl = (pkg) => {
+    const candidates = [
+        pkg?.providerLogoUrl,
+        pkg?.ProviderLogoUrl,
+        pkg?.providerLogoURL,
+        pkg?.provider_logo_url,
+        pkg?.logoUrl,
+        pkg?.LogoUrl,
+        pkg?.imageUrl,
+        pkg?.ImageUrl,
+        pkg?.provider?.providerLogoUrl,
+        pkg?.provider?.logoUrl,
+        pkg?.provider?.imageUrl,
+        pkg?.insuranceProvider?.providerLogoUrl,
+        pkg?.insuranceProvider?.logoUrl,
+        pkg?.providerLogo?.url,
+        typeof pkg?.providerLogo === 'string' ? pkg.providerLogo : '',
+    ];
+    const logoUrl = candidates.map((value) => String(value || '').trim()).find(Boolean) || '';
+    if (!logoUrl) return '';
+    try {
+        const hostname = new URL(logoUrl).hostname.toLowerCase();
+        if (hostname === 'example.com' || hostname.endsWith('.example.com')) return '';
+    } catch {
+        // Relative URLs are valid when images are served from the same origin.
+    }
+    return logoUrl;
+};
+
 const normalizeInsurancePackage = (pkg) => {
     const id = pkg?.id ?? pkg?.insurancePackageId ?? pkg?.code ?? null;
     const status = normalizeStatus(pkg);
@@ -68,11 +97,21 @@ const normalizeInsurancePackage = (pkg) => {
         unitPremiumAmount: Number(pkg?.unitPremiumAmount) || 0,
         coverageAmount: Number(pkg?.coverageAmount) || 0,
         isRequired: Boolean(pkg?.isRequired),
+        providerLogoUrl: getInsuranceProviderLogoUrl(pkg),
     };
 };
 
 export const getInsurancePackageId = (pkg) => {
-    const id = pkg?.id ?? pkg?.insurancePackageId ?? pkg?.code;
+    if (typeof pkg === 'string' || typeof pkg === 'number') {
+        return String(pkg);
+    }
+    const id = pkg?.id
+        ?? pkg?.insurancePackageId
+        ?? pkg?.data?.id
+        ?? pkg?.data?.insurancePackageId
+        ?? pkg?.result?.id
+        ?? pkg?.result?.insurancePackageId
+        ?? pkg?.code;
     return id == null ? null : String(id);
 };
 

@@ -308,13 +308,13 @@ export function ReviewManagement() {
                 </tr>
               ) : (
                 currentReviews.map((review) => (
-                  <tr key={review.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/20 transition-colors align-top">
-                    <td className="py-4 px-6">
+                  <tr key={review.id} className="transition-colors hover:bg-slate-50/60 dark:hover:bg-slate-900/20">
+                    <td className="px-6 py-4 align-top">
                       <p className="font-bold text-slate-800 dark:text-white text-sm">{review.customerName}</p>
                       <p className="text-[10px] text-slate-400 mt-1">{formatDateTime(review.createdAt)}</p>
                     </td>
 
-                    <td className="py-4 px-4">
+                    <td className="px-4 py-4 align-top">
                       <span className="font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200 inline-block">
                         {review.bookingCode}
                       </span>
@@ -322,7 +322,7 @@ export function ReviewManagement() {
                       <p className="text-[10px] text-slate-400">{formatDateTime(review.departureTime)}</p>
                     </td>
 
-                    <td className="py-4 px-4 max-w-xs">
+                    <td className="max-w-xs px-4 py-4 align-top">
                       <StarRatingDisplay rating={review.rating} size="text-sm" />
                       {review.comment ? (
                         <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap wrap-break-words">
@@ -331,7 +331,7 @@ export function ReviewManagement() {
                       ) : null}
                     </td>
 
-                    <td className="py-4 px-4 text-center">
+                    <td className="px-4 py-4 text-center align-middle">
                       <span className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${review.status === REVIEW_STATUS.PUBLISHED
                         ? "text-emerald-600 dark:text-emerald-400"
                         : "text-amber-700 dark:text-amber-400"
@@ -342,7 +342,7 @@ export function ReviewManagement() {
                       </span>
                     </td>
 
-                    <td className="py-4 px-6 text-center">
+                    <td className="px-6 py-4 text-center align-middle">
                       <div className="flex items-center justify-center gap-2">
                         {review.status !== REVIEW_STATUS.PUBLISHED && (
                           <button

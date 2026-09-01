@@ -13,8 +13,8 @@ export function ImageWithFallback({
   imgClassName = "w-full h-full object-cover",
   iconClassName = "",
 }) {
-  const [imgError, setImgError] = useState(false);
-  const showImage = !!src && !imgError;
+  const [failedSrc, setFailedSrc] = useState(null);
+  const showImage = !!src && failedSrc !== src;
 
   return (
     <div
@@ -24,8 +24,10 @@ export function ImageWithFallback({
         <img
           src={src}
           alt={alt}
-          className={imgClassName}
-          onError={() => setImgError(true)}
+          draggable={false}
+          className={`select-none ${imgClassName}`}
+          onDragStart={(event) => event.preventDefault()}
+          onError={() => setFailedSrc(src)}
         />
       ) : (
         <NullImageIcon className={iconClassName || "w-1/3 h-1/3"} />
