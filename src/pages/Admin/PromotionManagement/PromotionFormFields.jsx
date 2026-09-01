@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchAllRoutes } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
+import { ImageWithFallback } from "../../../components/ImageWithFallback";
 import {
   PROMOTION_BOOKING_TYPES,
   PROMOTION_DAYS,
@@ -759,11 +760,16 @@ export function PromotionFormFields({
           />
           <FieldError error={errors.imageFile} />
           {formData.imagePreviewUrl ? (
-            <div className="relative inline-block mt-3">
-              <img
+            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/60">
+              <div className="border-b border-slate-200 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-700">
+                {lang === "VN" ? "Xem trước toàn bộ ảnh" : "Full image preview"}
+              </div>
+              <ImageWithFallback
                 src={formData.imagePreviewUrl}
-                alt=""
-                className="h-28 w-auto rounded-xl border border-slate-200 object-cover dark:border-slate-700"
+                alt={formData.promotionName || (lang === "VN" ? "Ảnh khuyến mãi" : "Promotion image")}
+                className="h-52 w-full bg-transparent p-3 dark:bg-transparent sm:h-64"
+                imgClassName="h-full w-full object-contain"
+                iconClassName="h-16 w-16"
               />
             </div>
           ) : null}

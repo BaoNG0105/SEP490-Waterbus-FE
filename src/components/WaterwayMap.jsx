@@ -1042,44 +1042,18 @@ export const WaterwayMap = ({
           const isSticky = boat.positionSource === "sticky";
           const dimmed = boat.isOnline === false || isSticky;
           const imageSrc = getBoatImageUrl(boat, DEFAULT_BOAT_IMAGE);
-          const seatCount = (() => {
-            const fromCapacity = Number(boat.capacitySnapshot);
-            if (Number.isFinite(fromCapacity) && fromCapacity > 0) return fromCapacity;
-            const n = Number(boat.seatCount);
-            return Number.isFinite(n) && n > 0 ? n : null;
-          })();
-          // BE contract (2026-08-08):
-          //   totalPassengerCount       = tổng booking (kể cả chưa checkin)
-          //   onboardPassengerCount     = số khách ĐÃ CHECKIN trên tàu
-          //   alightedPassengerCount    = số khách đã xuống bến
-          // FE chỉ hiển thị ratio khi onboardPassengerCount > 0.
-          {/* const totalPassenger = (() => {
-            const n = Number(boat.totalPassengerCount);
-            return Number.isFinite(n) && n >= 0 ? n : null;
-          })(); */}
-          const onboardPassenger = (() => {
-            const n = Number(boat.onboardPassengerCount);
-            return Number.isFinite(n) && n >= 0 ? n : null;
-          })();
-          {/* const alightedPassenger = (() => {
-            const n = Number(boat.alightedPassengerCount);
-            return Number.isFinite(n) && n >= 0 ? n : null;
-          })(); */}
-          const hasSeats = seatCount != null;
-          // Đã checkin = có onboardPassenger > 0 (BE confirm)
-          const hasCheckedIn = onboardPassenger != null && onboardPassenger > 0;
-          // Luôn hiển thị số khách thực tế/sức chứa để 0 khách cũng rõ là 0/79.
-          const occupancyValue = hasSeats
-            ? `${onboardPassenger ?? 0}/${seatCount}`
-            : (onboardPassenger != null ? String(onboardPassenger) : null);
           const liveStatus = resolveBoatLiveStatus(boat);
           const isIncident = liveStatus.key === "incident";
           const movementKey = String(boat.movementStatus || boat.tripMovementStatus || boat.movement || "")
             .toLowerCase()
             .replace(/[_\s-]/g, "");
           const speedKmh = Number(boat.speed);
-          const remainingKm = Number(boat.remainingDistanceKmToNextStation);
-          const remainingMinutes = Number(boat.remainingMinutesToNextStation);
+          const remainingKm = boat.remainingDistanceKmToNextStation == null
+            ? null
+            : Number(boat.remainingDistanceKmToNextStation);
+          const remainingMinutes = boat.remainingMinutesToNextStation == null
+            ? null
+            : Number(boat.remainingMinutesToNextStation);
           const hasEnRouteProgress = Boolean(boat.tripId || boat.tripCode)
             && ((Number.isFinite(remainingKm) && remainingKm > 0.15)
               || (Number.isFinite(remainingMinutes) && remainingMinutes > 1));
@@ -1101,6 +1075,11 @@ export const WaterwayMap = ({
           const nextStationLabel = String(boat.nextStationName || boat.nextStationCode || "").trim();
           const currentStationLabel = String(boat.currentStationName || boat.currentStationCode || "").trim();
           const etaToNextStation = resolveEtaMinutesToNext(boat);
+          const etaText = !nextStationLabel || etaToNextStation == null
+            ? null
+            : etaToNextStation === 0
+              ? `Đang cập bến ${nextStationLabel}`
+              : `Đến ${nextStationLabel} khoảng ${etaToNextStation} phút`;
           const markerKind = resolveBoatMarkerKind(boat);
           const kindLabel = markerKind === "rescue"
             ? "Cứu hộ"
@@ -1151,19 +1130,14 @@ export const WaterwayMap = ({
                   />
                   {kindLabel}
                 </p>
-                {/* Số khách luôn hiện khi có capacity — không bị flash “đã rời bến” che. */}
-                {occupancyValue && markerKind !== "rescue" ? (
-                  <p className="wb-boat-card__seats">
-                    <strong>{occupancyValue}</strong>
-                    {boat.passengerBreakdown?.stopName ? (
-                      <span style={{ display: "block", marginTop: 2, fontSize: 10, fontWeight: 600, color: "#64748B" }}>
-                        {`Đoạn từ ${boat.passengerBreakdown.stopName}`}
-                      </span>
-                    ) : hasCheckedIn ? (
-                      <span style={{ display: "block", marginTop: 2, fontSize: 10, fontWeight: 600, color: "#64748B" }}>
-                        Check-in thực tế
-                      </span>
-                    ) : null}
+                {markerKind !== "rescue"
+                  && boat.passengerBreakdown
+                  && (Number.isFinite(Number(boat.passengerBreakdown.boarding))
+                    || Number.isFinite(Number(boat.passengerBreakdown.alighting))) ? (
+                  <p className="wb-boat-card__seats" style={{ marginTop: 2, fontSize: 10 }}>
+                    {lang === "VN"
+                      ? `Đã lên ${Number(boat.passengerBreakdown.boarding) || 0} · Đã xuống ${Number(boat.passengerBreakdown.alighting) || 0}`
+                      : `Boarded ${Number(boat.passengerBreakdown.boarding) || 0} · Alighted ${Number(boat.passengerBreakdown.alighting) || 0}`}
                   </p>
                 ) : null}
                 {boat.flashNotice ? (
@@ -1196,9 +1170,9 @@ export const WaterwayMap = ({
                     Vị trí cuối
                     {boat.recordedAt ? ` (${formatStickyRecordedAt(boat.recordedAt)})` : ""}
                   </p>
-                ) : isMoving && nextStationLabel && Number.isFinite(etaToNextStation) ? (
+                ) : etaText ? (
                   <p className="wb-boat-card__note" style={{ color: "#2563EB" }}>
-                    {`Đến ${nextStationLabel} khoảng ${etaToNextStation <= 0 ? "dưới 1" : Math.round(etaToNextStation)} phút`}
+                    {etaText}
                   </p>
                 ) : isDockedOnTrip ? (
                   <p className="wb-boat-card__note" style={{ color: isLongStopped ? "#475569" : "#0F766E" }}>

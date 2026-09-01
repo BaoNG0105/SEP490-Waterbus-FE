@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { ChevronLeft, ChevronRight, CirclePlus, Eye, Pause, Pencil, Play, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, CirclePlus, Copy, Eye, Pause, Pencil, Play, Search } from "lucide-react";
 import { useApp } from "../../../context/AppContext";
 
 import {
@@ -16,6 +16,7 @@ import {
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { notify } from "../../../utils/swalToast";
 import { FormSelect } from "../../../components/FormSelect";
+import { ImageWithFallback } from "../../../components/ImageWithFallback";
 
 const STATUS_LABELS = {
     [PROMOTION_STATUS.DRAFT]: { vn: "Nháp", en: "Draft" },
@@ -152,7 +153,6 @@ export function PromotionManagement() {
     const stats = useMemo(() => ({
         total: promotions.length,
         active: promotions.filter((p) => p.status === PROMOTION_STATUS.ACTIVE).length,
-        draft: promotions.filter((p) => p.status === PROMOTION_STATUS.DRAFT).length,
         paused: promotions.filter((p) => p.status === PROMOTION_STATUS.PAUSED).length,
         expired: promotions.filter((p) => getPromotionLifecycle(p) === "expired").length,
     }), [promotions]);
@@ -272,10 +272,10 @@ export function PromotionManagement() {
     }
 
     return (
-        <div className="space-y-5 font-body pb-10 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
+        <div className="mx-auto max-w-7xl space-y-4 px-2 pb-10 font-body animate-fade-in sm:px-4">
 
             {/* KHỐI TIÊU ĐỀ HEADER & NÚT THÊM MỚI */}
-            <div className="flex flex-col sm:flex-row bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-start sm:items-center justify-between gap-4">
+            <div className="flex flex-col items-start justify-between gap-4 rounded-4xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-center">
                 <div>
                     <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
                         {lang === "VN" ? "Quản lý Khuyến mãi" : "Promotion Management"}
@@ -287,7 +287,7 @@ export function PromotionManagement() {
                 {canManage && (
                     <button
                         onClick={() => navigate("/admin/promotions/create")}
-                        className="flex shrink-0 items-center gap-2 rounded-xl bg-yellow-400 px-5 py-3 font-headline text-xs font-black uppercase tracking-widest text-slate-900 shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        className="flex shrink-0 items-center gap-2 rounded-xl bg-yellow-400 px-4 py-2.5 font-headline text-xs font-black uppercase tracking-wider text-slate-900 transition-colors hover:bg-yellow-300"
                     >
                         <CirclePlus size={18} strokeWidth={2.5} />
                         {lang === "VN" ? "Thêm khuyến mãi mới" : "New Promotion"}
@@ -301,36 +301,22 @@ export function PromotionManagement() {
                 </div>
             )}
 
-            {/* KHỐI CARD THỐNG KÊ */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">{lang === "VN" ? "Tổng số" : "Total"}</span>
-                        <h3 className="text-2xl font-black font-headline text-[#124757] dark:text-white mt-1">{stats.total}</h3>
+            <div className="grid grid-cols-2 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-4">
+                {[
+                    [lang === "VN" ? "Tổng số" : "Total", stats.total, "text-[#124757] dark:text-white"],
+                    [lang === "VN" ? "Hoạt động" : "Active", stats.active, "text-emerald-600 dark:text-emerald-400"],
+                    [lang === "VN" ? "Tạm dừng" : "Paused", stats.paused, "text-sky-600 dark:text-sky-400"],
+                    [lang === "VN" ? "Hết hạn" : "Expired", stats.expired, "text-amber-600 dark:text-amber-400"],
+                ].map(([label, value, tone]) => (
+                    <div key={label} className="flex items-center justify-between gap-3 border-b border-r border-slate-100 px-4 py-3 last:border-r-0 dark:border-slate-700 sm:border-b-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+                        <strong className={`font-headline text-xl font-black ${tone}`}>{value}</strong>
                     </div>
-                </div>
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đang hoạt động" : "Active"}</span>
-                        <h3 className="text-2xl font-black font-headline text-emerald-600 dark:text-emerald-400 mt-1">{stats.active}</h3>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Tạm dừng" : "Paused"}</span>
-                        <h3 className="text-2xl font-black font-headline text-rose-500 mt-1">{stats.paused}</h3>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{lang === "VN" ? "Đã hết hạn" : "Expired"}</span>
-                        <h3 className="text-2xl font-black font-headline text-amber-600 dark:text-amber-400 mt-1">{stats.expired}</h3>
-                    </div>
-                </div>
+                ))}
             </div>
 
             {/* THANH TÌM KIẾM VÀ BỘ LỌC */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm flex flex-col xl:flex-row gap-3 items-stretch xl:items-center">
+            <div className="flex flex-col items-stretch gap-3 rounded-4xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 lg:flex-row lg:items-center">
                 <div className="w-full xl:flex-1 relative flex items-center">
                     <Search size={18} className="absolute left-3.5 text-slate-400 pointer-events-none" />
                     <input
@@ -338,13 +324,12 @@ export function PromotionManagement() {
                         placeholder={lang === "VN" ? "Tìm kiếm theo mã hoặc tên khuyến mãi..." : "Search by promotion code or name..."}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl pl-10 pr-4 py-3.5 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 transition-all shadow-inner"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-xs font-semibold text-slate-800 outline-none transition-colors focus:border-[#124757] dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-yellow-400"
                     />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto justify-end overflow-visible">
-                    <div className="relative z-20 flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Loại:" : "Type:"}</span>
+                <div className="flex w-full flex-col gap-2 overflow-visible sm:flex-row lg:w-auto">
+                    <div className="relative z-20 min-w-44">
                         <FormSelect
                             value={typeFilter}
                             onChange={setTypeFilter}
@@ -353,12 +338,11 @@ export function PromotionManagement() {
                                 { value: PROMOTION_TYPE.PERCENT, label: lang === "VN" ? "Giảm theo %" : "Percent" },
                                 { value: PROMOTION_TYPE.FIXED, label: lang === "VN" ? "Giảm số tiền" : "Fixed" },
                             ]}
-                            className="min-w-40 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 dark:text-white"
+                            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                         />
                     </div>
 
-                    <div className="relative z-10 flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{lang === "VN" ? "Trạng thái:" : "Status:"}</span>
+                    <div className="relative z-10 min-w-48">
                         <FormSelect
                             value={statusFilter}
                             onChange={setStatusFilter}
@@ -369,32 +353,29 @@ export function PromotionManagement() {
                                 { value: PROMOTION_STATUS.ACTIVE, label: getStatusLabel(PROMOTION_STATUS.ACTIVE, lang) },
                                 { value: PROMOTION_STATUS.PAUSED, label: getStatusLabel(PROMOTION_STATUS.PAUSED, lang) },
                             ]}
-                            className="min-w-45 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 dark:text-white"
+                            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                         />
                     </div>
                 </div>
             </div>
 
             {/* BẢNG DANH SÁCH KHUYẾN MÃI */}
-            <div className="bg-white dark:bg-slate-800 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm overflow-hidden">
+            <div className="overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
                 <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full min-w-[980px] border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30 text-[10px] font-headline font-black uppercase text-slate-400 tracking-wider">
-                                <th className="py-4 px-6">{lang === "VN" ? "Khuyến mãi" : "Promotion"}</th>
-                                <th className="py-4 px-4">{lang === "VN" ? "Mã" : "Code"}</th>
-                                <th className="py-4 px-4">{lang === "VN" ? "Giảm giá" : "Discount"}</th>
-                                <th className="py-4 px-4">{lang === "VN" ? "Hiệu lực" : "Validity"}</th>
-                                <th className="py-4 px-4 text-center">{lang === "VN" ? "Lượt dùng" : "Usage"}</th>
-                                <th className="min-w-52 py-4 px-4">{lang === "VN" ? "Ngân sách" : "Budget"}</th>
-                                <th className="py-4 px-4 text-center">{lang === "VN" ? "Trạng thái" : "Status"}</th>
-                                <th className="py-4 px-6 text-center">{lang === "VN" ? "Hành động" : "Actions"}</th>
+                            <tr className="border-b border-slate-200 bg-slate-50/80 font-headline text-[10px] font-black uppercase tracking-wider text-slate-400 dark:border-slate-700 dark:bg-slate-900/40">
+                                <th className="min-w-[350px] px-5 py-3">{lang === "VN" ? "Khuyến mãi" : "Promotion"}</th>
+                                <th className="min-w-36 px-4 py-3">{lang === "VN" ? "Ưu đãi" : "Offer"}</th>
+                                <th className="min-w-40 px-4 py-3">{lang === "VN" ? "Hiệu lực" : "Validity"}</th>
+                                <th className="min-w-52 px-4 py-3">{lang === "VN" ? "Sử dụng & ngân sách" : "Usage & budget"}</th>
+                                <th className="min-w-40 px-5 py-3 text-right">{lang === "VN" ? "Trạng thái" : "Status"}</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
+                        <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600 dark:divide-slate-700/60 dark:text-slate-300">
                             {currentPromotions.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="text-center py-14 text-slate-400 dark:text-slate-500 font-bold">
+                                    <td colSpan={5} className="py-14 text-center font-bold text-slate-400 dark:text-slate-500">
                                         {lang === "VN" ? "Không có khuyến mãi nào." : "No records found."}
                                     </td>
                                 </tr>
@@ -403,48 +384,64 @@ export function PromotionManagement() {
                                     const lifecycle = getPromotionLifecycle(promo);
                                     const budget = getBudgetMeta(promo, lang);
                                     return (
-                                        <tr key={promo.id} className="hover:bg-[#124757]/[0.035] dark:hover:bg-yellow-400/[0.04] transition-colors group">
-                                            {/* Cột 1: Thông tin khuyến mãi */}
-                                            <td className="py-4 px-6">
-                                                <div className="space-y-1">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <h4
-                                                            className="font-bold text-slate-800 dark:text-white text-sm tracking-tight leading-snug cursor-pointer hover:text-[#124757] dark:hover:text-yellow-400"
-                                                            onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
+                                        <tr key={promo.id} className="group transition-colors hover:bg-[#124757]/[0.03] dark:hover:bg-yellow-400/[0.04]">
+                                            <td className="px-5 py-3.5">
+                                                <div className="flex items-center gap-3.5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
+                                                        className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1 transition-colors hover:border-[#124757] focus:outline-none focus:ring-2 focus:ring-[#124757]/20 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-yellow-400"
+                                                        title={lang === "VN" ? "Xem ảnh và chi tiết" : "View image and details"}
+                                                    >
+                                                        <ImageWithFallback
+                                                            src={promo.imageUrl}
+                                                            alt={promo.promotionName}
+                                                            className="h-full w-full bg-transparent dark:bg-transparent"
+                                                            imgClassName="h-full w-full object-contain"
+                                                            iconClassName="h-8 w-8"
+                                                        />
+                                                    </button>
+                                                    <div className="min-w-0 space-y-1.5">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                className="line-clamp-2 text-left text-sm font-bold leading-snug text-slate-800 hover:text-[#124757] dark:text-white dark:hover:text-yellow-400"
+                                                                onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
+                                                            >
+                                                                {promo.promotionName}
+                                                            </button>
+                                                            {lifecycle === "expired" && (
+                                                                <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+                                                                    {lang === "VN" ? "Hết hạn" : "Expired"}
+                                                                </span>
+                                                            )}
+                                                            {lifecycle === "upcoming" && (
+                                                                <span className="shrink-0 rounded bg-sky-100 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-sky-700 dark:bg-sky-500/10 dark:text-sky-400">
+                                                                    {lang === "VN" ? "Sắp diễn ra" : "Upcoming"}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCopyCode(promo.promotionCode)}
+                                                            title={lang === "VN" ? "Sao chép mã" : "Copy code"}
+                                                            className="inline-flex items-center gap-1.5 font-headline text-[10px] font-black tracking-wide text-[#124757] hover:underline dark:text-yellow-400"
                                                         >
-                                                            {promo.promotionName}
-                                                        </h4>
-                                                        {lifecycle === "expired" && (
-                                                            <span className="bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 text-[8px] px-1.5 py-0.5 rounded uppercase font-black tracking-widest shrink-0">
-                                                                {lang === "VN" ? "Hết hạn" : "Expired"}
-                                                            </span>
-                                                        )}
-                                                        {lifecycle === "upcoming" && (
-                                                            <span className="bg-sky-100 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400 text-[8px] px-1.5 py-0.5 rounded uppercase font-black tracking-widest shrink-0">
-                                                                {lang === "VN" ? "Sắp diễn ra" : "Upcoming"}
-                                                            </span>
-                                                        )}
+                                                            {promo.promotionCode}
+                                                            <Copy size={11} aria-hidden="true" />
+                                                        </button>
+                                                        <p className="line-clamp-1 max-w-64 text-[10px] text-slate-400">
+                                                            {promo.description || (lang === "VN" ? "Chưa có mô tả" : "No description")}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </td>
 
-                                            {/* Cột 2: Mã khuyến mãi */}
-                                            <td className="py-4 px-4">
-                                                <span
-                                                    onClick={() => handleCopyCode(promo.promotionCode)}
-                                                    title={lang === "VN" ? "Nhấn để sao chép" : "Click to copy"}
-                                                    className="font-headline font-black text-[11px] tracking-wide text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg border inline-block cursor-pointer hover:border-[#124757] dark:hover:border-yellow-400 hover:text-[#124757] dark:hover:text-yellow-400 transition-colors"
-                                                >
-                                                    {promo.promotionCode}
-                                                </span>
-                                            </td>
-
-                                            {/* Cột 3: Loại & Giá trị giảm */}
-                                            <td className="py-4 px-4">
-                                                <div className="space-y-1">
-                                                    <span className="text-sm font-black font-headline text-[#124757] dark:text-yellow-400">
+                                            <td className="px-4 py-3.5 align-middle">
+                                                <div className="space-y-0.5">
+                                                    <strong className="font-headline text-lg font-black text-[#124757] dark:text-yellow-400">
                                                         {formatDiscount(promo)}
-                                                    </span>
+                                                    </strong>
                                                     <p className="text-[10px] text-slate-400">
                                                         {promo.promotionType === PROMOTION_TYPE.PERCENT
                                                             ? (lang === "VN" ? "Giảm theo %" : "Percent off")
@@ -452,49 +449,32 @@ export function PromotionManagement() {
                                                     </p>
                                                     {promo.minOrderValue != null && (
                                                         <p className="text-[10px] text-slate-400">
-                                                            {lang === "VN" ? "Đơn tối thiểu: " : "Min order: "}{formatCurrency(promo.minOrderValue)}
+                                                            {lang === "VN" ? "Từ " : "From "}<span className="font-bold text-slate-600 dark:text-slate-300">{formatCurrency(promo.minOrderValue)}</span>
                                                         </p>
                                                     )}
                                                 </div>
                                             </td>
 
-                                            {/* Cột 3: Hiệu lực */}
-                                            <td className="py-4 px-4">
-                                                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                                                    {formatDate(promo.validFrom)} - {formatDate(promo.validTo)}
-                                                </p>
+                                            <td className="px-4 py-3.5 align-middle">
+                                                <p className="font-bold text-slate-700 dark:text-slate-200">{formatDate(promo.validFrom)}</p>
+                                                <p className="mt-1 text-[10px] text-slate-400">{lang === "VN" ? "đến" : "to"} {formatDate(promo.validTo)}</p>
                                             </td>
 
-                                            {/* Cột 4: Lượt sử dụng */}
-                                            <td className="py-4 px-4 text-center">
-                                                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                                                    {promo.usageCount}/{promo.usageLimit ?? "∞"}
-                                                </p>
-                                                <p className="text-[10px] text-slate-400">
-                                                    {promo.maxUsesPerAccount != null
-                                                        ? (lang === "VN"
-                                                            ? `≤${promo.maxUsesPerAccount}/TK`
-                                                            : `≤${promo.maxUsesPerAccount}/acct`)
-                                                        : (lang === "VN" ? "Không giới hạn/TK" : "Unlimited/acct")}
-                                                </p>
-                                            </td>
-
-                                            {/* Cột 6: Ngân sách */}
-                                            <td className="min-w-52 py-4 px-4">
+                                            <td className="px-4 py-3.5 align-middle">
+                                                <div className="mb-2 flex items-baseline justify-between gap-3">
+                                                    <span className="text-[10px] text-slate-400">{lang === "VN" ? "Lượt dùng" : "Usage"}</span>
+                                                    <strong className="text-xs text-slate-700 dark:text-slate-200">{promo.usageCount}/{promo.usageLimit ?? "∞"}</strong>
+                                                </div>
                                                 {budget.unlimited ? (
-                                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-300">
-                                                        {budget.label}
-                                                    </p>
+                                                    <p className="text-[10px] font-semibold text-slate-400">{lang === "VN" ? "Ngân sách không giới hạn" : "Unlimited budget"}</p>
                                                 ) : (
-                                                    <div className="space-y-1.5">
-                                                        <p className="text-xs font-black text-slate-700 dark:text-slate-100">
-                                                            {formatBudgetCurrency(budget.remainingBudget)} {lang === "VN" ? "còn lại" : "remaining"}
-                                                        </p>
-                                                        <p className="text-[10px] text-slate-400">
-                                                            {lang === "VN" ? "Đã dùng" : "Spent"} {formatBudgetCurrency(budget.budgetSpent)} / {formatBudgetCurrency(budget.budgetCap)}
-                                                        </p>
+                                                    <div className="space-y-1">
+                                                        <div className="flex justify-between gap-2 text-[10px]">
+                                                            <span className="text-slate-400">{lang === "VN" ? "Ngân sách" : "Budget"}</span>
+                                                            <strong className="text-slate-600 dark:text-slate-300">{formatBudgetCurrency(budget.remainingBudget)}</strong>
+                                                        </div>
                                                         <div
-                                                            className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700"
+                                                            className="h-1 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700"
                                                             role="progressbar"
                                                             aria-label={lang === "VN" ? "Tỷ lệ ngân sách đã dùng" : "Budget used"}
                                                             aria-valuemin={0}
@@ -512,48 +492,45 @@ export function PromotionManagement() {
                                                                 style={{ width: `${budget.percent}%` }}
                                                             />
                                                         </div>
-                                                        {budget.label && (
-                                                            <p className={`text-[10px] font-black ${
+                                                        {budget.label ? (
+                                                            <p className={`text-[9px] font-bold ${
                                                                 budget.exhausted
                                                                     ? "text-rose-600 dark:text-rose-400"
                                                                     : "text-amber-600 dark:text-amber-400"
                                                             }`}>
                                                                 {budget.label}
                                                             </p>
-                                                        )}
+                                                        ) : null}
                                                     </div>
                                                 )}
                                             </td>
 
-                                            {/* Cột 7: Trạng thái */}
-                                            <td className="py-4 px-4 text-center">
-                                                <span className={`inline-flex items-center text-[10px] font-headline font-black uppercase tracking-wide ${
+                                            <td className="px-5 py-3.5 align-middle">
+                                                <div className="mb-2 flex justify-end">
+                                                    <span className={`inline-flex rounded-full px-2 py-1 text-[9px] font-headline font-black uppercase tracking-wide ${
                                                     promo.status === PROMOTION_STATUS.ACTIVE
-                                                        ? "text-emerald-600 dark:text-emerald-400"
+                                                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
                                                         : promo.status === PROMOTION_STATUS.DRAFT
-                                                            ? "text-amber-700 dark:text-amber-400"
+                                                            ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
                                                             : promo.status === PROMOTION_STATUS.PAUSED
-                                                                ? "text-sky-700 dark:text-sky-400"
-                                                                : "text-slate-500 dark:text-slate-400"
+                                                                ? "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400"
+                                                                : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
                                                     }`}>
-                                                    {getStatusLabel(promo.status, lang)}
-                                                </span>
-                                            </td>
-
-                                            {/* Cột 8: Hành động */}
-                                            <td className="py-4 px-6 text-center">
+                                                        {getStatusLabel(promo.status, lang)}
+                                                    </span>
+                                                </div>
                                                 {canManage ? (
-                                                    <div className="flex items-center justify-center gap-1.5">
+                                                    <div className="flex items-center justify-end gap-1.5">
                                                         <button
                                                             onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
-                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-[#124757] hover:bg-slate-50 dark:hover:bg-slate-900 dark:hover:text-yellow-400 transition-all"
+                                                            className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-colors hover:border-[#124757] hover:text-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:hover:border-yellow-400 dark:hover:text-yellow-400"
                                                             title={lang === "VN" ? "Xem chi tiết" : "View"}
                                                         >
                                                             <Eye size={17} aria-hidden="true" />
                                                         </button>
                                                         <button
                                                             onClick={() => navigate(`/admin/promotions/edit/${promo.id}`, { state: { promotion: promo } })}
-                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/20 hover:border-amber-200 dark:hover:border-amber-500/30 transition-all"
+                                                            className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-colors hover:border-amber-400 hover:text-amber-600 dark:border-slate-700 dark:bg-slate-800"
                                                             title={lang === "VN" ? "Chỉnh sửa" : "Edit"}
                                                         >
                                                             <Pencil size={17} aria-hidden="true" />
@@ -562,7 +539,7 @@ export function PromotionManagement() {
                                                             <button
                                                                 onClick={() => handlePause(promo)}
                                                                 disabled={processingId === promo.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sky-600 hover:bg-sky-600 hover:text-white flex items-center justify-center transition-all disabled:opacity-50"
+                                                                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-sky-600 transition-colors hover:border-sky-600 hover:bg-sky-600 hover:text-white disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
                                                                 title={lang === "VN" ? "Tạm dừng" : "Pause"}
                                                             >
                                                                 {processingId === promo.id ? (
@@ -575,7 +552,7 @@ export function PromotionManagement() {
                                                             <button
                                                                 onClick={() => handleActivate(promo)}
                                                                 disabled={processingId === promo.id}
-                                                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-all disabled:opacity-50"
+                                                                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-emerald-600 transition-colors hover:border-emerald-600 hover:bg-emerald-600 hover:text-white disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
                                                                 title={lang === "VN" ? "Kích hoạt" : "Activate"}
                                                             >
                                                                 {processingId === promo.id ? (
@@ -587,10 +564,10 @@ export function PromotionManagement() {
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center justify-center gap-1.5">
+                                                    <div className="flex items-center justify-end gap-1.5">
                                                         <button
                                                             onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
-                                                            className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-[#124757] transition-all"
+                                                            className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition-colors hover:border-[#124757] hover:text-[#124757] dark:border-slate-700 dark:bg-slate-800"
                                                             title={lang === "VN" ? "Xem chi tiết" : "View"}
                                                         >
                                                             <Eye size={17} aria-hidden="true" />
@@ -609,7 +586,7 @@ export function PromotionManagement() {
 
             {/* KHỐI PHÂN TRANG */}
             {totalPages > 0 && (
-                <div className="flex bg-white dark:bg-slate-800 p-5 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm items-center justify-between flex-col sm:flex-row gap-4">
+                <div className="flex flex-col items-center justify-between gap-4 rounded-4xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex-row">
                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                         {lang === "VN"
                             ? `Hiển thị ${startIndex}-${endIndex} trong số ${filteredPromotions.length} kết quả`

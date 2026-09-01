@@ -182,9 +182,17 @@ const normalizeInsuranceLeg = (leg) => {
   const packageName = leg.packageName ?? leg.name ?? "";
   const providerName = leg.providerName ?? "";
   const providerLogoUrl = leg.providerLogoUrl
+    ?? leg.ProviderLogoUrl
     ?? leg.logoUrl
+    ?? leg.LogoUrl
+    ?? leg.imageUrl
+    ?? leg.ImageUrl
     ?? leg.provider?.logoUrl
     ?? leg.provider?.providerLogoUrl
+    ?? leg.provider?.imageUrl
+    ?? leg.insuranceProvider?.logoUrl
+    ?? leg.insuranceProvider?.providerLogoUrl
+    ?? leg.insuranceProvider?.imageUrl
     ?? "";
   const terms = leg.terms ?? leg.conditions ?? leg.termUrl ?? leg.termsUrl ?? "";
   const source = leg.source ?? leg.providerSource ?? leg.provider?.source ?? "";
@@ -314,9 +322,17 @@ export const normalizeInsuranceFromBooking = (booking) => {
     const packageName = insurance.packageName ?? insurance.name ?? "";
     const providerName = insurance.providerName ?? "";
     const providerLogoUrl = insurance.providerLogoUrl
+      ?? insurance.ProviderLogoUrl
       ?? insurance.logoUrl
+      ?? insurance.LogoUrl
+      ?? insurance.imageUrl
+      ?? insurance.ImageUrl
       ?? insurance.provider?.logoUrl
       ?? insurance.provider?.providerLogoUrl
+      ?? insurance.provider?.imageUrl
+      ?? insurance.insuranceProvider?.logoUrl
+      ?? insurance.insuranceProvider?.providerLogoUrl
+      ?? insurance.insuranceProvider?.imageUrl
       ?? "";
     const terms = insurance.terms ?? insurance.conditions ?? insurance.termUrl ?? insurance.termsUrl ?? "";
 

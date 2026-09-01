@@ -73,13 +73,13 @@ export const getCharterBookingStatusInfo = (bookingStatus, paymentStatus, lang, 
   const isRefundedPayment = ["refunded", "partiallyrefunded"].includes(payment);
   const cancelledLabel = isVn ? "Đã hủy" : "Cancelled";
 
-  // BE đôi khi trả paymentStatus="Paid" cho cả booking mới đặt cọc (còn dư nợ).
-  // Tránh hiển thị "Đã thanh toán" khi còn balance dương — hiện "Đã đặt cọc" thay thế.
+  // Chỉ hiện "Đã đặt cọc" khi BE xác nhận còn số dư. `hasDepositPaid` không
+  // dùng ở đây vì booking đã trả đủ sau khi cọc vẫn có cờ đó bằng true.
   const hasRemainingBalance = Boolean(
     booking
     && (
-      booking.hasDepositPaid === true
-      || Number(booking.charterBalanceDue ?? booking.balanceDue ?? 0) > 0
+      booking.requiresAdditionalPayment === true
+      || Number(booking.charterBalanceDue ?? booking.balanceDue ?? booking.remainingAmount ?? 0) > 0
     ),
   );
 

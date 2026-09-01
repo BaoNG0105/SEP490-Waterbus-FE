@@ -532,11 +532,12 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     ? (selectedSeatsDeparture.length + selectedSeatsReturn.length)
     : selectedSeatsDeparture.length;
 
-// Phí BH theo số ghế có khách ngồi (chiều đi + chiều về nếu khứ hồi).
-// Em bé (INFANT) đi cùng người lớn không có ghế, miễn phí vé → không tính phí BH.
-const insurancePassengerCount =
+  // Bảo hiểm tính theo hành khách trên từng chặng, không tính theo số ghế.
+  // INFANT miễn phí vé và không chiếm ghế nhưng vẫn là một người được bảo hiểm.
+  const insurancePassengerCount =
     selectedSeatsDeparture.length
-    + (isRoundTrip ? selectedSeatsReturn.length : 0);
+    + infants.length
+    + (isRoundTrip ? selectedSeatsReturn.length + infants.length : 0);
   const selectedInsurancePackage = selectedInsurancePackageId
     ? findInsurancePackageById(insurancePackages, selectedInsurancePackageId)
     : null;
@@ -549,13 +550,32 @@ const insurancePassengerCount =
   const insuranceFee = selectedInsurancePackageId ? Number(insurancePreview.total) || 0 : 0;
   const insuranceRequired = insurancePackages.some((pkg) => pkg.isRequired);
 
-  // Ước tính giá vé: finalPrice = seat.effectivePrice * modifier (SightseeingLoop → sightseeingPriceModifier).
-  // effectivePrice đã bao gồm bảo hiểm mặc định. insuranceFee chỉ tính khi chọn gói bảo hiểm khác.
-  const sumSeatsPrice = (seats) => seats.reduce((sum, seat, i) => {
-    const modifier = getPriceModifier(passengers[i]?.ticketType || "ADULT");
-    return sum + Number(seat.effectivePrice || seat.basePrice || 0) * modifier;
-  }, 0);
-  const subtotal = sumSeatsPrice(selectedSeatsDeparture) + (isRoundTrip ? sumSeatsPrice(selectedSeatsReturn) : 0);
+  // Chỉ áp dụng ưu đãi loại vé lên giá ghế. Bảo hiểm Waterbus mặc định vẫn tính đủ
+  // cho vé miễn phí/giảm giá và đã nằm trong effectivePrice của seat-map.
+  const getDefaultInsurancePremium = (seat) => {
+    const effectivePrice = Number(seat?.effectivePrice ?? seat?.basePrice ?? 0) || 0;
+    const basePrice = Number(seat?.basePrice);
+    const explicitPremium = Number(seat?.waterbusInsurancePremium);
+    if (Number.isFinite(explicitPremium)) return Math.max(0, explicitPremium);
+    return Number.isFinite(basePrice) ? Math.max(0, effectivePrice - basePrice) : 0;
+  };
+  const sumLegPrice = (seats) => {
+    const seatedTotal = seats.reduce((sum, seat, i) => {
+      const modifier = getPriceModifier(passengers[i]?.ticketType || "ADULT");
+      const effectivePrice = Number(seat.effectivePrice ?? seat.basePrice ?? 0) || 0;
+      const defaultInsurance = getDefaultInsurancePremium(seat);
+      const baseFare = Number.isFinite(Number(seat.basePrice))
+        ? Math.max(0, Number(seat.basePrice))
+        : Math.max(0, effectivePrice - defaultInsurance);
+      return sum + (baseFare * modifier) + defaultInsurance;
+    }, 0);
+    const defaultInsurancePerInfant = seats.length > 0
+      ? getDefaultInsurancePremium(seats[0])
+      : 0;
+    return seatedTotal + (infants.length * defaultInsurancePerInfant);
+  };
+  const subtotal = sumLegPrice(selectedSeatsDeparture)
+    + (isRoundTrip ? sumLegPrice(selectedSeatsReturn) : 0);
   // Tổng đơn hàng trước giảm giá = giá vé + bảo hiểm (giống base BE dùng để validate mã).
   const orderBeforeDiscount = subtotal + insuranceFee;
 
@@ -868,7 +888,9 @@ const insurancePassengerCount =
         "data.bookingStatus", "data.status",
       ], "")).trim();
       const cappedPoints = getMaxPointsToUse(pointBalance, orderAmount);
-      const pointsForPayment = Math.min(pointsToUse, cappedPoints);
+      // Booking response là nguồn giá cuối cùng. Nếu user đã bật dùng điểm, áp dụng
+      // tối đa theo totalAmount BE trả về, kể cả preview trước đó tính thiếu bảo hiểm.
+      const pointsForPayment = useAllPoints ? cappedPoints : 0;
 
       const paymentServiceType = isLoopRoute ? "Sightseeing" : "Waterbus";
       const myTicketsPath = `/profile/my-bookings?type=${paymentServiceType}`;

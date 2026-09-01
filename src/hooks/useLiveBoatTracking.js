@@ -38,17 +38,17 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
   const boatsByIdRef = useRef(boatsById);
   boatsByIdRef.current = boatsById;
 
-  const applyLocations = useCallback((locations) => {
+  const applyLocations = useCallback((locations, options = {}) => {
     setBoatsById((prev) => {
       let next = prev;
       (locations || []).forEach((loc) => {
-        next = upsertBoatLocationMap(next, loc);
+        next = upsertBoatLocationMap(next, loc, options);
       });
       return next === prev ? prev : next;
     });
   }, []);
 
-  /** Hub: apply ngay, không đợi rAF. */
+
   const applyOneLocation = useCallback((payload) => {
     const items = Array.isArray(payload)
       ? payload
@@ -75,7 +75,9 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
     try {
       const list = await fetchLatestBoatLocations();
       if (!activeRef.current) return list;
-      applyLocations(list);
+      // Endpoint danh sách có thể không project các field ETA. Chỉ endpoint từng
+      // tàu và SignalR mới được phép dùng `null` để xóa ETA hiện tại.
+      applyLocations(list, { preserveNullEta: true });
       if (!silent) setErrorMsg("");
       return list;
     } catch (error) {

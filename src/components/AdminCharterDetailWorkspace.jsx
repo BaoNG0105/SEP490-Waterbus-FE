@@ -872,11 +872,12 @@ export function AdminBookingPassengersTab({ booking, lang }) {
 
       <div
         className={`items-center gap-4 rounded-xl bg-slate-50 ${padX} py-2 font-headline text-[10px] font-black uppercase tracking-widest text-slate-500 dark:bg-slate-900/60 dark:text-slate-400`}
-        style={{ display: "grid", gridTemplateColumns: "36px minmax(0, 1fr) 96px 88px" }}
+        style={{ display: "grid", gridTemplateColumns: "36px minmax(0, 1fr) 72px 96px 88px" }}
       >
         <span className="flex h-6 items-center justify-center">#</span>
         <span className="min-w-0">{lang === "VN" ? "Họ tên" : "Full name"}</span>
-        <span className="text-right" style={{ gridColumn: 3 }}>{lang === "VN" ? "Năm sinh" : "Birth year"}</span>
+        <span className="text-center">{lang === "VN" ? "Ghế" : "Seat"}</span>
+        <span className="text-right">{lang === "VN" ? "Năm sinh" : "Birth year"}</span>
         <span className="text-center">{lang === "VN" ? "Loại" : "Type"}</span>
       </div>
 
@@ -884,21 +885,26 @@ export function AdminBookingPassengersTab({ booking, lang }) {
         {filtered.map((row, idx) => {
           const name = pick(row, ["fullName", "passengerName", "name", "contactName"], "");
           const birthYear = getPassengerBirthYear(row);
+          const seatCode = pick(row, ["seatCode", "seatNumber", "seat"], "");
           return (
             <li
               key={`${name}-${idx}`}
               className={`items-center gap-4 rounded-xl border border-slate-100 bg-slate-50/60 ${padX} ${padY} transition hover:border-slate-200 hover:bg-white dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-slate-600 dark:hover:bg-slate-900`}
-              style={{ display: "grid", gridTemplateColumns: "36px minmax(0, 1fr) 96px 88px" }}
+              style={{ display: "grid", gridTemplateColumns: "36px minmax(0, 1fr) 72px 96px 88px" }}
             >
               <span className="flex h-8 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[11px] font-bold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                 {idx + 1}
               </span>
-              <div className={`min-w-0 flex-1 truncate ${sizeText} font-bold text-slate-800 dark:text-white`}>
-                {name}
+              <div className={`min-w-0 flex-1 ${sizeText} font-bold text-slate-800 dark:text-white`}>
+                <p className="truncate">{name}</p>
+              </div>
+              <div
+                className={`text-center ${sizeText} font-headline font-black ${seatCode ? "text-[#124757] dark:text-yellow-400" : "text-slate-400 dark:text-slate-500"}`}
+              >
+                {seatCode || "--"}
               </div>
               <div
                 className={`text-right ${sizeText} font-bold text-slate-800 dark:text-white`}
-                style={{ gridColumn: 3 }}
               >
                 {birthYear || "—"}
               </div>
@@ -1033,12 +1039,12 @@ export function AdminBookingOverviewTab({
             />
             <OverviewStat
               label={lang === "VN" ? "Đã thu" : "Collected"}
-              value={bookingPaidAmount > 0 ? currencyFormatter.format(bookingPaidAmount) : "--"}
+              value={quoteTotal > 0 ? currencyFormatter.format(bookingPaidAmount) : "--"}
               tone={bookingPaidAmount > 0 ? "success" : "default"}
             />
             <OverviewStat
               label={lang === "VN" ? "Còn lại" : "Remaining"}
-              value={remainingAmount > 0 ? currencyFormatter.format(remainingAmount) : "--"}
+              value={quoteTotal > 0 ? currencyFormatter.format(remainingAmount) : "--"}
               tone={remainingAmount > 0 ? "warn" : "default"}
             />
           </div>
@@ -1830,6 +1836,7 @@ export function AdminBookingTicketsTab({
     const status = pick(ticket, ["attendanceStatus", "ticketStatus", "status"], "Active");
     const approvalStatus = pick(ticket, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], "");
     const reviewNote = pick(ticket, ["reviewNote", "rejectNote", "note"], "");
+    const seatCode = pick(ticket, ["seatCode", "seatNumber", "seat"], "");
 
     return {
       ticket,
@@ -1842,6 +1849,7 @@ export function AdminBookingTicketsTab({
       status,
       approvalStatus,
       reviewNote,
+      seatCode,
       hasTicketId: Boolean(ticketId),
     };
   });
@@ -2004,13 +2012,9 @@ export function AdminBookingTicketsTab({
       const paymentMeta = extractCharterAdditionalPaymentMeta(response);
       await onRefresh?.();
 
-      const needsExtraPayment = paymentMeta.requiresAdditionalPayment
-        || paymentMeta.remainingAmount > 0
-        || paymentMeta.additionalInsuranceAmount > 0
-        || String(paymentMeta.paymentStatus).toLowerCase() === "depositpaid";
-      const extraAmount = paymentMeta.additionalInsuranceAmount > 0
-        ? paymentMeta.additionalInsuranceAmount
-        : paymentMeta.remainingAmount;
+      const needsExtraPayment = paymentMeta.requiresAdditionalPayment === true
+        || paymentMeta.remainingAmount > 0;
+      const extraAmount = paymentMeta.remainingAmount;
       const extraAmountLabel = extraAmount > 0
         ? new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(extraAmount)
         : "";
@@ -2265,6 +2269,9 @@ export function AdminBookingTicketsTab({
                         )}
                         {row.birthYear && (
                           <span>{lang === "VN" ? "Năm sinh" : "Birth year"}: {row.birthYear}</span>
+                        )}
+                        {row.seatCode && (
+                          <span>{lang === "VN" ? "Ghế" : "Seat"}: {row.seatCode}</span>
                         )}
                         {row.approvalStatus ? (
                           <span className={`px-1.5 py-0.5 text-[10px] font-black uppercase ${getPassengerApprovalTone(row.approvalStatus)

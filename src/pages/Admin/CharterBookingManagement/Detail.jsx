@@ -30,6 +30,7 @@ import {
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { buildConfirmBodyHtml, showConfirmDialog, showToast, showValidationMessage } from "../../../utils/swalToast";
 import { canShowCharterTickets } from "../../../utils/charterBookingTickets";
+import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
 import {
   bookingNeedsAdminRefundAttention,
   bookingNeedsRefundAttention,
@@ -81,7 +82,6 @@ import {
   getRemainingMs,
   getRequestedDeckCount,
   getRouteCandidateLegKey,
-  hasCompletedCharterRefund,
   hasRefundablePayment,
   isActiveBoat,
   isPaidPayment,
@@ -258,10 +258,17 @@ export function AdminCharterBookingDetail() {
     } catch (error) {
       console.error("Lỗi tải chi tiết charter booking:", error);
       if (!silent) {
-        setLoadError(getApiErrorMessage(
+        const message = getApiErrorMessage(
           error,
           lang === "VN" ? "Không thể tải chi tiết thuê tàu." : "Unable to load booking request detail.",
-        ));
+        );
+        const status = error?.response?.status;
+        const context = status
+          ? (lang === "VN"
+            ? `Mã booking: ${id} · HTTP ${status}`
+            : `Booking ID: ${id} · HTTP ${status}`)
+          : (lang === "VN" ? `Mã booking: ${id}` : `Booking ID: ${id}`);
+        setLoadError(`${message}\n${context}`);
       }
     } finally {
       if (silent) setIsRefreshing(false);
@@ -281,7 +288,7 @@ export function AdminCharterBookingDetail() {
   }, [refreshDetailSilently]);
 
   useCharterBookingDetailHub({
-    enabled: isAuthenticated && Boolean(id),
+    enabled: isAuthenticated && Boolean(id) && Boolean(booking),
     bookingId: id,
     onRefresh: refreshFromHub,
   });
@@ -996,7 +1003,6 @@ export function AdminCharterBookingDetail() {
         ...(depositAmount != null && depositAmount > 0 ? { depositAmount } : {}),
       };
 
-      console.info("Chốt giá payload:", payload);
       await submitAdminCharterBookingQuote(booking.id, payload);
       await loadDetail();
       showToast({
@@ -1175,7 +1181,17 @@ export function AdminCharterBookingDetail() {
           {lang === "VN" ? "Quay lại danh sách" : "Back to list"}
         </button>
         <div className="rounded-3xl border border-rose-100 bg-rose-50 p-6 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
-          <p className="font-bold">{loadError || (lang === "VN" ? "Không có dữ liệu booking." : "No booking data.")}</p>
+          <p className="whitespace-pre-line font-bold">{loadError || (lang === "VN" ? "Không có dữ liệu booking." : "No booking data.")}</p>
+          {loadError ? (
+            <button
+              type="button"
+              onClick={() => loadDetail()}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-xs font-headline font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-300 dark:hover:bg-rose-500/10"
+            >
+              <span className="material-symbols-outlined text-base">refresh</span>
+              {lang === "VN" ? "Thử tải lại" : "Try again"}
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -1187,10 +1203,33 @@ export function AdminCharterBookingDetail() {
   const bookingHoldRemainingMs = showBookingHoldCountdown
     ? getRemainingMs(quotePaymentDeadline, nowTick)
     : 0;
-  const quoteTotal = Number(booking?.estimatedPrice || 0);
-  const remainingAmount = booking?.remainingAmount !== undefined && booking?.remainingAmount !== null
-    ? Math.max(0, Number(booking.remainingAmount) || 0)
-    : Math.max(quoteTotal - bookingPaidAmount, 0);
+  const bookingQuoteSummary = buildBookingQuotePreview(booking);
+  const quoteTotal = Math.max(
+    0,
+    Number(booking?.totalAmount)
+      || Number(booking?.estimatedPrice)
+      || Number(bookingQuoteSummary?.totalAmount)
+      || 0,
+  );
+  const topLevelPaidAmount = Math.max(0, Number(booking?.paidAmount) || 0);
+  const explicitRemainingAmount = booking?.remainingAmount !== undefined
+    && booking?.remainingAmount !== null
+    && booking?.remainingAmount !== ""
+    && Number.isFinite(Number(booking.remainingAmount))
+    ? Math.max(0, Number(booking.remainingAmount))
+    : null;
+  const normalizedPaymentStatus = String(booking?.paymentStatus || "")
+    .toLowerCase()
+    .replace(/[_\s-]/g, "");
+  const isFullyPaid = normalizedPaymentStatus === "paid"
+    && !(explicitRemainingAmount > 0)
+    && booking?.requiresAdditionalPayment !== true;
+  const effectivePaidAmount = Math.max(
+    bookingPaidAmount,
+    topLevelPaidAmount,
+    isFullyPaid ? quoteTotal : 0,
+  );
+  const remainingAmount = explicitRemainingAmount ?? Math.max(quoteTotal - effectivePaidAmount, 0);
   const requestedBoats = Array.isArray(booking.requestedBoats) ? booking.requestedBoats : [];
   const payments = Array.isArray(booking.payments) ? booking.payments : [];
   const tickets = canShowCharterTickets(booking)
@@ -1384,7 +1423,7 @@ export function AdminCharterBookingDetail() {
           formatDateTime={formatDateTime}
           formatCountdown={formatCountdown}
           quoteTotal={quoteTotal}
-          bookingPaidAmount={bookingPaidAmount}
+          bookingPaidAmount={effectivePaidAmount}
           selectedBoats={selectedBoats}
           payments={payments}
           onSubmitQuote={handleDetailSubmitQuote}
@@ -1432,7 +1471,7 @@ export function AdminCharterBookingDetail() {
           getPaymentStatusInfo={getPaymentStatusInfo}
           currencyFormatter={currencyFormatter}
           quoteTotal={quoteTotal}
-          bookingPaidAmount={bookingPaidAmount}
+          bookingPaidAmount={effectivePaidAmount}
           remainingAmount={remainingAmount}
           requestedBoats={requestedBoats}
           selectedBoats={selectedBoats}

@@ -336,6 +336,12 @@ export const normalizeOperationsScheduleEntry = (raw) => {
     passengerCount,
     // Giữ tên contract BE để FE Live Tracking đọc thống nhất.
     onboardPassengerCount: passengerCount,
+    boardedPassengerCount: toFiniteNumber(pick(raw, [
+      "boardedPassengerCount", "BoardedPassengerCount",
+    ], null)),
+    alightedPassengerCount: toFiniteNumber(pick(raw, [
+      "alightedPassengerCount", "AlightedPassengerCount",
+    ], null)),
     totalPassengerCount: toFiniteNumber(pick(raw, [
       "totalPassengerCount", "TotalPassengerCount",
     ], null)),

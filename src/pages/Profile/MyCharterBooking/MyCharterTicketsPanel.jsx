@@ -257,7 +257,7 @@ export function MyCharterTicketsPanel({
               const nameLocked = isLocked;
               return (
                 <div key={row.id || `passenger-${index}`} className="space-y-2">
-                  <div className="grid gap-2 items-center grid-cols-[42px_1fr_110px] md:grid-cols-[42px_1fr_140px]">
+                  <div className="grid grid-cols-[42px_minmax(0,1fr)_84px_88px] items-center gap-2 sm:grid-cols-[42px_minmax(0,1fr)_110px_108px] md:grid-cols-[42px_minmax(0,1fr)_140px_116px]">
                     <label className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs font-black text-slate-400" title={row.ticketCode || undefined}>
                       {row.id && !isPlaceholder ? (
                         <input
@@ -298,6 +298,19 @@ export function MyCharterTicketsPanel({
                         placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
                         className="w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] read-only:cursor-default read-only:opacity-90"
                       />
+                    )}
+                    {isPlaceholder ? (
+                      <div className="flex min-h-10 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500">
+                        —
+                      </div>
+                    ) : (
+                      <div className={`flex min-h-10 items-center justify-center gap-1 rounded-xl border px-2 text-[10px] font-headline font-black uppercase whitespace-nowrap ${row.seatCode
+                        ? "border-[#124757]/20 bg-[#124757]/5 text-[#124757] dark:border-yellow-400/30 dark:bg-yellow-400/10 dark:text-yellow-400"
+                        : "border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500"
+                      }`}>
+                        <span className="material-symbols-outlined text-[13px]">event_seat</span>
+                        {lang === "VN" ? "Ghế" : "Seat"} {row.seatCode || "—"}
+                      </div>
                     )}
                   </div>
                   {/* Chỉ hiện khi chờ duyệt / từ chối. Đã duyệt = đã gộp vào danh sách, không cần badge. */}

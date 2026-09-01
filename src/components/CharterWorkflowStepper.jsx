@@ -27,11 +27,13 @@ export function CharterWorkflowStepper({ status, paymentStatus, lang = "VN", com
     && (Number(booking.estimatedPrice ?? booking.totalAmount ?? 0) > 0
       || String(status || "").toLowerCase() !== "pendingquote")
   );
-  // BE đôi khi trả paymentStatus=Paid cho cả booking mới đặt cọc (còn dư nợ).
-  // Stepper vẫn phải hiển thị "Đã đặt cọc" trong trường hợp đó.
+  // Chỉ BE xác định số dư. Không suy ra từ việc booking đã từng trả cọc.
   const hasRemainingBalance = Boolean(
     booking
-    && Number(booking.balanceDue ?? booking.remainingAmount ?? 0) > 0
+    && (
+      booking.requiresAdditionalPayment === true
+      || Number(booking.balanceDue ?? booking.remainingAmount ?? 0) > 0
+    )
   );
   // BE có thể trả "PaidWithPoints" (PascalCase) — chuẩn hoá về lowercase.
   // Trường hợp user dùng điểm 100% (estimatedPayable=0) và booking đã đủ → chuyển sang "paidwithpoints".
@@ -42,13 +44,18 @@ export function CharterWorkflowStepper({ status, paymentStatus, lang = "VN", com
     if (normalizedPayment === "paid" && pointsRedeemed) return "paidwithpoints";
     return normalizedPayment;
   })();
-  const isFullyPaid = effectivePayment === "paid" || effectivePayment === "paidwithpoints";
+  const isFullyPaid = !hasRemainingBalance
+    && (effectivePayment === "paid" || effectivePayment === "paidwithpoints");
 
   const remainingAmount = (() => {
     if (!booking) return 0;
     if (!hasQuote) return 0; // chưa báo giá thì remaining = 0 (không có nghĩa "đã đủ")
-    const remaining = Number(booking.remainingAmount ?? booking.balanceDue ?? 0);
-    if (remaining > 0) return remaining;
+    const rawRemaining = booking.remainingAmount ?? booking.balanceDue;
+    if (rawRemaining !== null && rawRemaining !== undefined && rawRemaining !== "") {
+      const remaining = Number(rawRemaining);
+      if (Number.isFinite(remaining)) return Math.max(remaining, 0);
+    }
+    if (hasRemainingBalance) return null;
     const total = Math.max(0, Number(booking.totalAmount ?? booking.estimatedPrice ?? 0) || 0);
     const paid = Math.max(0, Number(booking.paidAmount ?? 0) || 0);
     const depositFallback = booking.hasDepositPaid
@@ -129,7 +136,7 @@ export function CharterWorkflowStepper({ status, paymentStatus, lang = "VN", com
           "Chờ báo giá" thay vì ảo giác "Đã thanh toán đủ" (vì remainingAmount = 0). */}
       <div className={`flex items-center justify-center gap-2 rounded-xl px-3 ${compact ? "py-1 text-[9px]" : "py-1.5 text-[10px]"} font-headline font-black uppercase tracking-wider ${!hasQuote
           ? "bg-slate-100 text-slate-500 dark:bg-slate-700/40 dark:text-slate-300"
-          : remainingAmount <= 0
+          : isFullyPaid
           ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
           : effectivePayment === "depositpaid"
             ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
@@ -140,7 +147,7 @@ export function CharterWorkflowStepper({ status, paymentStatus, lang = "VN", com
           <span className={`material-symbols-outlined ${compact ? "text-[12px]" : "text-[14px]"}`}>
             {!hasQuote
               ? "hourglass_top"
-              : remainingAmount <= 0
+              : isFullyPaid
                 ? "verified"
                 : effectivePayment === "depositpaid"
                   ? "savings"
@@ -153,12 +160,12 @@ export function CharterWorkflowStepper({ status, paymentStatus, lang = "VN", com
               <strong className="font-black">
                 {lang === "VN" ? "Chờ báo giá" : "Awaiting quote"}
               </strong>
-            ) : remainingAmount <= 0 ? (
+            ) : isFullyPaid ? (
               <>
                 {lang === "VN" ? "Thanh toán: " : "Payment: "}
                 <strong className="font-black">{isFullyPaid || effectivePayment === "paid" || effectivePayment === "paidwithpoints" || effectivePayment === "refunded" ? paymentLabel : "Đã thanh toán đủ"}</strong>
               </>
-            ) : effectivePayment === "depositpaid" ? (
+            ) : effectivePayment === "depositpaid" && Number.isFinite(remainingAmount) && remainingAmount > 0 ? (
               <>
                 {lang === "VN" ? "Còn lại: " : "Remaining: "}
                 <strong className="font-black">

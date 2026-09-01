@@ -104,7 +104,7 @@ export const putAdminRentalPricePolicy = (payload) =>
     api.put('/charter-bookings/admin/rental-price-policies', payload).then((response) => response.data);
 
 export const getAdminCharterBookingById = (id) =>
-    api.get(`/charter-bookings/admin/${id}`).then(response => response.data);
+    api.get(`/charter-bookings/admin/${encodeURIComponent(id)}`).then(response => response.data);
 
 export const updateAdminCharterBookingStatus = (id, data) =>
     api.patch(`/charter-bookings/admin/${id}/status`, data).then(response => response.data);

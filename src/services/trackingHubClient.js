@@ -66,6 +66,8 @@ class TrackingHubClient {
     connection.on("boatLocation", forward);
     connection.on("BoatLocation", forward);
     connection.on("boatlocation", forward);
+    connection.on("boatLocationUpdated", forward);
+    connection.on("BoatLocationUpdated", forward);
 
     // BE sẽ broadcast khi GPS gọi stop event (Arriving/Arrived/Departed).
     connection.on("tripStopUpdated", forwardTripStop);

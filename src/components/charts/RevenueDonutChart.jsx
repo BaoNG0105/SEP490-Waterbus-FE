@@ -6,14 +6,53 @@ const CENTER = SIZE / 2;
 const R_OUTER = 120;
 const R_INNER = 75;
 
+const allocateRoundedPercentages = (data, total) => {
+  if (!(total > 0)) return data.map(() => 0);
+
+  const exact = data.map((item) => ((item.value || 0) / total) * 100);
+  const allocated = exact.map(Math.floor);
+  const remaining = 100 - allocated.reduce((sum, value) => sum + value, 0);
+  const priority = exact
+    .map((value, index) => ({
+      index,
+      remainder: value - Math.floor(value),
+      value: Number(data[index]?.value) || 0,
+    }))
+    .sort((a, b) => {
+      const remainderDifference = b.remainder - a.remainder;
+      if (Math.abs(remainderDifference) > 1e-9) return remainderDifference;
+      return b.value - a.value || a.index - b.index;
+    });
+
+  for (let index = 0; index < remaining; index += 1) {
+    allocated[priority[index % priority.length].index] += 1;
+  }
+  return allocated;
+};
+
 /**
  * Donut chart cho doanh thu theo dịch vụ / phương thức thanh toán.
  * data: [{ key, label, value, color }]
  */
-export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, title }) {
+export function RevenueDonutChart({
+  data = [],
+  lang,
+  isDarkMode,
+  isLoading,
+  title,
+  metric = "currency",
+}) {
   const [hoverIdx, setHoverIdx] = useState(null);
 
   const total = useMemo(() => data.reduce((s, d) => s + (d.value || 0), 0), [data]);
+  const isCountMetric = metric === "count";
+  const formattedTotal = isCountMetric
+    ? Math.round(total).toLocaleString(lang === "VN" ? "vi-VN" : "en-US")
+    : formatCurrency(total);
+  const roundedPercentages = useMemo(
+    () => allocateRoundedPercentages(data, total),
+    [data, total],
+  );
 
   // Build arc paths
   const arcs = useMemo(() => {
@@ -112,14 +151,16 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
             ))}
             {/* Center label */}
             <text x={CENTER} y={CENTER - 10} textAnchor="middle" fontSize={13} fontWeight={700} fill="#898781">
-              {lang === "VN" ? "Tổng" : "Total"}
+              {isCountMetric
+                ? (lang === "VN" ? "Tổng đơn" : "Bookings")
+                : (lang === "VN" ? "Tổng" : "Total")}
             </text>
             <text x={CENTER} y={CENTER + 12} textAnchor="middle" fontSize={16} fontWeight={900} fill={isDarkMode ? "#e2e8f0" : "#0b0b0b"}>
-              {formatCurrency(total)}
+              {formattedTotal}
             </text>
             {hoverIdx !== null && data[hoverIdx] && (
               <text x={CENTER} y={CENTER + 32} textAnchor="middle" fontSize={14} fontWeight={800} fill={data[hoverIdx].color}>
-                {total > 0 ? `${((data[hoverIdx].value || 0) / total * 100).toFixed(1)}%` : "0%"}
+                {roundedPercentages[hoverIdx]}%
               </text>
             )}
           </svg>
@@ -141,8 +182,15 @@ export function RevenueDonutChart({ data = [], lang, isDarkMode, isLoading, titl
               <span className="flex-1 truncate text-[10px] font-bold text-slate-600 dark:text-slate-300">
                 {d.label}
               </span>
-              <span className="shrink-0 text-[10px] font-black text-slate-800 dark:text-white">
-                {total > 0 ? `${((d.value || 0) / total * 100).toFixed(0)}%` : "0%"}
+              <span className={`shrink-0 text-right text-[10px] font-black text-slate-800 dark:text-white ${isCountMetric ? "leading-tight" : ""}`}>
+                {isCountMetric && (
+                  <span className="block text-slate-600 dark:text-slate-300">
+                    {Math.round(d.value || 0).toLocaleString(lang === "VN" ? "vi-VN" : "en-US")} {lang === "VN" ? "đơn" : "orders"}
+                  </span>
+                )}
+                <span className={isCountMetric ? "block text-[9px] text-slate-400" : ""}>
+                  {roundedPercentages[i]}%
+                </span>
               </span>
             </div>
           ))}

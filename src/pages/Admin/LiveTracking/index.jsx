@@ -35,7 +35,7 @@ import { trackingHub } from "../../../services/trackingHubClient";
 import { getBoatImageUrl } from "../../../utils/charterBookingAdmin";
 import { isBoatEligibleForLiveMap, isBoatUnderMaintenance, resolveBoatNumberOfDecks, resolveBoatServiceType, formatDwellCountdownNotice, shouldSuppressDwellCountdown, MOVING_SPEED_KMH, resolveDisplayPosition } from "../../../utils/boatTracking";
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
-import { buildBoatSituations, findStationByRef, getBoatStatusTag, haversineMeters, NOTICE_FLASH_MS_EXPORT, resolveEtaMinutesToNext, resolveStationAgainstGps } from "../../../utils/boatSituation";
+import { buildBoatSituations, getBoatStatusTag, NOTICE_FLASH_MS_EXPORT, resolveEtaMinutesToNext, resolveStationAgainstGps } from "../../../utils/boatSituation";
 import { isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { notify, showToast } from "../../../utils/swalToast";
 import {
@@ -709,71 +709,6 @@ export function LiveTracking({ viewTabs = null } = {}) {
           || flashByBoatKey.get(String(idKey))
           || null;
 
-        // AtStation: chỉ snap khi có currentStationId/Code rõ ràng — không dùng next/destination (tránh kéo sai tàu).
-        let dockSnapMeta = null;
-        {
-          const schedMove = String(schedule?.movementStatus || "").toLowerCase().replace(/[_\s-]/g, "");
-          const trackMove = String(boat.movementStatus || "").toLowerCase().replace(/[_\s-]/g, "");
-          const stopEv = String(schedule?.lastStopEvent || boat.lastStopEvent || flash?.event || "")
-            .toLowerCase()
-            .replace(/[_\s-]/g, "");
-          const speedSnap = Number(boat.speed ?? schedule?.latestSpeedKmh);
-          const stoppedSnap = !Number.isFinite(speedSnap) || speedSnap < MOVING_SPEED_KMH;
-          const kmSnap = Number(boat.remainingDistanceKmToNextStation);
-          const atStation = stoppedSnap && (
-            schedMove === "atstation"
-            || trackMove === "atstation"
-            || trackMove === "arrived"
-            || stopEv === "arrived"
-            || (Number.isFinite(kmSnap) && kmSnap <= 0.08)
-          );
-
-          const stationRef = {
-            id: String(boat.currentStationId || schedule?.currentStationId || "").trim(),
-            code: String(boat.currentStationCode || schedule?.currentStationCode || "").trim(),
-            name: String(boat.currentStationName || schedule?.currentStationName || "").trim(),
-          };
-          const canResolveStation = Boolean(stationRef.id || stationRef.code || stationRef.name);
-
-          if (atStation && canResolveStation) {
-            const stationHit = findStationByRef(stations, stationRef);
-            if (stationHit && stationHit.score >= 40) {
-              const gpsLat = hasTrackingPos ? latitude : null;
-              const gpsLng = hasTrackingPos ? longitude : null;
-              const metersFromDock = hasTrackingPos
-                ? haversineMeters(latitude, longitude, stationHit.latitude, stationHit.longitude)
-                : null;
-              const shouldSnap = !hasTrackingPos
-                || (Number.isFinite(metersFromDock) && metersFromDock > 150);
-
-              dockSnapMeta = {
-                boatCode: codeKey || idKey,
-                gps: hasTrackingPos ? { lat: gpsLat, lng: gpsLng } : null,
-                station: {
-                  id: stationHit.stationId,
-                  code: stationHit.stationCode,
-                  name: stationHit.stationName,
-                  lat: stationHit.latitude,
-                  lng: stationHit.longitude,
-                  matchBy: stationHit.matchBy,
-                },
-                ref: stationRef,
-                metersFromDock: Number.isFinite(metersFromDock) ? Math.round(metersFromDock) : null,
-                snapped: shouldSnap,
-              };
-
-              if (shouldSnap) {
-                latitude = stationHit.latitude;
-                longitude = stationHit.longitude;
-                hasTrackingPos = true;
-                if (typeof console !== "undefined") {
-                  console.info("[LiveTracking dock-snap]", dockSnapMeta);
-                }
-              }
-            }
-          }
-        }
-
         const hasLiveCoords = hasTrackingPos;
 
         let isGpsOnline = false;
@@ -871,6 +806,15 @@ export function LiveTracking({ viewTabs = null } = {}) {
           && Number.isFinite(Number(tripPax.segmentPassengerCount))
           ? Math.max(0, Math.trunc(Number(tripPax.segmentPassengerCount)))
           : null;
+        const beOnboard = toPassengerCount(
+          boat.onboardPassengerCount ?? schedule?.onboardPassengerCount,
+        );
+        const beBoarded = toPassengerCount(
+          boat.boardedPassengerCount ?? schedule?.boardedPassengerCount,
+        );
+        const beAlighted = toPassengerCount(
+          boat.alightedPassengerCount ?? schedule?.alightedPassengerCount,
+        );
         // Chỉ fallback tracking khi CHƯA có số theo đoạn từ trip detail.
         const trackingOnboard = vesselFromTrip == null
           ? firstPositiveCount(
@@ -888,14 +832,18 @@ export function LiveTracking({ viewTabs = null } = {}) {
           const n = Number(raw);
           return Number.isFinite(n) && n >= 0 ? n : null;
         })();
-        const passengerCount = vesselFromTrip != null
-          ? vesselFromTrip
-          : (trackingOnboard
+        const passengerCount = beOnboard != null
+          ? beOnboard
+          : (vesselFromTrip != null
+            ? vesselFromTrip
+            : (trackingOnboard
             ?? (urlOnboardSeed != null ? urlOnboardSeed : null)
-            ?? (resolvedTripId ? 0 : null));
-        const passengerCountSource = vesselFromTrip != null
-          ? (tripPax?.source || "segment")
-          : (trackingOnboard != null ? "tracking" : (urlOnboardSeed != null ? "url" : null));
+            ?? (resolvedTripId ? 0 : null)));
+        const passengerCountSource = beOnboard != null
+          ? "tracking"
+          : (vesselFromTrip != null
+            ? (tripPax?.source || "segment")
+            : (trackingOnboard != null ? "tracking" : (urlOnboardSeed != null ? "url" : null)));
 
         const dwellNotice = formatDwellCountdownNotice(dwellCountdown, lang, tick, {
           stops: resolvedTrip?.stops,
@@ -929,13 +877,13 @@ export function LiveTracking({ viewTabs = null } = {}) {
           // Contract: `${onboardPassengerCount ?? 0}/${capacitySnapshot}` — không tự đếm passengers.
           passengerCount,
           passengerCountSource,
-          passengerBreakdown: tripPax
+          passengerBreakdown: (beOnboard != null || beBoarded != null || beAlighted != null || tripPax)
             ? {
-              boarding: Number(tripPax.boarding) || 0,
-              through: Number(tripPax.through) || 0,
-              alighting: Number(tripPax.alighting) || 0,
-              stopName: tripPax.stationName || "",
-              source: tripPax.source || passengerCountSource,
+              boarding: beBoarded != null ? beBoarded : (Number(tripPax?.boarding) || 0),
+              through: beOnboard != null ? beOnboard : (Number(tripPax?.through) || 0),
+              alighting: beAlighted != null ? beAlighted : (Number(tripPax?.alighting) || 0),
+              stopName: tripPax?.stationName || "",
+              source: beBoarded != null || beAlighted != null ? "tracking" : (tripPax?.source || passengerCountSource),
             }
             : null,
           dwellCountdown,
@@ -962,16 +910,6 @@ export function LiveTracking({ viewTabs = null } = {}) {
           })(),
           displayLatitude: hasLiveCoords ? latitude : Number(boat.latitude),
           displayLongitude: hasLiveCoords ? longitude : Number(boat.longitude),
-          // Mốc GPS để ETA giảm đều giữa hai lần SignalR/polling cập nhật.
-          etaMeasuredAt: schedule?.latestGpsReceivedAt
-            || boat.receivedAt
-            || schedule?.latestGpsRecordedAt
-            || boat.recordedAt
-            || schedule?.latestGpsAt
-            || schedule?.recordedAt
-            || boat.updatedAt
-            || schedule?.updatedAt
-            || null,
           tripFinished,
           tripStatusKey: tripStatusKey || null,
           movementStatus: (() => {
@@ -1094,53 +1032,16 @@ export function LiveTracking({ viewTabs = null } = {}) {
               : null,
           flashNoticeAt: flash?.occurredAt || null,
           remainingDistanceKmToNextStation: (() => {
-            const fromTrack = Number(boat.remainingDistanceKmToNextStation);
-            const fromSched = Number(schedule?.remainingDistanceKmToNextStation);
-            const speed = Number(boat.speed ?? schedule?.latestSpeedKmh);
-            const moving = Number.isFinite(speed) && speed >= MOVING_SPEED_KMH;
-            if (Number.isFinite(fromTrack) && fromTrack > 0) return fromTrack;
-            // Track gửi 0km nhưng schedule còn xa / đang chạy → đừng tin 0 (tránh <1p sau F5)
-            if (Number.isFinite(fromTrack) && fromTrack === 0) {
-              if (Number.isFinite(fromSched) && fromSched > 0.15) return fromSched;
-              if (moving && Number.isFinite(fromSched) && fromSched > 0) return fromSched;
-              if (moving) return null;
-              return 0;
-            }
-            if (Number.isFinite(fromSched) && fromSched > 0) return fromSched;
-            if (Number.isFinite(fromSched) && fromSched === 0 && !moving) return 0;
-            return null;
+            const raw = boat.remainingDistanceKmToNextStation;
+            if (raw === null || raw === undefined || raw === "") return null;
+            const value = Number(raw);
+            return Number.isFinite(value) && value >= 0 ? value : null;
           })(),
           remainingMinutesToNextStation: (() => {
-            const fromTrack = Number(boat.remainingMinutesToNextStation);
-            const fromSched = Number(schedule?.remainingMinutesToNextStation);
-            const fromTrackKm = Number(boat.remainingDistanceKmToNextStation);
-            const fromSchedKm = Number(schedule?.remainingDistanceKmToNextStation);
-            const speed = Number(boat.speed ?? schedule?.latestSpeedKmh);
-            const moving = Number.isFinite(speed) && speed >= MOVING_SPEED_KMH;
-
-            // Resolve km giống field remainingDistanceKmToNextStation (tránh dùng km thô = 0)
-            let km = null;
-            if (Number.isFinite(fromTrackKm) && fromTrackKm > 0) km = fromTrackKm;
-            else if (Number.isFinite(fromTrackKm) && fromTrackKm === 0) {
-              if (Number.isFinite(fromSchedKm) && fromSchedKm > 0.15) km = fromSchedKm;
-              else if (moving && Number.isFinite(fromSchedKm) && fromSchedKm > 0) km = fromSchedKm;
-              else if (!moving) km = 0;
-            } else if (Number.isFinite(fromSchedKm) && fromSchedKm > 0) km = fromSchedKm;
-            else if (Number.isFinite(fromSchedKm) && fromSchedKm === 0 && !moving) km = 0;
-
-            let seedMin = null;
-            if (Number.isFinite(fromTrack) && fromTrack > 0) seedMin = fromTrack;
-            else if (Number.isFinite(fromTrack) && fromTrack === 0) {
-              seedMin = (Number.isFinite(fromSched) && fromSched > 0) ? fromSched : 0;
-            } else if (Number.isFinite(fromSched) && fromSched >= 0) seedMin = fromSched;
-
-            // ETA BE đã tính là mốc chuẩn; phần hiển thị sẽ đếm lùi từ mốc này.
-            if (Number.isFinite(seedMin) && seedMin > 0) return seedMin;
-            return resolveEtaMinutesToNext({
-              speed,
-              remainingDistanceKmToNextStation: km,
-              remainingMinutesToNextStation: seedMin,
-            });
+            const raw = boat.remainingMinutesToNextStation;
+            if (raw === null || raw === undefined || raw === "") return null;
+            const value = Number(raw);
+            return Number.isFinite(value) && value >= 0 ? value : null;
           })(),
           scheduledDepartureAt: schedule?.scheduledDepartureAt || boat.scheduledDepartureAt || null,
           minutesUntilDeparture: schedule?.minutesUntilDeparture ?? boat.minutesUntilDeparture ?? null,
@@ -1180,7 +1081,6 @@ export function LiveTracking({ viewTabs = null } = {}) {
           rescueMission: mission,
           rescuingBoatCode: mission?.role === "rescue" ? (mission.targetCode || "") : "",
           rescuedByBoatCode: mission?.role === "incident" ? (mission.rescueCode || "") : "",
-          dockSnap: dockSnapMeta,
         };
       })
       .filter(isBoatEligibleForLiveMap),
