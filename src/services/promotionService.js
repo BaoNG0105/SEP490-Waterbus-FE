@@ -27,7 +27,7 @@ export const PROMOTION_VISIBILITY = {
 
 export const PROMOTION_BOOKING_TYPES = {
     SEAT: 'SeatBooking',
-    CHARTER: 'Charter',
+    CHARTER: 'CharterBooking',
 };
 
 export const PROMOTION_DAYS = [
@@ -67,7 +67,7 @@ const hasMeaningfulText = (value) => /[\p{L}\p{N}]/u.test(String(value ?? ''));
 
 const isPromotionName = (value) =>
     /^[\p{L}\p{N} \u002F\u002D]+$/u.test(String(value ?? '').trim())
-    && !/[ \u002F\u002D]{2,}/u.test(String(value ?? '').trim());
+    && !/[\u002F\u002D]\s*[\u002F\u002D]/u.test(String(value ?? '').trim());
 
 const extractRows = (data) => {
     if (Array.isArray(data)) return data;
@@ -255,7 +255,7 @@ const emptyToNullList = (list) => {
 
 export const buildPromotionScope = (form) => {
     const rawTypes = emptyToNullList(form.bookingTypes);
-    // BE enum values are case-sensitive: SeatBooking | Charter.
+    // BE enum values are case-sensitive: SeatBooking | CharterBooking.
     const bookingTypes = rawTypes?.map(normalizePromotionBookingType).filter(Boolean);
     const routeIds = emptyToNullList(form.routeIds);
     const daysOfWeek = emptyToNullList(form.daysOfWeek);
@@ -324,7 +324,7 @@ export const validatePromotionForm = (form, lang = 'VN', { isCreate = true } = {
     const name = String(form.promotionName || '').normalize('NFC').trim();
     if (!name) return lang === 'VN' ? 'Tên khuyến mãi bắt buộc.' : 'Promotion name is required.';
     if (!hasMeaningfulText(name)) return lang === 'VN' ? 'Tên khuyến mãi phải có ít nhất một chữ hoặc số.' : 'Promotion name must contain at least one letter or number.';
-    if (!isPromotionName(name)) return lang === 'VN' ? 'Tên chỉ được chứa chữ, số, khoảng trắng, dấu - hoặc / và các ký tự phân cách không được đứng liên tiếp.' : 'Name may only contain letters, digits, spaces, hyphens, or slashes, and separators cannot appear consecutively.';
+    if (!isPromotionName(name)) return lang === 'VN' ? 'Tên chỉ được chứa chữ, số, khoảng trắng, dấu - hoặc /; dấu - và / không được lặp liên tiếp.' : 'Name may only contain letters, digits, spaces, hyphens, or slashes; hyphens and slashes cannot repeat consecutively.';
     if (name.length > PROMOTION_LIMITS.NAME_MAX_LENGTH) return lang === 'VN' ? 'Tên tối đa 150 ký tự.' : 'Name max 150 characters.';
 
     const desc = String(form.description || '');
