@@ -369,20 +369,21 @@ export function PromotionManagement() {
             {/* BẢNG DANH SÁCH KHUYẾN MÃI */}
             <div className="overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
                 <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full min-w-[980px] border-collapse text-left">
+                    <table className="w-full min-w-245 border-collapse text-left">
                         <thead>
                             <tr className="border-b border-slate-200 bg-slate-50/80 font-headline text-[10px] font-black uppercase tracking-wider text-slate-400 dark:border-slate-700 dark:bg-slate-900/40">
-                                <th className="min-w-[350px] px-5 py-3">{lang === "VN" ? "Khuyến mãi" : "Promotion"}</th>
+                                <th className="min-w-87.5 px-5 py-3">{lang === "VN" ? "Khuyến mãi" : "Promotion"}</th>
                                 <th className="min-w-36 px-4 py-3">{lang === "VN" ? "Ưu đãi" : "Offer"}</th>
                                 <th className="min-w-40 px-4 py-3">{lang === "VN" ? "Hiệu lực" : "Validity"}</th>
                                 <th className="min-w-52 px-4 py-3">{lang === "VN" ? "Sử dụng & ngân sách" : "Usage & budget"}</th>
-                                <th className="min-w-40 px-5 py-3 text-right">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                                <th className="min-w-28 px-4 py-3">{lang === "VN" ? "Trạng thái" : "Status"}</th>
+                                <th className="min-w-40 px-5 py-3 text-right">{lang === "VN" ? "Hành động" : "Actions"}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600 dark:divide-slate-700/60 dark:text-slate-300">
                             {currentPromotions.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="py-14 text-center font-bold text-slate-400 dark:text-slate-500">
+                                    <td colSpan={6} className="py-14 text-center font-bold text-slate-400 dark:text-slate-500">
                                         {lang === "VN" ? "Không có khuyến mãi nào." : "No records found."}
                                     </td>
                                 </tr>
@@ -391,13 +392,13 @@ export function PromotionManagement() {
                                     const lifecycle = getPromotionLifecycle(promo);
                                     const budget = getBudgetMeta(promo, lang);
                                     return (
-                                        <tr key={promo.id} className="group transition-colors hover:bg-[#124757]/[0.03] dark:hover:bg-yellow-400/[0.04]">
+                                        <tr key={promo.id} className="group transition-colors hover:bg-[#124757]/03 dark:hover:bg-yellow-400/4">
                                             <td className="px-5 py-3.5">
                                                 <div className="flex items-center gap-3.5">
                                                     <button
                                                         type="button"
                                                         onClick={() => navigate(`/admin/promotions/view/${promo.id}`, { state: { promotion: promo } })}
-                                                        className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1 transition-colors hover:border-[#124757] focus:outline-none focus:ring-2 focus:ring-[#124757]/20 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-yellow-400"
+                                                        className="h-18 w-18 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1 transition-colors hover:border-[#124757] focus:outline-none focus:ring-2 focus:ring-[#124757]/20 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-yellow-400"
                                                         title={lang === "VN" ? "Xem ảnh và chi tiết" : "View image and details"}
                                                     >
                                                         <ImageWithFallback
@@ -437,9 +438,6 @@ export function PromotionManagement() {
                                                             {promo.promotionCode}
                                                             <Copy size={11} aria-hidden="true" />
                                                         </button>
-                                                        <p className="line-clamp-1 max-w-64 text-[10px] text-slate-400">
-                                                            {promo.description || (lang === "VN" ? "Chưa có mô tả" : "No description")}
-                                                        </p>
                                                     </div>
                                                 </div>
                                             </td>
@@ -512,20 +510,21 @@ export function PromotionManagement() {
                                                 )}
                                             </td>
 
+                                            <td className="px-4 py-3.5 align-middle">
+                                                <span className={`inline-flex text-[9px] font-headline font-black uppercase tracking-wide ${
+                                                promo.status === PROMOTION_STATUS.ACTIVE
+                                                    ? "text-emerald-700 dark:text-emerald-400"
+                                                    : promo.status === PROMOTION_STATUS.DRAFT
+                                                        ? "text-amber-700 dark:text-amber-400"
+                                                        : promo.status === PROMOTION_STATUS.PAUSED
+                                                            ? "text-sky-700 dark:text-sky-400"
+                                                            : "text-slate-500 dark:text-slate-400"
+                                                }`}>
+                                                    {getStatusLabel(promo.status, lang)}
+                                                </span>
+                                            </td>
+
                                             <td className="px-5 py-3.5 align-middle">
-                                                <div className="mb-2 flex justify-end">
-                                                    <span className={`inline-flex rounded-full px-2 py-1 text-[9px] font-headline font-black uppercase tracking-wide ${
-                                                    promo.status === PROMOTION_STATUS.ACTIVE
-                                                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
-                                                        : promo.status === PROMOTION_STATUS.DRAFT
-                                                            ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
-                                                            : promo.status === PROMOTION_STATUS.PAUSED
-                                                                ? "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400"
-                                                                : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-                                                    }`}>
-                                                        {getStatusLabel(promo.status, lang)}
-                                                    </span>
-                                                </div>
                                                 {canManage ? (
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         <button

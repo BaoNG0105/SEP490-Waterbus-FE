@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchAllRoutes } from "../../../services/routeService";
 import { FormSelect } from "../../../components/FormSelect";
 import { ImageWithFallback } from "../../../components/ImageWithFallback";
+import { AppDateInput } from "../../../components/AppDateInput";
+import { AppTimeInput } from "../../../components/AppTimeInput";
 import {
   PROMOTION_BOOKING_TYPES,
   PROMOTION_DAYS,
@@ -13,7 +15,8 @@ import {
   isRouteSelectableForPromotion,
 } from "../../../services/promotionService";
 
-import { required, RequiredStar } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
+import { RequiredStar } from "../../../utils/requiredStar";
 const inputStyle =
   "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
 const errorInputStyle = "!border-red-500 !bg-red-50/50 focus:!ring-red-300 dark:!bg-red-500/10";
@@ -59,20 +62,17 @@ const errSeverity = (e) => (e && typeof e === "object" ? e.severity || "error" :
 const FieldError = ({ error, className = "" }) => {
   const msg = errMessage(error);
   const severity = errSeverity(error);
-  if (!msg) return <div className={`min-h-[18px] mt-1 ${className}`} />;
+  if (!msg) return <div className={`min-h-4.5 mt-1 ${className}`} />;
 
   const colors =
     severity === "warn"
       ? "text-amber-600 dark:text-amber-400"
       : "text-red-500 dark:text-red-400";
-  const icon =
-    severity === "warn" ? "⚠" : "✕";
 
   return (
-    <div className={`mt-1 min-h-[18px] leading-tight ${className}`}>
-      <p className={`text-[10px] font-bold ${colors} flex items-start gap-1`}>
-        <span className="shrink-0 leading-none mt-px">{icon}</span>
-        <span className="break-words">{msg}</span>
+    <div className={`mt-1 min-h-4.5 leading-tight ${className}`}>
+      <p className={`text-[10px] font-bold ${colors}`}>
+        <span className="wrap-break-words">{msg}</span>
       </p>
     </div>
   );
@@ -113,7 +113,7 @@ const OptionalNumberField = ({
   };
   return (
     <div className="flex flex-col h-full" data-field={dataField}>
-      <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[32px]">
+      <div className="flex items-center justify-between gap-2 mb-1.5 min-h-8">
         <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider leading-tight min-w-0 flex-1">
           {lang === "VN" ? labelVn : labelEn}
           {enabled && <RequiredStar />}
@@ -199,7 +199,7 @@ const RequiredNumberField = ({
   };
   return (
   <div className="flex flex-col h-full" data-field={dataField}>
-    <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[32px]">
+    <div className="flex items-center justify-between gap-2 mb-1.5 min-h-8">
       <label className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider leading-tight min-w-0 flex-1">
         {lang === "VN" ? labelVn : labelEn}
       </label>
@@ -263,6 +263,23 @@ export function PromotionFormFields({
     const pad = (n) => String(n).padStart(2, "0");
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }, [now]);
+  // Hiệu lực từ/đến giờ tách 2 ô AppDateInput + AppTimeInput — cần min riêng cho từng phần.
+  const minDateOnly = useMemo(() => minDateTime.split("T")[0], [minDateTime]);
+  const minTimeOnly = useMemo(() => minDateTime.split("T")[1], [minDateTime]);
+
+  /** Tách "YYYY-MM-DDTHH:mm" thành { datePart, timePart } cho AppDateInput/AppTimeInput. */
+  const splitDateTime = (value) => {
+    const [datePart = "", timePart = ""] = String(value || "").split("T");
+    return { datePart, timePart: timePart.slice(0, 5) };
+  };
+
+  /** Đổi 1 phần (date hoặc time) của field datetime, ghép lại thành "YYYY-MM-DDTHH:mm". */
+  const updateDateTimePart = (field, part, rawValue) => {
+    const { datePart, timePart } = splitDateTime(formData[field]);
+    const nextDate = part === "date" ? rawValue : datePart;
+    const nextTime = part === "time" ? rawValue : timePart;
+    setField(field, nextDate || nextTime ? `${nextDate}T${nextTime}` : "");
+  };
 
   const validateField = (field, value, currentForm = formData) => {
     const err = (severity, message) => ({ severity, message });
@@ -633,59 +650,11 @@ export function PromotionFormFields({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-stretch">
-      <div className="lg:col-span-3 bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
-        <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-1">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+      <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
+        <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">
           {lang === "VN" ? "Thông tin cơ bản" : "Basic Information"}
         </h3>
-
-        <div className="flex flex-wrap items-center gap-3 pt-1 pb-1 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
-          <label className="flex items-center gap-2 cursor-pointer shrink-0">
-            <input
-              type="checkbox"
-              checked={formData.firstBookingOnly}
-              onChange={(e) => setField("firstBookingOnly", e.target.checked)}
-              className="w-4 h-4 rounded text-[#124757] focus:ring-0"
-            />
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-              {lang === "VN" ? "Chỉ áp dụng booking đầu tiên" : "First booking only"}
-            </span>
-          </label>
-
-          <span className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-700" />
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-              {lang === "VN" ? "Hiển thị" : "Visibility"}
-            </span>
-            <FormSelect
-              value={formData.visibility}
-              onChange={(value) => setField("visibility", value)}
-              options={[
-                { value: PROMOTION_VISIBILITY.PUBLIC, label: lang === "VN" ? "Công khai" : "Public" },
-                { value: PROMOTION_VISIBILITY.PRIVATE, label: lang === "VN" ? "Riêng tư" : "Private" },
-              ]}
-              className={`${inputStyle} !py-1.5 !text-xs w-[130px]`}
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-              {lang === "VN" ? "Trạng thái" : "Status"}
-            </span>
-            <FormSelect
-              value={formData.status}
-              onChange={(value) => setField("status", value)}
-              options={[
-                { value: PROMOTION_STATUS.DRAFT, label: lang === "VN" ? "Nháp" : "Draft" },
-                { value: PROMOTION_STATUS.ACTIVE, label: lang === "VN" ? "Đang chạy" : "Active" },
-                { value: PROMOTION_STATUS.PAUSED, label: lang === "VN" ? "Tạm dừng" : "Paused" },
-                ...(!isCreate ? [{ value: PROMOTION_STATUS.ARCHIVED, label: lang === "VN" ? "Đã lưu trữ" : "Archived" }] : []),
-              ]}
-              className={`${inputStyle} !py-1.5 !text-xs w-[130px]`}
-            />
-          </div>
-        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div data-field="promotionCode">
@@ -867,7 +836,7 @@ export function PromotionFormFields({
             />
           ) : (
             <div className="flex flex-col h-full">
-              <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[32px]">
+              <div className="flex items-center justify-between gap-2 mb-1.5 min-h-8">
                 <label className={`${labelStyle} min-w-0 flex-1`}>
                   {lang === "VN" ? "Giảm tối đa" : "Max discount"}
                 </label>
@@ -894,9 +863,57 @@ export function PromotionFormFields({
             inputProps={{ min: 1000, max: PROMOTION_LIMITS.MAX_DISCOUNT_AMOUNT, maxLength: 10 }}
           />
         </div>
+
+        <div className="flex flex-nowrap items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer shrink-0">
+            <input
+              type="checkbox"
+              checked={formData.firstBookingOnly}
+              onChange={(e) => setField("firstBookingOnly", e.target.checked)}
+              className="w-4 h-4 rounded text-[#124757] focus:ring-0"
+            />
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+              {lang === "VN" ? "Chỉ áp dụng booking đầu tiên" : "First booking only"}
+            </span>
+          </label>
+
+          <span className="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-700" />
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider whitespace-nowrap">
+              {lang === "VN" ? "Hiển thị" : "Visibility"}
+            </span>
+            <FormSelect
+              value={formData.visibility}
+              onChange={(value) => setField("visibility", value)}
+              options={[
+                { value: PROMOTION_VISIBILITY.PUBLIC, label: lang === "VN" ? "Công khai" : "Public" },
+                { value: PROMOTION_VISIBILITY.PRIVATE, label: lang === "VN" ? "Riêng tư" : "Private" },
+              ]}
+              className={`${inputStyle} py-1.5! text-xs! w-32.5`}
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider whitespace-nowrap">
+              {lang === "VN" ? "Trạng thái" : "Status"}
+            </span>
+            <FormSelect
+              value={formData.status}
+              onChange={(value) => setField("status", value)}
+              options={[
+                { value: PROMOTION_STATUS.DRAFT, label: lang === "VN" ? "Nháp" : "Draft" },
+                { value: PROMOTION_STATUS.ACTIVE, label: lang === "VN" ? "Đang chạy" : "Active" },
+                { value: PROMOTION_STATUS.PAUSED, label: lang === "VN" ? "Tạm dừng" : "Paused" },
+                ...(!isCreate ? [{ value: PROMOTION_STATUS.ARCHIVED, label: lang === "VN" ? "Đã lưu trữ" : "Archived" }] : []),
+              ]}
+              className={`${inputStyle} py-1.5! text-xs! w-32.5`}
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
+      <div className="bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-1">
           {lang === "VN" ? "Phạm vi áp dụng" : "Scope"}
         </h3>
@@ -1026,34 +1043,58 @@ export function PromotionFormFields({
         </div>
       </div>
 
-      <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
+      <div className="bg-white dark:bg-slate-800 p-5 sm:p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-3">
         <h3 className="font-headline font-black text-sm text-[#124757] dark:text-yellow-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-1">
           {lang === "VN" ? "Thời gian & hạn mức" : "Validity & limits"}
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <div data-field="validFrom">
             <label className={labelStyle}>{<>{lang === "VN" ? "Hiệu lực từ" : "Valid from"}{required()}</>}</label>
-            <input
-              type="datetime-local"
-              required
-              min={isCreate ? minDateTime : undefined}
-              value={formData.validFrom}
-              onChange={(e) => setField("validFrom", e.target.value)}
-              className={`${inputStyle} ${errors.validFrom ? errorInputStyle : ""}`}
-            />
+            <div className="flex gap-2">
+              <div className="flex-3 min-w-0">
+                <AppDateInput
+                  required
+                  min={isCreate ? minDateOnly : undefined}
+                  value={splitDateTime(formData.validFrom).datePart}
+                  onChange={(e) => updateDateTimePart("validFrom", "date", e.target.value)}
+                  className={`${inputStyle} ${errors.validFrom ? errorInputStyle : ""}`}
+                />
+              </div>
+              <div className="flex-2 min-w-0">
+                <AppTimeInput
+                  required
+                  min={isCreate && splitDateTime(formData.validFrom).datePart === minDateOnly ? minTimeOnly : undefined}
+                  value={splitDateTime(formData.validFrom).timePart}
+                  onChange={(e) => updateDateTimePart("validFrom", "time", e.target.value)}
+                  className={`${inputStyle} ${errors.validFrom ? errorInputStyle : ""}`}
+                />
+              </div>
+            </div>
             <FieldError error={errors.validFrom} />
           </div>
           <div data-field="validTo">
             <label className={labelStyle}>{<>{lang === "VN" ? "Hiệu lực đến" : "Valid to"}{required()}</>}</label>
-            <input
-              type="datetime-local"
-              required
-              min={isCreate ? minDateTime : undefined}
-              value={formData.validTo}
-              onChange={(e) => setField("validTo", e.target.value)}
-              className={`${inputStyle} ${errors.validTo ? errorInputStyle : ""}`}
-            />
+            <div className="flex gap-2">
+              <div className="flex-3 min-w-0">
+                <AppDateInput
+                  required
+                  min={isCreate ? minDateOnly : undefined}
+                  value={splitDateTime(formData.validTo).datePart}
+                  onChange={(e) => updateDateTimePart("validTo", "date", e.target.value)}
+                  className={`${inputStyle} ${errors.validTo ? errorInputStyle : ""}`}
+                />
+              </div>
+              <div className="flex-2 min-w-0">
+                <AppTimeInput
+                  required
+                  min={isCreate && splitDateTime(formData.validTo).datePart === minDateOnly ? minTimeOnly : undefined}
+                  value={splitDateTime(formData.validTo).timePart}
+                  onChange={(e) => updateDateTimePart("validTo", "time", e.target.value)}
+                  className={`${inputStyle} ${errors.validTo ? errorInputStyle : ""}`}
+                />
+              </div>
+            </div>
             <FieldError error={errors.validTo} />
           </div>
         </div>

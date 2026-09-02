@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import {
@@ -27,6 +27,12 @@ export function CreatePromotion() {
   const codeCheckRequestRef = useRef(0);
   const hasBlockingErrors = Object.keys(fieldErrors).length > 0
     || Object.keys(externalFieldErrors).length > 0;
+  // Chặn nút submit ngay từ đầu — không chỉ dựa vào fieldErrors (chỉ có khi field đã "touched"),
+  // mà check toàn bộ form ngay cả khi user chưa động vào field nào.
+  const liveFormError = useMemo(
+    () => validatePromotionForm(formData, lang, { isCreate: true }),
+    [formData, lang],
+  );
 
   const handleFieldChange = (field, value) => {
     if (field === "promotionCode") {
@@ -217,7 +223,7 @@ export function CreatePromotion() {
 
         <button
           type="submit"
-          disabled={isSubmitting || hasBlockingErrors}
+          disabled={isSubmitting || hasBlockingErrors || Boolean(liveFormError)}
           className="sticky bottom-4 z-20 w-full bg-[#124757] text-white dark:bg-yellow-400 dark:text-slate-900 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl shadow-xl hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {isSubmitting && (

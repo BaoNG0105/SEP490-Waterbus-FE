@@ -186,7 +186,7 @@ export function ViewPromotion() {
         <button
           type="button"
           onClick={() => navigate(`/admin/promotions/edit/${promo.id}`, { state: { promotion: promo } })}
-          className="flex shrink-0 items-center gap-1.5 rounded-xl bg-[#124757] px-3.5 py-2.5 font-headline text-[10px] font-black uppercase tracking-wider text-white transition-colors hover:bg-[#0d3946] dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
+          className="flex shrink-0 items-center gap-1.5 rounded-xl bg-yellow-400 px-3.5 py-2.5 font-headline text-[10px] font-black uppercase tracking-wider text-slate-900 transition-colors hover:bg-yellow-300"
         >
           <Pencil size={14} aria-hidden="true" />
           {lang === "VN" ? "Chỉnh sửa" : "Edit"}
@@ -210,7 +210,7 @@ export function ViewPromotion() {
             <ImageWithFallback
               src={promo.imageUrl}
               alt={promo.promotionName}
-              className="h-[280px] w-full bg-transparent p-2 sm:h-[340px] dark:bg-transparent"
+              className="h-70 w-full bg-transparent p-2 sm:h-85 dark:bg-transparent"
               imgClassName="h-full w-full object-contain"
               iconClassName="h-20 w-20"
             />
@@ -218,7 +218,6 @@ export function ViewPromotion() {
 
           <section className="flex flex-col justify-center p-5 sm:p-6">
             <div className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              <TicketPercent size={15} aria-hidden="true" />
               {promo.promotionType === PROMOTION_TYPE.PERCENT
                 ? (lang === "VN" ? "Giảm theo phần trăm" : "Percentage discount")
                 : (lang === "VN" ? "Giảm số tiền cố định" : "Fixed discount")}
@@ -244,11 +243,20 @@ export function ViewPromotion() {
             </div>
 
             <div className="mt-4 flex items-start gap-3">
-              <CalendarDays size={17} className="mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
-              <div className="grid min-w-0 flex-1 grid-cols-1 gap-1 text-xs sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-                <span className="font-semibold text-slate-700 dark:text-slate-200">{formatDateTime(promo.validFrom)}</span>
+              <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                    {lang === "VN" ? "Hiệu lực từ" : "Valid from"}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">{formatDateTime(promo.validFrom)}</p>
+                </div>
                 <span className="hidden text-slate-300 sm:inline">→</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-200 sm:text-right">{formatDateTime(promo.validTo)}</span>
+                <div className="sm:text-right">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                    {lang === "VN" ? "Hiệu lực đến" : "Valid to"}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">{formatDateTime(promo.validTo)}</p>
+                </div>
               </div>
             </div>
           </section>
