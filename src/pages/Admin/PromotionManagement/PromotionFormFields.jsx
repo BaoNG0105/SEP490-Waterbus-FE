@@ -237,6 +237,8 @@ export function PromotionFormFields({
   lockType = false,
   isCreate = true,
   onErrorsChange,
+  externalErrors = {},
+  onPromotionCodeBlur,
   submitValidationTick = 0,
 }) {
   const [routes, setRoutes] = useState([]);
@@ -294,7 +296,7 @@ export function PromotionFormFields({
       const name = String(value ?? "").normalize("NFC").trim();
       if (name && !/[\p{L}\p{N}]/u.test(name)) return err("error", lang === "VN" ? "Tên khuyến mãi phải có ít nhất một chữ hoặc số." : "Promotion name must contain at least one letter or number.");
       if (name && !/^[\p{L}\p{N} \u002F\u002D]+$/u.test(name)) return err("error", lang === "VN" ? "Tên khuyến mãi chỉ được chứa chữ, số, khoảng trắng, dấu - và /." : "Promotion name may only contain letters, digits, spaces, hyphens, and slashes.");
-      if (name && /[ \u002F\u002D]{2,}/u.test(name)) return err("error", lang === "VN" ? "Khoảng trắng, dấu - và / không được đứng liên tiếp." : "Spaces, hyphens, and slashes cannot appear consecutively.");
+      if (name && /[\u002F\u002D]\s*[\u002F\u002D]/u.test(name)) return err("error", lang === "VN" ? "Dấu - và / không được lặp liên tiếp." : "Hyphens and slashes cannot repeat consecutively.");
     }
     if (field === "discountValue" && !isPercent && value !== "" && value != null && !isVndAmount(value)) return err("error", lang === "VN" ? "Số tiền giảm phải là số nguyên VND." : "Discount amount must be a whole VND value.");
     if (field === "maxDiscountAmount") {
@@ -704,15 +706,18 @@ export function PromotionFormFields({
                 )
               }
               onFocus={() => setFocusedField("promotionCode")}
-              onBlur={() => setFocusedField(null)}
-              className={`${inputStyle} uppercase tracking-wider ${lockCode ? "cursor-not-allowed opacity-60" : ""} ${errors.promotionCode ? errorInputStyle : ""}`}
+              onBlur={() => {
+                setFocusedField(null);
+                if (!lockCode) onPromotionCodeBlur?.(formData.promotionCode);
+              }}
+              className={`${inputStyle} uppercase tracking-wider ${lockCode ? "cursor-not-allowed opacity-60" : ""} ${(externalErrors.promotionCode || errors.promotionCode) ? errorInputStyle : ""}`}
             />
             {(formData.promotionCode || focusedField === "promotionCode") && (
               <p className="text-[10px] text-slate-400 mt-1">
                 {lang === "VN" ? "Tối đa 50 ký tự, chỉ chữ in hoa và số (A–Z, 0–9), không sửa sau khi tạo." : "Max 50 chars, uppercase letters and digits only (A–Z, 0–9), locked after create."}
               </p>
             )}
-            <FieldError error={errors.promotionCode} />
+            <FieldError error={externalErrors.promotionCode || errors.promotionCode} />
           </div>
           <div data-field="promotionName">
             <label className={labelStyle}>

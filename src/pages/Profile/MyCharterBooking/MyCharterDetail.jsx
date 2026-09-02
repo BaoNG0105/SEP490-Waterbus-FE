@@ -16,6 +16,7 @@ import {
   respondToCharterBookingQuote,
   updateMyCharterBookingPassengers,
   addMyCharterBookingPassengers,
+  createMyCharterPassengerAddInsurancePayment,
 } from "../../../services/charterBookingService";
 import { listBookingPassengers, normalizePassengerApprovalStatus } from "../../../utils/charterPassengerAdd";
 import { checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
@@ -47,6 +48,7 @@ import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
 import { getPassengerBirthYear, hasCharterPassengerName } from "../../../utils/charterBookingTickets";
 import {
   canShowCharterTicketsWithBalance,
+  clearCharterTopUpPayOsStarted,
   extractCharterAdditionalPaymentMeta,
   extractPayOsPaymentFields,
   getCharterBalanceDue,
@@ -361,6 +363,7 @@ const normalizeBooking = (item) => {
     quoteBoats: pick(item, ["quoteBoats", "quoteBreakdown.boats", "pricing.boats", "pricePreview.boats"], []),
     subtotalAmount: Number(pick(item, ["subtotalAmount", "quoteBreakdown.subtotalAmount", "pricing.subtotalAmount"], 0)),
     discountAmount: Number(pick(item, ["discountAmount", "quoteBreakdown.discountAmount", "pricing.discountAmount"], 0)),
+    pointsUsed: Number(pick(item, ["pointsUsed"], 0)) || 0,
     totalAmount: Number(pick(item, ["totalAmount", "finalAmount", "quoteBreakdown.totalAmount", "pricing.totalAmount"], 0)),
     passengers: pick(item, ["passengers"], []),
     tickets: pick(item, ["tickets"], []),
@@ -1285,15 +1288,9 @@ export function CharterDetail() {
     insuranceTopUpInFlightRef.current = true;
     try {
       if (!silent) setIsSubmitting(true);
-      setPaymentOption("Remaining");
-      // Top-up không được thay đổi lựa chọn điểm đã khóa ở payment đầu tiên.
-      const payment = await createBookingPayment({
-        bookingId: booking.id,
-        paymentOption: "Remaining",
-        promotionCode: promoClearedByUserRef.current
-          ? null
-          : (String(paymentPromotionCode || "").trim() || null),
-      });
+      // Dùng endpoint chuyên biệt: booking đã trả đủ bằng điểm có DepositAmount = 0,
+      // nên /payments với paymentOption=Remaining sẽ bị BE từ chối.
+      const payment = await createMyCharterPassengerAddInsurancePayment(booking.id);
       const applied = applyCreatedPayOsPayment(payment, {
         fallbackAmount: balanceDue,
         openCheckout,
@@ -1310,6 +1307,7 @@ export function CharterDetail() {
       }
       return applied;
     } catch (error) {
+      clearCharterTopUpPayOsStarted(booking.id, balanceDue);
       if (!silent) {
         showAlertDialog({
           icon: "error",
@@ -1327,7 +1325,7 @@ export function CharterDetail() {
       insuranceTopUpInFlightRef.current = false;
       if (!silent) setIsSubmitting(false);
     }
-  }, [applyCreatedPayOsPayment, booking?.id, currencyFormatter, lang, paymentPromotionCode]);
+  }, [applyCreatedPayOsPayment, booking?.id, currencyFormatter, lang]);
 
   const handleCreatePayment = async () => {
     if (!booking?.id) return;
@@ -1370,6 +1368,38 @@ export function CharterDetail() {
         return;
       }
       await handleSyncPayment(existingPaymentId);
+      return;
+    }
+
+    // Sau khi admin duyệt thêm khách, phần RemainingAmount chỉ là phí bảo hiểm
+    // phát sinh. Luồng này không phải "trả phần còn lại sau đặt cọc", đặc biệt
+    // booking thanh toán ban đầu hoàn toàn bằng điểm sẽ không có paidAmount > 0.
+    const hasApprovedPassengerAddBatch = Array.isArray(booking.passengers)
+      && booking.passengers.some((passenger) => (
+        Boolean(pick(passenger, ["requestBatchId", "passengerAddRequestId", "addRequestId", "batchId"], ""))
+        && normalizePassengerApprovalStatus(
+          pick(passenger, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], ""),
+        ) === "Approved"
+      ));
+    const hasPassengerAddInsurancePayment = Array.isArray(booking.payments)
+      && booking.payments.some((payment) => getPaymentPurpose(payment) === "passengeraddinsurance");
+    const bookingStatus = String(booking.status || "").toLowerCase();
+    const isPassengerAddInsuranceTopUp = balanceDue > 0
+      && ["approved", "pendingpayment"].includes(bookingStatus)
+      && (
+        bookingStatus === "approved"
+        || hasApprovedPassengerAddBatch
+        || hasPassengerAddInsurancePayment
+      );
+
+    if (isPassengerAddInsuranceTopUp) {
+      charterLog("create-passenger-add-insurance-payment-start", {
+        bookingId: booking.id,
+        bookingCode: booking.bookingCode,
+        balanceDue,
+        bookingStatus: booking.status,
+      });
+      await createInsuranceTopUpPayOs(balanceDue, { openCheckout: true });
       return;
     }
 
@@ -2219,7 +2249,9 @@ export function CharterDetail() {
   const depositPaymentAmount = getCharterDepositAmount(payableQuoteTotal, booking.depositAmount);
   const canPayDeposit = depositPaymentAmount > 0 && !booking.hasDepositPaid;
   const usesDefaultDeposit = !(Number(booking.depositAmount) > 0);
-  const effectivePaidAmount = Math.max(paidAmount, booking.hasDepositPaid ? paidDepositAmount || quoteDepositAmount : 0);
+  // Chỉ hiển thị tiền thực tế đã thu. Không lấy cọc mặc định 50% làm số đã chuyển:
+  // booking trả bằng điểm rồi phát sinh BH có thể mang DepositPaid nhưng depositAmount = 0.
+  const effectivePaidAmount = Math.max(paidAmount, booking.hasDepositPaid ? paidDepositAmount : 0);
   const computedRemaining = promoApplied && booking.hasDepositPaid
     ? Math.max(0, Number(promoPreview.finalAmount) || 0)
     : Math.max(payableQuoteTotal - effectivePaidAmount, 0);
@@ -2796,12 +2828,7 @@ export function CharterDetail() {
                       if (previewHasPricedBoats || (customerQuotePreview?.boats?.length > 0 && previewHasTotal)) {
                         return (
                           <CharterQuotePreviewTable
-                            preview={{
-                              ...customerQuotePreview,
-                              totalAmount: Number(customerQuotePreview?.totalAmount) > 0
-                                ? customerQuotePreview.totalAmount
-                                : displayQuoteTotal,
-                            }}
+                            preview={customerQuotePreview}
                             booking={booking}
                             lang={lang}
                             currencyFormatter={currencyFormatter}

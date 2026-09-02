@@ -26,6 +26,7 @@ import {
   inputStyle,
   buildTouched,
   buildTouchedFromValidation,
+  findDuplicateInsuranceCode,
   validateField,
   parseVndInput,
   formatVndDisplay,
@@ -101,14 +102,8 @@ export function InsuranceManagement() {
     try {
       setIsLoading(true);
       setErrorMsg("");
-      const params = {};
-      // BE mặc định activeOnly=true khi không truyền param → sẽ loại gói Inactive
-      // khỏi filter "all" và "Inactive" trên Admin page. Force explicit để hiển thị đủ.
-      if (statusFilter === "Active") {
-        params.activeOnly = true;
-      } else {
-        params.activeOnly = false;
-      }
+      // Luôn lấy cả Active/Inactive để kiểm tra trùng mã chính xác; UI tự lọc bên dưới.
+      const params = { activeOnly: false };
       const data = await fetchInsurancePackages(params);
       setPackages(data || []);
     } catch (error) {
@@ -484,7 +479,7 @@ export function InsuranceManagement() {
 
   const validateForm = () => {
     for (const fieldName of VALIDATED_FIELDS) {
-      const result = validateField(fieldName, form[fieldName], form);
+      const result = validateField(fieldName, form[fieldName], form, { packages, editingId });
       if (result && result.level === "error") {
         return result.message;
       }
@@ -495,10 +490,10 @@ export function InsuranceManagement() {
   const errors = useMemo(() => {
     const result = {};
     for (const fieldName of VALIDATED_FIELDS) {
-      result[fieldName] = validateField(fieldName, form[fieldName], form);
+      result[fieldName] = validateField(fieldName, form[fieldName], form, { packages, editingId });
     }
     return result;
-  }, [form]);
+  }, [editingId, form, packages]);
 
   const hasBlockingError = useMemo(
     () => Object.entries(errors).some(([field, e]) => e && e.level === "error" && touched[field]),
@@ -617,6 +612,36 @@ export function InsuranceManagement() {
         return;
       }
 
+      if (!editingId) {
+        let latestPackages = packages;
+        try {
+          latestPackages = await fetchInsurancePackages({ activeOnly: false });
+          setPackages(latestPackages || []);
+        } catch (checkError) {
+          // BE vẫn kiểm tra unique khi POST; không chặn tạo chỉ vì GET kiểm tra bị lỗi.
+          console.warn("Không kiểm tra được mã bảo hiểm trước khi lưu:", checkError);
+        }
+
+        const duplicate = findDuplicateInsuranceCode(
+          latestPackages,
+          validationPayload.code,
+          null,
+          validationPayload.bookingType,
+        );
+        if (duplicate) {
+          setTouched((prev) => ({ ...prev, code: true }));
+          notify({
+            icon: "warning",
+            title: lang === "VN" ? "Mã gói đã tồn tại" : "Package code already exists",
+            text: lang === "VN"
+              ? `Mã '${validationPayload.code}' đã được dùng cho một gói bảo hiểm hành khách.`
+              : `Code '${validationPayload.code}' is already used by a passenger insurance package.`,
+            confirmButtonColor: "#124757",
+          });
+          return;
+        }
+      }
+
       // Spec BE: cả Create lẫn Edit đều phải đảm bảo chưa có gói Waterbus default active khác
       // khi payload yêu cầu isWaterbusDefault=true + isActive=true.
       // - Create: payload đang áp dụng cho gói mới → excludeId = null.
@@ -653,6 +678,22 @@ export function InsuranceManagement() {
         timer: 1800,
       });
     } catch (error) {
+      const responseErrors = error?.response?.data?.errors || {};
+      const duplicateCodeMessage = (responseErrors.code || responseErrors.Code || [])[0];
+      if (
+        error?.response?.status === 400
+        && /đã tồn tại|already exists|duplicate/i.test(String(duplicateCodeMessage || ""))
+      ) {
+        setTouched((prev) => ({ ...prev, code: true }));
+        await loadPackages();
+        notify({
+          icon: "warning",
+          title: lang === "VN" ? "Mã gói đã tồn tại" : "Package code already exists",
+          text: duplicateCodeMessage,
+          confirmButtonColor: "#124757",
+        });
+        return;
+      }
       const { isDuplicateDefault } = detectDuplicateDefault(error);
       if (isDuplicateDefault) {
         const duplicates = findOtherActiveWaterbusDefaults(editingId);

@@ -173,6 +173,12 @@ export const respondToCharterBookingQuote = (id, data) =>
 export const addCharterBookingPassengers = (id, data) =>
     api.post(`/charter-bookings/${encodeURIComponent(id)}/passengers`, data).then((response) => response.data);
 
+/** Customer: tạo PayOS riêng cho bảo hiểm phát sinh sau khi yêu cầu thêm khách được duyệt. */
+export const createCharterPassengerAddInsurancePayment = (id) =>
+    api
+        .post(`/charter-bookings/${encodeURIComponent(id)}/passenger-add-insurance-payment`)
+        .then((response) => response.data);
+
 /** Admin/Manager: duyệt yêu cầu thêm HK — BE chỉ expose nhánh assigned. */
 export const approvePassengerAddRequest = (id, requestBatchId, data = {}) =>
     api

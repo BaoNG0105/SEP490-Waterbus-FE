@@ -268,18 +268,12 @@ export const buildQuotePreviewModel = (preview, options = {}) => {
   const discountAmount = useForcedDayTotals
     ? 0
     : (Number(pick(preview, ["discountAmount"], 0)) || 0);
-  const totalAmount = useForcedDayTotals
-    ? Math.max(subtotalBeforeDiscount - discountAmount, 0)
-    : (Number(pick(preview, ["totalAmount", "finalAmount"], 0))
-      || Math.max(subtotalBeforeDiscount - discountAmount, 0));
-
   const promotionCode = useForcedDayTotals ? "" : (pick(preview, ["promotionCode"], "") || pick(preview, ["promotion.code"], ""));
   const promotionType = useForcedDayTotals ? "" : pick(preview, ["promotion.type", "promotionType"], "");
   const promotionValue = useForcedDayTotals
     ? 0
     : (Number(pick(preview, ["promotion.discountValue", "promotionDiscountValue"], 0)) || 0);
 
-  const deposit = getCharterDepositAmount(totalAmount, useForcedDayTotals ? 0 : (Number(pick(preview, ["depositAmount"], 0)) || 0));
   const insuranceSource = {
     insuranceSelected: preview?.insuranceSelected ?? options.booking?.insuranceSelected,
     insurancePackageId: preview?.insurancePackageId ?? options.booking?.insurancePackageId,
@@ -290,6 +284,38 @@ export const buildQuotePreviewModel = (preview, options = {}) => {
     insurance: preview?.insurance ?? options.booking?.insurance,
   };
   const insurance = normalizeInsuranceFromBooking(insuranceSource);
+  const insuranceTotal = insurance?.selected === false
+    ? 0
+    : (Number(insurance?.totalAmount) || 0);
+  const explicitGrossTotal = pick(preview, ["grossTotal", "subtotalBeforePoints"], null);
+  const grossTotal = explicitGrossTotal !== null
+    ? Math.max(0, Number(explicitGrossTotal) || 0)
+    : Math.max(subtotalBeforeDiscount, autoSubtotal + insuranceTotal);
+  const pointsUsed = useForcedDayTotals
+    ? 0
+    : Math.max(0, Number(pick(preview, ["pointsUsed"], 0)) || 0);
+  const explicitPayableAmount = useForcedDayTotals
+    ? null
+    : pick(preview, ["payableAmount", "totalAmount", "finalAmount"], null);
+  const payableAmount = explicitPayableAmount !== null
+    ? Math.max(0, Number(explicitPayableAmount) || 0)
+    : Math.max(grossTotal - discountAmount - pointsUsed, 0);
+  const unclassifiedDeduction = Math.max(
+    grossTotal - discountAmount - pointsUsed - payableAmount,
+    0,
+  );
+  const actualDepositAmount = Math.max(
+    0,
+    Number(pick(preview, ["actualDepositAmount", "depositAmount"], 0)) || 0,
+  );
+  const showDefaultDeposit = preview?.showDefaultDeposit !== false;
+  const deposit = actualDepositAmount > 0
+    ? actualDepositAmount
+    : (showDefaultDeposit ? getCharterDepositAmount(payableAmount, 0) : 0);
+  const paymentStatus = String(
+    pick(options.booking, ["paymentStatus", "bookingPaymentStatus"], pick(preview, ["paymentStatus"], "")),
+  ).toLowerCase();
+  const isFullyPaid = paymentStatus === "paid" && payableAmount <= 0;
 
   return {
     rentalUnit,
@@ -298,12 +324,19 @@ export const buildQuotePreviewModel = (preview, options = {}) => {
     boatRows,
     autoSubtotal,
     subtotalBeforeDiscount,
+    grossTotal,
     discountAmount,
-    totalAmount,
+    pointsUsed,
+    unclassifiedDeduction,
+    totalAmount: payableAmount,
+    payableAmount,
     promotionCode,
     promotionType,
     promotionValue,
     deposit,
+    showDeposit: deposit > 0 && !isFullyPaid,
+    isFullyPaid,
+    paidByPoints: isFullyPaid && pointsUsed > 0,
     insurance,
     routeEstimate,
     formatMoney,
@@ -327,7 +360,7 @@ export const getQuoteDiscountLabel = (model, lang = "VN") => {
   return lang === "VN" ? "Giảm giá" : "Discount";
 };
 
-export const formatQuoteRouteEstimate = (routeEstimate, lang = "VN", defaultRentalUnit = "Day") => {
+export const formatQuoteRouteEstimate = (routeEstimate, lang = "VN") => {
   if (!routeEstimate) return "";
   if (typeof routeEstimate === "string") return routeEstimate;
   if (typeof routeEstimate !== "object") return String(routeEstimate);
@@ -392,14 +425,36 @@ export const buildBookingQuotePreview = (booking) => {
     booking.subtotalAmount
     ?? pick(raw, ["subtotalAmount", "subtotalBeforeDiscount"], 0),
   ) || boatsRentalTotal;
-  const quoteTotal = Number(
-    booking.totalAmount
+  const grossTotal = Math.max(
+    boatsRentalTotal + insuranceAmount,
+    quoteSubtotal,
+  );
+  const pointsUsed = Math.max(
+    0,
+    Number(booking.pointsUsed ?? pick(raw, ["pointsUsed"], 0)) || 0,
+  );
+  const rawQuoteTotal = booking.totalAmount
     ?? booking.estimatedPrice
-    ?? pick(raw, ["finalAmount", "totalAmount"], 0),
-  ) || 0;
-  const displayQuoteTotal = quoteTotal > 0
-    ? quoteTotal
-    : Math.max(boatsRentalTotal + insuranceAmount - discountAmount, 0);
+    ?? pick(raw, ["finalAmount", "totalAmount"], null);
+  const hasExplicitQuoteTotal = rawQuoteTotal !== null
+    && rawQuoteTotal !== undefined
+    && rawQuoteTotal !== ""
+    && Number.isFinite(Number(rawQuoteTotal));
+  const displayQuoteTotal = hasExplicitQuoteTotal
+    ? Math.max(0, Number(rawQuoteTotal))
+    : Math.max(grossTotal - discountAmount - pointsUsed, 0);
+  const status = String(booking.status || pick(raw, ["bookingStatus", "status"], "")).toLowerCase();
+  const paymentStatus = String(
+    booking.paymentStatus || pick(raw, ["paymentStatus", "bookingPaymentStatus"], ""),
+  ).toLowerCase();
+  const hasPassengerAddPayment = (Array.isArray(booking.payments) ? booking.payments : [])
+    .some((payment) => String(payment?.paymentPurpose || "").toLowerCase() === "passengeraddinsurance");
+  const isPassengerAddTopUp = status === "approved"
+    || (status === "pendingpayment" && hasPassengerAddPayment);
+  const actualDepositAmount = Math.max(0, Number(booking.depositAmount) || 0);
+  const showDefaultDeposit = actualDepositAmount <= 0
+    && paymentStatus !== "paid"
+    && !isPassengerAddTopUp;
 
   if (boats.length === 0 && displayQuoteTotal <= 0) return null;
 
@@ -407,10 +462,15 @@ export const buildBookingQuotePreview = (booking) => {
     rentalUnit: booking.rentalUnit || pick(raw, ["rentalUnit"], ""),
     routeEstimate: booking.routeEstimate || pick(raw, ["routeEstimate"], null),
     boats,
-    subtotalAmount: boatsRentalTotal > 0 ? boatsRentalTotal : quoteSubtotal,
+    subtotalAmount: grossTotal,
+    grossTotal,
     discountAmount,
     totalAmount: displayQuoteTotal,
-    depositAmount: Number(booking.depositAmount) > 0 ? booking.depositAmount : undefined,
+    payableAmount: displayQuoteTotal,
+    pointsUsed,
+    actualDepositAmount,
+    showDefaultDeposit,
+    paymentStatus,
     promotionCode: booking.promotionCode || pick(raw, ["promotionCode"], ""),
     insuranceSelected: booking.insuranceSelected,
     insurancePackageId: booking.insurancePackageId,
@@ -421,4 +481,3 @@ export const buildBookingQuotePreview = (booking) => {
     insurance,
   };
 };
-

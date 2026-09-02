@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import {
@@ -6,6 +6,7 @@ import {
   buildPromotionPayload,
   emptyPromotionForm,
   extractPromotionId,
+  fetchPromotions,
   uploadPromotionImageFile,
   validatePromotionForm,
 } from "../../../services/promotionService";
@@ -22,22 +23,76 @@ export function CreatePromotion() {
   const [errorTick, setErrorTick] = useState(0);
   const [formData, setFormData] = useState(() => emptyPromotionForm());
   const [fieldErrors, setFieldErrors] = useState({});
-  const hasBlockingErrors = Object.keys(fieldErrors).length > 0;
+  const [externalFieldErrors, setExternalFieldErrors] = useState({});
+  const codeCheckRequestRef = useRef(0);
+  const hasBlockingErrors = Object.keys(fieldErrors).length > 0
+    || Object.keys(externalFieldErrors).length > 0;
 
   const handleFieldChange = (field, value) => {
+    if (field === "promotionCode") {
+      codeCheckRequestRef.current += 1;
+      setExternalFieldErrors((prev) => {
+        if (!prev.promotionCode) return prev;
+        const next = { ...prev };
+        delete next.promotionCode;
+        return next;
+      });
+      setServerError("");
+    }
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const setDuplicateCodeError = (code, message = "") => {
+    setExternalFieldErrors((prev) => ({
+      ...prev,
+      promotionCode: {
+        severity: "error",
+        message: message || (lang === "VN"
+          ? `Mã khuyến mãi '${code}' đã tồn tại.`
+          : `Promotion code '${code}' already exists.`),
+      },
+    }));
+    setServerError("");
+  };
+
+  const checkPromotionCodeExists = async (rawCode) => {
+    const code = String(rawCode || "").trim().toUpperCase();
+    if (!code || !/^[A-Z0-9]+$/.test(code)) return false;
+
+    const requestId = ++codeCheckRequestRef.current;
+    try {
+      const promotions = await fetchPromotions();
+      if (requestId !== codeCheckRequestRef.current) return false;
+      const duplicate = promotions.some(
+        (promotion) => String(promotion.promotionCode || "").trim().toUpperCase() === code,
+      );
+      if (duplicate) {
+        setDuplicateCodeError(code);
+        return true;
+      }
+      setExternalFieldErrors((prev) => {
+        if (!prev.promotionCode) return prev;
+        const next = { ...prev };
+        delete next.promotionCode;
+        return next;
+      });
+      return false;
+    } catch {
+      // Không chặn form khi pre-check lỗi mạng; POST vẫn là kiểm tra cuối cùng.
+      return false;
+    }
   };
 
   // Cuộn tới field đầu tiên bị lỗi khi submit bị chặn.
   useEffect(() => {
     if (errorTick === 0) return;
-    const firstErrField = Object.keys(fieldErrors)[0];
+    const firstErrField = Object.keys({ ...fieldErrors, ...externalFieldErrors })[0];
     if (!firstErrField) return;
     const el = document.querySelector(`[data-field="${firstErrField}"]`);
     if (el && typeof el.scrollIntoView === "function") {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [errorTick, fieldErrors]);
+  }, [errorTick, externalFieldErrors, fieldErrors]);
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
@@ -52,6 +107,11 @@ export function CreatePromotion() {
     try {
       setIsSubmitting(true);
       setServerError("");
+
+      if (await checkPromotionCodeExists(formData.promotionCode)) {
+        setErrorTick((tick) => tick + 1);
+        return;
+      }
 
       const payload = buildPromotionPayload(formData, { includeCode: true });
       const created = await addPromotion(payload);
@@ -84,6 +144,25 @@ export function CreatePromotion() {
       }).then(() => navigate("/admin/promotions"));
     } catch (error) {
       console.error("Lỗi tạo khuyến mãi:", error);
+      const responseData = error.response?.data || {};
+      const responseErrors = responseData.errors || {};
+      const codeMessages = responseErrors.promotionCode
+        || responseErrors.PromotionCode
+        || responseErrors.code
+        || responseErrors.Code
+        || [];
+      const codeMessage = Array.isArray(codeMessages) ? codeMessages[0] : codeMessages;
+      const duplicateText = String(codeMessage || responseData.message || responseData.title || "");
+      const isDuplicateCode = /tồn tại|trùng|already exists|duplicate/i.test(duplicateText)
+        && (Boolean(codeMessage) || /mã khuyến mãi|promotion/i.test(duplicateText));
+      if (
+        [400, 409].includes(error.response?.status)
+        && isDuplicateCode
+      ) {
+        setDuplicateCodeError(formData.promotionCode, codeMessage || "");
+        setErrorTick((tick) => tick + 1);
+        return;
+      }
       let validationError = "";
       if (error.response?.data?.errors) {
         validationError = Object.values(error.response.data.errors).flat().join(" | ");
@@ -130,6 +209,8 @@ export function CreatePromotion() {
           formData={formData}
           onChange={handleFieldChange}
           onErrorsChange={setFieldErrors}
+          externalErrors={externalFieldErrors}
+          onPromotionCodeBlur={checkPromotionCodeExists}
           submitValidationTick={errorTick}
           isCreate
         />
