@@ -67,6 +67,11 @@ const normalizeBooking = (item) => {
   const finalDepositAmount = paidDepositAmount || (hasDepositPaid ? rawDepositAmount : 0);
 
   const estimatedPrice = Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0));
+  const status = resolveCharterBookingStatus(item);
+  const quotedAt = pick(item, ["quotedAt", "quoteSubmittedAt", "quoteAt", "quotedDate"], "");
+  const hasFinalPrice = estimatedPrice > 0
+    || Boolean(quotedAt)
+    || ["Quoted", "PendingPayment", "Confirmed", "Completed"].includes(status);
   const topLevelPaidAmount = Number(pick(item, ["paidAmount", "amountPaid", "paid"], 0));
   const topLevelPaidDeposit = Number(pick(item, ["paidDepositAmount", "paidDeposit"], 0));
   const paidAmount = paidPaymentAmount || topLevelPaidAmount || (hasDepositPaid ? finalDepositAmount : 0);
@@ -96,12 +101,13 @@ const normalizeBooking = (item) => {
     adultCount,
     childCount,
     passengerCount,
-    status: resolveCharterBookingStatus(item),
+    status,
     bookingPaymentStatus: pick(item, ["bookingPaymentStatus", "BookingPaymentStatus"], ""),
     paymentStatus,
     refundStatus: pick(item, ["refundStatus", "RefundStatus", "latestRefundStatus", "paymentRefundStatus"], ""),
     isRefundable: pick(item, ["isRefundable", "IsRefundable"], null),
     estimatedPrice,
+    hasFinalPrice,
     paidAmount,
     paidDepositAmount: totalPaidDeposit,
     hasDepositPaid,
@@ -408,8 +414,8 @@ export function CharterList() {
                               {lang === "VN" ? "Còn phải trả" : "Balance due"}
                             </p>
                             <p className="font-headline text-xl font-black text-rose-600 dark:text-rose-400 sm:text-2xl">
-                              {booking.estimatedPrice > 0
-                                ? currencyFormatter.format(booking.remainingAmount > 0 ? booking.remainingAmount : 0)
+                              {booking.remainingAmount !== null
+                                ? currencyFormatter.format(booking.remainingAmount)
                                 : "--"}
                             </p>
                           </>
@@ -419,7 +425,7 @@ export function CharterList() {
                               {lang === "VN" ? "Giá chốt" : "Quote"}
                             </p>
                             <p className="font-headline text-xl font-black text-[#124757] dark:text-yellow-400 sm:text-2xl">
-                              {booking.estimatedPrice > 0 ? currencyFormatter.format(booking.estimatedPrice) : "--"}
+                              {booking.hasFinalPrice ? currencyFormatter.format(booking.estimatedPrice) : "--"}
                             </p>
                           </>
                         )}

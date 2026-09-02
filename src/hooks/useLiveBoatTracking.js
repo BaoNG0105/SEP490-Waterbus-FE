@@ -13,8 +13,7 @@ import { upsertBoatLocationMap, loadStickyBoatLocationMap } from "../utils/boatT
  * - REST /tracking/boats/latest = fallback / đồng bộ
  * - Không đọc Neon / Live /api/snapshot
  */
-const POLL_WHEN_HUB_LIVE_MS = 5000;
-const POLL_WHEN_HUB_DOWN_MS = 3000;
+const LOCATION_POLL_MS = 2500;
 /** List /boats/latest hay thiếu ETA — bổ sung GET /boats/{code}/latest cho tàu đang chạy. */
 const ETA_ENRICH_MS = 8000;
 const SERVER_CLOCK_REFRESH_MS = 60 * 1000;
@@ -135,7 +134,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
   }, []);
 
   const resolvePollMs = useCallback(
-    () => (hubLiveRef.current ? POLL_WHEN_HUB_LIVE_MS : POLL_WHEN_HUB_DOWN_MS),
+    () => LOCATION_POLL_MS,
     [],
   );
 
@@ -192,11 +191,11 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
         hubLiveRef.current = true;
         setConnectionMode("live");
         setErrorMsg("");
-        startPolling(POLL_WHEN_HUB_LIVE_MS);
+        startPolling(LOCATION_POLL_MS);
       } else if (status === "reconnecting" || status === "offline") {
         hubLiveRef.current = false;
         setConnectionMode("polling");
-        startPolling(POLL_WHEN_HUB_DOWN_MS);
+        startPolling(LOCATION_POLL_MS);
       }
     });
 
@@ -214,8 +213,8 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
 
       if (cancelled || !activeRef.current) return;
 
-      // Poll fallback ngay; khi hub live sẽ nới interval lên 5s.
-      startPolling(POLL_WHEN_HUB_DOWN_MS);
+      // REST fallback 2,5 giây; SignalR vẫn áp vị trí ngay khi có sự kiện.
+      startPolling(LOCATION_POLL_MS);
 
       try {
         await trackingHub.acquire();
@@ -225,7 +224,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
         }
         hubLiveRef.current = true;
         setConnectionMode("live");
-        startPolling(POLL_WHEN_HUB_LIVE_MS);
+        startPolling(LOCATION_POLL_MS);
       } catch (error) {
         const aborted = error?.name === "AbortError"
           || /stop\(\) was called|cancelled|aborted/i.test(String(error?.message || error));
@@ -235,7 +234,7 @@ export function useLiveBoatTracking({ enabled = true } = {}) {
         if (!cancelled && activeRef.current) {
           hubLiveRef.current = false;
           setConnectionMode("polling");
-          startPolling(POLL_WHEN_HUB_DOWN_MS);
+          startPolling(LOCATION_POLL_MS);
         }
       }
     };

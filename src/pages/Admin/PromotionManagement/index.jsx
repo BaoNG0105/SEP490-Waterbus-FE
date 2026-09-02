@@ -301,16 +301,23 @@ export function PromotionManagement() {
                 </div>
             )}
 
-            <div className="grid grid-cols-2 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 {[
                     [lang === "VN" ? "Tổng số" : "Total", stats.total, "text-[#124757] dark:text-white"],
                     [lang === "VN" ? "Hoạt động" : "Active", stats.active, "text-emerald-600 dark:text-emerald-400"],
                     [lang === "VN" ? "Tạm dừng" : "Paused", stats.paused, "text-sky-600 dark:text-sky-400"],
                     [lang === "VN" ? "Hết hạn" : "Expired", stats.expired, "text-amber-600 dark:text-amber-400"],
                 ].map(([label, value, tone]) => (
-                    <div key={label} className="flex items-center justify-between gap-3 border-b border-r border-slate-100 px-4 py-3 last:border-r-0 dark:border-slate-700 sm:border-b-0">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
-                        <strong className={`font-headline text-xl font-black ${tone}`}>{value}</strong>
+                    <div
+                        key={label}
+                        className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-700/50 dark:bg-slate-800"
+                    >
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                            {label}
+                        </span>
+                        <strong className={`mt-0.5 block font-headline text-xl font-black ${tone}`}>
+                            {value}
+                        </strong>
                     </div>
                 ))}
             </div>

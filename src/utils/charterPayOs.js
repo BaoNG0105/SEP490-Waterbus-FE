@@ -201,7 +201,13 @@ export const rememberCharterPayOsSession = (bookingId, fields = {}) => {
 export const markCharterTopUpPayOsStarted = (bookingId, amount) => {
   if (!bookingId || !(amount > 0)) return false;
   const key = `charterTopUpPayos:${bookingId}:${Math.round(amount)}`;
-  if (sessionStorage.getItem(key)) return false;
-  sessionStorage.setItem(key, "1");
+  const startedAt = Number(sessionStorage.getItem(key));
+  if (Number.isFinite(startedAt) && Date.now() - startedAt < 30_000) return false;
+  sessionStorage.setItem(key, String(Date.now()));
   return true;
+};
+
+export const clearCharterTopUpPayOsStarted = (bookingId, amount) => {
+  if (!bookingId || !(amount > 0)) return;
+  sessionStorage.removeItem(`charterTopUpPayos:${bookingId}:${Math.round(amount)}`);
 };

@@ -38,10 +38,10 @@ export const MAX_COVERAGE = 10_000_000_000;
 export const MAX_LOGO_SIZE = 5 * 1024 * 1024;
 export const CODE_REGEX = /^[A-Za-z]\w*$/;
 export const URL_REGEX = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
-const INSURANCE_NAME_REGEX = /^[\p{L}\p{N}\s.()&'\-]+$/u;
+const INSURANCE_NAME_REGEX = /^[\p{L}\p{N}\s.()&'-]+$/u;
 
 export const sanitizeInsuranceName = (value) => String(value || "")
-  .replace(/[^\p{L}\p{N}\s.()&'\-]/gu, "");
+  .replace(/[^\p{L}\p{N}\s.()&'-]/gu, "");
 
 export const normalizeInsuranceName = (value) => String(value || "")
   .trim()
@@ -64,10 +64,10 @@ export const buildTouched = (fields) => {
 };
 
 // Chỉ touch những field thực sự vi phạm (khi mở edit mà data cũ invalid theo rule mới).
-export const buildTouchedFromValidation = (formValues) => {
+export const buildTouchedFromValidation = (formValues, context = {}) => {
   const next = {};
   for (const fieldName of VALIDATED_FIELDS) {
-    if (validateField(fieldName, formValues[fieldName], formValues)?.level === "error") {
+    if (validateField(fieldName, formValues[fieldName], formValues, context)?.level === "error") {
       next[fieldName] = true;
     }
   }
@@ -112,7 +112,23 @@ export const formatVndInput = (raw) => {
   return out.join("");
 };
 
-export const validateField = (name, value, form = {}) => {
+export const findDuplicateInsuranceCode = (packages = [], code, editingId = null, bookingType = "") => {
+  const normalizedCode = String(code || "").trim().toUpperCase();
+  const normalizedType = String(bookingType || "").trim().toLowerCase();
+  if (!normalizedCode) return null;
+
+  return (Array.isArray(packages) ? packages : []).find((pkg) => {
+    const packageId = pkg?.id ?? pkg?.insurancePackageId;
+    if (editingId != null && String(packageId) === String(editingId)) return false;
+
+    const packageCode = String(pkg?.code || "").trim().toUpperCase();
+    const packageType = String(pkg?.bookingType || "").trim().toLowerCase();
+    const sameType = !normalizedType || !packageType || packageType === normalizedType;
+    return sameType && packageCode === normalizedCode;
+  }) || null;
+};
+
+export const validateField = (name, value, form = {}, context = {}) => {
   const stringValue = String(value ?? "");
   switch (name) {
     case "code": {
@@ -120,6 +136,14 @@ export const validateField = (name, value, form = {}) => {
       if (!trimmed) return { level: "error", message: "Vui lòng nhập mã gói." };
       if (trimmed.length > MAX_CODE) return { level: "error", message: `Mã gói không được vượt quá ${MAX_CODE} ký tự.` };
       if (!CODE_REGEX.test(trimmed)) return { level: "error", message: "Mã gói chỉ gồm chữ cái, số, gạch dưới và bắt đầu bằng chữ cái." };
+      if (findDuplicateInsuranceCode(
+        context.packages,
+        trimmed,
+        context.editingId,
+        form.bookingType,
+      )) {
+        return { level: "error", message: `Mã gói '${trimmed.toUpperCase()}' đã tồn tại.` };
+      }
       return null;
     }
     case "name": {

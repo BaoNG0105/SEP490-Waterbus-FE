@@ -11,6 +11,7 @@ import {
     updateAdminCharterBookingStatus as apiUpdateAdminCharterBookingStatus,
     updateCharterBookingPassengers as apiUpdateCharterBookingPassengers,
     addCharterBookingPassengers as apiAddCharterBookingPassengers,
+    createCharterPassengerAddInsurancePayment as apiCreateCharterPassengerAddInsurancePayment,
     approvePassengerAddRequest as apiApprovePassengerAddRequest,
     rejectPassengerAddRequest as apiRejectPassengerAddRequest,
     getAdminCharterBookingRouteCandidates as apiGetAdminCharterBookingRouteCandidates,
@@ -339,6 +340,15 @@ export const addMyCharterBookingPassengers = async (id, passengersPayload) => {
     }
 };
 
+export const createMyCharterPassengerAddInsurancePayment = async (id) => {
+    try {
+        return await apiCreateCharterPassengerAddInsurancePayment(id);
+    } catch (error) {
+        charterLogError("create-passenger-add-insurance-payment", error);
+        throw error;
+    }
+};
+
 export const approveCharterPassengerAddRequest = async (id, requestBatchId, { note = null } = {}) => {
     try {
         return await apiApprovePassengerAddRequest(id, requestBatchId, { note });
@@ -348,7 +358,7 @@ export const approveCharterPassengerAddRequest = async (id, requestBatchId, { no
     }
 };
 
-export const rejectCharterPassengerAddRequest = async (id, requestBatchId, note, _options = {}) => {
+export const rejectCharterPassengerAddRequest = async (id, requestBatchId, note) => {
     try {
         return await apiRejectPassengerAddRequest(id, requestBatchId, { note });
     } catch (error) {

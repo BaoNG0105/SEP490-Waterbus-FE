@@ -111,14 +111,6 @@ export function CharterQuotePreviewTable({
           </div>
         ))}
 
-        {model.discountAmount > 0 ? (
-          <InvoiceRow
-            label={getQuoteDiscountLabel(model, lang)}
-            amount={`-${fmt(model.discountAmount)}`}
-            amountClass="text-sm font-headline font-black text-emerald-600 dark:text-emerald-400"
-          />
-        ) : null}
-
         {model.insurance && model.insurance.selected !== false ? (
           <InvoiceRow
             label={lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
@@ -134,15 +126,59 @@ export function CharterQuotePreviewTable({
 
         <InvoiceRow
           bold
-          label={lang === "VN" ? "Tổng cộng" : "Grand total"}
-          amount={fmt(model.totalAmount)}
+          label={lang === "VN" ? "Tạm tính" : "Subtotal"}
+          amount={fmt(model.grossTotal)}
+          amountClass="text-sm font-headline font-black text-slate-800 dark:text-white"
+        />
+
+        {model.discountAmount > 0 ? (
+          <InvoiceRow
+            label={getQuoteDiscountLabel(model, lang)}
+            amount={`-${fmt(model.discountAmount)}`}
+            amountClass="text-sm font-headline font-black text-emerald-600 dark:text-emerald-400"
+          />
+        ) : null}
+
+        {model.pointsUsed > 0 ? (
+          <InvoiceRow
+            label={lang === "VN" ? "Điểm đã sử dụng" : "Points used"}
+            detail={lang === "VN"
+              ? `${Number(model.pointsUsed).toLocaleString("vi-VN")} điểm · 1 điểm = 1 VND`
+              : `${Number(model.pointsUsed).toLocaleString("en-US")} points · 1 point = 1 VND`}
+            amount={`-${fmt(model.pointsUsed)}`}
+            amountClass="text-sm font-headline font-black text-sky-700 dark:text-sky-300"
+          />
+        ) : null}
+
+        {model.unclassifiedDeduction > 0 ? (
+          <InvoiceRow
+            label={lang === "VN" ? "Khuyến mãi / điểm" : "Promotion / points"}
+            amount={`-${fmt(model.unclassifiedDeduction)}`}
+            amountClass="text-sm font-headline font-black text-sky-700 dark:text-sky-300"
+          />
+        ) : null}
+
+        <InvoiceDivider />
+
+        <InvoiceRow
+          bold
+          label={lang === "VN" ? "Cần thanh toán" : "Amount payable"}
+          amount={fmt(model.payableAmount)}
           amountClass={`text-base ${moneyClass}`}
         />
-        <InvoiceRow
-          label={lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
-          amount={fmt(model.deposit)}
-          amountClass="text-sm font-headline font-black text-emerald-700 dark:text-emerald-300"
-        />
+        {model.showDeposit ? (
+          <InvoiceRow
+            label={lang === "VN" ? "Đặt cọc 50%" : "Deposit 50%"}
+            amount={fmt(model.deposit)}
+            amountClass="text-sm font-headline font-black text-emerald-700 dark:text-emerald-300"
+          />
+        ) : null}
+        {model.paidByPoints ? (
+          <div className="mt-1 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <span className="material-symbols-outlined text-base">verified</span>
+            <span>{lang === "VN" ? "Đã thanh toán bằng điểm" : "Paid with points"}</span>
+          </div>
+        ) : null}
       </div>
     </div>
   );

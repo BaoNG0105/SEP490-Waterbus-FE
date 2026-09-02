@@ -237,6 +237,8 @@ export function PromotionFormFields({
   lockType = false,
   isCreate = true,
   onErrorsChange,
+  externalErrors = {},
+  onPromotionCodeBlur,
   submitValidationTick = 0,
 }) {
   const [routes, setRoutes] = useState([]);
@@ -704,15 +706,18 @@ export function PromotionFormFields({
                 )
               }
               onFocus={() => setFocusedField("promotionCode")}
-              onBlur={() => setFocusedField(null)}
-              className={`${inputStyle} uppercase tracking-wider ${lockCode ? "cursor-not-allowed opacity-60" : ""} ${errors.promotionCode ? errorInputStyle : ""}`}
+              onBlur={() => {
+                setFocusedField(null);
+                if (!lockCode) onPromotionCodeBlur?.(formData.promotionCode);
+              }}
+              className={`${inputStyle} uppercase tracking-wider ${lockCode ? "cursor-not-allowed opacity-60" : ""} ${(externalErrors.promotionCode || errors.promotionCode) ? errorInputStyle : ""}`}
             />
             {(formData.promotionCode || focusedField === "promotionCode") && (
               <p className="text-[10px] text-slate-400 mt-1">
                 {lang === "VN" ? "Tối đa 50 ký tự, chỉ chữ in hoa và số (A–Z, 0–9), không sửa sau khi tạo." : "Max 50 chars, uppercase letters and digits only (A–Z, 0–9), locked after create."}
               </p>
             )}
-            <FieldError error={errors.promotionCode} />
+            <FieldError error={externalErrors.promotionCode || errors.promotionCode} />
           </div>
           <div data-field="promotionName">
             <label className={labelStyle}>
