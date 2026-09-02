@@ -151,12 +151,12 @@ export const AdminHeader = ({ onMenuClick, title = "Dashboard", isSidebarCollaps
         {/* Vạch chia ngăn cách */}
         <div className="hidden md:block w-1px h-5 bg-white/20 dark:bg-slate-700 mx-1"></div>
 
-        {/* Nút Đăng xuất tài khoản Admin */}
+        {/* Nút trở về trang chủ */}
         <Link
           to="/"
           className="p-2 text-white/80 hover:text-red-400 hover:bg-white/10 dark:hover:bg-red-500/20 dark:hover:text-red-400 rounded-full transition-all flex items-center justify-center"
-          title={lang === "VN" ? "Đăng xuất" : "Logout"}
-          aria-label={lang === "VN" ? "Đăng xuất" : "Logout"}
+          title={lang === "VN" ? "Trở về trang chủ" : "Back to home"}
+          aria-label={lang === "VN" ? "Trở về trang chủ" : "Back to home"}
         >
           <span className="material-symbols-outlined text-[20px]" aria-hidden="true">power_settings_new</span>
         </Link>
