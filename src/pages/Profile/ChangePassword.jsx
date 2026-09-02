@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
-import { required } from "../../utils/requiredStar";
+import { required } from "../../utils/required";
 import { useDispatch } from "react-redux";
 import { logout } from "../../redux/authSlice";
 import { notify } from "../../utils/swalToast";

@@ -7,7 +7,7 @@ import { registerCustomer, verifyRegisterOtp, resendRegisterOtp } from "../../se
 import { FormSelect } from "../../components/FormSelect";
 import { AppDateInput } from "../../components/AppDateInput";
 import { NationalitySelect } from "../../components/NationalitySelect";
-import { required } from "../../utils/requiredStar";
+import { required } from "../../utils/required";
 
 import { getApiErrorMessage } from "../../utils/apiError";
 import { getTodayDateString } from "../../utils/dateOnly";

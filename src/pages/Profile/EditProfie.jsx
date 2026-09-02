@@ -8,7 +8,7 @@ import {
     verifyPhoneChangeOtp
 } from "../../services/authService";
 import "flag-icons/css/flag-icons.min.css";
-import { required } from "../../utils/requiredStar";
+import { required } from "../../utils/required";
 import { notify, showValidationMessage } from "../../utils/swalToast";
 import { AppDateInput } from "../../components/AppDateInput";
 import { UserAvatar } from "../../components/UserAvatar";
