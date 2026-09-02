@@ -4,7 +4,7 @@ import { NationalitySelect } from "../../../components/NationalitySelect";
 import { getTodayDateString } from "../../../utils/dateOnly";
 import { sanitizeFullName, sanitizePhoneNumber } from "../../../utils/formValidation";
 
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 const labelStyle = "text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5 block";
 const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all";
 const errorInputStyle = "w-full !bg-rose-50/50 dark:!bg-rose-500/10 border !border-rose-500 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:!ring-rose-500 shadow-inner transition-all";

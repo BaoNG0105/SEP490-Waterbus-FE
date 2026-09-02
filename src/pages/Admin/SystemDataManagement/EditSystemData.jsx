@@ -184,7 +184,7 @@ export function EditSystemData() {
           value={KNOWLEDGE_STATUS.DRAFT}
           disabled={isSaving || hasFieldErrors}
           title={lang === "VN" ? "Không ai dùng." : "Not used anywhere."}
-          className="w-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          className="w-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {isSaving && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
           {lang === "VN" ? "Lưu bản nháp" : "Save as Draft"}
@@ -195,7 +195,7 @@ export function EditSystemData() {
           value={KNOWLEDGE_STATUS.PRIVATE}
           disabled={isSaving || hasFieldErrors}
           title={lang === "VN" ? "Chỉ trợ lý AI đọc, không hiện trên web." : "Read by the assistant only — not shown on the website."}
-          className="w-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          className="w-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 font-headline font-black uppercase text-xs tracking-wider py-4 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/20 hover:scale-[1.01] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
           {isSaving && <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>}
           {lang === "VN" ? "Lưu nội bộ" : "Save as Private"}

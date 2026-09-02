@@ -1,6 +1,6 @@
 import { WaterwayMap } from "../../../components/WaterwayMap";
 import { AppTimeInput } from "../../../components/AppTimeInput";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 import { sanitizeStationCode, sanitizeStationName } from "../../../utils/stationValidation";
 
 const labelStyle = "mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500";

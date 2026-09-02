@@ -5,7 +5,7 @@ import {
   KNOWLEDGE_CONTENT_AI_LIMIT,
 } from "../../../services/knowledgeEntryService";
 
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 const labelStyle = "block mb-1.5 text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider";
 const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#124757] dark:focus:ring-yellow-400 shadow-inner transition-all disabled:opacity-50";
 const errorInputStyle = "w-full bg-slate-50 dark:bg-slate-900 border border-rose-500 dark:border-rose-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 shadow-inner transition-all disabled:opacity-50";

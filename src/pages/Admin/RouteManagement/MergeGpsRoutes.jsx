@@ -12,7 +12,7 @@ import {
 } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
 import { REGISTRATION_NUMBER_REGEX } from "../../../utils/boatValidation";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 
 const getRouteId = (route) => String(route?.routeId || route?.id || "");
 

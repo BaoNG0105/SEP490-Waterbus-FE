@@ -12,7 +12,7 @@ import {
   formatVndInput,
   sanitizeInsuranceName,
 } from "../../../utils/insurancePackageForm";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 
 /**
  * Wrapper dùng chung cho các field trong form tạo/sửa gói bảo hiểm:

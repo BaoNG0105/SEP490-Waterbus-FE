@@ -30,7 +30,7 @@ const STATUS_STYLE = {
   },
 };
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 6;
 
 const emptyMetadata = {
   categories: KNOWLEDGE_CATEGORY_ORDER,

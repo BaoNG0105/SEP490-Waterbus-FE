@@ -29,7 +29,7 @@ export function RouteManagement() {
     const [statusFilter, setStatusFilter] = useState("All");
 
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 10;
+    const ITEMS_PER_PAGE = 6;
 
     useEffect(() => {
         const getRoutesData = async () => {

@@ -27,7 +27,7 @@ export function ManagerManagement() {
     const [currentPage, setCurrentPage] = useState(1);
     const [updatingUserId, setUpdatingUserId] = useState("");
     const [deletingUserId, setDeletingUserId] = useState("");
-    const ITEMS_PER_PAGE = 8;
+    const ITEMS_PER_PAGE = 6;
 
     const canAccessPage = isAdminUser(currentUser);
 

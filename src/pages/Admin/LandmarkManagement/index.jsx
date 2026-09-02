@@ -20,7 +20,7 @@ export function LandmarkManagement() {
     const [statusFilter, setStatusFilter] = useState("All");
 
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 8;
+    const ITEMS_PER_PAGE = 6;
 
     const loadLandmarks = useCallback(async () => {
         try {

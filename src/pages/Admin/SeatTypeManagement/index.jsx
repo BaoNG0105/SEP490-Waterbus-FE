@@ -20,7 +20,7 @@ import {
 } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify } from "../../../utils/swalToast";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 
 const MAIN_TABS = [
   { id: "tickets", vn: "Giá mua vé", en: "Ticket prices" },
@@ -71,14 +71,14 @@ const groupThousands = (value) => {
 
 /** Tên ngày lễ: chữ, số và các dấu phân cách thường gặp như "Quốc khánh (2/9)". */
 const sanitizeHolidayName = (value) => String(value ?? "")
-  .replace(/[^\p{L}\p{N}\s/().,\-]/gu, "")
+  .replace(/[^\p{L}\p{N}\s/().,-]/gu, "")
   .replace(/\s{2,}/g, " ");
 
 const isValidHolidayName = (value) => {
   const name = String(value ?? "").trim();
   if (!name || name.length > 100 || !/\p{L}/u.test(name) || sanitizeHolidayName(name) !== name) return false;
   if (!/^[\p{L}\p{N}]/u.test(name) || !/[\p{L}\p{N})]$/u.test(name)) return false;
-  if (/[.,/\-]{2,}|\({2,}|\){2,}/.test(name)) return false;
+  if (/[.,/-]{2,}|\({2,}|\){2,}/.test(name)) return false;
   if ((name.match(/\//g) || []).length > 1) return false;
   if ((name.match(/\(/g) || []).length !== (name.match(/\)/g) || []).length) return false;
   return true;
@@ -941,7 +941,7 @@ function SurchargeTab({ lang }) {
                       setHolidayDateTouched(true);
                       setHoliday((prev) => ({ ...prev, date: e.target.value }));
                     }}
-                    className={`${inputStyle} ${holidayDateError ? "!border-rose-500 !bg-rose-50/50 focus:!ring-rose-500 dark:!bg-rose-500/10" : ""}`}
+                    className={`${inputStyle} ${holidayDateError ? "border-rose-500! bg-rose-50/50! focus:ring-rose-500! dark:bg-rose-500/10!" : ""}`}
                   />
                   <p className="mt-1 min-h-4 text-[10px] font-bold text-rose-600 dark:text-rose-400">{holidayDateError}</p>
                 </div>
@@ -957,7 +957,7 @@ function SurchargeTab({ lang }) {
                     }}
                     onBlur={() => setHolidayNameTouched(true)}
                     placeholder={lang === "VN" ? "Quốc khánh" : "National Day"}
-                    className={`${inputStyle} ${holidayNameError ? "!border-rose-500 !bg-rose-50/50 focus:!ring-rose-500 dark:!bg-rose-500/10" : ""}`}
+                    className={`${inputStyle} ${holidayNameError ? "border-rose-500! bg-rose-50/50! focus:ring-rose-500! dark:bg-rose-500/10!" : ""}`}
                   />
                   <p className="mt-1 min-h-4 text-[10px] font-bold text-rose-600 dark:text-rose-400">{holidayNameError}</p>
                 </div>
@@ -969,7 +969,7 @@ function SurchargeTab({ lang }) {
                       setHolidayPercentTouched(true);
                       setHoliday((prev) => ({ ...prev, surchargePercent }));
                     }}
-                    className={`${inputStyle} ${holidayPercentError ? "!border-rose-500 !bg-rose-50/50 focus:!ring-rose-500 dark:!bg-rose-500/10" : ""}`}
+                    className={`${inputStyle} ${holidayPercentError ? "border-rose-500! bg-rose-50/50! focus:ring-rose-500! dark:bg-rose-500/10!" : ""}`}
                     aria-label={lang === "VN" ? "Mức phụ thu ngày lễ" : "Holiday surcharge"}
                   />
                   <p className="mt-1 min-h-4 text-[10px] font-bold text-rose-600 dark:text-rose-400">{holidayPercentError}</p>

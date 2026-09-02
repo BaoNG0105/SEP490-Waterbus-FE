@@ -1,5 +1,5 @@
 import { WaterwayMap } from "../../../components/WaterwayMap";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 
 const labelStyle = "mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500";
 const inputStyle = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-800 outline-none shadow-inner transition-all focus:ring-2 focus:ring-[#124757] dark:border-slate-700/60 dark:bg-slate-900 dark:text-white dark:focus:ring-yellow-400";

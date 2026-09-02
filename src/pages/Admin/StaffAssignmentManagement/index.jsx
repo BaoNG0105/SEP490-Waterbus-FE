@@ -32,7 +32,7 @@ import { getApiErrorMessage } from "../../../utils/apiError";
 import { getUserId, isAdminUser, isManagerUser, isStaffUser } from "../../../utils/roleHelpers";
 import { getRangeForScheduleMode, toDateKey } from "../../../utils/staffAssignmentCalendarUtils";
 import { notify } from "../../../utils/swalToast";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 //component
 import { StaffAssignmentCalendar } from "../../../components/StaffAssignmentCalendar";
 import { AppDateInput } from "../../../components/AppDateInput";

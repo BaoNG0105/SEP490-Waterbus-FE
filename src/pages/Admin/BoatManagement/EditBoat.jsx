@@ -14,7 +14,7 @@ import { SeatMapIcon, seatToneFromCode, resolveSeatTypeCode } from "../../../com
 import { BoatBowLabel } from "../../../components/ShipWheelIcon";
 //utils
 import { notify } from "../../../utils/swalToast";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 import {
   BOAT_CODE_REGEX,
   MIN_BOAT_CODE_LENGTH,

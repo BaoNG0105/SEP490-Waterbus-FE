@@ -8,7 +8,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { YearPickerInput } from "../../../components/YearPickerInput";
 //utils
 import { notify } from "../../../utils/swalToast";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 import {
   BOAT_DOCUMENT_ACCEPT,
   BOAT_DOCUMENT_MAX_SIZE,

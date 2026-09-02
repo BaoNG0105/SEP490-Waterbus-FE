@@ -119,7 +119,7 @@ export function PromotionManagement() {
     const [typeFilter, setTypeFilter] = useState("All");
 
     const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 8;
+    const ITEMS_PER_PAGE = 6;
 
     const canManage = isAdminUser(currentUser);
 

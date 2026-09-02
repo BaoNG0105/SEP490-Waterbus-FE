@@ -518,6 +518,9 @@ export function InsuranceManagement() {
   };
 
   const inputClass = (fieldName) => {
+    // Chỉ tô viền lỗi sau khi field đã "touched" — giống renderHint/hasBlockingError,
+    // tránh field trống bị đỏ ngay lúc vừa mở modal, trước khi người dùng thao tác.
+    if (!touched[fieldName]) return inputStyle;
     const entry = errors[fieldName];
     if (entry?.level === "error") return `${inputStyle} !border-red-500 !bg-red-50/50 focus:!ring-red-300 dark:!bg-red-500/10`;
     if (entry?.level === "warning") return `${inputStyle} !border-amber-400 focus:!ring-amber-300`;

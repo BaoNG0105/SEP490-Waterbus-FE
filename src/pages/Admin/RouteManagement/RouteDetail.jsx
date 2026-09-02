@@ -14,7 +14,7 @@ import { WaterwayMap } from "../../../components/WaterwayMap";
 import { geometryToCoordinates } from "../../../utils/charterRouteMap";
 import { getRouteKindLabel, isGpsOrMergedRoute } from "../../../utils/routeTypes";
 import { notify } from "../../../utils/swalToast";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 
 export function RouteDetail() {
     const { lang } = useApp();
