@@ -31,7 +31,7 @@ import { assignmentCoversDay } from "../../../utils/staffAssignmentCalendarUtils
 import { deckOptionImages } from "../../../utils/charterRequestForm";
 import { notify } from "../../../utils/swalToast";
 import { getTodayDateString, getMaxBookableDateString } from "../../../utils/dateOnly";
-import { required } from "../../../utils/requiredStar";
+import { required } from "../../../utils/required";
 //component
 import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
@@ -42,6 +42,8 @@ const MIN_ONBOARD_STAFF = 2;
 // Giờ khởi hành chỉ nhận trong khung phục vụ 07:00 - 23:00 (7h sáng - 11h đêm).
 const TRIP_TIME_MIN = "07:00";
 const TRIP_TIME_MAX = "23:00";
+// Giờ khởi hành cách nhau tối thiểu 15 phút để tránh lịch tàu quá dày.
+const MIN_INTERVAL_MINUTES = 15;
 
 const DAYS_OF_WEEK = [
   { value: 0, vn: "CN", en: "Sun" },
@@ -254,6 +256,15 @@ export function CreateTrip() {
 
   const todayDateString = getTodayDateString();
   const maxBookableDateString = getMaxBookableDateString();
+  // Nếu ngày chọn là hôm nay → không cho chọn giờ đã qua (so theo giờ hệ thống hiện tại).
+  const isToday = form.fromDate === todayDateString;
+  const currentClockString = (() => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    return hh + ":" + mm;
+  })();
+  const effectiveTimeMin = isToday && currentClockString > TRIP_TIME_MIN ? currentClockString : TRIP_TIME_MIN;
   const needsTimeWindow = isRoundTrip || form.mode === "interval";
   const showDepartureTimesField = !isRoundTrip && form.mode === "fixed";
 
@@ -293,22 +304,26 @@ export function CreateTrip() {
         ? { startTime: lang === "VN" ? "Vui lòng chọn giờ bắt đầu" : "Please choose the start time" }
         : (form.startTime < TRIP_TIME_MIN || form.startTime > TRIP_TIME_MAX)
           ? { startTime: lang === "VN" ? `Chỉ nhận giờ từ ${TRIP_TIME_MIN} đến ${TRIP_TIME_MAX}` : `Only ${TRIP_TIME_MIN}-${TRIP_TIME_MAX} is allowed` }
-          : (form.endTime && form.startTime >= form.endTime)
-            ? { startTime: lang === "VN" ? "Giờ bắt đầu phải trước giờ kết thúc" : "Start time must be before end time" }
-            : {}
+          : (isToday && form.startTime < currentClockString)
+            ? { startTime: lang === "VN" ? "Không được chọn giờ, phút trong quá khứ" : "Cannot pick a past time" }
+            : (form.endTime && form.startTime >= form.endTime)
+              ? { startTime: lang === "VN" ? "Giờ bắt đầu phải trước giờ kết thúc" : "Start time must be before end time" }
+              : {}
     ) : {}),
     ...(needsTimeWindow ? (
       !form.endTime
         ? { endTime: lang === "VN" ? "Vui lòng chọn giờ kết thúc" : "Please choose the end time" }
         : (form.endTime < TRIP_TIME_MIN || form.endTime > TRIP_TIME_MAX)
           ? { endTime: lang === "VN" ? `Chỉ nhận giờ từ ${TRIP_TIME_MIN} đến ${TRIP_TIME_MAX}` : `Only ${TRIP_TIME_MIN}-${TRIP_TIME_MAX} is allowed` }
-          : (form.startTime && form.endTime <= form.startTime)
-            ? { endTime: lang === "VN" ? "Giờ kết thúc phải sau giờ bắt đầu" : "End time must be after start time" }
-            : {}
+          : (isToday && form.endTime < currentClockString)
+            ? { endTime: lang === "VN" ? "Không được chọn giờ, phút trong quá khứ" : "Cannot pick a past time" }
+            : (form.startTime && form.endTime <= form.startTime)
+              ? { endTime: lang === "VN" ? "Giờ kết thúc phải sau giờ bắt đầu" : "End time must be after start time" }
+              : {}
     ) : {}),
     ...(!isRoundTrip && form.mode === "interval"
-      ? (String(form.intervalMinutes).trim() === "" || Number.isNaN(Number(form.intervalMinutes)) || Number(form.intervalMinutes) <= 0
-        ? { intervalMinutes: lang === "VN" ? "Vui lòng nhập khoảng phút hợp lệ (> 0)" : "Please enter a valid interval (> 0)" }
+      ? (String(form.intervalMinutes).trim() === "" || Number.isNaN(Number(form.intervalMinutes)) || Number(form.intervalMinutes) < MIN_INTERVAL_MINUTES
+        ? { intervalMinutes: lang === "VN" ? `Vui lòng nhập khoảng phút tối thiểu ${MIN_INTERVAL_MINUTES} phút` : `Please enter an interval of at least ${MIN_INTERVAL_MINUTES} minutes` }
         : {})
       : {}),
     ...(showDepartureTimesField && form.departureTimes.length === 0
@@ -674,9 +689,11 @@ export function CreateTrip() {
           return;
         }
         const interval = Number(form.intervalMinutes);
-        if (!Number.isFinite(interval) || interval <= 0) {
+        if (!Number.isFinite(interval) || interval < MIN_INTERVAL_MINUTES) {
           setErrorMsg(
-            lang === "VN" ? "Khoảng phút phải > 0." : "Interval must be > 0.",
+            lang === "VN"
+              ? `Khoảng phút phải từ ${MIN_INTERVAL_MINUTES} trở lên.`
+              : `Interval must be at least ${MIN_INTERVAL_MINUTES} minutes.`,
           );
           return;
         }
@@ -1174,7 +1191,7 @@ export function CreateTrip() {
                   required
                   placeholder={lang === "VN" ? "Chọn tuyến đi" : "Select outbound route"}
                   emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
-                  className={fieldErrors.outboundRouteCode ? errorInputStyle : selectStyle}
+                  className={visibleFieldErrors.outboundRouteCode ? errorInputStyle : selectStyle}
                 />
               </div>
               <div className="relative z-20">
@@ -1188,7 +1205,7 @@ export function CreateTrip() {
                   required
                   placeholder={lang === "VN" ? "Chọn tuyến về" : "Select inbound route"}
                   emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
-                  className={fieldErrors.inboundRouteCode ? errorInputStyle : selectStyle}
+                  className={visibleFieldErrors.inboundRouteCode ? errorInputStyle : selectStyle}
                 />
               </div>
               <div className="relative z-10 sm:col-span-2">
@@ -1202,7 +1219,7 @@ export function CreateTrip() {
                   required
                   placeholder={lang === "VN" ? "Chọn tàu" : "Select a boat"}
                   emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
-                  className={fieldErrors.boatCode ? errorInputStyle : selectStyle}
+                  className={visibleFieldErrors.boatCode ? errorInputStyle : selectStyle}
                 />
               </div>
             </div>
@@ -1219,7 +1236,7 @@ export function CreateTrip() {
                   required
                   placeholder={lang === "VN" ? "Chọn tuyến đường" : "Select a route"}
                   emptyLabel={lang === "VN" ? "Không có tuyến phù hợp" : "No matching routes"}
-                  className={fieldErrors.routeCode ? errorInputStyle : selectStyle}
+                  className={visibleFieldErrors.routeCode ? errorInputStyle : selectStyle}
                 />
               </div>
               <div className="relative z-20">
@@ -1238,7 +1255,7 @@ export function CreateTrip() {
                   required
                   placeholder={lang === "VN" ? "Chọn tàu" : "Select a boat"}
                   emptyLabel={lang === "VN" ? "Không có tàu phù hợp" : "No matching boats"}
-                  className={fieldErrors.boatCode ? errorInputStyle : selectStyle}
+                  className={visibleFieldErrors.boatCode ? errorInputStyle : selectStyle}
                 />
               </div>
             </div>
@@ -1332,7 +1349,7 @@ export function CreateTrip() {
                 <label className={labelStyle}>{lang === "VN" ? "Giờ bắt đầu" : "Start time"}</label>
                 <AppTimeInput
                   required
-                  min={TRIP_TIME_MIN}
+                  min={effectiveTimeMin}
                   max={TRIP_TIME_MAX}
                   value={form.startTime}
                   onChange={(e) => {
@@ -1348,7 +1365,7 @@ export function CreateTrip() {
                 <label className={labelStyle}>{lang === "VN" ? "Giờ kết thúc" : "End time"}</label>
                 <AppTimeInput
                   required
-                  min={TRIP_TIME_MIN}
+                  min={effectiveTimeMin}
                   max={TRIP_TIME_MAX}
                   value={form.endTime}
                   onChange={(e) => {
@@ -1415,7 +1432,7 @@ export function CreateTrip() {
                       <label className={labelStyle}>{<>{lang === "VN" ? "Từ giờ" : "From"}{required()}</>}</label>
                       <AppTimeInput
                         required
-                        min={TRIP_TIME_MIN}
+                        min={effectiveTimeMin}
                         max={TRIP_TIME_MAX}
                         value={form.startTime}
                         onChange={(e) => {
@@ -1430,7 +1447,7 @@ export function CreateTrip() {
                       <label className={labelStyle}>{<>{lang === "VN" ? "Đến giờ" : "To"}{required()}</>}</label>
                       <AppTimeInput
                         required
-                        min={TRIP_TIME_MIN}
+                        min={effectiveTimeMin}
                         max={TRIP_TIME_MAX}
                         value={form.endTime}
                         onChange={(e) => {
@@ -1445,7 +1462,7 @@ export function CreateTrip() {
                       <label className={labelStyle}>{<>{lang === "VN" ? "Thời gian cách nhau (phút)" : "Time between trips (min)"}{required()}</>}</label>
                       <input
                         type="number"
-                        min={1}
+                        min={MIN_INTERVAL_MINUTES}
                         required
                         value={form.intervalMinutes}
                         onChange={(e) => {
@@ -1498,7 +1515,7 @@ export function CreateTrip() {
                     >
                       <label className={labelStyle}>{<>{lang === "VN" ? "Giờ khởi hành" : "Departure time"}{required()}</>}</label>
                       <AppTimeInput
-                        min={TRIP_TIME_MIN}
+                        min={effectiveTimeMin}
                         max={TRIP_TIME_MAX}
                         value={form.draftTime}
                         onChange={(e) => updateForm({ draftTime: e.target.value })}
