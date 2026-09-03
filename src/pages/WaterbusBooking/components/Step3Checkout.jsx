@@ -1447,9 +1447,6 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
           {(() => {
             const formatVnd = (value) => `${(Number(value) || 0).toLocaleString("vi-VN")}đ`;
             const wantsInsurance = selectedInsurancePackageId != null;
-            const displayPackage = selectedInsurancePackage || insurancePackages[0];
-            const providerName = displayPackage?.providerName || "";
-            const providerLogoUrl = displayPackage?.providerLogoUrl || "";
 
             const handleInsuranceToggle = (enabled) => {
               if (insuranceRequired && !enabled) return;
@@ -1470,8 +1467,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
               setSelectedInsurancePackageId(packageId);
             };
 
-            const handleShowTerms = () => {
-              const pkg = displayPackage;
+            const handleShowTerms = (pkg) => {
               if (!pkg) return;
               const escapeHtml = (value) => String(value ?? "")
                 .replaceAll("&", "&amp;")
@@ -1543,39 +1539,26 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
               );
             }
 
-            const singlePackage = insurancePackages.length === 1;
             const selectedPkg = selectedInsurancePackage;
 
             return (
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
-                {/* Dòng header: icon | label | giá | toggle */}
-                <div className="flex items-center gap-3">
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg ${
-                    providerLogoUrl
-                      ? "bg-white p-1 ring-1 ring-slate-200 dark:ring-slate-600"
-                      : "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400"
-                  }`}>
-                    {providerLogoUrl ? (
-                      <img src={providerLogoUrl} alt={providerName || "Insurance"} className="h-full w-full object-contain" />
-                    ) : (
-                      <span className="material-symbols-outlined text-lg">verified_user</span>
-                    )}
-                  </span>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-slate-800 dark:text-white">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-800">
+                {/* Header: cùng bố cục với khối chọn mã giảm giá (SelectablePublicVouchers) */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-white">
                       {lang === "VN" ? "Bảo hiểm hành khách" : "Passenger insurance"}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    </h4>
+                    <p className="mt-0.5 text-[11px] text-slate-400">
                       {wantsInsurance && selectedPkg
-                        ? `${selectedPkg.name || providerName} · ${formatVnd(insuranceFee)}`
-                        : (singlePackage
-                            ? formatVnd(insurancePackages[0].unitPremiumAmount) + `/${lang === "VN" ? "khách" : "pax"} · ${lang === "VN" ? "Tùy chọn" : "Optional"}`
-                            : (lang === "VN" ? "Tùy chọn thêm" : "Optional add-on"))}
+                        ? `${selectedPkg.name || selectedPkg.providerName || ""} · ${formatVnd(insuranceFee)}`
+                        : insuranceRequired
+                          ? (lang === "VN" ? "Gói bắt buộc" : "Required package")
+                          : (lang === "VN" ? "Tùy chọn thêm" : "Optional add-on")}
                     </p>
                   </div>
 
-                  {/* Toggle bật/tắt */}
+                  {/* Toggle bật/tắt — gói bắt buộc thì khóa luôn */}
                   <button
                     type="button"
                     role="switch"
@@ -1595,48 +1578,88 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                   </button>
                 </div>
 
-                {/* Pills chọn gói — chỉ hiện khi bật */}
-                {wantsInsurance && !singlePackage && (
-                  <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
-                    {insurancePackages.map((pkg) => {
-                      const packageId = getInsurancePackageId(pkg);
-                      const isSelected = isSameInsurancePackageId(selectedInsurancePackageId, packageId);
-                      return (
-                        <button
-                          key={packageId}
-                          type="button"
-                          onClick={() => handleSelectPackage(pkg)}
-                          className={`rounded-xl border px-3 py-2 text-left text-[11px] font-bold transition ${
-                            isSelected
-                              ? "border-[#124757] bg-[#124757] text-white dark:border-yellow-400 dark:bg-yellow-400 dark:text-slate-900"
-                              : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
-                          }`}
-                        >
-                          <span className="block">{pkg.name || pkg.code}</span>
-                          <span className={`mt-0.5 block text-[10px] ${isSelected ? "text-white/70 dark:text-slate-900/70" : "text-slate-400"}`}>
-                            {formatVnd(pkg.unitPremiumAmount)}/{lang === "VN" ? "khách" : "pax"}
-                            {Number(pkg.coverageAmount) > 0 ? ` · BH ${formatVnd(pkg.coverageAmount)}` : ""}
+                {/* Carousel thẻ gói bảo hiểm — mỗi thẻ có nút "i" mở điều khoản của chính gói đó.
+                    Tắt toggle = không mua bảo hiểm nên ẩn luôn danh sách gói. */}
+                {wantsInsurance && (
+                <div className="-mx-0.5 flex gap-4 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                  {insurancePackages.map((pkg) => {
+                    const packageId = getInsurancePackageId(pkg);
+                    const active = wantsInsurance
+                      && isSameInsurancePackageId(selectedInsurancePackageId, packageId);
+                    const logoUrl = pkg.providerLogoUrl || "";
+                    return (
+                      <article
+                        key={packageId}
+                        className={`relative w-50 shrink-0 rounded-2xl border bg-white p-3 dark:bg-slate-900 ${
+                          active
+                            ? "border-[#124757] shadow-sm dark:border-yellow-400"
+                            : "border-slate-200 dark:border-slate-700"
+                        }`}
+                      >
+                        {/* Nút "i" nằm trong hàng (không absolute) để không bị tên gói đè lên */}
+                        <div className="flex items-start gap-2">
+                          <span className={`flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg ${
+                            logoUrl
+                              ? "bg-white p-0.5 ring-1 ring-slate-200 dark:ring-slate-600"
+                              : "bg-[#124757]/10 text-[#124757] dark:bg-yellow-400/15 dark:text-yellow-400"
+                          }`}>
+                            {logoUrl ? (
+                              <img src={logoUrl} alt={pkg.providerName || "Insurance"} className="h-full w-full object-contain" />
+                            ) : (
+                              <span className="material-symbols-outlined text-base">verified_user</span>
+                            )}
                           </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          <p className="line-clamp-2 min-h-9 min-w-0 flex-1 text-[13px] font-bold leading-snug text-slate-800 dark:text-white">
+                            {pkg.name || pkg.code}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleShowTerms(pkg)}
+                            title={lang === "VN" ? "Xem điều khoản" : "View terms"}
+                            aria-label={lang === "VN" ? "Xem điều khoản" : "View terms"}
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-[#124757] hover:text-white dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-yellow-400 dark:hover:text-slate-900"
+                          >
+                            <span className="material-symbols-outlined text-[14px] leading-none">info</span>
+                          </button>
+                        </div>
+
+                        <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-[#124757] dark:text-yellow-400">
+                          {formatVnd(pkg.unitPremiumAmount)}/{lang === "VN" ? "khách" : "pax"}
+                          {Number(pkg.coverageAmount) > 0 ? ` · BH ${formatVnd(pkg.coverageAmount)}` : ""}
+                        </p>
+
+                        <div className="mt-2.5 flex items-end justify-between gap-2 border-t border-dashed border-slate-200 pt-2.5 dark:border-slate-700">
+                          <p className="min-w-0 truncate text-[10px] font-medium text-slate-400">
+                            {pkg.providerName || (lang === "VN" ? "Đối tác bảo hiểm" : "Insurance partner")}
+                          </p>
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => handleSelectPackage(pkg)}
+                            className={`shrink-0 text-[12px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                              active
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-[#124757] hover:underline dark:text-yellow-400"
+                            }`}
+                          >
+                            {active
+                              ? (lang === "VN" ? "Đã chọn" : "Selected")
+                              : (lang === "VN" ? "Chọn" : "Select")}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
                 )}
 
-                {/* Chi tiết giá + điều khoản */}
+                {/* Chi tiết cách tính phí của gói đang chọn */}
                 {wantsInsurance && selectedPkg && (
-                  <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2.5 dark:border-slate-700">
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {formatVnd(insurancePreview.unitPremium)} × {insurancePreview.quantity} {lang === "VN" ? "khách" : "pax"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleShowTerms}
-                      className="text-[11px] font-bold text-[#124757] hover:underline dark:text-yellow-400"
-                    >
-                      {lang === "VN" ? "Điều khoản" : "Terms"}
-                    </button>
-                  </div>
+                  <p className="border-t border-slate-100 pt-2.5 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    {formatVnd(insurancePreview.unitPremium)} × {insurancePreview.quantity} {lang === "VN" ? "khách" : "pax"}
+                    {" = "}
+                    <span className="font-bold text-slate-700 dark:text-slate-200">{formatVnd(insuranceFee)}</span>
+                  </p>
                 )}
               </div>
             );

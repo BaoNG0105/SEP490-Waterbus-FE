@@ -14,7 +14,6 @@ import { fetchBoatDetail } from "../../../services/boatService";
 //toast
 import { notify, showToast } from "../../../utils/swalToast";
 //utils
-import { getSeatBaseFare } from "../../../utils/insurancePreview";
 import {
   bookingHasSeatSelection,
   clearSeatSelectionFields,
@@ -1143,7 +1142,7 @@ export default function Step2SelectTripAndSeats({
                   >
                     {seat.seatNumber}
                     <span className="text-[#124757] dark:text-yellow-400">
-                      {getSeatBaseFare(seat).toLocaleString()}₫
+                      {Number(seat.effectivePrice || seat.basePrice || 0).toLocaleString()}₫
                     </span>
                   </span>
                 ))}
@@ -1153,15 +1152,9 @@ export default function Step2SelectTripAndSeats({
                   {lang === "VN" ? "Tạm tính" : "Subtotal"}
                 </span>
                 <span className="text-lg font-headline font-black text-[#124757] dark:text-yellow-400">
-                  {currentSeats.reduce((sum, s) => sum + getSeatBaseFare(s), 0).toLocaleString()} VND
+                  {currentSeats.reduce((sum, s) => sum + Number(s.effectivePrice || s.basePrice || 0), 0).toLocaleString()} VND
                 </span>
               </div>
-              {/* Bảo hiểm mặc định bắt buộc không cộng ở bước này — hiển thị & tính tại Bước 3 (thanh toán). */}
-              <p className="text-[10px] font-bold italic text-slate-500 dark:text-slate-400">
-                {lang === "VN"
-                  ? "Chưa bao gồm phí bảo hiểm bắt buộc."
-                  : "Excludes the mandatory insurance fee."}
-              </p>
             </div>
           )}
 
@@ -1261,7 +1254,7 @@ export default function Step2SelectTripAndSeats({
                                     {seatStatusLabel}
                                   </div>
                                   <div className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
-                                    {lang === "VN" ? "Giá" : "Price"}: {getSeatBaseFare(seat).toLocaleString()} {lang === "VN" ? "VNĐ" : "VND"}
+                                    {lang === "VN" ? "Giá" : "Price"}: {Number(seat.effectivePrice || seat.basePrice || 0).toLocaleString()} {lang === "VN" ? "VNĐ" : "VND"}
                                   </div>
                                 </div>
                                 <div className="mx-auto -mt-1 h-2 w-2 rotate-45 border-b border-r border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800" />
