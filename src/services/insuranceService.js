@@ -93,6 +93,7 @@ const normalizeInsurancePackage = (pkg) => {
         status,
         isActive: status === 'Active',
         isWaterbusDefault: Boolean(pkg?.isWaterbusDefault),
+        providerSource: pkg?.providerSource ?? pkg?.ProviderSource ?? '',
         displayOrder: Number(pkg?.displayOrder ?? 0) || 0,
         unitPremiumAmount: Number(pkg?.unitPremiumAmount) || 0,
         coverageAmount: Number(pkg?.coverageAmount) || 0,
@@ -209,7 +210,10 @@ export const removeInsurancePackage = async (id) => {
  * cho UI user chọn (checkout, charter request, …).
  */
 export const filterThirdPartyPackages = (packages = []) => (
-    (Array.isArray(packages) ? packages : []).filter((pkg) => !pkg?.isWaterbusDefault)
+    (Array.isArray(packages) ? packages : []).filter((pkg) => (
+        !pkg?.isWaterbusDefault
+        && String(pkg?.providerSource ?? pkg?.ProviderSource ?? '').toLowerCase() !== 'waterbus'
+    ))
 );
 
 /**

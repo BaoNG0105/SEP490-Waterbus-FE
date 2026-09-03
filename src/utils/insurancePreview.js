@@ -173,10 +173,13 @@ export const resolveInsuranceSelected = (booking) => {
   return null;
 };
 
-const pickNumber = (...values) => {
+// Amount từ BE có thể hợp lệ bằng 0 (vé miễn phí). Giữ giá trị 0 đầu tiên thay vì bỏ qua
+// rồi suy ngược quantity × unitPremiumAmount làm phí bảo hiểm xuất hiện trở lại.
+const pickAmount = (...values) => {
   for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
     const num = Number(value);
-    if (Number.isFinite(num) && num !== 0) return num;
+    if (Number.isFinite(num)) return num;
   }
   return 0;
 };
@@ -186,11 +189,10 @@ const normalizeInsuranceLeg = (leg) => {
   const quantity = Number(leg.quantity ?? leg.seatCount) || 0;
   const unitPremiumAmount = Number(leg.unitPremiumAmount ?? leg.unitAmount) || 0;
   const coverageAmount = Number(leg.coverageAmount ?? leg.coverage) || 0;
-  const totalAmount = pickNumber(
+  const totalAmount = pickAmount(
     leg.totalAmount,
     leg.amount,
     leg.premiumAmount,
-    quantity * unitPremiumAmount,
   );
   const packageId = leg.insurancePackageId
     ?? leg.packageId
@@ -271,7 +273,7 @@ export const normalizeInsuranceFromBooking = (booking) => {
   if (!insurance || typeof insurance !== "object") {
     if (selected === true) {
       const fallbackPackageId = getBookingInsurancePackageId(booking);
-      const legacyAmount = pickNumber(
+      const legacyAmount = pickAmount(
         booking?.insurance?.totalAmount,
         booking?.insurance?.amount,
         booking?.insurance?.premiumAmount,
@@ -312,12 +314,12 @@ export const normalizeInsuranceFromBooking = (booking) => {
   const defaultLeg = normalizeInsuranceLeg(defaultLegRaw);
   const optionalLeg = normalizeInsuranceLeg(optionalLegRaw);
 
-  let defaultAmount = pickNumber(
+  const defaultAmount = pickAmount(
     insurance.defaultInsuranceAmount,
     insurance.defaultAmount,
     defaultLeg?.totalAmount,
   );
-  let optionalAmount = pickNumber(
+  const optionalAmount = pickAmount(
     insurance.optionalInsuranceAmount,
     insurance.optionalAmount,
     optionalLeg?.totalAmount,
@@ -329,11 +331,10 @@ export const normalizeInsuranceFromBooking = (booking) => {
     const quantity = Number(insurance.quantity ?? insurance.seatCount) || 0;
     const unitPremiumAmount = Number(insurance.unitPremiumAmount ?? insurance.unitAmount) || 0;
     const coverageAmount = Number(insurance.coverageAmount ?? insurance.coverage) || 0;
-    const totalAmount = pickNumber(
+    const totalAmount = pickAmount(
       insurance.totalAmount,
       insurance.amount,
       insurance.premiumAmount,
-      quantity * unitPremiumAmount,
     );
     const packageId = getBookingInsurancePackageId(booking);
     const packageCode = insurance.code ?? insurance.packageCode ?? "";
@@ -391,10 +392,6 @@ export const normalizeInsuranceFromBooking = (booking) => {
       selected: selected !== false,
     };
   }
-
-  // Trường hợp có defaultLeg nhưng BE không trả defaultAmount riêng → tự tính từ leg.totalAmount.
-  if (defaultLeg && defaultAmount === 0) defaultAmount = defaultLeg.totalAmount;
-  if (optionalLeg && optionalAmount === 0) optionalAmount = optionalLeg.totalAmount;
 
   const totalAmount = defaultAmount + optionalAmount;
   const primary = defaultLeg || optionalLeg;
