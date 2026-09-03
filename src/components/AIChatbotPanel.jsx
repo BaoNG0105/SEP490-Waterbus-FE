@@ -154,12 +154,11 @@ const isBookingDataReadyForCheckout = (data) => {
 };
 
 // Ghế trợ lý AI chọn tạm (bookingDraft.selectedSeatsDeparture/Return) chỉ đủ seatNumber để BE kiểm
-// tra còn trống — KHÔNG có basePrice/effectivePrice/seatTypeCode như ghế lấy từ sơ đồ ghế thật (Bước
-// 2 tự gọi fetchTripSeatMap trước khi cho chọn). Bước 3 (Step3Checkout) ưu tiên đọc seat.effectivePrice
-// (đã gồm sẵn phí bảo hiểm mặc định bắt buộc), fallback basePrice nếu thiếu — nếu đẩy thẳng ghế trợ lý
-// sang Bước 3 mà không bù đủ 2 field này, tổng tiền hiển thị sẽ thiếu phí bảo hiểm mặc định (hoặc ra
-// 0). Gọi lại seat map thật rồi bù basePrice/effectivePrice/seatTypeCode theo đúng seatNumber trước
-// khi giữ ghế.
+// tra còn trống — KHÔNG có basePrice/effectivePrice/waterbusInsurancePremium/seatTypeCode như ghế
+// lấy từ sơ đồ ghế thật (Bước 2 tự gọi fetchTripSeatMap trước khi cho chọn). Bước 3 (Step3Checkout)
+// tách hóa đơn thành "giá vé" (basePrice) và "bảo hiểm bắt buộc" (waterbusInsurancePremium, fallback
+// effectivePrice - basePrice), nên thiếu các field này thì tổng tiền hiển thị sẽ sai (hoặc ra 0).
+// Gọi lại seat map thật rồi bù đủ theo đúng seatNumber trước khi giữ ghế.
 const enrichSeatsWithFare = async (trip, seats, fromStationCode, toStationCode) => {
   if (!trip?.tripId || !seats?.length) return seats;
   try {
@@ -168,7 +167,13 @@ const enrichSeatsWithFare = async (trip, seats, fromStationCode, toStationCode) 
     return seats.map((seat) => {
       const real = bySeatNumber.get(seat.seatNumber);
       return real
-        ? { ...seat, basePrice: real.basePrice, effectivePrice: real.effectivePrice, seatTypeCode: real.seatTypeCode ?? seat.seatTypeCode }
+        ? {
+          ...seat,
+          basePrice: real.basePrice,
+          effectivePrice: real.effectivePrice,
+          waterbusInsurancePremium: real.waterbusInsurancePremium,
+          seatTypeCode: real.seatTypeCode ?? seat.seatTypeCode,
+        }
         : seat;
     });
   } catch {
@@ -401,7 +406,7 @@ export const AIChatbotPanel = ({ lang, onClose }) => {
       setIsHoldingSeats(true);
       let seatHoldExpiresAt = null;
       try {
-        // Bù basePrice/seatTypeCode thật cho ghế trợ lý chọn tạm trước khi giữ ghế + nhảy thẳng
+        // Bù basePrice/bảo hiểm/seatTypeCode thật cho ghế trợ lý chọn tạm trước khi giữ ghế + nhảy thẳng
         // Bước 3 — nếu không, Bước 3 sẽ hiển thị tổng tiền = 0 (xem comment enrichSeatsWithFare).
         const [enrichedDeparture, enrichedReturn] = await Promise.all([
           enrichSeatsWithFare(
