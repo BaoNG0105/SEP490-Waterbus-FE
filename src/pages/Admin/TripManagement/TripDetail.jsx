@@ -30,7 +30,10 @@ import {
   getIncidentTypeLabel,
   getSeverityLabel,
 } from "../../../services/incidentService";
-import { DEFAULT_BOAT_IMAGE, getBoatImageUrl } from "../../../utils/charterBookingAdmin";
+import {
+  DEFAULT_BOAT_IMAGE,
+  getBoatImageUrl,
+} from "../../../utils/charterBookingAdmin";
 import { NullImageIcon } from "../../../components/NullImageIcon";
 import { formatCustomerRouteTitle, resolveTripKindKey } from "../../../utils/routeTypes";
 import { isAdminUser, isManagerUser } from "../../../utils/roleHelpers";
@@ -49,6 +52,7 @@ import { formatDwellCountdownNotice, shouldSuppressDwellCountdown } from "../../
 import { geometryToCoordinates as parseRouteGeometry } from "../../../utils/charterRouteMap";
 import { assignmentCoversDay, toDateKey } from "../../../utils/staffAssignmentCalendarUtils";
 import { notify, showToast } from "../../../utils/swalToast";
+import { formatTripClock } from "../../../utils/tripClock";
 import {
   applyDelayPayloadToTrip,
   canResumeTripDelay,
@@ -66,11 +70,14 @@ import {
 } from "../../../utils/tripDelay";
 
 const formatTime = (value) => {
-  if (value == null || value === "") return "—";
-  const date = new Date(value);
+  const clock = formatTripClock(value);
+  return clock === "--:--" ? "—" : clock;
+};
+
+const formatLocalTime = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  const pad2 = (n) => String(n).padStart(2, "0");
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  return date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 };
 
 const formatOperatingDate = (value, lang) => {
@@ -1050,10 +1057,8 @@ export function TripDetail() {
     }
     try {
       setIsChangingBoat(true);
-      const updated = await changeTripBoat(id, nextId);
-      const detail = updated?.tripId || updated?.id
-        ? updated
-        : await fetchTripDetail(id);
+      await changeTripBoat(id, nextId);
+      const detail = await fetchTripDetail(id);
       setTrip(detail);
       const boatId = detail?.boatId || detail?.boat?.boatId || detail?.boat?.id || nextId;
       if (boatId) {
@@ -1831,7 +1836,7 @@ export function TripDetail() {
               <div className="ml-auto flex items-center gap-2">
                 {trackingAt ? (
                   <span className="text-[10px] font-medium tabular-nums text-slate-400">
-                    {formatTime(trackingAt instanceof Date ? trackingAt.toISOString() : trackingAt)}
+                    {formatLocalTime(trackingAt)}
                   </span>
                 ) : null}
                 {canTrackGps ? (<>

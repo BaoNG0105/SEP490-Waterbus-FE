@@ -95,7 +95,11 @@ export function CharterWorkflowStepper({ status, paymentStatus, lang = "VN", com
             // Đã xác nhận là một mốc nghiệp vụ hoàn tất, không phụ thuộc vào việc
             // suy luận trạng thái thanh toán từ dữ liệu booking.
             const isConfirmedStep = step.id === "Confirmed" && String(status || "") === "Confirmed";
-            const done = !isQuoteStep && (index < currentIndex || (index === currentIndex && (isFullyPaid || isConfirmedStep)));
+            const isCompletedStep = step.id === "Completed" && String(status || "") === "Completed";
+            const done = !isQuoteStep && (
+              index < currentIndex
+              || (index === currentIndex && (isFullyPaid || isConfirmedStep || isCompletedStep))
+            );
             const active = index === currentIndex && !done;
             const upcoming = index > currentIndex;
             return (

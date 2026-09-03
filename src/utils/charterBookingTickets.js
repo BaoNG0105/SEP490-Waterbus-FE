@@ -8,8 +8,74 @@ const pick = (source, keys, fallback = "") => {
 
 const hasText = (value) => String(value || "").trim().length > 0;
 
+const normalizeStatusKey = (value) => String(value || "")
+  .trim()
+  .toLowerCase()
+  .replace(/[\s_-]/g, "");
+
+const INACTIVE_TICKET_STATUSES = new Set([
+  "cancelled",
+  "canceled",
+  "expired",
+  "inactive",
+  "refunded",
+  "rejected",
+  "void",
+  "voided",
+]);
+
 export const hasCharterPassengerName = (entry) =>
   hasText(pick(entry, ["fullName", "passengerName", "name", "contactName"], ""));
+
+export const isApprovedCharterPassenger = (entry) => {
+  const approvalStatus = pick(
+    entry,
+    ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"],
+    "",
+  );
+  const normalized = normalizeStatusKey(approvalStatus);
+
+  // Hành khách gốc từ các DTO cũ không có approvalStatus và được xem là đã duyệt.
+  return !normalized || ["approved", "approve", "accepted"].includes(normalized);
+};
+
+export const isActiveCharterTicket = (ticket) => {
+  if (
+    !ticket
+    || typeof ticket !== "object"
+    || ticket.__hasTicketSource === false
+    || !isApprovedCharterPassenger(ticket)
+  ) return false;
+  const ticketStatus = normalizeStatusKey(
+    pick(ticket, ["attendanceStatus", "ticketStatus", "status"], "Active"),
+  );
+  return !INACTIVE_TICKET_STATUSES.has(ticketStatus);
+};
+
+export const getActiveCharterTickets = (source) => {
+  const tickets = Array.isArray(source?.tickets) ? source.tickets : [];
+  return tickets.filter(isActiveCharterTicket);
+};
+
+export const getCharterTicketCount = (source) => {
+  const tickets = Array.isArray(source?.tickets) ? source.tickets : [];
+  const explicitValue = pick(
+    source,
+    [
+      "ticketCount", "TicketCount",
+      "activeTicketCount", "ActiveTicketCount",
+      "totalTicketCount", "TotalTicketCount",
+    ],
+    null,
+  );
+  if (explicitValue !== null) {
+    const explicitCount = Number(explicitValue);
+    if (Number.isFinite(explicitCount)) return Math.max(0, Math.trunc(explicitCount));
+  }
+
+  const hasTicketSource = tickets.some((ticket) => ticket?.__hasTicketSource !== false);
+  return hasTicketSource ? getActiveCharterTickets(source).length : 0;
+};
 
 export const isCharterFullyPaid = (booking) => {
   if (booking?.requiresAdditionalPayment === true) return false;
@@ -34,12 +100,15 @@ export const hasCharterDepositOrFullPaid = (booking) => {
 
 export const hasCharterPassengerManifest = (source) => {
   const passengers = Array.isArray(source?.passengers) ? source.passengers : [];
-  const tickets = Array.isArray(source?.tickets) ? source.tickets : [];
-  return passengers.some(hasCharterPassengerName) || tickets.some(hasCharterPassengerName);
+  const tickets = getActiveCharterTickets(source);
+  return passengers.some((passenger) => (
+    isApprovedCharterPassenger(passenger) && hasCharterPassengerName(passenger)
+  )) || tickets.some(hasCharterPassengerName);
 };
 
 export const canShowCharterTickets = (booking) =>
-  isCharterFullyPaid(booking) && hasCharterPassengerManifest(booking);
+  getCharterTicketCount(booking) > 0
+  || (isCharterFullyPaid(booking) && hasCharterPassengerManifest(booking));
 
 export const getCharterTicketId = (ticket) =>
   pick(ticket, ["ticketId", "id", "charterTicketId", "ticket.id"], "");
@@ -104,12 +173,14 @@ export const formatPassengerBirthYearDisplay = (passenger, lang = "VN") => {
 
 const normalizeTicketRow = (passenger, ticket, index, adultCount) => {
   const merged = { ...passenger, ...ticket };
+  const hasTicketSource = Boolean(ticket && Object.keys(ticket).length > 0);
   const fullName = pick(merged, ["fullName", "passengerName", "name", "contactName"], "");
   const passengerType = pick(merged, ["passengerType", "type"], index < adultCount ? "Adult" : "Child");
   const ticketId = getCharterTicketId(merged) || getCharterTicketId(ticket) || getCharterTicketId(passenger);
 
   return {
     ...merged,
+    __hasTicketSource: hasTicketSource,
     id: ticketId,
     ticketId,
     ticketCode: pick(merged, ["ticketCode", "code", "ticketNumber"], ""),
@@ -132,8 +203,6 @@ export const normalizeCharterTicketRows = (source, options = {}) => {
   const tickets = Array.isArray(source?.tickets) ? source.tickets : [];
   const passengers = Array.isArray(source?.passengers) ? source.passengers : [];
   const adultCount = Number(options.adultCount || 0);
-  const passengerCount = Number(options.passengerCount || 0);
-  const contactName = String(options.contactName || "").trim();
 
   const maxRows = Math.max(tickets.length, passengers.length);
   const rows = [];

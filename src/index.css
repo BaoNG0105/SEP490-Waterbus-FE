@@ -1219,6 +1219,84 @@ html.dark {
   background: #fff !important;
 }
 
+.admin-swal-schedule-form {
+  display: grid;
+  gap: 1rem;
+  text-align: left;
+}
+
+.admin-swal-schedule-note {
+  margin: 0;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.admin-swal-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-swal-schedule-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.4rem;
+}
+
+.admin-swal-schedule-field > span {
+  color: #94a3b8;
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.admin-swal-schedule-field > input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 3rem;
+  padding: 0 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  outline: none;
+  background: #f8fafc;
+  color: #0f172a;
+  font: inherit;
+}
+
+.admin-swal-schedule-field > input:focus {
+  border-color: #124757;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(18, 71, 87, 0.12);
+}
+
+.dark .admin-swal-schedule-note {
+  color: #94a3b8;
+}
+
+.dark .admin-swal-schedule-field > input {
+  border-color: #475569;
+  background: #0f172a;
+  color: #f8fafc;
+  color-scheme: dark;
+}
+
+.dark .admin-swal-schedule-field > input:focus {
+  border-color: #facc15;
+  background: #111827;
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.14);
+}
+
+@media (max-width: 520px) {
+  .admin-swal-schedule-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .admin-swal-actions {
   margin: 1.35rem 0 0 !important;
   width: 100% !important;

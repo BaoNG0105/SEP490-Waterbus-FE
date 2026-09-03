@@ -8,6 +8,7 @@ import { FormSelect } from "../../../components/FormSelect";
 import { AppDateInput } from "../../../components/AppDateInput";
 import { resolveTripKindKey } from "../../../utils/routeTypes";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { formatTripClock } from "../../../utils/tripClock";
 import {
   applyDelayPayloadToTrip,
   formatActiveDelayLine,
@@ -52,11 +53,8 @@ const tripStatusBadgeClass = (status) => {
 };
 
 const formatTime = (iso) => {
-    if (!iso) return "—";
-    const time = new Date(iso);
-    if (Number.isNaN(time.getTime())) return "—";
-    const pad2 = (n) => String(n).padStart(2, "0");
-    return `${pad2(time.getHours())}:${pad2(time.getMinutes())}`;
+    const clock = formatTripClock(iso);
+    return clock === "--:--" ? "—" : clock;
 };
 
 const isUuid = (value) => /^[0-9a-f-]{36}$/i.test(String(value || "").trim());
@@ -270,7 +268,10 @@ export function TripManagement() {
                 if (statusFilter !== "All") params.status = statusFilter;
                 const data = await fetchAllTrips(params);
                 const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
-                setTrips(sortTripsForOpsList(list));
+                const operationalTrips = list.filter((trip) => (
+                    normalizeTripStatusKey(trip?.tripStatus ?? trip?.status ?? trip?.TripStatus) !== "Cancelled"
+                ));
+                setTrips(sortTripsForOpsList(operationalTrips));
             } catch (error) {
                 console.error("Lỗi giao diện tải danh sách chuyến tàu:", error);
                 setErrorMsg(getApiErrorMessage(
@@ -398,7 +399,6 @@ export function TripManagement() {
         { value: "InProgress", label: getTripStatusLabel("InProgress", lang) },
         { value: "Delayed", label: getTripStatusLabel("Delayed", lang) },
         { value: "Completed", label: getTripStatusLabel("Completed", lang) },
-        { value: "Cancelled", label: getTripStatusLabel("Cancelled", lang) },
     ];
 
     const serviceKindOptions = [
@@ -428,6 +428,7 @@ export function TripManagement() {
 
     const displayedTrips = useMemo(() => {
         return trips.filter((trip) => {
+            if (normalizeTripStatusKey(trip?.tripStatus ?? trip?.status ?? trip?.TripStatus) === "Cancelled") return false;
             if (boatFilter !== "All" && resolveBoatFilterKey(trip) !== boatFilter) return false;
             if (serviceKindFilter !== "All" && resolveTripKindKey(trip) !== serviceKindFilter) return false;
             return true;

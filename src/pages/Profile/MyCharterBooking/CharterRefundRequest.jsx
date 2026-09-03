@@ -2,14 +2,27 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { BankBinSelect } from "../../../components/BankBinSelect";
 import { useApp } from "../../../context/AppContext";
-import { cancelMyCharterBooking, fetchMyCharterBookingDetail } from "../../../services/charterBookingService";
+import {
+  cancelMyCharterBooking,
+  fetchLinkedCharterTrip,
+  fetchMyCharterBookingDetail,
+} from "../../../services/charterBookingService";
 import {
   fetchRefundOtpOptions,
   refundBookingPayment,
   requestRefundBookingOtp,
 } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
-import { getRefundPaymentId, getAvailableRefundAmount, hasCompletedCharterRefund, isPaymentUuid, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
+import {
+  applyCharterTripSchedule,
+  getRefundPaymentId,
+  getAvailableRefundAmount,
+  hasCompletedCharterRefund,
+  isPaymentUuid,
+  resolveCharterBookingStatus,
+  resolveCharterPaymentStatus,
+  resolveCharterScheduleTime,
+} from "../../../utils/charterBookingAdmin";
 
 const pick = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -49,11 +62,6 @@ const formatDate = (value) => {
     String(date.getMonth() + 1).padStart(2, "0"),
     date.getFullYear(),
   ].join("-");
-};
-
-const normalizeTime = (value) => {
-  const match = String(value || "").match(/(?:\d+\.)?(\d{1,2}):(\d{2})/);
-  return match ? `${String(Number(match[1])).padStart(2, "0")}:${match[2]}` : "";
 };
 
 const getBookingRouteLabel = (item) => {
@@ -158,6 +166,13 @@ const normalizeBooking = (item) => {
   const payments = Array.isArray(item?.payments) ? item.payments : [];
   const paidPayments = payments.filter(isPaidPayment);
   const paidAmountFromPayments = paidPayments.reduce((total, payment) => total + getPaymentAmount(payment), 0);
+  const departureTimestamp = pick(item, [
+    "scheduledDepartureAt",
+    "departureTime",
+    "DepartureTime",
+    "requestedDepartureTime",
+    "scheduledDepartureTime",
+  ], "");
   const departureDate = pick(item, [
     "departureDate",
     "DepartureDate",
@@ -166,21 +181,14 @@ const normalizeBooking = (item) => {
     "scheduledDate",
     "rentalDate",
     "requestedDepartureDate",
-    "scheduledDepartureAt",
-    "departureTime",
-    "requestedDepartureTime",
   ], "");
-  const startTime = normalizeTime(pick(item, [
+  const startTime = resolveCharterScheduleTime(pick(item, [
     "startTime",
     "StartTime",
-    "departureTime",
-    "DepartureTime",
-    "requestedDepartureTime",
-    "scheduledDepartureTime",
     "rentalStartTime",
     "schedule.startTime",
     "charterSchedule.startTime",
-  ], "")) || normalizeTime(departureDate) || "--";
+  ], ""), departureTimestamp) || "--";
 
   return {
     id: pick(item, ["id", "charterBookingId", "bookingId"]),
@@ -292,8 +300,13 @@ export function CharterRefund() {
         setIsLoading(true);
         setLoadError("");
         const detail = await fetchMyCharterBookingDetail(id);
+        const linkedTrip = await fetchLinkedCharterTrip(detail);
         if (!isMounted) return;
-        const normalized = normalizeBooking(detail);
+        const baseBooking = normalizeBooking(detail);
+        const normalized = applyCharterTripSchedule(
+          baseBooking,
+          linkedTrip,
+        );
         const targetPayment = getRefundablePayment(normalized);
         setBooking(normalized);
         setPayment(targetPayment);

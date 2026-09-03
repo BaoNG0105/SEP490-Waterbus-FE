@@ -399,6 +399,10 @@ export const buildBookingQuotePreview = (booking) => {
   });
 
   const boatsRentalTotal = boats.reduce((sum, boat) => sum + (Number(boat.subtotalAmount) || 0), 0);
+  const ticketSubtotalAmount = Number(
+    booking.ticketSubtotalAmount
+    ?? pick(raw, ["ticketSubtotalAmount", "pricing.ticketSubtotalAmount", "quoteBreakdown.ticketSubtotalAmount"], 0),
+  ) || 0;
   const insurance = booking.insurance || normalizeInsuranceFromBooking(booking);
   // Tổng tiền bảo hiểm ưu tiên lấy từ BE trả defaultInsuranceAmount + optionalInsuranceAmount nếu có,
   // fallback về insurance.totalAmount (chuẩn hoá).
@@ -412,10 +416,20 @@ export const buildBookingQuotePreview = (booking) => {
     ?? insurance?.optionalInsuranceAmount
     ?? 0,
   ) || 0;
+  const explicitInsuranceAmount = Number(
+    booking.insuranceAmount
+    ?? pick(raw, ["insuranceAmount", "pricing.insuranceAmount", "quoteBreakdown.insuranceAmount"], 0),
+  ) || 0;
   const insuranceAmount = (booking.insuranceSelected !== false)
-    && (Number(insurance?.quantity) > 0 || defaultInsuranceAmount > 0 || optionalInsuranceAmount > 0)
-    && (Number(insurance?.totalAmount) > 0 || defaultInsuranceAmount + optionalInsuranceAmount > 0)
-    ? Math.max(defaultInsuranceAmount + optionalInsuranceAmount, Number(insurance?.totalAmount) || 0)
+    && (Number(insurance?.quantity) > 0
+      || defaultInsuranceAmount > 0
+      || optionalInsuranceAmount > 0
+      || explicitInsuranceAmount > 0)
+    ? Math.max(
+      defaultInsuranceAmount + optionalInsuranceAmount,
+      Number(insurance?.totalAmount) || 0,
+      explicitInsuranceAmount,
+    )
     : 0;
   const discountAmount = Number(
     booking.discountAmount
@@ -427,19 +441,21 @@ export const buildBookingQuotePreview = (booking) => {
   ) || boatsRentalTotal;
   const grossTotal = Math.max(
     boatsRentalTotal + insuranceAmount,
+    ticketSubtotalAmount + insuranceAmount,
     quoteSubtotal,
   );
   const pointsUsed = Math.max(
     0,
     Number(booking.pointsUsed ?? pick(raw, ["pointsUsed"], 0)) || 0,
   );
-  const rawQuoteTotal = booking.totalAmount
-    ?? booking.estimatedPrice
-    ?? pick(raw, ["finalAmount", "totalAmount"], null);
-  const hasExplicitQuoteTotal = rawQuoteTotal !== null
-    && rawQuoteTotal !== undefined
-    && rawQuoteTotal !== ""
-    && Number.isFinite(Number(rawQuoteTotal));
+  const rawQuoteTotal = [
+    booking.totalAmount,
+    pick(raw, ["finalAmount", "totalAmount", "payableAmount"], null),
+    booking.estimatedPrice,
+  ].find((value) => Number.isFinite(Number(value)) && Number(value) > 0);
+  // normalizeBooking uses 0 for missing monetary fields. Do not let that
+  // synthetic zero suppress a total that can be rebuilt from the quote lines.
+  const hasExplicitQuoteTotal = rawQuoteTotal !== undefined;
   const displayQuoteTotal = hasExplicitQuoteTotal
     ? Math.max(0, Number(rawQuoteTotal))
     : Math.max(grossTotal - discountAmount - pointsUsed, 0);

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { fetchMyCharterBookingDetail, updateMyCharterBooking } from "../../../services/charterBookingService";
+import {
+  fetchLinkedCharterTrip,
+  fetchMyCharterBookingDetail,
+  updateMyCharterBooking,
+} from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { handleDuplicateCharterBookingError } from "../../../utils/charterDuplicateBooking";
 import {
@@ -17,6 +21,9 @@ import { listBookingPassengers } from "../../../utils/charterPassengerAdd";
 import { getPassengerBirthYear } from "../../../utils/charterBookingTickets";
 import { CharterRequestForm } from "../../../components/CharterRequestForm";
 import { notify } from "../../../utils/swalToast";
+import {
+  applyCharterTripSchedule,
+} from "../../../utils/charterBookingAdmin";
 
 const editableStatuses = ["PendingQuote", "Confirmed", "Quoted", "DepositPaid", "AwaitingPayment"];
 
@@ -144,7 +151,12 @@ export function EditCharter() {
     try {
       setIsLoading(true);
       setLoadError("");
-      const detail = await fetchMyCharterBookingDetail(id);
+      const rawDetail = await fetchMyCharterBookingDetail(id);
+      const linkedTrip = await fetchLinkedCharterTrip(rawDetail);
+      const detail = applyCharterTripSchedule(
+        rawDetail,
+        linkedTrip,
+      );
       const status = pick(detail, ["bookingStatus", "status"], "PendingQuote");
 
       if (!editableStatuses.includes(status)) {
@@ -188,7 +200,12 @@ export function EditCharter() {
         confirmButtonColor: "#124757",
       });
 
-      const detail = await fetchMyCharterBookingDetail(id);
+      const rawDetail = await fetchMyCharterBookingDetail(id);
+      const linkedTrip = await fetchLinkedCharterTrip(rawDetail);
+      const detail = applyCharterTripSchedule(
+        rawDetail,
+        linkedTrip,
+      );
       const baseFormData = buildFormDataFromDetail(detail, user);
       const status = pick(detail, ["bookingStatus", "status"], "PendingQuote");
       setInitialFormData({

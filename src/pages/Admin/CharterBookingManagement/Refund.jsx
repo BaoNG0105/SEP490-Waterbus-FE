@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useApp } from "../../../context/AppContext";
 import { fetchAdminCharterBookingDetail } from "../../../services/charterBookingService";
+import { fetchAllTrips } from "../../../services/tripService";
 import { manualRefundBookingPayment, syncBookingPayment } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
@@ -24,6 +25,8 @@ import {
   getRemainingRefundAmount,
   isRefundProcessing,
   normalizeBooking,
+  applyCharterTripSchedule,
+  findCharterTripForBooking,
   pick,
 } from "../../../utils/charterBookingAdmin";
 
@@ -59,8 +62,15 @@ export function AdminCharterBookingRefund() {
     try {
       setIsLoading(true);
       setLoadError("");
-      const detail = await fetchAdminCharterBookingDetail(id);
-      const normalized = normalizeBooking(detail);
+      const [detail, charterTrips] = await Promise.all([
+        fetchAdminCharterBookingDetail(id),
+        fetchAllTrips({ tripType: "Charter" }).catch(() => []),
+      ]);
+      const baseBooking = normalizeBooking(detail);
+      const normalized = applyCharterTripSchedule(
+        baseBooking,
+        findCharterTripForBooking(charterTrips, baseBooking),
+      );
       const targetPayment = normalized.payments.find((item) => getRefundPaymentId(item) === decodedPaymentId);
 
       setBooking(normalized);

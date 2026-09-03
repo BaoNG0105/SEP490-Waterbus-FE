@@ -6,14 +6,25 @@ import { useApp } from "../../../context/AppContext";
 import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepper";
 import { FormSelect } from "../../../components/FormSelect";
 
-import { fetchMyCharterBookings } from "../../../services/charterBookingService";
+import {
+  fetchLinkedCharterTrip,
+  fetchMyCharterBookingDetail,
+  fetchMyCharterBookings,
+} from "../../../services/charterBookingService";
 
 import {
   getCustomerActionInfo,
   isTerminalBookingStatus,
 } from "../../../utils/charterBookingActions";
 import { getCharterBookingStatusInfo } from "../../../utils/charterBookingStatus";
-import { resolveCharterBookingStatus, resolveCharterPaymentStatus, matchesCharterStatusFilter } from "../../../utils/charterBookingAdmin";
+import {
+  applyCharterTripSchedule,
+  formatDate,
+  matchesCharterStatusFilter,
+  resolveCharterScheduleTime,
+  resolveCharterBookingStatus,
+  resolveCharterPaymentStatus,
+} from "../../../utils/charterBookingAdmin";
 
 const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired", "Approved", "PendingApproval"];
 const ITEMS_PER_PAGE = 6;
@@ -95,7 +106,12 @@ const normalizeBooking = (item) => {
     boatName: pick(item, ["boatName", "boat.name"], "--"),
     route: pick(item, ["routeName", "route", "itineraryName"], fromName || toName ? `${fromName || "--"} - ${toName || "--"}` : "--"),
     departureDate: pick(item, ["departureDate", "startDate"]),
-    startTime: pick(item, ["startTime"], "--"),
+    startTime: resolveCharterScheduleTime(pick(item, [
+      "startTime",
+      "schedule.startTime", "charterSchedule.startTime",
+    ], ""), pick(item, [
+      "departureTime", "requestedDepartureTime", "scheduledDepartureTime", "scheduledDepartureAt",
+    ], "")) || "--",
     rentalUnit: pick(item, ["rentalUnit"], ""),
     durationValue: Number(pick(item, ["durationValue", "durationHours"], 0)) || 0,
     adultCount,
@@ -117,13 +133,6 @@ const normalizeBooking = (item) => {
       || item?.RequiresAdditionalPayment === true,
     holdExpiresAt: pick(item, ["holdExpiresAt"], ""),
   };
-};
-
-const formatDate = (value) => {
-  if (!value) return "--";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  return date.toLocaleDateString("vi-VN");
 };
 
 const ListSkeleton = () => (
@@ -194,7 +203,13 @@ export function CharterList() {
       setIsLoading(true);
       setErrorMsg("");
       const data = await fetchMyCharterBookings();
-      setBookings(Array.isArray(data) ? data.map(normalizeBooking) : []);
+      const normalized = Array.isArray(data) ? data.map(normalizeBooking) : [];
+      const enriched = await Promise.all(normalized.map(async (booking) => {
+        const detail = await fetchMyCharterBookingDetail(booking.id).catch(() => null);
+        const linkedTrip = await fetchLinkedCharterTrip(detail || booking);
+        return applyCharterTripSchedule(booking, linkedTrip);
+      }));
+      setBookings(enriched);
     } catch (error) {
       console.error("Lỗi tải yêu cầu thuê tàu:", error);
       setErrorMsg(error.response?.data?.message || (lang === "VN" ? "Không thể tải danh sách yêu cầu thuê tàu." : "Unable to load booking requests."));

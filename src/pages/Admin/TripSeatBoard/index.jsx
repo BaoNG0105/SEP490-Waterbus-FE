@@ -6,12 +6,19 @@ import {
   fetchTripDetail,
   fetchTripPassengers,
   groupTripPassengersForDisplay,
+  normalizeTripPassenger,
   normalizeTripStatusKey,
 } from "../../../services/tripService";
+import {
+  fetchAssignedCharterBookingDetail,
+  fetchCharterBookingManifestByCode,
+} from "../../../services/charterBookingService";
 import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { pickDisplayArrival, pickDisplayDeparture } from "../../../utils/tripDelay";
 import { enrichPassengersWithStopTimes } from "../../../utils/tripStationSeatBoard";
+import { resolveTripKindKey } from "../../../utils/routeTypes";
+import { formatTripClock } from "../../../utils/tripClock";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -44,14 +51,127 @@ const stationLabel = (value) => {
 };
 
 const formatClock = (value) => {
-  if (!value) return "--:--";
-  const ms = Date.parse(String(value));
-  if (Number.isNaN(ms)) {
-    const m = String(value).match(/(\d{2}):(\d{2})/);
-    return m ? `${m[1]}:${m[2]}` : "--:--";
+  return formatTripClock(value);
+};
+
+const unwrapCharterManifest = (payload) => {
+  let current = payload;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) break;
+    if (Array.isArray(current.passengers) || Array.isArray(current.tickets)) return current;
+    const nested = current.manifest || current.booking || current.data || current.result;
+    if (!nested || nested === current) break;
+    current = nested;
   }
-  const d = new Date(ms);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return current && typeof current === "object" ? current : null;
+};
+
+const resolveCharterBookingTotal = (payload) => {
+  const source = payload?.data && typeof payload.data === "object"
+    ? payload.data
+    : payload;
+  const raw = source?.totalAmount
+    ?? source?.finalAmount
+    ?? source?.quoteBreakdown?.totalAmount
+    ?? source?.pricing?.totalAmount;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const amount = Number(raw);
+  return Number.isFinite(amount) && amount >= 0 ? amount : null;
+};
+
+const resolveCharterBookingCode = (trip) => {
+  const direct = String(
+    trip?.bookingCode
+    || trip?.BookingCode
+    || trip?.charterBookingCode
+    || trip?.CharterBookingCode
+    || "",
+  ).trim();
+  if (direct) return direct;
+  const tripCode = String(trip?.tripCode || trip?.TripCode || "");
+  return tripCode.match(/CB-\d{8}-[A-Z0-9]+/i)?.[0] || "";
+};
+
+const passengerMatchTokens = (row) => [
+  row?.passengerId && `passenger:${String(row.passengerId).toLowerCase()}`,
+  row?.tripSeatId && `trip-seat:${String(row.tripSeatId).toLowerCase()}`,
+  row?.ticketCode && row.ticketCode !== "—" && `ticket:${String(row.ticketCode).toUpperCase()}`,
+  row?.seatNumber && row.seatNumber !== "—" && `seat:${String(row.seatNumber).toUpperCase()}`,
+].filter(Boolean);
+
+const buildCharterManifestPassengers = (payload, tripId) => {
+  const manifest = unwrapCharterManifest(payload);
+  if (!manifest) return [];
+  const passengers = Array.isArray(manifest.passengers) ? manifest.passengers : [];
+  const tickets = Array.isArray(manifest.tickets) ? manifest.tickets : [];
+  const expectedTripId = String(tripId || "").trim().toLowerCase();
+  const belongsToTrip = (row) => {
+    const rowTripId = String(row?.tripId || row?.TripId || "").trim().toLowerCase();
+    return !expectedTripId || !rowTripId || rowTripId === expectedTripId;
+  };
+  const tripTickets = tickets.filter(belongsToTrip);
+  const usedTickets = new Set();
+  const findTicket = (passenger) => {
+    const passengerId = String(passenger?.passengerId || passenger?.PassengerId || "").toLowerCase();
+    const tripSeatId = String(passenger?.tripSeatId || passenger?.TripSeatId || "").toLowerCase();
+    const seatCode = String(passenger?.seatCode || passenger?.seatNumber || "").toUpperCase();
+    const index = tripTickets.findIndex((ticket, ticketIndex) => {
+      if (usedTickets.has(ticketIndex)) return false;
+      const ticketPassengerId = String(ticket?.passengerId || ticket?.PassengerId || "").toLowerCase();
+      const ticketTripSeatId = String(ticket?.tripSeatId || ticket?.TripSeatId || "").toLowerCase();
+      const ticketSeatCode = String(ticket?.seatCode || ticket?.seatNumber || "").toUpperCase();
+      return Boolean(
+        (passengerId && passengerId === ticketPassengerId)
+        || (tripSeatId && tripSeatId === ticketTripSeatId)
+        || (seatCode && seatCode === ticketSeatCode),
+      );
+    });
+    if (index < 0) return null;
+    usedTickets.add(index);
+    return tripTickets[index];
+  };
+  const rootFields = {
+    bookingCode: manifest.bookingCode || manifest.BookingCode || "",
+    contactPhone: manifest.contactPhone || manifest.ContactPhone || "",
+    contactEmail: manifest.contactEmail || manifest.ContactEmail || "",
+    fromStationId: manifest.fromStationId || manifest.FromStationId || "",
+    fromStationName: manifest.fromStationName || manifest.FromStationName || "",
+    toStationId: manifest.toStationId || manifest.ToStationId || "",
+    toStationName: manifest.toStationName || manifest.ToStationName || "",
+  };
+  const rows = passengers.filter(belongsToTrip).map((passenger) => normalizeTripPassenger({
+    ...rootFields,
+    ...(findTicket(passenger) || {}),
+    ...passenger,
+  })).filter(Boolean);
+
+  tripTickets.forEach((ticket, ticketIndex) => {
+    if (usedTickets.has(ticketIndex)) return;
+    const normalized = normalizeTripPassenger({ ...rootFields, ...ticket });
+    if (normalized) rows.push(normalized);
+  });
+  return rows;
+};
+
+const mergeTripPassengerSources = (tripRows, charterRows) => {
+  const primary = Array.isArray(tripRows) ? tripRows : [];
+  const fallback = Array.isArray(charterRows) ? charterRows : [];
+  if (!primary.length) return fallback;
+  if (!fallback.length) return primary;
+
+  const fallbackByToken = new Map();
+  fallback.forEach((row) => passengerMatchTokens(row).forEach((token) => fallbackByToken.set(token, row)));
+  const matchedFallback = new Set();
+  const merged = primary.map((row) => {
+    const match = passengerMatchTokens(row).map((token) => fallbackByToken.get(token)).find(Boolean);
+    if (!match) return row;
+    matchedFallback.add(match);
+    return normalizeTripPassenger({ ...(match.raw || {}), ...(row.raw || {}) }) || row;
+  });
+  fallback.forEach((row) => {
+    if (!matchedFallback.has(row)) merged.push(row);
+  });
+  return merged;
 };
 
 const formatDateOfBirth = (value, birthYear) => {
@@ -75,6 +195,7 @@ const formatDateOfBirth = (value, birthYear) => {
 };
 
 const formatMoney = (value) => {
+  if (value === null || value === undefined || value === "") return "—";
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   return `${n.toLocaleString("vi-VN")}đ`;
@@ -173,6 +294,7 @@ export function TripSeatBoardPage() {
   const [tab, setTab] = useState("seats");
   const [trip, setTrip] = useState(null);
   const [passengers, setPassengers] = useState([]);
+  const [charterBookingTotal, setCharterBookingTotal] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [paxError, setPaxError] = useState("");
@@ -237,16 +359,49 @@ export function TripSeatBoardPage() {
         const detail = await fetchTripDetail(tripId);
         if (!alive) return;
         setTrip(detail);
+        let tripPassengerRows = [];
+        let tripPassengerError = null;
         try {
-          const rows = await fetchTripPassengers(tripId);
-          if (!alive) return;
-          setPassengers(rows);
+          tripPassengerRows = await fetchTripPassengers(tripId);
         } catch (error) {
-          if (!alive) return;
-          setPassengers([]);
+          tripPassengerError = error;
+        }
+
+        let charterRows = [];
+        let nextCharterBookingTotal = null;
+        const charterBookingCode = resolveTripKindKey(detail) === "Charter"
+          ? resolveCharterBookingCode(detail)
+          : "";
+        if (charterBookingCode) {
+          try {
+            const manifest = await fetchCharterBookingManifestByCode(charterBookingCode);
+            const manifestRoot = unwrapCharterManifest(manifest);
+            nextCharterBookingTotal = resolveCharterBookingTotal(manifestRoot);
+            const charterBookingId = String(
+              manifestRoot?.bookingId || manifestRoot?.charterBookingId || "",
+            ).trim();
+            if (nextCharterBookingTotal === null && charterBookingId) {
+              try {
+                const assignedBooking = await fetchAssignedCharterBookingDetail(charterBookingId);
+                nextCharterBookingTotal = resolveCharterBookingTotal(assignedBooking);
+              } catch {
+                // Passenger manifest remains usable when price detail is unavailable.
+              }
+            }
+            charterRows = buildCharterManifestPassengers(manifest, tripId);
+          } catch (error) {
+            if (!tripPassengerRows.length) tripPassengerError = error;
+          }
+        }
+
+        if (!alive) return;
+        const mergedRows = mergeTripPassengerSources(tripPassengerRows, charterRows);
+        setPassengers(mergedRows);
+        setCharterBookingTotal(nextCharterBookingTotal);
+        if (tripPassengerError && !mergedRows.length) {
           setPaxError(
             getApiErrorMessage(
-              error,
+              tripPassengerError,
               lang === "VN" ? "Không tải được danh sách khách." : "Unable to load passengers.",
             ),
           );
@@ -284,6 +439,8 @@ export function TripSeatBoardPage() {
     if (!q) return passengerGroups;
     return passengerGroups.filter((row) => passengerSearchBlob(row).includes(q));
   }, [passengerGroups, paxQuery]);
+
+  const isCharterTrip = resolveTripKindKey(trip) === "Charter";
 
   const totalPassengerCount = passengersWithTimes.length;
   const filteredPassengerCount = useMemo(
@@ -363,6 +520,12 @@ export function TripSeatBoardPage() {
                   <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
                     <span className="material-symbols-outlined text-sm" aria-hidden>pin_drop</span>
                     {trip.stops.length} {lang === "VN" ? "bến" : "stops"}
+                  </span>
+                ) : null}
+                {isCharterTrip && charterBookingTotal !== null ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                    <span className="material-symbols-outlined text-sm" aria-hidden>payments</span>
+                    {lang === "VN" ? "Tổng booking" : "Booking total"}: {formatMoney(charterBookingTotal)}
                   </span>
                 ) : null}
               </div>
@@ -500,7 +663,9 @@ export function TripSeatBoardPage() {
                         const dob = formatDateOfBirth(row.dateOfBirth, row.birthYear);
                         const verifyType = needsEligibilityVerify(row);
                         const missingDob = verifyType && dob === "—";
-                        const isFree = Number(row.price) === 0;
+                        const displayedPrice = isCharterTrip ? charterBookingTotal : row.price;
+                        const hasPrice = displayedPrice !== null && displayedPrice !== undefined && displayedPrice !== "";
+                        const isFree = hasPrice && Number(displayedPrice) === 0;
 
                         return (
                           <li key={rowKey} className="bg-white dark:bg-slate-800">
@@ -559,7 +724,7 @@ export function TripSeatBoardPage() {
                                   <p className="mb-2 text-[10px] font-headline font-black uppercase tracking-widest text-slate-400">
                                     {lang === "VN" ? "Đối chiếu (chi tiết)" : "Verify (details)"}
                                   </p>
-                                  <div className="grid gap-3 text-[11px] sm:grid-cols-3">
+                                  <div className="grid gap-3 text-[11px] sm:grid-cols-2 lg:grid-cols-3">
                                     <div className={missingDob ? "rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-2 dark:border-amber-500/40 dark:bg-amber-500/15" : ""}>
                                       <p className="font-bold uppercase tracking-wider text-slate-400">
                                         {lang === "VN" ? "Ngày sinh" : "Date of birth"}
@@ -576,14 +741,16 @@ export function TripSeatBoardPage() {
                                     </div>
                                     <div className={isFree ? "rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-2 dark:border-amber-500/40 dark:bg-amber-500/15" : ""}>
                                       <p className="font-bold uppercase tracking-wider text-slate-400">
-                                        {lang === "VN" ? "Giá vé" : "Fare"}
+                                        {isCharterTrip
+                                          ? (lang === "VN" ? "Tổng giá booking" : "Booking total")
+                                          : (lang === "VN" ? "Giá vé" : "Fare")}
                                       </p>
                                       <p className={`mt-0.5 text-sm font-black ${
                                         isFree
                                           ? "text-amber-900 dark:text-amber-100"
                                           : "text-[#124757] dark:text-yellow-400"
                                       }`}>
-                                        {formatMoney(row.price)}
+                                        {formatMoney(displayedPrice)}
                                         {isFree ? (
                                           <span className="ml-1 text-[10px] uppercase">
                                             {lang === "VN" ? "· Miễn phí" : "· Free"}
@@ -595,6 +762,28 @@ export function TripSeatBoardPage() {
                                       <p className="font-bold uppercase tracking-wider text-slate-400">Booking</p>
                                       <p className="mt-0.5 break-all text-sm font-black text-slate-800 dark:text-slate-100">
                                         {row.bookingCode || "—"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="font-bold uppercase tracking-wider text-slate-400">
+                                        {lang === "VN" ? "Số điện thoại" : "Phone"}
+                                      </p>
+                                      <p className="mt-0.5 break-all text-sm font-black text-slate-800 dark:text-slate-100">
+                                        {row.phoneNumber || row.contactPhone || "—"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="font-bold uppercase tracking-wider text-slate-400">Email</p>
+                                      <p className="mt-0.5 break-all text-sm font-black text-slate-800 dark:text-slate-100">
+                                        {row.email || row.contactEmail || "—"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="font-bold uppercase tracking-wider text-slate-400">
+                                        {lang === "VN" ? "Mã vé" : "Ticket"}
+                                      </p>
+                                      <p className="mt-0.5 break-all text-sm font-black text-slate-800 dark:text-slate-100">
+                                        {row.ticketCode || "—"}
                                       </p>
                                     </div>
                                   </div>

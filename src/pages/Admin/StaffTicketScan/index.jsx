@@ -21,6 +21,7 @@ import { formatTicketTypeLabel } from "../../../services/ticketTypeService";
 import { createBookingPayment } from "../../../services/paymentService";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { notify } from "../../../utils/swalToast";
+import { formatTripClock } from "../../../utils/tripClock";
 
 const pickDeep = (source, keys, fallback = "") => {
   for (const key of keys) {
@@ -135,15 +136,8 @@ const concessionCodesOf = (ticket) => (
 );
 
 const formatClock = (value) => {
-  if (!value) return "—";
-  const ms = Date.parse(String(value));
-  if (Number.isNaN(ms)) {
-    const m = String(value).match(/(\d{1,2}):(\d{2})/);
-    return m ? `${String(m[1]).padStart(2, "0")}:${m[2]}` : "—";
-  }
-  const d = new Date(ms);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const clock = formatTripClock(value);
+  return clock === "--:--" ? "—" : clock;
 };
 
 const statusTone = (ticket) => {
@@ -533,7 +527,9 @@ const TicketResultCard = ({
           </DetailField>
           <DetailField label={lang === "VN" ? "Giờ lên dự kiến" : "Board at"}>
             <span className="tabular-nums">
-              {ticket.scheduledBoardingAt
+              {ticket.isCharter && ticket.startTime
+                ? ticket.startTime
+                : ticket.scheduledBoardingAt
                 ? formatClock(ticket.scheduledBoardingAt)
                 : (ticket.startTime || "—")}
             </span>

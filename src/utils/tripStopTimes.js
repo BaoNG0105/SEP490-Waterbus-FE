@@ -5,6 +5,8 @@ export const pickStopScheduledArrival = (stop) => (
   ?? stop?.ScheduledArrivalAt
   ?? stop?.scheduledArrival
   ?? stop?.ScheduledArrival
+  ?? stop?.plannedArrivalTime
+  ?? stop?.PlannedArrivalTime
   ?? null
 );
 
@@ -14,8 +16,60 @@ export const pickStopScheduledDeparture = (stop) => (
   ?? stop?.scheduledDeparture
   ?? stop?.ScheduledDeparture
   ?? stop?.plannedDepartureTime
+  ?? stop?.PlannedDepartureTime
   ?? null
 );
+
+const toTimestampMs = (value) => {
+  if (!value) return null;
+  const timestamp = Date.parse(String(value));
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
+const shiftTimestamp = (value, shiftMs) => {
+  const timestamp = toTimestampMs(value);
+  return timestamp == null ? value : new Date(timestamp + shiftMs).toISOString();
+};
+
+/**
+ * Dữ liệu charter cũ có thể có stop nằm khác ngày trip. FE neo lại phần lịch dự kiến/điều
+ * chỉnh theo giờ khởi hành trip; actual time vẫn giữ nguyên vì là dữ liệu vận hành thật.
+ */
+export const alignCharterTripStops = (trip, stops) => {
+  const list = Array.isArray(stops) ? stops : [];
+  const tripType = String(trip?.tripType ?? trip?.TripType ?? "").toLowerCase();
+  if (!tripType.includes("charter") || list.length === 0) return list;
+
+  const ordered = [...list].sort((a, b) => Number(a?.stopOrder ?? 0) - Number(b?.stopOrder ?? 0));
+  const firstStop = ordered[0];
+  const stopAnchor = pickStopAdjustedDeparture(firstStop) ?? pickStopScheduledDeparture(firstStop);
+  const tripAnchor = trip?.adjustedDepartureTime
+    ?? trip?.AdjustedDepartureTime
+    ?? trip?.departureTime
+    ?? trip?.DepartureTime;
+  const stopAnchorMs = toTimestampMs(stopAnchor);
+  const tripAnchorMs = toTimestampMs(tripAnchor);
+  if (stopAnchorMs == null || tripAnchorMs == null) return list;
+
+  const shiftMs = tripAnchorMs - stopAnchorMs;
+  if (shiftMs === 0) return list;
+
+  return list.map((stop) => ({
+    ...stop,
+    plannedArrivalTime: shiftTimestamp(stop.plannedArrivalTime, shiftMs),
+    plannedDepartureTime: shiftTimestamp(stop.plannedDepartureTime, shiftMs),
+    scheduledArrival: shiftTimestamp(stop.scheduledArrival, shiftMs),
+    scheduledDeparture: shiftTimestamp(stop.scheduledDeparture, shiftMs),
+    scheduledArrivalAt: shiftTimestamp(stop.scheduledArrivalAt, shiftMs),
+    scheduledDepartureAt: shiftTimestamp(stop.scheduledDepartureAt, shiftMs),
+    adjustedArrival: shiftTimestamp(stop.adjustedArrival, shiftMs),
+    adjustedDeparture: shiftTimestamp(stop.adjustedDeparture, shiftMs),
+    adjustedArrivalAt: shiftTimestamp(stop.adjustedArrivalAt, shiftMs),
+    adjustedDepartureAt: shiftTimestamp(stop.adjustedDepartureAt, shiftMs),
+    adjustedArrivalTime: shiftTimestamp(stop.adjustedArrivalTime, shiftMs),
+    adjustedDepartureTime: shiftTimestamp(stop.adjustedDepartureTime, shiftMs),
+  }));
+};
 
 export const pickStopAdjustedArrival = (stop) => (
   stop?.adjustedArrivalAt

@@ -17,12 +17,16 @@ import {
   itemsPerPage,
   matchesCharterStatusFilter,
   normalizeBooking,
+  applyCharterTripSchedule,
+  findCharterTripForBooking,
   statusOptions,
 } from "../../../utils/charterBookingAdmin";
 import { shouldUseAssignedCharterApi, getCharterCapabilities, getDefaultCharterTab } from "../../../utils/charterBookingAccess";
 import { isAdminUser } from "../../../utils/roleHelpers";
 import { useCharterBookingListHub } from "../../../hooks/useCharterBookingListHub";
 import { PageLoading } from "../../../components/PageLoading";
+import { fetchAllTrips } from "../../../services/tripService";
+import { formatQuoteHumanDuration } from "../../../utils/charterQuotePreview";
 
 /** List DTO thường thiếu payments/refund — enrich vài booking Confirmed+Paid từ detail. */
 const enrichListRefundStatuses = async (bookings, useAssignedApi) => {
@@ -78,13 +82,19 @@ export function CharterBookingManagement() {
       if (silent) setIsRefreshing(true);
       else setIsLoading(true);
       setErrorMsg("");
-      const bookingData = useAssignedApi
-        ? await fetchAssignedCharterBookings()
-        : await fetchAdminCharterBookings();
+      const [bookingData, charterTrips] = await Promise.all([
+        useAssignedApi
+          ? fetchAssignedCharterBookings()
+          : fetchAdminCharterBookings(),
+        fetchAllTrips({ tripType: "Charter" }).catch(() => []),
+      ]);
       const normalized = extractCharterBookingList(bookingData).map(normalizeBooking);
       // Chỉ set sau khi enrich xong — tránh hiện trạng thái nửa mùa khi load chậm.
       const enriched = await enrichListRefundStatuses(normalized, useAssignedApi);
-      setBookings(enriched);
+      setBookings(enriched.map((booking) => applyCharterTripSchedule(
+        booking,
+        findCharterTripForBooking(charterTrips, booking),
+      )));
     } catch (error) {
       console.error("Lỗi tải charter booking:", error);
       if (!silent) {
@@ -375,11 +385,16 @@ export function CharterBookingManagement() {
                         <p className="font-headline font-black text-[#124757] dark:text-white">{booking.bookingCode}</p>
                         <p className="text-[10px] text-slate-400 mt-1">
                           {booking.passengerCount} {lang === "VN" ? "khách" : "guests"}
-                          {Number(booking.durationValue) > 0
-                            ? ` / ${formatDuration(booking.durationValue, booking.rentalUnit, lang)}`
-                            : (booking.rentalUnit
-                              ? ` / ${booking.rentalUnit === "Hour" ? (lang === "VN" ? "Theo giờ" : "Hourly") : (lang === "VN" ? "Theo ngày" : "Daily")}`
-                              : "")}
+                          {booking.rentalUnit === "Hour"
+                            ? (() => {
+                              const chargeableMinutes = Number(booking.routeEstimate?.chargeableDurationMinutes);
+                              return Number.isFinite(chargeableMinutes) && chargeableMinutes > 0
+                                ? ` / ${lang === "VN" ? "Tính tiền" : "Chargeable"} ${formatQuoteHumanDuration(chargeableMinutes, lang)}`
+                                : ` / ${lang === "VN" ? "Theo giờ" : "Hourly"}`;
+                            })()
+                            : (Number(booking.durationValue) > 0
+                              ? ` / ${formatDuration(booking.durationValue, booking.rentalUnit, lang)}`
+                              : (booking.rentalUnit ? ` / ${lang === "VN" ? "Theo ngày" : "Daily"}` : ""))}
                         </p>
                       </td>
                       <td className="py-4 px-4">

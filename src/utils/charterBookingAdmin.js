@@ -1,7 +1,8 @@
-import { normalizeCharterTicketRows } from "./charterBookingTickets";
+import { getCharterTicketCount, normalizeCharterTicketRows } from "./charterBookingTickets";
 import { getCharterDepositAmount } from "./charterBookingActions";
 import { getBookingInsurancePackageId, normalizeInsuranceFromBooking, resolveInsuranceSelected } from "./insurancePreview";
 import { resolveRouteLabelKey } from "./routeTypes";
+import { formatLiteralClock, formatTripClock, formatTripDateKey } from "./tripClock";
 
 export const statusOptions = ["All", "PendingQuote", "Quoted", "PendingPayment", "Confirmed", "Completed", "Cancelled", "Expired"];
 export const manualStatusOptions = ["Cancelled", "Expired", "Completed"];
@@ -102,9 +103,10 @@ export const enrichAssignedBoat = (assigned, catalogBoats = []) => {
 
 export const formatDate = (value) => {
   if (!value) return "--";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  return date.toLocaleDateString("vi-VN");
+  const dateKey = formatTripDateKey(value);
+  if (!dateKey) return String(value).trim().slice(0, 10);
+  const [year, month, day] = dateKey.split("-");
+  return `${day}/${month}/${year}`;
 };
 
 export const formatDateTime = (value) => {
@@ -150,28 +152,7 @@ export const CHARTER_BOAT_HOLDING_STATUSES = new Set([
 ]);
 
 export const normalizeCharterScheduleDate = (value) => {
-  if (value === undefined || value === null || value === "") return "";
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, "0");
-    const day = String(value.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  const raw = String(value).trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-
-  const vnMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (vnMatch) {
-    return `${vnMatch[3]}-${String(vnMatch[2]).padStart(2, "0")}-${String(vnMatch[1]).padStart(2, "0")}`;
-  }
-
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return "";
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return formatTripDateKey(value);
 };
 
 export const normalizeCharterScheduleTime = (value) => {
@@ -185,10 +166,102 @@ export const normalizeCharterScheduleTime = (value) => {
   }
   const text = String(value).trim();
   if (!text || text === "--") return "";
-  // .NET TimeSpan may be "1.09:30:00" (days.hours:minutes:seconds) or "09:30:00".
-  const withDays = text.match(/(?:(\d+)\.)?(\d{1,2}):(\d{2})(?::\d{2})?/);
-  if (!withDays) return "";
-  return `${String(Number(withDays[2])).padStart(2, "0")}:${withDays[3]}`;
+  const clock = formatLiteralClock(text);
+  return clock === "--:--" ? "" : clock;
+};
+
+/** Ưu tiên TimeOnly của booking; chỉ dùng quy đổi timezone cho timestamp fallback. */
+export const resolveCharterScheduleTime = (literalValue, timestampValue) => {
+  const literalClock = normalizeCharterScheduleTime(literalValue);
+  if (literalClock) return literalClock;
+  const instantClock = formatTripClock(timestampValue);
+  return instantClock === "--:--" ? "" : instantClock;
+};
+
+const getCharterTripDepartureValue = (trip) => pick(trip, [
+  "adjustedDepartureTime", "AdjustedDepartureTime",
+  "adjustedDeparture", "AdjustedDeparture",
+  "departureTime", "DepartureTime",
+  "plannedDepartureTime", "PlannedDepartureTime",
+  "plannedDeparture", "PlannedDeparture",
+  "scheduledDepartureAt", "ScheduledDepartureAt",
+  "startAt", "StartAt",
+], "");
+
+/** Lịch đang vận hành của charter trip, hiển thị theo giờ Việt Nam. */
+export const getCharterTripSchedule = (trip) => {
+  if (!trip || typeof trip !== "object") return { departureDate: "", startTime: "" };
+  const departureValue = getCharterTripDepartureValue(trip);
+  const operatingDate = pick(trip, ["operatingDate", "OperatingDate"], "");
+  let departureDate = normalizeCharterScheduleDate(operatingDate || departureValue);
+  const startTime = formatTripClock(departureValue);
+
+  if (!operatingDate && departureValue && /[zZ]|[+-]\d{2}:?\d{2}$/.test(String(departureValue))) {
+    const parsed = new Date(departureValue);
+    if (!Number.isNaN(parsed.getTime())) {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(parsed).map((part) => [part.type, part.value]));
+      departureDate = `${parts.year}-${parts.month}-${parts.day}`;
+    }
+  }
+
+  return {
+    departureDate,
+    startTime: startTime === "--:--" ? "" : startTime,
+  };
+};
+
+const charterTripMatchesBooking = (trip, booking) => {
+  const bookingId = String(booking?.id || booking?.bookingId || "").trim().toLowerCase();
+  const linkedBookingId = String(pick(trip, [
+    "charterBookingId", "CharterBookingId", "bookingId", "BookingId",
+    "requestBookingId", "RequestBookingId", "sourceBookingId", "SourceBookingId",
+    "charterBooking.id", "CharterBooking.Id", "booking.id", "Booking.Id",
+  ], "")).trim().toLowerCase();
+  if (bookingId && linkedBookingId && bookingId === linkedBookingId) return true;
+
+  const bookingCode = String(booking?.bookingCode || booking?.code || "").trim().toUpperCase();
+  if (!bookingCode || bookingCode === "--") return false;
+  const linkedBookingCode = String(pick(trip, [
+    "charterBookingCode", "CharterBookingCode", "bookingCode", "BookingCode",
+    "charterBooking.bookingCode", "booking.bookingCode",
+  ], "")).trim().toUpperCase();
+  if (linkedBookingCode && linkedBookingCode === bookingCode) return true;
+  const tripCode = String(pick(trip, ["tripCode", "TripCode", "code", "Code"], "")).toUpperCase();
+  return tripCode.includes(bookingCode);
+};
+
+/** Tìm tất cả charter trip gắn với booking, kể cả trip đã hủy. */
+export const findCharterTripsForBooking = (trips, booking) => (
+  (Array.isArray(trips) ? trips : []).filter((trip) => (
+    charterTripMatchesBooking(trip, booking)
+  ))
+);
+
+/** Tìm charter trip hiện tại của booking; bỏ trip đã hủy nếu còn trip khác. */
+export const findCharterTripForBooking = (trips, booking) => {
+  const matches = findCharterTripsForBooking(trips, booking);
+  if (!matches.length) return null;
+  const active = matches.filter((trip) => !["cancelled", "canceled"].includes(
+    String(trip?.tripStatus || trip?.status || trip?.TripStatus || "").toLowerCase(),
+  ));
+  return active[0] || matches[0];
+};
+
+/** Khi booking đã có trip, lịch trip là lịch vận hành cần hiển thị trên FE. */
+export const applyCharterTripSchedule = (booking, trip) => {
+  if (!booking || !trip) return booking;
+  const schedule = getCharterTripSchedule(trip);
+  if (!schedule.departureDate && !schedule.startTime) return booking;
+  return {
+    ...booking,
+    departureDate: schedule.departureDate || booking.departureDate,
+    startTime: schedule.startTime || booking.startTime,
+  };
 };
 
 export const getAssignedBoatIdsFromBooking = (booking) => {
@@ -300,6 +373,22 @@ export const getCharterBookingLinkedTripIds = (booking) => {
         "tripId", "TripId", "trip.id", "trip.TripId", "Trip.Id",
         "tripCode", "TripCode", "trip.tripCode", "Trip.TripCode",
       ], ""));
+    });
+  });
+
+  const passengerAndTicketCollections = [
+    booking?.passengers,
+    booking?.Passengers,
+    booking?.tickets,
+    booking?.Tickets,
+    booking?.raw?.passengers,
+    booking?.raw?.Passengers,
+    booking?.raw?.tickets,
+    booking?.raw?.Tickets,
+  ];
+  passengerAndTicketCollections.forEach((list) => {
+    (Array.isArray(list) ? list : []).forEach((row) => {
+      push(pick(row, ["tripId", "TripId", "trip.id", "trip.TripId", "Trip.Id"], ""));
     });
   });
 
@@ -1729,14 +1818,15 @@ export const normalizeBooking = (item) => {
   const passengerCount = Number(pick(item, ["passengerCount"], adultCount + childCount));
   // Booking bị hủy vẫn phải giữ lịch thuê để admin đối soát. Tùy endpoint,
   // BE có thể trả giờ bằng departureTime/requestedDepartureTime thay vì startTime.
-  const departureDate = pick(item, [
+  const departureTimestamp = pick(item, [
+    "departureTime", "requestedDepartureTime", "scheduledDepartureTime", "scheduledDepartureAt",
+  ], "");
+  const departureDate = normalizeCharterScheduleDate(pick(item, [
     "departureDate", "startDate", "scheduledDate", "rentalDate", "requestedDepartureDate",
-    "departureTime", "requestedDepartureTime",
-  ]);
-  const startTime = normalizeCharterScheduleTime(pick(item, [
-    "startTime", "departureTime", "requestedDepartureTime", "scheduledDepartureTime",
-    "rentalStartTime", "schedule.startTime", "charterSchedule.startTime",
-  ])) || "--";
+  ], "")) || normalizeCharterScheduleDate(departureTimestamp);
+  const startTime = resolveCharterScheduleTime(pick(item, [
+    "startTime", "rentalStartTime", "schedule.startTime", "charterSchedule.startTime",
+  ], ""), departureTimestamp) || "--";
   const fromName = pick(item, ["fromStationName", "fromStation.stationName", "fromStation.name"]);
   const toName = pick(item, ["toStationName", "toStation.stationName", "toStation.name"]);
   const routeEstimate = pick(item, ["routeEstimate"], null);
@@ -1775,6 +1865,16 @@ export const normalizeBooking = (item) => {
   const route = matchedRouteName
     || pick(item, ["route", "itineraryName"], "")
     || (fromName || toName ? `${fromName || "--"} - ${toName || "--"}` : "--");
+
+  const tickets = normalizeCharterTicketRows(item, {
+    adultCount,
+    passengerCount,
+    contactName: pick(item, ["contactName", "customerName", "fullName"], ""),
+  });
+  const ticketCount = getCharterTicketCount({
+    ...item,
+    tickets,
+  });
 
   return {
     raw: item,
@@ -1818,6 +1918,9 @@ export const normalizeBooking = (item) => {
     estimatedPrice: Number(pick(item, ["finalAmount", "totalAmount", "subtotalAmount", "estimatedPrice", "quoteAmount"], 0)),
     totalAmount: Number(pick(item, ["finalAmount", "totalAmount"], 0)) || 0,
     subtotalAmount: Number(pick(item, ["subtotalAmount", "subtotalBeforeDiscount"], 0)) || 0,
+    ticketSubtotalAmount: Number(pick(item, ["ticketSubtotalAmount", "pricing.ticketSubtotalAmount", "quoteBreakdown.ticketSubtotalAmount"], 0)) || 0,
+    insuranceAmount: Number(pick(item, ["insuranceAmount", "pricing.insuranceAmount", "quoteBreakdown.insuranceAmount"], 0)) || 0,
+    pointsUsed: Number(pick(item, ["pointsUsed"], 0)) || 0,
     discountAmount: Number(pick(item, ["discountAmount"], 0)) || 0,
     depositAmount: Number(pick(item, ["depositAmount"], 0)),
     remainingAmount: (() => {
@@ -1830,7 +1933,11 @@ export const normalizeBooking = (item) => {
       item?.requiresAdditionalPayment === true || item?.RequiresAdditionalPayment === true,
     ),
     additionalInsuranceAmount: Number(pick(item, ["additionalInsuranceAmount"], 0)) || 0,
-    paidAmount: Number(pick(item, ["paidAmount", "paidPaymentAmount"], 0)) || 0,
+    paidAmount: Number(pick(item, [
+      "paidAmount",
+      "paidPaymentAmount",
+      "refundSummary.totalPaidAmount",
+    ], 0)) || 0,
     promotionCode: pick(item, ["promotionCode"], ""),
     quoteBoats: pick(item, ["quoteBoats", "quoteBreakdown.boats", "pricing.boats", "pricePreview.boats"], []),
     specialRequests: pick(item, ["specialRequests"], ""),
@@ -1848,11 +1955,8 @@ export const normalizeBooking = (item) => {
     insurance: normalizeInsuranceFromBooking(item) || pick(item, ["insurance"], null),
     qrToken: pick(item, ["charterBookingQrToken", "qrToken"], ""),
     passengers: Array.isArray(item?.passengers) ? item.passengers : [],
-    tickets: normalizeCharterTicketRows(item, {
-      adultCount,
-      passengerCount,
-      contactName: pick(item, ["contactName", "customerName", "fullName"], ""),
-    }),
+    tickets,
+    ticketCount,
     payments: collectCharterPayments(item),
     trips: Array.isArray(item?.trips) ? item.trips : (Array.isArray(item?.charterTrips) ? item.charterTrips : []),
     tripIds: getCharterBookingLinkedTripIds(item),

@@ -1,8 +1,19 @@
 import api from './axios';
 
+const freshDetailConfig = () => ({
+    params: { _ts: Date.now() },
+    headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+    },
+});
+
 // API: Danh sách chuyến tàu (query params: operatingDate dd/MM/yyyy, routeCode, status, tripType, routeType — tất cả optional)
 export const getTrips = (params) =>
-    api.get('/trips', { params }).then(response => response.data);
+    api.get('/trips', {
+        ...freshDetailConfig(),
+        params: { ...params, _ts: Date.now() },
+    }).then(response => response.data);
 
 // API: Tạo chuyến tàu mới (routeCode, boatCode, operatingDate, departureTime bắt buộc).
 // Legacy — giữ tương thích; form Admin dùng POST /trips/schedule.
@@ -44,7 +55,7 @@ export const searchSightseeingTrips = (params) =>
 
 // API: Chi tiết 1 chuyến tàu kèm danh sách bến dừng (trip_stops)
 export const getTripById = (id) =>
-    api.get(`/trips/${id}`).then(response => response.data);
+    api.get(`/trips/${id}`, freshDetailConfig()).then(response => response.data);
 
 /** GET /api/trips/{tripId}/passengers — manifest khách mua vé của đúng chuyến (Admin/Manager/Staff). */
 export const getTripPassengers = (tripId) =>

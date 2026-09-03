@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SeatMapIcon, seatToneFromOccupancyRole } from "./SeatMapIcon";
 import { BoatBowLabel } from "./ShipWheelIcon";
 import { fetchTripDetail, fetchTripSeatMap } from "../services/tripService";
@@ -262,6 +262,11 @@ const PersonRow = ({ person, accent, onSeatClick, lang = "VN", lapInfants = [] }
         <span className="mt-0.5 block truncate text-[10px] font-medium opacity-80">
           {(person.fromStationName || "—")} → {(person.toStationName || "—")}
         </span>
+        {(person.phoneNumber || person.contactPhone) ? (
+          <span className="mt-0.5 block truncate text-[10px] font-medium opacity-80">
+            {person.phoneNumber || person.contactPhone}
+          </span>
+        ) : null}
         {companions.map((infant, infantIndex) => (
           <SharedSeatCompanionCard
             key={`lap-${infant.passengerName}-${infantIndex}`}
@@ -364,7 +369,7 @@ export function TripStationSeatBoard({
     [detail, trip],
   );
 
-  const followLiveStop = (stop, { clearSeat = true } = {}) => {
+  const followLiveStop = useCallback((stop, { clearSeat = true } = {}) => {
     if (!stop) return;
     const nextKey = stopKeyOf(stop);
     lastLiveStopKeyRef.current = nextKey;
@@ -374,7 +379,7 @@ export function TripStationSeatBoard({
       setSelectedSeatNumber("");
       setFocusRole("all");
     }
-  };
+  }, [selectedStopKey]);
 
   useEffect(() => {
     if (!stops.length) {
@@ -413,7 +418,7 @@ export function TripStationSeatBoard({
     if (!userPickedStopRef.current) {
       followLiveStop(live || stops[0]);
     }
-  }, [stops, initialStationId, detail, trip, nowTick, selectedStopKey]);
+  }, [stops, initialStationId, detail, trip, nowTick, selectedStopKey, followLiveStop]);
 
   const selectedStop = useMemo(() => {
     if (!selectedStopKey) return stops[0] || null;
@@ -910,6 +915,19 @@ export function TripStationSeatBoard({
                           <p className="mt-0.5 text-[10px] font-medium opacity-80">
                             {(p.fromStationName || "—")} → {(p.toStationName || "—")}
                           </p>
+                          <div className="mt-1 space-y-0.5 text-[10px] font-medium opacity-80">
+                            {(p.phoneNumber || p.contactPhone) ? (
+                              <p className="truncate">{p.phoneNumber || p.contactPhone}</p>
+                            ) : null}
+                            {(p.email || p.contactEmail) ? (
+                              <p className="break-all">{p.email || p.contactEmail}</p>
+                            ) : null}
+                            {(p.bookingCode || p.ticketCode) ? (
+                              <p className="break-all font-bold">
+                                {[p.bookingCode, p.ticketCode].filter((value) => value && value !== "—").join(" · ")}
+                              </p>
+                            ) : null}
+                          </div>
                           {infants.map((infant, infantIndex) => (
                             <SharedSeatCompanionCard
                               key={`lap-${infant.passengerName}-${infantIndex}`}

@@ -4,7 +4,9 @@ import {
   formatPassengerApprovalStatus,
   getCharterPassengerAddSummary,
   getPassengerAddBlockedReason,
+  getPassengerAddRequestBatches,
   getPassengerApprovalTone,
+  listBookingPassengers,
   normalizePassengerApprovalStatus,
 } from "../../../utils/charterPassengerAdd";
 import { pick } from "../../../utils/charterBookingAdmin";
@@ -81,13 +83,7 @@ export function MyCharterTicketsPanel({
   selectedTicketIds,
   setSelectedTicketIds,
   passengerRows,
-  canUseContactAsSinglePassenger,
-  bookerAsFirstPassenger = false,
-  bookerName = "",
-  importInputRef,
-  isUsableText,
   handleTicketFileAction,
-  handleImportPassengers,
   handlePassengerChange,
   handleSavePassengers,
   handleAddPassengers,
@@ -99,12 +95,13 @@ export function MyCharterTicketsPanel({
   const COLLAPSED_LIMIT = 5;
   const summary = getCharterPassengerAddSummary(booking);
   const canAdd = canCustomerRequestAddPassengers(booking);
+  const requestBatches = getPassengerAddRequestBatches(listBookingPassengers(booking));
 
   // Merge BE passengers + placeholder slots so customer always sees the full count
   // — replaces the old CustomerPassengerManifest duplicate card.
   const approvedNamedRows = passengerRows.filter((row) => {
     const status = normalizePassengerApprovalStatus(row.approvalStatus);
-    return status !== "Rejected";
+    return status === "Approved";
   });
   const seatCount = Math.max(
     0,
@@ -122,7 +119,10 @@ export function MyCharterTicketsPanel({
     : [];
 
   // Tổng số slot sẽ hiển thị: placeholder + rows BE — dùng cho header counter & collapse.
-  const displayRows = [...placeholderRows, ...passengerRows];
+  const currentPassengerRows = passengerRows
+    .map((row, sourceIndex) => ({ ...row, __sourceIndex: sourceIndex }))
+    .filter((row) => normalizePassengerApprovalStatus(row.approvalStatus) === "Approved");
+  const displayRows = [...placeholderRows, ...currentPassengerRows];
   const canCollapseList = displayRows.length > COLLAPSED_LIMIT;
   const visibleRows = canCollapseList && !isExpanded
     ? displayRows.slice(0, COLLAPSED_LIMIT)
@@ -276,7 +276,7 @@ export function MyCharterTicketsPanel({
                       ) : (
                         <input
                           value={displayName}
-                          onChange={(e) => handlePassengerChange(index, "fullName", sanitizeFullName(e.target.value))}
+                          onChange={(e) => handlePassengerChange(row.__sourceIndex ?? index, "fullName", sanitizeFullName(e.target.value))}
                           readOnly={nameLocked}
                           placeholder={lang === "VN" ? "Họ tên" : "Full name"}
                           className="w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] read-only:cursor-default read-only:opacity-90"
@@ -293,7 +293,7 @@ export function MyCharterTicketsPanel({
                         min={MIN_BIRTH_YEAR}
                         max={CURRENT_YEAR}
                         value={row.birthYear}
-                        onChange={(e) => handlePassengerChange(index, "birthYear", e.target.value)}
+                        onChange={(e) => handlePassengerChange(row.__sourceIndex ?? index, "birthYear", e.target.value)}
                         readOnly={isLocked}
                         placeholder={lang === "VN" ? "Năm sinh" : "Birth year"}
                         className="w-full px-3 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-[#FFD100] read-only:cursor-default read-only:opacity-90"
@@ -362,6 +362,43 @@ export function MyCharterTicketsPanel({
         )}
         </div>
       </section>
+
+      {requestBatches.length > 0 ? (
+        <section className="overflow-hidden rounded-4xl border border-slate-200/70 bg-white shadow-sm dark:border-slate-700/70 dark:bg-slate-800">
+          <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-700/70 md:px-8">
+            <h2 className="font-headline text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
+              {lang === "VN" ? "Lịch sử yêu cầu thêm hành khách" : "Passenger add request history"}
+            </h2>
+          </div>
+          <div className="space-y-3 px-6 py-6 md:px-8">
+            {requestBatches.map((batch) => (
+              <div
+                key={batch.requestBatchId}
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p className="text-xs font-medium text-slate-400">
+                    {batch.requestedAt
+                      ? new Date(batch.requestedAt).toLocaleDateString("vi-VN")
+                      : (lang === "VN" ? "Không rõ thời gian" : "Date unavailable")}
+                  </p>
+                  <span className={`inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-headline font-black uppercase tracking-wider ${getPassengerApprovalTone(batch.status)}`}>
+                    {formatPassengerApprovalStatus(batch.status, lang, batch.reviewNote)}
+                  </span>
+                </div>
+                <ul className="mt-3 space-y-1.5">
+                  {batch.passengers.map((passenger, index) => (
+                    <li key={`${batch.requestBatchId}-${index}`} className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                      {passenger.fullName || "--"}
+                      {passenger.birthYear ? ` · ${passenger.birthYear}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {isPaid && booking?.status === "Confirmed" ? (
         <section className="bg-white dark:bg-slate-800 rounded-4xl p-6 md:p-8 shadow-xl border border-slate-100 dark:border-slate-700/50">
