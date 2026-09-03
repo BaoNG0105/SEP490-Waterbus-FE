@@ -422,11 +422,15 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
 
   // 4. ƯỚC TÍNH GIÁ — trình bày giống trang đặt vé khách lẻ (WaterbusBooking/Step3Checkout):
   // BE cộng sẵn phí bảo hiểm bắt buộc mặc định vào effectivePrice của ghế, nên tách ra 2 dòng
-  // "Giá vé" (đơn giá từng vé) và "Bảo hiểm bắt buộc". Ưu đãi loại vé chỉ áp lên giá ghế; bảo hiểm
-  // mặc định vẫn tính đủ cho vé miễn phí/giảm giá và cho em bé không chiếm ghế.
+  // "Giá vé" (đơn giá từng vé) và "Bảo hiểm bắt buộc". Vé Waterbus có giá 0 sau ưu đãi
+  // (người cao tuổi, trẻ em, người khuyết tật) được miễn cả phí bảo hiểm mặc định.
   const legSeatFares = (seats) => seats.map((seat, i) => {
     const ticketTypeCode = String(passengers[i]?.ticketType || "ADULT").toUpperCase();
-    return { ticketTypeCode, fare: getSeatBaseFare(seat) * getPriceModifier(ticketTypeCode) };
+    return {
+      seat,
+      ticketTypeCode,
+      fare: getSeatBaseFare(seat) * getPriceModifier(ticketTypeCode),
+    };
   });
   const seatFares = [
     ...legSeatFares(selectedSeatsDeparture),
@@ -446,15 +450,16 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
     return map;
   }, new Map()).values()];
 
-  const sumLegDefaultInsurance = (seats) => {
-    const seatedTotal = seats.reduce((sum, seat) => sum + getSeatDefaultInsurancePremium(seat), 0);
-    const defaultInsurancePerInfant = seats.length > 0
-      ? getSeatDefaultInsurancePremium(seats[0])
-      : 0;
-    return seatedTotal + (infants.length * defaultInsurancePerInfant);
-  };
-  const defaultInsuranceTotal = sumLegDefaultInsurance(selectedSeatsDeparture)
-    + (isRoundTrip ? sumLegDefaultInsurance(selectedSeatsReturn) : 0);
+  const sumLegDefaultInsurance = (items) => items.reduce(
+    (sum, item) => sum + (item.fare > 0 ? getSeatDefaultInsurancePremium(item.seat) : 0),
+    0,
+  );
+  const departureSeatFares = legSeatFares(selectedSeatsDeparture);
+  const returnSeatFares = isRoundTrip ? legSeatFares(selectedSeatsReturn) : [];
+  const defaultInsuranceTotal = sumLegDefaultInsurance(departureSeatFares)
+    + sumLegDefaultInsurance(returnSeatFares);
+  const chargeableInsurancePassengerCount = departureSeatFares.filter((item) => item.fare > 0).length
+    + returnSeatFares.filter((item) => item.fare > 0).length;
   const insurancePassengerCount = selectedSeatsDeparture.length
     + infants.length
     + (isRoundTrip ? selectedSeatsReturn.length + infants.length : 0);
@@ -1353,17 +1358,21 @@ export default function Step3CounterCheckout({ bookingData, onBack, onExpire, on
             <span>{lang === "VN" ? "Tổng giá vé" : "Ticket subtotal"}</span>
             <span className="font-bold text-slate-700 dark:text-slate-200">{ticketFareTotal.toLocaleString()}đ</span>
           </div>
-          {defaultInsuranceTotal > 0 && (
+          {insurancePassengerCount > 0 && (
             <div className="flex items-start justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
               <div className="min-w-0 max-w-[65%]">
-                <p>{lang === "VN" ? "Bảo hiểm bắt buộc" : "Mandatory insurance"}</p>
+                <p>{lang === "VN" ? "Bảo hiểm mặc định Waterbus" : "Waterbus default insurance"}</p>
                 <p className="mt-0.5 text-[11px] text-slate-400">
                   {lang === "VN"
-                    ? `Bảo hiểm mặc định của Waterbus · ${insurancePassengerCount} hành khách`
-                    : `Waterbus standard insurance · ${insurancePassengerCount} passenger(s)`}
+                    ? `Waterbus · ${chargeableInsurancePassengerCount} tính phí / ${insurancePassengerCount} được bảo hiểm`
+                    : `Waterbus · ${chargeableInsurancePassengerCount} charged / ${insurancePassengerCount} insured`}
                 </p>
               </div>
-              <span className="shrink-0 font-bold text-slate-700 dark:text-slate-200">+{defaultInsuranceTotal.toLocaleString()}đ</span>
+              <span className="shrink-0 font-bold text-slate-700 dark:text-slate-200">
+                {defaultInsuranceTotal > 0
+                  ? `+${defaultInsuranceTotal.toLocaleString()}đ`
+                  : (lang === "VN" ? "Miễn phí" : "Free")}
+              </span>
             </div>
           )}
           {insuranceFee > 0 && (

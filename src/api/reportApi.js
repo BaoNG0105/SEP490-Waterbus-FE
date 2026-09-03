@@ -7,6 +7,10 @@ import api from './axios';
 export const getBookingsReport = (params = {}) =>
     api.get('/reports/bookings', { params }).then(response => response.data);
 
+// Xuất toàn bộ booking khớp bộ lọc hiện tại (không phân trang) dưới dạng Excel.
+export const exportBookingsReport = (params = {}) =>
+    api.get('/reports/bookings/export', { params, responseType: 'blob' });
+
 // API: Danh sách booking rút gọn cho FE autocomplete/select/dropdown.
 // params: keyword, bookingStatus, paymentStatus, serviceType, limit (required).
 export const getBookingsSelect = (params = {}) =>

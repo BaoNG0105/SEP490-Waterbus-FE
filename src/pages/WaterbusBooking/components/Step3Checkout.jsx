@@ -547,44 +547,48 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     ? (selectedSeatsDeparture.length + selectedSeatsReturn.length)
     : selectedSeatsDeparture.length;
 
-  // Bảo hiểm tính theo hành khách trên từng chặng, không tính theo số ghế.
-  // INFANT miễn phí vé và không chiếm ghế nhưng vẫn là một người được bảo hiểm.
+  // Quantity vẫn là tổng số hành khách được bảo hiểm trên từng chặng. Waterbus chỉ thu
+  // phí mặc định trên vé có giá; gói bên thứ ba thu phí đủ mọi hành khách được bảo hiểm.
   const insurancePassengerCount =
     selectedSeatsDeparture.length
     + infants.length
     + (isRoundTrip ? selectedSeatsReturn.length + infants.length : 0);
+  const legSeatFares = (seats) => seats.map((seat, i) => {
+    const ticketTypeCode = String(passengers[i]?.ticketType || "ADULT").toUpperCase();
+    return {
+      seat,
+      ticketTypeCode,
+      fare: getSeatBaseFare(seat) * getPriceModifier(ticketTypeCode),
+    };
+  });
+  const departureSeatFares = legSeatFares(selectedSeatsDeparture);
+  const returnSeatFares = isRoundTrip ? legSeatFares(selectedSeatsReturn) : [];
+  const seatFares = [...departureSeatFares, ...returnSeatFares];
+  const chargeableInsurancePassengerCount = seatFares.filter((item) => item.fare > 0).length;
   const selectedInsurancePackage = selectedInsurancePackageId
     ? findInsurancePackageById(insurancePackages, selectedInsurancePackageId)
     : null;
+  const selectedInsuranceIsWaterbus = selectedInsurancePackage?.isWaterbusDefault === true
+    || String(selectedInsurancePackage?.providerSource || '').toLowerCase() === 'waterbus';
+  const selectedInsurancePassengerCount = selectedInsuranceIsWaterbus
+    ? chargeableInsurancePassengerCount
+    : insurancePassengerCount;
   const insurancePreview = selectedInsurancePackage
     ? calculateTicketInsurancePreview({
       unitPremiumAmount: selectedInsurancePackage.unitPremiumAmount,
-      passengerCount: insurancePassengerCount,
+      passengerCount: selectedInsurancePassengerCount,
     })
     : { canPreview: false, quantity: 0, unitPremium: 0, total: 0 };
   const insuranceFee = selectedInsurancePackageId ? Number(insurancePreview.total) || 0 : 0;
   const insuranceRequired = insurancePackages.some((pkg) => pkg.isRequired);
 
-  // Chỉ áp dụng ưu đãi loại vé lên giá ghế. Bảo hiểm Waterbus mặc định vẫn tính đủ
-  // cho vé miễn phí/giảm giá và đã nằm trong effectivePrice của seat-map.
+  // Chỉ áp dụng ưu đãi loại vé lên giá ghế. Bảo hiểm mặc định từ seat-map cũng chỉ
+  // được thu nếu giá vé sau khi áp loại hành khách lớn hơn 0.
   // Bước 2 chỉ hiển thị giá ghế thuần, nên ở đây tách hẳn 2 dòng: giá vé và phí bảo hiểm bắt buộc.
-  // Giá của TỪNG vé (giá ghế đã áp ưu đãi loại vé) — khối hóa đơn hiển thị đơn giá × số ghế.
-  const legSeatFares = (seats) => seats.map((seat, i) => {
-    const ticketTypeCode = String(passengers[i]?.ticketType || "ADULT").toUpperCase();
-    return { ticketTypeCode, fare: getSeatBaseFare(seat) * getPriceModifier(ticketTypeCode) };
-  });
-  // Bảo hiểm mặc định tính đủ cho mọi hành khách — kể cả vé miễn phí và em bé không chiếm ghế.
-  const sumLegDefaultInsurance = (seats) => {
-    const seatedTotal = seats.reduce((sum, seat) => sum + getSeatDefaultInsurancePremium(seat), 0);
-    const defaultInsurancePerInfant = seats.length > 0
-      ? getSeatDefaultInsurancePremium(seats[0])
-      : 0;
-    return seatedTotal + (infants.length * defaultInsurancePerInfant);
-  };
-  const seatFares = [
-    ...legSeatFares(selectedSeatsDeparture),
-    ...(isRoundTrip ? legSeatFares(selectedSeatsReturn) : []),
-  ];
+  const sumLegDefaultInsurance = (items) => items.reduce(
+    (sum, item) => sum + (item.fare > 0 ? getSeatDefaultInsurancePremium(item.seat) : 0),
+    0,
+  );
   const ticketFareTotal = seatFares.reduce((sum, item) => sum + item.fare, 0);
   // Đơn giá 1 vé; nếu các vé lệch giá (khác loại ghế / loại hành khách / khác chiều) thì
   // không có một đơn giá chung — khối hóa đơn liệt kê từng nhóm vé thay vì hiện 1 con số.
@@ -598,8 +602,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     else map.set(key, { key, ticketTypeCode, fare, count: 1 });
     return map;
   }, new Map()).values()];
-  const defaultInsuranceTotal = sumLegDefaultInsurance(selectedSeatsDeparture)
-    + (isRoundTrip ? sumLegDefaultInsurance(selectedSeatsReturn) : 0);
+  const defaultInsuranceTotal = sumLegDefaultInsurance(departureSeatFares)
+    + sumLegDefaultInsurance(returnSeatFares);
   const subtotal = ticketFareTotal + defaultInsuranceTotal;
   // Tổng đơn hàng trước giảm giá = giá vé + bảo hiểm (giống base BE dùng để validate mã).
   const orderBeforeDiscount = subtotal + insuranceFee;
@@ -904,14 +908,13 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
       // Giá chốt: luôn lấy subtotalAmount / totalAmount từ booking response (không tự khóa tổng trên FE).
       const bookingTotalRaw = pick(booking, ["totalAmount", "data.totalAmount"], null);
       const bookingSubtotalRaw = pick(booking, ["subtotalAmount", "data.subtotalAmount", "ticketSubtotalAmount", "data.ticketSubtotalAmount"], null);
-      const bookingTotal = Number(bookingTotalRaw);
+      const hasBookingTotal = bookingTotalRaw !== null
+        && bookingTotalRaw !== undefined
+        && bookingTotalRaw !== "";
+      const bookingTotal = hasBookingTotal ? Number(bookingTotalRaw) : Number.NaN;
       const orderAmount = Number.isFinite(bookingTotal)
         ? bookingTotal
         : (Number(bookingSubtotalRaw) || estimatedOrderAmount);
-      const bookingStatus = String(pick(booking, [
-        "bookingStatus", "status",
-        "data.bookingStatus", "data.status",
-      ], "")).trim();
       const cappedPoints = getMaxPointsToUse(pointBalance, orderAmount);
       // Booking response là nguồn giá cuối cùng. Nếu user đã bật dùng điểm, áp dụng
       // tối đa theo totalAmount BE trả về, kể cả preview trước đó tính thiếu bảo hiểm.
@@ -941,7 +944,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
         });
       };
 
-      if (orderAmount === 0 && bookingStatus.toLowerCase() === "confirmed") {
+      if (orderAmount === 0) {
         try {
           await fetchMyBookingDetail(bookingId);
         } catch (detailError) {
@@ -1775,17 +1778,21 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
             <span>{lang === "VN" ? "Tổng giá vé" : "Ticket subtotal"}</span>
             <span className="font-bold text-slate-700 dark:text-slate-200">{ticketFareTotal.toLocaleString()}đ</span>
           </div>
-          {defaultInsuranceTotal > 0 && (
+          {insurancePassengerCount > 0 && (
             <div className="flex items-start justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
               <div className="min-w-0 max-w-[65%]">
-                <p>{lang === "VN" ? "Bảo hiểm bắt buộc" : "Mandatory insurance"}</p>
+                <p>{lang === "VN" ? "Bảo hiểm mặc định Waterbus" : "Waterbus default insurance"}</p>
                 <p className="mt-0.5 text-[11px] text-slate-400">
                   {lang === "VN"
-                    ? `Bảo hiểm mặc định của Waterbus · ${insurancePassengerCount} hành khách`
-                    : `Waterbus standard insurance · ${insurancePassengerCount} passenger(s)`}
+                    ? `Waterbus · ${chargeableInsurancePassengerCount} tính phí / ${insurancePassengerCount} được bảo hiểm`
+                    : `Waterbus · ${chargeableInsurancePassengerCount} charged / ${insurancePassengerCount} insured`}
                 </p>
               </div>
-              <span className="shrink-0 font-bold text-slate-700 dark:text-slate-200">+{defaultInsuranceTotal.toLocaleString()}đ</span>
+              <span className="shrink-0 font-bold text-slate-700 dark:text-slate-200">
+                {defaultInsuranceTotal > 0
+                  ? `+${defaultInsuranceTotal.toLocaleString()}đ`
+                  : (lang === "VN" ? "Miễn phí" : "Free")}
+              </span>
             </div>
           )}
           {insuranceFee > 0 && (
@@ -1794,7 +1801,7 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                 <p>{lang === "VN" ? "Bảo hiểm bổ sung" : "Additional insurance"}</p>
                 <p className="mt-0.5 text-[11px] text-slate-400">
                   {insurancePreview.unitPremium.toLocaleString()}đ × {insurancePreview.quantity}{" "}
-                  {lang === "VN" ? "hành khách" : "passenger(s)"}
+                  {lang === "VN" ? "hành khách tính phí" : "charged passenger(s)"}
                 </p>
               </div>
               <span className="shrink-0 font-bold text-slate-700 dark:text-slate-200">+{insuranceFee.toLocaleString()}đ</span>

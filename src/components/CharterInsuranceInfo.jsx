@@ -141,13 +141,16 @@ export function CharterInsuranceInfo({
     const packageTitle = leg?.packageName
       || (isVn ? "Gói bảo hiểm" : "Insurance package");
     const providerLine = leg?.providerName || "";
+    const isFree = amount <= 0;
     const unitPremiumLabel = leg?.unitPremiumAmount
       ? `${formatMoney(leg.unitPremiumAmount)}/${unitNoun}`
       : "";
     const qty = leg?.quantity
       ? `${leg.quantity} ${leg.quantity === 1 ? unitNoun : (isVn ? "khách" : "passengers")}`
       : "";
-    const formula = [unitPremiumLabel, qty].filter(Boolean).join(" × ");
+    const formula = isFree
+      ? (isVn ? "Miễn phí" : "Free")
+      : [unitPremiumLabel, qty].filter(Boolean).join(" × ");
     const hasTerms = normalizeTermParagraphs(leg?.terms).length > 0;
     return (
       <div className="rounded-2xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/80 space-y-1.5">
@@ -186,7 +189,7 @@ export function CharterInsuranceInfo({
               </button>
             ) : null}
             <p className="text-sm font-headline font-black tabular-nums text-[#124757] dark:text-yellow-400">
-              {amount > 0 ? formatMoney(amount) : "—"}
+              {isFree ? (isVn ? "Miễn phí" : "Free") : formatMoney(amount)}
             </p>
           </div>
         </div>

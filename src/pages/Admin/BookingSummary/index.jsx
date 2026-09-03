@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useApp } from "../../../context/AppContext";
-import { getBookingsReport, getWaterbusStationRevenue } from "../../../api/reportApi";
+import { exportBookingsReport, getBookingsReport, getWaterbusStationRevenue } from "../../../api/reportApi";
 import { WaterbusStationSummaryTable } from "../../../components/WaterbusStationSummaryTable";
 import { hasRole } from "../../../utils/roleHelpers";
 import { FormSelect } from "../../../components/FormSelect";
@@ -21,6 +21,22 @@ import {
 } from "../../../utils/bookingReport";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
+
+const buildBookingReportParams = (currentFilters, page = null, pageSize = null) => {
+  const params = {};
+  if (page != null) params.page = page;
+  if (pageSize != null) params.pageSize = pageSize;
+  if (currentFilters.keyword) params.keyword = currentFilters.keyword;
+  if (currentFilters.bookingStatus !== "All") params.bookingStatus = currentFilters.bookingStatus;
+  if (currentFilters.paymentStatus !== "All") params.paymentStatus = currentFilters.paymentStatus;
+  if (currentFilters.serviceType !== "All") params.serviceType = currentFilters.serviceType;
+  if (currentFilters.paymentMethod !== "All") params.paymentMethod = currentFilters.paymentMethod;
+  if (currentFilters.createdFrom) params.createdFrom = currentFilters.createdFrom;
+  if (currentFilters.createdTo) params.createdTo = currentFilters.createdTo;
+  if (currentFilters.departureFrom) params.departureFrom = currentFilters.departureFrom;
+  if (currentFilters.departureTo) params.departureTo = currentFilters.departureTo;
+  return params;
+};
 
 /** Tổng hợp Booking — danh sách booking chi tiết, lọc theo trạng thái/dịch vụ/thời gian. */
 export const BookingSummary = () => {
@@ -49,6 +65,7 @@ export const BookingSummary = () => {
   const [errorMsg, setErrorMsg] = useState("");
   const [waterbusData, setWaterbusData] = useState(null);
   const [waterbusLoading, setWaterbusLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Debounce ô tìm kiếm để tránh gọi API liên tục khi đang gõ.
   useEffect(() => {
@@ -64,18 +81,7 @@ export const BookingSummary = () => {
     try {
       setIsLoading(true);
       setErrorMsg("");
-      const params = { page, pageSize };
-      if (filters.keyword) params.keyword = filters.keyword;
-      if (filters.bookingStatus !== "All") params.bookingStatus = filters.bookingStatus;
-      if (filters.paymentStatus !== "All") params.paymentStatus = filters.paymentStatus;
-      if (filters.serviceType !== "All") params.serviceType = filters.serviceType;
-      if (filters.paymentMethod !== "All") params.paymentMethod = filters.paymentMethod;
-      if (filters.createdFrom) params.createdFrom = filters.createdFrom;
-      if (filters.createdTo) params.createdTo = filters.createdTo;
-      if (filters.departureFrom) params.departureFrom = filters.departureFrom;
-      if (filters.departureTo) params.departureTo = filters.departureTo;
-
-      const result = await getBookingsReport(params);
+      const result = await getBookingsReport(buildBookingReportParams(filters, page, pageSize));
       setData(result);
     } catch (error) {
       console.error("Lỗi tải tổng hợp booking:", error);
@@ -89,6 +95,37 @@ export const BookingSummary = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAccess, page, pageSize, filters]);
+
+  const handleExport = async () => {
+    if (isExporting) return;
+    try {
+      setIsExporting(true);
+      setErrorMsg("");
+      const response = await exportBookingsReport(buildBookingReportParams(filters));
+      const contentDisposition = response.headers?.["content-disposition"] || "";
+      const filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+      const filename = filenameMatch
+        ? decodeURIComponent(filenameMatch[1] || filenameMatch[2])
+        : `booking_report_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.xlsx`;
+      const objectUrl = URL.createObjectURL(response.data);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      console.error("Lỗi xuất Excel tổng hợp booking:", error);
+      setErrorMsg(
+        lang === "VN"
+          ? "Không thể xuất file Excel tổng hợp booking."
+          : "Failed to export the booking summary Excel file."
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     loadReport();
@@ -164,14 +201,30 @@ export const BookingSummary = () => {
 
       {/* HEADER */}
       <div className="bg-white dark:bg-slate-800 p-6 rounded-4xl border border-slate-100 dark:border-slate-700/50 shadow-sm">
-        <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
-          {lang === "VN" ? "Tổng hợp Booking" : "Booking Summary"}
-        </h2>
-        <p className="text-xs text-slate-400 mt-0.5">
-          {lang === "VN"
-            ? "Tra cứu danh sách booking chi tiết, lọc theo trạng thái, dịch vụ và thời gian."
-            : "Browse detailed bookings, filtered by status, service and date range."}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl md:text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 uppercase tracking-wide">
+              {lang === "VN" ? "Tổng hợp Booking" : "Booking Summary"}
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {lang === "VN"
+                ? "Tra cứu danh sách booking chi tiết, lọc theo trạng thái, dịch vụ và thời gian."
+                : "Browse detailed bookings, filtered by status, service and date range."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#124757] px-4 py-2.5 text-xs font-headline font-black uppercase tracking-wide text-white transition hover:bg-[#0e3743] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-yellow-400 dark:text-slate-900 dark:hover:bg-yellow-300"
+            title={lang === "VN" ? "Xuất toàn bộ booking theo bộ lọc hiện tại" : "Export all bookings using the current filters"}
+          >
+            <span className="material-symbols-outlined text-base">{isExporting ? "progress_activity" : "download"}</span>
+            {isExporting
+              ? (lang === "VN" ? "Đang xuất..." : "Exporting...")
+              : (lang === "VN" ? "Xuất Excel" : "Export Excel")}
+          </button>
+        </div>
       </div>
 
       {errorMsg && (
