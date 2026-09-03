@@ -14,6 +14,7 @@ import { fetchBoatDetail } from "../../../services/boatService";
 //toast
 import { notify, showToast } from "../../../utils/swalToast";
 //utils
+import { getSeatBaseFare } from "../../../utils/insurancePreview";
 import {
   bookingHasSeatSelection,
   clearSeatSelectionFields,
@@ -943,6 +944,14 @@ export default function Step2SelectTripAndSeats({
         )}
 
       {/* --- BỐ CỤC CHÍNH ĐƯỢC CHIA ĐÔI: TRÁI CHỌN TUYẾN - PHẢI CHỌN GHẾ --- */}
+      {roundTripSeatCountMismatch && (
+        <p className="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl px-4 py-3">
+          {lang === "VN"
+            ? `Số ghế chiều đi (${selectedSeatsDeparture.length}) và chiều về (${selectedSeatsReturn.length}) phải bằng nhau.`
+            : `Departure seat count (${selectedSeatsDeparture.length}) and return seat count (${selectedSeatsReturn.length}) must match.`}
+        </p>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
         {/* CỘT TRÁI (Tỷ lệ 5/12): DANH SÁCH CHUYẾN TÀU CHẠY TRONG NGÀY (dữ liệu thật từ API tìm chuyến) */}
@@ -1134,7 +1143,7 @@ export default function Step2SelectTripAndSeats({
                   >
                     {seat.seatNumber}
                     <span className="text-[#124757] dark:text-yellow-400">
-                      {Number(seat.effectivePrice || seat.basePrice || 0).toLocaleString()}₫
+                      {getSeatBaseFare(seat).toLocaleString()}₫
                     </span>
                   </span>
                 ))}
@@ -1144,9 +1153,15 @@ export default function Step2SelectTripAndSeats({
                   {lang === "VN" ? "Tạm tính" : "Subtotal"}
                 </span>
                 <span className="text-lg font-headline font-black text-[#124757] dark:text-yellow-400">
-                  {currentSeats.reduce((sum, s) => sum + Number(s.effectivePrice || s.basePrice || 0), 0).toLocaleString()} VND
+                  {currentSeats.reduce((sum, s) => sum + getSeatBaseFare(s), 0).toLocaleString()} VND
                 </span>
               </div>
+              {/* Bảo hiểm mặc định bắt buộc không cộng ở bước này — hiển thị & tính tại Bước 3 (thanh toán). */}
+              <p className="text-[10px] font-bold italic text-slate-500 dark:text-slate-400">
+                {lang === "VN"
+                  ? "Chưa bao gồm phí bảo hiểm bắt buộc."
+                  : "Excludes the mandatory insurance fee."}
+              </p>
             </div>
           )}
 
@@ -1246,7 +1261,7 @@ export default function Step2SelectTripAndSeats({
                                     {seatStatusLabel}
                                   </div>
                                   <div className="text-sm font-headline font-black text-[#124757] dark:text-yellow-400">
-                                    {lang === "VN" ? "Giá" : "Price"}: {Number(seat.effectivePrice || seat.basePrice || 0).toLocaleString()} {lang === "VN" ? "VNĐ" : "VND"}
+                                    {lang === "VN" ? "Giá" : "Price"}: {getSeatBaseFare(seat).toLocaleString()} {lang === "VN" ? "VNĐ" : "VND"}
                                   </div>
                                 </div>
                                 <div className="mx-auto -mt-1 h-2 w-2 rotate-45 border-b border-r border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800" />
@@ -1286,14 +1301,6 @@ export default function Step2SelectTripAndSeats({
         </div>
 
       </div>
-
-      {roundTripSeatCountMismatch && (
-        <p className="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl px-4 py-3">
-          {lang === "VN"
-            ? `Số ghế chiều đi (${selectedSeatsDeparture.length}) và chiều về (${selectedSeatsReturn.length}) phải bằng nhau.`
-            : `Departure seat count (${selectedSeatsDeparture.length}) and return seat count (${selectedSeatsReturn.length}) must match.`}
-        </p>
-      )}
 
       {/* --- NÚT ĐIỀU HƯỚNG CHUYỂN BƯỚC DƯỚI CÙNG ---
           Dán cố định (sticky) ở đáy khung nhìn khi cuộn — danh sách chuyến bên trái có thể dài,

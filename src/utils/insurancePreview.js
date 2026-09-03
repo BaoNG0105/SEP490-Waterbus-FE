@@ -62,6 +62,24 @@ export const calculateTicketInsurancePreview = ({ unitPremiumAmount, passengerCo
   };
 };
 
+// Seat-map trả effectivePrice = giá ghế + phí bảo hiểm mặc định (bắt buộc) của Waterbus.
+// Bước 2 chỉ hiển thị phần giá ghế; phần bảo hiểm mặc định được tách ra hiển thị ở Bước 3 (checkout).
+export const getSeatDefaultInsurancePremium = (seat) => {
+  const effectivePrice = Number(seat?.effectivePrice ?? seat?.basePrice ?? 0) || 0;
+  const basePrice = Number(seat?.basePrice);
+  const explicitPremium = Number(seat?.waterbusInsurancePremium);
+  if (Number.isFinite(explicitPremium)) return Math.max(0, explicitPremium);
+  return Number.isFinite(basePrice) ? Math.max(0, effectivePrice - basePrice) : 0;
+};
+
+/** Giá ghế thuần (chưa gồm bảo hiểm mặc định) — dùng cho mọi chỗ hiển thị giá ở Bước 2. */
+export const getSeatBaseFare = (seat) => {
+  const basePrice = Number(seat?.basePrice);
+  if (Number.isFinite(basePrice)) return Math.max(0, basePrice);
+  const effectivePrice = Number(seat?.effectivePrice ?? 0) || 0;
+  return Math.max(0, effectivePrice - getSeatDefaultInsurancePremium(seat));
+};
+
 /** Charter: quantity = adultCount + childCount (BE PassengerInsurance). */
 export const calculateCharterInsurancePreview = ({
   unitPremiumAmount,
@@ -225,7 +243,7 @@ export const normalizeInsuranceFromBooking = (booking) => {
   if (snapshots.length > 0) {
     const legs = snapshots.map(normalizeInsuranceLeg).filter(Boolean);
     const defaultLeg = legs.find((leg, index) => Boolean(snapshots[index]?.isWaterbusDefault)) || null;
-    const optionalLeg = legs.find((leg, index) => !Boolean(snapshots[index]?.isWaterbusDefault)) || null;
+    const optionalLeg = legs.find((leg, index) => !snapshots[index]?.isWaterbusDefault) || null;
     const defaultAmount = Number(defaultLeg?.totalAmount) || 0;
     const optionalAmount = Number(optionalLeg?.totalAmount) || 0;
     const primary = defaultLeg || optionalLeg;

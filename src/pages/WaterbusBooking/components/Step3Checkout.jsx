@@ -23,7 +23,11 @@ import {
 } from "../../../services/insuranceService";
 import { PROMOTION_BOOKING_TYPES, checkPromotionCode, normalizePromotionValidateResult } from "../../../services/promotionService";
 //utils
-import { calculateTicketInsurancePreview } from "../../../utils/insurancePreview";
+import {
+  calculateTicketInsurancePreview,
+  getSeatBaseFare,
+  getSeatDefaultInsurancePremium,
+} from "../../../utils/insurancePreview";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import { isBlank, isValidEmailFormat, isValidPhoneFormat, isValidFullName, sanitizeFullName } from "../../../utils/formValidation";
 import { notify, showToast } from "../../../utils/swalToast";
@@ -378,6 +382,12 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
       infants: { ...prev.infants, [index]: { ...prev.infants[index], [field]: true } },
     }));
 
+  // BE: booking có CHILD / INFANT phải có ít nhất 1 ADULT có ghế cùng chiều.
+  // Tính ở đây để báo lỗi ngay khi đổi "Loại hành khách", không đợi tới lúc bấm thanh toán.
+  const seatedAdultCount = passengers.filter(
+    (p) => String(p.ticketType || "").toUpperCase() === "ADULT",
+  ).length;
+
   const fieldErrors = {
     contact: {
       ...(isBlank(contact.name)
@@ -398,6 +408,11 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     },
     passengers: passengers.map((p) => {
       const errors = {};
+      if (String(p.ticketType || "").toUpperCase() === "CHILD" && seatedAdultCount === 0) {
+        errors.ticketType = lang === "VN"
+          ? "Trẻ em (dưới 12 tuổi) phải đi kèm ít nhất 1 hành khách Người lớn trong cùng lần đặt."
+          : "A child (under 12) must be accompanied by at least 1 adult passenger in the same booking.";
+      }
       if (isBlank(p.name)) {
         errors.name = lang === "VN" ? "Vui lòng nhập họ tên." : "Full name is required.";
       } else if (!isValidFullName(p.name)) {
@@ -552,30 +567,40 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
 
   // Chỉ áp dụng ưu đãi loại vé lên giá ghế. Bảo hiểm Waterbus mặc định vẫn tính đủ
   // cho vé miễn phí/giảm giá và đã nằm trong effectivePrice của seat-map.
-  const getDefaultInsurancePremium = (seat) => {
-    const effectivePrice = Number(seat?.effectivePrice ?? seat?.basePrice ?? 0) || 0;
-    const basePrice = Number(seat?.basePrice);
-    const explicitPremium = Number(seat?.waterbusInsurancePremium);
-    if (Number.isFinite(explicitPremium)) return Math.max(0, explicitPremium);
-    return Number.isFinite(basePrice) ? Math.max(0, effectivePrice - basePrice) : 0;
-  };
-  const sumLegPrice = (seats) => {
-    const seatedTotal = seats.reduce((sum, seat, i) => {
-      const modifier = getPriceModifier(passengers[i]?.ticketType || "ADULT");
-      const effectivePrice = Number(seat.effectivePrice ?? seat.basePrice ?? 0) || 0;
-      const defaultInsurance = getDefaultInsurancePremium(seat);
-      const baseFare = Number.isFinite(Number(seat.basePrice))
-        ? Math.max(0, Number(seat.basePrice))
-        : Math.max(0, effectivePrice - defaultInsurance);
-      return sum + (baseFare * modifier) + defaultInsurance;
-    }, 0);
+  // Bước 2 chỉ hiển thị giá ghế thuần, nên ở đây tách hẳn 2 dòng: giá vé và phí bảo hiểm bắt buộc.
+  // Giá của TỪNG vé (giá ghế đã áp ưu đãi loại vé) — khối hóa đơn hiển thị đơn giá × số ghế.
+  const legSeatFares = (seats) => seats.map((seat, i) => {
+    const ticketTypeCode = String(passengers[i]?.ticketType || "ADULT").toUpperCase();
+    return { ticketTypeCode, fare: getSeatBaseFare(seat) * getPriceModifier(ticketTypeCode) };
+  });
+  // Bảo hiểm mặc định tính đủ cho mọi hành khách — kể cả vé miễn phí và em bé không chiếm ghế.
+  const sumLegDefaultInsurance = (seats) => {
+    const seatedTotal = seats.reduce((sum, seat) => sum + getSeatDefaultInsurancePremium(seat), 0);
     const defaultInsurancePerInfant = seats.length > 0
-      ? getDefaultInsurancePremium(seats[0])
+      ? getSeatDefaultInsurancePremium(seats[0])
       : 0;
     return seatedTotal + (infants.length * defaultInsurancePerInfant);
   };
-  const subtotal = sumLegPrice(selectedSeatsDeparture)
-    + (isRoundTrip ? sumLegPrice(selectedSeatsReturn) : 0);
+  const seatFares = [
+    ...legSeatFares(selectedSeatsDeparture),
+    ...(isRoundTrip ? legSeatFares(selectedSeatsReturn) : []),
+  ];
+  const ticketFareTotal = seatFares.reduce((sum, item) => sum + item.fare, 0);
+  // Đơn giá 1 vé; nếu các vé lệch giá (khác loại ghế / loại hành khách / khác chiều) thì
+  // không có một đơn giá chung — khối hóa đơn liệt kê từng nhóm vé thay vì hiện 1 con số.
+  const uniqueSeatFares = [...new Set(seatFares.map((item) => item.fare))];
+  const hasUniformSeatFare = uniqueSeatFares.length <= 1;
+  const unitSeatFare = uniqueSeatFares[0] ?? 0;
+  const seatFareBreakdown = [...seatFares.reduce((map, { ticketTypeCode, fare }) => {
+    const key = `${ticketTypeCode}|${fare}`;
+    const current = map.get(key);
+    if (current) current.count += 1;
+    else map.set(key, { key, ticketTypeCode, fare, count: 1 });
+    return map;
+  }, new Map()).values()];
+  const defaultInsuranceTotal = sumLegDefaultInsurance(selectedSeatsDeparture)
+    + (isRoundTrip ? sumLegDefaultInsurance(selectedSeatsReturn) : 0);
+  const subtotal = ticketFareTotal + defaultInsuranceTotal;
   // Tổng đơn hàng trước giảm giá = giá vé + bảo hiểm (giống base BE dùng để validate mã).
   const orderBeforeDiscount = subtotal + insuranceFee;
 
@@ -770,16 +795,16 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
       return;
     }
 
-    const adultCount = passengers.filter((p) => String(p.ticketType || "").toUpperCase() === "ADULT").length;
+    const adultCount = seatedAdultCount;
     const childCount = passengers.filter((p) => String(p.ticketType || "").toUpperCase() === "CHILD").length;
     const infantCount = infants.length;
     // BE: CHILD cần ≥ 1 ADULT; mỗi INFANT không ghế cần 1 ADULT có ghế (infantCount ≤ adultCount).
     if ((childCount + infantCount) > 0 && adultCount === 0) {
       showError(
-        lang === "VN" ? "Thiếu người lớn đi kèm" : "Adult companion required",
+        lang === "VN" ? "Thiếu Người Lớn đi kèm" : "Adult companion required",
         lang === "VN"
-          ? "Booking có trẻ em / em bé phải có ít nhất 1 người lớn (ADULT) cùng chiều."
-          : "A booking with child/infant needs at least 1 adult (ADULT) on the same leg.",
+          ? "Booking có Trẻ Em / Em Bé phải có ít nhất 1 Người Lớn đi cùng."
+          : "Booking with Children/Infants must have at least 1 Adult passenger.",
       );
       return;
     }
@@ -788,8 +813,8 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
       showError(
         lang === "VN" ? "Quá nhiều em bé đi kèm" : "Too many lap infants",
         lang === "VN"
-          ? `Mỗi người lớn (ADULT) chỉ kèm tối đa 1 em bé. Hiện có ${infantCount} em bé nhưng chỉ ${adultCount} người lớn.`
-          : `Each adult may accompany at most 1 infant. You have ${infantCount} infant(s) but only ${adultCount} adult(s).`,
+          ? `Mỗi Người Lớn chỉ kèm tối đa 1 Em Bé. Hiện có ${infantCount} Em Bé nhưng chỉ ${adultCount} Người Lớn.`
+          : `Each Adult may accompany at most 1 Infant. You have ${infantCount} Infant(s) but only ${adultCount} Adult(s).`,
       );
       return;
     }
@@ -799,10 +824,10 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     ));
     if (infantOnNonAdult) {
       showError(
-        lang === "VN" ? "Em bé phải đi kèm người lớn" : "Infant must accompany an adult",
+        lang === "VN" ? "Em Bé phải đi kèm Người Lớn" : "Infant must accompany an Adult",
         lang === "VN"
-          ? "Chỉ thêm em bé dưới hành khách loại Người lớn."
-          : "Add infants only under an Adult passenger.",
+          ? "Chỉ thêm Em Bé dưới hành khách loại Người Lớn."
+          : "Add Infants only under an Adult passenger.",
       );
       return;
     }
@@ -812,9 +837,9 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
     ));
     if (infantMissingCompanion) {
       showError(
-        lang === "VN" ? "Thiếu người lớn đi kèm em bé" : "Missing infant companion",
+        lang === "VN" ? "Thiếu Người Lớn đi kèm Em Bé" : "Missing Infant companion",
         lang === "VN"
-          ? "Mỗi em bé phải gắn với một hành khách người lớn đã nhập họ tên."
+          ? "Mỗi Em Bé phải gắn với một hành khách Người Lớn đã nhập họ tên."
           : "Each infant must be linked to a named adult passenger.",
       );
       return;
@@ -1170,8 +1195,16 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
                         label: getTicketTypeLabel(option, lang, routeType),
                         disabled: !isTicketTypeAllowedForPassenger(option, index),
                       }))}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-[#124757] dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-[#FFD100]"
+                      className={`w-full rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-[#124757] dark:bg-slate-800 dark:text-slate-100 dark:focus:border-[#FFD100] ${
+                        fieldErrors.passengers[index]?.ticketType
+                          ? "border-rose-500 dark:border-rose-500"
+                          : "border-slate-200 dark:border-slate-700"
+                      }`}
                     />
+                    {/* Lỗi thiếu người lớn đi kèm hiện ngay khi chọn loại vé, không đợi blur/bấm thanh toán. */}
+                    {fieldErrors.passengers[index]?.ticketType && (
+                      <p className={fieldErrorText}>{fieldErrors.passengers[index].ticketType}</p>
+                    )}
                     {ticketTypeAgeHint(passenger.ticketType, travelYear, lang) ? (
                       <p className="text-[10px] font-medium text-[#124757] dark:text-yellow-400">
                         {ticketTypeAgeHint(passenger.ticketType, travelYear, lang)}
@@ -1676,13 +1709,35 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
             <span>
               <span className="block">{lang === "VN" ? "Giá vé" : "Ticket fare"}</span>
               <span className="mt-0.5 block text-[11px] leading-snug text-slate-400">
-                {lang === "VN"
-                  ? "Đã bao gồm bảo hiểm mặc định của Waterbus"
-                  : "Includes Waterbus standard insurance"}
+                {hasUniformSeatFare
+                  ? (lang === "VN"
+                    ? "Đơn giá 1 vé (chưa gồm bảo hiểm)"
+                    : "Price per ticket (insurance excluded)")
+                  : (lang === "VN"
+                    ? "Đơn giá từng vé (chưa gồm bảo hiểm)"
+                    : "Price of each ticket (insurance excluded)")}
               </span>
             </span>
-            <span className="font-bold text-slate-700 dark:text-slate-200">{subtotal.toLocaleString()}đ</span>
+            {hasUniformSeatFare && (
+              <span className="font-bold text-slate-700 dark:text-slate-200">{unitSeatFare.toLocaleString()}đ</span>
+            )}
           </div>
+          {/* Vé lệch giá nhau: liệt kê từng nhóm (loại hành khách + đơn giá) thay vì một đơn giá chung. */}
+          {!hasUniformSeatFare && (
+            <ul className="space-y-1 border-l-2 border-slate-100 pl-3 dark:border-slate-700">
+              {seatFareBreakdown.map((item) => (
+                <li key={item.key} className="flex items-start justify-between gap-3 text-[12px] text-slate-500 dark:text-slate-400">
+                  <span className="min-w-0">
+                    {TICKET_TYPE_LABELS[item.ticketTypeCode]?.[lang === "VN" ? "vn" : "en"]
+                      || formatTicketTypeLabel(item.ticketTypeCode, lang)}
+                  </span>
+                  <span className="shrink-0 font-bold text-slate-700 dark:text-slate-200">
+                    {item.fare.toLocaleString()}đ × {item.count}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
             <span>{lang === "VN" ? "Ghế" : "Seats"}</span>
             <span className="font-bold text-slate-700 dark:text-slate-200">x{totalSeatsCount}</span>
@@ -1693,10 +1748,27 @@ export default function Step3Checkout({ bookingData, onBack, onExpire, onBooking
               <span className="font-bold text-slate-700 dark:text-slate-200">x{infants.length}</span>
             </div>
           )}
+          <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
+            <span>{lang === "VN" ? "Tổng giá vé" : "Ticket subtotal"}</span>
+            <span className="font-bold text-slate-700 dark:text-slate-200">{ticketFareTotal.toLocaleString()}đ</span>
+          </div>
+          {defaultInsuranceTotal > 0 && (
+            <div className="flex items-start justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
+              <div className="min-w-0 max-w-[65%]">
+                <p>{lang === "VN" ? "Bảo hiểm bắt buộc" : "Mandatory insurance"}</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">
+                  {lang === "VN"
+                    ? `Bảo hiểm mặc định của Waterbus · ${insurancePassengerCount} hành khách`
+                    : `Waterbus standard insurance · ${insurancePassengerCount} passenger(s)`}
+                </p>
+              </div>
+              <span className="shrink-0 font-bold text-slate-700 dark:text-slate-200">+{defaultInsuranceTotal.toLocaleString()}đ</span>
+            </div>
+          )}
           {insuranceFee > 0 && (
             <div className="flex items-start justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
               <div className="min-w-0 max-w-[65%]">
-                <p>{lang === "VN" ? "Bảo hiểm" : "Insurance"}</p>
+                <p>{lang === "VN" ? "Bảo hiểm bổ sung" : "Additional insurance"}</p>
                 <p className="mt-0.5 text-[11px] text-slate-400">
                   {insurancePreview.unitPremium.toLocaleString()}đ × {insurancePreview.quantity}{" "}
                   {lang === "VN" ? "hành khách" : "passenger(s)"}
