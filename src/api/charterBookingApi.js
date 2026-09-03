@@ -2,8 +2,16 @@ import api from './axios';
 
 const charterBookingDetailRequests = new Map();
 
+const freshDetailConfig = () => ({
+    params: { _ts: Date.now() },
+    headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+    },
+});
+
 export const getCharterBookings = () =>
-    api.get('/charter-bookings').then(response => response.data);
+    api.get('/charter-bookings', freshDetailConfig()).then(response => response.data);
 
 export const createCharterBooking = (data) =>
     api.post('/charter-bookings', data).then(response => response.data);
@@ -18,7 +26,7 @@ export const getCharterBookingById = async (id) => {
     if (pendingRequest) return pendingRequest;
 
     const request = api
-        .get(`/charter-bookings/${encodeURIComponent(requestKey)}`)
+        .get(`/charter-bookings/${encodeURIComponent(requestKey)}`, freshDetailConfig())
         .then(response => response.data);
 
     charterBookingDetailRequests.set(requestKey, request);
@@ -49,12 +57,12 @@ export const importCharterBookingPassengers = (id, file) => {
 
 export const getCharterBookingManifestByCode = (bookingCode) =>
     api
-        .get(`/charter-bookings/manifest/${encodeURIComponent(bookingCode)}`)
+        .get(`/charter-bookings/manifest/${encodeURIComponent(bookingCode)}`, freshDetailConfig())
         .then(response => response.data);
 
 export const getCharterBookingManifestByQrToken = (qrToken) =>
     api
-        .get(`/charter-bookings/manifest/qr/${encodeURIComponent(qrToken)}`)
+        .get(`/charter-bookings/manifest/qr/${encodeURIComponent(qrToken)}`, freshDetailConfig())
         .then(response => response.data);
 
 export const getCharterBookingQrImage = (qrToken) =>
@@ -93,7 +101,7 @@ export const exportCharterBookingTicketsPdfByQrToken = (qrToken) =>
     });
 
 export const getAdminCharterBookings = () =>
-    api.get('/charter-bookings/admin').then(response => response.data);
+    api.get('/charter-bookings/admin', freshDetailConfig()).then(response => response.data);
 
 /** GET /api/charter-bookings/admin/rental-price-policies — giá thuê theo số tầng. */
 export const getAdminRentalPricePolicies = () =>
@@ -104,10 +112,18 @@ export const putAdminRentalPricePolicy = (payload) =>
     api.put('/charter-bookings/admin/rental-price-policies', payload).then((response) => response.data);
 
 export const getAdminCharterBookingById = (id) =>
-    api.get(`/charter-bookings/admin/${encodeURIComponent(id)}`).then(response => response.data);
+    api
+        .get(`/charter-bookings/admin/${encodeURIComponent(id)}`, freshDetailConfig())
+        .then(response => response.data);
 
 export const updateAdminCharterBookingStatus = (id, data) =>
     api.patch(`/charter-bookings/admin/${id}/status`, data).then(response => response.data);
+
+/** Admin: doi ngay gio khoi hanh va dong bo booking/trip lien quan. */
+export const updateAdminCharterBookingDeparture = (id, data) =>
+    api
+        .patch(`/charter-bookings/admin/${encodeURIComponent(id)}/departure`, data)
+        .then((response) => response.data);
 
 export const getAdminCharterBookingRouteCandidates = (id) =>
     api.get(`/charter-bookings/admin/${encodeURIComponent(id)}/route-candidates`).then((response) => response.data);
@@ -161,10 +177,12 @@ export const completeAdminRouteDrawRequest = (requestId, data) =>
         .then((response) => response.data);
 
 export const getAssignedCharterBookings = () =>
-    api.get('/charter-bookings/assigned').then(response => response.data);
+    api.get('/charter-bookings/assigned', freshDetailConfig()).then(response => response.data);
 
 export const getAssignedCharterBookingById = (id) =>
-    api.get(`/charter-bookings/assigned/${encodeURIComponent(id)}`).then(response => response.data);
+    api
+        .get(`/charter-bookings/assigned/${encodeURIComponent(id)}`, freshDetailConfig())
+        .then(response => response.data);
 
 export const respondToCharterBookingQuote = (id, data) =>
     api.post(`/charter-bookings/${encodeURIComponent(id)}/quote-response`, data).then(response => response.data);

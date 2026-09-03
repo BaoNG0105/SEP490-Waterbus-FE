@@ -20,9 +20,9 @@ const baseClasses = {
     dot: "bg-sky-500",
   },
   completed: {
-    classes: "bg-emerald-50/70 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/15",
-    text: "text-emerald-700 dark:text-emerald-400",
-    dot: "bg-emerald-500",
+    classes: "bg-rose-50/70 text-rose-700 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/15",
+    text: "text-rose-700 dark:text-rose-400",
+    dot: "bg-rose-500",
   },
   cancelled: {
     classes: "bg-rose-50/70 text-rose-700 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/15",

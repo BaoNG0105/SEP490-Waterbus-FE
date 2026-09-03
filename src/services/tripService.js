@@ -17,7 +17,7 @@ import {
     resumeTripDelay as apiResumeTripDelay,
     cancelTripNoShow as apiCancelTripNoShow,
 } from '../api/tripApi';
-import { normalizeTripStops } from '../utils/tripStopTimes';
+import { alignCharterTripStops, normalizeTripStops } from '../utils/tripStopTimes';
 
 export const TRIP_STATUS_OPTIONS = [
   'Scheduled',
@@ -141,7 +141,10 @@ const unwrapTripList = (data) => {
 /** Chuẩn hoá trip + stops[] (*At aliases, fromLocation/toLocation, serviceType). */
 export const normalizeTripPayload = (trip) => {
   if (!trip || typeof trip !== "object") return trip;
-  const stops = normalizeTripStops(trip.stops || trip.Stops || []);
+  const stops = alignCharterTripStops(
+    trip,
+    normalizeTripStops(trip.stops || trip.Stops || []),
+  );
   return {
     ...trip,
     stops,
@@ -985,6 +988,9 @@ export const normalizeTripPassenger = (item) => {
   const passengerId = String(
     pickPassengerField(item, ["passengerId", "id", "bookingPassengerId"], "") || "",
   ).trim();
+  const tripSeatId = String(
+    pickPassengerField(item, ["tripSeatId", "TripSeatId", "seatId", "SeatId"], "") || "",
+  ).trim();
   const companionPassengerId = String(
     pickPassengerField(item, ["companionPassengerId", "CompanionPassengerId"], "") || "",
   ).trim();
@@ -1025,6 +1031,8 @@ export const normalizeTripPassenger = (item) => {
 
   return {
     passengerId,
+    tripSeatId,
+    tripId: String(pickPassengerField(item, ["tripId", "TripId"], "") || "").trim(),
     bookingCode: pickPassengerField(item, ["bookingCode", "booking.bookingCode"], "") || "—",
     passengerName: pickPassengerField(item, ["passengerName", "fullName", "name"], "") || "—",
     ticketTypeCode: ticketTypeCode

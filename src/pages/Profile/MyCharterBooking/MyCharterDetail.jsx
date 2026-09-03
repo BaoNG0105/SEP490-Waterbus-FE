@@ -11,6 +11,7 @@ import {
   downloadSelectedCharterBookingTickets,
   fetchCharterBookingManifestByCode,
   fetchCharterBookingQrImage,
+  fetchLinkedCharterTrip,
   fetchMyCharterBookingDetail,
   importMyCharterBookingPassengers,
   respondToCharterBookingQuote,
@@ -45,7 +46,13 @@ import {
   shouldShowCustomerTabBadge,
 } from "../../../utils/charterBookingActions";
 import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
-import { getPassengerBirthYear, hasCharterPassengerName } from "../../../utils/charterBookingTickets";
+import {
+  canShowCharterTickets,
+  getCharterTicketCount,
+  getPassengerBirthYear,
+  hasCharterPassengerName,
+  normalizeCharterTicketRows,
+} from "../../../utils/charterBookingTickets";
 import {
   canShowCharterTicketsWithBalance,
   clearCharterTopUpPayOsStarted,
@@ -61,7 +68,16 @@ import { buildConfirmBodyHtml, showAlertDialog, showConfirmDialog, showToast } f
 import { useCharterBookingDetailHub } from "../../../hooks/useCharterBookingDetailHub";
 import { MyCharterPaymentPanel, MyCharterPaymentStickyBar } from "./MyCharterPaymentPanel";
 import { MyCharterTicketsPanel } from "./MyCharterTicketsPanel";
-import { getRefundPaymentId, isPaymentUuid, normalizeSelectedRoute, resolveCharterBookingStatus, resolveCharterPaymentStatus } from "../../../utils/charterBookingAdmin";
+import {
+  applyCharterTripSchedule,
+  formatDate,
+  getRefundPaymentId,
+  isPaymentUuid,
+  resolveCharterScheduleTime,
+  normalizeSelectedRoute,
+  resolveCharterBookingStatus,
+  resolveCharterPaymentStatus,
+} from "../../../utils/charterBookingAdmin";
 import { charterLog, charterLogError } from "../../../utils/charterDebugLog";
 
 
@@ -281,6 +297,13 @@ const normalizeBooking = (item) => {
   const paidDepositAmount = paidDepositAmountFromPayments || (hasDepositPaid ? rawDepositAmount : 0);
   const paidAmount = paidAmountFromPayments || Number(pick(item, ["paidAmount", "paidPaymentAmount"], 0)) || paidDepositAmount;
 
+  const tickets = normalizeCharterTicketRows(item, {
+    adultCount,
+    passengerCount,
+    contactName: pick(item, ["contactName", "customerName", "fullName"], ""),
+  });
+  const ticketCount = getCharterTicketCount({ ...item, tickets });
+
   return {
     raw: item,
     id: pick(item, ["id", "charterBookingId", "bookingId"]),
@@ -292,16 +315,11 @@ const normalizeBooking = (item) => {
     toStationName: toName || "",
     departureDate: pick(item, ["departureDate", "DepartureDate", "startDate", "StartDate", "scheduledDepartureAt"]),
     startTime: (() => {
-      const raw = pick(item, ["startTime", "StartTime", "departureTime", "DepartureTime"], "");
-      const normalized = String(raw || "").trim();
-      if (normalized && normalized !== "--") {
-        const match = normalized.match(/(\d{1,2}):(\d{2})/);
-        if (match) return `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`;
-      }
-      const dateRaw = String(pick(item, ["departureDate", "DepartureDate", "scheduledDepartureAt"], "") || "");
-      const fromIso = dateRaw.match(/T(\d{1,2}):(\d{2})/);
-      if (fromIso) return `${String(Number(fromIso[1])).padStart(2, "0")}:${fromIso[2]}`;
-      return "";
+      const literal = pick(item, ["startTime", "StartTime"], "");
+      const timestamp = pick(item, [
+        "departureTime", "DepartureTime", "scheduledDepartureAt",
+      ], "");
+      return resolveCharterScheduleTime(literal, timestamp);
     })(),
     rentalUnit: pick(item, ["rentalUnit"], ""),
     durationValue: Number(pick(item, ["durationValue", "durationHours"], 0)) || 0,
@@ -366,7 +384,8 @@ const normalizeBooking = (item) => {
     pointsUsed: Number(pick(item, ["pointsUsed"], 0)) || 0,
     totalAmount: Number(pick(item, ["totalAmount", "finalAmount", "quoteBreakdown.totalAmount", "pricing.totalAmount"], 0)),
     passengers: pick(item, ["passengers"], []),
-    tickets: pick(item, ["tickets"], []),
+    tickets,
+    ticketCount,
     payments,
     refundablePayments: Array.isArray(item?.refundablePayments) ? item.refundablePayments : [],
     paidAmount,
@@ -405,13 +424,6 @@ const formatDeckCount = (deckCount, lang) => (
     ? `${deckCount} ${lang === "VN" ? "tầng" : Number(deckCount) === 1 ? "deck" : "decks"}`
     : ""
 );
-
-const formatDate = (value) => {
-  if (!value) return "--";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  return date.toLocaleDateString("vi-VN");
-};
 
 const formatDateTime = (value) => {
   if (!value) return "--";
@@ -729,14 +741,19 @@ export function CharterDetail() {
         if (!bookingCode || bookingCode === "--") throw detailError;
         detail = await fetchCharterBookingManifestByCode(bookingCode);
       }
-      const normalized = normalizeBooking(detail);
+      let normalized = normalizeBooking(detail);
+      const linkedTrip = await fetchLinkedCharterTrip(normalized);
+      normalized = applyCharterTripSchedule(
+        normalized,
+        linkedTrip,
+      );
       charterLog("load-detail-response", {
         bookingId: normalized?.id,
         bookingCode: normalized?.bookingCode,
         bookingStatus: normalized?.status,
         paymentStatus: normalized?.paymentStatus,
         passengerCount: normalized?.passengers?.length,
-        ticketCount: normalized?.tickets?.length,
+        ticketCount: normalized?.ticketCount,
         hasQrToken: Boolean(normalized?.qrToken),
         hasPayments: Array.isArray(normalized?.payments) && normalized.payments.length > 0,
       });
@@ -1077,7 +1094,7 @@ export function CharterDetail() {
         paymentId,
         bookingId: booking?.id,
         paymentStatus: booking?.paymentStatus,
-        ticketCount: booking?.tickets?.length,
+        ticketCount: booking?.ticketCount,
       });
       if (!silent) {
         showAlertDialog({
@@ -1117,8 +1134,8 @@ export function CharterDetail() {
         orderCode,
         bookingId: booking?.id,
         paymentStatus: booking?.paymentStatus,
-        ticketCount: booking?.tickets?.length,
-        hasTickets: Array.isArray(booking?.tickets) && booking.tickets.length > 0,
+        ticketCount: booking?.ticketCount,
+        hasTickets: getCharterTicketCount(booking) > 0,
       });
       if (!silent) {
         showAlertDialog({
@@ -1780,7 +1797,7 @@ export function CharterDetail() {
 
   const handleTicketFileAction = async (action) => {
     if (!booking?.id) return;
-    if (String(booking.paymentStatus).toLowerCase() !== "paid") return;
+    if (!canShowCharterTickets(booking)) return;
 
     const missingManifestPayload = !hasSavedPassengerManifest(booking)
       ? buildPassengerPayload(booking, passengerRows, lang, user)
@@ -2374,14 +2391,17 @@ export function CharterDetail() {
       seatSetupType: pick(boat, ["requiredSeatSetupType", "seatSetupType", "preferredSeatSetupType"], "--"),
     }))
     : [];
-  const showTicketsTab = isPaymentStatusPaid || canShowCharterTicketsWithBalance(booking) || booking.hasDepositPaid;
+  const showTicketsTab = canShowCharterTickets(booking)
+    || isPaymentStatusPaid
+    || canShowCharterTicketsWithBalance(booking)
+    || booking.hasDepositPaid;
   // Badge tab: "!" khi có hành động khẩn (báo giá cần trả lời, cần thanh toán, chờ nhập hoàn tiền);
   // số lượng payments/tickets khi tab đó có dữ liệu mới — giống cơ chế bên Admin.
   const actionInfo = getCustomerActionInfo(booking, lang);
   const needsPaymentAttention = actionInfo.urgent && ["pay", "refund"].includes(actionInfo.tone);
   const paymentsCount = Array.isArray(booking.payments) ? booking.payments.length : 0;
   const paymentBadge = needsPaymentAttention ? "!" : (paymentsCount || "");
-  const ticketsCount = Array.isArray(booking.tickets) ? booking.tickets.length : 0;
+  const ticketsCount = getCharterTicketCount(booking);
   const ticketsBadge = showTicketsTab ? (ticketsCount || "") : "";
   const manifestRows = listBookingPassengers(booking).filter((row) => {
     if (!hasCharterPassengerName(row)) return false;
@@ -2665,7 +2685,7 @@ export function CharterDetail() {
               <MyCharterTicketsPanel
                 lang={lang}
                 booking={booking}
-                isPaid={isPaid || canShowCharterTicketsWithBalance(booking) || booking.hasDepositPaid}
+                isPaid={canShowCharterTickets(booking) || isPaid || canShowCharterTicketsWithBalance(booking) || booking.hasDepositPaid}
                 isSubmitting={isSubmitting}
                 qrImageUrl={qrImageUrl}
                 selectedTicketIds={selectedTicketIds}

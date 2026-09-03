@@ -11,7 +11,9 @@ import {
 import { getBoatById as apiGetBoatById } from '../api/boatApi';
 import { getTrips as apiGetTrips } from '../api/tripApi';
 import { updateCharterBookingAttendance as apiUpdateCharterAttendance } from '../api/charterBookingApi';
-import { fetchTripPassengers } from './tripService';
+import { fetchTripDetail, fetchTripPassengers } from './tripService';
+import { findCharterTripForBooking } from '../utils/charterBookingAdmin';
+import { formatTripClock, formatTripDateKey } from '../utils/tripClock';
 
 const pick = (source, keys, fallback = '') => {
   for (const key of keys) {
@@ -38,19 +40,24 @@ const formatScanDate = (value) => {
       return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
     }
   }
-  const text = String(value).trim();
-  if (!text) return '';
-  const isoDate = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoDate) return `${isoDate[3]}/${isoDate[2]}/${isoDate[1]}`;
-  const viDate = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (viDate) {
-    return `${String(viDate[1]).padStart(2, '0')}/${String(viDate[2]).padStart(2, '0')}/${viDate[3]}`;
+  const dateKey = formatTripDateKey(value);
+  if (!dateKey) return '';
+  const [year, month, day] = dateKey.split('-');
+  return `${day}/${month}/${year}`;
+};
+
+/** Chuẩn hoá TimeOnly/string từ BE thành HH:mm, không đổi múi giờ. */
+const formatScanClock = (value) => {
+  if (value == null || value === '') return '';
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const h = Number(value.hour ?? value.Hour);
+    const m = Number(value.minute ?? value.Minute);
+    if (Number.isFinite(h) && Number.isFinite(m)) {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
   }
-  const ms = Date.parse(text);
-  if (!Number.isNaN(ms)) {
-    return new Date(ms).toLocaleDateString('vi-VN');
-  }
-  return '';
+  const clock = formatTripClock(value);
+  return clock === '--:--' ? '' : clock;
 };
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -547,6 +554,7 @@ export const normalizeScannedTicket = (item) => {
     bookingCode: pick(item, ['bookingCode', 'booking.bookingCode'], '')
       || pick(ticket, ['bookingCode'], ''),
     bookingType: pick(item, ['bookingType', 'BookingType'], '') || pick(ticket, ['bookingType'], ''),
+    isCharter: detectIsCharter(item, pick(item, ['bookingQrToken', 'charterBookingQrToken', 'qrToken'], '')),
     bookingStatus: pick(item, ['bookingStatus', 'BookingStatus'], '')
       || pick(ticket, ['bookingStatus', 'BookingStatus'], '')
       || '',
@@ -579,6 +587,20 @@ export const normalizeScannedTicket = (item) => {
       ? false
       : (hasCanCheckOutFlag ? toBool(canCheckOutRaw, false) : false),
     blockedReason,
+    tripId: String(
+      pick(item, ['tripId', 'TripId', 'trip.id'], '')
+      || pick(ticket, ['tripId', 'TripId', 'trip.id'], '')
+      || pick(passenger, ['tripId', 'TripId'], '')
+      || primaryPassenger?.raw?.tripId
+      || primaryPassenger?.raw?.TripId
+      || '',
+    ).trim(),
+    tripSeatId: String(
+      pick(item, ['tripSeatId', 'TripSeatId'], '')
+      || pick(ticket, ['tripSeatId', 'TripSeatId'], '')
+      || pick(passenger, ['tripSeatId', 'TripSeatId'], '')
+      || '',
+    ).trim(),
     tripCode: pick(item, ['tripCode', 'trip.code'], '') || pick(ticket, ['tripCode'], ''),
     legLabel: pick(item, ['leg', 'direction', 'tripDirection', 'legType'], '')
       || pick(ticket, ['leg', 'direction'], ''),
@@ -604,17 +626,7 @@ export const normalizeScannedTicket = (item) => {
     ),
     startTime: (() => {
       const raw = pick(item, ['startTime', 'StartTime'], '') || pick(ticket, ['startTime'], '') || '';
-      if (!raw) return '';
-      if (typeof raw === 'object') {
-        const h = Number(raw.hour ?? raw.Hour);
-        const m = Number(raw.minute ?? raw.Minute);
-        if (Number.isFinite(h) && Number.isFinite(m)) {
-          return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        }
-      }
-      const text = String(raw);
-      const hm = text.match(/(\d{1,2}):(\d{2})/);
-      return hm ? `${String(hm[1]).padStart(2, '0')}:${hm[2]}` : text;
+      return formatScanClock(raw);
     })(),
     passengerCount: Number(pick(item, ['passengerCount', 'registeredPassengerCount'], '') || 0) || null,
     issuedAt: pick(item, ['issuedAt', 'IssuedAt'], '')
@@ -769,6 +781,19 @@ const collectTripCodes = (source, tickets) => {
 export const normalizeBookingManifest = (item, qrToken = '') => {
   if (!item) return null;
   const root = item?.manifest && typeof item.manifest === 'object' ? item.manifest : item;
+  const token = String(
+    qrToken
+    || pick(root, ['bookingQrToken', 'charterBookingQrToken', 'qrToken', 'token'], '')
+    || '',
+  ).trim();
+  const isCharter = detectIsCharter(root, token);
+  const bookingDepartureDate = formatScanDate(
+    pick(root, ['departureDate', 'DepartureDate', 'operatingDate', 'OperatingDate'], '')
+    || pick(item, ['departureDate', 'DepartureDate', 'operatingDate', 'OperatingDate'], ''),
+  );
+  const bookingStartTime = formatScanClock(
+    pick(root, ['startTime', 'StartTime'], '') || pick(item, ['startTime', 'StartTime'], ''),
+  );
   const bookingStatus = pick(root, ['bookingStatus', 'BookingStatus'], '')
     || pick(item, ['bookingStatus', 'BookingStatus'], '')
     || '';
@@ -786,13 +811,31 @@ export const normalizeBookingManifest = (item, qrToken = '') => {
         || pick(root, ['bookingCode', 'code'], '')
         || pick(item, ['bookingCode', 'code'], '')
         || normalized.bookingCode,
+      boatName: normalized.boatName || pick(root, ['boatName', 'BoatName'], ''),
+      passengerPhone: normalized.passengerPhone || String(
+        pick(root, ['contactPhone', 'ContactPhone'], '') || '',
+      ).trim(),
+      passengerEmail: normalized.passengerEmail || String(
+        pick(root, ['contactEmail', 'ContactEmail'], '') || '',
+      ).trim(),
+      contactName: normalized.contactName || pick(root, ['contactName', 'ContactName'], ''),
+      fromStation: normalized.fromStation || pick(root, ['fromStationName', 'FromStationName'], ''),
+      toStation: normalized.toStation || pick(root, ['toStationName', 'ToStationName'], ''),
+      fromStationId: normalized.fromStationId || String(pick(root, ['fromStationId', 'FromStationId'], '') || ''),
+      toStationId: normalized.toStationId || String(pick(root, ['toStationId', 'ToStationId'], '') || ''),
+      isCharter,
+      departureDate: isCharter && bookingDepartureDate
+        ? bookingDepartureDate
+        : (normalized.departureDate || bookingDepartureDate),
+      startTime: isCharter && bookingStartTime
+        ? bookingStartTime
+        : (normalized.startTime || bookingStartTime),
     };
   }).filter(Boolean);
   const tripCodes = collectTripCodes(root, tickets);
-  const token = String(qrToken || pick(root, ['bookingQrToken', 'qrToken', 'token'], '') || '').trim();
   return {
     kind: 'manifest',
-    isCharter: detectIsCharter(root, token),
+    isCharter,
     bookingQrToken: token,
     bookingCode: pick(root, ['bookingCode', 'code'], '') || pick(item, ['bookingCode', 'code'], '') || '—',
     bookingStatus,
@@ -1087,6 +1130,133 @@ const enrichTicketFromManifest = async (ticket) => {
   return Object.keys(patch).length ? { ...ticket, ...patch } : ticket;
 };
 
+const stopOrder = (stop, fallback) => {
+  const value = Number(stop?.stopOrder ?? stop?.StopOrder);
+  return Number.isFinite(value) ? value : fallback;
+};
+
+const stationValue = (stop, keys) => pick(stop || {}, keys, '');
+
+const enrichTicketFromTrip = (ticket, trip) => {
+  if (!ticket || !trip) return ticket;
+  const stops = (Array.isArray(trip.stops) ? [...trip.stops] : [])
+    .sort((a, b) => stopOrder(a, 0) - stopOrder(b, 0));
+  const findStop = (stationId, fallback) => {
+    const id = String(stationId || '').trim();
+    if (!id) return fallback;
+    return stops.find((stop) => String(
+      stop?.stationId ?? stop?.StationId ?? stop?.station?.id ?? '',
+    ).trim() === id) || fallback;
+  };
+  const boardingStop = findStop(ticket.fromStationId, stops[0]);
+  const alightingStop = findStop(ticket.toStationId, stops[stops.length - 1]);
+  const boardingAt = stationValue(boardingStop, [
+    'adjustedDepartureAt', 'AdjustedDepartureAt', 'adjustedDepartureTime', 'AdjustedDepartureTime',
+    'scheduledDepartureAt', 'ScheduledDepartureAt', 'scheduledDeparture', 'ScheduledDeparture',
+    'plannedDepartureTime', 'PlannedDepartureTime',
+  ]) || pick(trip, [
+    'adjustedDepartureTime', 'AdjustedDepartureTime',
+    'plannedDepartureTime', 'plannedDeparture', 'departureTime', 'startAt', 'scheduledDepartureAt',
+  ], '');
+  const alightingAt = stationValue(alightingStop, [
+    'adjustedArrivalAt', 'AdjustedArrivalAt', 'adjustedArrivalTime', 'AdjustedArrivalTime',
+    'scheduledArrivalAt', 'ScheduledArrivalAt', 'scheduledArrival', 'ScheduledArrival',
+    'plannedArrivalTime', 'PlannedArrivalTime',
+  ]) || pick(trip, [
+    'adjustedArrivalTime', 'AdjustedArrivalTime',
+    'plannedArrivalTime', 'plannedArrival', 'arrivalTime', 'endAt', 'scheduledArrivalAt',
+  ], '');
+  const fromStation = ticket.fromStation || stationValue(boardingStop, [
+    'stationName', 'StationName', 'station.stationName', 'station.name',
+  ]) || pick(trip, ['fromStationName', 'fromLocation.name', 'fromLocation'], '');
+  const toStation = ticket.toStation || stationValue(alightingStop, [
+    'stationName', 'StationName', 'station.stationName', 'station.name',
+  ]) || pick(trip, ['toStationName', 'toLocation.name', 'toLocation'], '');
+  const tripDeparture = pick(trip, [
+    'adjustedDepartureTime', 'AdjustedDepartureTime',
+    'departureTime', 'DepartureTime', 'startAt', 'scheduledDepartureAt',
+  ], '');
+  const tripDepartureDate = formatScanDate(
+    pick(trip, ['operatingDate', 'OperatingDate'], '') || tripDeparture,
+  );
+  const tripStartTime = formatScanClock(tripDeparture);
+  const useTripSchedule = ticket.isCharter;
+
+  return {
+    ...ticket,
+    tripCode: ticket.tripCode || pick(trip, ['tripCode', 'TripCode', 'code'], ''),
+    routeName: ticket.routeName || pick(trip, ['routeName', 'RouteName', 'route.name'], ''),
+    boatName: ticket.boatName || pick(trip, [
+      'boatName', 'BoatName', 'boat.name', 'boat.boatName', 'vesselName',
+    ], ''),
+    fromStation: typeof fromStation === 'string' ? fromStation : '',
+    toStation: typeof toStation === 'string' ? toStation : '',
+    departureDate: useTripSchedule
+      ? (tripDepartureDate || ticket.departureDate)
+      : (ticket.departureDate || tripDepartureDate || formatScanDate(boardingAt)),
+    startTime: useTripSchedule ? (tripStartTime || ticket.startTime) : ticket.startTime,
+    scheduledBoardingAt: useTripSchedule
+      ? (boardingAt || ticket.scheduledBoardingAt)
+      : (ticket.scheduledBoardingAt || boardingAt),
+    scheduledAlightingAt: useTripSchedule
+      ? (alightingAt || ticket.scheduledAlightingAt)
+      : (ticket.scheduledAlightingAt || alightingAt),
+  };
+};
+
+const enrichManifestFromTrips = async (manifest) => {
+  if (!manifest?.tickets?.length) return manifest;
+  const tripIds = [...new Set(manifest.tickets.map((ticket) => ticket.tripId).filter(Boolean))];
+  if (!tripIds.length) return manifest;
+
+  const tripEntries = await Promise.all(tripIds.map(async (tripId) => {
+    try {
+      return [tripId, await fetchTripDetail(tripId)];
+    } catch (error) {
+      console.warn(`Khong lay duoc chi tiet chuyen ${tripId} cho man hinh soat ve:`, error);
+      return [tripId, null];
+    }
+  }));
+  const tripById = new Map(tripEntries);
+  return {
+    ...manifest,
+    tickets: manifest.tickets.map((ticket) => (
+      enrichTicketFromTrip(ticket, tripById.get(ticket.tripId))
+    )),
+  };
+};
+
+const resolveCharterTicketTripId = async (ticket) => {
+  if (ticket?.tripId) return ticket.tripId;
+  if (!ticket?.isCharter) return '';
+
+  const tripListRaw = await apiGetTrips({ tripType: 'Charter' });
+  const trips = Array.isArray(tripListRaw)
+    ? tripListRaw
+    : (tripListRaw?.items || tripListRaw?.data || tripListRaw?.trips || []);
+  const linkedTrip = findCharterTripForBooking(trips, ticket);
+  return String(
+    linkedTrip?.tripId
+    || linkedTrip?.TripId
+    || linkedTrip?.id
+    || linkedTrip?.Id
+    || '',
+  ).trim();
+};
+
+const enrichSingleTicketFromTrip = async (ticket) => {
+  if (!ticket) return ticket;
+  try {
+    const tripId = await resolveCharterTicketTripId(ticket);
+    if (!tripId) return ticket;
+    const trip = await fetchTripDetail(tripId);
+    return enrichTicketFromTrip({ ...ticket, tripId }, trip);
+  } catch (error) {
+    console.warn(`Khong lay duoc chuyen charter cho ve ${ticket.ticketCode || ''}:`, error);
+    return ticket;
+  }
+};
+
 /** Tra cứu qua POST /tickets/scan — 1 endpoint, BE tự phân vé thường / QR tổng. */
 export const scanTicket = async (codeOrToken, { source = 'Qr' } = {}) => {
   const body = buildTicketScanBody(codeOrToken, { source });
@@ -1096,21 +1266,29 @@ export const scanTicket = async (codeOrToken, { source = 'Qr' } = {}) => {
     try {
       raw = await apiScanTicket(body);
     } catch (firstError) {
-      if (!isTransientGatewayError(firstError)) throw firstError;
-      // Retry 1 lần cho lỗi gateway/timeout tạm thời để giảm false-negative khi BE đang warm up.
-      await wait(350);
-      raw = await apiScanTicket(body);
+      const retryWithoutDeviceTime = Number(firstError?.response?.status || 0) === 500
+        && Boolean(body.deviceTime);
+      if (!retryWithoutDeviceTime && !isTransientGatewayError(firstError)) throw firstError;
+
+      // Production cũ có thể lỗi 500 khi ghi metadata deviceTime cho thao tác tra cứu.
+      // Giữ clientOperationId/source; check-in và check-out vẫn gửi metadata đầy đủ.
+      const retryBody = retryWithoutDeviceTime
+        ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'deviceTime'))
+        : body;
+      if (!retryWithoutDeviceTime) await wait(350);
+      raw = await apiScanTicket(retryBody);
     }
     const data = unwrapScanPayload(raw);
     if (looksLikeManifest(data)) {
-      return normalizeBookingManifest(data, body.codeOrToken);
+      return enrichManifestFromTrips(normalizeBookingManifest(data, body.codeOrToken));
     }
     const ticket = normalizeScannedTicket(data);
     if (!ticket?.ticketCode && !ticket?.ticketId && !ticket?.codeOrToken) {
       console.error('Scan response không nhận diện được TicketScanDto:', raw);
       throw new Error('INVALID_SCAN_RESPONSE');
     }
-    return enrichTicketFromManifest(ticket);
+    const enrichedTicket = await enrichTicketFromManifest(ticket);
+    return enrichSingleTicketFromTrip(enrichedTicket);
   } catch (error) {
     console.error('Lỗi scan vé:', error);
     throw error;
@@ -1123,7 +1301,7 @@ export const fetchBookingManifestByQr = async (bookingQrToken) => {
   if (!trimmed) throw new Error('EMPTY_CODE');
   try {
     const data = await apiGetBookingManifestByQr(trimmed);
-    return normalizeBookingManifest(data, trimmed);
+    return enrichManifestFromTrips(normalizeBookingManifest(data, trimmed));
   } catch (error) {
     console.error('Lỗi tải manifest booking:', error);
     throw error;
@@ -1244,7 +1422,7 @@ export const updateCharterManifestAttendance = async (
   }
   try {
     const data = await apiUpdateCharterAttendance(trimmed, payload);
-    return normalizeBookingManifest(data, trimmed);
+    return enrichManifestFromTrips(normalizeBookingManifest(data, trimmed));
   } catch (error) {
     console.error('Lỗi attendance charter:', error);
     throw error;

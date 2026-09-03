@@ -12,13 +12,14 @@ import { CharterWorkflowStepper } from "../../../components/CharterWorkflowStepp
 import { PageLoading } from "../../../components/PageLoading";
 import { useApp } from "../../../context/AppContext";
 import { fetchAllBoats, fetchActiveBoatsByServiceType } from "../../../services/boatService";
-import { fetchAllTrips, toOperatingDateQuery } from "../../../services/tripService";
+import { fetchAllTrips, normalizeTripStatusKey } from "../../../services/tripService";
 import {
   fetchAdminCharterBookingDetail,
   fetchAssignedCharterBookingDetail,
   fetchAdminCharterBookingRouteCandidates,
   fetchAdminRentalPricePolicies,
   modifyAdminCharterBookingStatus,
+  rescheduleAdminCharterBooking,
   previewAdminCharterBookingQuote,
   submitAdminCharterBookingQuote,
   createAdminCharterBookingTrip,
@@ -28,9 +29,17 @@ import {
   fetchRouteDrawRequestDetail,
 } from "../../../services/charterBookingService";
 import { getApiErrorMessage } from "../../../utils/apiError";
+import { getServerNowMs, getVietnamDateYmd } from "../../../utils/serverClock";
 import { buildConfirmBodyHtml, showConfirmDialog, showToast, showValidationMessage } from "../../../utils/swalToast";
-import { canShowCharterTickets } from "../../../utils/charterBookingTickets";
-import { buildBookingQuotePreview } from "../../../utils/charterQuotePreview";
+import {
+  canShowCharterTickets,
+  getActiveCharterTickets,
+  getCharterTicketCount,
+} from "../../../utils/charterBookingTickets";
+import {
+  buildBookingQuotePreview,
+  formatQuoteHumanDuration,
+} from "../../../utils/charterQuotePreview";
 import {
   bookingNeedsAdminRefundAttention,
   bookingNeedsRefundAttention,
@@ -90,6 +99,11 @@ import {
   isRescueBoat,
   manualStatusOptions,
   normalizeBooking,
+  applyCharterTripSchedule,
+  findCharterTripForBooking,
+  findCharterTripsForBooking,
+  normalizeCharterScheduleDate,
+  normalizeCharterScheduleTime,
   normalizeRequestedBoats,
   normalizeRouteCandidateLegs,
   enrichCandidateLegsWithManualGpsRoutes,
@@ -120,6 +134,7 @@ const isCharterBookingAlreadyHasTripError = (error) => {
 };
 
 const EXISTING_CHARTER_TRIP_MARKER_PREFIX = "existingCharterTrip:";
+const RESCHEDULE_SYNC_GUARD_MS = 30_000;
 
 const hasKnownExistingCharterTrip = (bookingId) => {
   if (!bookingId) return false;
@@ -155,6 +170,45 @@ const getTripIdsLinkedToBooking = (trips, bookingId) => {
   });
 };
 
+const getRescheduleDurationMinutes = (booking) => {
+  const estimate = booking?.routeEstimate;
+  const estimatedMinutes = Number(estimate?.estimatedDurationMinutes);
+  if (Number.isFinite(estimatedMinutes) && estimatedMinutes > 0) return estimatedMinutes;
+
+  const bookingDuration = Number(booking?.durationValue);
+  const estimateDuration = Number(estimate?.chargeableDurationValue);
+  const durationValue = bookingDuration > 0 ? bookingDuration : estimateDuration;
+  if (Number.isFinite(durationValue) && durationValue > 0) {
+    return String(booking?.rentalUnit || estimate?.rentalUnit).toLowerCase() === "day"
+      ? durationValue * 24 * 60
+      : durationValue * 60;
+  }
+
+  const chargeableMinutes = Number(estimate?.chargeableDurationMinutes);
+  return Number.isFinite(chargeableMinutes) && chargeableMinutes > 0 ? chargeableMinutes : 0;
+};
+
+const hasStartedCharterAttendance = (booking) => (
+  (Array.isArray(booking?.tickets) ? booking.tickets : []).some((ticket) => {
+    if (ticket?.checkedInAt || ticket?.CheckedInAt || ticket?.checkedOutAt || ticket?.CheckedOutAt) {
+      return true;
+    }
+    const status = String(
+      ticket?.attendanceStatus || ticket?.ticketStatus || ticket?.status || "",
+    ).toLowerCase().replace(/[\s_-]/g, "");
+    return status.includes("checkedin")
+      || status.includes("checkedout")
+      || status === "used";
+  })
+);
+
+const formatMinutesAsClock = (minutes) => {
+  const rounded = Math.round(minutes);
+  const hours = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return `${String(hours).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+};
+
 export function AdminCharterBookingDetail() {
   const { lang } = useApp();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
@@ -186,11 +240,20 @@ export function AdminCharterBookingDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReschedulingDeparture, setIsReschedulingDeparture] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [acknowledgedBadges, setAcknowledgedBadges] = useState(() => readAcknowledgedTabBadges(id));
   const [routeDrawRequest, setRouteDrawRequest] = useState(null);
   const [isRouteDrawSubmitting, setIsRouteDrawSubmitting] = useState(false);
+  const confirmedScheduleRef = useRef(null);
+  const rescheduleVerifyTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (rescheduleVerifyTimerRef.current) {
+      window.clearTimeout(rescheduleVerifyTimerRef.current);
+    }
+  }, []);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }),
@@ -226,19 +289,61 @@ export function AdminCharterBookingDetail() {
         fetchAdminRentalPricePolicies().catch(() => ({ policies: [] })),
       ]);
       const normalized = normalizeBooking(detail);
-      setBooking(normalized);
-      // API detail hiện có thể không trả tripId dù trip đã tồn tại. Kiểm tra danh
-      // sách chuyến theo ngày để ẩn nút Tạo chuyến ngay khi vừa mở trang.
-      const operatingDate = toOperatingDateQuery(normalized.departureDate);
-      if (operatingDate) {
-        const tripsOnDepartureDate = await fetchAllTrips({ operatingDate, tripType: "Charter" })
-          .catch(() => []);
-        const linkedIds = getTripIdsLinkedToBooking(tripsOnDepartureDate, normalized.id);
-        if (linkedIds.length > 0) {
-          rememberExistingCharterTrip(normalized.id);
-          setLocalCreatedTripIds((prev) => [...new Set([...prev, ...linkedIds])]);
+      const confirmedSchedule = confirmedScheduleRef.current;
+      if (confirmedSchedule) {
+        const sameBooking = String(confirmedSchedule.bookingId) === String(id);
+        const stillProtected = Date.now() <= confirmedSchedule.expiresAt;
+        const fetchedDate = normalizeCharterScheduleDate(normalized.departureDate);
+        const fetchedTime = normalizeCharterScheduleTime(normalized.startTime);
+        const detailCaughtUp = fetchedDate === confirmedSchedule.departureDate
+          && fetchedTime === confirmedSchedule.startTime;
+
+        if (sameBooking && detailCaughtUp) {
+          confirmedScheduleRef.current = null;
+        } else if (sameBooking && stillProtected) {
+          // PATCH response da xac nhan lich moi; khong de detail cu ghi de trong luc BE dong bo.
+          normalized.departureDate = confirmedSchedule.departureDate;
+          normalized.startTime = confirmedSchedule.startTime;
+        } else {
+          confirmedScheduleRef.current = null;
         }
       }
+      // API detail hiện có thể không trả tripId dù trip đã tồn tại. Kiểm tra danh
+      // sách charter trip để ẩn nút Tạo chuyến và lấy lịch vận hành đã đồng bộ.
+      let charterTrips = [];
+      let charterTripsLoaded = false;
+      try {
+        charterTrips = await fetchAllTrips({ tripType: "Charter" });
+        charterTripsLoaded = true;
+      } catch {
+        // Không đoán trạng thái trip khi API danh sách chuyến tạm thời lỗi.
+      }
+      const linkedCharterTrips = findCharterTripsForBooking(charterTrips, normalized);
+      const linkedTrip = findCharterTripForBooking(charterTrips, normalized);
+      normalized.linkedCharterTrips = linkedCharterTrips;
+      normalized.linkedCharterTripsLoaded = charterTripsLoaded;
+      const linkedIds = linkedTrip
+        ? [String(pick(linkedTrip, ["tripId", "TripId", "id", "Id", "tripCode", "TripCode"], ""))]
+          .filter(Boolean)
+        : getTripIdsLinkedToBooking(charterTrips, normalized.id);
+      if (linkedIds.length > 0) {
+        rememberExistingCharterTrip(normalized.id);
+        setLocalCreatedTripIds((prev) => [...new Set([...prev, ...linkedIds])]);
+      }
+
+      if (linkedTrip) {
+        const tripScheduleBooking = applyCharterTripSchedule(normalized, linkedTrip);
+        const protectedSchedule = confirmedScheduleRef.current;
+        const tripMatchesProtected = protectedSchedule
+          && normalizeCharterScheduleDate(tripScheduleBooking.departureDate) === protectedSchedule.departureDate
+          && normalizeCharterScheduleTime(tripScheduleBooking.startTime) === protectedSchedule.startTime;
+        if (!protectedSchedule || tripMatchesProtected) {
+          normalized.departureDate = tripScheduleBooking.departureDate;
+          normalized.startTime = tripScheduleBooking.startTime;
+          if (tripMatchesProtected) confirmedScheduleRef.current = null;
+        }
+      }
+      setBooking(normalized);
       const embeddedDraw = normalizeRouteDrawRequest(
         normalized.routeDrawRequest || detail?.routeDrawRequest || detail?.latestRouteDrawRequest,
       );
@@ -564,6 +669,14 @@ export function AdminCharterBookingDetail() {
     const fromBooking = booking ? getCharterBookingLinkedTripIds(booking) : [];
     return [...new Set([...fromBooking, ...localCreatedTripIds])];
   }, [booking, localCreatedTripIds]);
+  const canRescheduleLinkedTrips = linkedTripIds.length === 0 || (
+    booking?.linkedCharterTripsLoaded === true
+    && Array.isArray(booking.linkedCharterTrips)
+    && booking.linkedCharterTrips.length > 0
+    && booking.linkedCharterTrips.every((trip) => (
+      normalizeTripStatusKey(trip?.tripStatus ?? trip?.status ?? trip?.TripStatus) === "Scheduled"
+    ))
+  );
 
   useEffect(() => {
     setLocalCreatedTripIds(hasKnownExistingCharterTrip(id) ? [`existing-${id}`] : []);
@@ -1129,6 +1242,176 @@ export function AdminCharterBookingDetail() {
     }
   };
 
+  const handleRescheduleDeparture = async () => {
+    if (!booking?.id || !capabilities.canManageStatus) return;
+    if (hasStartedCharterAttendance(booking)) {
+      showToast({
+        icon: "warning",
+        title: lang === "VN" ? "Không thể đổi lịch" : "Schedule cannot be changed",
+        text: lang === "VN"
+          ? "Booking đã có vé check-in hoặc check-out."
+          : "The booking already has a checked-in or checked-out ticket.",
+        timer: 3500,
+      });
+      return;
+    }
+
+    const currentDate = normalizeCharterScheduleDate(booking.departureDate);
+    const currentTime = normalizeCharterScheduleTime(booking.startTime);
+    const minimumDate = getVietnamDateYmd();
+    const durationMinutes = getRescheduleDurationMinutes(booking);
+    const result = await showConfirmDialog({
+      tone: "brand",
+      icon: "question",
+      title: lang === "VN" ? "Đổi ngày giờ khởi hành" : "Change departure date and time",
+      html: `
+        <div class="admin-swal-schedule-form">
+          <p class="admin-swal-schedule-note">
+            ${lang === "VN"
+              ? `Giờ hoạt động từ 07:00 đến 23:00.${durationMinutes > 0 ? `<br />Hành trình dự kiến ${formatQuoteHumanDuration(durationMinutes, lang)}.` : ""}`
+              : `Operating hours are 07:00 to 23:00.${durationMinutes > 0 ? `<br />Estimated trip ${formatQuoteHumanDuration(durationMinutes, lang)}.` : ""}`}
+          </p>
+          <div class="admin-swal-schedule-grid">
+            <label class="admin-swal-schedule-field" for="charter-departure-date">
+              <span>${lang === "VN" ? "Ngày khởi hành mới" : "New departure date"}</span>
+              <input id="charter-departure-date" type="date" value="${currentDate}" min="${minimumDate}" />
+            </label>
+            <label class="admin-swal-schedule-field" for="charter-departure-time">
+              <span>${lang === "VN" ? "Giờ khởi hành mới" : "New departure time"}</span>
+              <input id="charter-departure-time" type="time" value="${currentTime}" min="07:00" max="22:59" step="60" />
+            </label>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      showLoaderOnConfirm: true,
+      allowOutsideClick: false,
+      confirmButtonText: lang === "VN" ? "Lưu ngày giờ" : "Save schedule",
+      cancelButtonText: lang === "VN" ? "Hủy" : "Cancel",
+      preConfirm: async () => {
+        const departureDate = normalizeCharterScheduleDate(
+          document.getElementById("charter-departure-date")?.value,
+        );
+        const startTime = normalizeCharterScheduleTime(
+          document.getElementById("charter-departure-time")?.value,
+        );
+        if (!departureDate) {
+          showValidationMessage(lang === "VN" ? "Vui lòng chọn ngày hợp lệ." : "Choose a valid date.");
+          return false;
+        }
+        if (!startTime) {
+          showValidationMessage(lang === "VN" ? "Vui lòng chọn giờ hợp lệ." : "Choose a valid time.");
+          return false;
+        }
+        const [hours, minutes] = startTime.split(":").map(Number);
+        const startMinutes = (hours * 60) + minutes;
+        if (!Number.isFinite(startMinutes) || startMinutes < 7 * 60 || startMinutes >= 23 * 60) {
+          showValidationMessage(
+            lang === "VN"
+              ? "Giờ bắt đầu phải từ 07:00 đến trước 23:00."
+              : "Start time must be from 07:00 and before 23:00.",
+          );
+          return false;
+        }
+        const endMinutes = startMinutes + durationMinutes;
+        if (durationMinutes > 0 && endMinutes > 23 * 60) {
+          showValidationMessage(
+            lang === "VN"
+              ? `Chuyến sẽ kết thúc lúc ${formatMinutesAsClock(endMinutes)}, sau giờ hoạt động 23:00.`
+              : `The trip would end at ${formatMinutesAsClock(endMinutes)}, after the 23:00 operating limit.`,
+          );
+          return false;
+        }
+        const departureMs = Date.parse(`${departureDate}T${startTime}:00+07:00`);
+        if (!Number.isFinite(departureMs) || departureMs <= getServerNowMs()) {
+          showValidationMessage(
+            lang === "VN"
+              ? "Ngày và giờ khởi hành mới phải ở tương lai."
+              : "The new departure date and time must be in the future.",
+          );
+          return false;
+        }
+        if (departureDate === currentDate && startTime === currentTime) {
+          showValidationMessage(lang === "VN" ? "Hãy chọn ngày hoặc giờ khác hiện tại." : "Choose a different date or time.");
+          return false;
+        }
+        try {
+          setIsReschedulingDeparture(true);
+          const response = await rescheduleAdminCharterBooking(booking.id, {
+            departureDate,
+            startTime,
+          });
+          return { departureDate, startTime, response };
+        } catch (error) {
+          showValidationMessage(getApiErrorMessage(
+            error,
+            lang === "VN"
+              ? "Giờ mới bị trùng lịch tàu. Vui lòng chọn giờ khác."
+              : "The new time conflicts with the boat schedule. Choose another time.",
+          ));
+          return false;
+        } finally {
+          setIsReschedulingDeparture(false);
+        }
+      },
+    });
+
+    if (!result.isConfirmed || !result.value) return;
+
+    try {
+      const { response } = result.value;
+      const responsePayload = response?.data && typeof response.data === "object"
+        ? response.data
+        : response;
+      const responseBooking = responsePayload?.booking || response?.booking || responsePayload;
+      const responseDate = normalizeCharterScheduleDate(pick(responseBooking, [
+        "departureDate", "DepartureDate",
+      ], "")) || result.value.departureDate;
+      const responseTime = normalizeCharterScheduleTime(pick(responseBooking, [
+        "startTime", "StartTime",
+      ], "")) || result.value.startTime;
+      confirmedScheduleRef.current = {
+        bookingId: booking.id,
+        departureDate: responseDate,
+        startTime: responseTime,
+        expiresAt: Date.now() + RESCHEDULE_SYNC_GUARD_MS,
+      };
+      setBooking((previous) => normalizeBooking({
+        ...(previous?.raw || booking.raw || {}),
+        ...(responseBooking && typeof responseBooking === "object" ? responseBooking : {}),
+        departureDate: responseDate,
+        startTime: responseTime,
+      }));
+      // Cho BE mot nhip dong bo booking/trip; loadDetail se giu lich PATCH neu van nhan ban cu.
+      if (rescheduleVerifyTimerRef.current) {
+        window.clearTimeout(rescheduleVerifyTimerRef.current);
+      }
+      rescheduleVerifyTimerRef.current = window.setTimeout(() => {
+        rescheduleVerifyTimerRef.current = null;
+        loadDetail({ silent: true });
+      }, 800);
+      showToast({
+        icon: "success",
+        title: lang === "VN" ? "Đã đổi ngày giờ khởi hành" : "Departure schedule updated",
+        timer: 2400,
+      });
+    } catch (error) {
+      showToast({
+        icon: "error",
+        title: lang === "VN" ? "Không thể đổi ngày giờ" : "Could not change departure schedule",
+        text: getApiErrorMessage(
+          error,
+          lang === "VN"
+            ? "Vui lòng kiểm tra ngày giờ mới và lịch tàu."
+            : "Check the new date, time, and boat schedule.",
+        ),
+        timer: 5000,
+      });
+    } finally {
+      setIsReschedulingDeparture(false);
+    }
+  };
+
   const handleDetailRefundPayment = async (payment) => {
     const paymentId = getRefundPaymentId(payment);
     if (!paymentId || !booking?.id) return;
@@ -1153,9 +1436,7 @@ export function AdminCharterBookingDetail() {
       badge: passengerCount > 0 ? passengerCount : "",
     });
     const paymentList = Array.isArray(booking?.payments) ? booking.payments : [];
-    const ticketList = canShowCharterTickets(booking)
-      ? (Array.isArray(booking?.tickets) ? booking.tickets : [])
-      : [];
+    const ticketList = canShowCharterTickets(booking) ? getActiveCharterTickets(booking) : [];
     if (capabilities.canViewPayments) {
       tabs.push({
         id: "payments",
@@ -1164,7 +1445,11 @@ export function AdminCharterBookingDetail() {
       });
     }
     if (capabilities.canViewTickets) {
-      tabs.push({ id: "tickets", label: lang === "VN" ? "Vé/khách" : "Tickets", badge: ticketList.length || "" });
+      tabs.push({
+        id: "tickets",
+        label: lang === "VN" ? "Vé/khách" : "Tickets",
+        badge: getCharterTicketCount(booking) || ticketList.length || "",
+      });
     }
     return tabs;
   }, [booking, capabilities, lang]);
@@ -1207,8 +1492,8 @@ export function AdminCharterBookingDetail() {
   const quoteTotal = Math.max(
     0,
     Number(booking?.totalAmount)
-      || Number(booking?.estimatedPrice)
       || Number(bookingQuoteSummary?.totalAmount)
+      || Number(booking?.estimatedPrice)
       || 0,
   );
   const topLevelPaidAmount = Math.max(0, Number(booking?.paidAmount) || 0);
@@ -1232,9 +1517,7 @@ export function AdminCharterBookingDetail() {
   const remainingAmount = explicitRemainingAmount ?? Math.max(quoteTotal - effectivePaidAmount, 0);
   const requestedBoats = Array.isArray(booking.requestedBoats) ? booking.requestedBoats : [];
   const payments = Array.isArray(booking.payments) ? booking.payments : [];
-  const tickets = canShowCharterTickets(booking)
-    ? (Array.isArray(booking.tickets) ? booking.tickets : [])
-    : [];
+  const tickets = canShowCharterTickets(booking) ? getActiveCharterTickets(booking) : [];
 
   return (
     <div className="relative mx-auto max-w-7xl space-y-6 px-2 pb-10 font-body sm:px-4">
@@ -1266,7 +1549,7 @@ export function AdminCharterBookingDetail() {
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-2xl font-headline font-black text-[#124757] dark:text-yellow-400 md:text-3xl">{booking.bookingCode}</h2>
                 <span className={`inline-flex items-center gap-1.5 text-sm font-headline font-black uppercase tracking-wide ${statusInfo.text}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${statusInfo}`}></span>
+                  <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.dot}`}></span>
                   {statusInfo.label}
                 </span>
               </div>
@@ -1483,6 +1766,12 @@ export function AdminCharterBookingDetail() {
           hasMissingRouteLegs={hasMissingRouteLegs}
           hasEnoughRouteCodes={hasEnoughRouteCodes}
           onRequestRouteDraw={handleRequestRouteDraw}
+          canRescheduleDeparture={capabilities.canManageStatus
+            && !["Cancelled", "Expired", "Refunded", "Completed"].includes(String(booking.status || ""))
+            && !hasStartedCharterAttendance(booking)
+            && canRescheduleLinkedTrips}
+          isReschedulingDeparture={isReschedulingDeparture}
+          onRescheduleDeparture={handleRescheduleDeparture}
         />
       )}
 

@@ -9,6 +9,7 @@ import {
     getAdminRentalPricePolicies as apiGetAdminRentalPricePolicies,
     putAdminRentalPricePolicy as apiPutAdminRentalPricePolicy,
     updateAdminCharterBookingStatus as apiUpdateAdminCharterBookingStatus,
+    updateAdminCharterBookingDeparture as apiUpdateAdminCharterBookingDeparture,
     updateCharterBookingPassengers as apiUpdateCharterBookingPassengers,
     addCharterBookingPassengers as apiAddCharterBookingPassengers,
     createCharterPassengerAddInsurancePayment as apiCreateCharterPassengerAddInsurancePayment,
@@ -42,10 +43,29 @@ import {
     collectOccupiedBoatIdsForSchedule,
     extractCharterBookingList,
     getAssignedBoatIdsFromBooking,
+    getCharterBookingLinkedTripIds,
     normalizeBooking,
     normalizeCharterScheduleDate,
+    normalizeCharterScheduleTime,
 } from '../utils/charterBookingAdmin';
 import { charterLog, charterLogError } from '../utils/charterDebugLog';
+import { fetchTripDetail } from './tripService';
+
+const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Customer không có quyền GET /trips; lấy trip detail public từ tripId trong detail booking. */
+export const fetchLinkedCharterTrip = async (booking) => {
+    const tripIds = getCharterBookingLinkedTripIds(booking).filter((id) => GUID_PATTERN.test(id));
+    if (tripIds.length === 0) return null;
+
+    const trips = (await Promise.all(
+        tripIds.map((tripId) => fetchTripDetail(tripId).catch(() => null)),
+    )).filter(Boolean);
+    const activeTrips = trips.filter((trip) => !['cancelled', 'canceled'].includes(
+        String(trip?.tripStatus || trip?.status || trip?.TripStatus || '').toLowerCase(),
+    ));
+    return activeTrips[0] || trips[0] || null;
+};
 
 export const fetchMyCharterBookings = async () => {
     try {
@@ -210,6 +230,21 @@ export const modifyAdminCharterBookingStatus = async (id, bookingStatusOrPayload
         return await apiUpdateAdminCharterBookingStatus(id, body);
     } catch (error) {
         console.error(`Lỗi khi cập nhật trạng thái charter booking ${id}:`, error);
+        throw error;
+    }
+};
+
+export const rescheduleAdminCharterBooking = async (id, { departureDate, startTime }) => {
+    const normalizedDate = normalizeCharterScheduleDate(departureDate);
+    const normalizedTime = normalizeCharterScheduleTime(startTime);
+
+    try {
+        return await apiUpdateAdminCharterBookingDeparture(id, {
+            departureDate: normalizedDate || departureDate,
+            startTime: normalizedTime ? `${normalizedTime}:00` : null,
+        });
+    } catch (error) {
+        console.error(`Loi doi ngay gio khoi hanh charter booking ${id}:`, error);
         throw error;
     }
 };

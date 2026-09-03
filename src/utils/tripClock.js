@@ -2,6 +2,61 @@
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
+const vietnamDateParts = (date) => Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).formatToParts(date).map((part) => [part.type, part.value]));
+
+/** DateOnly giữ nguyên; timestamp có timezone được đổi sang ngày Việt Nam. */
+export const formatTripDateKey = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "object" && !(value instanceof Date) && !Array.isArray(value)) {
+    const year = Number(value.year ?? value.Year);
+    const month = Number(value.month ?? value.Month);
+    const day = Number(value.day ?? value.Day);
+    if (year > 0 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${pad2(month)}-${pad2(day)}`;
+    }
+  }
+
+  const text = value instanceof Date ? "" : String(value).trim();
+  const dateOnly = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (dateOnly) return `${dateOnly[1]}-${pad2(dateOnly[2])}-${pad2(dateOnly[3])}`;
+
+  const dayFirst = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dayFirst) return `${dayFirst[3]}-${pad2(dayFirst[2])}-${pad2(dayFirst[1])}`;
+
+  const isoPrefix = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:T|\s)/);
+  const hasExplicitTimeZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(text);
+  if (isoPrefix && !hasExplicitTimeZone) {
+    return `${isoPrefix[1]}-${pad2(isoPrefix[2])}-${pad2(isoPrefix[3])}`;
+  }
+
+  const parsed = value instanceof Date ? value : new Date(text);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const parts = vietnamDateParts(parsed);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+/**
+ * Lay nguyen HH:mm trong gia tri BE tra ve, khong quy doi mui gio.
+ * Dung cho cac man hinh can phan anh dung gia tri lich trong response.
+ */
+export const formatLiteralClock = (value) => {
+  if (value == null || value === "") return "--:--";
+  const text = String(value).trim();
+  if (!text) return "--:--";
+
+  const timeOnly = text.match(/^(?:\d+\.)?(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+  const embedded = text.match(/(?:T|\s)(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?/);
+  const matched = timeOnly || embedded;
+  if (!matched) return "--:--";
+
+  return `${pad2(Number(matched[1]))}:${matched[2]}`;
+};
+
 /**
  * ISO / HH:mm → HH:mm (Asia/Ho_Chi_Minh).
  * - Có +07:00 → lấy HH:mm trên chuỗi (giờ tường VN).

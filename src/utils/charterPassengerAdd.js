@@ -130,7 +130,7 @@ export const countApprovedOrDefaultPassengers = (passengers = []) =>
     const status = normalizePassengerApprovalStatus(
       pick(row, ["approvalStatus", "passengerApprovalStatus", "addRequestStatus"], "Approved"),
     );
-    return status !== "Rejected";
+    return status === "Approved";
   }).length;
 
 export const countPendingAddPassengers = (passengers = []) =>

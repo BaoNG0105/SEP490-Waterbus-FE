@@ -13,10 +13,12 @@ import {
 import {
   canShowCharterTickets,
   formatCharterPassengerType,
+  getCharterTicketCount,
   getPassengerBirthYear,
   getCharterTicketId,
   hasCharterPassengerManifest,
   hasCharterPassengerName,
+  isApprovedCharterPassenger,
   isCharterFullyPaid,
 } from "../utils/charterBookingTickets";
 import { extractCharterAdditionalPaymentMeta } from "../utils/charterPayOs";
@@ -48,6 +50,7 @@ import { CharterInsuranceInfo } from "./CharterInsuranceInfo";
 import { CharterQuotePreviewPanel, CharterQuotePreviewTable } from "./CharterQuotePreviewTable";
 import {
   buildBookingQuotePreview,
+  formatQuoteHumanDuration,
   formatQuoteRentalUnit,
   formatQuoteUnitPriceLabel,
 } from "../utils/charterQuotePreview";
@@ -759,7 +762,9 @@ function OverviewField({ icon, label, value, hint, action }) {
 }
 
 export function AdminBookingPassengersTab({ booking, lang }) {
-  const passengers = listBookingPassengers(booking).filter(hasCharterPassengerName);
+  const passengers = listBookingPassengers(booking).filter((passenger) => (
+    isApprovedCharterPassenger(passenger) && hasCharterPassengerName(passenger)
+  ));
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
 
@@ -975,6 +980,9 @@ export function AdminBookingOverviewTab({
   hasMissingRouteLegs = false,
   hasEnoughRouteCodes = false,
   onRequestRouteDraw,
+  canRescheduleDeparture = false,
+  isReschedulingDeparture = false,
+  onRescheduleDeparture,
 }) {
   const boatRows = [];
   const maxBoats = Math.max(requestedBoats.length, selectedBoats.length, 0);
@@ -992,6 +1000,31 @@ export function AdminBookingOverviewTab({
   const rentalUnitLabel = booking.rentalUnit
     ? formatQuoteRentalUnit(booking.rentalUnit, lang)
     : (lang === "VN" ? "Chưa chọn" : "Not set");
+  const estimatedDurationMinutes = Number(booking.routeEstimate?.estimatedDurationMinutes);
+  const chargeableDurationMinutes = Number(booking.routeEstimate?.chargeableDurationMinutes);
+  const rentalDurationHint = (() => {
+    if (booking.rentalUnit === "Hour") {
+      const parts = [];
+      if (Number.isFinite(estimatedDurationMinutes) && estimatedDurationMinutes > 0) {
+        parts.push(lang === "VN"
+          ? `Hành trình dự kiến: ${formatQuoteHumanDuration(estimatedDurationMinutes, lang)}`
+          : `Estimated trip: ${formatQuoteHumanDuration(estimatedDurationMinutes, lang)}`);
+      }
+      if (Number.isFinite(chargeableDurationMinutes) && chargeableDurationMinutes > 0) {
+        parts.push(lang === "VN"
+          ? `Tính tiền: ${formatQuoteHumanDuration(chargeableDurationMinutes, lang)}`
+          : `Chargeable: ${formatQuoteHumanDuration(chargeableDurationMinutes, lang)}`);
+      }
+      return parts.join(" · ") || undefined;
+    }
+
+    if (booking.rentalUnit === "Day" && Number(booking.durationValue) > 0) {
+      return lang === "VN"
+        ? `Thời lượng thuê: ${booking.durationValue} ngày`
+        : `Rental duration: ${booking.durationValue} day(s)`;
+    }
+    return undefined;
+  })();
   const createdAtLabel = booking.createdAt
     ? (typeof formatDateTime === "function" ? formatDateTime(booking.createdAt) : formatDate(booking.createdAt))
     : "--";
@@ -1101,16 +1134,26 @@ export function AdminBookingOverviewTab({
                 icon="event_available"
                 label={lang === "VN" ? "Ngày giờ khởi hành" : "Departure date & time"}
                 value={`${formatDate(booking.departureDate)} · ${String(booking.startTime || "--").slice(0, 5)}`}
+                action={canRescheduleDeparture ? (
+                  <button
+                    type="button"
+                    disabled={isReschedulingDeparture}
+                    onClick={onRescheduleDeparture}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-[#124757] transition hover:border-[#124757]/30 hover:bg-white disabled:cursor-wait disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-yellow-400"
+                    title={lang === "VN" ? "Đổi ngày giờ khởi hành" : "Change departure date and time"}
+                    aria-label={lang === "VN" ? "Đổi ngày giờ khởi hành" : "Change departure date and time"}
+                  >
+                    <span className={`material-symbols-outlined text-[18px] ${isReschedulingDeparture ? "animate-pulse" : ""}`}>
+                      edit_calendar
+                    </span>
+                  </button>
+                ) : null}
               />
               <OverviewField
                 icon="schedule"
                 label={lang === "VN" ? "Hình thức thuê" : "Rental type"}
                 value={rentalUnitLabel}
-                hint={Number(booking.durationValue) > 0
-                  ? (booking.rentalUnit === "Hour"
-                    ? (lang === "VN" ? `${booking.durationValue} giờ (khách khai)` : `${booking.durationValue} hour(s) declared`)
-                    : (lang === "VN" ? `${booking.durationValue} ngày (khách khai)` : `${booking.durationValue} day(s) declared`))
-                  : undefined}
+                hint={rentalDurationHint}
               />
               <OverviewField
                 icon="payments"
@@ -1666,13 +1709,7 @@ export function AdminBookingActionsTab({
                 </p>
                 {hasLinkedTrips && (
                   <p className="mt-2 text-xs font-bold text-sky-700 dark:text-sky-200">
-                    {lang === "VN"
-                      ? (linkedTripIds.length > 1
-                        ? `Đã gắn ${linkedTripIds.length} chuyến Request.`
-                        : "Booking đã được gắn chuyến theo yêu cầu.")
-                      : (linkedTripIds.length > 1
-                        ? `${linkedTripIds.length} Request trips linked.`
-                        : "Request is linked to this booking.")}
+                    {lang === "VN" ? "Đã tạo chuyến." : "Trip created."}
                   </p>
                 )}
               </div>
@@ -1862,12 +1899,13 @@ export function AdminBookingTicketsTab({
 
   const selectableTicketIds = ticketRows.filter((row) => row.hasTicketId).map((row) => row.ticketId);
   const canViewTickets = canShowCharterTickets(booking);
-  const canExportTickets = canViewTickets && ticketRows.length > 0;
+  const reportedTicketCount = getCharterTicketCount(booking);
+  const canExportTickets = canViewTickets && reportedTicketCount > 0;
   const isFullyPaid = isCharterFullyPaid(booking);
   const hasManifest = hasCharterPassengerManifest(booking);
 
   const ticketGateMessage = (() => {
-    if (!isFullyPaid) {
+    if (!canViewTickets && !isFullyPaid) {
       return {
         tone: "amber",
         title: lang === "VN" ? "Chưa thanh toán đủ" : "Not fully paid",
@@ -1876,7 +1914,7 @@ export function AdminBookingTicketsTab({
           : "Tickets are issued only after the booking is fully paid",
       };
     }
-    if (!hasManifest) {
+    if (!canViewTickets && !hasManifest) {
       return {
         tone: "sky",
         title: lang === "VN" ? "Chưa có danh sách hành khách" : "Passenger list missing",
@@ -2218,7 +2256,7 @@ export function AdminBookingTicketsTab({
                   {lang === "VN" ? "Danh sách vé" : "Ticket list"}
                 </h3>
                 <p className="mt-1 text-xs font-medium text-slate-400">
-                  {ticketRows.length} {lang === "VN" ? "vé" : "ticket(s)"}
+                  {reportedTicketCount} {lang === "VN" ? "vé" : "ticket(s)"}
                 </p>
               </div>
               <span className="material-symbols-outlined shrink-0 text-slate-400 transition group-open:rotate-180">expand_more</span>
@@ -2318,12 +2356,18 @@ export function AdminBookingTicketsTab({
               <p className="mt-3 text-sm font-bold text-slate-500 dark:text-slate-400">
                 {!canViewTickets
                   ? (lang === "VN" ? "Chưa có vé để hiển thị." : "No tickets to display yet.")
-                  : (lang === "VN" ? "Đã đủ điều kiện nhưng hệ thống chưa trả vé." : "Eligible, but the system has not returned tickets yet.")}
+                  : reportedTicketCount > 0
+                    ? (lang === "VN" ? "API đã ghi nhận vé nhưng chưa trả chi tiết vé." : "The API reported tickets but did not include ticket details.")
+                    : (lang === "VN" ? "Đã đủ điều kiện nhưng hệ thống chưa trả vé." : "Eligible, but the system has not returned tickets yet.")}
               </p>
               <p className="mt-1 text-xs font-medium text-slate-400">
-                {lang === "VN"
-                  ? "Cần thanh toán đủ & khách đã lưu danh sách hành khách."
-                  : "Requires full payment & saved passenger manifest."}
+                {!canViewTickets
+                  ? (lang === "VN"
+                    ? "Cần thanh toán đủ & khách đã lưu danh sách hành khách."
+                    : "Requires full payment & saved passenger manifest.")
+                  : (lang === "VN"
+                    ? "Tải lại trang để nhận chi tiết vé mới nhất."
+                    : "Reload the page to fetch the latest ticket details.")}
               </p>
             </div>
           )}
