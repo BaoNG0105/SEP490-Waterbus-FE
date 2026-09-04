@@ -807,12 +807,12 @@ export const Home = () => {
 
       {/* App Download Section */}
       <section
-        className="bg-[#124757] dark:bg-slate-900 bg-cover bg-center bg-no-repeat py-16 md:py-0 overflow-hidden select-none border-t border-white/10 dark:border-slate-800/80"
+        className="bg-[#124757] dark:bg-slate-900 bg-cover bg-center bg-no-repeat py-20 md:py-10 overflow-hidden select-none border-t border-white/10 dark:border-slate-800/80"
         style={{ backgroundImage: "url('https://pub-1d02c0e903fd425fae0b0bd4d59909b4.r2.dev/3D.png')" }}
       >
-        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 items-center gap-12 lg:gap-20 min-h-125">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 items-center gap-12 lg:gap-20 min-h-162.5">
           {/* CỘT TRÁI: Slide Hình Ảnh App (Thiết kế xếp chồng) */}
-          <div className="relative w-full h-87.5 md:h-125 flex items-center justify-center lg:justify-end">
+          <div className="relative w-full h-100 md:h-150 flex items-center justify-center lg:justify-end">
             {/* Lớp trang trí phát sáng phía sau */}
             <div className="absolute w-62.5 md:w-87.5 h-62.5 md:h-87.5 bg-yellow-400/20 rounded-full blur-[80px]"></div>
             {/* Khung chứa các Slide Ảnh */}
@@ -839,7 +839,7 @@ export const Home = () => {
             </div>
           </div>
 
-          {/* CỘT PHẢI: Nội dung Text & Mã QR */}
+          {/* CỘT PHẢI: Nội dung Text giới thiệu ứng dụng */}
           <div className="flex flex-col items-center text-center lg:items-start lg:text-left space-y-8 lg:py-24">
             {/* Tiêu đề & Subtitle */}
             <div className="space-y-4">
@@ -858,40 +858,6 @@ export const Home = () => {
                   ? "Trải nghiệm tiện ích đặt vé và tận hưởng hành trình ngay trên điện thoại của bạn. Không cần xếp hàng, không lo hết vé."
                   : "Experience the convenience of booking tickets and enjoying your journey right from your phone. No lines, no sold-out worries."}
               </p>
-            </div>
-            {/* Khối quét mã QR & Download Badges */}
-            <div className="flex flex-col sm:flex-row items-center gap-6 pt-4">
-              {/* Hình ảnh QR Code */}
-              <div className="bg-white p-3 rounded-2xl shadow-lg shrink-0 hover:scale-105 transition-transform">
-                <img
-                  src="https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg"
-                  alt="QR Code"
-                  className="w-24 h-24 object-contain"
-                />
-              </div>
-
-              {/* Text hướng dẫn & Nút tải Store */}
-              <div className="space-y-4 text-center sm:text-left">
-                <p className="text-sm font-bold text-white/90 font-headline uppercase tracking-wide">
-                  {lang === "VN" ? "Quét để tải ngay!" : "Scan to download!"}
-                </p>
-                <div className="flex gap-3">
-                  <a href="#" className="hover:opacity-80 transition-opacity hover:-translate-y-1 transform duration-300">
-                    <img
-                      src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg"
-                      alt="Download on App Store"
-                      className="h-10 w-auto"
-                    />
-                  </a>
-                  <a href="#" className="hover:opacity-80 transition-opacity hover:-translate-y-1 transform duration-300">
-                    <img
-                      src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg"
-                      alt="Get it on Google Play"
-                      className="h-10 w-auto"
-                    />
-                  </a>
-                </div>
-              </div>
             </div>
           </div>
         </div>
